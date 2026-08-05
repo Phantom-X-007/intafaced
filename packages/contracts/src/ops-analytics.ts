@@ -241,3 +241,21 @@ export function listMetricIdsUsingSource(source: AnalyticsSourceDb): readonly st
     .map((m) => m.id)
     .sort();
 }
+
+/**
+ * L3 — true when catalog has at least one money/amount metric (decimal-string law).
+ */
+export function hasMoneyMetrics(): boolean {
+  return listMoneyMetricIds().length > 0;
+}
+
+/**
+ * L3 — per-source metric counts (catalog only; no invent series).
+ */
+export function metricCountBySource(): Readonly<Record<AnalyticsSourceDb, number>> {
+  return {
+    ledger: countMetricsUsingSource('ledger'),
+    trade: countMetricsUsingSource('trade'),
+    identity: countMetricsUsingSource('identity'),
+  };
+}

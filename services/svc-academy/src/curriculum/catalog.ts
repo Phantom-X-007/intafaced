@@ -570,3 +570,19 @@ export function listKindsWithContent(): readonly CurriculumKind[] {
   const inv = inventoryCurriculum();
   return order.filter((k) => inv.byKind[k] > 0);
 }
+
+/**
+ * L3 — total spine items. Seed spine never empty on tip; still pure.
+ */
+export function curriculumSpineSize(): number {
+  return SPINE.length;
+}
+
+/**
+ * L3 — sorted titles for one path. Empty path → [].
+ */
+export function listCurriculumTitlesByPath(path: CurriculumPath): readonly string[] {
+  return SPINE.filter((item) => item.path === path)
+    .map((item) => item.title)
+    .sort();
+}

@@ -17,6 +17,7 @@ import {
   listScoreWritableSeasons,
   snapshotStandingsAtFreeze,
   transitionSeason,
+  listEndedSeasonIds,
 } from './season-lifecycle.js';
 
 const base = {
@@ -181,5 +182,15 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     ];
     expect(listScheduledSeasonIds(seasons)).toEqual(['a']);
     expect(listScheduledSeasonIds([])).toEqual([]);
+  });
+
+  it('L3 wave16 listEndedSeasonIds without invent', () => {
+    const seasons = [
+      { ...base, id: 'a', status: 'live' as const },
+      { ...base, id: 'b', status: 'ended' as const },
+      { ...base, id: 'c', status: 'ended' as const },
+    ];
+    expect(listEndedSeasonIds(seasons)).toEqual(['b', 'c']);
+    expect(listEndedSeasonIds([])).toEqual([]);
   });
 });

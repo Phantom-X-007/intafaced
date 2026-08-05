@@ -10,6 +10,8 @@ import {
   missingCredentialHonesty,
   countFanoutRefusals,
   hasAnyFanoutAcceptance,
+  acceptedChannels,
+  failedChannels,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -116,5 +118,17 @@ describe('notify Stage-2 delivery honesty', () => {
     ).toBe(1);
     expect(hasAnyFanoutAcceptance([{ channel: 'email', outcome: 'accepted', code: '2xx' }])).toBe(true);
     expect(hasAnyFanoutAcceptance([{ channel: 'email', outcome: 'failed', code: 'x' }])).toBe(false);
+  });
+
+  it('L3 wave16 acceptedChannels + failedChannels', () => {
+    expect(acceptedChannels([])).toEqual([]);
+    expect(failedChannels([])).toEqual([]);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: '2xx' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'timeout' },
+      { channel: 'sms' as const, outcome: 'refused' as const, code: 'missing' },
+    ];
+    expect(acceptedChannels(attempts)).toEqual(['email']);
+    expect(failedChannels(attempts)).toEqual(['push']);
   });
 });

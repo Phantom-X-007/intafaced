@@ -17,6 +17,9 @@ import {
   mayLabelLive,
   metricById,
   isMetricCatalogEmpty,
+  hasMoneyMetrics,
+  countMetricsUsingSource,
+  metricCountBySource,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -144,5 +147,14 @@ describe('L3 wave13 analytics source catalog helpers', () => {
   });
   it('L3 isMetricCatalogEmpty false on tip catalog', () => {
     expect(isMetricCatalogEmpty()).toBe(false);
+  });
+});
+
+describe('L3 wave16 analytics money/source helpers', () => {
+  it('hasMoneyMetrics + metricCountBySource', () => {
+    expect(hasMoneyMetrics()).toBe(true);
+    const by = metricCountBySource();
+    expect(by.ledger + by.trade + by.identity).toBeGreaterThan(0);
+    expect(by.trade).toBe(countMetricsUsingSource('trade'));
   });
 });

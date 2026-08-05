@@ -95,4 +95,18 @@ export class MemoryMuteStore {
     this.byUser.set(userId, new Set(next.muted));
     return next;
   }
+
+  /**
+   * L3 — whether channel is muted for user. Missing prefs → false (never invent mute).
+   */
+  isMuted(userId: string, channel: MuteableChannel): boolean {
+    return this.get(userId).muted.has(channel);
+  }
+
+  /**
+   * L3 — muted channel count for user. Missing → 0.
+   */
+  muteCount(userId: string): number {
+    return this.get(userId).muted.size;
+  }
 }
