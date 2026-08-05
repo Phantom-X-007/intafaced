@@ -24,6 +24,8 @@ import {
   singleSourceMetricCount,
   moneyMetricRatio,
   nonMoneyMetricRatio,
+  countMoneyMetrics,
+  hasNonMoneyMetrics,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -184,5 +186,12 @@ describe('L3 wave16 analytics money/source helpers', () => {
     const r = nonMoneyMetricRatio();
     expect(r).not.toBeNull();
     expect(r).toMatch(/^\d+\.\d{4}$/);
+  });
+});
+
+describe('L3 wave21 money/non-money counts', () => {
+  it('countMoneyMetrics + hasNonMoneyMetrics', () => {
+    expect(countMoneyMetrics()).toBe(listMoneyMetricIds().length);
+    expect(hasNonMoneyMetrics()).toBe(listNonMoneyMetricIds().length > 0);
   });
 });

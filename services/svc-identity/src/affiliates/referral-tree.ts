@@ -254,4 +254,23 @@ export class MemoryReferralTree {
     if (!id) return 0;
     return chainDepth(this.parent, id);
   }
+
+  /**
+   * L3 — max chain depth among attributed users. Empty tree → 0.
+   */
+  maxChainDepth(): number {
+    let max = 0;
+    for (const userId of this.parent.keys()) {
+      const d = chainDepth(this.parent, userId);
+      if (d > max) max = d;
+    }
+    return max;
+  }
+
+  /**
+   * L3 — number of distinct referrer roots currently used. Empty → 0.
+   */
+  referrerCount(): number {
+    return this.listReferrerIds().length;
+  }
 }

@@ -305,4 +305,20 @@ export class MemoryAmbassadorProgramme {
   isProgrammeActive(userId: string): boolean {
     return this.isActiveAmbassador(userId);
   }
+
+  /**
+   * L3 — true when any programme row exists (active or frozen). Empty → false.
+   */
+  hasAnyProgrammeRow(): boolean {
+    return this.byUser.size > 0;
+  }
+
+  /**
+   * L3 — frozen/total as fixed 4dp string. Empty programme → null (never invent 0).
+   */
+  frozenRatio(): string | null {
+    const total = this.byUser.size;
+    if (total === 0) return null;
+    return (this.frozenCount() / total).toFixed(4);
+  }
 }

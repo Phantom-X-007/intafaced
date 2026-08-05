@@ -21,6 +21,8 @@ import {
   snapshotStandingsAtFreeze,
   transitionSeason,
   listEndedSeasonIds,
+  endedSeasonCount,
+  hasLiveSeason,
 } from './season-lifecycle.js';
 
 const base = {
@@ -223,5 +225,17 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
       { ...base, id: 'b', status: 'live' as const },
     ];
     expect(frozenSeasonCount(seasons)).toBe(1);
+  });
+
+  it('L3 wave21 endedSeasonCount + hasLiveSeason', () => {
+    const seasons = [
+      { ...base, id: 'a', status: 'live' as const },
+      { ...base, id: 'b', status: 'ended' as const },
+      { ...base, id: 'c', status: 'ended' as const },
+    ];
+    expect(endedSeasonCount(seasons)).toBe(2);
+    expect(hasLiveSeason(seasons)).toBe(true);
+    expect(hasLiveSeason([])).toBe(false);
+    expect(endedSeasonCount([])).toBe(0);
   });
 });

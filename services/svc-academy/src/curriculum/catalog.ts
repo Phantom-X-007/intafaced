@@ -611,3 +611,17 @@ export function hasCurriculumPath(path: CurriculumPath): boolean {
 export function spineItemCount(): number {
   return inventoryCurriculum().total;
 }
+
+/**
+ * L3 — sorted lesson slugs on spine only. None → [].
+ */
+export function listLessonSlugs(): readonly string[] {
+  return listCurriculumSlugsByKind('lesson');
+}
+
+/**
+ * L3 — playbook count on spine.
+ */
+export function playbookCount(): number {
+  return countCurriculumByKind('playbook');
+}

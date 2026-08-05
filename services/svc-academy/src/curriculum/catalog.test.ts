@@ -20,6 +20,8 @@ import {
   isSpineSlug,
   hasCurriculumPath,
   spineItemCount,
+  listLessonSlugs,
+  playbookCount,
 } from './catalog.js';
 
 /**
@@ -195,5 +197,12 @@ describe('curriculum catalog', () => {
   it('L3 spineItemCount matches inventory total', () => {
     expect(spineItemCount()).toBe(inventoryCurriculum().total);
     expect(spineItemCount()).toBeGreaterThan(0);
+  });
+
+  it('L3 wave21 listLessonSlugs + playbookCount', () => {
+    const lessons = listLessonSlugs();
+    expect(lessons).toEqual(listCurriculumSlugsByKind('lesson'));
+    expect(playbookCount()).toBe(countCurriculumByKind('playbook'));
+    expect(playbookCount()).toBeGreaterThan(0);
   });
 });

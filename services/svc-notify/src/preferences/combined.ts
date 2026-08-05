@@ -140,3 +140,13 @@ export function planIsEmpty(plan: readonly DeliveryDecision[]): boolean {
 export function planHasHolds(plan: readonly DeliveryDecision[]): boolean {
   return countHoldingChannels(plan) > 0;
 }
+
+/** L3 — true when any decision is skip_muted. Empty → false. */
+export function planHasSkips(plan: readonly DeliveryDecision[]): boolean {
+  return plan.some((d) => d.action === 'skip_muted');
+}
+
+/** L3 — send_now count. Empty → 0. */
+export function countSendNow(plan: readonly DeliveryDecision[]): number {
+  return plan.filter((d) => d.action === 'send_now').length;
+}

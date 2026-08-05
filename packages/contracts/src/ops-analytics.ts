@@ -291,3 +291,17 @@ export function nonMoneyMetricRatio(): string | null {
   if (part.total === 0) return null;
   return (part.nonMoney / part.total).toFixed(4);
 }
+
+/**
+ * L3 — count of money/amount metrics in catalog.
+ */
+export function countMoneyMetrics(): number {
+  return listMoneyMetricIds().length;
+}
+
+/**
+ * L3 — true when catalog has any non-money metric.
+ */
+export function hasNonMoneyMetrics(): boolean {
+  return listNonMoneyMetricIds().length > 0;
+}
