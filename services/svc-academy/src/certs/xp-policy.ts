@@ -27,6 +27,18 @@ export function xpPolicyFor(certId: string): CertXpPolicy | null {
   return CERT_XP_V0.find((p) => p.certId === certId) ?? null;
 }
 
+/**
+ * L3 — XP delta string for a cert id. Unknown cert → null (never invent amount).
+ */
+export function xpDeltaForCert(certId: string): string | null {
+  return xpPolicyFor(certId.trim())?.xpDelta ?? null;
+}
+
+/** L3 — sorted cert ids with a v0 XP policy. */
+export function listXpPolicyCertIds(): readonly string[] {
+  return CERT_XP_V0.map((p) => p.certId).sort();
+}
+
 export type XpEarnedIntent = {
   readonly userId: string;
   readonly certId: string;

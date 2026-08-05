@@ -5,6 +5,7 @@ import {
   assertScore,
   assertSeasonSlug,
   countStandingsAboveScore,
+  bottomNStandings,
   standingCount,
   pageStandings,
   rankStandings,
@@ -90,5 +91,13 @@ describe('L3 standings board helpers', () => {
   it('standingCount is length without invent', () => {
     expect(standingCount([])).toBe(0);
     expect(standingCount([row('a', 1, '2026-08-01T12:00:00Z')])).toBe(1);
+  });
+
+  it('L3 bottomNStandings empty when n<=0; never invents podium', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+    expect(bottomNStandings(rows, 0)).toEqual([]);
+    const bot = bottomNStandings(rows, 1);
+    expect(bot).toHaveLength(1);
+    expect(bot[0]!.userId).toBe('a');
   });
 });

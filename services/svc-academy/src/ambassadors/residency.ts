@@ -189,4 +189,18 @@ export class MemoryResidencyDesk {
   openCount(): number {
     return this.listOpen().length;
   }
+
+  /** L3 — accepted count across all cohorts. Empty → 0. */
+  acceptedCount(): number {
+    return [...this.rows.values()].filter((r) => r.status === 'accepted').length;
+  }
+
+  /**
+   * L3 — sorted open application ids. Empty desk → [] (never invent).
+   */
+  openApplicationIds(): readonly string[] {
+    return this.listOpen()
+      .map((r) => r.id)
+      .sort();
+  }
 }
