@@ -64,6 +64,10 @@ import {
   planBoardHasSends,
   planBoardIsEmpty,
   planBoardChannels,
+  filterPlanByAction,
+  planIncludesAction,
+  countPlanAction,
+  filterPlanSendChannels,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -318,5 +322,14 @@ describe('notify L3 combined mute + digest', () => {
     expect(planBoardCard(plan).allSend).toBe(true);
     expect(planBoardHasSends(plan)).toBe(true);
     expect(planBoardChannels(plan).send.length).toBeGreaterThan(0);
+  });
+
+  it('L3 wave37 plan action filters', () => {
+    expect(filterPlanByAction([], 'send_now')).toEqual([]);
+    expect(planIncludesAction([], 'send_now')).toBe(false);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(countPlanAction(plan, 'send_now')).toBe(plan.length);
+    expect(planIncludesAction(plan, 'send_now')).toBe(true);
+    expect(filterPlanSendChannels(plan, 'in')).toContain('inapp');
   });
 });

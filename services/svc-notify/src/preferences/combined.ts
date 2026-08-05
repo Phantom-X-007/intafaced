@@ -467,3 +467,25 @@ export function planBoardChannels(plan: readonly DeliveryDecision[]): {
 } {
   return planChannelPartition(plan);
 }
+
+/** L3 — filter plan decisions by action. Empty → []. */
+export function filterPlanByAction(plan: readonly DeliveryDecision[], action: DeliveryDecision['action']): readonly DeliveryDecision[] {
+  return plan.filter((d) => d.action === action);
+}
+
+/** L3 — true when plan has action. */
+export function planIncludesAction(plan: readonly DeliveryDecision[], action: DeliveryDecision['action']): boolean {
+  return plan.some((d) => d.action === action);
+}
+
+/** L3 — count decisions for action. Empty → 0. */
+export function countPlanAction(plan: readonly DeliveryDecision[], action: DeliveryDecision['action']): number {
+  return filterPlanByAction(plan, action).length;
+}
+
+/** L3 — filter send channels by substring. Empty needle → []. */
+export function filterPlanSendChannels(plan: readonly DeliveryDecision[], needle: string): readonly (MuteableChannel | 'inapp')[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return channelsToSendNow(plan).filter((c) => c.includes(n));
+}

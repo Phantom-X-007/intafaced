@@ -629,4 +629,31 @@ export class MemoryAmbassadorProgramme {
   isProgrammeMissing(userId: string): boolean {
     return this.programmeRowSummary(userId).status === 'missing';
   }
+
+  /** L3 — filter board rows by status. */
+  filterProgrammeRows(status: AmbassadorStatus): readonly {
+    readonly userId: string;
+    readonly status: 'active' | 'frozen';
+    readonly isActive: boolean;
+    readonly isFrozen: boolean;
+  }[] {
+    return this.listProgrammeRowSummaries().filter((r) => r.status === status);
+  }
+
+  /** L3 — search programme ids by substring (case-sensitive, no invent). Empty needle → []. */
+  searchProgrammeUserIds(needle: string): readonly string[] {
+    const n = needle.trim();
+    if (!n) return [];
+    return this.listAllUserIds().filter((id) => id.includes(n));
+  }
+
+  /** L3 — true when search returns any hit. */
+  programmeSearchHasHits(needle: string): boolean {
+    return this.searchProgrammeUserIds(needle).length > 0;
+  }
+
+  /** L3 — count of search hits. */
+  programmeSearchHitCount(needle: string): number {
+    return this.searchProgrammeUserIds(needle).length;
+  }
 }

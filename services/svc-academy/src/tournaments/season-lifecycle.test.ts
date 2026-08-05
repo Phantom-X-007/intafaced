@@ -68,6 +68,10 @@ import {
   seasonCard,
   listSeasonCards,
   seasonPresent,
+  filterSeasonCardsByStatus,
+  searchSeasonIds,
+  listWritableSeasonCards,
+  listTerminalSeasonCards,
 } from './season-lifecycle.js';
 
 const base = {
@@ -537,5 +541,26 @@ describe('L3 wave36 season board cards', () => {
     expect(seasonCard(rows, 'a').writable).toBe(true);
     expect(listSeasonCards(rows)).toHaveLength(2);
     expect(seasonPresent(rows, 'b')).toBe(true);
+  });
+});
+
+describe('L3 wave37 season filters + search', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('filter/search/writable/terminal cards', () => {
+    expect(filterSeasonCardsByStatus([], 'live')).toEqual([]);
+    expect(searchSeasonIds([], 'a')).toEqual([]);
+    const rows = [mk('alpha-live', 'live'), mk('beta-ended', 'ended')];
+    expect(filterSeasonCardsByStatus(rows, 'live')).toHaveLength(1);
+    expect(searchSeasonIds(rows, 'alpha')).toEqual(['alpha-live']);
+    expect(listWritableSeasonCards(rows)).toHaveLength(1);
+    expect(listTerminalSeasonCards(rows)).toHaveLength(1);
   });
 });

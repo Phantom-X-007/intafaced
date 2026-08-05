@@ -80,6 +80,10 @@ import {
   userStandingCard,
   topNStandingCards,
   userStandingPresent,
+  filterStandingsMinScore,
+  filterStandingsMaxScore,
+  searchStandingUserIds,
+  countStandingsInScoreRange,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -387,5 +391,16 @@ describe('L3 standings board helpers', () => {
     expect(userStandingCard(rows, 'b').isTop).toBe(true);
     expect(userStandingPresent(rows, 'a')).toBe(true);
     expect(topNStandingCards(rows, 1)[0]!.userId).toBe('b');
+  });
+
+  it('L3 wave37 filter/search standings + score range count', () => {
+    expect(filterStandingsMinScore([], 1)).toEqual([]);
+    expect(searchStandingUserIds([], 'a')).toEqual([]);
+    expect(countStandingsInScoreRange([], 0, 10)).toBe(0);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z'), row('c', 20, '2026-08-01T11:00:00Z')];
+    expect(filterStandingsMinScore(rows, 20)).toHaveLength(2);
+    expect(filterStandingsMaxScore(rows, 20)).toHaveLength(2);
+    expect(searchStandingUserIds(rows, 'a')).toEqual(['a']);
+    expect(countStandingsInScoreRange(rows, 10, 20)).toBe(2);
   });
 });

@@ -58,6 +58,10 @@ import {
   fanoutBoardHasFailures,
   fanoutBoardIsEmpty,
   fanoutBoardChannels,
+  filterAttemptsByOutcome,
+  fanoutIncludesOutcome,
+  countAttemptsWithOutcome,
+  filterAcceptedChannels,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -345,5 +349,17 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutBoardCard(attempts).total).toBe(2);
     expect(fanoutBoardHasFailures(attempts)).toBe(true);
     expect(fanoutBoardChannels(attempts).accepted).toEqual(['email']);
+  });
+
+  it('L3 wave37 fanout outcome filters', () => {
+    expect(filterAttemptsByOutcome([], 'accepted')).toEqual([]);
+    expect(fanoutIncludesOutcome([], 'failed')).toBe(false);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(countAttemptsWithOutcome(attempts, 'accepted')).toBe(1);
+    expect(fanoutIncludesOutcome(attempts, 'failed')).toBe(true);
+    expect(filterAcceptedChannels(attempts, 'em')).toEqual(['email']);
   });
 });

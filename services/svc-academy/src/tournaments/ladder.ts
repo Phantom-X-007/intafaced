@@ -700,3 +700,29 @@ export function topNStandingCards(
 export function userStandingPresent(rows: readonly StandingRecord[], userId: string): boolean {
   return userStandingCard(rows, userId).present;
 }
+
+/** L3 — filter standings by minimum score (inclusive). Empty → []. */
+export function filterStandingsMinScore(rows: readonly StandingRecord[], minScoreInclusive: number): readonly StandingRecord[] {
+  if (!Number.isFinite(minScoreInclusive)) return [];
+  return rows.filter((r) => r.score >= minScoreInclusive);
+}
+
+/** L3 — filter standings by max score (inclusive). Empty → []. */
+export function filterStandingsMaxScore(rows: readonly StandingRecord[], maxScoreInclusive: number): readonly StandingRecord[] {
+  if (!Number.isFinite(maxScoreInclusive)) return [];
+  return rows.filter((r) => r.score <= maxScoreInclusive);
+}
+
+/** L3 — search standing user ids by substring. Empty needle → []. */
+export function searchStandingUserIds(rows: readonly StandingRecord[], needle: string): readonly string[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return listStandingUserIds(rows).filter((id) => id.includes(n));
+}
+
+/** L3 — count standings in score range [min, max] inclusive. Invalid → 0. */
+export function countStandingsInScoreRange(rows: readonly StandingRecord[], minScoreInclusive: number, maxScoreInclusive: number): number {
+  if (!Number.isFinite(minScoreInclusive) || !Number.isFinite(maxScoreInclusive)) return 0;
+  if (minScoreInclusive > maxScoreInclusive) return 0;
+  return rows.filter((r) => r.score >= minScoreInclusive && r.score <= maxScoreInclusive).length;
+}

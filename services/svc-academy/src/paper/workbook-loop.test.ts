@@ -54,6 +54,10 @@ import {
   drillStepBar,
   drillCardIsRefused,
   drillCardIsFresh,
+  filterRemainingStepIds,
+  filterCompletedStepIds,
+  remainingStepsMatch,
+  completedStepsMatch,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -361,5 +365,22 @@ describe('paper Stage-2 workbook loop', () => {
     expect(drillCardIsFresh(started.run)).toBe(true);
     expect(drillCardIsRefused(started.run)).toBe(false);
     expect(drillStepBar(started.run).percent).toBe(0);
+  });
+
+  it('L3 wave37 drill step filter/match', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w37', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(filterRemainingStepIds(started.run, '')).toEqual([]);
+    expect(remainingStepsMatch(started.run, 'size')).toBe(true);
+    expect(completedStepsMatch(started.run, 'size')).toBe(false);
+    const step = started.run.steps[0]!.id;
+    const mid = completeDrillStep(started.run, step);
+    expect(mid.ok).toBe(true);
+    if (!mid.ok) return;
+    expect(filterCompletedStepIds(mid.run, step.slice(0, 3))).toContain(step);
   });
 });

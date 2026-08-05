@@ -613,3 +613,27 @@ export function analyticsKindBoard(): {
 } {
   return catalogKindSnapshot();
 }
+
+/** L3 — search metric ids by substring. Empty needle → []. */
+export function searchMetricIds(needle: string): readonly string[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return ANALYTICS_METRICS_V0.map((m) => m.id)
+    .filter((id) => id.includes(n))
+    .sort();
+}
+
+/** L3 — filter metric ids by kind. Empty → []. */
+export function filterMetricIdsByKind(kind: 'count' | 'amount' | 'ratio'): readonly string[] {
+  return listMetricIdsByKind(kind);
+}
+
+/** L3 — true when search has hits. */
+export function metricSearchHasHits(needle: string): boolean {
+  return searchMetricIds(needle).length > 0;
+}
+
+/** L3 — count search hits. */
+export function metricSearchHitCount(needle: string): number {
+  return searchMetricIds(needle).length;
+}

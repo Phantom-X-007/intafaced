@@ -69,6 +69,10 @@ import {
   curriculumSlugCard,
   curriculumPathCard,
   curriculumSlugPresent,
+  searchCurriculumSlugs,
+  searchCurriculumTitles,
+  listCurriculumSlugCardsByKind,
+  listAllCurriculumPathCards,
 } from './catalog.js';
 
 /**
@@ -342,5 +346,14 @@ describe('curriculum catalog', () => {
     expect(curriculumSlugPresent(slug)).toBe(true);
     expect(curriculumSlugPresent('no-such-slug-wave36')).toBe(false);
     expect(curriculumPathCard('foundations').count).toBe(foundationsItemCount());
+  });
+
+  it('L3 wave37 catalog search + cards by kind/path', () => {
+    expect(searchCurriculumSlugs('')).toEqual([]);
+    expect(searchCurriculumTitles('')).toEqual([]);
+    const slug = listCurriculumSlugs()[0]!;
+    expect(searchCurriculumSlugs(slug.slice(0, 3)).length).toBeGreaterThan(0);
+    expect(listCurriculumSlugCardsByKind('lesson').length).toBe(lessonCount());
+    expect(listAllCurriculumPathCards()).toHaveLength(CURRICULUM_PATHS.length);
   });
 });
