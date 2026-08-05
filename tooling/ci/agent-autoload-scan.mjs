@@ -51,6 +51,19 @@ mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'HUMAN-CLAIMED', 'must h
 mustInclude('docs/COORDINATION-TRUTH-LAYERS.md', 'No PR cap', 'anti-limit guarantees must stay in the law home');
 mustInclude('docs/COORDINATION-TRUTH-LAYERS.md', 'mountain events', 'mountain-events-only rule must stay');
 
+// Internet leverage — Phase A reuse (cold agents must not rebuild kit/ledger by default)
+mustInclude('AGENTS.md', 'INTERNET-LEVERAGE-LAW', 'cold agents must load internet leverage law without Nitro paste');
+mustInclude('AGENTS.md', 'Internet leverage law', 'mandatory section must stay visible in AGENTS.md');
+mustInclude('CLAUDE.md', 'INTERNET-LEVERAGE-LAW', 'Claude cold start must inherit leverage law');
+mustInclude(
+  'tooling/agent-protocol/AGENT_PROTOCOL.md',
+  'INTERNET-LEVERAGE-LAW',
+  'protocol hard path must require leverage before product code',
+);
+mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'second money book', 'must hard-ban second book / rebuild kit class failures');
+mustInclude('docs/INTERNET-LEVERAGE-LAW.md', 'Phase A is finished for NOW', 'leverage law home must keep operator decision');
+mustInclude('docs/INTERNET-LEVERAGE-LAW.md', 'Mandatory pre-code ritual', 'agents need an executable ritual not a vague blog');
+
 if (problems.length) {
   console.error('\n✖ agent-autoload-scan failed — cold agents would lose multi-dev law:\n');
   for (const p of problems) console.error(`  - ${p}`);
@@ -58,5 +71,5 @@ if (problems.length) {
   process.exit(1);
 }
 
-console.log('✓ agent-autoload-scan: AGENTS + CLAUDE + AGENT_PROTOCOL + layers home intact');
+console.log('✓ agent-autoload-scan: AGENTS + CLAUDE + AGENT_PROTOCOL + layers + internet leverage intact');
 process.exit(0);

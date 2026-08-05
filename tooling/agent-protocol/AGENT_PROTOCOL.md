@@ -10,6 +10,7 @@
 2. Read the target service's `README.md`.
 3. Read this file.
 4. Multi-dev: read `docs/COORDINATION-TRUTH-LAYERS.md` (or the coordination section in `AGENTS.md`). **Nitro does not paste this** — it is binding on cold start.
+5. Internet leverage: read `docs/INTERNET-LEVERAGE-LAW.md` before product code. Prefer Phase A in-repo assets (shell, ledger, `svc-*`). **Do not ask Nitro for a pick list.**
 
 If the task is ambiguous, **the doctrine (§0) decides**. If the doctrine does not decide, **stop and ask D.** Do not guess on money, custody, or jurisdiction.
 
@@ -48,6 +49,10 @@ These are not style preferences. A PR that does any of them is rejected without 
 | Code without LIVE-LANES (or equivalent) claim when other agents may run                                              | Dual-build same paths                                                                                                 | Claim session row + path-intersect open PRs first                  |
 | Mark tracker `done` without path evidence / DoD                                                                      | False product map                                                                                                     | Mountain event: `requires` + real proof; `pnpm tracker:check`      |
 | Require every craft PR to edit `features.mjs`                                                                        | Speed tax — **not** the law                                                                                           | mountain events only (claim / handoff / done / optional wave note) |
+| Rebuild product UI as a new SPA / second exchange kit while vendored shell is product law                            | Internet leverage Phase A — V-SHELL is sole product UI                                                                | Craft/wire `vendor/upstream-exchange/05_Web_Front` + overlays      |
+| Adopt a second money book (Java balances as SoT, external ledger as SoT, service-held balances)                      | Doctrine §0.6 + Phase A forbidden leverage                                                                            | `packages/ledger-client` recipes only                              |
+| Invent mids/depth/prices so charts or books “look live”                                                              | Honesty doctrine                                                                                                      | Real feeds or honest empty; see Phase A                            |
+| Skip Phase A / full-horizon path and greenfield a domain that already has `svc-*` + shell surface                    | Rebuild tax; agents “forget leverage”                                                                                 | Read `docs/INTERNET-LEVERAGE-LAW.md` before first product edit     |
 
 ---
 
