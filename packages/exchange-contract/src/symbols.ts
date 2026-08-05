@@ -12,7 +12,12 @@
  * Getting this grammar exactly right is what makes an integration work on the
  * first attempt. It is small, fiddly, and entirely mechanical — so it lives
  * here, parsed and formatted in one place, and is tested to destruction.
+ *
+ * Asset / expiry / strike fragments use RE2-class matching (FH-SEC-01) so
+ * untrusted symbol strings cannot ReDoS the contract parsers.
  */
+
+import { compileSafe, safeTest } from '@intafaced/safe-regex';
 
 export interface ParsedSymbol {
   base: string;
@@ -35,10 +40,19 @@ export class SymbolError extends Error {
   }
 }
 
-const ASSET = /^[A-Z0-9]{2,16}$/;
+const ASSET_RE = compileSafe('^[A-Z0-9]{2,16}$');
+const EXPIRY_RE = compileSafe('^\\d{6}$');
+const STRIKE_RE = compileSafe('^\\d+(\\.\\d+)?$');
+
+function isAssetCode(s: string): boolean {
+  const r = safeTest(ASSET_RE, s, { maxInputLen: 16 });
+  return r.ok && r.matched;
+}
 
 export function parseSymbol(symbol: string): ParsedSymbol {
   if (typeof symbol !== 'string' || symbol.length === 0) throw new SymbolError(String(symbol), 'empty');
+  // Hard length cap before any split work (FH-SEC-01).
+  if (symbol.length > 128) throw new SymbolError(symbol, 'symbol too long');
 
   const [pair, ...rest] = symbol.split(':');
   if (rest.length > 1) throw new SymbolError(symbol, 'more than one ":" separator');
@@ -47,8 +61,8 @@ export function parseSymbol(symbol: string): ParsedSymbol {
   if (pairParts.length !== 2) throw new SymbolError(symbol, 'expected BASE/QUOTE');
 
   const [base, quote] = pairParts as [string, string];
-  if (!ASSET.test(base)) throw new SymbolError(symbol, `base "${base}" is not a valid asset code`);
-  if (!ASSET.test(quote)) throw new SymbolError(symbol, `quote "${quote}" is not a valid asset code`);
+  if (!isAssetCode(base)) throw new SymbolError(symbol, `base "${base}" is not a valid asset code`);
+  if (!isAssetCode(quote)) throw new SymbolError(symbol, `quote "${quote}" is not a valid asset code`);
 
   // Spot: no settlement suffix at all.
   if (rest.length === 0) {
@@ -58,7 +72,7 @@ export function parseSymbol(symbol: string): ParsedSymbol {
   const suffix = rest[0] ?? '';
   const [settle, expiry, strike, option] = suffix.split('-') as [string, string?, string?, string?];
 
-  if (!ASSET.test(settle)) throw new SymbolError(symbol, `settle "${settle}" is not a valid asset code`);
+  if (!isAssetCode(settle)) throw new SymbolError(symbol, `settle "${settle}" is not a valid asset code`);
 
   // A contract settling in its quote asset is linear; in its base asset, inverse.
   const linear = settle === quote;
@@ -69,13 +83,15 @@ export function parseSymbol(symbol: string): ParsedSymbol {
     return { base, quote, settle, expiry: null, strike: null, optionType: null, type: 'swap', linear, inverse };
   }
 
-  if (!/^\d{6}$/.test(expiry)) throw new SymbolError(symbol, `expiry "${expiry}" must be YYMMDD`);
+  const expOk = safeTest(EXPIRY_RE, expiry, { maxInputLen: 6 });
+  if (!expOk.ok || !expOk.matched) throw new SymbolError(symbol, `expiry "${expiry}" must be YYMMDD`);
 
   if (strike === undefined) {
     return { base, quote, settle, expiry, strike: null, optionType: null, type: 'future', linear, inverse };
   }
 
-  if (!/^\d+(\.\d+)?$/.test(strike)) throw new SymbolError(symbol, `strike "${strike}" must be numeric`);
+  const strikeOk = safeTest(STRIKE_RE, strike, { maxInputLen: 32 });
+  if (!strikeOk.ok || !strikeOk.matched) throw new SymbolError(symbol, `strike "${strike}" must be numeric`);
   if (option !== 'C' && option !== 'P') throw new SymbolError(symbol, 'option type must be "C" or "P"');
 
   return {
