@@ -143,3 +143,22 @@ export function standingNeighbors(rows: readonly StandingRecord[], userId: strin
     below: idx < ranked.length - 1 ? ranked[idx + 1]! : null,
   };
 }
+
+/**
+ * L3 — score for one user. Missing → null (never invent 0 as a standing).
+ */
+export function scoreOfUser(rows: readonly StandingRecord[], userId: string): number | null {
+  const id = userId.trim();
+  if (!id) return null;
+  const row = rows.find((r) => r.userId === id);
+  return row ? row.score : null;
+}
+
+/**
+ * L3 — how many standings strictly above a score (for percentile UI).
+ * Empty rows → 0.
+ */
+export function countStandingsAboveScore(rows: readonly StandingRecord[], score: number): number {
+  if (!Number.isFinite(score)) return 0;
+  return rows.filter((r) => r.score > score).length;
+}

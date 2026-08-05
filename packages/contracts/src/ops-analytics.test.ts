@@ -4,6 +4,8 @@ import {
   ANALYTICS_METRICS_V0,
   ANALYTICS_SOURCE_DBS,
   assertMetricPoint,
+  countMetricsByKind,
+  hasAnalyticsMetric,
   lagFreshness,
   listMoneyMetricIds,
   analyticsMetricCatalogSize,
@@ -88,5 +90,21 @@ describe('analytics metric catalogue v0', () => {
   it('L3 analyticsMetricCatalogSize is stable catalog length', () => {
     expect(analyticsMetricCatalogSize()).toBe(ANALYTICS_METRICS_V0.length);
     expect(analyticsMetricCatalogSize()).toBeGreaterThan(0);
+  });
+});
+
+describe('L3 wave10 analytics catalog helpers', () => {
+  it('hasAnalyticsMetric is false for unknown / blank', () => {
+    expect(hasAnalyticsMetric('trade.fills.count')).toBe(true);
+    expect(hasAnalyticsMetric('no.such.metric')).toBe(false);
+    expect(hasAnalyticsMetric('  ')).toBe(false);
+  });
+
+  it('countMetricsByKind partitions catalog without inventing', () => {
+    const counts = countMetricsByKind('count');
+    const amounts = countMetricsByKind('amount');
+    const ratios = countMetricsByKind('ratio');
+    expect(counts + amounts + ratios).toBe(ANALYTICS_METRICS_V0.length);
+    expect(counts).toBeGreaterThan(0);
   });
 });

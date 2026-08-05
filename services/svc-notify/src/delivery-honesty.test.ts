@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { countFanoutOutcomes, hasFanoutFailure, deliveryHonesty, fanoutHonesty, missingCredentialHonesty } from './delivery-honesty.js';
+import {
+  allChannelsRefused,
+  countFanoutFailures,
+  countFanoutOutcomes,
+  hasFanoutFailure,
+  deliveryHonesty,
+  fanoutHonesty,
+  missingCredentialHonesty,
+} from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
   it('accepted out-of-app may start grace but not claim inbox-read', () => {
@@ -63,5 +71,23 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(hasFanoutFailure([])).toBe(false);
     expect(hasFanoutFailure([{ channel: 'email', outcome: 'accepted', code: '2xx' }])).toBe(false);
     expect(hasFanoutFailure([{ channel: 'email', outcome: 'failed', code: 'timeout' }])).toBe(true);
+  });
+
+  it('L3 wave10 countFanoutFailures + allChannelsRefused', () => {
+    expect(countFanoutFailures([])).toBe(0);
+    expect(allChannelsRefused([])).toBe(false);
+    expect(
+      countFanoutFailures([
+        { channel: 'email', outcome: 'failed', code: 'timeout' },
+        { channel: 'push', outcome: 'refused', code: 'missing' },
+      ]),
+    ).toBe(1);
+    expect(
+      allChannelsRefused([
+        { channel: 'email', outcome: 'refused', code: 'missing' },
+        { channel: 'sms', outcome: 'refused', code: 'missing' },
+      ]),
+    ).toBe(true);
+    expect(allChannelsRefused([{ channel: 'email', outcome: 'accepted', code: '2xx' }])).toBe(false);
   });
 });

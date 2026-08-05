@@ -211,4 +211,23 @@ export class MemoryAmbassadorProgramme {
     if (!row || row.status !== 'frozen') return null;
     return row.freezeReason;
   }
+
+  /**
+   * L3 — true only when stored row is active. Missing/frozen → false (never invent).
+   */
+  isActiveAmbassador(userId: string): boolean {
+    const row = this.get(userId.trim());
+    return row?.status === 'active';
+  }
+
+  /**
+   * L3 — appointed-by operator ids (unique, sorted). Empty store → [].
+   */
+  appointingOperators(): readonly string[] {
+    const set = new Set<string>();
+    for (const r of this.byUser.values()) {
+      if (r.appointedBy) set.add(r.appointedBy);
+    }
+    return [...set].sort();
+  }
 }

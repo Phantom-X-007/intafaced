@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countCurriculumByKind,
   countCurriculumByPath,
   CURRICULUM_PATHS,
   getCurriculumItem,
@@ -7,6 +8,7 @@ import {
   inventoryCurriculum,
   listCurriculum,
   listCurriculumSlugs,
+  listCurriculumSlugsByKind,
 } from './catalog.js';
 
 /**
@@ -109,5 +111,15 @@ describe('curriculum catalog', () => {
     }
     const risk = getCurriculumItem('foundations-risk-first')!;
     expect(risk.body).toContain('Identity Blueprint');
+  });
+
+  it('L3 wave10 countCurriculumByKind + listCurriculumSlugsByKind', () => {
+    const inv = inventoryCurriculum();
+    expect(countCurriculumByKind('playbook')).toBe(inv.byKind.playbook);
+    expect(countCurriculumByKind('workbook')).toBe(inv.byKind.workbook);
+    expect(countCurriculumByKind('lesson')).toBe(inv.byKind.lesson);
+    const playbooks = listCurriculumSlugsByKind('playbook');
+    expect(playbooks.length).toBe(inv.byKind.playbook);
+    expect(playbooks).toEqual([...playbooks].sort());
   });
 });

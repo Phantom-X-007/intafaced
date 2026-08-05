@@ -97,4 +97,19 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.freezeReasonOf(u2)).toBe('policy hold');
     expect(desk.freezeReasonOf(u1)).toBeNull();
   });
+
+  it('L3 wave10 isActiveAmbassador + appointingOperators', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const opA = '22222222-2222-4222-8222-222222222222';
+    const opB = '44444444-4444-4444-8444-444444444444';
+    expect(desk.isActiveAmbassador(u1)).toBe(false);
+    desk.appoint({ userId: u1, appointedBy: opB });
+    desk.appoint({ userId: u2, appointedBy: opA });
+    expect(desk.isActiveAmbassador(u1)).toBe(true);
+    desk.freeze({ userId: u1, frozenBy: opB, reason: 'pause' });
+    expect(desk.isActiveAmbassador(u1)).toBe(false);
+    expect(desk.appointingOperators()).toEqual([opA, opB]);
+  });
 });

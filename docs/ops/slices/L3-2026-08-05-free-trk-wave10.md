@@ -1,18 +1,24 @@
-# L3 pack — free TRK wave10
+# L3 free-TRK wave10 — Stage-1 pure helpers
 
-**Date:** 2026-08-05  
-**Class:** N  
-**Depends on:** tip #840 wave9  
-**Does NOT invent L1/L2:** no pay/prizes/rates; no partner dual-edit.
+**Tip base:** `origin/main` @ wave9 (#840)  
+**Class:** N (non-money Stage-1 deepen)  
+**Board-Delta:** free implementable TRK residual-own Stage-1 helpers
 
-## Outcome
+## What
 
-- Season terminal flag + sorted season ids
-- Referral edge count + attributed user ids
-- Fanout hold/skip channel lists
-- Commission max hop (null when empty)
-- Digest holding cadences (excludes off)
+| TRK                 | Helper                                               |
+| ------------------- | ---------------------------------------------------- |
+| ops.analytics       | `hasAnalyticsMetric`, `countMetricsByKind`           |
+| academy.ambassadors | `isActiveAmbassador`, `appointingOperators`          |
+| academy.tournaments | `scoreOfUser`, `countStandingsAboveScore`            |
+| academy.curriculum  | `countCurriculumByKind`, `listCurriculumSlugsByKind` |
+| ops.affiliates      | `edgeCount`, `hasReferrer`                           |
+| ops.notifications   | `countFanoutFailures`, `allChannelsRefused`          |
 
-## Board-Delta
+## Honesty
 
-L3 Class N free-TRK wave10: season terminal/ids · referral edges · hold/skip lists · max hop · holding cadences.
+No money moves · empty never invents rows · missing user → null/false · partner paths untouched.
+
+## Proof
+
+Focused vitest on touched modules; `pnpm gates` before open when thrift allows.
