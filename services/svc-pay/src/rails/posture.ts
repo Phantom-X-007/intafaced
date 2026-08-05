@@ -83,6 +83,16 @@ export interface RailPostureStatus {
   readonly policy: ValueMovementPolicy;
   readonly live: readonly string[];
   readonly sandbox: readonly string[];
+  /**
+   * Rails registered with NOTHING behind them.
+   *
+   * Its own list, because these used to be counted as `sandbox` and that was the
+   * wrong place. A rail that refuses every call is neither a hazard to gate nor a
+   * capability to count. An operator needs "this rail will lie to you" and "this
+   * rail will not answer you" as separate lines: the first is a posture decision,
+   * the second is usually a contract nobody has signed yet.
+   */
+  readonly absent: readonly string[];
   /** One line an operator can read in a log, on `/ready`, or on a dashboard. */
   readonly summary: string;
 }
@@ -103,8 +113,12 @@ export function railPostureStatus(rails: RailRegistry, policy: ValueMovementPoli
     .list()
     .filter((a) => a.mode === 'sandbox')
     .map((a) => a.id);
+  const absent = rails
+    .list()
+    .filter((a) => a.mode === 'absent')
+    .map((a) => a.id);
 
-  const summary =
+  const base =
     sandbox.length === 0
       ? `rails: ${live.length} live [${live.join(', ')}], 0 sandbox`
       : `rails: ${live.length} live [${live.join(', ') || '—'}], ${sandbox.length} SANDBOX [${sandbox.join(', ')}] — ` +
@@ -112,7 +126,15 @@ export function railPostureStatus(rails: RailRegistry, policy: ValueMovementPoli
           ? 'sandbox rails are refused for payout and refund'
           : 'SANDBOX RAILS MAY MOVE VALUE. A payout here returns a fabricated reference and nothing leaves.');
 
-  return { policy, live, sandbox, summary };
+  // APPENDED, never woven in. A deployment with no absent rails reads exactly as
+  // it always did — a clean posture still needs no extra words, and the operator
+  // who has learned to recognise the old line does not have to relearn it.
+  const summary =
+    absent.length === 0
+      ? base
+      : `${base}; ${absent.length} ABSENT [${absent.join(', ')}] — nothing is configured behind these; every call refuses`;
+
+  return { policy, live, sandbox, absent, summary };
 }
 
 export class SandboxRailError extends Error {
@@ -161,6 +183,27 @@ export function assertRailPosture(rails: RailRegistry, env: Record<string, strin
   const appEnv = env.APP_ENV ?? 'dev';
   const enforced = (RAIL_POSTURE_ENFORCED_ENVS as readonly string[]).includes(appEnv);
   const sandboxOverride = env.PAY_ALLOW_SANDBOX_RAILS === 'true';
+
+  /**
+   * `sandbox` ONLY — an ABSENT rail does not fail boot, and that is a fix rather
+   * than a relaxation.
+   *
+   * This filter is unchanged in text and changed in effect, because `RailMode`
+   * used to collapse `absent` into `sandbox`. The consequence was perverse:
+   * `defaultChainFor` hands `staging`/`prod` an `UnconfiguredChain` when nothing
+   * is set — the DESIGNED and SAFE production default — and that chain made
+   * `crypto-native` report `sandbox`, which landed here, which refused to boot.
+   * The documented escape was `PAY_ALLOW_SANDBOX_RAILS=true`, whose whole meaning
+   * is "sandbox rails may move value here". The gate was pushing operators toward
+   * setting, in production, the exact override it exists to warn about.
+   *
+   * An absent rail cannot fabricate anything. `UnconfiguredChain` throws on every
+   * call including the reads, `crypto-native` reports it unhealthy so routing and
+   * the console never offer it, and `assertRailMayMoveValue` refuses it by name
+   * under every policy. There is no hazard here to fail boot over — only a rail
+   * that has not been bought yet, which is `railStatus.absent` on `/ready` and in
+   * the boot log.
+   */
   const sandboxRails = rails
     .list()
     .filter((a) => a.mode === 'sandbox')
@@ -183,20 +226,58 @@ export function assertRailPosture(rails: RailRegistry, env: Record<string, strin
   };
 }
 
+/**
+ * THIS RAIL IS NOT LIVE, AND HERE IS WHICH KIND OF NOT-LIVE IT IS.
+ *
+ * ── WHY THE CLASS KEEPS ITS NAME AND GAINS A `reason` ───────────────────────
+ *
+ * `pay.rail_not_live` was always the accurate code; `SandboxRailRefusal` was the
+ * accurate NAME only while `sandbox` was the only way to be not-live. Now that
+ * `RailMode` carries `absent` distinctly, there are two, and they need different
+ * words in front of an operator:
+ *
+ *   sandbox — the rail WILL answer, and its answer is fabricated. The fix is a
+ *             live adapter, or a deliberate `PAY_ALLOW_SANDBOX_RAILS`.
+ *   absent  — the rail will NOT answer at all. There is no flag; the fix is
+ *             usually a contract somebody has to sign.
+ *
+ * Sending an operator to look for a flag when the real answer is a sponsor bank
+ * costs them a day, which is the whole reason the two are now told apart.
+ *
+ * The class is not split because `router.ts` maps `instanceof SandboxRailRefusal`
+ * to SERVICE_UNAVAILABLE, and that mapping is correct for both: the request was
+ * well-formed and the platform cannot serve it. Splitting the type to say
+ * something the code already says would break that mapping for the new case and
+ * reach a client as INTERNAL_SERVER_ERROR, which reads as "retry" — the one thing
+ * that can never fix either of these.
+ */
+export type RailNotLiveReason = 'sandbox' | 'absent';
+
 export class SandboxRailRefusal extends Error {
   readonly code = 'pay.rail_not_live';
 
   constructor(
     readonly railId: string,
     readonly capability: RailCapability,
+    readonly reason: RailNotLiveReason = 'sandbox',
   ) {
     super(
-      `Rail "${railId}" is a SANDBOX and this deployment refuses ${capability} on a sandbox rail. ` +
-        `A ${capability} here would return a provider reference nothing outside this process has ever ` +
-        `seen, and the caller would be told value moved when none did. No value has been moved and no ` +
-        `hold has been placed.`,
+      reason === 'absent'
+        ? `Rail "${railId}" has NOTHING CONFIGURED BEHIND IT and this deployment refuses ${capability} on it. ` +
+            `This is not a sandbox: a sandbox would answer, and answer falsely. This rail will not answer at ` +
+            `all — every call to it refuses — so the refusal is raised HERE, before anything is written, ` +
+            `rather than after a hold has been placed for a reason that was knowable beforehand. No value ` +
+            `has been moved and no hold has been placed.\n\n` +
+            `THERE IS NO FLAG FOR THIS. PAY_ALLOW_SANDBOX_RAILS permits a SIMULATION, and there is no ` +
+            `simulation here to permit. What is missing is the thing behind the rail — a chain node and ` +
+            `signing custody for crypto, a sponsor bank and an acquiring BIN for cards — and §13 lists ` +
+            `those as sockets precisely because they are commercial relationships rather than code.`
+        : `Rail "${railId}" is a SANDBOX and this deployment refuses ${capability} on a sandbox rail. ` +
+            `A ${capability} here would return a provider reference nothing outside this process has ever ` +
+            `seen, and the caller would be told value moved when none did. No value has been moved and no ` +
+            `hold has been placed.`,
     );
-    this.name = 'SandboxRailRefusal';
+    this.name = reason === 'absent' ? 'AbsentRailRefusal' : 'SandboxRailRefusal';
   }
 }
 
@@ -213,6 +294,23 @@ export class SandboxRailRefusal extends Error {
  * was knowable before anything was touched.
  */
 export function assertRailMayMoveValue(adapter: RailAdapter, capability: RailCapability, policy: ValueMovementPolicy): void {
+  // AN ABSENT RAIL IS REFUSED UNDER EVERY POLICY, INCLUDING `allow-sandbox`, and
+  // ahead of every other consideration.
+  //
+  // `allow-sandbox` is an operator's statement about a SIMULATION: "everything
+  // here works, and none of it is real, and everyone it affects is inside the
+  // exercise." That statement cannot be made about a rail with nothing behind it,
+  // because there is no simulation to consent to — the call is going to refuse
+  // whatever this function decides. Letting it through would mean the ledger
+  // moves first and the rail refuses second, which is precisely the ordering the
+  // comment above forbids: a hold posted for a reason that was knowable before
+  // anything was touched.
+  //
+  // It also refuses by the RIGHT NAME. `SandboxRailRefusal` says "this rail
+  // fabricates references", which is untrue of an absent rail and sends an
+  // operator to look for a flag instead of a contract.
+  if (adapter.mode === 'absent') throw new SandboxRailRefusal(adapter.id, capability, 'absent');
+
   if (policy !== 'live-only') return;
   if (!VALUE_LEAVING_CAPABILITIES.includes(capability)) return;
   if (adapter.mode === 'live') return;
@@ -226,7 +324,12 @@ export class PublicCheckoutUnavailable extends Error {
 
   constructor(
     readonly railId: string | null,
-    readonly reason: 'sandbox' | 'none-configured' | 'unhealthy',
+    /**
+     * `absent` is its own reason for the same operator-facing purpose the third
+     * `RailMode` serves: "we have a rail and it lies" and "we have no rail" send
+     * a reader to two different places, and only one of them is fixable today.
+     */
+    readonly reason: 'sandbox' | 'absent' | 'none-configured' | 'unhealthy',
   ) {
     super(
       (railId === null
@@ -268,6 +371,14 @@ export class PublicCheckoutUnavailable extends Error {
  * written leaves nothing to reconcile.
  */
 export function assertRailMayAcceptPublicPayment(adapter: RailAdapter, policy: ValueMovementPolicy): void {
+  // Under EVERY policy, including dev's. A sandbox rail is a legitimate fixture
+  // and dev genuinely wants a payer to be able to complete a checkout against
+  // it; an absent rail cannot complete anything, so opening a session on it hands
+  // a payer a page that is guaranteed to fail. `selectPublicCheckoutRail` already
+  // skips it as unhealthy — this is the direct-call path, and a gate that is only
+  // correct when reached one particular way is not a gate.
+  if (adapter.mode === 'absent') throw new PublicCheckoutUnavailable(adapter.id, 'absent');
+
   if (policy !== 'live-only') return;
   if (adapter.mode === 'live') return;
   throw new PublicCheckoutUnavailable(adapter.id, 'sandbox');
@@ -306,11 +417,22 @@ export function selectPublicCheckoutRail(
 ): RailAdapter {
   let sawSandbox = false;
   let sawUnhealthy = false;
+  let sawAbsent = false;
 
   for (const railId of preference) {
     if (!rails.has(railId)) continue;
     const adapter = rails.get(railId);
     if (!PUBLIC_CHECKOUT_CAPABILITIES.every((c) => adapter.capabilities.includes(c))) continue;
+
+    // BEFORE the health check, because an absent rail is unhealthy BY
+    // CONSTRUCTION and reporting it as `unhealthy` would send an operator to
+    // check a node's uptime when the node was never bought. Same distinction the
+    // adapter already makes between `chain.unavailable` and `chain.not_configured`
+    // — one is a bad minute, the other is a procurement task.
+    if (adapter.mode === 'absent') {
+      sawAbsent = true;
+      continue;
+    }
 
     if (!isUsable(adapter, now)) {
       sawUnhealthy = true;
@@ -327,7 +449,11 @@ export function selectPublicCheckoutRail(
 
   // The reason is for operators. The payer's page says "this merchant cannot
   // take payment right now" and nothing whatsoever about our rail estate.
-  throw new PublicCheckoutUnavailable(null, sawSandbox ? 'sandbox' : sawUnhealthy ? 'unhealthy' : 'none-configured');
+  // Ordered most-actionable first. `sandbox` outranks `absent` because a
+  // deployment with a sandbox rail configured has made a posture decision it can
+  // revisit; `absent` outranks `unhealthy` because "nothing is configured" is not
+  // something waiting five minutes will fix.
+  throw new PublicCheckoutUnavailable(null, sawSandbox ? 'sandbox' : sawAbsent ? 'absent' : sawUnhealthy ? 'unhealthy' : 'none-configured');
 }
 
 /**

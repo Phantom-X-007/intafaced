@@ -18,9 +18,11 @@ import {
   shouldRegisterCardSandbox,
 } from './rails/posture.js';
 import { createPayRouter } from './router.js';
+import { MerchantStateService } from './merchant-state-service.js';
+import { createMerchantStateRouter } from './merchant-state-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext } from '@intafaced/contracts';
+import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -174,8 +176,35 @@ const userMoney = new UserMoneyService(sql, ledger, rails, {
   valueMovement: railPosture.policy,
 });
 
-export const appRouter = createPayRouter(pay, rails, userMoney);
+/**
+ * The writer for `merchants.status`, and the history behind it.
+ *
+ * Its own service and its own router because `merchants.status` is an OPERATOR
+ * control, not a merchant one: `PayService` reads it and refuses payments on it,
+ * and nothing in the repository ever wrote it except a line of raw SQL inside a
+ * test. See `merchant-state-service.ts` for the ADR clause this closes, and for
+ * what it deliberately does not decide.
+ */
+const merchantState = new MerchantStateService(sql);
+
+/**
+ * MERGED, not nested.
+ *
+ * `mergeRouters` keeps one wire surface, so the edge still forwards `/api/pay`
+ * to a single tRPC router and no caller has to learn a second mount. The admin
+ * procedures live under `merchantState.*` and carry `admin:write` / `admin:read`
+ * rather than the `pay:*` scopes the merchant surface uses — see
+ * `merchant-state-router.ts` for why those and not the other three.
+ *
+ * Two routers rather than one file only because `router.ts` is held by open PR
+ * #346 and dual-editing a partner's file is how two branches both end up
+ * unmergeable. The composition is not a workaround, though: an operator surface
+ * and a merchant surface having separate files is the shape this would want
+ * anyway.
+ */
+export const appRouter = mergeRouters(createPayRouter(pay, rails, userMoney), createMerchantStateRouter(merchantState));
 export type { PayRouter } from './router.js';
+export type { MerchantStateRouter } from './merchant-state-router.js';
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
