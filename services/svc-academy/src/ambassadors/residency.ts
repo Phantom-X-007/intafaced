@@ -603,4 +603,36 @@ export class MemoryResidencyDesk {
     if (!slug) return 0;
     return this.listOpen(slug).length;
   }
+
+  /** L3 — page open application ids. Empty → []. */
+  pageOpenApplicationIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+    const all = this.openApplicationIds();
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    return all.slice(offset, offset + limit);
+  }
+
+  /** L3 — page accepted application ids. Empty → []. */
+  pageAcceptedApplicationIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+    const all = this.acceptedApplicationIds();
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    return all.slice(offset, offset + limit);
+  }
+
+  /** L3 — page all application ids (sorted). Empty → []. */
+  pageAllApplicationIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+    const all = [...this.rows.keys()].sort();
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    return all.slice(offset, offset + limit);
+  }
+
+  /** L3 — open queue page count at pageSize. */
+  openQueuePageCount(pageSize: number): number {
+    if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+    const n = this.openCount();
+    if (n === 0) return 0;
+    return Math.ceil(n / Math.floor(pageSize));
+  }
 }

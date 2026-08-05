@@ -73,6 +73,10 @@ import {
   searchCurriculumTitles,
   listCurriculumSlugCardsByKind,
   listAllCurriculumPathCards,
+  pageCurriculumSlugs,
+  pageLessonSlugs,
+  curriculumSpinePageCount,
+  reverseCurriculumSlugs,
 } from './catalog.js';
 
 /**
@@ -355,5 +359,12 @@ describe('curriculum catalog', () => {
     expect(searchCurriculumSlugs(slug.slice(0, 3)).length).toBeGreaterThan(0);
     expect(listCurriculumSlugCardsByKind('lesson').length).toBe(lessonCount());
     expect(listAllCurriculumPathCards()).toHaveLength(CURRICULUM_PATHS.length);
+  });
+
+  it('L3 wave38 curriculum paging', () => {
+    expect(pageCurriculumSlugs({ offset: 0, limit: 1 })).toHaveLength(1);
+    expect(pageLessonSlugs({ limit: 100 }).length).toBe(lessonCount());
+    expect(curriculumSpinePageCount(5)).toBeGreaterThan(0);
+    expect(reverseCurriculumSlugs()[0]).toBe(listCurriculumSlugs()[listCurriculumSlugs().length - 1]);
   });
 });

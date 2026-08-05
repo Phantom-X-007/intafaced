@@ -499,3 +499,37 @@ export function filterAcceptedChannels(
   if (!n) return [];
   return acceptedChannels(attempts).filter((c) => c.includes(n));
 }
+
+/** L3 — page fanout attempts. Empty → []. */
+export function pageFanoutAttempts(
+  attempts: readonly ChannelDeliveryAttempt[],
+  options: { offset?: number; limit?: number } = {},
+): readonly ChannelDeliveryAttempt[] {
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? attempts.length));
+  return attempts.slice(offset, offset + limit);
+}
+
+/** L3 — page accepted channels. Empty → []. */
+export function pageAcceptedChannels(
+  attempts: readonly ChannelDeliveryAttempt[],
+  options: { offset?: number; limit?: number } = {},
+): readonly ChannelDeliveryAttempt['channel'][] {
+  const all = acceptedChannels(attempts);
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — fanout page count. */
+export function fanoutPageCount(attempts: readonly ChannelDeliveryAttempt[], pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = attempts.length;
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse attempts. Empty → []. */
+export function reverseFanoutAttempts(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt[] {
+  return [...attempts].reverse();
+}

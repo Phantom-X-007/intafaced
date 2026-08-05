@@ -726,3 +726,34 @@ export function countStandingsInScoreRange(rows: readonly StandingRecord[], minS
   if (minScoreInclusive > maxScoreInclusive) return 0;
   return rows.filter((r) => r.score >= minScoreInclusive && r.score <= maxScoreInclusive).length;
 }
+
+/**
+ * L3 — page ranked standings (rank order). offset/limit floor ≥0; empty → [].
+ */
+export function pageRankedStandings(
+  rows: readonly StandingRecord[],
+  options: { offset?: number; limit?: number } = {},
+): readonly RankedStanding[] {
+  const ranked = rankStandings(rows);
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? ranked.length));
+  return ranked.slice(offset, offset + limit);
+}
+
+/** L3 — page ranked user ids only. Empty → []. */
+export function pageRankedUserIds(rows: readonly StandingRecord[], options: { offset?: number; limit?: number } = {}): readonly string[] {
+  return pageRankedStandings(rows, options).map((r) => r.userId);
+}
+
+/** L3 — how many pages of standings at pageSize. */
+export function standingsPageCount(rows: readonly StandingRecord[], pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = standingCount(rows);
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse rank order (lowest score first). Empty → []. */
+export function reverseRankedStandings(rows: readonly StandingRecord[]): readonly RankedStanding[] {
+  return [...rankStandings(rows)].reverse();
+}

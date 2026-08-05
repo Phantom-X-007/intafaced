@@ -566,3 +566,32 @@ export function listTerminalSeasonCards(seasons: readonly SeasonRecord[]): reado
 }[] {
   return listSeasonCards(seasons).filter((c) => c.terminal);
 }
+
+/** L3 — page season ids (sorted). Empty → []. */
+export function pageSeasonIds(seasons: readonly SeasonRecord[], options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = listSeasonIds(seasons);
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — page live season ids. Empty → []. */
+export function pageLiveSeasonIds(seasons: readonly SeasonRecord[], options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = listLiveSeasonIds(seasons);
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — season list page count. */
+export function seasonListPageCount(seasons: readonly SeasonRecord[], pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = totalSeasonCount(seasons);
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse sorted season ids. Empty → []. */
+export function reverseSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
+  return [...listSeasonIds(seasons)].reverse();
+}

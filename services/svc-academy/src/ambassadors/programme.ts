@@ -656,4 +656,38 @@ export class MemoryAmbassadorProgramme {
   programmeSearchHitCount(needle: string): number {
     return this.searchProgrammeUserIds(needle).length;
   }
+
+  /**
+   * L3 — page programme user ids (sorted). offset/limit floor ≥0; empty → [].
+   */
+  pageProgrammeUserIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+    const all = this.listAllUserIds();
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    return all.slice(offset, offset + limit);
+  }
+
+  /** L3 — page active ids only. */
+  pageActiveUserIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+    const all = this.listActiveUserIds();
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    return all.slice(offset, offset + limit);
+  }
+
+  /** L3 — page frozen ids only. */
+  pageFrozenUserIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+    const all = this.listFrozenUserIds();
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    return all.slice(offset, offset + limit);
+  }
+
+  /** L3 — how many pages at pageSize (ceil). pageSize <1 → 0. Empty → 0. */
+  programmePageCount(pageSize: number): number {
+    if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+    const n = this.totalCount();
+    if (n === 0) return 0;
+    return Math.ceil(n / Math.floor(pageSize));
+  }
 }

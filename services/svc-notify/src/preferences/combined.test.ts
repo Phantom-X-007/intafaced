@@ -68,6 +68,10 @@ import {
   planIncludesAction,
   countPlanAction,
   filterPlanSendChannels,
+  pagePlanDecisions,
+  pagePlanSendChannels,
+  planPageCount,
+  reversePlanDecisions,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -331,5 +335,15 @@ describe('notify L3 combined mute + digest', () => {
     expect(countPlanAction(plan, 'send_now')).toBe(plan.length);
     expect(planIncludesAction(plan, 'send_now')).toBe(true);
     expect(filterPlanSendChannels(plan, 'in')).toContain('inapp');
+  });
+
+  it('L3 wave38 plan paging', () => {
+    expect(pagePlanDecisions([], { limit: 1 })).toEqual([]);
+    expect(planPageCount([], 5)).toBe(0);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email', 'sms'], 'critical');
+    expect(pagePlanDecisions(plan, { offset: 0, limit: 2 })).toHaveLength(2);
+    expect(pagePlanSendChannels(plan, { limit: 1 })).toHaveLength(1);
+    expect(planPageCount(plan, 2)).toBe(2);
+    expect(reversePlanDecisions(plan)).toHaveLength(plan.length);
   });
 });
