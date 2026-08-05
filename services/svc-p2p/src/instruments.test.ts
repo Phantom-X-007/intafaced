@@ -209,7 +209,7 @@ describe('what registration accepts is what validation runs', () => {
    * wrong or we did, which is exactly what the comment above `parseFieldSpecs`
    * says the compile check exists to prevent.
    */
-  const CURRENCY_ISH = ['\\$', '\\d+\\$', '^\\d+\\$', '\\d+\\$$', '[0-9]+\\.[0-9]{2}\\$', '\\$[0-9]+'];
+  const CURRENCY_ISH = ['\\$', '\\d+\\$', '^\\d+\\$', '\\d+\\$$', '^\\d+\\$$', '[0-9]+\\.[0-9]{2}\\$', '\\$[0-9]+'];
 
   it('accepts an escaped dollar sign at registration', () => {
     // Rejecting it would also be a way to make save stop exploding, and it
@@ -232,6 +232,31 @@ describe('what registration accepts is what validation runs', () => {
       expect(err).toBeInstanceOf(InstrumentError);
       expect((err as InstrumentError).field).toBe('amount');
     }
+  });
+
+  /**
+   * BOTH SPELLINGS OF THE CURRENCY FIELD, INCLUDING THE ONE THAT NEVER BROKE.
+   *
+   * `^\d+\$$` — anchored, with an escaped dollar before the anchor — is the form
+   * the ReDoS ruling named. It is worth being exact about why it belongs here:
+   * under the old `anchored()` it did NOT throw. The trailing `$` absorbed the
+   * `.replace(/\$$/, '')`, leaving `^(?:\d+\$)$`, which is valid and correct.
+   *
+   * The form that actually exploded is the same pattern WITHOUT the closing
+   * anchor — `\d+\$` — where the strip ate the escape instead and produced
+   * `^(?:\d+\)$`. So the escaped dollar sign is not one bug with one spelling:
+   * whether it detonated depended on whether the operator happened to anchor.
+   * Both are pinned, because a fix that only handled the anchored form would
+   * leave the actual defect open and still look green.
+   */
+  it('registers and matches the anchored currency pattern from the ruling', () => {
+    expect(() => parseFieldSpecs([{ key: 'amount', label: 'Amount', pattern: '^\\d+\\$$' }])).not.toThrow();
+
+    const amount = schema([{ key: 'amount', label: 'Amount', pattern: '^\\d+\\$$' }]);
+    expect(validateDetails(amount, { amount: '5$' })).toEqual({ amount: '5$' });
+    expect(validateDetails(amount, { amount: '1234$' })).toEqual({ amount: '1234$' });
+    // The dollar is a literal, so a value without one is not in the format.
+    expect(() => validateDetails(amount, { amount: '5' })).toThrow(/expected format/);
   });
 
   it('still reads a bare trailing $ as the anchor', () => {
