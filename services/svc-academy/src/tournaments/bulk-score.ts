@@ -120,3 +120,23 @@ export function bulkAcceptedCount(result: BulkScoreResult): number {
 export function bulkRefuseReason(result: BulkScoreResult): string | null {
   return result.status === 'ok' ? null : result.reason;
 }
+
+/** L3 — true when bulk write refused. */
+export function isBulkScoreRefused(result: BulkScoreResult): boolean {
+  return !isBulkScoreOk(result);
+}
+
+/** L3 — accepted count label. */
+export function bulkAcceptedCountLabel(result: BulkScoreResult): string {
+  return String(bulkAcceptedCount(result));
+}
+
+/** L3 — refuse reason label or empty. */
+export function bulkRefuseReasonLabel(result: BulkScoreResult): string {
+  return bulkRefuseReason(result) ?? '';
+}
+
+/** L3 — true when bulk ok with zero accepted (empty patch set allowed). */
+export function isBulkScoreEmptyOk(result: BulkScoreResult): boolean {
+  return isBulkScoreOk(result) && bulkAcceptedCount(result) === 0;
+}

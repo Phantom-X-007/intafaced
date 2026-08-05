@@ -10,6 +10,10 @@ import {
   hasAnyMute,
   listMutedChannels,
   isFullyUnmuted,
+  allMuteableChannels,
+  listUnmutedChannels,
+  mutedChannelRatio,
+  hasSingleMute,
 } from './mute.js';
 
 describe('isChannelMuted — critical never silenced', () => {
@@ -86,5 +90,16 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     store.setMuted('u1', 'push', true);
     expect(store.isMuted('u1', 'email')).toBe(true);
     expect(store.muteCount('u1')).toBe(2);
+  });
+
+  it('L3 wave35 muteable list + unmuted + ratio + single', () => {
+    expect(allMuteableChannels()).toEqual(['email', 'push', 'sms']);
+    expect(listUnmutedChannels(EMPTY_MUTE_PREFS)).toEqual(['email', 'push', 'sms']);
+    expect(mutedChannelRatio(EMPTY_MUTE_PREFS)).toBe('0.0000');
+    expect(hasSingleMute(EMPTY_MUTE_PREFS)).toBe(false);
+    const one = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'email', muted: true });
+    expect(hasSingleMute(one)).toBe(true);
+    expect(listUnmutedChannels(one)).toEqual(['push', 'sms']);
+    expect(mutedChannelRatio(one)).toBe('0.3333');
   });
 });

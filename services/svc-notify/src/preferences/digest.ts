@@ -115,3 +115,28 @@ export class MemoryDigestStore {
     return next;
   }
 }
+
+/** L3 — all cadences in stable order. */
+export function allDigestCadences(): readonly DigestCadence[] {
+  return ['off', 'hourly', 'daily'];
+}
+
+/** L3 — true when cadence is off. */
+export function isDigestOff(cadence: DigestCadence): boolean {
+  return cadence === 'off';
+}
+
+/** L3 — true when cadence is daily. */
+export function isDigestDaily(cadence: DigestCadence): boolean {
+  return cadence === 'daily';
+}
+
+/** L3 — true when cadence is hourly. */
+export function isDigestHourly(cadence: DigestCadence): boolean {
+  return cadence === 'hourly';
+}
+
+/** L3 — window ms label string. */
+export function digestWindowMsLabel(cadence: DigestCadence): string {
+  return String(digestWindowMs(cadence));
+}

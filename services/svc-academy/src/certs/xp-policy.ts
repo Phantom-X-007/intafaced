@@ -69,3 +69,24 @@ export function xpIntentFromGrant(grant: CertGrantRecord): XpEarnedIntent | null
     source: 'academy.cert',
   };
 }
+
+/** L3 — how many cert XP policies exist. */
+export function xpPolicyCount(): number {
+  return CERT_XP_V0.length;
+}
+
+/** L3 — true when XP policy catalog is non-empty. */
+export function hasAnyXpPolicy(): boolean {
+  return CERT_XP_V0.length > 0;
+}
+
+/** L3 — sorted policy cert ids joined. Empty → "". */
+export function xpPolicyCertIdsJoined(): string {
+  return listXpPolicyCertIds().join(',');
+}
+
+/** L3 — true when catalog has at least n policies. */
+export function hasAtLeastXpPolicies(n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return CERT_XP_V0.length >= Math.floor(n);
+}

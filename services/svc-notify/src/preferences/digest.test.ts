@@ -11,6 +11,11 @@ import {
   shouldSendImmediate,
   applyDigestCadence,
   holdingDigestCadences,
+  allDigestCadences,
+  isDigestOff,
+  isDigestDaily,
+  isDigestHourly,
+  digestWindowMsLabel,
 } from './digest.js';
 
 describe('notify L3 digest cadence (non-critical only)', () => {
@@ -77,5 +82,14 @@ describe('notify L3 digest cadence (non-critical only)', () => {
   it('L3 holdingDigestCadences excludes off', () => {
     expect(holdingDigestCadences()).toEqual(['hourly', 'daily']);
     expect(holdingDigestCadences()).not.toContain('off');
+  });
+
+  it('L3 wave35 cadence helpers + window label', () => {
+    expect(allDigestCadences()).toEqual(['off', 'hourly', 'daily']);
+    expect(isDigestOff('off')).toBe(true);
+    expect(isDigestHourly('hourly')).toBe(true);
+    expect(isDigestDaily('daily')).toBe(true);
+    expect(digestWindowMsLabel('off')).toBe('0');
+    expect(digestWindowMsLabel('hourly')).toBe('3600000');
   });
 });
