@@ -77,4 +77,14 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     const m = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'sms', muted: true });
     expect(isFullyUnmuted(m)).toBe(false);
   });
+
+  it('L3 wave16 isMuted + muteCount', () => {
+    const store = new MemoryMuteStore();
+    expect(store.isMuted('u1', 'email')).toBe(false);
+    expect(store.muteCount('u1')).toBe(0);
+    store.setMuted('u1', 'email', true);
+    store.setMuted('u1', 'push', true);
+    expect(store.isMuted('u1', 'email')).toBe(true);
+    expect(store.muteCount('u1')).toBe(2);
+  });
 });

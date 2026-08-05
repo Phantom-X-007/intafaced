@@ -236,4 +236,22 @@ export class MemoryReferralTree {
     if (!id) return null;
     return this.parent.get(id) ?? null;
   }
+
+  /**
+   * L3 — true when user has no parent edge (root or unknown). Empty id → false.
+   */
+  isRoot(userId: string): boolean {
+    const id = userId.trim();
+    if (!id) return false;
+    return !this.parent.has(id);
+  }
+
+  /**
+   * L3 — chain depth for user (0 if root). Blank → 0.
+   */
+  depthOf(userId: string): number {
+    const id = userId.trim();
+    if (!id) return 0;
+    return chainDepth(this.parent, id);
+  }
 }

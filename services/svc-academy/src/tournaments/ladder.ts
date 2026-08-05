@@ -241,3 +241,26 @@ export function averageScore(rows: readonly StandingRecord[]): number | null {
   for (const r of rows) sum += r.score;
   return sum / rows.length;
 }
+
+/**
+ * L3 — max score minus min score. Empty or single → null (never invent spread).
+ */
+export function scoreSpread(rows: readonly StandingRecord[]): number | null {
+  if (rows.length < 2) return null;
+  let min = rows[0]!.score;
+  let max = rows[0]!.score;
+  for (const r of rows) {
+    if (r.score < min) min = r.score;
+    if (r.score > max) max = r.score;
+  }
+  return max - min;
+}
+
+/**
+ * L3 — true when user has a standing row. Missing → false (never invent).
+ */
+export function hasStanding(rows: readonly StandingRecord[], userId: string): boolean {
+  const id = userId.trim();
+  if (!id) return false;
+  return rows.some((r) => r.userId === id);
+}

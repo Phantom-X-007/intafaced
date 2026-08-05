@@ -115,4 +115,16 @@ describe('MemoryReferralTree Slice A', () => {
     expect(tree.referrerOf(U(1))).toBeNull();
     expect(tree.referrerOf('  ')).toBeNull();
   });
+
+  it('L3 wave16 isRoot + depthOf', () => {
+    const tree = new MemoryReferralTree();
+    expect(tree.isRoot(U(1))).toBe(true);
+    expect(tree.depthOf(U(1))).toBe(0);
+    tree.attribute({ userId: U(2), referrerId: U(1) });
+    tree.attribute({ userId: U(3), referrerId: U(2) });
+    expect(tree.isRoot(U(2))).toBe(false);
+    expect(tree.depthOf(U(2))).toBe(1);
+    expect(tree.depthOf(U(3))).toBe(2);
+    expect(tree.isRoot('  ')).toBe(false);
+  });
 });

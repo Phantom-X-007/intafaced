@@ -263,4 +263,18 @@ export class MemoryAmbassadorProgramme {
     const row = this.get(userId.trim());
     return row?.status === 'frozen';
   }
+
+  /**
+   * L3 — all programme user ids (sorted). Empty store → [] (never invent).
+   */
+  listAllUserIds(): readonly string[] {
+    return [...this.byUser.keys()].sort();
+  }
+
+  /**
+   * L3 — total programme rows (active+frozen). Empty → 0.
+   */
+  totalCount(): number {
+    return this.byUser.size;
+  }
 }

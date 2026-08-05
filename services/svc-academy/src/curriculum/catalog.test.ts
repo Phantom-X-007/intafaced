@@ -14,6 +14,8 @@ import {
   listEmptyCurriculumPaths,
   listKindsWithContent,
   isPlaybookSlug,
+  curriculumSpineSize,
+  listCurriculumTitlesByPath,
 } from './catalog.js';
 
 /**
@@ -161,5 +163,13 @@ describe('curriculum catalog', () => {
     expect(isPlaybookSlug('not-real')).toBe(false);
     const pb = listCurriculum({ kind: 'playbook' })[0];
     if (pb) expect(isPlaybookSlug(pb.slug)).toBe(true);
+  });
+
+  it('L3 wave16 curriculumSpineSize + listCurriculumTitlesByPath', () => {
+    expect(curriculumSpineSize()).toBe(listCurriculum().length);
+    expect(curriculumSpineSize()).toBeGreaterThan(0);
+    const titles = listCurriculumTitlesByPath('foundations');
+    expect(titles.length).toBe(countCurriculumByPath('foundations'));
+    expect(titles).toEqual([...titles].sort());
   });
 });

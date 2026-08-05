@@ -147,3 +147,17 @@ export function countFanoutRefusals(attempts: readonly ChannelDeliveryAttempt[])
 export function hasAnyFanoutAcceptance(attempts: readonly ChannelDeliveryAttempt[]): boolean {
   return attempts.some((a) => a.outcome === 'accepted');
 }
+
+/**
+ * L3 — channels that accepted (order preserved). Empty → [].
+ */
+export function acceptedChannels(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt['channel'][] {
+  return attempts.filter((a) => a.outcome === 'accepted').map((a) => a.channel);
+}
+
+/**
+ * L3 — channels that failed transport (not refused). Empty → [].
+ */
+export function failedChannels(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt['channel'][] {
+  return attempts.filter((a) => a.outcome === 'failed').map((a) => a.channel);
+}
