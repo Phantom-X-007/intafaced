@@ -611,6 +611,14 @@ if (!available) {
         'trades.list': {},
         'trades.paymentInstrument': { tradeId: trade.id },
         'disputes.open': { tradeId: trade.id, reason: 'probing' },
+        // Considered, per the note below the map. Neither can carry an
+        // instrument: `appendEvidence` returns only the caller's OWN evidence
+        // envelopes, and `list` serialises dispute rows, which hold no
+        // instrument id and never join the instrument tables. Both are probed
+        // as a stranger anyway — the assertion is on what comes back, not on
+        // the reasoning.
+        'disputes.appendEvidence': { tradeId: trade.id, evidence: ['probing'] },
+        'disputes.list': {},
         'disputes.get': { tradeId: trade.id },
         'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
         'reputation.get': { userId: SELLER },
