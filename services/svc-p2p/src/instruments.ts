@@ -95,7 +95,7 @@ export type InstrumentErrorCode =
   | 'p2p.instrument_country_invalid'
   | 'p2p.instrument_not_found'
   | 'p2p.instrument_slot_taken'
-  | 'p2p.no_payment_instrument';
+  | 'p2p.take_refused';
 
 export class InstrumentError extends Error {
   constructor(
@@ -107,6 +107,47 @@ export class InstrumentError extends Error {
     super(message);
     this.name = 'InstrumentError';
   }
+}
+
+/**
+ * THE ONE REFUSAL A TAKE GETS WHEN THE PAYMENT METHOD IS THE PROBLEM.
+ *
+ * It is a constant, and every word of it is chosen for what it does NOT say.
+ *
+ * `attachToTrade` used to throw
+ *   `The seller has no active "${methodId}" destination for ${fiatCurrency}`
+ * and the router returned `err.message` verbatim as a `BAD_REQUEST`. The throw
+ * sits inside the reserve transaction, so a failed take rolls back cleanly — no
+ * trade row, no inventory decrement, no escrow, nothing to clean up — and
+ * `logDenied` was not called on that path, so it wrote no access-log row.
+ *
+ * Each take attempt was therefore a **free, unlogged, self-describing
+ * confirm/deny** for "does seller S hold an instrument for method M in currency
+ * C", with `instruments.methods.list` handing any authenticated caller the
+ * candidate list to enumerate against. It answered a question about someone
+ * else's bank accounts, for nothing, and left no trace it had been asked.
+ *
+ * Two things close it, and they are the two the ADR names:
+ *
+ *   · this message, which does not distinguish "no such instrument" from any
+ *     other reason the take could not name a destination — same code, same
+ *     text, same shape;
+ *   · the access-log row every such refusal now writes, so the attempt is
+ *     attributable and lands in the OWNER's own access log, like every other
+ *     read of instrument existence.
+ *
+ * WHAT THIS DOES NOT CLOSE, stated plainly rather than implied: an offer
+ * publishes its `methods`, so a caller who takes against a method the offer
+ * DOES list and is refused can still infer the instrument is missing. That
+ * residual is offer-side, not instrument-side, and the fix for it is
+ * offer-side too — an offer whose seller has no live destination for a method
+ * should not advertise that method. That is a change to the board query and
+ * belongs in its own PR; it is not smuggled in here.
+ */
+export const TAKE_REFUSED_MESSAGE = 'This offer cannot be taken with the selected payment method';
+
+export function takeRefused(): InstrumentError {
+  return new InstrumentError(TAKE_REFUSED_MESSAGE, 'p2p.take_refused');
 }
 
 const KEY_RE = /^[a-z][a-z0-9_]{0,39}$/;

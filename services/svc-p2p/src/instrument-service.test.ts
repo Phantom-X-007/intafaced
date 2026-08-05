@@ -316,7 +316,7 @@ if (!available) {
       });
 
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
-        code: 'p2p.no_payment_instrument',
+        code: 'p2p.take_refused',
       });
 
       // BEFORE ANY LOCK, and the transaction rolled back with it: no trade row,
@@ -465,8 +465,157 @@ if (!available) {
       });
 
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Other_Rail' })).rejects.toMatchObject({
-        code: 'p2p.no_payment_instrument',
+        code: 'p2p.take_refused',
       });
+    });
+  });
+
+  // ── THE ORACLE ────────────────────────────────────────────────────────────
+
+  /**
+   * `trades.take` WAS A FREE, UNLOGGED, SELF-DESCRIBING PROBE.
+   *
+   * `attachToTrade` threw with the method id and the currency echoed back, and
+   * the router returned `err.message` verbatim as a `BAD_REQUEST`. The throw is
+   * inside the reserve transaction, so the probe rolled back cleanly — no trade
+   * row, no inventory decrement, no escrow, no cost — and `logDenied` was not
+   * called on that path, so it wrote no access-log row. With
+   * `instruments.methods.list` supplying the candidate ids, that is a complete
+   * confirm/deny for "does seller S hold an instrument for method M in currency
+   * C", answered for nothing and never recorded.
+   *
+   * These tests are the two halves of closing it: the refusals must be
+   * indistinguishable, and every one of them must be on the record.
+   */
+  describe('the take oracle', () => {
+    /** An offer that lists `methodId`, from a seller funded and ready. */
+    async function offerListing(methodId: string, fiatCurrency = 'USD') {
+      await fund(SELLER, '1000');
+      return p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency,
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        totalAmt: amt('500'),
+        methods: [methodId],
+      });
+    }
+
+    /** Everything a caller can observe from one refused take. */
+    async function refusalShape(offerId: string, method: string) {
+      const err = await callerFor(BUYER)
+        .trades.take({ offerId, amount: '100', method })
+        .then(
+          () => null,
+          (e: unknown) => e as { code?: string; message?: string; shape?: unknown; data?: unknown },
+        );
+      return {
+        code: (err as { code?: string })?.code,
+        message: (err as { message?: string })?.message,
+        keys: Object.keys((err ?? {}) as object).sort(),
+        data: JSON.parse(JSON.stringify((err as { data?: unknown })?.data ?? null)),
+      };
+    }
+
+    /**
+     * THE PROOF.
+     *
+     * Two takes that fail for two entirely different reasons — one because the
+     * seller holds no destination for the method, one because the offer does
+     * not accept it — and nothing a caller can see tells them apart.
+     */
+    it('refuses "no such instrument" and "offer does not accept it" identically', async () => {
+      await registerMethod();
+      await registerMethod({ methodId: 'other-rail' });
+
+      // (a) The offer lists the method. The seller has NO instrument for it.
+      const noInstrument = await offerListing('other-rail');
+      const a = await refusalShape(noInstrument.id, 'other-rail');
+
+      // (b) The offer does NOT list the method. The seller DOES hold one.
+      await sellerInstrument();
+      const notAccepted = await offerListing('other-rail');
+      const b = await refusalShape(notAccepted.id, METHOD);
+
+      expect(a.code).toBe('BAD_REQUEST');
+      expect(a).toEqual(b);
+      // And the message names nothing the caller was not entitled to see: not
+      // the method they asked for, not the currency, not the seller.
+      expect(a.message).toBe('This offer cannot be taken with the selected payment method');
+      expect(a.message).not.toContain('other-rail');
+      expect(a.message).not.toContain(METHOD);
+      expect(a.message).not.toContain('USD');
+      expect(a.message).not.toContain(SELLER);
+    });
+
+    it('costs the prober nothing to attempt and everything to hide', async () => {
+      // The rollback that made the probe free is still there — refusing before
+      // any lock is correct and is not what changed. What changed is that the
+      // attempt is now on the seller's own access log.
+      await registerMethod();
+      await registerMethod({ methodId: 'other-rail' });
+      const offer = await offerListing('other-rail');
+
+      await expect(refusalShape(offer.id, 'other-rail')).resolves.toMatchObject({ code: 'BAD_REQUEST' });
+
+      expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
+      expect((await p2p.getOffer(offer.id)).remainingAmt).toBe(amt('500'));
+      expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
+
+      // THE LOG ROW SURVIVED THE ROLLBACK. It is written on the service's own
+      // connection, not the reserve transaction — a log row written inside the
+      // transaction the throw aborts would vanish with it, which is precisely
+      // what "unlogged" meant.
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log).toHaveLength(1);
+      expect(log[0]).toMatchObject({
+        ownerId: SELLER,
+        viewerId: BUYER,
+        outcome: 'denied',
+        denyReason: 'take_refused',
+        instrumentId: null,
+        tradeId: null,
+      });
+    });
+
+    it('logs both refusals the same way, so the log does not restore the distinction', async () => {
+      await registerMethod();
+      await registerMethod({ methodId: 'other-rail' });
+
+      const noInstrument = await offerListing('other-rail');
+      await refusalShape(noInstrument.id, 'other-rail');
+
+      await sellerInstrument();
+      const notAccepted = await offerListing('other-rail');
+      await refusalShape(notAccepted.id, METHOD);
+
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log).toHaveLength(2);
+      const shapes = log.map((e) => ({
+        outcome: e.outcome,
+        denyReason: e.denyReason,
+        viewerRole: e.viewerRole,
+        instrumentId: e.instrumentId,
+        tradeId: e.tradeId,
+      }));
+      expect(shapes[0]).toEqual(shapes[1]);
+    });
+
+    it('enumerating a seller is now a visible act, not a silent one', async () => {
+      // The seller reads their own log and sees that somebody spent an
+      // afternoon asking. Before this, there was nothing to see.
+      await registerMethod();
+      await registerMethod({ methodId: 'other-rail' });
+      const offer = await offerListing('other-rail');
+
+      for (let i = 0; i < 5; i++) await refusalShape(offer.id, 'other-rail');
+
+      const log = await callerFor(SELLER).instruments.accessLog({});
+      expect(log.filter((e) => e.outcome === 'denied' && e.denyReason === 'take_refused')).toHaveLength(5);
     });
   });
 
@@ -736,7 +885,7 @@ if (!available) {
       // And it is gone for everything that has not started yet.
       expect(await callerFor(SELLER).instruments.list({})).toEqual([]);
       await expect(p2p.takeOffer({ offerId: trade.offerId, takerId: BUYER, amount: amt('50'), method: METHOD })).rejects.toMatchObject({
-        code: 'p2p.no_payment_instrument',
+        code: 'p2p.take_refused',
       });
     });
 

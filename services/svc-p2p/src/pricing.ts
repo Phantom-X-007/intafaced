@@ -24,7 +24,8 @@ export class PricingError extends Error {
       | 'p2p.amount_below_min'
       | 'p2p.amount_above_max'
       | 'p2p.insufficient_offer_liquidity'
-      | 'p2p.invalid_amount',
+      | 'p2p.invalid_amount'
+      | 'p2p.offer_methods_required',
   ) {
     super(message);
     this.name = 'PricingError';

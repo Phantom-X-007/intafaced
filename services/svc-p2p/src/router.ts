@@ -145,6 +145,13 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
       case 'p2p.instrument_slot_taken':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'p2p.take_refused':
+        // ONE code, ONE message, for every reason a take could not name a
+        // payment destination. `BAD_REQUEST` and not `NOT_FOUND`, because the
+        // caller genuinely can fix it — by taking with a method the offer can
+        // complete — and because the response must be identical whichever of
+        // the reasons applied. See `TAKE_REFUSED_MESSAGE`.
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     }
@@ -177,6 +184,11 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.offer_not_active':
       case 'p2p.offer_method_unsupported':
       case 'p2p.dispute_evidence_rejected':
+        // `offer_method_unsupported` is no longer reachable from `trades.take`
+        // — that refusal goes through `refuseTake` so it is indistinguishable
+        // from "the seller holds no destination". The case stays mapped rather
+        // than deleted so a future caller that raises it does not fall through
+        // to INTERNAL_SERVER_ERROR.
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
       case 'p2p.escrow_missing':
         // Not a client error: the caller asked for something reasonable and the
@@ -298,7 +310,14 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService)
             minAmount: amountString,
             maxAmount: amountString,
             totalAmount: amountString.optional(),
-            methods: z.array(z.unknown()).optional(),
+            /**
+             * REQUIRED, and `min(1)`. An offer with no declared methods
+             * accepts anything, so the only thing that can refuse a take on it
+             * is the seller's instrument set — a clean per-method probe of the
+             * maker. The service refuses it too; this is the message a client
+             * can act on rather than a 400 from deeper down.
+             */
+            methods: z.array(z.unknown()).min(1),
             terms: z.string().max(4000).optional(),
           }),
         )

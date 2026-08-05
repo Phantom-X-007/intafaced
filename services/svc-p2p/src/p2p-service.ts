@@ -121,8 +121,19 @@ export class P2pError extends Error {
 export interface TradeInstrumentAttacher {
   attachToTrade(
     tx: Sql,
-    input: { tradeId: string; sellerId: string; methodId: string; fiatCurrency: string },
+    input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string },
   ): Promise<{ instrumentId: string; fingerprint: string }>;
+
+  /**
+   * THE ONE REFUSAL. Logs the attempt against the seller, then throws.
+   *
+   * On the interface rather than built here because it writes an access-log
+   * row, and this file must not own a second way to describe a payment
+   * instrument. Both reasons a take can fail on the method — the OFFER not
+   * accepting it, and the SELLER not holding a destination for it — go through
+   * it, so a caller cannot tell them apart.
+   */
+  refuseTake(input: { takerId: string; sellerId: string; tradeId?: string }): Promise<never>;
 }
 
 export interface P2pServiceOptions {
@@ -444,6 +455,24 @@ export class P2pService {
       throw new PricingError(`Fiat currency "${fiatCurrency}" is not enabled`, 'p2p.unsupported_fiat');
     }
 
+    // AN OFFER MUST DECLARE HOW IT CAN BE PAID.
+    //
+    // `methodAllowed` treats an offer with no declared methods as accepting
+    // ANYTHING, which used to be a reasonable "the terms text is the contract"
+    // default. It is not reasonable next to the take refusal: on an offer that
+    // declares nothing, the ONLY thing that can refuse a take is the seller's
+    // instrument set, so every method id a caller cares to try is answered
+    // cleanly. That is the take oracle again, in its sharpest form — an offer
+    // whose maker never chose to publish anything becomes a per-method probe of
+    // its own seller.
+    //
+    // Refused at creation, for NEW offers only. Existing ones keep working and
+    // refuse at take, honestly — breaking live offers to close a hole would
+    // cost makers real liquidity for a fix they did not ask for.
+    if (!Array.isArray(input.methods) || input.methods.length === 0) {
+      throw new PricingError('An offer must declare at least one payment method it accepts', 'p2p.offer_methods_required');
+    }
+
     const totalAmt = input.totalAmt ?? input.maxAmt;
     const offerId = input.offerId ?? crypto.randomUUID();
 
@@ -620,8 +649,17 @@ export class P2pService {
           // record raises limits platform-wide (§6.2 → §4.1).
           throw new P2pError('A maker cannot take their own offer', 'p2p.self_trade');
         }
+        // Computed here rather than after pricing, because the refusal below
+        // has to name the seller in the access log.
+        const { sellerId, buyerId } = partiesFor(offer.side, offer.makerId, input.takerId);
+
         if (!methodAllowed(offer.methods, input.method)) {
-          throw new P2pError(`Offer ${offer.id} does not accept "${input.method}"`, 'p2p.offer_method_unsupported');
+          // NOT a distinct error any more. "The offer does not accept that
+          // method" and "the seller holds no destination for that method" are
+          // the same sentence to the caller, deliberately: any difference
+          // between them is a bit of information about someone else's bank
+          // accounts, handed out for free. See `TAKE_REFUSED_MESSAGE`.
+          await this.instruments.refuseTake({ takerId: input.takerId, sellerId, tradeId: input.tradeId });
         }
 
         // BEFORE ANY LOCK. Both bounds and the remaining liquidity, under the
@@ -636,7 +674,6 @@ export class P2pService {
           fiatCurrency: offer.fiatCurrency,
         });
 
-        const { sellerId, buyerId } = partiesFor(offer.side, offer.makerId, input.takerId);
         const now = await txNow(tx);
         const deadlineAt = deadlineFor('created', now, this.deadlines);
         const deadlines = withDeadline({}, 'created', deadlineAt);
@@ -687,6 +724,7 @@ export class P2pService {
         await this.instruments.attachToTrade(tx, {
           tradeId: input.tradeId,
           sellerId,
+          takerId: input.takerId,
           methodId: input.method,
           fiatCurrency: offer.fiatCurrency,
         });
