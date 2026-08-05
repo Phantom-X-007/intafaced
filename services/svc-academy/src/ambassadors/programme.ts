@@ -74,3 +74,86 @@ export class AmbassadorProgrammeError extends Error {
     this.name = 'AmbassadorProgrammeError';
   }
 }
+
+/**
+ * L3 in-memory programme store (non-pay). Appoint / freeze / unfreeze only.
+ * Does not grant lobby host rights — identity perks remain SoT.
+ */
+export class MemoryAmbassadorProgramme {
+  private readonly byUser = new Map<string, AmbassadorRecord>();
+
+  get(userId: string): AmbassadorRecord | null {
+    return this.byUser.get(userId) ?? null;
+  }
+
+  badge(userId: string): AmbassadorBadge {
+    return badgeOf(userId, this.get(userId));
+  }
+
+  list(status?: AmbassadorStatus): readonly AmbassadorRecord[] {
+    const rows = [...this.byUser.values()];
+    const filtered = status ? rows.filter((r) => r.status === status) : rows;
+    return filtered.sort((a, b) => a.appointedAt.getTime() - b.appointedAt.getTime());
+  }
+
+  appoint(input: { userId: string; appointedBy: string; now?: Date }): AmbassadorRecord {
+    const userId = input.userId?.trim() ?? '';
+    const appointedBy = input.appointedBy?.trim() ?? '';
+    if (!userId || !appointedBy) {
+      throw new AmbassadorProgrammeError('userId and appointedBy required', 'academy.ambassador_invalid');
+    }
+    const existing = this.byUser.get(userId);
+    if (existing?.status === 'active') {
+      throw new AmbassadorProgrammeError(`User ${userId} is already an active ambassador`, 'academy.ambassador_already_active');
+    }
+    const row: AmbassadorRecord = {
+      userId,
+      status: 'active',
+      appointedBy,
+      appointedAt: input.now ?? new Date(),
+      frozenAt: null,
+      frozenBy: null,
+      freezeReason: null,
+    };
+    this.byUser.set(userId, row);
+    return row;
+  }
+
+  freeze(input: { userId: string; frozenBy: string; reason: string; now?: Date }): AmbassadorRecord {
+    const existing = this.byUser.get(input.userId);
+    if (!existing) {
+      throw new AmbassadorProgrammeError(`No ambassador programme row for ${input.userId}`, 'academy.ambassador_not_found');
+    }
+    if (existing.status === 'frozen') {
+      throw new AmbassadorProgrammeError(`Ambassador ${input.userId} is already frozen`, 'academy.ambassador_already_frozen');
+    }
+    const row: AmbassadorRecord = {
+      ...existing,
+      status: 'frozen',
+      frozenAt: input.now ?? new Date(),
+      frozenBy: input.frozenBy.trim(),
+      freezeReason: assertFreezeReason(input.reason),
+    };
+    this.byUser.set(input.userId, row);
+    return row;
+  }
+
+  unfreeze(input: { userId: string }): AmbassadorRecord {
+    const existing = this.byUser.get(input.userId);
+    if (!existing) {
+      throw new AmbassadorProgrammeError(`No ambassador programme row for ${input.userId}`, 'academy.ambassador_not_found');
+    }
+    if (existing.status !== 'frozen') {
+      throw new AmbassadorProgrammeError(`Ambassador ${input.userId} is not frozen`, 'academy.ambassador_invalid');
+    }
+    const row: AmbassadorRecord = {
+      ...existing,
+      status: 'active',
+      frozenAt: null,
+      frozenBy: null,
+      freezeReason: null,
+    };
+    this.byUser.set(input.userId, row);
+    return row;
+  }
+}

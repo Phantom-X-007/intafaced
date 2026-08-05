@@ -129,6 +129,37 @@ export function xpToNextRank(xp: bigint, tiers: readonly RankTier[] = RANK_TIERS
 }
 
 /**
+ * L3 — pure progress snapshot for UI (no money, no invent rank).
+ * XP fields are decimal strings of non-negative integers.
+ */
+export type RankProgress = {
+  readonly rank: number;
+  readonly title: string;
+  readonly xp: string;
+  readonly xpToNext: string | null;
+  readonly nextRank: number | null;
+  readonly nextTitle: string | null;
+  readonly atMax: boolean;
+};
+
+export function rankProgress(xp: bigint, tiers: readonly RankTier[] = RANK_TIERS): RankProgress {
+  const safeXp = xp < 0n ? 0n : xp;
+  const rank = rankForXp(safeXp, tiers);
+  const tier = tierFor(rank, tiers);
+  const toNext = xpToNextRank(safeXp, tiers);
+  const next = tiers.find((t) => t.xpRequired > safeXp) ?? null;
+  return {
+    rank,
+    title: tier.title,
+    xp: safeXp.toString(),
+    xpToNext: toNext === null ? null : toNext.toString(),
+    nextRank: next?.rank ?? null,
+    nextTitle: next?.title ?? null,
+    atMax: toNext === null,
+  };
+}
+
+/**
  * XP awards per action, per module.
  *
  * Kept here rather than in each module so the economy is visible in one place —
