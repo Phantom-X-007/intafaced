@@ -514,3 +514,23 @@ export function tradeMetricIdsJoined(): string {
 export function identityMetricIdsJoined(): string {
   return listMetricIdsUsingSource('identity').join(',');
 }
+
+/** L3 — money metric ratio label or empty. */
+export function moneyMetricRatioLabel(): string {
+  return moneyMetricRatio() ?? '';
+}
+
+/** L3 — non-money metric ratio label or empty. */
+export function nonMoneyMetricRatioLabel(): string {
+  return nonMoneyMetricRatio() ?? '';
+}
+
+/** L3 — multi-source ratio label or empty. */
+export function multiSourceMetricRatioLabel(): string {
+  return multiSourceMetricRatio() ?? '';
+}
+
+/** L3 — single-source ratio label or empty. */
+export function singleSourceMetricRatioLabel(): string {
+  return singleSourceMetricRatio() ?? '';
+}

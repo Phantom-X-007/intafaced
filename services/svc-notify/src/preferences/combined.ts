@@ -360,3 +360,23 @@ export function planSkipChannelsJoined(plan: readonly DeliveryDecision[]): strin
 export function planActionsPresentJoined(plan: readonly DeliveryDecision[]): string {
   return planActionsPresent(plan).join(',');
 }
+
+/** L3 — send ratio label or empty. */
+export function planSendRatioLabel(plan: readonly DeliveryDecision[]): string {
+  return planSendRatio(plan) ?? '';
+}
+
+/** L3 — hold ratio label or empty. */
+export function planHoldRatioLabel(plan: readonly DeliveryDecision[]): string {
+  return planHoldRatio(plan) ?? '';
+}
+
+/** L3 — skip ratio label or empty. */
+export function planSkipRatioLabel(plan: readonly DeliveryDecision[]): string {
+  return planSkipRatio(plan) ?? '';
+}
+
+/** L3 — first send channel label or empty. */
+export function firstSendChannelLabel(plan: readonly DeliveryDecision[]): string {
+  return firstSendChannel(plan) ?? '';
+}

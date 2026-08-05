@@ -68,6 +68,10 @@ import {
   podiumUserIdsJoined,
   standingUserIdsJoined,
   averageScoreLabel,
+  firstPlaceUserLabel,
+  lastPlaceUserLabel,
+  midRankUserLabel,
+  scoreSpreadLabel,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -341,5 +345,16 @@ describe('L3 standings board helpers', () => {
     expect(scoresInRankOrderJoined(rows)).toBe('20,10');
     expect(podiumUserIdsJoined(rows)).toBe('b,a');
     expect(averageScoreLabel(rows)).toBe('15');
+  });
+
+  it('L3 wave33 place/spread labels', () => {
+    expect(firstPlaceUserLabel([])).toBe('');
+    expect(lastPlaceUserLabel([])).toBe('');
+    expect(midRankUserLabel([])).toBe('');
+    expect(scoreSpreadLabel([])).toBe('');
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    expect(firstPlaceUserLabel(rows)).toBe('b');
+    expect(lastPlaceUserLabel(rows)).toBe('a');
+    expect(scoreSpreadLabel(rows)).toBe('20');
   });
 });

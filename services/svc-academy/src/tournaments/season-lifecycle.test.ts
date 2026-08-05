@@ -56,6 +56,10 @@ import {
   frozenSeasonIdsJoined,
   endedSeasonIdsJoined,
   scoreWritableSeasonIdsJoined,
+  liveSeasonRatioLabel,
+  frozenSeasonRatioLabel,
+  endedSeasonRatioLabel,
+  openSeasonRatioLabel,
 } from './season-lifecycle.js';
 
 const base = {
@@ -461,5 +465,27 @@ describe('L3 wave32 season status id joins', () => {
     expect(frozenSeasonIdsJoined(rows)).toBe('f');
     expect(endedSeasonIdsJoined(rows)).toBe('e');
     expect(scoreWritableSeasonIdsJoined(rows)).toBe('l');
+  });
+});
+
+describe('L3 wave33 season ratio labels', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('ratio labels empty and half', () => {
+    expect(liveSeasonRatioLabel([])).toBe('');
+    expect(frozenSeasonRatioLabel([])).toBe('');
+    expect(endedSeasonRatioLabel([])).toBe('');
+    expect(openSeasonRatioLabel([])).toBe('');
+    const rows = [mk('a', 'live'), mk('b', 'ended')];
+    expect(liveSeasonRatioLabel(rows)).toBe('0.5000');
+    expect(endedSeasonRatioLabel(rows)).toBe('0.5000');
+    expect(openSeasonRatioLabel(rows)).toBe('0.5000');
   });
 });

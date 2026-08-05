@@ -400,3 +400,23 @@ export function drillStatusLabel(run: DrillRun): string {
 export function drillRatioLabel(run: DrillRun): string {
   return drillProgress(run).ratio;
 }
+
+/** L3 — market id label. */
+export function drillMarketIdLabel(run: DrillRun): string {
+  return drillMarketId(run);
+}
+
+/** L3 — symbol label. */
+export function drillSymbolLabel(run: DrillRun): string {
+  return drillSymbol(run);
+}
+
+/** L3 — workbook slug label. */
+export function drillWorkbookSlugLabel(run: DrillRun): string {
+  return drillWorkbookSlug(run);
+}
+
+/** L3 — completion percent label. */
+export function drillCompletionPercentLabel(run: DrillRun): string {
+  return String(drillCompletionPercent(run));
+}

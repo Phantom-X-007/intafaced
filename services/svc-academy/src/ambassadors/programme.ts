@@ -530,4 +530,24 @@ export class MemoryAmbassadorProgramme {
   isProgrammeEmptyLabel(): boolean {
     return this.isEmpty();
   }
+
+  /** L3 — active ratio label or empty when null. */
+  activeRatioLabel(): string {
+    return this.activeRatio() ?? '';
+  }
+
+  /** L3 — frozen ratio label or empty when null. */
+  frozenRatioLabel(): string {
+    return this.frozenRatio() ?? '';
+  }
+
+  /** L3 — programme active ratio label (alias surface). */
+  programmeActiveRatioLabel(): string {
+    return this.programmeActiveRatio() ?? '';
+  }
+
+  /** L3 — true when density exceeds active (always when frozen present). */
+  hasInactiveRows(): boolean {
+    return this.frozenCount() > 0;
+  }
 }

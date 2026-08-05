@@ -576,3 +576,24 @@ export function averageScoreLabel(rows: readonly StandingRecord[]): string {
   const a = averageScore(rows);
   return a === null ? '' : String(a);
 }
+
+/** L3 — first place user label or empty. */
+export function firstPlaceUserLabel(rows: readonly StandingRecord[]): string {
+  return firstPlaceUser(rows) ?? '';
+}
+
+/** L3 — last place user label or empty. */
+export function lastPlaceUserLabel(rows: readonly StandingRecord[]): string {
+  return lastPlaceUser(rows) ?? '';
+}
+
+/** L3 — mid rank user label or empty. */
+export function midRankUserLabel(rows: readonly StandingRecord[]): string {
+  return midRankUser(rows) ?? '';
+}
+
+/** L3 — score spread label or empty. */
+export function scoreSpreadLabel(rows: readonly StandingRecord[]): string {
+  const s = scoreSpread(rows);
+  return s === null ? '' : String(s);
+}

@@ -811,3 +811,23 @@ export function pathsWithContentJoined(): string {
 export function kindsWithContentJoined(): string {
   return listKindsWithContent().join(',');
 }
+
+/** L3 — path count with content label. */
+export function pathCountWithContentLabel(): string {
+  return String(pathCountWithContent());
+}
+
+/** L3 — kind count with content label. */
+export function kindCountWithContentLabel(): string {
+  return String(kindCountWithContent());
+}
+
+/** L3 — empty path count label. */
+export function emptyPathCountLabel(): string {
+  return String(emptyPathCount());
+}
+
+/** L3 — first curriculum slug label or empty. */
+export function firstCurriculumSlugLabel(): string {
+  return firstCurriculumSlug() ?? '';
+}

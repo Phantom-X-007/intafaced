@@ -398,3 +398,23 @@ export function endedSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
 export function scoreWritableSeasonIdsJoined(seasons: readonly SeasonRecord[]): string {
   return listScoreWritableSeasonIds(seasons).join(',');
 }
+
+/** L3 — live season ratio label or empty. */
+export function liveSeasonRatioLabel(seasons: readonly SeasonRecord[]): string {
+  return liveSeasonRatio(seasons) ?? '';
+}
+
+/** L3 — frozen season ratio label or empty. */
+export function frozenSeasonRatioLabel(seasons: readonly SeasonRecord[]): string {
+  return frozenSeasonRatio(seasons) ?? '';
+}
+
+/** L3 — ended season ratio label or empty. */
+export function endedSeasonRatioLabel(seasons: readonly SeasonRecord[]): string {
+  return endedSeasonRatio(seasons) ?? '';
+}
+
+/** L3 — open season ratio label or empty. */
+export function openSeasonRatioLabel(seasons: readonly SeasonRecord[]): string {
+  return openSeasonRatio(seasons) ?? '';
+}
