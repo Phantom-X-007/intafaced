@@ -2,7 +2,8 @@
 
 **Status:** LAW · binding on every agent session  
 **Operator decision (2026-08-05):** Phase A is **finished for current residual craft**. Agents **must use** that leverage. Nitro does **not** re-decide this per chat.  
-**Home for maps:** Phase A audit · Phase B full-horizon (paths) · this file = **enforcement**
+**Home for maps:** Phase A audit · Phase B full-horizon (paths) · this file = **enforcement**  
+**Partner pack (Denon + his agent):** [`INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md`](INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md)
 
 ---
 
