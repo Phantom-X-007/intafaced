@@ -117,6 +117,199 @@ describe('an operator’s field list', () => {
     expect(parseFieldSpecs([{ key: 'a', label: 'A', pattern: '[0-9]{4}' }])[0]!.pattern).toBe('[0-9]{4}');
   });
 
+  it('refuses a pattern whose automaton would be too large to run cheaply', () => {
+    // `{n,m}` is expanded, so a short pattern can ask for an enormous machine.
+    // That is a denial of service at REGISTRATION rather than at match time,
+    // and it is refused with an InstrumentError like everything else here.
+    expect(() => parseFieldSpecs([{ key: 'a', label: 'A', pattern: '(a{100}){100}' }])).toThrow(InstrumentError);
+    expect(() => parseFieldSpecs([{ key: 'a', label: 'A', pattern: 'a{5000}' }])).toThrow(/repetition count above/);
+  });
+
+  it('refuses a construct the validator cannot run, and says which', () => {
+    // Not "invalid regular expression": these are valid regular expressions
+    // that this validator will not run. An operator who wrote a lookahead has
+    // to be told it was the lookahead, or they go hunting for a typo.
+    for (const [pattern, why] of [
+      ['(?=x)a', /lookahead/],
+      ['(?<=x)a', /lookbehind/],
+      ['(a)\\1', /backreference/],
+      ['\\bx', /word boundary/],
+      ['\\p{L}+', /Unicode property/],
+    ] as const) {
+      expect(() => parseFieldSpecs([{ key: 'a', label: 'A', pattern }]), pattern).toThrow(InstrumentError);
+      expect(() => parseFieldSpecs([{ key: 'a', label: 'A', pattern }]), pattern).toThrow(why);
+    }
+  });
+});
+
+describe('the pattern that used to be a denial of service', () => {
+  /**
+   * THE MEASURED FACT, AS A TEST.
+   *
+   * `(a+)+b` is six characters — well inside `MAX_PATTERN_LENGTH` (200) — and
+   * it compiled cleanly under the old `new RegExp(pattern, 'u')` check. Against
+   * 33 characters of `a`, well inside `MAX_VALUE_LENGTH` (512), it blocked the
+   * Node event loop for **24,674 ms**, doubling with every added character.
+   *
+   * Both caps did exactly what they said and neither was a mitigation: a cap on
+   * LENGTH bounds nothing about RUNTIME when the runtime is exponential in the
+   * length. The control is the engine — see `linear-pattern.ts`.
+   *
+   * This asserts the elapsed time, not a flag. A flag would go on passing if the
+   * matcher were swapped back.
+   */
+  it('does not block, and the answer is still right', () => {
+    const patterned = schema([{ key: 'code', label: 'Code', pattern: '(a+)+b' }]);
+    const attack = 'a'.repeat(33);
+
+    const t0 = process.hrtime.bigint();
+    expect(() => validateDetails(patterned, { code: attack })).toThrow(/expected format/);
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+
+    // Three orders of magnitude below the measured 24,674 ms, so this is a
+    // statement about the algorithm rather than about the machine.
+    expect(ms).toBeLessThan(50);
+  });
+
+  it('is bounded at the value cap, which is where the old engine was hopeless', () => {
+    // 512 is what MAX_VALUE_LENGTH permits. Under the old engine this call
+    // would not have returned — the extrapolation from the measured doubling is
+    // on the order of 10^140 years.
+    const attack = 'a'.repeat(MAX_VALUE_LENGTH);
+
+    // Every one of these is a classic catastrophic-backtracking shape, and none
+    // of them matches a run of `a` — so the refusal is the right answer and the
+    // elapsed time is the thing under test.
+    for (const pattern of ['(a+)+b', '(a|a)*b', '(a*)*b', '([a-z]+)*!', '(a|aa)+c']) {
+      const patterned = schema([{ key: 'code', label: 'Code', pattern }]);
+      const t0 = process.hrtime.bigint();
+      expect(() => validateDetails(patterned, { code: attack })).toThrow(/expected format/);
+      expect(Number(process.hrtime.bigint() - t0) / 1e6, pattern).toBeLessThan(100);
+    }
+  });
+});
+
+describe('what registration accepts is what validation runs', () => {
+  /**
+   * THE INVARIANT THE OLD CODE DID NOT HAVE.
+   *
+   * Registration checked `new RegExp(pattern, 'u')`. Validation ran
+   * `anchored(pattern)`, which built a DIFFERENT string — `^(?:${body})$` after
+   * stripping a leading `^` and a trailing `$` with two regexes that could not
+   * tell an anchor from an escaped literal — and compiled it fresh on every
+   * call. Measured, before the fix:
+   *
+   *     "\$"     | register: ok | anchored: FAIL /^(?:\)$/u: Unterminated group
+   *     "\d+\$"  | register: ok | anchored: FAIL /^(?:\d+\)$/u: Unterminated group
+   *
+   * A pattern ending in an ESCAPED dollar sign — a currency-amount field, which
+   * is not exotic — passed registration and threw a raw `SyntaxError` at every
+   * user's first save. Not an `InstrumentError`, so it left the service as
+   * INTERNAL_SERVER_ERROR: the user cannot tell whether they typed something
+   * wrong or we did, which is exactly what the comment above `parseFieldSpecs`
+   * says the compile check exists to prevent.
+   */
+  const CURRENCY_ISH = ['\\$', '\\d+\\$', '^\\d+\\$', '\\d+\\$$', '^\\d+\\$$', '[0-9]+\\.[0-9]{2}\\$', '\\$[0-9]+'];
+
+  it('accepts an escaped dollar sign at registration', () => {
+    // Rejecting it would also be a way to make save stop exploding, and it
+    // would be the wrong one: this is a legitimate pattern and an operator is
+    // entitled to write it.
+    for (const pattern of CURRENCY_ISH) {
+      expect(() => parseFieldSpecs([{ key: 'amount', label: 'Amount', pattern }]), pattern).not.toThrow();
+    }
+  });
+
+  it('then runs it correctly at save, instead of throwing a SyntaxError', () => {
+    const amount = schema([{ key: 'amount', label: 'Amount', pattern: '\\d+\\$' }]);
+
+    expect(validateDetails(amount, { amount: '1234$' })).toEqual({ amount: '1234$' });
+    // A refusal is an InstrumentError with a field, never a raw SyntaxError.
+    try {
+      validateDetails(amount, { amount: '1234' });
+      throw new Error('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(InstrumentError);
+      expect((err as InstrumentError).field).toBe('amount');
+    }
+  });
+
+  /**
+   * BOTH SPELLINGS OF THE CURRENCY FIELD, INCLUDING THE ONE THAT NEVER BROKE.
+   *
+   * `^\d+\$$` — anchored, with an escaped dollar before the anchor — is the form
+   * the ReDoS ruling named. It is worth being exact about why it belongs here:
+   * under the old `anchored()` it did NOT throw. The trailing `$` absorbed the
+   * `.replace(/\$$/, '')`, leaving `^(?:\d+\$)$`, which is valid and correct.
+   *
+   * The form that actually exploded is the same pattern WITHOUT the closing
+   * anchor — `\d+\$` — where the strip ate the escape instead and produced
+   * `^(?:\d+\)$`. So the escaped dollar sign is not one bug with one spelling:
+   * whether it detonated depended on whether the operator happened to anchor.
+   * Both are pinned, because a fix that only handled the anchored form would
+   * leave the actual defect open and still look green.
+   */
+  it('registers and matches the anchored currency pattern from the ruling', () => {
+    expect(() => parseFieldSpecs([{ key: 'amount', label: 'Amount', pattern: '^\\d+\\$$' }])).not.toThrow();
+
+    const amount = schema([{ key: 'amount', label: 'Amount', pattern: '^\\d+\\$$' }]);
+    expect(validateDetails(amount, { amount: '5$' })).toEqual({ amount: '5$' });
+    expect(validateDetails(amount, { amount: '1234$' })).toEqual({ amount: '1234$' });
+    // The dollar is a literal, so a value without one is not in the format.
+    expect(() => validateDetails(amount, { amount: '5' })).toThrow(/expected format/);
+  });
+
+  it('still reads a bare trailing $ as the anchor', () => {
+    // The other half of the same bug: fixing the escape must not stop `$`
+    // meaning "end of value".
+    const anchored = schema([{ key: 'code', label: 'Code', pattern: '\\d+$' }]);
+    expect(validateDetails(anchored, { code: '1234' })).toEqual({ code: '1234' });
+    expect(() => validateDetails(anchored, { code: '1234$' })).toThrow(/expected format/);
+  });
+
+  it('holds as a property: nothing that registers can throw at save', () => {
+    // The general statement, rather than one example of it. Every pattern
+    // accepted by `parseFieldSpecs` must be runnable by `validateDetails`
+    // against anything — and the only error either may raise is InstrumentError.
+    const CORPUS = [
+      '[0-9]{4}',
+      '^[0-9]{4}$',
+      '\\$',
+      '\\d+\\$',
+      '^\\d+\\$',
+      '\\\\',
+      '\\.',
+      '[A-Z]{2}[0-9]{2}[A-Z0-9]{1,30}',
+      '(a+)+b',
+      '\\w+([.-]\\w+)*',
+      '[+-]?[0-9]+(\\.[0-9]{1,2})?',
+      '(?:abc|def)+',
+      '[\\d.-]{1,34}',
+      '.*',
+      '^$',
+      'a|',
+      '[^ ]+',
+    ];
+    const VALUES = ['', ' ', '1234', '12$', '$', '\\', '.', 'DE89370400440532013000', 'a'.repeat(64), 'a-b.c', '-12.50', 'abcdef'];
+
+    let registered = 0;
+    for (const pattern of CORPUS) {
+      const specs = parseFieldSpecs([{ key: 'v', label: 'V', pattern, required: false }]);
+      registered++;
+      const s = schema([{ key: 'v', label: 'V', pattern, required: false }]);
+      expect(specs[0]!.pattern).toBe(pattern);
+
+      for (const value of VALUES) {
+        try {
+          validateDetails(s, { v: value });
+        } catch (err) {
+          expect(err, `${pattern} vs ${JSON.stringify(value)}`).toBeInstanceOf(InstrumentError);
+        }
+      }
+    }
+    expect(registered).toBe(CORPUS.length);
+  });
+
   it('rejects nonsensical length bounds', () => {
     expect(() => parseFieldSpecs([{ key: 'a', label: 'A', minLength: 10, maxLength: 4 }])).toThrow(/minLength above maxLength/);
     expect(() => parseFieldSpecs([{ key: 'a', label: 'A', maxLength: 0 }])).toThrow(/outside/);

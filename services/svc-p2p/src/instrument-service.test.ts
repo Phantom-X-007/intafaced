@@ -10,7 +10,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
-import { ANY_COUNTRY } from './instruments.js';
+import { ANY_COUNTRY, InstrumentError } from './instruments.js';
 import { createP2pRouter } from './router.js';
 
 /**
@@ -1166,6 +1166,143 @@ if (!available) {
         SELECT viewer_id, outcome, deny_reason FROM p2p.instrument_access_log WHERE viewer_id = ${STRANGER}
       `;
       expect(attempts).toEqual([{ viewer_id: STRANGER, outcome: 'denied', deny_reason: 'not_the_owner' }]);
+    });
+  });
+
+  // ── A row that did not come through the API ────────────────────────────────
+
+  /**
+   * THE DOOR IS NOT THE CONTROL.
+   *
+   * `registerMethodSchema` is the only writer with `admin:compliance` in front
+   * of it, and it validates. Everything else that can reach the column —
+   * a migration, a data-fix script, a psql session, some future writer in this
+   * same service — validated nothing, and `toSchema` cast the row straight to
+   * `FieldSpec[]`. "Only a trusted operator can get here" is a statement about
+   * who is holding the door; it stops being true the first time a scope widens
+   * or a migration writes the row directly, and it was never something the code
+   * enforced.
+   *
+   * These tests write rows with RAW SQL — deliberately bypassing every line of
+   * TypeScript in this service — and assert that both halves hold:
+   *
+   *   · the DATABASE refuses a structurally bad field list at write time,
+   *     whoever is writing;
+   *   · the SERVICE refuses a field list it cannot run at read time, because
+   *     "is this pattern safe to execute" is not a question SQL can answer.
+   */
+  describe('a schema row inserted behind the API', () => {
+    /** Straight to the table. No service code involved on the way in. */
+    async function rawInsertSchema(fields: unknown, methodId = 'raw-method') {
+      return sql`
+        INSERT INTO p2p.payment_method_schemas (method_id, country, label, fields, enabled)
+        VALUES (${methodId}, ${ANY_COUNTRY}, 'Inserted behind the API', ${sql.json(fields as never)}, true)
+        ON CONFLICT (method_id, country) DO UPDATE SET fields = EXCLUDED.fields
+      `;
+    }
+
+    it('is refused by the database when the field list is malformed', async () => {
+      // The column guard used to be "a non-empty JSON array" and nothing more,
+      // so every one of these was storable.
+      const REFUSED: Array<[string, unknown]> = [
+        ['no fields at all', []],
+        ['not an array', { key: 'a' }],
+        ['above MAX_FIELDS', Array.from({ length: 25 }, (_, i) => ({ key: `f${i}`, label: 'L' }))],
+        ['a key that is not a key', [{ key: 'Not A Key', label: 'L' }]],
+        ['no key', [{ label: 'L' }]],
+        ['no label', [{ key: 'a' }]],
+        ['a blank label', [{ key: 'a', label: '   ' }]],
+        ['a label over MAX_LABEL_LENGTH', [{ key: 'a', label: 'x'.repeat(121) }]],
+        ['a pattern over MAX_PATTERN_LENGTH', [{ key: 'a', label: 'L', pattern: 'x'.repeat(201) }]],
+        ['a pattern that is not a string', [{ key: 'a', label: 'L', pattern: 5 }]],
+        ['a minLength of 0', [{ key: 'a', label: 'L', minLength: 0 }]],
+        ['a minLength past MAX_VALUE_LENGTH', [{ key: 'a', label: 'L', minLength: 513 }]],
+        ['a fractional minLength', [{ key: 'a', label: 'L', minLength: 1.5 }]],
+        ['minLength above maxLength', [{ key: 'a', label: 'L', minLength: 10, maxLength: 4 }]],
+        [
+          'a duplicate key',
+          [
+            { key: 'a', label: 'A' },
+            { key: 'a', label: 'B' },
+          ],
+        ],
+        ['a non-boolean required', [{ key: 'a', label: 'L', required: 'yes' }]],
+        ['an element that is not an object', ['nope']],
+      ];
+
+      for (const [what, fields] of REFUSED) {
+        await expect(rawInsertSchema(fields), what).rejects.toMatchObject({
+          constraint_name: 'payment_method_schemas_fields_ck',
+        });
+      }
+
+      // And nothing landed.
+      const rows = await sql`SELECT method_id FROM p2p.payment_method_schemas WHERE method_id = 'raw-method'`;
+      expect(rows).toEqual([]);
+    });
+
+    /**
+     * The half SQL cannot cover.
+     *
+     * `(?=…)` is a perfectly well-formed string of 12 characters, so the column
+     * constraint has no grounds to refuse it — deciding whether a pattern is one
+     * this service can run in linear time means running this service's parser.
+     * That is why the re-validation on READ exists as well, and this is the test
+     * that would go green again if `toSchema` went back to casting the row.
+     */
+    it('is refused by the service on read when the pattern is one we cannot run', async () => {
+      await rawInsertSchema([{ key: 'acct', label: 'Account', pattern: '(?=[0-9]{4})[0-9]+' }]);
+
+      // It really is in the table — the database had no reason to object.
+      const stored = await sql`SELECT fields FROM p2p.payment_method_schemas WHERE method_id = 'raw-method'`;
+      expect(stored).toHaveLength(1);
+
+      // Every read path refuses it, and says which row is the problem.
+      await expect(instruments.listMethodSchemas()).rejects.toThrow(/raw-method/);
+      await expect(instruments.listMethodSchemas()).rejects.toThrow(/lookahead/);
+      await expect(
+        instruments.createInstrument({
+          ownerId: SELLER,
+          methodId: 'raw-method',
+          country: 'DE',
+          fiatCurrency: 'USD',
+          details: { acct: '1234' },
+        }),
+      ).rejects.toThrow(InstrumentError);
+    });
+
+    it('refuses on read for the rest of the rules too, not only patterns', async () => {
+      // A row whose SHAPE the constraint accepts but whose CONTENT the service
+      // will not: `help` is a string, so SQL is satisfied, and the pattern is a
+      // 13-character automaton bomb that only the compiler can recognise.
+      await rawInsertSchema([{ key: 'acct', label: 'Account', pattern: '(a{100}){100}' }]);
+
+      await expect(instruments.listMethodSchemas()).rejects.toThrow(InstrumentError);
+      await expect(instruments.listMethodSchemas()).rejects.toThrow(/raw-method/);
+    });
+
+    it('lets a legitimate hand-written row through untouched', async () => {
+      // Fail-closed must not mean fail-always. A row an operator could have
+      // registered through the API reads back exactly as written — including a
+      // pattern with an escaped dollar sign, the one that used to explode.
+      await rawInsertSchema([
+        { key: 'amount', label: 'Amount', required: true, pattern: '\\d+\\$' },
+        { key: 'holder_name', label: 'Account holder', required: true, maxLength: 80 },
+      ]);
+
+      const all = await instruments.listMethodSchemas({ methodId: 'raw-method' });
+      expect(all).toHaveLength(1);
+      expect(all[0]!.fields.map((f) => f.key)).toEqual(['amount', 'holder_name']);
+      expect(all[0]!.fields[0]!.pattern).toBe('\\d+\\$');
+
+      const created = await instruments.createInstrument({
+        ownerId: SELLER,
+        methodId: 'raw-method',
+        country: 'DE',
+        fiatCurrency: 'USD',
+        details: { amount: '2500$', holder_name: 'A Seller' },
+      });
+      expect(created.methodId).toBe('raw-method');
     });
   });
 }

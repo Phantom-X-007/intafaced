@@ -865,12 +865,57 @@ function toHeader(row: InstrumentRow): InstrumentHeader {
   };
 }
 
+/**
+ * A STORED ROW IS NOT A TRUSTED ROW.
+ *
+ * This used to `as FieldSpec[]` whatever was in the column. That made every
+ * rule in `instruments.ts` — the length cap, the field cap, the key shape, and
+ * above all the check that a pattern is one this engine can run in linear time
+ * — a property of ONE code path (`registerMethodSchema`) rather than a property
+ * of the data. Anything that reached the column another way inherited none of
+ * them: a migration, a fix-up script, a psql session, a future writer in this
+ * same service. The row would then be cast straight into the validator and its
+ * pattern handed to the matcher.
+ *
+ * "Only `admin:compliance` can get here" is not the control. It is an argument
+ * about who is holding the door, and it stops being true the first time a scope
+ * widens or a data-fix writes the row directly.
+ *
+ * So the parse runs again, on the way out of the database. `parseFieldSpecs` is
+ * idempotent over anything this service wrote — it trims, lower-cases and
+ * bounds, and re-running it on its own output changes nothing — so this costs a
+ * re-parse and buys the guarantee that a `MethodSchema` in memory has been
+ * through the same gate however it arrived.
+ *
+ * It FAILS CLOSED, and deliberately loudly: a schema we cannot re-validate is a
+ * schema we cannot honour, and a listing that silently omitted the bad row would
+ * hide the exact thing an operator needs to see. The refusal names the method
+ * and country so the offending row can be found.
+ *
+ * The database enforces the structural half of the same rules — see
+ * `payment_method_fields_are_well_formed` in
+ * `drizzle/0001_p2p_payment_instruments.sql`. The two are not redundant: SQL can
+ * check the shape of a field list at write time no matter who is writing, and
+ * cannot decide whether a regular expression is safe to run without running this
+ * service's matcher. Neither half covers the other.
+ */
 function toSchema(row: SchemaRow): MethodSchema {
+  let fields: FieldSpec[];
+  try {
+    fields = parseFieldSpecs(row.fields);
+  } catch (err) {
+    const why = err instanceof InstrumentError ? err.message : String(err);
+    throw new InstrumentError(
+      `The stored field list for "${row.method_id}" in ${row.country} is not one this service can accept: ${why}`,
+      'p2p.instrument_schema_invalid',
+    );
+  }
+
   return {
     methodId: row.method_id,
     country: row.country,
     label: row.label,
-    fields: (Array.isArray(row.fields) ? row.fields : []) as readonly FieldSpec[],
+    fields,
     enabled: row.enabled,
   };
 }
