@@ -50,10 +50,13 @@ export type RankEmpty = {
 export type RankUnavailable = {
   readonly status: 'unavailable';
   readonly userMessageKey: 'agents.scanner.unavailable';
-  readonly reason: 'stale' | 'no_quotes';
+  readonly reason: 'stale' | 'no_quotes' | 'market_plane_dark';
 };
 
 export type RankResult = RankOk | RankEmpty | RankUnavailable;
+
+/** Stage-2: live market data plane. Dark → refuse invent signals. */
+export type MarketPlaneState = 'live' | 'dark';
 
 function parseDecimal(s: string): number | null {
   if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
@@ -71,10 +74,16 @@ function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
  * Rank fixture markets by |changeBps| × log1p(volume) when both present and fresh.
  * Incomplete rows are skipped; never zero-filled.
  */
-export function rankFixtures(fixtures: readonly MarketFixture[], options: { now?: Date; limit?: number } = {}): RankResult {
+export function rankFixtures(
+  fixtures: readonly MarketFixture[],
+  options: { now?: Date; limit?: number; marketPlane?: MarketPlaneState } = {},
+): RankResult {
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
   const limit = options.limit ?? 20;
+  if (options.marketPlane === 'dark') {
+    return { status: 'unavailable', userMessageKey: 'agents.scanner.unavailable', reason: 'market_plane_dark' };
+  }
 
   if (fixtures.length === 0) {
     return { status: 'empty', userMessageKey: 'agents.scanner.empty' };

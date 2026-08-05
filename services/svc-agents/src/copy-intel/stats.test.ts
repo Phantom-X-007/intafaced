@@ -61,4 +61,13 @@ describe('copy-intel buildLeaderStats (Stage-1 fixtures)', () => {
     const r = buildLeaderStats([row({ leaderId: 'L1', closedTrades: 5, winningTrades: 9 })], { now: NOW });
     expect(r.status).toBe('unavailable');
   });
+
+  it('Stage-2: copy plane dark → refuse invent PnL', () => {
+    const r = buildLeaderStats([row({ leaderId: 'L1' })], { now: NOW, copyPlane: 'dark' });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.copy_intel.unavailable',
+      reason: 'copy_plane_dark',
+    });
+  });
 });
