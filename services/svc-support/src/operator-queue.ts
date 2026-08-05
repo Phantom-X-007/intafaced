@@ -82,3 +82,43 @@ export function assignNext(
   }
   return null;
 }
+
+export type ClaimOk = {
+  readonly status: 'ok';
+  readonly ticket: SupportTicket;
+};
+
+export type ClaimRefuse = {
+  readonly status: 'refuse';
+  readonly reason: 'not_found' | 'not_queueable' | 'already_claimed' | 'invalid_operator';
+};
+
+export type ClaimResult = ClaimOk | ClaimRefuse;
+
+/**
+ * Pure exclusive claim: only open/pending unassigned tickets can be claimed.
+ * Already assigned to another operator → refuse (no steal invent).
+ * Same operator re-claim → ok (idempotent).
+ */
+export function claimTicket(input: { tickets: readonly SupportTicket[]; ticketId: string; operatorId: string; now?: Date }): ClaimResult {
+  const operatorId = input.operatorId?.trim() ?? '';
+  if (!operatorId) return { status: 'refuse', reason: 'invalid_operator' };
+  const ticket = input.tickets.find((t) => t.id === input.ticketId);
+  if (!ticket) return { status: 'refuse', reason: 'not_found' };
+  if (ticket.status !== 'open' && ticket.status !== 'pending') {
+    return { status: 'refuse', reason: 'not_queueable' };
+  }
+  if (ticket.assigneeId && ticket.assigneeId !== operatorId) {
+    return { status: 'refuse', reason: 'already_claimed' };
+  }
+  const now = (input.now ?? new Date()).toISOString();
+  return {
+    status: 'ok',
+    ticket: {
+      ...ticket,
+      assigneeId: operatorId,
+      status: ticket.status === 'open' ? 'pending' : ticket.status,
+      updatedAt: now,
+    },
+  };
+}

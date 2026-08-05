@@ -45,12 +45,23 @@ describe('support agent Stage-1 guardrail', () => {
     }
   });
 
-  it('never grants a write tool in trade/pay/bank/ledger modules', () => {
+  it('never grants tools in trade/pay/bank/ledger modules', () => {
     const moneyModules = new Set(['trade', 'pay', 'bank', 'ledger', 'p2p']);
     for (const tool of g().tools) {
       expect(moneyModules.has(tool.module)).toBe(false);
-      expect(tool.mode).toBe('read');
     }
+  });
+
+  it('Stage-2 L3: ticket.comment is write + requiresApproval; refuse without approval', () => {
+    const comment = g().tools.find((t) => t.name === 'support.ticket.comment');
+    expect(comment).toMatchObject({ mode: 'write', requiresApproval: true });
+    expect(evaluateToolCall(g(), state(), { tool: 'support.ticket.comment' })).toMatchObject({
+      allowed: false,
+    });
+    expect(evaluateToolCall(g(), state({ approvedTools: ['support.ticket.comment'] }), { tool: 'support.ticket.comment' })).toEqual({
+      allowed: true,
+    });
+    expect(evaluateToolCall(g(), state(), { tool: 'support.ticket.comment', approved: true })).toEqual({ allowed: true });
   });
 
   it('refuses support tools outside the grant list', () => {
