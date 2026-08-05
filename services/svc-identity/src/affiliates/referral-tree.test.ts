@@ -80,5 +80,7 @@ describe('MemoryReferralTree Slice A', () => {
       [U(2)]: 1,
       [U(9)]: 0,
     });
+    expect(tree.maxDirectDownline([U(1), U(2), U(9)])).toBe(2);
+    expect(tree.maxDirectDownline([])).toBe(0);
   });
 });

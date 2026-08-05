@@ -39,6 +39,13 @@ export class MuteUpdateError extends Error {
   }
 }
 
+/**
+ * L3 — how many muteable channels are muted (0–3). Never invents a mute.
+ */
+export function countMutedChannels(prefs: ChannelMutePrefs): number {
+  return prefs.muted.size;
+}
+
 /** Apply a mute toggle. Refuses any API that claims to mute "critical" as a channel. */
 export function applyMuteToggle(current: ChannelMutePrefs, input: { channel: string; muted: boolean }): ChannelMutePrefs {
   const ch = input.channel;

@@ -128,3 +128,10 @@ export function countSeasonsByStatus(seasons: readonly SeasonRecord[]): SeasonSt
     scoreWritable: live,
   };
 }
+
+/**
+ * L3 — seasons that still accept score writes (live only). Empty in → empty out.
+ */
+export function listScoreWritableSeasons(seasons: readonly SeasonRecord[]): readonly SeasonRecord[] {
+  return seasons.filter((s) => isScoreWritable(s.status));
+}

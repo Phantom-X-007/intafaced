@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_MUTE_PREFS, MemoryMuteStore, MuteUpdateError, applyMuteToggle, isChannelMuted } from './mute.js';
+import { EMPTY_MUTE_PREFS, MemoryMuteStore, MuteUpdateError, applyMuteToggle, countMutedChannels, isChannelMuted } from './mute.js';
 
 describe('isChannelMuted — critical never silenced', () => {
   const mutedEmail = { muted: new Set(['email'] as const) };
@@ -33,5 +33,11 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     store.setMuted('u1', 'sms', true);
     expect(isChannelMuted(store.get('u1'), 'sms', 'info')).toBe(true);
     expect(isChannelMuted(store.get('u2'), 'sms', 'info')).toBe(false);
+  });
+
+  it('L3 countMutedChannels without invent', () => {
+    expect(countMutedChannels(EMPTY_MUTE_PREFS)).toBe(0);
+    const muted = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'email', muted: true });
+    expect(countMutedChannels(muted)).toBe(1);
   });
 });

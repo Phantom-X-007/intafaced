@@ -55,3 +55,22 @@ export function consumeCubePointsForMetrics(
   const filtered = points.filter((p) => set.has(p.metricId));
   return consumeCubePoints(filtered);
 }
+
+/**
+ * L3 — operator board summary of a consume result (never invents points).
+ */
+export type ConsumeSummary = {
+  readonly status: ConsumeResult['status'];
+  readonly pointCount: number;
+  readonly reason: string | null;
+};
+
+export function summarizeConsumeResult(result: ConsumeResult): ConsumeSummary {
+  if (result.status === 'ok') {
+    return { status: 'ok', pointCount: result.points.length, reason: null };
+  }
+  if (result.status === 'empty') {
+    return { status: 'empty', pointCount: 0, reason: null };
+  }
+  return { status: 'refuse', pointCount: 0, reason: result.reason };
+}
