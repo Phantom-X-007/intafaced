@@ -949,13 +949,10 @@ function printStatus(m) {
     );
     try {
       const ev = evaluateThrift(m.actionsRuns24h);
-      const msg =
-        ev.level === 'hard'
-          ? 'FAIL — do not open/update PRs that start CI (pnpm thrift:check / pnpm pr); wait or THRIFT_ALLOW=1'
-          : ev.level === 'soft'
-            ? 'WARN — batch into fat PRs; no micro-PR / stamp docs'
-            : 'OK';
-      console.log(`  thrift: level=${ev.level} soft≥${ev.soft} hard≥${ev.hard} docs≥${ev.hardDocs} ci≥${ev.hardCi} — ${msg}`);
+      const msg = ev.level === 'soft' ? 'WARN — volume high (never a delivery block); one push per unit; no coordination PRs' : 'OK';
+      console.log(
+        `  thrift: level=${ev.level} soft≥${ev.soft} total_ref≥${ev.hard} docs_warn≥${ev.hardDocs} ci_warn≥${ev.hardCi} — ${msg}`,
+      );
     } catch {
       console.log('  thrift: (evaluate failed)');
     }

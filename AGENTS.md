@@ -167,35 +167,43 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 ## GitHub Actions thrift (mandatory — Nitro and Denon agents)
 
-**Intent:** cut **wasted** Actions spend on a private repo. Does **not** slow parallel shipping, kill automation, or add a Denon review gate.  
+**Intent:** cut **wasted** Actions spend without slowing delivery. GitHub is the **merge seal**, not the workshop.  
 **Full law + economics:** [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Keep this section and that doc in sync.
 
-### Speed / autonomy preserved (explicit)
+### Local-first (habit — not a hard exit)
 
-- **Parallel agents are allowed** — many open PRs under soft/ok thrift. **Docs thrash** and **re-push waste** hard-stop; CI volume alone does not stop NEW opens.
-- **No new human approval** beyond existing asymmetric review + green CI.
-- **Remote CI stays the merge seal** (full matrix green). Local `pnpm verify` is the filter so we do not pay for “push to discover red.”
-- Budget stop-at-cap is Denon’s **high fuse** (infra), not a reason to open fewer PRs.
+1. **Workshop is local.** Write and prove as much as the machine can run locally. Remote CI is the seal after a coherent unit is done — not the first debugger.
+2. **Push once per finished unit.** Do not re-push every tiny edit to watch CI. Re-push only after a real local fix.
+3. **`pnpm thrift:check` meters and WARNs** (pre-push + `pnpm pr`). **It never exit-1s on run counts.** Stamp-mill protection is **value-gate** (content), not a volume gate.
+4. **`pnpm verify` honesty:** if the machine has no Docker, verify may exit 0 with **INCOMPLETE** — do **not** call that full green. Install local infra once: `tooling/scripts/local-infra-bootstrap.sh` (Colima/Docker + Foundry; see script header). Foundry lives under `.tools/foundry` when bootstrapped in-repo.
+5. **Open product PRs** via **`pnpm pr -- …`**. Prefer path-cluster batches over one micro-PR per residual id when they share a service — soft preference, not a hard “one PR per day.”
+6. Prefer **pure docs/markdown** when docs-only (full CI skipped; Docs format **PR only**).
+7. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
+8. **Re-run all jobs** only for flake or known infra fix.
 
-### Do
+### Coordination PRs — forbidden
 
-1. **`pnpm thrift:check` before any push/PR that starts Actions** (also in `.githooks/pre-push`). **Docs thrash hard-fails** (Docs≥120). **CI/total volume soft-warns** (soft≥120, total hard ref≥220, CI soft ref≥160) — **new work is never blocked by CI volume alone**. **Re-push waste hard-fails** when this branch already has **≥2 CI runs/24h** unless you ran `pnpm verify` and push with **`THRIFT_LOCAL_GREEN=1`**. Open PRs via **`pnpm pr -- …`**. Override only `THRIFT_ALLOW=1` + PR note.
-2. **AFK batch law:** parallel code in worktrees is fine; **do not** open one micro-PR per claim — batch path-clusters into fat PRs (see SWARM-MANDATE). **Push once after local green** — never re-push to watch CI.
-3. **`pnpm verify` green locally** before the push that opens or updates a **code** PR.
-4. **Batch** coherent change-sets; avoid push storms (push → CI → push 2 min later → cancel → repeat) while iterating without local green.
-5. Prefer **pure docs/markdown** when docs-only (full CI skipped; Docs format **PR only**, skips FREEZE/claims meters).
-6. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
-7. **Re-run all jobs** only for flake or known infra fix.
+**Do not open a PR whose only job is status, keepalive, peace, cycle stamp, FREEZE tip-bump, claims-only meter, or “board unchanged.”**  
+Claims / FREEZE / R00–R02 / DASHBOARD stay **files** agents edit in worktrees. They ship **only** when a real product or law PR needs them as part of that delta — never alone as swarm chat.
 
-### Never (false thrift)
+### Never (false thrift — integrity only)
 
-- Make the repo public, skip doctrine/money tests, claim green without verify, or disable required checks “to save money.”
+These are **integrity violations**, not cost preferences:
+
+- Skip doctrine/money tests “to save money.”
+- Claim green without an honest verify (including calling an INCOMPLETE local run full green).
+- Disable required checks “to save money.”
 - Restore `push: main` full CI / Docs-format without a spend review (double-bill thrash).
+
+### Public vs private (not thrift)
+
+**Making the repo public is a business/IP decision (Nitro + Denon), not thrift and not an integrity sin.**  
+Agents **do not** flip visibility. Standard GitHub-hosted Actions minutes are free on public repos; private Free plan has a minute pool. Do **not** invent security myths to justify staying private, and do **not** go public to “save money” without an explicit owner decision. Secrets unique-to-this-repo vs public CoinExchange vendor import: see forensic notes / spend-control — the #197 “secrets ban” is not a thrift rule.
 
 ### Denon-only infra (agents may implement workflow PR after he installs the runner app)
 
-- Actions budget ~$50–80/mo, stop-when-reached ON, alerts.
-- Prefer cheaper managed runners (e.g. Ubicloud) for heavy jobs — same GitHub checks UI; see spend-control doc.
+- Actions budget ~$50–80/mo, stop-when-reached ON, alerts — high fuse while private.
+- Prefer cheaper managed runners (e.g. Ubicloud) for heavy jobs if the repo stays private — same GitHub checks UI; see spend-control doc.
 
 ---
 

@@ -268,7 +268,7 @@ export const NOT_GATES = {
   'value-gate.mjs':
     'stamp-mill detector for docs-only near-duplicate commits. Lives on Docs format workflow (docs-format.yml), not pnpm gates — ci.yml excludes docs/** and **/*.md, so coordinator docs PRs never hit GATES. (That exclusion is now written as negated `paths:` rather than `paths-ignore`, because INTAFACED_DEFINITIVE_BUILD.md is law and coverage-check has to see it; the set of excluded docs is unchanged.) Advisory first; flip to strict in that workflow only.',
   'thrift-preflight.mjs':
-    'Actions spend brake for agents (`pnpm thrift:check`) before gh pr create / CI-restarting push — needs live `gh` + network to meter 24h runs. Not a doctrine gate: a laptop without GH_TOKEN would fail green trees for the wrong reason, and hard-capping mid-verify would block legitimate local work. Self-test via `pnpm thrift:self-test`; law in docs/GITHUB-CI-SPEND-CONTROL and AGENTS.md thrift.',
+    'Actions spend meter for agents (`pnpm thrift:check`) before gh pr create / push — WARN only on run counts (never exit-1). Needs live `gh` for live meters; missing gh is OK. Not a doctrine gate. Self-test via `pnpm thrift:self-test`; law in docs/GITHUB-CI-SPEND-CONTROL and AGENTS.md thrift (local-first 2026-08-05).',
 };
 
 // ── Self-check: nothing in tooling/ci/ may be unaccounted for ───────────────

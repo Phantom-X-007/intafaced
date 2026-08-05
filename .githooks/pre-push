@@ -1,9 +1,8 @@
 #!/bin/sh
 #
 # Refuse direct push to main + require format:check before any push.
-# THRIFT: thrift-preflight — docs thrash hard-fail; re-push waste gate
-# (branch with ≥2 CI runs/24h needs THRIFT_LOCAL_GREEN=1 after pnpm verify).
-# NEW work is never blocked by CI volume alone. THRIFT_ALLOW=1 overrides.
+# THRIFT: thrift-preflight meters + WARNs only (never exit 1 on run counts).
+# Stamp mill = value-gate content on Docs format. Local-first is habit.
 # Safety net only — --no-verify bypasses; real enforcement is branch protection (needs Pro).
 #
 # P1: format:check covers tooling/scripts/*.mjs (what red-trunked main via #471).
@@ -11,24 +10,9 @@
 
 TOP=$(git rev-parse --show-toplevel)
 
-# --- thrift meter (runs-per-unit-of-work, never units of work) ---
+# --- thrift meter (warn only — never blocks delivery) ---
 if command -v node >/dev/null 2>&1 && [ -f "$TOP/tooling/ci/thrift-preflight.mjs" ]; then
-  if ! (CDPATH= cd -- "$TOP" && node tooling/ci/thrift-preflight.mjs); then
-    cat >&2 <<'THRIFT'
-
-  ✖ thrift-preflight refused this push.
-
-    Docs thrash hard-cap, OR re-push waste (branch already had ≥2 CI runs/24h
-    without local green). NEW work is not blocked by CI volume alone.
-
-    After pnpm verify:
-      THRIFT_LOCAL_GREEN=1 git push
-    Emergency only (note why in PR):
-      THRIFT_ALLOW=1 git push
-
-THRIFT
-    exit 1
-  fi
+  (CDPATH= cd -- "$TOP" && node tooling/ci/thrift-preflight.mjs) || true
 fi
 COMMON_GIT=$(git rev-parse --git-common-dir)
 # git-common-dir is e.g. /repo/.git or /repo/.git/worktrees/x → parent of .git is main checkout
