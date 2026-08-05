@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { TournamentError, type StandingRecord } from './ladder.js';
-import { freezeSeasonWithSnapshot, isScoreWritable, snapshotStandingsAtFreeze, transitionSeason } from './season-lifecycle.js';
+import {
+  countSeasonsByStatus,
+  freezeSeasonWithSnapshot,
+  isScoreWritable,
+  snapshotStandingsAtFreeze,
+  transitionSeason,
+} from './season-lifecycle.js';
 
 const base = {
   id: 's1',
@@ -68,5 +74,24 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     expect(season.status).toBe('frozen');
     expect(snapshot.standings).toHaveLength(1);
     expect(isScoreWritable(season.status)).toBe(false);
+  });
+
+  it('L3 countSeasonsByStatus histogram without invent', () => {
+    expect(countSeasonsByStatus([])).toEqual({
+      scheduled: 0,
+      live: 0,
+      frozen: 0,
+      ended: 0,
+      total: 0,
+      scoreWritable: 0,
+    });
+    const h = countSeasonsByStatus([
+      { ...base, id: 'a', status: 'scheduled' },
+      { ...base, id: 'b', status: 'live' },
+      { ...base, id: 'c', status: 'live' },
+      { ...base, id: 'd', status: 'frozen' },
+      { ...base, id: 'e', status: 'ended' },
+    ]);
+    expect(h).toEqual({ scheduled: 1, live: 2, frozen: 1, ended: 1, total: 5, scoreWritable: 2 });
   });
 });

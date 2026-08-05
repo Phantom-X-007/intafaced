@@ -169,4 +169,18 @@ export class MemoryAmbassadorProgramme {
   activeCount(): number {
     return this.list('active').length;
   }
+
+  /**
+   * L3 — status histogram for operator desk.
+   * Does not invent rows for non-ambassadors (only stored programme rows).
+   */
+  statusHistogram(): { readonly active: number; readonly frozen: number; readonly total: number } {
+    let active = 0;
+    let frozen = 0;
+    for (const r of this.byUser.values()) {
+      if (r.status === 'active') active += 1;
+      else if (r.status === 'frozen') frozen += 1;
+    }
+    return { active, frozen, total: active + frozen };
+  }
 }

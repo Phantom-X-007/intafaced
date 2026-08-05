@@ -121,3 +121,15 @@ export function sumCountFixtures(facts: readonly CubeFactRow[], metricId: string
   }
   return { status: 'ok', points: [{ metricId, value: total.toString(), dim: null }] };
 }
+
+/**
+ * L3 — distinct non-null dims present in fixtures (sorted).
+ * Never invents a dim that no fact carries.
+ */
+export function listPresentDims(facts: readonly CubeFactRow[]): readonly string[] {
+  const set = new Set<string>();
+  for (const row of facts) {
+    if (row.dim != null && row.dim !== '') set.add(row.dim);
+  }
+  return [...set].sort();
+}

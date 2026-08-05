@@ -62,3 +62,26 @@ export function planFanoutDelivery(
 ): readonly DeliveryDecision[] {
   return channels.map((ch) => decideChannelDelivery(prefs, ch, severity));
 }
+
+/**
+ * L3 — summarize a fanout plan by action (operator honesty board).
+ * Empty plan → zeros; never invents channels not in the plan.
+ */
+export type FanoutPlanSummary = {
+  readonly sendNow: number;
+  readonly holdDigest: number;
+  readonly skipMuted: number;
+  readonly total: number;
+};
+
+export function summarizeFanoutPlan(plan: readonly DeliveryDecision[]): FanoutPlanSummary {
+  let sendNow = 0;
+  let holdDigest = 0;
+  let skipMuted = 0;
+  for (const d of plan) {
+    if (d.action === 'send_now') sendNow += 1;
+    else if (d.action === 'hold_digest') holdDigest += 1;
+    else if (d.action === 'skip_muted') skipMuted += 1;
+  }
+  return { sendNow, holdDigest, skipMuted, total: plan.length };
+}

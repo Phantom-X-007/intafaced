@@ -69,4 +69,16 @@ describe('MemoryReferralTree Slice A', () => {
     expect(tree.directDownlineCount(U(2))).toBe(1);
     expect(tree.directDownlineCount(U(9))).toBe(0);
   });
+
+  it('L3 directDownlineCounts multi-referrer without invent', () => {
+    const tree = new MemoryReferralTree();
+    tree.attribute({ userId: U(2), referrerId: U(1) });
+    tree.attribute({ userId: U(3), referrerId: U(1) });
+    tree.attribute({ userId: U(4), referrerId: U(2) });
+    expect(tree.directDownlineCounts([U(1), U(2), U(9)])).toEqual({
+      [U(1)]: 2,
+      [U(2)]: 1,
+      [U(9)]: 0,
+    });
+  });
 });
