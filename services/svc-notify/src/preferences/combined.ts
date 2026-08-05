@@ -380,3 +380,46 @@ export function planSkipRatioLabel(plan: readonly DeliveryDecision[]): string {
 export function firstSendChannelLabel(plan: readonly DeliveryDecision[]): string {
   return firstSendChannel(plan) ?? '';
 }
+
+/** L3 — action histogram snapshot (alias of planActionHistogram). */
+export function planActionSnapshot(plan: readonly DeliveryDecision[]): {
+  readonly send_now: number;
+  readonly hold_digest: number;
+  readonly skip_muted: number;
+  readonly total: number;
+} {
+  const h = planActionHistogram(plan);
+  return { ...h, total: plan.length };
+}
+
+/** L3 — true when histogram parts sum to plan length. */
+export function planActionCountsConsistent(plan: readonly DeliveryDecision[]): boolean {
+  const s = planActionSnapshot(plan);
+  return s.total === s.send_now + s.hold_digest + s.skip_muted;
+}
+
+/** L3 — ratio snapshot (nulls when empty). */
+export function planRatioSnapshot(plan: readonly DeliveryDecision[]): {
+  readonly send: string | null;
+  readonly hold: string | null;
+  readonly skip: string | null;
+} {
+  return {
+    send: planSendRatio(plan),
+    hold: planHoldRatio(plan),
+    skip: planSkipRatio(plan),
+  };
+}
+
+/** L3 — channel partition snapshot. */
+export function planChannelPartition(plan: readonly DeliveryDecision[]): {
+  readonly send: readonly (MuteableChannel | 'inapp')[];
+  readonly hold: readonly MuteableChannel[];
+  readonly skip: readonly MuteableChannel[];
+} {
+  return {
+    send: channelsToSendNow(plan),
+    hold: channelsHeldForDigest(plan),
+    skip: channelsSkippedMuted(plan),
+  };
+}

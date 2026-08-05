@@ -383,3 +383,46 @@ export function fanoutRefusalRatioLabel(attempts: readonly ChannelDeliveryAttemp
 export function firstAcceptedChannelLabel(attempts: readonly ChannelDeliveryAttempt[]): string {
   return firstAcceptedChannel(attempts) ?? '';
 }
+
+/** L3 — outcome snapshot with total. */
+export function fanoutOutcomeSnapshot(attempts: readonly ChannelDeliveryAttempt[]): {
+  readonly accepted: number;
+  readonly refused: number;
+  readonly failed: number;
+  readonly total: number;
+} {
+  const h = fanoutOutcomeHistogram(attempts);
+  return { ...h, total: attempts.length };
+}
+
+/** L3 — true when outcomes sum to attempts. */
+export function fanoutOutcomeCountsConsistent(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  const s = fanoutOutcomeSnapshot(attempts);
+  return s.total === s.accepted + s.refused + s.failed;
+}
+
+/** L3 — ratio snapshot (nulls when empty). */
+export function fanoutRatioSnapshot(attempts: readonly ChannelDeliveryAttempt[]): {
+  readonly acceptance: string | null;
+  readonly failure: string | null;
+  readonly refusal: string | null;
+} {
+  return {
+    acceptance: fanoutAcceptanceRatio(attempts),
+    failure: fanoutFailureRatio(attempts),
+    refusal: fanoutRefusalRatio(attempts),
+  };
+}
+
+/** L3 — channel lists snapshot. */
+export function fanoutChannelLists(attempts: readonly ChannelDeliveryAttempt[]): {
+  readonly accepted: readonly ChannelDeliveryAttempt['channel'][];
+  readonly failed: readonly ChannelDeliveryAttempt['channel'][];
+  readonly refused: readonly ChannelDeliveryAttempt['channel'][];
+} {
+  return {
+    accepted: acceptedChannels(attempts),
+    failed: failedChannels(attempts),
+    refused: refusedChannels(attempts),
+  };
+}

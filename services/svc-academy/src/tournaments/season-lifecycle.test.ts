@@ -60,6 +60,10 @@ import {
   frozenSeasonRatioLabel,
   endedSeasonRatioLabel,
   openSeasonRatioLabel,
+  seasonStatusSnapshot,
+  seasonCountsConsistent,
+  seasonOpenEndedPartition,
+  seasonWritableSnapshot,
 } from './season-lifecycle.js';
 
 const base = {
@@ -487,5 +491,25 @@ describe('L3 wave33 season ratio labels', () => {
     expect(liveSeasonRatioLabel(rows)).toBe('0.5000');
     expect(endedSeasonRatioLabel(rows)).toBe('0.5000');
     expect(openSeasonRatioLabel(rows)).toBe('0.5000');
+  });
+});
+
+describe('L3 wave34 season snapshots', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('status + open/ended + writable', () => {
+    expect(seasonCountsConsistent([])).toBe(true);
+    const rows = [mk('a', 'live'), mk('b', 'ended'), mk('c', 'scheduled')];
+    expect(seasonCountsConsistent(rows)).toBe(true);
+    expect(seasonStatusSnapshot(rows).live).toBe(1);
+    expect(seasonOpenEndedPartition(rows)).toEqual({ open: 2, ended: 1 });
+    expect(seasonWritableSnapshot(rows).hasWritable).toBe(true);
   });
 });

@@ -50,6 +50,10 @@ import {
   fanoutFailureRatioLabel,
   fanoutRefusalRatioLabel,
   firstAcceptedChannelLabel,
+  fanoutOutcomeSnapshot,
+  fanoutOutcomeCountsConsistent,
+  fanoutRatioSnapshot,
+  fanoutChannelLists,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -313,5 +317,17 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutAcceptanceRatioLabel(attempts)).toBe('0.5000');
     expect(fanoutFailureRatioLabel(attempts)).toBe('0.5000');
     expect(firstAcceptedChannelLabel(attempts)).toBe('email');
+  });
+
+  it('L3 wave34 fanout snapshots consistent', () => {
+    expect(fanoutOutcomeCountsConsistent([])).toBe(true);
+    expect(fanoutRatioSnapshot([]).acceptance).toBeNull();
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(fanoutOutcomeCountsConsistent(attempts)).toBe(true);
+    expect(fanoutOutcomeSnapshot(attempts).total).toBe(2);
+    expect(fanoutChannelLists(attempts).accepted).toEqual(['email']);
   });
 });

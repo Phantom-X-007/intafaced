@@ -403,4 +403,21 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     expect(desk.acceptedApplicationRatioLabel()).toBe('1.0000');
     expect(desk.openApplicationRatioLabel()).toBe('0.0000');
   });
+
+  it('L3 wave34 status snapshot + share percent', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.applicationStatusSnapshot().total).toBe(0);
+    expect(desk.applicationCountsConsistent()).toBe(true);
+    expect(desk.openSharePercent()).toBeNull();
+    const a = desk.apply({
+      userId: 'u-w34',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    expect(desk.openSharePercent()).toBe(100);
+    desk.decide({ id: a.id, operatorId: 'op1', decision: 'accepted', now: NOW });
+    expect(desk.applicationCountsConsistent()).toBe(true);
+    expect(desk.decidedSharePercent()).toBe(100);
+  });
 });

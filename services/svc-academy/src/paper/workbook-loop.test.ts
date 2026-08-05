@@ -46,6 +46,10 @@ import {
   drillSymbolLabel,
   drillWorkbookSlugLabel,
   drillCompletionPercentLabel,
+  drillProgressSnapshot,
+  drillStepCountsConsistent,
+  drillIdentitySnapshot,
+  isFreshActiveDrill,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -327,5 +331,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(drillSymbolLabel(started.run)).toBe('SOL/USDT');
     expect(drillWorkbookSlugLabel(started.run)).toBe('foundations-paper-workbook');
     expect(drillCompletionPercentLabel(started.run)).toBe('0');
+  });
+
+  it('L3 wave34 drill snapshots + fresh active', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w34', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(drillProgressSnapshot(started.run).percent).toBe(0);
+    expect(drillStepCountsConsistent(started.run)).toBe(true);
+    expect(drillIdentitySnapshot(started.run).marketId).toBe('m-w34');
+    expect(isFreshActiveDrill(started.run)).toBe(true);
   });
 });

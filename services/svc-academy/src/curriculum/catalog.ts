@@ -831,3 +831,45 @@ export function emptyPathCountLabel(): string {
 export function firstCurriculumSlugLabel(): string {
   return firstCurriculumSlug() ?? '';
 }
+
+/** L3 — kind count snapshot. */
+export function curriculumKindSnapshot(): {
+  readonly lesson: number;
+  readonly playbook: number;
+  readonly workbook: number;
+  readonly total: number;
+} {
+  return {
+    lesson: lessonCount(),
+    playbook: playbookCount(),
+    workbook: workbookCount(),
+    total: curriculumSpineSize(),
+  };
+}
+
+/** L3 — true when kind counts sum to spine size. */
+export function curriculumKindCountsConsistent(): boolean {
+  const s = curriculumKindSnapshot();
+  return s.total === s.lesson + s.playbook + s.workbook;
+}
+
+/** L3 — path content snapshot counts. */
+export function curriculumPathSnapshot(): {
+  readonly foundations: number;
+  readonly markets: number;
+  readonly builder: number;
+  readonly sovereign: number;
+} {
+  return {
+    foundations: foundationsItemCount(),
+    markets: marketsItemCount(),
+    builder: builderItemCount(),
+    sovereign: sovereignItemCount(),
+  };
+}
+
+/** L3 — true when path counts sum to spine size. */
+export function curriculumPathCountsConsistent(): boolean {
+  const s = curriculumPathSnapshot();
+  return curriculumSpineSize() === s.foundations + s.markets + s.builder + s.sovereign;
+}

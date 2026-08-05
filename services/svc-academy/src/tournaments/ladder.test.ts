@@ -72,6 +72,10 @@ import {
   lastPlaceUserLabel,
   midRankUserLabel,
   scoreSpreadLabel,
+  scoreExtremumSnapshot,
+  podiumSnapshot,
+  scoreExtremumConsistent,
+  standingDepthSnapshot,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -356,5 +360,17 @@ describe('L3 standings board helpers', () => {
     expect(firstPlaceUserLabel(rows)).toBe('b');
     expect(lastPlaceUserLabel(rows)).toBe('a');
     expect(scoreSpreadLabel(rows)).toBe('20');
+  });
+
+  it('L3 wave34 extremum + podium + depth snapshots', () => {
+    expect(scoreExtremumSnapshot([]).max).toBeNull();
+    expect(podiumSnapshot([]).first).toBeNull();
+    expect(scoreExtremumConsistent([])).toBe(true);
+    expect(standingDepthSnapshot([]).empty).toBe(true);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z'), row('c', 20, '2026-08-01T11:00:00Z')];
+    expect(scoreExtremumSnapshot(rows).max).toBe(30);
+    expect(scoreExtremumConsistent(rows)).toBe(true);
+    expect(podiumSnapshot(rows).first).toBe('b');
+    expect(standingDepthSnapshot(rows).hasPodium3).toBe(true);
   });
 });

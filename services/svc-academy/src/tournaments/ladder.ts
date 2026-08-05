@@ -597,3 +597,51 @@ export function scoreSpreadLabel(rows: readonly StandingRecord[]): string {
   const s = scoreSpread(rows);
   return s === null ? '' : String(s);
 }
+
+/** L3 — score extremum snapshot. Empty → nulls. */
+export function scoreExtremumSnapshot(rows: readonly StandingRecord[]): {
+  readonly min: number | null;
+  readonly max: number | null;
+  readonly spread: number | null;
+  readonly average: number | null;
+} {
+  return {
+    min: minScore(rows),
+    max: maxScore(rows),
+    spread: scoreSpread(rows),
+    average: averageScore(rows),
+  };
+}
+
+/** L3 — podium snapshot top-3 user ids. */
+export function podiumSnapshot(rows: readonly StandingRecord[]): {
+  readonly first: string | null;
+  readonly second: string | null;
+  readonly third: string | null;
+} {
+  return {
+    first: firstPlaceUser(rows),
+    second: secondPlaceUser(rows),
+    third: thirdPlaceUser(rows),
+  };
+}
+
+/** L3 — true when extremum min/max consistent with spread. Empty → true. */
+export function scoreExtremumConsistent(rows: readonly StandingRecord[]): boolean {
+  const s = scoreExtremumSnapshot(rows);
+  if (s.min === null || s.max === null || s.spread === null) return rows.length === 0;
+  return s.spread === s.max - s.min;
+}
+
+/** L3 — standing depth snapshot. */
+export function standingDepthSnapshot(rows: readonly StandingRecord[]): {
+  readonly count: number;
+  readonly empty: boolean;
+  readonly hasPodium3: boolean;
+} {
+  return {
+    count: standingCount(rows),
+    empty: isEmptyStandings(rows),
+    hasPodium3: hasPodiumDepth(rows, 3),
+  };
+}
