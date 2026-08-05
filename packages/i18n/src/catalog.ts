@@ -196,6 +196,8 @@ export const en = {
   'agents.scanner.empty': 'No markets to rank right now.',
   'agents.scanner.unavailable': 'Market ranking is unavailable — quotes are missing, stale, or the market plane is dark.',
   'agents.refused.tool_not_declared': 'That tool is not allowed for this agent.',
+  'agents.support.unavailable': 'Support desk data is unavailable — the agent will not invent answers.',
+  'agents.support.comment_refused': 'That comment cannot be posted — missing ticket, empty body, or forbidden invent language.',
 } as const;
 
 /** The English catalog's exact shape — the thing every other language is measured against. */

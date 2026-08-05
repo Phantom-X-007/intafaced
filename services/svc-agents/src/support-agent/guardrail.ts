@@ -25,20 +25,27 @@ export const SUPPORT_MONEY_TOOLS = [
 ] as const;
 
 /**
- * Stage-1 support agent guardrail.
+ * Support agent guardrail (Stage-1 reads + Stage-2 L3 comment write).
  *
- * Tools: read-only desk helpers only. Completions: support.classify + support.reply.
- * Module: support only. No spend cap needed for mock Stage-1 (null = uncapped
- * internal) — production user-facing should set a cap; residual.
+ * Tools: ticket/kb read; ticket.comment is write + requiresApproval (never silent).
+ * Completions: support.classify + support.reply.
+ * Money tools stay undeclared → refuse before dispatch.
  */
 export function supportAgentGuardrail(overrides: { version?: number } = {}): Guardrail {
   return parseGuardrail({
     agentId: 'support',
-    version: overrides.version ?? 1,
+    version: overrides.version ?? 2,
     tools: [
       { name: 'support.ticket.read', module: 'support', mode: 'read' },
       { name: 'support.kb.search', module: 'support', mode: 'read' },
-      // Stage-2 may add support.ticket.comment as write with approval.
+      // Stage-2 L3: comment only with explicit user/operator approval.
+      {
+        name: 'support.ticket.comment',
+        module: 'support',
+        mode: 'write',
+        requiresApproval: true,
+        maxCallsPerSession: 20,
+      },
     ],
     limits: {
       maxActionsPerSession: 40,
