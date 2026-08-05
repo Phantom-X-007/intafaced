@@ -1,15 +1,14 @@
 # Internet leverage — Phase B full-horizon map (whole future project)
 
 **Status:** CANONICAL Phase B decision surface · research map (no auto-implement)  
-**Date:** 2026-08-05  
-**Operator correction:** Phase B is **full future-project scope**, not a max-5 implement thrift queue.  
-**Supersedes for decisions:** the “90-day max ≤5 tracks” framing in  
-[`INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md)  
-(v2 **research tables still valid** as evidence; **queue shape wrong** for your intent).  
-**v1 historical:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-05.md)  
-**Phase A (internal inventory):** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md)  
-**Plan (amended this PR):** [`INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md`](INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md)  
-**Prior terrain:** ORDER-ROUTE landscape · SECURITY-WHEN-PLAIN · Denon hard board · Shehzad chain board · tracker
+**Date:** 2026-08-05 · **re-derived** after Phase A proper refresh + methodology audit  
+**Phase A gate:** PASS — [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md) refreshed  
+**Execute stamp:** [`INTERNET-LEVERAGE-PHASE-B-EXECUTE-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-EXECUTE-2026-08-05.md)  
+**Operator correction:** full future-project scope — **not** a max-5 thrift queue. Ranking = start order only.  
+**Research evidence:** [`INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md)  
+**Plan law:** [`INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md`](INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md) (hardened)  
+**Methodology:** [`INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md`](INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md)  
+**Prior terrain:** ORDER-ROUTE · SECURITY-WHEN-PLAIN · Denon hard board · Shehzad board · tracker
 
 **Term:** Internet leverage = already-built systems we adopt / wire / wrap instead of rebuild.  
 **Internal leverage** = Phase A (kit + ledger + services). **External leverage** = this map.
@@ -90,18 +89,19 @@ Every open tracker feature (ready/wip/socket at tip re-derive) + Phase A gaps + 
 
 ### 2.2 Shell / terminal / WS (IN first)
 
-| ID           | Need                                                    | Path          | External / note                                                           | Phase     | Owner | Depends              |
-| ------------ | ------------------------------------------------------- | ------------- | ------------------------------------------------------------------------- | --------- | ----- | -------------------- |
-| web.terminal | Live feed, decimals, shape validation residual          | **IN**        | V-SHELL + bignumber + port notes; charts = lightweight-charts **already** | **NOW**   | N     | S-WS path            |
-| ws.gateway   | Fan-out depth/trades/orders/positions                   | **IN**        | S-WS; positions need futures events                                       | **MID**   | N     | D-S-01 for positions |
-| G-P0-2       | Decimal desk end-to-end                                 | **IN**        | Vendored bignumber wire                                                   | **NOW**   | N     | —                    |
-| G-P0-1       | Depth client residual                                   | **IN**        | #748-class; re-verify tip                                                 | **NOW**   | N     | fleet                |
-| FH-UI-01     | Runtime edge response validation                        | **EXT** trial | Zod (default) / Valibot / ArkType — pick one                              | **MID**   | N     | honesty residual     |
-| FH-UI-02     | Second exchange SPA / TV Charting Library without grant | **KILL**      | Phase A non-regression; licence law                                       | **NEVER** | —     | —                    |
-| FH-UI-03     | Headless a11y only if claim needs                       | **EXT** trial | Only if frontend residual demands                                         | **LATE**  | N     | claim                |
-| FH-UI-04     | Platform pages craft                                    | **IN**        | V-SHELL Platform + cms/uc                                                 | **MID**   | N     | D-S-15 IA            |
-| ops.admin    | Admin console                                           | **IN**        | Prefer **V-ADMIN** over new SPA                                           | **MID**   | N/D   | honesty              |
-| G-P2-1       | apps/web delete                                         | **IN**        | D-P2-01                                                                   | **MID**   | D     | —                    |
+| ID           | Need                                                     | Path          | External / note                                                           | Phase     | Owner | Depends              |
+| ------------ | -------------------------------------------------------- | ------------- | ------------------------------------------------------------------------- | --------- | ----- | -------------------- |
+| web.terminal | Live feed, decimals, shape validation residual           | **IN**        | V-SHELL + bignumber + port notes; charts = lightweight-charts **already** | **NOW**   | N     | S-WS path            |
+| ws.gateway   | Fan-out depth/trades/orders/positions                    | **IN**        | S-WS; positions need futures events                                       | **MID**   | N     | D-S-01 for positions |
+| G-P0-2       | Decimal desk end-to-end                                  | **IN**        | Vendored bignumber wire                                                   | **NOW**   | N     | —                    |
+| G-P0-1       | Depth **E2E** residual (client #748 shipped; prove live) | **IN**        | S-WS + fleet + shell — no new terminal                                    | **NOW**   | N     | fleet                |
+| G-P1-5       | ops.support ↔ svc-support                                | **IN**        | Wire desk to **svc-support**                                              | **MID**   | N     | —                    |
+| FH-UI-01     | Runtime edge response validation                         | **EXT** trial | Zod (default) / Valibot / ArkType — pick one                              | **MID**   | N     | honesty residual     |
+| FH-UI-02     | Second exchange SPA / TV Charting Library without grant  | **KILL**      | Phase A non-regression; licence law                                       | **NEVER** | —     | —                    |
+| FH-UI-03     | Headless a11y only if claim needs                        | **EXT** trial | Only if frontend residual demands                                         | **LATE**  | N     | claim                |
+| FH-UI-04     | Platform pages craft                                     | **IN**        | V-SHELL Platform + cms/uc                                                 | **MID**   | N     | D-S-15 IA            |
+| ops.admin    | Admin console                                            | **IN**        | Prefer **V-ADMIN** over new SPA                                           | **MID**   | N/D   | honesty              |
+| G-P2-1       | apps/web delete                                          | **IN**        | D-P2-01                                                                   | **MID**   | D     | —                    |
 
 ### 2.3 Pay (N after handoff; law D-S-10)
 

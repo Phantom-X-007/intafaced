@@ -1,329 +1,266 @@
-# Internet leverage — Phase B plan (new external candidates)
+# Internet leverage — Phase B plan (external candidates · full future project)
 
-**Status:** PLAN / SPEC — **executed**; operator correction 2026-08-05  
-**Depends on:** Phase A complete on tip — [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md)  
-**Canonical decision surface:** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — **full future-project map**, no max-5 thrift cap  
-**Research evidence (v2 tables still valid):** [`INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-REPORT-V2-2026-08-05.md)  
-**Term:** **Internet leverage** = already-built systems we adopt/wire/wrap instead of rebuilding.
+**Status:** PLAN LAW · living · **hardened 2026-08-05** after methodology audit  
+**Hard gate:** Phase A must be **proper** (plan §8 green on tip) before B0  
+**Phase A:** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md)  
+**Methodology:** [`INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md`](INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md)  
+**Decision surface (output):** full-horizon map — **not** a max-5 thrift queue  
+**Term:** Internet leverage = already-built systems we adopt/wire/wrap instead of rebuild.
 
-**Phase B is not shopping for fun.** It is a disciplined landscape of **candidates that fill real gaps** left after Phase A, filtered by doctrine, ownership, cost, and dual-build risk.
-
----
-
-## 0 · High-level overview (what good looks like)
-
-| Dimension     | Good job                                                                                                       | Failure (lazy / dangerous)                                                    |
-| ------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| **Scope**     | New leverage **outside** monorepo (or not yet adopted) for Nitro + Denon work                                  | Re-auditing prior kits as if new                                              |
-| **Anchor**    | Every search lane starts from a **named gap** (Phase A G-\* + tracker ready + Denon D-S-\* / hard board)       | “Cool projects on GitHub” with no job                                         |
-| **Planes**    | Fiat vs Protocol vs shell clearly labeled                                                                      | Handing Shizu UI kits or agents chain L1 cores                                |
-| **Doctrine**  | Ledger-only money; no dual-book; no invent prices; partner names in adapters                                   | “Just use their wallet balances”                                              |
-| **Ownership** | Candidate → who would adopt (N / D / S)                                                                        | Agents invent futures risk via a random lib                                   |
-| **Depth**     | Multi-source (docs, license, maturity, ops, security)                                                          | One README screenshot                                                         |
-| **Output**    | Ranked shortlist + kill list + **full-horizon** map (every open mountain/socket/D-S; phase NOW/MID/LATE/NEVER) | 200-link dump **or** artificial max-5 thrift cap as if only five levers exist |
-| **Peace**     | You can see: adopt / adapt / reject / later for each                                                           | “We should look into X someday”                                               |
-
-**Unspoken needs (inferred):**
-
-1. **Don’t compromise Phase A wins** — no second product SPA, no Java second book.
-2. **All-out research without thrash** — wide fan-out, narrow decisions.
-3. **Denon/Nitro/Shizu stay collision-free** — candidates tagged to a lane.
-4. **Class X stays human** — custody keys, sanctions content, go-live not “npm install.”
-5. **Cost honesty** — license, ops, audit, integration months.
-6. **Actionable** — top N with Done-shaped next steps, not encyclopedia.
-7. **Survives chat death** — durable tip (or harvest) report.
-8. **You can decide in minutes** — plain ranking, not code dumps.
+**Phase B is not shopping for fun.** Gap-first landscape of **external** (or not-yet-default) leverage for the **whole future project**, filtered by doctrine, ownership, cost, dual-build risk.
 
 ---
 
-## 1 · Methodology audit (what to watch out for)
+## 0 · Good vs failure
 
-| Risk                    | Why it appears in “leverage research” | Control in this plan                         |
-| ----------------------- | ------------------------------------- | -------------------------------------------- |
-| **Solution-first bias** | Cool project found → invent a problem | Gap-first matrix only                        |
-| **License landmines**   | GPL/AGPL into monorepo                | License tier gate before shortlist           |
-| **Custody creep**       | “Drop-in wallet” holds keys wrong way | Forbidden if dual-book / platform withdrawal |
-| **Shell dual-kit**      | Another full exchange Vue             | Auto-reject if Phase A kit covers surface    |
-| **Fake maturity**       | Stars ≠ production                    | Evidence: users, releases, CVEs, maintainers |
-| **Scope explosion**     | Research forever                      | Timeboxed stages + candidate caps per lane   |
-| **Ignoring in-repo**    | Re-find what we already vendor        | Phase A asset register is exclusion list     |
-| **Agent overclaim**     | “We should use X” without Denon law   | Product-law-touching → D seal required       |
-| **Shizu bleed**         | L1 frameworks dumped on Nitro         | Protocol candidates → S lane only            |
-| **Security theater**    | Long blog, no threat model            | Security pass mandatory for custody/crypto   |
-| **Integration fantasy** | “Two week plug-in”                    | Integration cost score 1–5                   |
-| **Stamp research**      | Docs PR with no decision              | Kill list + adopt queue required             |
-| **Thrift / CI thrash**  | 50 tiny research PRs                  | One fat report PR (or harvest then one PR)   |
+| Dimension            | Good                                                                        | Failure                                    |
+| -------------------- | --------------------------------------------------------------------------- | ------------------------------------------ |
+| **Gate**             | Phase A tip-fresh and §8 green                                              | Shopping on stale gaps                     |
+| **Scope**            | Full future residual + boards                                               | Max-N implement thrift as if only N levers |
+| **Anchor**           | Every row from named gap                                                    | Cool GitHub without a job                  |
+| **Planes**           | Fiat / Protocol / shell labeled                                             | Shizu UI kits or Nitro L1                  |
+| **Doctrine**         | Ledger-only; no invent; adapters for partners                               | Second book / invent mids                  |
+| **Ownership**        | N/D/S every candidate                                                       | Agents invent futures law                  |
+| **Depth**            | Multi-source + license/push for shortlist                                   | README screenshot                          |
+| **Output**           | Kill list + shortlist deep cards + **full-horizon** phased map + rank order | Link dump **or** “only five forever”       |
+| **Bullshit control** | Tip stamp, sources, hole hunt, non-regression                               | Memory-as-research                         |
+| **Peace**            | adopt/adapt/trial/later/reject/never per open need                          | “Look into someday”                        |
 
----
+### Unspoken needs (bind the execute)
 
-## 2 · Scope boundaries
-
-### In scope (Phase B)
-
-- OSS libraries, services, protocols, SDKs, hosted APIs **not yet** our default path
-- Categories tied to **open work**: pay residual, bank, P2P/disputes (post-ruling), notifications, indexing, observability, card rails, KYC **adapters**, mobile later, matching/perf **libraries** (not invent mids), ReDoS-safe parsers, etc.
-- Re-evaluation of **V-WALLET-RPC alternatives** only as “after security review” options
-
-### Out of scope
-
-- Replacing vendored trader shell wholesale
-- Replacing ledger-client as book
-- Sanctions **list content**, licence purchase, mainnet keys (Class X)
-- Building Shehzad’s L1 for him (may **list** Cosmos/Hyperliquid-class **references** for his board only)
-- Implementing adopt PRs in the research pass (research → decide → later implement)
+1. Phase A wins preserved (shell + ledger).
+2. **Whole project** external map — ranking for order, not ceiling.
+3. No false peace — proof and kills.
+4. Collision-free N/D/S.
+5. Class X human.
+6. Cost honesty.
+7. Durable tip doc.
+8. Decide-altitude one-screen + drillable map.
+9. Import prior terrain (ORDER-ROUTE, SECURITY-WHEN-PLAIN).
+10. Tip re-derive every run.
+11. Honest “no external fit → GF/IN/LAW”.
+12. freeProduct=0 ≠ done — map all open tracker rows.
 
 ---
 
-## 3 · Phases (program shape)
+## 1 · Methodology risks → controls
+
+| Risk                 | Control                                                                |
+| -------------------- | ---------------------------------------------------------------------- |
+| Solution-first       | Gap-first matrix only                                                  |
+| License landmines    | License before shortlist                                               |
+| Custody creep        | Dual-book / wrong keys → kill                                          |
+| Dual-kit UI          | Auto-reject full exchange SPA                                          |
+| Fake maturity        | Release + push + users, not stars alone                                |
+| Scope explosion      | Timebox stages; **per-lane** raw caps — **not** global “only 5 levers” |
+| Ignoring in-repo     | Phase A register = exclusion / prefer-IN                               |
+| Agent overclaim      | Product law → D seal                                                   |
+| Shizu bleed          | Chain → S only                                                         |
+| Security theater     | Custody/pay shortlist need security note                               |
+| Integration fantasy  | Cost 1–5                                                               |
+| Stamp research       | Kill list + full-horizon required                                      |
+| Thrift thrash        | One fat docs PR                                                        |
+| Stale Phase A        | B0 fails if Phase A gates red or tip stamp missing                     |
+| Top-N residue        | Forbidden as project ceiling                                           |
+| Fake community pulse | last30days optional; disclose degradation                              |
+
+---
+
+## 2 · Scope
+
+### In
+
+- OSS/SaaS/protocols/SDKs **not** already default
+- Open residual: pay, bank, P2P, id, notify, ops, agents, academy, token honesty, security, custody, mobile, matching **libs study**, chain **refs for S**, test/chaos tooling
+- Wallet RPC alternatives only post-review framing
+
+### Out
+
+- Replace V-SHELL wholesale
+- Replace ledger-client as book
+- Class X **content** agent-closed
+- Implement Shehzad L1
+- Adopt implement in research pass (unless operator says trial)
+
+---
+
+## 3 · Stages
 
 ```
-B0  Orient + freeze gap backlog from Phase A + boards + tracker
-B1  Taxonomy — research lanes (what buckets exist)
-B2  Fan-out collection — candidates per lane (wide, cheap)
-B3  Hard filters — license, doctrine, ownership, dual-kit, Class X
-B4  Deep evaluation — shortlist only (expensive judgment)
-B5  Score + rank — decision matrix
-B6  Recommendations — adopt / adapt / reject / later + owners
-B7  Durable report + operator one-screen + optional Denon/Shizu notes
-B8  STOP — no implement until you pick from shortlist
+B0  Gate Phase A + orient gaps (tracker, boards, open PRs, prior terrain)
+B1  Taxonomy lanes (all; N/A written)
+B2  Fan-out (wide; per-lane caps)
+B3  Hard filters → kill/keep
+B4  Deep cards (shortlist only; expensive)
+B5  Score + rank (decision order)
+B6  Full-horizon map (EVERY open need: IN/EXT/GF/LAW/S/X/KILL × NOW/MID/LATE/NEVER)
+B7  Durable report + operator one-screen
+B8  STOP — no implement until pick
 ```
 
 ---
 
-## 4 · Phase depth specs
+## 4 · Stage depth
 
-### B0 — Orient (no shopping yet)
+### B0 — Gate + orient
 
-**Inputs (must re-derive tip):**
+**Fail closed if:** Phase A checklist not green on tip; tip not re-derived.
 
-- Phase A audit + gap register
-- Denon hard board + product rulings (disputes human, etc.)
-- Three-way ownership
-- Tracker ready/socket non-chain rows
-- Open Denon PRs (avoid dual-building mid-flight)
+**Must load:** Phase A · Denon hard board · three-way · tracker non-done · `gh pr list` · ORDER-ROUTE landscape · SECURITY-WHEN-PLAIN · prior Phase B evidence (do not re-discover kills).
 
-**Output:** `Gap backlog` table: GapID · need · owner · phase-A status · research-lane tags
+**Output:** Gap backlog GapID · need · owner · Phase A status · lane tags.
 
-**Done when:** ≥1 research lane per open need; no orphan “random interest” lanes without a gap.
+### B1 — Lanes (mandatory; N/A with reason)
 
----
+| Lane        | Question                                   |
+| ----------- | ------------------------------------------ |
+| L-UI        | Beyond kit?                                |
+| L-PAY       | Orchestration / PSP adapters               |
+| L-BANK      | Earn/cards/ramps rails                     |
+| L-P2P       | Disputes / safe parsers                    |
+| L-ID        | KYC/WebAuthn adapters                      |
+| L-MSG       | Email/SMS/push                             |
+| L-DATA      | Search/indexer/warehouse                   |
+| L-OBS       | Beyond stock OTEL                          |
+| L-SEC       | ReDoS, secrets, SAST                       |
+| L-CUSTODY   | MPC/HSM after review                       |
+| L-MATCH     | Perf study only                            |
+| L-CHAIN-REF | S refs only                                |
+| L-MOBILE    | App stacks                                 |
+| L-AGENTS    | Agent frameworks (guardrailed)             |
+| L-ACADEMY   | Spatial/learning (if any EXT)              |
+| L-OPS       | Support/affiliate tooling                  |
+| L-TOKEN     | Honesty tooling only — no invent economics |
+| L-TEST      | Property/chaos (fast-check, toxiproxy…)    |
+| L-I18N      | TMS only if packages/i18n insufficient     |
+| L-KILL      | Explicit never                             |
 
-### B1 — Taxonomy (research lanes)
+### B2 — Fan-out
 
-Mandatory lanes (adjust names, don’t drop categories without writing “N/A — covered by Phase A”):
+- ≥3 sources per **active** lane (or N/A)
+- **8–12 raw per lane** (collection cap, not project cap)
+- Fields: name, url, job, license, last push/release, fits GapID
+- Empty lane: “searched A/B/C — no fit”
 
-| Lane ID         | Question                                            | Typical gaps                                   |
-| --------------- | --------------------------------------------------- | ---------------------------------------------- |
-| **L-UI**        | UI components / patterns beyond kit?                | a11y, charts (already decided?), admin widgets |
-| **L-PAY**       | Card/PSP/crypto pay adapters                        | pay residual after #346 handoff                |
-| **L-BANK**      | Earn/cards/ramps adapters                           | bank residual                                  |
-| **L-P2P**       | Dispute tooling, moderation UX, safe parsers        | post-ruling P2P integrity                      |
-| **L-ID**        | KYC/WebAuthn/step-up vendors as **adapters**        | identity residual                              |
-| **L-MSG**       | Email/SMS/push providers                            | notify residual                                |
-| **L-DATA**      | Indexer/ETL/search                                  | indexer / ops analytics                        |
-| **L-OBS**       | Metrics/logs/traces (beyond current otel)           | ops                                            |
-| **L-SEC**       | Secret scanning, ReDoS-safe regex, dependency audit | ReDoS ruling, CI                               |
-| **L-CUSTODY**   | Wallet/custody stacks (review-first)                | wallet_rpc alternative                         |
-| **L-MATCH**     | Matching/perf libraries (not price invent)          | scale — Denon seal                             |
-| **L-CHAIN-REF** | L1/L2 stacks **reference only for Shizu**           | INTACHAIN sequencing                           |
-| **L-MOBILE**    | Mobile (Phase A: stubs only)                        | future app                                     |
-| **L-KILL**      | Explicit non-goals                                  | dual-kit, second ledger, etc.                  |
+### B3 — Kill if any
 
-**Done when:** each lane has purpose, in/out, primary owner (N/D/S).
+1. Bad/unknown license for monorepo
+2. Second book / wrong custody
+3. Full exchange UI kit
+4. Class X content without human path
+5. Unmaintained >18 mo **and** security-critical
+6. Partner names forced into UI
+7. Ownership mismatch
 
----
+### B4 — Deep cards
 
-### B2 — Fan-out collection (all-out width)
+≤3 survivors/lane ideal; global shortlist deep-only. Full-horizon may keep shallow rows.
 
-**How to go all-out without drowning:**
+Criteria: gap fit · cost 1–5 · ops · security · doctrine · owner · months saved · residual risk.
 
-| Rule                      | Spec                                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Sources per lane**      | ≥3 independent (e.g. official docs, GitHub/awesome lists, eng blogs/HN, competitor teardown, existing ADRs) |
-| **Candidates per lane**   | Cap **8–12** raw → expect most to die in B3                                                                 |
-| **Fields captured (raw)** | name, url, one-line job, license, last release, stars/forks (weak), used-by if known, fits which GapID      |
-| **Parallelism**           | One subagent/source-batch per lane; **judgment model** only at B4+                                          |
-| **No implement**          | Collection only                                                                                             |
-| **Deduplicate**           | Canonical name map                                                                                          |
+### B5 — Weights (state in report)
 
-**Anti-lazy:** empty lane must say “searched X Y Z — no fit” with sources.
+30% severity · 25% doctrine · 20% cost↓ · 15% maturity · 10% multi-mountain.
 
-**Done when:** raw candidate table exists for every non-N/A lane.
+Output: ranked **start order** (Top 15 ok) + top rejects — **not** “only these exist.”
 
----
+### B6 — Full-horizon map (required product)
 
-### B3 — Hard filters (fast death)
+Every open tracker + D-S + Phase A gap:
 
-Drop or quarantine if **any**:
-
-1. License incompatible with monorepo policy (flag GPL/AGPL/unknown)
-2. Requires second balance book or platform withdrawal of user chain funds without SA model
-3. Duplicates Phase A kit surface (full exchange UI)
-4. Touches Class X content (sanctions lists as data product) without human path
-5. Unmaintained >18 months **and** security-critical
-6. Forces partner name into user-facing copy
-7. Ownership mismatch with no path (e.g. only works as Shizu L1 core but pitched for Nitro shell)
-
-**Output:** survivors + kill list with one-line reason each.
-
-**Done when:** every raw candidate is keep or kill.
-
----
-
-### B4 — Deep evaluation (shortlist only)
-
-For each survivor (target **≤3 per lane**, **≤25 global**):
-
-| Criterion            | Score / note                         |
-| -------------------- | ------------------------------------ |
-| Gap fit              | Which GapID / mountain               |
-| Integration cost     | 1 (adapter) … 5 (rewrite platform)   |
-| Ops burden           | self-host / SaaS / keys / SLAs       |
-| Security posture     | audits, issue hygiene, supply chain  |
-| Doctrine fit         | ledger, honesty, custody-scan        |
-| Lane owner           | N / D / S                            |
-| Replaces what build? | months saved estimate (honest range) |
-| Residual risk        | what we still own after adopt        |
-
-**Done when:** deep cards exist; no raw-only survivors.
-
----
-
-### B5 — Score + rank
-
-Composite for operator view (weights adjustable, state them):
-
-| Weight | Factor                                  |
-| ------ | --------------------------------------- |
-| 30%    | Gap severity (blocks money/UX/security) |
-| 25%    | Doctrine/safety fit                     |
-| 20%    | Integration cost (invert)               |
-| 15%    | Maturity/maintenance                    |
-| 10%    | Strategic (unlocks multiple mountains)  |
-
-**Output:** ranked table Top 15 + “do not adopt” top rejects.
-
----
-
-### B6 — Recommendations
-
-For each Top item:
-
-- **Adopt** — wrap adapter, own interface
-- **Adapt** — fork/subset
-- **Trial** — spike ≤3 days in worktree
-- **Later** — after D-S-x or Class X
-- **Reject** — reason
-
-Plus a **full-horizon phased map** (NOW / MID / LATE / NEVER) covering every open residual — **not** a max-5 implement thrift queue. Ranking = decision order only. (Operator correction 2026-08-05: Phase B is whole-future scope.)
-
----
+| Field              | Values                             |
+| ------------------ | ---------------------------------- |
+| Path               | IN / EXT / GF / LAW / S / X / KILL |
+| Phase              | NOW / MID / LATE / NEVER           |
+| External candidate | if EXT                             |
+| Owner              | N/D/S                              |
 
 ### B7 — Deliverable
 
-**Primary:** `docs/INTERNET-LEVERAGE-PHASE-B-REPORT-2026-08-XX.md` on tip (one PR)  
-**Must include:** gap backlog · lane map · kill list · ranked shortlist · **full-horizon map** · explicit non-goals · Phase A non-regression checklist
+- `docs/INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-<date>.md` (canonical decisions)
+- Research appendix or update v2-class evidence tables
+- Chat: Tier A start order + Class X decisions + link — **never** “only five levers left”
 
-**Chat to you:** one screen — how to read the map + Tier A start order + Class X decisions (not “only five levers forever”).
+### B8 — Stop
 
----
-
-### B8 — Stop line
-
-Research does **not** auto-merge dependencies.  
-Implement only after you pick (or standing order “trial top 3 spikes”).
+No dependency merge. Implement after operator pick.
 
 ---
 
-## 5 · Max out / all-out playbook
+## 5 · Done / peace criteria
 
-| Lever                  | How                                                                     |
-| ---------------------- | ----------------------------------------------------------------------- |
-| **Width**              | All L-\* lanes in parallel collection (B2)                              |
-| **Depth**              | Only shortlist gets B4 (don’t deep-dive 100)                            |
-| **Models**             | Cheap bulk collect → strong model for B4–B6 judgment                    |
-| **Reuse Phase A**      | Exclusion list = asset register + forbidden leverage                    |
-| **Denon alignment**    | Any candidate needing product law → “needs D-S-x” tag, not silent adopt |
-| **Shizu alignment**    | L-CHAIN-REF is **reference pack for him**, not Nitro build              |
-| **Security**           | Custody/pay/crypto shortlist always security subsection                 |
-| **Completeness proof** | Checklist §7 must all be true to claim done                             |
-
----
-
-## 6 · What “done” means for Phase B (peace criteria)
-
-- [ ] Every Phase A open gap either has a candidate lane or “no external leverage — greenfield OK”
-- [ ] Kill list ≥ shortlist (proves filtering)
-- [ ] No full-UI kit competitor recommended without explicit “replace shell” decision (default: reject)
-- [ ] No second ledger recommended
-- [ ] Full-horizon map: every open tracker mountain/socket + D-S has path type + phase (no silent drop)
-- [ ] Ranking present for decision order — **not** a hard implement ceiling of 5
-- [ ] Class X items listed separately for you only
-- [ ] Durable report on tip or harvest+PR
-- [ ] You can see Tier A start order in <10 minutes from one screen
+- [ ] Phase A green at B0
+- [ ] Every open need has path+phase
+- [ ] Kill list ≥ shortlist
+- [ ] No dual-kit / dual-book recommend
+- [ ] Rank = order only
+- [ ] Class X separate
+- [ ] S isolated
+- [ ] Tip durable
+- [ ] Hole hunt
+- [ ] Non-regression Phase A
+- [ ] Methodology self-check in report
 
 ---
 
-## 7 · Completeness checklist (cannot claim finished without)
+## 6 · Completeness checklist (cannot claim Phase B done)
 
-- [ ] B0 gap backlog from tip re-derive
-- [ ] All L-\* lanes addressed or N/A
-- [ ] ≥3 sources cited per active lane
-- [ ] Raw caps respected; kills reasoned
-- [ ] Deep cards for shortlist
-- [ ] Rank weights stated
-- [ ] Full-horizon phased map (NOW/MID/LATE/NEVER) — **not** max-5 thrift queue as sole output
-- [ ] Collision with open Denon PRs noted
-- [ ] Shizu chain refs isolated
-- [ ] Non-regression: Phase A kit + ledger-only restated
+- [ ] B0 tip re-derive + Phase A gate
+- [ ] All lanes or N/A
+- [ ] ≥3 sources active lanes
+- [ ] Kills reasoned
+- [ ] Deep cards shortlist
+- [ ] Weights stated
+- [ ] Full-horizon complete
+- [ ] Open PRs collision noted
+- [ ] Prior terrain imported
+- [ ] No max-5 project ceiling
 
 ---
 
-## 8 · Enhanced execute prompt (paste when you say GO Phase B)
+## 7 · Execute prompt (GO Phase B)
 
 ```
-INTERNET LEVERAGE PHASE B — execute the plan on tip.
+INTERNET LEVERAGE PHASE B — execute this plan on tip.
 
-PLAN LAW: docs/INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md (full). Re-derive origin/main first.
+PLAN: docs/INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md (hardened).
+PHASE A GATE: CURRENT-AUDIT must be proper/refreshed green — else STOP and fix Phase A.
 
-GOAL: Ranked external leverage candidates that fill REAL gaps after Phase A — not a second exchange kit, not a second ledger.
+GOAL: Full-horizon external/residual leverage map for whole future project + research evidence.
+NOT: max-5 thrift queue; not second shell; not second ledger.
 
-UNSPOKEN / IMPLICIT
-- Preserve Phase A: vendor shell = product UI; ledger-client = only book.
-- All-out width in collection; ruthless filters; small actionable shortlist.
-- Tag every candidate N/D/S owner; product-law → Denon seal; chain L1 refs → Shehzad only.
-- Class X never agent-closed.
-- One durable report; chat = Top 5 + decisions only.
-- No dependency installs / adopt implement in this pass unless I say trial.
+IMPLICIT: preserve Phase A; N/D/S tags; Class X human; import ORDER-ROUTE + SECURITY-WHEN-PLAIN;
+tip re-derive; kill≥shortlist; multi-source; no implement.
 
-METHOD: B0→B8 exactly. Gap-first. Multi-source. Kill list required. Score weights stated.
+METHOD: B0→B8. Gap-first.
 
-ANTI-LAZY FAIL if: no kill list; only GitHub stars; recommends replacing shell; invents money paths; skips license; skips ownership tags; dumps 100 links without rank.
+ANTI-LAZY FAIL: no kill list; stars-only; replace shell; invent money; skip license/ownership;
+claim “only five levers”; skip Phase A gate; dump links without rank/horizon.
 
-OUTPUT: docs/INTERNET-LEVERAGE-PHASE-B-REPORT-<date>.md + PR (batch one fat docs PR; thrift-aware).
-
-FORBIDDEN: dual-edit Denon open PRs; Shehzad protocol implement; invent mids; partner names in UI copy.
+OUTPUT: full-horizon doc + evidence; one fat docs PR.
 ```
 
 ---
 
-## 9 · Relationship to open human threads
+## 8 · Relationship to prior reports
 
-| Thread                     | Phase B impact                                                           |
-| -------------------------- | ------------------------------------------------------------------------ |
-| #346 handoff asserted      | Pay residual can use L-PAY findings later                                |
-| Denon product rulings sent | L-P2P research respects human disputes, no chain escrow handoff          |
-| Denon open PRs             | Note collisions; don’t redesign his mid-flight P2P in research implement |
-| Fleet/depth done           | L-UI depth not a priority lane                                           |
+| Doc                   | Role                                      |
+| --------------------- | ----------------------------------------- |
+| Phase A CURRENT-AUDIT | In-repo truth; gate                       |
+| PHASE-B-REPORT v1/v2  | Historical research evidence              |
+| FULL-HORIZON          | Decision surface — re-derive each execute |
+| METHODOLOGY-AUDIT     | Why gates exist                           |
 
 ---
 
-## 10 · Your go options
+## 9 · Operator commands
 
-| Command                           | Meaning                               |
-| --------------------------------- | ------------------------------------- |
-| **GO Phase B**                    | Execute this plan (research + report) |
-| **Revise plan**                   | Change lanes/weights first            |
-| **Trial only Top-N after report** | Default stop at B8                    |
+| Command          | Meaning                  |
+| ---------------- | ------------------------ |
+| **GO Phase B**   | Execute if Phase A green |
+| **Revise plan**  | Edit this file first     |
+| **Phase A only** | Refresh in-repo audit    |
 
-**Recommendation:** Land #346 handoff docs → then **GO Phase B** as research-only.
+---
+
+_Board-Delta: Phase B plan hardened — Phase A gate, full-horizon, anti-bullshit, no max-5 ceiling_

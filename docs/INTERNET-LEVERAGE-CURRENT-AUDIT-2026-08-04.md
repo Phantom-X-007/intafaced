@@ -1,298 +1,368 @@
 # Internet leverage — Phase A current audit (in-repo)
 
-**Status:** AUDIT COMPLETE · Phase A only (no open-web shopping)  
-**Tip at audit:** re-derive — written from worktree on `origin/main` at execute  
-**Plan:** `~/projects/OS/harvest/INTERNET-LEVERAGE-CURRENT-AUDIT-PLAN-2026-08-04.md`  
-**Term:** **Internet leverage** = already-built code/systems we adopt, wire, or wrap instead of rebuilding (UI or backend).
+**Status:** PHASE A PROPER · **refreshed 2026-08-05** (closes methodology audit gates)  
+**Original execute:** 2026-08-04 · **Refresh tip:** re-derive `origin/main` at refresh  
+**Plan law:** harvest `INTERNET-LEVERAGE-CURRENT-AUDIT-PLAN-2026-08-04.md` §8  
+**Methodology audit:** [`INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md`](INTERNET-LEVERAGE-METHODOLOGY-AUDIT-2026-08-05.md)  
+**Term:** Internet leverage = already-built code/systems we adopt, wire, or wrap instead of rebuilding.
 
-**Lanes:** Nitro (you + agents) + Denon hard board.  
-**Shehzad:** cross-plane notes only (bridge / matching dual-target).
+**Lanes:** Nitro + Denon. **Shehzad:** cross-plane only (bridge / dual-target matching).
+
+**Refresh reasons (tip drift):** `apps/web` deleted (#757) · vendor path `vendor/upstream-exchange` (#771) · depth client #748 · open PR pile re-derived · `svc-support` missing · D-S-01…18 incomplete · FUTURE thinner than tracker.
 
 ---
 
 ## 0 · Verdict (peace of mind)
 
-| Question                               | Answer                                                                                                                                                 |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Do we already hold massive leverage?   | **Yes** — vendored full exchange kit (`vendor/<kit>`) + full TypeScript spine (`services/*`, `packages/*`) + infra images                              |
-| Is product UI law using that leverage? | **Yes, by ADR** — sole product surface = vendor shell `:8090`; `apps/web` retires                                                                      |
-| Are we fully _using_ the kit?          | **No** — shell is primary; **Java money is deliberately not the book**; many Java modules not product-path; wallet RPC **not** live-money until review |
-| Biggest rebuild risk (Nitro)?          | New UI for screens that already exist in `05_Web_Front` / admin; second terminal; ignoring `ledger-client` recipes                                     |
-| Biggest rebuild risk (Denon)?          | Specs that ignore dual-target matching + ledger-only money; reopening `apps/web` as product; dual-editing shell craft                                  |
-| Forbidden “leverage”?                  | Java `MemberWallet` as second book; invent prices to make kit “look live”; unaudited wallet_rpc on mainnet                                             |
+| Question                  | Answer                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| Massive in-repo leverage? | **Yes** — `vendor/upstream-exchange` kit + 18 TS services + packages + compose    |
+| Product UI law?           | **Yes** — sole product surface = vendor shell **:8090**; `apps/web` **gone**      |
+| Fully using kit?          | **No** — shell primary; Java money **not** book; wallet RPC not live until review |
+| Biggest rebuild risk (N)? | New UI for kit screens; ignore ledger-client; second terminal                     |
+| Biggest rebuild risk (D)? | Specs without kit+ledger mandate; dual-edit; invent mids                          |
+| Forbidden leverage?       | Java balances as SoT; invent prices; unaudited wallet_rpc mainnet                 |
 
-**One line:** Use the **kit for product shape and screens**, use **our ledger/services for money truth**, wire the gap — do not rebuild either side blindly.
+**One line:** Kit for product **shape/screens**; **ledger-client** for money truth; wire the gap — do not rebuild either blindly.
 
 ---
 
-## 1 · Prior maps status (E1)
+## 1 · Prior maps status (E1) — tip 2026-08-05
 
-| Prior doc                                                  | Status vs tip                                                                                  | Action                                                    |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md` | **Still law**                                                                                  | Keep                                                      |
-| `adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`      | **Still law**                                                                                  | Keep; port residual named there still open                |
-| `adr/2026-07-28-vendored-exchange-integration.md`          | **Still law** (ledger only)                                                                    | Keep                                                      |
-| `VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md`           | **Mostly true**, paths may say `exchange-tree` / brand tokens — tip tree is **`vendor/<kit>`** | Treat as map; paths = vendored-kit                        |
-| `VENDORED-OVERLAP-AUDIT.md`                                | **Historical** (Jul 30) — Java under-use still directionally true                              | Do not treat fleet row counts as current without re-probe |
-| `UPSTREAM-ADOPTION-QUEUE-2026-08-02.md`                    | Queue doc — re-check any open items against tip                                                | Refresh when acting                                       |
-| `REDUNDANT-VS-PORT-2026-08-03.md`                          | Port map for apps/web → shell                                                                  | Still the port checklist                                  |
-| `ORDER-ROUTE-VENDOR-MONEY-INVENTORY.md`                    | Money seam inventory                                                                           | Use for dual-book / Java residual                         |
+| Prior doc                                             | Status                               | Action                                              |
+| ----------------------------------------------------- | ------------------------------------ | --------------------------------------------------- |
+| ADR adopt vendored product + keep ledger (2026-08-02) | **Law**                              | Keep                                                |
+| ADR retire apps/web → Vue shell (2026-08-03)          | **Law** + **executed** (#757 delete) | Keep port notes only                                |
+| ADR vendored exchange integration (2026-07-28)        | **Law**                              | Keep                                                |
+| VENDORED-SHELL-PEACE-OF-MIND-MAP                      | Useful; paths may lag rename         | Map; path = `vendor/upstream-exchange`              |
+| VENDORED-OVERLAP-AUDIT                                | Historical                           | Don’t cite fleet counts without re-probe            |
+| UPSTREAM-ADOPTION-QUEUE                               | Queue                                | Re-check when acting                                |
+| REDUNDANT-VS-PORT                                     | Port checklist                       | Mostly absorbed by delete; residual port ideas only |
+| ORDER-ROUTE-VENDOR-MONEY-INVENTORY                    | Money seams                          | Dual-book / Java residual                           |
+| ADMIN-0-INVENTORY-VENDOR-VS-APPS                      | Admin map                            | Prefer V-ADMIN                                      |
+| brand/path docs saying coinexchange/Bizzan            | **Stale brand risk**                 | brand-scan; vendor rename                           |
 
 ---
 
 ## 2 · Leverage asset register (E2)
 
-### 2.1 Vendored kit (`vendor/<kit>`) — primary internet leverage
+### 2.1 Vendored kit — `vendor/upstream-exchange`
 
-| Asset ID         | Path                                                                            | Kind                      | Use?                                                           | Owner care                     |
-| ---------------- | ------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------- | ------------------------------ |
-| **V-SHELL**      | `05_Web_Front` (~41 page entries, 74 Vue-class surface)                         | Trader UI                 | **YES — sole product UI**                                      | Nitro                          |
-| **V-ADMIN**      | `04_Web_Admin`                                                                  | Operator UI               | **YES — adopt workflows**, rebrand/honesty                     | Nitro later / Denon ops        |
-| **V-JAVA**       | `00_framework/*` (exchange, market, otc, ucenter, admin, wallet, chat, jobs, …) | Java microservices        | **Shape + controllers** adapt; **not** balance book            | Denon policy + agents residual |
-| **V-WALLET-RPC** | `01_wallet_rpc/*`                                                               | Chain custody RPC         | **Leverage after security review** — not live value until then | Denon + Class X                |
-| **V-DOC**        | `09_DOC`                                                                        | Screenshots / nginx notes | Reference                                                      | —                              |
-| **V-MOBILE**     | `02_App_Android`, `03_APP_IOS`                                                  | Stubs only                | **No source** — not leverage yet                               | Future decision                |
-| **V-ROBOT**      | `06_ExchangeRobot`                                                              | Stub                      | Out of scope                                                   | —                              |
-| **V-COMPOSE**    | `vendor/<kit>-compose.yml` + monorepo compose `vendor-shell`                    | Fleet                     | Shell on **:8090**                                             | Ops                            |
+| Asset ID                      | Path                                                       | Kind        | Use?                                     | Owner care    |
+| ----------------------------- | ---------------------------------------------------------- | ----------- | ---------------------------------------- | ------------- |
+| **V-SHELL**                   | `05_Web_Front`                                             | Trader UI   | **YES — sole product UI**                | N             |
+| **V-ADMIN**                   | `04_Web_Admin`                                             | Operator UI | **YES — workflows**                      | N/D           |
+| **V-JAVA-admin**              | `00_framework/admin`                                       | Java        | Shape only — not book                    | D policy      |
+| **V-JAVA-exchange**           | `00_framework/exchange` + `exchange-api` + `exchange-core` | Java        | Shape / study; **not** Fiat matching SoT | D             |
+| **V-JAVA-market**             | `00_framework/market`                                      | Java        | Shape                                    | D             |
+| **V-JAVA-otc**                | `00_framework/otc-api` + `otc-core`                        | Java        | Workflow shape for OTC                   | D/N after law |
+| **V-JAVA-ucenter**            | `00_framework/ucenter-api`                                 | Java        | Shape                                    | D             |
+| **V-JAVA-wallet**             | `00_framework/wallet`                                      | Java        | **Forbidden as book**                    | D-S-17        |
+| **V-JAVA-chat**               | `00_framework/chat`                                        | Java        | Shape only                               | —             |
+| **V-JAVA-job**                | `00_framework/bitrade-job`                                 | Java        | Ops shape                                | —             |
+| **V-JAVA-cloud/core/sql/jar** | cloud, core, sql, jar                                      | Support     | Infra/shape                              | —             |
+| **V-WALLET-RPC**              | `01_wallet_rpc/*`                                          | Custody RPC | After **security review** only           | D + X         |
+| **V-DOC**                     | `09_DOC`                                                   | Notes       | Reference                                | —             |
+| **V-MOBILE**                  | `02_App_Android`, `03_APP_IOS`                             | Stubs       | **No source**                            | Future        |
+| **V-ROBOT**                   | `06_ExchangeRobot`                                         | Stub        | Out                                      | —             |
+| **V-COMPOSE**                 | monorepo `vendor-shell` + kit compose                      | Fleet       | Shell **:8090**                          | Ops           |
 
-**Overlays already ours (leverage + extension):**  
-`05_Web_Front/.../pages/intafaced/*` — Academy, Agents, Bank, Blueprint, Chain, Dex, Launch, Pay, P2P, Platform, Protocol, Token, NotBuilt, …
+**Overlays (ours):** `05_Web_Front/.../pages/intafaced/*` — Academy, Agents, Bank, Blueprint, Chain, Dex, Launch, Pay, P2P, Platform, Protocol, Token, NotBuilt, …
 
-### 2.2 TypeScript services (already-built backend leverage)
+### 2.2 TypeScript services (complete tip list — 18)
 
-| Asset ID    | Service                                 | Leverage for                                  |
-| ----------- | --------------------------------------- | --------------------------------------------- |
-| S-LEDGER    | `svc-ledger` + `packages/ledger-client` | **Only book** — all money                     |
-| S-ID        | `svc-identity`                          | Accounts, rank, keys, KYC surfaces            |
-| S-TOKEN     | `svc-token`                             | IFC stake/emissions (honest residuals remain) |
-| S-MATCH     | `svc-matching`                          | Fiat plane matching                           |
-| S-TRADE     | `svc-trade`                             | Spot/convert done; futures residual           |
-| S-PAY       | `svc-pay`                               | Crypto rail done; card/gateway residual       |
-| S-BANK      | `svc-bank`                              | Accounts/loans done; earn/cards residual      |
-| S-P2P       | `svc-p2p`                               | P2P product                                   |
-| S-WS        | `svc-ws`                                | Depth/stream (platform path landed #727/#737) |
-| S-EDGE      | `svc-edge`                              | API edge                                      |
-| S-PROTOCOL  | `svc-protocol`                          | **Shehzad** contracts/plane                   |
-| S-DEX       | `svc-dex`                               | Self-custody DEX (**Shehzad** gravity)        |
-| S-INDEXER   | `svc-indexer`                           | Chain read models                             |
-| S-NOTIFY    | `svc-notify`                            | Fan-out                                       |
-| S-AGENTS    | `svc-agents`                            | Navigator etc.                                |
-| S-ACADEMY   | `svc-academy`                           | Lobbies                                       |
-| S-BLUEPRINT | `svc-blueprint`                         | Blueprint                                     |
+| Asset ID    | Service                                 | Leverage                                 |
+| ----------- | --------------------------------------- | ---------------------------------------- |
+| S-LEDGER    | `svc-ledger` + `packages/ledger-client` | **Only book**                            |
+| S-ID        | `svc-identity`                          | Accounts, rank, keys, KYC surfaces       |
+| S-TOKEN     | `svc-token`                             | IFC stake/emissions (honest residuals)   |
+| S-MATCH     | `svc-matching`                          | Fiat matching SoT                        |
+| S-TRADE     | `svc-trade`                             | Spot/convert done; futures residual      |
+| S-PAY       | `svc-pay`                               | Crypto rail done; card/gateway residual  |
+| S-BANK      | `svc-bank`                              | Accounts/loans done; earn/cards residual |
+| S-P2P       | `svc-p2p`                               | P2P product                              |
+| S-WS        | `svc-ws`                                | Depth/stream platform                    |
+| S-EDGE      | `svc-edge`                              | API edge                                 |
+| S-PROTOCOL  | `svc-protocol`                          | **Shehzad**                              |
+| S-DEX       | `svc-dex`                               | **Shehzad** gravity                      |
+| S-INDEXER   | `svc-indexer`                           | Chain read models                        |
+| S-NOTIFY    | `svc-notify`                            | Fan-out                                  |
+| S-AGENTS    | `svc-agents`                            | Navigator/scanner/…                      |
+| S-ACADEMY   | `svc-academy`                           | Lobbies/curriculum                       |
+| S-BLUEPRINT | `svc-blueprint`                         | Blueprint                                |
+| S-SUPPORT   | `svc-support`                           | Support desk backend                     |
 
-### 2.3 Packages
+### 2.3 Packages (complete tip)
 
-| Package                                                                   | Leverage                 |
-| ------------------------------------------------------------------------- | ------------------------ |
-| `ledger-client`                                                           | Money movement only path |
-| `contracts` / `events`                                                    | Cross-service API law    |
-| `auth` / `config` / `db`                                                  | Shared infra             |
-| `i18n` / `ui`                                                             | Shell honesty / tokens   |
-| `market-data` / `venue-adapter` / `venue-contracts` / `exchange-contract` | Venue/market wiring      |
+`auth` · `config` · `contracts` · `db` · `events` · `exchange-contract` · `i18n` · `ledger-client` · `market-data` · `ui` · `venue-adapter` · `venue-contracts`
 
-### 2.4 Apps (non-product)
+### 2.4 Apps
 
-| Path         | Role                                                                                     |
-| ------------ | ---------------------------------------------------------------------------------------- |
-| `apps/web`   | **Retired product** — port source for desk ideas only; delete sequencing = Denon D-P2-01 |
-| `apps/admin` | Separate admin surface if present — prefer **V-ADMIN** for exchange ops                  |
+| Path         | Role                                                   |
+| ------------ | ------------------------------------------------------ |
+| `apps/web`   | **Deleted** (#757) — not a product surface             |
+| `apps/admin` | Present — prefer **V-ADMIN** for exchange ops patterns |
 
-### 2.5 Infra leverage (compose)
+### 2.5 Infra
 
-Postgres 16 · Redis 7 · NATS · OTEL collector · vendor-shell image — **do not rebuild** messaging/DB.
-
----
-
-## 3 · PAST — already done leverage (E3)
-
-| Work                        | Leverage used                               | Proof / note                    |
-| --------------------------- | ------------------------------------------- | ------------------------------- |
-| Product UI decision         | V-SHELL not apps/web                        | ADR 2026-08-02 / 2026-08-03     |
-| Ledger-only money           | ledger-client recipes                       | ADR 2026-07-28; dual-book scans |
-| Shell deployable :8090      | V-SHELL + nginx/compose                     | #412-class + fleet              |
-| Spot / convert trade        | S-TRADE + shell Exchange                    | tracker `done`                  |
-| WS depth platform path      | S-WS + nginx                                | #727 Denon + #737               |
-| Pay crypto rail             | S-PAY adapters                              | #226 / pay.rails done           |
-| Bank accounts/loans         | S-BANK                                      | tracker done                    |
-| Identity core               | S-ID                                        | tracker done                    |
-| Matching engine             | S-MATCH                                     | tracker done                    |
-| Order-route / CX-8 program  | Vendor money inventory + our edge           | ORDER-ROUTE docs                |
-| Brand scrub / partner names | brand-scan + kit rebrand                    | ongoing gates                   |
-| AFK shell honesty residual  | V-SHELL screens (wire/honesty, not rebuild) | freeProduct≈0 shell             |
-
-**Past debt (still true):** kit **breadth** (OTC desk, admin finance workflows, wallet RPC) adopted as **shape** more than **running product path**; Java balance subsystem **must not** be adopted as book.
+Postgres 16 · Redis 7 · NATS · OTEL · vendor-shell image — **do not rebuild**.
 
 ---
 
-## 4 · NOW — active work × leverage (E4)
+## 3 · PAST — done leverage (E3)
 
-### 4.1 Nitro / agents (now)
+| Work                         | Leverage used       | Proof              |
+| ---------------------------- | ------------------- | ------------------ |
+| Product UI = shell           | V-SHELL             | ADR 08-02 / 08-03  |
+| apps/web product role killed | Delete #757         | tip tree           |
+| Ledger-only money            | ledger-client       | ADR 07-28; scans   |
+| Shell :8090                  | V-SHELL + compose   | fleet              |
+| Spot/convert                 | S-TRADE + Exchange  | tracker done       |
+| WS depth platform            | S-WS + nginx        | #727 #737          |
+| WS depth **client**          | V-SHELL + ix-depth  | **#748**           |
+| Pay crypto rail              | S-PAY               | pay.rails done     |
+| Bank accounts/loans          | S-BANK              | tracker done       |
+| Identity core                | S-ID                | tracker done       |
+| Matching                     | S-MATCH             | tracker done       |
+| Market-id authority ADR      | S-WS/S-EDGE/S-MATCH | #746               |
+| Vendor rename                | path hygiene        | #771               |
+| Brand/honesty residual       | scans + shell       | ongoing            |
+| Wallet RPC auth on modules   | V-WALLET-RPC        | #720 (not go-live) |
 
-| Work                                  | Best leverage                                            | Using?                                        | Action                                                    |
-| ------------------------------------- | -------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------- |
-| **WS depth client**                   | V-SHELL book UI + S-WS `/ws/stream` + #727 spec          | Partial — platform unblocked; client residual | **WIRE** shell to live feed; no new terminal app          |
-| **Decimal-safe desk**                 | `bignumber` under shell assets + port note in retire ADR | Partial                                       | **WIRE** ix-trade to bignumber — not rewrite desk         |
-| **Runtime shape validation**          | apps/web patterns as **reference** only                  | Partial                                       | Port discipline into shell, not resurrect Next            |
-| **Stranded branch land**              | Existing feat branches                                   | Active                                        | Prefer path-clean land over rewrite                       |
-| **#346 pay residual**                 | S-PAY + V-SHELL Pay/intafaced Pay + card sandbox in PR   | Blocked on handoff                            | After handoff: **extend svc-pay**, don’t new pay UI stack |
-| **Open #734 multi-asset**             | S-TRADE + contracts + Denon D-S-05 law                   | Risky without law                             | **Pause invent** until D-S-05 or narrow refuse-closed     |
-| **Open #735 bank/pay audit residual** | S-BANK/S-PAY                                             | Collision risk                                | Path-check vs Denon/Shehzad; no dual-edit                 |
-| **Platform-pages craft**              | V-SHELL `Platform.vue` + cms/uc pages                    | Should                                        | **Craft on kit**, not apps/web                            |
-| **Invent / honesty scans**            | fabricated-money gate + shell                            | Active                                        | Keep ratchet; don’t invent to green                       |
-
-### 4.2 Denon (now — hard board)
-
-| Work                                               | Best leverage                                    | Using?                     | Action                                                                       |
-| -------------------------------------------------- | ------------------------------------------------ | -------------------------- | ---------------------------------------------------------------------------- |
-| **Open PR pile** (#448 #433 #432 #430 #428 #420 …) | Existing services/gates/config                   | Active on **his** branches | **Land** — don’t parallel-rebuild in agents                                  |
-| **Fleet image rebuild**                            | compose + Dockerfiles already in repo            | Ops residual               | **Rebuild images** from tip — not new fleet design                           |
-| **Market-id authority ADR**                        | S-WS + S-EDGE + S-MATCH reality                  | Partial after #727         | **Write law** so agents don’t invent                                         |
-| **D-S-01…05 engine laws**                          | S-TRADE/S-MATCH + kit OTC/exchange **workflows** | Specs missing              | Specs should say: **UI from V-SHELL/V-JAVA shape; money from ledger-client** |
-| **D-S-06 matching dual-target**                    | S-MATCH + Shehzad INTACORE later                 | Spec missing               | **Must** reuse matching **spec**, not two product laws                       |
-| **D-S-10/11/09 pay/id/bank law**                   | S-PAY/S-ID/S-BANK + kit screens                  | Spec missing               | Name **which kit screens + which recipes**                                   |
-| **D-S-12 bridge accounting**                       | S-LEDGER + S-PROTOCOL/S-INDEXER                  | Future                     | Spec only — Shehzad builds chain side                                        |
-| **D-P2-01 apps/web delete**                        | Retire ADR + V-SHELL already product             | Pending                    | **Delete** product role; keep port notes                                     |
-| **D-P2-02 spine-\* abandon**                       | Remote branches as leverage or cut               | Pending                    | Decide — don’t silent dual-maintain                                          |
-| **D-P3 admin Actions/protection**                  | GitHub + existing setup-github.mjs               | Admin                      | Use existing scripts — not new process theater                               |
-| **Java dual-book residual**                        | vendor-java-money-scan + dual-book-door          | Scans exist                | **Policy + residual** — don’t re-home balances to Java                       |
+**Past debt:** kit **breadth** (OTC desk, admin finance, full admin) still shape > product path; Java balances must never become book.
 
 ---
 
-## 5 · FUTURE — reclaimed / residual mountains (E5)
+## 4 · NOW — active × leverage (E4)
 
-| Mountain                  | Default leverage                                          | Greenfield OK?              | Notes                                      |
-| ------------------------- | --------------------------------------------------------- | --------------------------- | ------------------------------------------ |
-| **pay.\*** expand         | S-PAY + V-SHELL pay/uc + kit merchant patterns            | No full rewrite             | After #346 + D-S-10                        |
-| **bank.earn/cards/ramps** | S-BANK + V-SHELL Bank.vue + kit finance workflows         | No                          | D-S-09; issuer Class X                     |
-| **bank.sovereign-card**   | S-BANK + Shehzad SA contracts (S-E\*)                     | Split                       | Custodial half agents; contract half Shizu |
-| **trade.futures**         | S-TRADE residual + S-WS private + kit futures UI if any   | Law first                   | **D-S-01 required**                        |
-| **trade.otc**             | Kit **otc** pages + otc-api **workflow** + ledger recipes | No UI rewrite               | **D-S-02**                                 |
-| **trade.copy / algo**     | Mostly greenfield engines                                 | Engines yes; UI on shell    | **D-S-03/04**                              |
-| **identity money graph**  | S-ID + shell sub-account selector already shipped         | No new identity service     | D-S-11                                     |
-| **trade.mm-bot**          | S-TRADE patterns                                          | Thin                        | Nitro owned ready                          |
-| **ws.gateway complete**   | S-WS                                                      | No                          | Positions need futures events (D-S-01)     |
-| **Admin ops console**     | **V-ADMIN** first                                         | No second admin SPA         | Rebrand/honesty                            |
-| **CMS / help / notice**   | Kit **cms** pages                                         | No                          | Honesty/i18n only                          |
-| **Notifications**         | S-NOTIFY + kit chat **shape**                             | Partial                     | Don’t rebuild chat stack blindly           |
-| **Wallet custody**        | **V-WALLET-RPC** after security review                    | Building from zero = months | Denon gate                                 |
-| **Mobile**                | No leverage in repo (stubs)                               | Yes if ever                 | Phase B later                              |
-| **Shehzad protocol/L1**   | S-PROTOCOL + forge — his board                            | His plane                   | Don’t steal                                |
+### 4.1 Open PRs (re-derived tip — not folklore)
+
+| PR       | Author  | Leverage note                                                          | Dual-build risk          |
+| -------- | ------- | ---------------------------------------------------------------------- | ------------------------ |
+| **#428** | Denon   | P2P payment instruments — **his** branch                               | Agents: **babysit only** |
+| **#346** | Shehzad | Pay M1 gateway — operator handoff asserted; path-check before residual | No dual-edit             |
+
+Any other “open Denon money pile” claims must be re-`gh pr list`’d — do not cite old #448-class lists without re-derive.
+
+### 4.2 Nitro / agents now
+
+| Work                        | Best leverage                          | Using?                                                           | Action                               |
+| --------------------------- | -------------------------------------- | ---------------------------------------------------------------- | ------------------------------------ |
+| Depth live **E2E residual** | #748 client + S-WS + fleet             | Partial — client exists; `feedLive` starts false until connected | Prove live path; no new terminal     |
+| Decimal desk                | Vendored bignumber                     | Partial                                                          | Wire ix-trade                        |
+| Shape validation            | Port discipline (not resurrect Next)   | Partial                                                          | One schema lib later = Phase B       |
+| Pay residual after handoff  | S-PAY + shell Pay                      | After #346 clear                                                 | Extend svc-pay — no new pay UI stack |
+| Platform craft              | V-SHELL Platform + cms                 | Should                                                           | Kit first                            |
+| Honesty scans               | fabricated-money + brand               | Active                                                           | Keep                                 |
+| freeProduct residual craft  | Matching tracker row’s service + shell | Active                                                           | Prefer path-clean land               |
+
+### 4.3 Denon now
+
+| Work                           | Best leverage                     | Action               |
+| ------------------------------ | --------------------------------- | -------------------- |
+| Land/close **#428** path       | S-P2P + ledger                    | His merge discipline |
+| Spec factory D-S-01…18         | Name kit screens + ledger recipes | **Unblocks** agents  |
+| D-S-06 dual-target             | One matching **spec**             | With Shehzad         |
+| Fleet/images                   | Existing Dockerfiles              | Rebuild not redesign |
+| Wallet RPC review program      | V-WALLET-RPC                      | Before live custody  |
+| D-S-17 Java dual-book residual | Scans                             | Policy + residual    |
+
+---
+
+## 5 · FUTURE — every non-done tracker mountain (E5)
+
+Default: **IN** leverage first. **GF** only if no asset. **LAW** = Denon D-S. **S** = Shehzad. **X** = Class X.
+
+### 5.1 Trade / venue / terminal / WS
+
+| ID                | Default leverage           | GF OK?           | Notes                               |
+| ----------------- | -------------------------- | ---------------- | ----------------------------------- |
+| trade.futures     | S-TRADE + S-WS + kit shape | After **D-S-01** | No invent mids                      |
+| trade.options     | S-TRADE patterns           | After law        | LATE                                |
+| trade.otc         | Kit otc + ledger           | After **D-S-02** | No UI rewrite                       |
+| trade.copy        | Engine GF + shell          | After **D-S-03** |                                     |
+| trade.algo        | Engine GF + shell          | After **D-S-04** | Study Nautilus only later (Phase B) |
+| trade.forex       | Same engine                | After **D-S-05** |                                     |
+| trade.ccxt-api    | Public API shape           | Care             | **No CCXT money path**              |
+| trade.mm-bot      | S-TRADE                    | Thin             | N ready                             |
+| venue.aggregation | venue-adapter              | Partial          |                                     |
+| web.terminal      | V-SHELL                    | Residual wire    | decimals + live prove               |
+| ws.gateway        | S-WS                       | Partial          | Positions need D-S-01               |
+
+### 5.2 Pay / bank / p2p
+
+| ID                                                                               | Default leverage     | Notes                                   |
+| -------------------------------------------------------------------------------- | -------------------- | --------------------------------------- |
+| pay.gateway/psp/payfac/routing/settlement/fraud/subscriptions/plugins/public-api | S-PAY + shell Pay    | **D-S-10**; EXT orchestration = Phase B |
+| socket.psp-partners                                                              | Adapters only        | **X**                                   |
+| bank.earn/cards/ramps                                                            | S-BANK + shell Bank  | **D-S-09**; issuer **X**                |
+| bank.sovereign-card                                                              | S-BANK + S SA        | Split N/S                               |
+| socket.live-issuer                                                               | —                    | **X**                                   |
+| p2p.merchants                                                                    | S-P2P + shell        |                                         |
+| P2P disputes                                                                     | Human desk GF + SPEC | **D-S-08**; ReDoS Phase B               |
+
+### 5.3 Identity / token / notify / ops
+
+| ID                                        | Default leverage                | Notes                               |
+| ----------------------------------------- | ------------------------------- | ----------------------------------- |
+| identity money graph                      | S-ID + shell sub-accounts       | **D-S-11**                          |
+| token.yield/buyback/governance            | S-TOKEN honesty                 | **D-S-14** numbers; sockets         |
+| ops.notifications + notify sockets        | S-NOTIFY                        | EXT channel SDKs Phase B            |
+| ops.support                               | S-SUPPORT + desk                | Prefer not second ticket SaaS day-1 |
+| ops.affiliates/compliance/analytics/admin | apps/admin + V-ADMIN + services | Analytics warehouse = Phase B late  |
+| ops.compliance screening content          | Queues IN                       | List **content** **X**              |
+| infra.i18n                                | packages/i18n                   |                                     |
+
+### 5.4 Agents / academy / market
+
+| ID                      | Default leverage         | Notes                  |
+| ----------------------- | ------------------------ | ---------------------- |
+| agents.\*               | S-AGENTS                 | No invent money        |
+| academy.\*              | S-ACADEMY + kit overlays | VR/stream sockets late |
+| market.vendors/commerce | Shell + services         |                        |
+
+### 5.5 Protocol / chain / bridge / launch / dex / mining (S)
+
+| ID                                                                                     | Default leverage                    | Notes                     |
+| -------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------- |
+| protocol.\* / chain.\* / bridge.\* / launch.\* / mining.\* / dex.\* / contract sockets | S-PROTOCOL, S-DEX, S-INDEXER, forge | **S only**; Nitro babysit |
+| socket.mpc-custody                                                                     | After wallet review                 | Phase B EXT + **X**       |
+| socket.rust-matching                                                                   | Dual-target **D-S-06**              | LATE                      |
+| socket.ledger-sharding                                                                 | Scale                               | LATE                      |
+
+### 5.6 Mobile
+
+| ID                    | Default leverage | Notes                              |
+| --------------------- | ---------------- | ---------------------------------- |
+| V-MOBILE / future app | **None** (stubs) | GF when product yes — Phase B late |
 
 ---
 
 ## 6 · Forbidden leverage (E6)
 
-| Temptation                                                         | Why forbidden             |
-| ------------------------------------------------------------------ | ------------------------- |
-| Java `MemberWallet` / dual balance tables as source of truth       | Doctrine: ledger only     |
-| Invent mids/depth so kit charts “look live”                        | Honesty doctrine          |
-| Partner/PSP names in user-facing copy                              | Brand law — adapters only |
-| `01_wallet_rpc` on mainnet without security review                 | Custody Class X / ADR     |
-| Resurrect `apps/web` as product because it “has a better terminal” | ADR 2026-08-03            |
-| Agents implementing Shehzad `svc-protocol` contracts               | Ownership                 |
-| Dual-edit Denon open PR files “to help”                            | Collision                 |
-| New npm “exchange kit” while vendored-kit sits in tree             | Rebuild of V-SHELL        |
+| Temptation                               | Why                            |
+| ---------------------------------------- | ------------------------------ |
+| Java MemberWallet / dual balances as SoT | Doctrine ledger only           |
+| Invent mids/depth to look live           | Honesty                        |
+| Partner/PSP names in user copy           | Brand — adapters only          |
+| wallet_rpc mainnet without review        | Custody X                      |
+| Resurrect apps/web as product            | ADR + deleted                  |
+| Agents implement Shehzad protocol cores  | Ownership                      |
+| Dual-edit Denon open PR files            | Collision                      |
+| New full exchange UI kit                 | Rebuild V-SHELL                |
+| CCXT on money path                       | Floats + doctrine              |
+| Formance/TigerBeetle as ledger SoT       | Second book (Phase B kill too) |
 
 ---
 
-## 7 · Gap register (E7) — ordered
+## 7 · Gap register (E7)
 
-### P0 — stop silent rebuild / unlock money path
+### P0
 
-| ID         | Gap                                                             | Who              | Action                                               |
-| ---------- | --------------------------------------------------------------- | ---------------- | ---------------------------------------------------- |
-| **G-P0-1** | WS client / live feed still residual while platform path exists | Nitro            | Wire V-SHELL to S-WS per #727 — highest leverage NOW |
-| **G-P0-2** | Desk may still not use bignumber end-to-end                     | Nitro            | Wire existing asset — retire ADR residual            |
-| **G-P0-3** | #346 handoff blocks pay leverage chain                          | Shizu → Nitro    | Finish/handoff then extend S-PAY                     |
-| **G-P0-4** | Denon open money PRs unmerged = blocked leverage of fixes       | Denon            | Land P0 pile                                         |
-| **G-P0-5** | Engine work without D-S-01…05 = invent or stall                 | Denon then Nitro | Spec factory first                                   |
+| ID     | Gap                                                 | Who             | Action                             |
+| ------ | --------------------------------------------------- | --------------- | ---------------------------------- |
+| G-P0-1 | Depth **E2E** residual (client shipped; prove live) | N               | Fleet + connect proof — no new app |
+| G-P0-2 | Decimal desk not end-to-end                         | N               | Wire bignumber                     |
+| G-P0-3 | Pay residual after #346                             | N after handoff | Extend S-PAY                       |
+| G-P0-4 | Denon open work unlanded (#428…)                    | D               | Land his PRs                       |
+| G-P0-5 | Engines without D-S-01…05                           | D then N        | Spec factory                       |
 
-### P1 — kit under-used (shape adoption)
+### P1
 
-| ID         | Gap                                                             | Who             | Action                                   |
-| ---------- | --------------------------------------------------------------- | --------------- | ---------------------------------------- |
-| **G-P1-1** | OTC/admin/CMS workflows not fully product-path                  | Nitro after law | Adopt screens; money via ledger adapters |
-| **G-P1-2** | V-ADMIN not primary ops story                                   | Nitro/Denon     | Prefer V-ADMIN over new admin            |
-| **G-P1-3** | Peace maps path names drift (`exchange-tree` vs `vendored-kit`) | Agents docs     | When touching maps, fix paths            |
-| **G-P1-4** | Wallet RPC unused without review                                | Denon           | Security review program before live      |
+| ID     | Gap                                   | Who         | Action                 |
+| ------ | ------------------------------------- | ----------- | ---------------------- |
+| G-P1-1 | OTC/admin/CMS not full product path   | N after law | Kit screens + ledger   |
+| G-P1-2 | V-ADMIN not primary ops story         | N/D         | Prefer V-ADMIN         |
+| G-P1-3 | Doc path drift                        | Agents      | Fix when touching      |
+| G-P1-4 | Wallet RPC unused without review      | D           | Review program         |
+| G-P1-5 | svc-support under-used vs ops.support | N           | Wire desk to S-SUPPORT |
 
-### P2 — hygiene
+### P2
 
-| ID         | Gap                                        | Who           | Action                       |
-| ---------- | ------------------------------------------ | ------------- | ---------------------------- |
-| **G-P2-1** | apps/web still in tree as confusion magnet | Denon D-P2-01 | One-commit delete when ready |
-| **G-P2-2** | spine-\* branch pile                       | Denon D-P2-02 | Abandon/resume list          |
-| **G-P2-3** | Stale overlap audit fleet numbers          | —             | Don’t cite without re-probe  |
-
----
-
-## 8 · Hole hunt — second pass (E8)
-
-| Hunt question                      | Result                                                         |
-| ---------------------------------- | -------------------------------------------------------------- |
-| Missed packages?                   | Covered §2.3                                                   |
-| Missed services?                   | All 17 svc-\* listed                                           |
-| Mobile leverage?                   | **None** (stubs) — called out future                           |
-| Charting?                          | Already decided lightweight-charts on shell — not Phase B shop |
-| Existing peace maps ignored?       | Explicitly loaded; path drift noted                            |
-| Shehzad plane stolen?              | No — only dual-target + bridge notes                           |
-| Phase B mixed in?                  | **No** — no new OSS candidates                                 |
-| Tracker done features as leverage? | Core money/identity/trade/ws.depth treated as leverage in §3   |
-| Compose infra?                     | Yes §2.5                                                       |
-| intafaced overlays?                | Listed as our extension of kit                                 |
-
-**None found that change the verdict** after named hunt above.
+| ID     | Gap                               | Who | Action            |
+| ------ | --------------------------------- | --- | ----------------- |
+| G-P2-1 | apps/web confusion                | —   | **Closed** (#757) |
+| G-P2-2 | spine-\* pile                     | D   | Disposition list  |
+| G-P2-3 | Stale fleet numbers in old audits | —   | Re-probe          |
 
 ---
 
-## 9 · Actions (E9) — no code in this PR beyond this doc
+## 8 · D-S-01…18 — leverage mandate (plan gate)
 
-### Nitro / agents (now)
-
-1. **WS client + decimal desk** on V-SHELL — top leverage use.
-2. **Never** new product SPA.
-3. After #346: pay on **S-PAY + existing Pay screens**.
-4. #734 only with D-S-05 or refuse-closed thin.
-5. Platform craft → kit pages first.
-
-### Denon (now)
-
-1. Land open P0 PR pile + fleet rebuild.
-2. Write **D-S-*** specs that **name leverage** (kit workflow + ledger recipes + our svc).
-3. D-S-06 dual-target matching — shared spec.
-4. apps/web delete + spine disposition when ready.
-5. Wallet RPC review before live custody leverage.
-
-### You (operator)
-
-1. Optional: re-send Denon paste pointing at hard board + this audit.
-2. Phase B fan-out only after G-P0-1…5 move — so research fills **real** holes (e.g. mobile, reviewed custody, card issuer adapters).
+| D-S                      | Spec must mandate                                                                     | N/A?        |
+| ------------------------ | ------------------------------------------------------------------------------------- | ----------- |
+| 01 Futures risk          | UI: kit futures/exchange shape; money: ledger recipes; marks: refuse rules not invent |             |
+| 02 OTC                   | Kit otc workflow; ledger stake/spread recipes                                         |             |
+| 03 Copy                  | Shell follow UI; ledger profit-share recipe                                           |             |
+| 04 Algo                  | Shell order UI; no fake fills; study-only external engines                            |             |
+| 05 Multi-asset           | Enum authority in contracts; refuse-closed                                            |             |
+| 06 Matching dual-target  | **One matching spec**; Fiat = S-MATCH; chain = S later                                |             |
+| 07 Oracle/mark           | Refuse rules; no vendor mid as truth                                                  |             |
+| 08 P2P dispute           | Human desk; custody escrow Fiat; no Kleros default                                    |             |
+| 09 Bank                  | S-BANK + shell Bank; issuer adapters Class X                                          |             |
+| 10 Pay beyond crypto     | S-PAY + shell Pay; orchestration adapter later                                        |             |
+| 11 Identity graph        | S-ID; shell sub-account; no second identity service                                   |             |
+| 12 Bridge accounting     | Ledger IFC ↔ chain IFC; S builds chain                                                |             |
+| 13 Event bus             | packages/events + existing NATS; explicit §13 sockets                                 |             |
+| 14 Token economics       | Numbers from you/spec only; S-TOKEN honesty                                           |             |
+| 15 Platform IA           | V-SHELL platform pages; no apps/web                                                   |             |
+| 16 Class M hold language | Process — no package                                                                  | N/A package |
+| 17 Java dual-book        | Scans + residual; never adopt Java book                                               |             |
+| 18 Predict/quant/connect | Invent ban until law; shell only if in scope                                          |             |
 
 ---
 
-## 10 · Success criteria (this audit)
+## 9 · Hole hunt (E8) — refresh
 
-- [x] Asset register covers vendor + services + packages + infra
-- [x] Past / Now / Future matrices
-- [x] Denon open PRs + D-S-\* notes
-- [x] Reclaimed mountains future rows
-- [x] Forbidden leverage
-- [x] Gaps ranked
-- [x] Second-pass hole hunt
+| Hunt                    | Result                                 |
+| ----------------------- | -------------------------------------- |
+| Missed service?         | **svc-support** was missed — **added** |
+| apps/web still product? | **No** — deleted                       |
+| Vendor path?            | **upstream-exchange**                  |
+| Depth client?           | **#748** — E2E residual remains        |
+| Open PR folklore?       | Re-derived #428 #346                   |
+| D-S full set?           | **Filled §8**                          |
+| Tracker FUTURE breadth? | **§5** all domains                     |
+| Phase B mixed in?       | **No** candidates — boundary §11       |
+| Mobile leverage?        | Still none                             |
+| Charting shop?          | No — lightweight-charts decided        |
+
+---
+
+## 10 · Actions (E9)
+
+**Nitro:** prove depth E2E; decimal wire; after pay handoff extend S-PAY; kit-first platform; never new SPA.  
+**Denon:** #428 discipline; D-S factory with leverage mandates; wallet review; Java dual-book residual.  
+**You:** Class X only; optional Denon nudge for law factory.
+
+---
+
+## 11 · Phase B boundary
+
+Search **new external** only for holes this audit leaves open (security parsers, secrets CI, multi-PSP orchestration, passkeys, ACH file libs, KYC adapters, custody vendors after review, mobile stacks, chain **refs for S**, etc.).  
+**Not:** second UI kit; second ledger; invent mids.
+
+**Gate:** Phase B plan + methodology audit require this refresh **green** before B0.
+
+---
+
+## 12 · Completeness (plan §8) — refresh self-check
+
+- [x] Every tip `services/svc-*` (18)
+- [x] Vendor shell + admin + Java modules named
+- [x] Packages complete
+- [x] Open PRs re-derived
+- [x] D-S-01…18 leverage mandates
+- [x] Nitro NOW mapped (incl. #748 residual)
+- [x] FUTURE all tracker domains
+- [x] Forbidden explicit
+- [x] Prior maps status
+- [x] Hole hunt named
 - [x] No Phase B shopping
-- [x] Durable on tip via PR
+- [x] Durable tip path
+
+**Phase A proper: YES (after this refresh lands on tip).**
 
 ---
 
-## 11 · Phase B boundary (later only)
-
-Search **new** external leverage only for gaps this audit leaves honestly open, e.g.:
-
-- Mobile (no kit source)
-- Card issuer / KYC providers (adapters — Class X content separate)
-- Post-review custody alternatives if wallet_rpc fails review
-- Not: another full exchange Vue kit while vendored-kit exists
-
----
-
-_Board-Delta: Phase A internet leverage audit — in-repo reuse map for Nitro+Denon_
+_Board-Delta: Phase A internet leverage audit refreshed — tip drift + plan §8 gates closed_
