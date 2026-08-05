@@ -13,6 +13,10 @@ import {
   progressRatioLabel,
   progressIsGrantable,
   missingItemSlugsJoined,
+  progressBoardCard,
+  progressExportLine,
+  progressExportHeader,
+  progressExportText,
 } from './progress.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
@@ -172,5 +176,20 @@ describe('academy.certs Stage-1 progress spine', () => {
     expect(progressRatioLabel(report)).toBe('0.5000');
     expect(progressIsGrantable(report)).toBe(false);
     expect(missingItemSlugsJoined(report)).toBe('b');
+  });
+
+  it('L3 wave43 progress board + export', () => {
+    const cert = { id: 'c1', title: 'T', requiredItemSlugs: ['a', 'b'] };
+    const report = progressReport({
+      userId: 'u1',
+      cert,
+      completedSlugs: new Set(['a']),
+      existingGrant: null,
+    });
+    expect(progressBoardCard(report).completed).toBe(1);
+    expect(progressBoardCard(report).grantable).toBe(false);
+    expect(progressExportHeader()).toBe('userId,certId,ratio,complete,granted');
+    expect(progressExportLine(report)).toContain('u1,c1,0.5000');
+    expect(progressExportText(report)).toContain('userId,certId');
   });
 });

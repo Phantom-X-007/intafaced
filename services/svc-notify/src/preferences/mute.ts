@@ -130,3 +130,56 @@ export function mutedChannelRatio(prefs: ChannelMutePrefs): string {
 export function hasSingleMute(prefs: ChannelMutePrefs): boolean {
   return countMutedChannels(prefs) === 1;
 }
+
+/** L3 — mute board card for operator UI. */
+export function muteBoardCard(prefs: ChannelMutePrefs): {
+  readonly mutedCount: number;
+  readonly unmutedCount: number;
+  readonly muted: readonly MuteableChannel[];
+  readonly unmuted: readonly MuteableChannel[];
+  readonly ratio: string;
+  readonly single: boolean;
+  readonly fullyMuted: boolean;
+  readonly fullyUnmuted: boolean;
+} {
+  const muted = listMutedChannels(prefs);
+  const unmuted = listUnmutedChannels(prefs);
+  return {
+    mutedCount: muted.length,
+    unmutedCount: unmuted.length,
+    muted,
+    unmuted,
+    ratio: mutedChannelRatio(prefs),
+    single: hasSingleMute(prefs),
+    fullyMuted: allMuteableMuted(prefs),
+    fullyUnmuted: isFullyUnmuted(prefs),
+  };
+}
+
+/** L3 — CSV export lines channel,muted(0|1). */
+export function muteExportLines(prefs: ChannelMutePrefs): readonly string[] {
+  return allMuteableChannels().map((c) => `${c},${prefs.muted.has(c) ? '1' : '0'}`);
+}
+
+/** L3 — mute export header. */
+export function muteExportHeader(): string {
+  return 'channel,muted';
+}
+
+/** L3 — full mute export text. */
+export function muteExportText(prefs: ChannelMutePrefs): string {
+  return [muteExportHeader(), ...muteExportLines(prefs)].join('\n');
+}
+
+/** L3 — parse mute export line. Invalid → null. */
+export function parseMuteExportLine(line: string): { readonly channel: MuteableChannel; readonly muted: boolean } | null {
+  const t = line.trim();
+  if (!t || t === muteExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 2) return null;
+  const channel = parts[0]!.trim();
+  const flag = parts[1]!.trim();
+  if (channel !== 'email' && channel !== 'push' && channel !== 'sms') return null;
+  if (flag !== '0' && flag !== '1') return null;
+  return { channel, muted: flag === '1' };
+}

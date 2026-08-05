@@ -16,6 +16,11 @@ import {
   isDigestDaily,
   isDigestHourly,
   digestWindowMsLabel,
+  digestBoardCard,
+  digestExportLine,
+  digestExportHeader,
+  digestExportText,
+  parseDigestExportLine,
 } from './digest.js';
 
 describe('notify L3 digest cadence (non-critical only)', () => {
@@ -91,5 +96,16 @@ describe('notify L3 digest cadence (non-critical only)', () => {
     expect(isDigestDaily('daily')).toBe(true);
     expect(digestWindowMsLabel('off')).toBe('0');
     expect(digestWindowMsLabel('hourly')).toBe('3600000');
+  });
+
+  it('L3 wave43 digest board + export/parse', () => {
+    expect(digestBoardCard(DEFAULT_DIGEST_PREFS).off).toBe(true);
+    expect(digestExportHeader()).toBe('cadence,windowMs');
+    expect(digestExportLine(DEFAULT_DIGEST_PREFS)).toBe('off,0');
+    expect(parseDigestExportLine('hourly,3600000')).toEqual({ cadence: 'hourly', windowMs: 3600000 });
+    expect(parseDigestExportLine('cadence,windowMs')).toBeNull();
+    const hourly = applyDigestCadence(DEFAULT_DIGEST_PREFS, 'hourly');
+    expect(digestBoardCard(hourly).hourly).toBe(true);
+    expect(digestExportText(hourly)).toContain('hourly');
   });
 });

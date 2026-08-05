@@ -140,3 +140,56 @@ export function bulkRefuseReasonLabel(result: BulkScoreResult): string {
 export function isBulkScoreEmptyOk(result: BulkScoreResult): boolean {
   return isBulkScoreOk(result) && bulkAcceptedCount(result) === 0;
 }
+
+/** L3 — bulk score board card. */
+export function bulkScoreBoardCard(result: BulkScoreResult): {
+  readonly ok: boolean;
+  readonly accepted: number;
+  readonly refused: boolean;
+  readonly reason: string | null;
+  readonly emptyOk: boolean;
+  readonly acceptedLabel: string;
+  readonly reasonLabel: string;
+} {
+  return {
+    ok: isBulkScoreOk(result),
+    accepted: bulkAcceptedCount(result),
+    refused: isBulkScoreRefused(result),
+    reason: bulkRefuseReason(result),
+    emptyOk: isBulkScoreEmptyOk(result),
+    acceptedLabel: bulkAcceptedCountLabel(result),
+    reasonLabel: bulkRefuseReasonLabel(result),
+  };
+}
+
+/** L3 — bulk export header. */
+export function bulkScoreExportHeader(): string {
+  return 'status,accepted,reason';
+}
+
+/** L3 — bulk export line from result. */
+export function bulkScoreExportLine(result: BulkScoreResult): string {
+  const c = bulkScoreBoardCard(result);
+  return `${c.ok ? 'ok' : 'refuse'},${c.accepted},${c.reason ?? ''}`;
+}
+
+/** L3 — full bulk export text. */
+export function bulkScoreExportText(result: BulkScoreResult): string {
+  return [bulkScoreExportHeader(), bulkScoreExportLine(result)].join('\n');
+}
+
+/** L3 — parse bulk export line. Invalid → null. */
+export function parseBulkScoreExportLine(
+  line: string,
+): { readonly status: 'ok' | 'refuse'; readonly accepted: number; readonly reason: string } | null {
+  const t = line.trim();
+  if (!t || t === bulkScoreExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length < 2) return null;
+  const status = parts[0]!.trim();
+  const accepted = Number(parts[1]);
+  const reason = parts.slice(2).join(',').trim();
+  if (status !== 'ok' && status !== 'refuse') return null;
+  if (!Number.isFinite(accepted) || accepted < 0) return null;
+  return { status, accepted: Math.floor(accepted), reason };
+}

@@ -14,6 +14,11 @@ import {
   listUnmutedChannels,
   mutedChannelRatio,
   hasSingleMute,
+  muteBoardCard,
+  muteExportLines,
+  muteExportHeader,
+  muteExportText,
+  parseMuteExportLine,
 } from './mute.js';
 
 describe('isChannelMuted — critical never silenced', () => {
@@ -101,5 +106,16 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     expect(hasSingleMute(one)).toBe(true);
     expect(listUnmutedChannels(one)).toEqual(['push', 'sms']);
     expect(mutedChannelRatio(one)).toBe('0.3333');
+  });
+
+  it('L3 wave43 mute board + export/parse', () => {
+    expect(muteBoardCard(EMPTY_MUTE_PREFS).fullyUnmuted).toBe(true);
+    expect(muteExportHeader()).toBe('channel,muted');
+    expect(muteExportLines(EMPTY_MUTE_PREFS)).toHaveLength(3);
+    expect(parseMuteExportLine('email,1')).toEqual({ channel: 'email', muted: true });
+    expect(parseMuteExportLine('channel,muted')).toBeNull();
+    const one = applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'email', muted: true });
+    expect(muteBoardCard(one).single).toBe(true);
+    expect(muteExportText(one)).toContain('email,1');
   });
 });

@@ -10,6 +10,11 @@ import {
   bulkAcceptedCountLabel,
   bulkRefuseReasonLabel,
   isBulkScoreEmptyOk,
+  bulkScoreBoardCard,
+  bulkScoreExportHeader,
+  bulkScoreExportLine,
+  bulkScoreExportText,
+  parseBulkScoreExportLine,
 } from './bulk-score.js';
 
 describe('tournament L3 bulk score (no prizes)', () => {
@@ -82,5 +87,17 @@ describe('tournament L3 bulk score (no prizes)', () => {
     const emptyOk = { status: 'ok' as const, patches: [] as const };
     expect(isBulkScoreEmptyOk(emptyOk)).toBe(true);
     expect(isBulkScoreRefused(emptyOk)).toBe(false);
+  });
+
+  it('L3 wave43 bulk score board + export/parse', () => {
+    const refused = { status: 'refuse' as const, reason: 'season_not_live' as const, message: 'x' };
+    const card = bulkScoreBoardCard(refused);
+    expect(card.ok).toBe(false);
+    expect(card.reason).toBe('season_not_live');
+    expect(bulkScoreExportHeader()).toBe('status,accepted,reason');
+    expect(bulkScoreExportLine(refused)).toBe('refuse,0,season_not_live');
+    expect(parseBulkScoreExportLine('ok,2,')).toEqual({ status: 'ok', accepted: 2, reason: '' });
+    expect(parseBulkScoreExportLine('status,accepted,reason')).toBeNull();
+    expect(bulkScoreExportText(refused)).toContain('refuse');
   });
 });

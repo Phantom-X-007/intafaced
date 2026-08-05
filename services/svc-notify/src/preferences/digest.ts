@@ -140,3 +140,52 @@ export function isDigestHourly(cadence: DigestCadence): boolean {
 export function digestWindowMsLabel(cadence: DigestCadence): string {
   return String(digestWindowMs(cadence));
 }
+
+/** L3 — digest board card. */
+export function digestBoardCard(prefs: DigestPrefs): {
+  readonly cadence: DigestCadence;
+  readonly holding: boolean;
+  readonly off: boolean;
+  readonly hourly: boolean;
+  readonly daily: boolean;
+  readonly windowMs: number;
+  readonly windowLabel: string;
+} {
+  return {
+    cadence: prefs.cadence,
+    holding: isDigestHolding(prefs.cadence),
+    off: isDigestOff(prefs.cadence),
+    hourly: isDigestHourly(prefs.cadence),
+    daily: isDigestDaily(prefs.cadence),
+    windowMs: digestWindowMs(prefs.cadence),
+    windowLabel: digestWindowMsLabel(prefs.cadence),
+  };
+}
+
+/** L3 — digest export line cadence,windowMs. */
+export function digestExportLine(prefs: DigestPrefs): string {
+  return `${prefs.cadence},${digestWindowMs(prefs.cadence)}`;
+}
+
+/** L3 — digest export header. */
+export function digestExportHeader(): string {
+  return 'cadence,windowMs';
+}
+
+/** L3 — full digest export text. */
+export function digestExportText(prefs: DigestPrefs): string {
+  return [digestExportHeader(), digestExportLine(prefs)].join('\n');
+}
+
+/** L3 — parse digest export line. Invalid → null. */
+export function parseDigestExportLine(line: string): { readonly cadence: DigestCadence; readonly windowMs: number } | null {
+  const t = line.trim();
+  if (!t || t === digestExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 2) return null;
+  const cadence = parts[0]!.trim();
+  const windowMs = Number(parts[1]);
+  if (cadence !== 'off' && cadence !== 'hourly' && cadence !== 'daily') return null;
+  if (!Number.isFinite(windowMs) || windowMs < 0) return null;
+  return { cadence, windowMs: Math.floor(windowMs) };
+}
