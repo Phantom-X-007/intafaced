@@ -82,6 +82,10 @@ import {
   pageMoneyMetricIds,
   metricCatalogPageCount,
   reverseMetricIds,
+  moneyMetricIdsOnly,
+  metricIdsOnlyInKind,
+  moneyMinusNonMoneyCount,
+  multiEqualsSingleSourceCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -389,5 +393,14 @@ describe('L3 wave38 metric catalog paging', () => {
     expect(metricCatalogPageCount(5)).toBeGreaterThan(0);
     const all = pageMetricIds({ limit: 1000 });
     expect(reverseMetricIds()[0]).toBe(all[all.length - 1]);
+  });
+});
+
+describe('L3 wave39 analytics compare helpers', () => {
+  it('money-only + kind exclude + deltas', () => {
+    expect(moneyMetricIdsOnly().length).toBe(moneyMetricCount());
+    expect(metricIdsOnlyInKind('count', 'amount').length).toBe(countKindMetricCount());
+    expect(typeof moneyMinusNonMoneyCount()).toBe('number');
+    expect(typeof multiEqualsSingleSourceCount()).toBe('boolean');
   });
 });

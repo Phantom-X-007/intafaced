@@ -690,4 +690,29 @@ export class MemoryAmbassadorProgramme {
     if (n === 0) return 0;
     return Math.ceil(n / Math.floor(pageSize));
   }
+
+  /**
+   * L3 — ids present in this store but not in other (sorted). Empty other → all ids.
+   */
+  programmeIdsOnlyHere(otherUserIds: readonly string[]): readonly string[] {
+    const other = new Set(otherUserIds);
+    return this.listAllUserIds().filter((id) => !other.has(id));
+  }
+
+  /** L3 — ids present in both stores (sorted). */
+  programmeIdsInBoth(otherUserIds: readonly string[]): readonly string[] {
+    const other = new Set(otherUserIds);
+    return this.listAllUserIds().filter((id) => other.has(id));
+  }
+
+  /** L3 — active delta vs other active list (this - other). */
+  activeIdsOnlyHere(otherActiveIds: readonly string[]): readonly string[] {
+    const other = new Set(otherActiveIds);
+    return this.listActiveUserIds().filter((id) => !other.has(id));
+  }
+
+  /** L3 — true when total equals other total. */
+  programmeSameSize(otherTotal: number): boolean {
+    return this.totalCount() === otherTotal;
+  }
 }

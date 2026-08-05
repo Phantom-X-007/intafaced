@@ -76,6 +76,10 @@ import {
   pageLiveSeasonIds,
   seasonListPageCount,
   reverseSeasonIds,
+  seasonIdsOnlyLeft,
+  seasonIdsInBoth,
+  liveSeasonCountDelta,
+  seasonsSameSize,
 } from './season-lifecycle.js';
 
 const base = {
@@ -587,5 +591,25 @@ describe('L3 wave38 season paging', () => {
     expect(pageLiveSeasonIds(rows, { limit: 10 })).toEqual(['a', 'c']);
     expect(seasonListPageCount(rows, 2)).toBe(2);
     expect(reverseSeasonIds(rows)[0]).toBe('c');
+  });
+});
+
+describe('L3 wave39 season diffs', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('id diffs + live delta + same size', () => {
+    const left = [mk('a', 'live'), mk('b', 'ended')];
+    const right = [mk('b', 'live'), mk('c', 'scheduled')];
+    expect(seasonIdsOnlyLeft(left, right)).toEqual(['a']);
+    expect(seasonIdsInBoth(left, right)).toEqual(['b']);
+    expect(liveSeasonCountDelta(left, right)).toBe(0);
+    expect(seasonsSameSize(left, right)).toBe(true);
   });
 });

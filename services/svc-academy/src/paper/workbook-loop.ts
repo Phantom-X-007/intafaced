@@ -573,3 +573,25 @@ export function remainingStepsPageCount(run: DrillRun, pageSize: number): number
 export function reverseRemainingStepIds(run: DrillRun): readonly string[] {
   return [...remainingStepIds(run)].reverse();
 }
+
+/** L3 — remaining steps only in left run vs right remaining set. */
+export function remainingStepsOnlyLeft(left: DrillRun, right: DrillRun): readonly string[] {
+  const r = new Set(remainingStepIds(right));
+  return remainingStepIds(left).filter((id) => !r.has(id));
+}
+
+/** L3 — completed steps only in left run. */
+export function completedStepsOnlyLeft(left: DrillRun, right: DrillRun): readonly string[] {
+  const r = new Set(right.completedStepIds);
+  return left.completedStepIds.filter((id) => !r.has(id));
+}
+
+/** L3 — completion percent delta (left - right). */
+export function drillPercentDelta(left: DrillRun, right: DrillRun): number {
+  return drillCompletionPercent(left) - drillCompletionPercent(right);
+}
+
+/** L3 — true when both drills same status. */
+export function drillsSameStatus(left: DrillRun, right: DrillRun): boolean {
+  return left.status === right.status;
+}

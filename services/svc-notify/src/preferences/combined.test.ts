@@ -72,6 +72,10 @@ import {
   pagePlanSendChannels,
   planPageCount,
   reversePlanDecisions,
+  planSendChannelsOnlyLeft,
+  planSendCountDelta,
+  plansSameSize,
+  plansSameActionHistogram,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -345,5 +349,14 @@ describe('notify L3 combined mute + digest', () => {
     expect(pagePlanSendChannels(plan, { limit: 1 })).toHaveLength(1);
     expect(planPageCount(plan, 2)).toBe(2);
     expect(reversePlanDecisions(plan)).toHaveLength(plan.length);
+  });
+
+  it('L3 wave39 plan compare', () => {
+    const left = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    const right = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp'], 'critical');
+    expect(planSendChannelsOnlyLeft(left, right)).toContain('email');
+    expect(planSendCountDelta(left, right)).toBe(1);
+    expect(plansSameSize(left, left)).toBe(true);
+    expect(plansSameActionHistogram(left, left)).toBe(true);
   });
 });

@@ -666,3 +666,24 @@ export function metricCatalogPageCount(pageSize: number): number {
 export function reverseMetricIds(): readonly string[] {
   return [...ANALYTICS_METRICS_V0.map((m) => m.id).sort()].reverse();
 }
+
+/** L3 — money metric ids only (vs non-money set is automatic). Alias surface of list. */
+export function moneyMetricIdsOnly(): readonly string[] {
+  return listMoneyMetricIds();
+}
+
+/** L3 — metric ids only in kind A not B. */
+export function metricIdsOnlyInKind(kind: 'count' | 'amount' | 'ratio', excludeKind: 'count' | 'amount' | 'ratio'): readonly string[] {
+  const exclude = new Set(listMetricIdsByKind(excludeKind));
+  return listMetricIdsByKind(kind).filter((id) => !exclude.has(id));
+}
+
+/** L3 — money count delta vs non-money count (money - nonMoney). */
+export function moneyMinusNonMoneyCount(): number {
+  return moneyMetricCount() - nonMoneyMetricCount();
+}
+
+/** L3 — true when multi-source count equals single-source count. */
+export function multiEqualsSingleSourceCount(): boolean {
+  return multiSourceMetricCount() === singleSourceMetricCount();
+}

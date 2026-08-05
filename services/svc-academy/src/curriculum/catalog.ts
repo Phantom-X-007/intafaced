@@ -1002,3 +1002,24 @@ export function curriculumSpinePageCount(pageSize: number): number {
 export function reverseCurriculumSlugs(): readonly string[] {
   return [...listCurriculumSlugs()].reverse();
 }
+
+/** L3 — slugs only in kind A vs kind B sets. */
+export function curriculumSlugsOnlyInKind(kind: CurriculumKind, excludeKind: CurriculumKind): readonly string[] {
+  const exclude = new Set(listCurriculumSlugsByKind(excludeKind));
+  return listCurriculumSlugsByKind(kind).filter((s) => !exclude.has(s));
+}
+
+/** L3 — path count delta (left path - right path). */
+export function curriculumPathCountDelta(left: CurriculumPath, right: CurriculumPath): number {
+  return countCurriculumByPath(left) - countCurriculumByPath(right);
+}
+
+/** L3 — true when two kinds have same count. */
+export function curriculumKindsSameSize(a: CurriculumKind, b: CurriculumKind): boolean {
+  return countCurriculumByKind(a) === countCurriculumByKind(b);
+}
+
+/** L3 — true when two paths have same count. */
+export function curriculumPathsSameSize(a: CurriculumPath, b: CurriculumPath): boolean {
+  return countCurriculumByPath(a) === countCurriculumByPath(b);
+}

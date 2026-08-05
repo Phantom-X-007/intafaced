@@ -595,3 +595,25 @@ export function seasonListPageCount(seasons: readonly SeasonRecord[], pageSize: 
 export function reverseSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
   return [...listSeasonIds(seasons)].reverse();
 }
+
+/** L3 — season ids only in left list. */
+export function seasonIdsOnlyLeft(left: readonly SeasonRecord[], right: readonly SeasonRecord[]): readonly string[] {
+  const r = new Set(listSeasonIds(right));
+  return listSeasonIds(left).filter((id) => !r.has(id));
+}
+
+/** L3 — season ids in both lists. */
+export function seasonIdsInBoth(left: readonly SeasonRecord[], right: readonly SeasonRecord[]): readonly string[] {
+  const r = new Set(listSeasonIds(right));
+  return listSeasonIds(left).filter((id) => r.has(id));
+}
+
+/** L3 — live count delta (left - right). */
+export function liveSeasonCountDelta(left: readonly SeasonRecord[], right: readonly SeasonRecord[]): number {
+  return liveSeasonCount(left) - liveSeasonCount(right);
+}
+
+/** L3 — true when season totals equal. */
+export function seasonsSameSize(left: readonly SeasonRecord[], right: readonly SeasonRecord[]): boolean {
+  return totalSeasonCount(left) === totalSeasonCount(right);
+}
