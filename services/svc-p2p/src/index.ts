@@ -8,6 +8,7 @@ import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
+import { P2pErasure } from './erasure.js';
 
 /**
  * svc-p2p — peer-to-peer trading with escrow (§6.2).
@@ -67,7 +68,12 @@ const p2p = new P2pService(sql, ledger, bus, {
   // when its mark-price surface lands.
 });
 
-export const appRouter = createP2pRouter(p2p, instruments);
+// §0.9. Stage 1: self-only, refuses while any escrow is live, and names what
+// it retained and why. Nothing else in the platform calls it yet — svc-p2p
+// subscribes to no events, so there is no account-deletion signal to hear.
+const erasure = new P2pErasure(sql);
+
+export const appRouter = createP2pRouter(p2p, instruments, erasure);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge

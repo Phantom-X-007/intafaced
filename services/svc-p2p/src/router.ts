@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { enabledFiat } from '@intafaced/config';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import type { P2pErasure } from './erasure.js';
 import {
   MAX_EVIDENCE_PER_CALL,
   P2pError,
@@ -180,6 +181,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.dispute_already_open':
       case 'p2p.dispute_already_resolved':
       case 'p2p.trade_exists':
+      case 'p2p.erase_blocked':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.offer_not_active':
       case 'p2p.offer_method_unsupported':
@@ -261,7 +263,7 @@ const instrumentHeaderOutput = z.object({
 /** The values. Only ever produced by a call that wrote an access-log row. */
 const instrumentDetailsOutput = z.record(z.string(), z.string());
 
-export function createP2pRouter(p2p: P2pService, instruments: InstrumentService) {
+export function createP2pRouter(p2p: P2pService, instruments: InstrumentService, erasure?: P2pErasure) {
   /**
    * The owner's own instruments, mapped for the wire.
    *
@@ -868,6 +870,72 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService)
         ),
     }),
 
+    /**
+     * WHAT WE HOLD ABOUT YOU, AND GETTING RID OF IT (§0.9).
+     *
+     * Self-only, and there is no `userId` in either input — the caller is the
+     * subject, always. An export endpoint that takes a user id is a data-breach
+     * endpoint with a friendly name.
+     *
+     * Mounted only when the service was built with an erasure collaborator, so
+     * `p2p.erase` cannot exist in a half-wired deployment and refuse for the
+     * wrong reason.
+     */
+    data: router({
+      export: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(
+          z.object({
+            userId: z.string(),
+            at: z.string(),
+            offers: z.array(z.unknown()),
+            trades: z.array(z.unknown()),
+            disputes: z.array(z.unknown()),
+            reputation: z.unknown().nullable(),
+            /**
+             * Headers only. The values live behind `instruments.reveal`, which
+             * writes an access-log row in the same statement that reads them —
+             * and an export that also served them would be a second way to read
+             * an account number with nothing recording that anyone did.
+             */
+            instruments: z.array(z.unknown()),
+            /** What a reader must go elsewhere for. Omitting this would be a lie by omission. */
+            notCovered: z.array(z.string()),
+          }),
+        )
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            const out = await requireErasure(erasure).exportFor(ctx.principal.userId);
+            return { ...out, at: out.at.toISOString(), reputation: out.reputation ?? null };
+          }),
+        ),
+
+      erase: scopedProcedure('p2p:write', { module: 'p2p' })
+        .output(
+          z.object({
+            userId: z.string(),
+            at: z.string(),
+            erased: z.array(z.object({ category: z.string(), rows: z.number().int() })),
+            /**
+             * NAMED, COUNTED AND EXPLAINED. An erase that quietly keeps half the
+             * record is worse than one that refuses: the person believes
+             * something untrue and finds out in a dispute.
+             */
+            retained: z.array(z.object({ category: z.string(), rows: z.number().int(), reason: z.string() })),
+          }),
+        )
+        .mutation(async ({ ctx }) =>
+          guard(async () => {
+            const report = await requireErasure(erasure).eraseFor(ctx.principal.userId);
+            return {
+              userId: report.userId,
+              at: report.at.toISOString(),
+              erased: report.erased.map((l) => ({ category: l.category, rows: l.rows })),
+              retained: report.retained.map((l) => ({ category: l.category, rows: l.rows, reason: l.reason ?? '' })),
+            };
+          }),
+        ),
+    }),
+
     reputation: router({
       /**
        * §6.2 → §4.1. The numbers a counterparty sees before they trade with
@@ -897,6 +965,18 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService)
 }
 
 export type P2pRouter = ReturnType<typeof createP2pRouter>;
+
+/**
+ * A service built without an erasure collaborator does not get to answer an
+ * erasure request with a shrug. `NOT_IMPLEMENTED` says the truth — the code is
+ * missing, not the data.
+ */
+function requireErasure(erasure: P2pErasure | undefined): P2pErasure {
+  if (!erasure) {
+    throw new TRPCError({ code: 'NOT_IMPLEMENTED', message: 'P2P export and erasure are not wired in this deployment' });
+  }
+  return erasure;
+}
 
 function toOfferOut(offer: Awaited<ReturnType<P2pService['getOffer']>>): OfferOut {
   return {
