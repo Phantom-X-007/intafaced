@@ -213,4 +213,14 @@ export class MemoryResidencyDesk {
   withdrawnCount(): number {
     return [...this.rows.values()].filter((r) => r.status === 'withdrawn').length;
   }
+
+  /**
+   * L3 — sorted rejected application ids. Empty → [] (never invent).
+   */
+  rejectedApplicationIds(): readonly string[] {
+    return [...this.rows.values()]
+      .filter((r) => r.status === 'rejected')
+      .map((r) => r.id)
+      .sort();
+  }
 }

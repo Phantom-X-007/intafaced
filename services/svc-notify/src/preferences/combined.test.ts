@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   channelsHeldForDigest,
   countHoldingChannels,
+  countSendNowChannels,
   channelsSkippedMuted,
   channelsToSendNow,
   criticalAlwaysImmediate,
@@ -77,5 +78,11 @@ describe('notify L3 combined mute + digest', () => {
     const digest = applyDigestCadence(DEFAULT_COMBINED_PREFS.digest, 'hourly');
     const plan = planFanoutDelivery({ mute: DEFAULT_COMBINED_PREFS.mute, digest }, ['email', 'push'], 'info');
     expect(countHoldingChannels(plan)).toBe(2);
+  });
+
+  it('L3 countSendNowChannels without invent', () => {
+    expect(countSendNowChannels([])).toBe(0);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(countSendNowChannels(plan)).toBe(2);
   });
 });

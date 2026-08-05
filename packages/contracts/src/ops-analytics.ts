@@ -220,6 +220,15 @@ export function countMetricsUsingSource(source: AnalyticsSourceDb): number {
 }
 
 /**
+ * L3 — money vs non-money catalog sizes (partition of v0; no invent).
+ */
+export function metricMoneyPartition(): { readonly money: number; readonly nonMoney: number; readonly total: number } {
+  const money = listMoneyMetricIds().length;
+  const nonMoney = listNonMoneyMetricIds().length;
+  return { money, nonMoney, total: money + nonMoney };
+}
+
+/**
  * L3 — sorted metric ids that touch a source. Unknown source key still returns [] via filter.
  */
 export function listMetricIdsUsingSource(source: AnalyticsSourceDb): readonly string[] {

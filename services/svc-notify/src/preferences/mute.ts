@@ -58,6 +58,11 @@ export function allMuteableMuted(prefs: ChannelMutePrefs): boolean {
   return listMutedChannels(prefs).length === 3;
 }
 
+/** L3 — true when at least one muteable channel is muted. Empty → false. */
+export function hasAnyMute(prefs: ChannelMutePrefs): boolean {
+  return prefs.muted.size > 0;
+}
+
 /** Apply a mute toggle. Refuses any API that claims to mute "critical" as a channel. */
 export function applyMuteToggle(current: ChannelMutePrefs, input: { channel: string; muted: boolean }): ChannelMutePrefs {
   const ch = input.channel;
