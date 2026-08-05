@@ -661,3 +661,48 @@ export function planStatusLineDetailed(plan: readonly DeliveryDecision[]): strin
 export function planStatusLineTokenCount(plan: readonly DeliveryDecision[]): number {
   return planStatusLineDetailed(plan).split(/\s+/).filter(Boolean).length;
 }
+
+/** L3 — parse plan status line. Invalid → null. */
+export function parsePlanStatusLine(
+  line: string,
+): { readonly total: number; readonly send: number; readonly hold: number; readonly skip: number } | null {
+  const m = line.trim().match(/^total=(\d+) send=(\d+) hold=(\d+) skip=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), send: Number(m[2]), hold: Number(m[3]), skip: Number(m[4]) };
+}
+
+/** L3 — true when status line matches plan. */
+export function planStatusLineMatches(plan: readonly DeliveryDecision[]): boolean {
+  const p = parsePlanStatusLine(planStatusLine(plan));
+  if (!p) return false;
+  const c = planBoardCard(plan);
+  return p.total === c.total && p.send === c.send && p.hold === c.hold && p.skip === c.skip;
+}
+
+/** L3 — parse detailed plan status. Invalid → null. */
+export function parsePlanStatusLineDetailed(line: string): {
+  readonly total: number;
+  readonly send: number;
+  readonly hold: number;
+  readonly skip: number;
+  readonly mixed: boolean;
+  readonly allSend: boolean;
+} | null {
+  const m = line.trim().match(/^total=(\d+) send=(\d+) hold=(\d+) skip=(\d+) mixed=([01]) allSend=([01])$/);
+  if (!m) return null;
+  return {
+    total: Number(m[1]),
+    send: Number(m[2]),
+    hold: Number(m[3]),
+    skip: Number(m[4]),
+    mixed: m[5] === '1',
+    allSend: m[6] === '1',
+  };
+}
+
+/** L3 — true when send+hold+skip equals total. */
+export function planStatusLineConsistent(line: string): boolean {
+  const p = parsePlanStatusLine(line);
+  if (!p) return false;
+  return p.total === p.send + p.hold + p.skip;
+}

@@ -727,3 +727,48 @@ export function seasonStatusLineDetailed(seasons: readonly SeasonRecord[]): stri
 export function seasonStatusLineTokenCount(seasons: readonly SeasonRecord[]): number {
   return seasonStatusLineDetailed(seasons).split(/\s+/).filter(Boolean).length;
 }
+
+/** L3 — parse "total=N live=L open=O ended=E". Invalid → null. */
+export function parseSeasonStatusLine(
+  line: string,
+): { readonly total: number; readonly live: number; readonly open: number; readonly ended: number } | null {
+  const m = line.trim().match(/^total=(\d+) live=(\d+) open=(\d+) ended=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), live: Number(m[2]), open: Number(m[3]), ended: Number(m[4]) };
+}
+
+/** L3 — true when status line matches seasons. */
+export function seasonStatusLineMatches(seasons: readonly SeasonRecord[]): boolean {
+  const p = parseSeasonStatusLine(seasonStatusLine(seasons));
+  if (!p) return false;
+  const h = seasonBoardHeadline(seasons);
+  return p.total === h.total && p.live === h.live && p.open === h.open && p.ended === h.ended;
+}
+
+/** L3 — parse detailed season status. Invalid → null. */
+export function parseSeasonStatusLineDetailed(line: string): {
+  readonly total: number;
+  readonly scheduled: number;
+  readonly live: number;
+  readonly frozen: number;
+  readonly ended: number;
+  readonly writable: boolean;
+} | null {
+  const m = line.trim().match(/^total=(\d+) scheduled=(\d+) live=(\d+) frozen=(\d+) ended=(\d+) writable=([01])$/);
+  if (!m) return null;
+  return {
+    total: Number(m[1]),
+    scheduled: Number(m[2]),
+    live: Number(m[3]),
+    frozen: Number(m[4]),
+    ended: Number(m[5]),
+    writable: m[6] === '1',
+  };
+}
+
+/** L3 — true when detailed parts sum to total. */
+export function seasonStatusLineDetailedConsistent(line: string): boolean {
+  const p = parseSeasonStatusLineDetailed(line);
+  if (!p) return false;
+  return p.total === p.scheduled + p.live + p.frozen + p.ended;
+}

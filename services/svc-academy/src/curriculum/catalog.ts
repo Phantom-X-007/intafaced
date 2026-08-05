@@ -1140,3 +1140,52 @@ export function catalogStatusLineDetailed(): string {
 export function catalogStatusLineTokenCount(): number {
   return catalogStatusLineDetailed().split(/\s+/).filter(Boolean).length;
 }
+
+/** L3 — parse catalog status line. Invalid → null. */
+export function parseCatalogStatusLine(line: string): {
+  readonly spine: number;
+  readonly lessons: number;
+  readonly playbooks: number;
+  readonly workbooks: number;
+} | null {
+  const m = line.trim().match(/^spine=(\d+) lessons=(\d+) playbooks=(\d+) workbooks=(\d+)$/);
+  if (!m) return null;
+  return { spine: Number(m[1]), lessons: Number(m[2]), playbooks: Number(m[3]), workbooks: Number(m[4]) };
+}
+
+/** L3 — true when status line matches live catalog. */
+export function catalogStatusLineMatches(): boolean {
+  const p = parseCatalogStatusLine(catalogStatusLine());
+  if (!p) return false;
+  return (
+    p.spine === curriculumSpineSize() && p.lessons === lessonCount() && p.playbooks === playbookCount() && p.workbooks === workbookCount()
+  );
+}
+
+/** L3 — parse detailed catalog status. Invalid → null. */
+export function parseCatalogStatusLineDetailed(line: string): {
+  readonly spine: number;
+  readonly lessons: number;
+  readonly playbooks: number;
+  readonly workbooks: number;
+  readonly paths: number;
+  readonly emptyPaths: number;
+} | null {
+  const m = line.trim().match(/^spine=(\d+) lessons=(\d+) playbooks=(\d+) workbooks=(\d+) paths=(\d+) emptyPaths=(\d+)$/);
+  if (!m) return null;
+  return {
+    spine: Number(m[1]),
+    lessons: Number(m[2]),
+    playbooks: Number(m[3]),
+    workbooks: Number(m[4]),
+    paths: Number(m[5]),
+    emptyPaths: Number(m[6]),
+  };
+}
+
+/** L3 — true when kinds sum to spine. */
+export function catalogStatusLineConsistent(line: string): boolean {
+  const p = parseCatalogStatusLine(line);
+  if (!p) return false;
+  return p.spine === p.lessons + p.playbooks + p.workbooks;
+}

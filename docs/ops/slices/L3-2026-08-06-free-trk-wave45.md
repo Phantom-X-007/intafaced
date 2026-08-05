@@ -1,0 +1,30 @@
+# L3 pack — free TRK wave45
+
+**Date:** 2026-08-06  
+**Class:** N  
+**Depends on:** tip #875 wave44  
+**Does NOT invent L1/L2.**
+
+## Outcome
+
+Parse/validate operator status lines + match live store (invalid → null; never invent).
+
+## Non-goals
+
+Pay · rates · Class M · dual-edit #800/#346.
+
+## Done bar
+
+Focused vitest green; thrift soft; CI green.
+
+## Class
+
+N
+
+## Explicit
+
+Does NOT invent L1/L2.
+
+## Board-Delta
+
+L3 Class N free-TRK wave45: status-line parse/match/consistency across free TRK modules.

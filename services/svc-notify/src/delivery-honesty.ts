@@ -677,3 +677,51 @@ export function fanoutStatusLineDetailed(attempts: readonly ChannelDeliveryAttem
 export function fanoutStatusLineTokenCount(attempts: readonly ChannelDeliveryAttempt[]): number {
   return fanoutStatusLineDetailed(attempts).split(/\s+/).filter(Boolean).length;
 }
+
+/** L3 — parse fanout status line. Invalid → null. */
+export function parseFanoutStatusLine(line: string): {
+  readonly total: number;
+  readonly accepted: number;
+  readonly refused: number;
+  readonly failed: number;
+} | null {
+  const m = line.trim().match(/^total=(\d+) accepted=(\d+) refused=(\d+) failed=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), accepted: Number(m[2]), refused: Number(m[3]), failed: Number(m[4]) };
+}
+
+/** L3 — true when status line matches attempts. */
+export function fanoutStatusLineMatches(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  const p = parseFanoutStatusLine(fanoutStatusLine(attempts));
+  if (!p) return false;
+  const c = fanoutBoardCard(attempts);
+  return p.total === c.total && p.accepted === c.accepted && p.refused === c.refused && p.failed === c.failed;
+}
+
+/** L3 — parse detailed fanout status. Invalid → null. */
+export function parseFanoutStatusLineDetailed(line: string): {
+  readonly total: number;
+  readonly accepted: number;
+  readonly refused: number;
+  readonly failed: number;
+  readonly mixed: boolean;
+  readonly fullOk: boolean;
+} | null {
+  const m = line.trim().match(/^total=(\d+) accepted=(\d+) refused=(\d+) failed=(\d+) mixed=([01]) fullOk=([01])$/);
+  if (!m) return null;
+  return {
+    total: Number(m[1]),
+    accepted: Number(m[2]),
+    refused: Number(m[3]),
+    failed: Number(m[4]),
+    mixed: m[5] === '1',
+    fullOk: m[6] === '1',
+  };
+}
+
+/** L3 — true when outcomes sum to total. */
+export function fanoutStatusLineConsistent(line: string): boolean {
+  const p = parseFanoutStatusLine(line);
+  if (!p) return false;
+  return p.total === p.accepted + p.refused + p.failed;
+}

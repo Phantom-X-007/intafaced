@@ -97,6 +97,10 @@ import {
   catalogStatusLineIsEmpty,
   catalogStatusLineDetailed,
   catalogStatusLineTokenCount,
+  parseCatalogStatusLine,
+  catalogStatusLineMatches,
+  parseCatalogStatusLineDetailed,
+  catalogStatusLineConsistent,
 } from './catalog.js';
 
 /**
@@ -425,5 +429,13 @@ describe('curriculum catalog', () => {
     expect(catalogStatusLine()).toContain('spine=');
     expect(catalogStatusLineDetailed()).toContain('paths=');
     expect(catalogStatusLineTokenCount()).toBeGreaterThan(4);
+  });
+
+  it('L3 wave45 catalog status parse + match', () => {
+    expect(catalogStatusLineMatches()).toBe(true);
+    const p = parseCatalogStatusLine(catalogStatusLine());
+    expect(p).not.toBeNull();
+    expect(catalogStatusLineConsistent(catalogStatusLine())).toBe(true);
+    expect(parseCatalogStatusLineDetailed(catalogStatusLineDetailed())).not.toBeNull();
   });
 });

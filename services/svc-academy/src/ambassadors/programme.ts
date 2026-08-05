@@ -832,4 +832,42 @@ export class MemoryAmbassadorProgramme {
   programmeStatusLineTokenCount(): number {
     return this.programmeStatusLine().split(/\s+/).filter(Boolean).length;
   }
+
+  /**
+   * L3 — parse "active=N frozen=M total=T". Invalid → null.
+   */
+  parseProgrammeStatusLine(line: string): { readonly active: number; readonly frozen: number; readonly total: number } | null {
+    const m = line.trim().match(/^active=(\d+) frozen=(\d+) total=(\d+)$/);
+    if (!m) return null;
+    return { active: Number(m[1]), frozen: Number(m[2]), total: Number(m[3]) };
+  }
+
+  /** L3 — true when status line parses and totals match live store. */
+  programmeStatusLineMatchesStore(): boolean {
+    const parsed = this.parseProgrammeStatusLine(this.programmeStatusLine());
+    if (!parsed) return false;
+    return parsed.active === this.activeCount() && parsed.frozen === this.frozenCount() && parsed.total === this.totalCount();
+  }
+
+  /** L3 — parse detailed ratio suffix when present. Invalid → null. */
+  parseProgrammeStatusLineWithRatio(
+    line: string,
+  ): { readonly active: number; readonly frozen: number; readonly total: number; readonly activeRatio: string | null } | null {
+    const t = line.trim();
+    const base = t.match(/^active=(\d+) frozen=(\d+) total=(\d+)(?: activeRatio=(\d+\.\d{4}))?$/);
+    if (!base) return null;
+    return {
+      active: Number(base[1]),
+      frozen: Number(base[2]),
+      total: Number(base[3]),
+      activeRatio: base[4] ?? null,
+    };
+  }
+
+  /** L3 — true when parsed total equals active+frozen. */
+  programmeStatusLineConsistent(line: string): boolean {
+    const p = this.parseProgrammeStatusLine(line);
+    if (!p) return false;
+    return p.total === p.active + p.frozen;
+  }
 }

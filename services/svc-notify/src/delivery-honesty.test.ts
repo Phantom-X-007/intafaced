@@ -86,6 +86,10 @@ import {
   fanoutStatusLineIsEmpty,
   fanoutStatusLineDetailed,
   fanoutStatusLineTokenCount,
+  parseFanoutStatusLine,
+  fanoutStatusLineMatches,
+  parseFanoutStatusLineDetailed,
+  fanoutStatusLineConsistent,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -454,5 +458,16 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutStatusLine(attempts)).toContain('accepted=1');
     expect(fanoutStatusLineDetailed(attempts)).toContain('mixed=1');
     expect(fanoutStatusLineTokenCount(attempts)).toBe(6);
+  });
+
+  it('L3 wave45 fanout status parse + match', () => {
+    expect(fanoutStatusLineMatches([])).toBe(true);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(fanoutStatusLineMatches(attempts)).toBe(true);
+    expect(fanoutStatusLineConsistent(fanoutStatusLine(attempts))).toBe(true);
+    expect(parseFanoutStatusLineDetailed(fanoutStatusLineDetailed(attempts))?.mixed).toBe(true);
   });
 });

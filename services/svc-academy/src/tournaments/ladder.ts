@@ -894,3 +894,58 @@ export function leaderboardStatusLineDetailed(rows: readonly StandingRecord[]): 
 export function leaderboardStatusLineTokenCount(rows: readonly StandingRecord[]): number {
   return leaderboardStatusLineDetailed(rows).split(/\s+/).filter(Boolean).length;
 }
+
+/** L3 — parse "count=N first=X max=Y". Invalid → null. */
+export function parseLeaderboardStatusLine(
+  line: string,
+): { readonly count: number; readonly first: string | null; readonly max: number | null } | null {
+  const m = line.trim().match(/^count=(\d+) first=(\S+) max=(\S+)$/);
+  if (!m) return null;
+  const count = Number(m[1]);
+  const first = m[2] === '-' ? null : m[2]!;
+  const max = m[3] === '-' ? null : Number(m[3]);
+  if (!Number.isFinite(count) || (max !== null && !Number.isFinite(max))) return null;
+  return { count, first, max };
+}
+
+/** L3 — true when status line matches rows. */
+export function leaderboardStatusLineMatches(rows: readonly StandingRecord[]): boolean {
+  const p = parseLeaderboardStatusLine(leaderboardStatusLine(rows));
+  if (!p) return false;
+  const h = leaderboardHeadline(rows);
+  return p.count === h.count && p.first === h.first && p.max === h.max;
+}
+
+/** L3 — parse detailed leaderboard status. Invalid → null. */
+export function parseLeaderboardStatusLineDetailed(line: string): {
+  readonly count: number;
+  readonly first: string | null;
+  readonly last: string | null;
+  readonly min: number | null;
+  readonly max: number | null;
+  readonly unique: boolean;
+} | null {
+  const m = line.trim().match(/^count=(\d+) first=(\S+) last=(\S+) min=(\S+) max=(\S+) unique=([01])$/);
+  if (!m) return null;
+  const numOrNull = (s: string) => (s === '-' ? null : Number(s));
+  const min = numOrNull(m[4]!);
+  const max = numOrNull(m[5]!);
+  if (min !== null && !Number.isFinite(min)) return null;
+  if (max !== null && !Number.isFinite(max)) return null;
+  return {
+    count: Number(m[1]),
+    first: m[2] === '-' ? null : m[2]!,
+    last: m[3] === '-' ? null : m[3]!,
+    min,
+    max,
+    unique: m[6] === '1',
+  };
+}
+
+/** L3 — true when detailed min/max consistent with empty/non-empty. */
+export function leaderboardStatusLineDetailedConsistent(line: string): boolean {
+  const p = parseLeaderboardStatusLineDetailed(line);
+  if (!p) return false;
+  if (p.count === 0) return p.min === null && p.max === null && p.first === null;
+  return p.min !== null && p.max !== null && p.min <= p.max;
+}

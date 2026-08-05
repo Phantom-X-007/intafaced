@@ -769,4 +769,44 @@ export class MemoryResidencyDesk {
   residencyStatusLineTokenCount(): number {
     return this.residencyStatusLineDetailed().split(/\s+/).filter(Boolean).length;
   }
+
+  /** L3 — parse "open=N decided=M total=T". Invalid → null. */
+  parseResidencyStatusLine(line: string): { readonly open: number; readonly decided: number; readonly total: number } | null {
+    const m = line.trim().match(/^open=(\d+) decided=(\d+) total=(\d+)$/);
+    if (!m) return null;
+    return { open: Number(m[1]), decided: Number(m[2]), total: Number(m[3]) };
+  }
+
+  /** L3 — true when status line matches store. */
+  residencyStatusLineMatchesStore(): boolean {
+    const p = this.parseResidencyStatusLine(this.residencyStatusLine());
+    if (!p) return false;
+    return p.open === this.openCount() && p.decided === this.decidedApplicationCount() && p.total === this.applicationCount();
+  }
+
+  /** L3 — parse detailed residency status line. Invalid → null. */
+  parseResidencyStatusLineDetailed(line: string): {
+    readonly open: number;
+    readonly accepted: number;
+    readonly rejected: number;
+    readonly withdrawn: number;
+    readonly total: number;
+  } | null {
+    const m = line.trim().match(/^open=(\d+) accepted=(\d+) rejected=(\d+) withdrawn=(\d+) total=(\d+)$/);
+    if (!m) return null;
+    return {
+      open: Number(m[1]),
+      accepted: Number(m[2]),
+      rejected: Number(m[3]),
+      withdrawn: Number(m[4]),
+      total: Number(m[5]),
+    };
+  }
+
+  /** L3 — true when detailed parts sum to total. */
+  residencyStatusLineDetailedConsistent(line: string): boolean {
+    const p = this.parseResidencyStatusLineDetailed(line);
+    if (!p) return false;
+    return p.total === p.open + p.accepted + p.rejected + p.withdrawn;
+  }
 }
