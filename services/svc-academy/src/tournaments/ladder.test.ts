@@ -116,11 +116,7 @@ it('L3 wave13 isInTopN + listStandingUserIds', () => {
 
   it('L3 medianScore null when empty; never invent 0', () => {
     expect(medianScore([])).toBeNull();
-    const rows = [
-      row('a', 10, '2026-08-01T12:00:00Z'),
-      row('b', 20, '2026-08-01T13:00:00Z'),
-      row('c', 30, '2026-08-01T11:00:00Z'),
-    ];
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 30, '2026-08-01T11:00:00Z')];
     expect(medianScore(rows)).toBe(20);
   });
 });

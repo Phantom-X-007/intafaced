@@ -537,3 +537,20 @@ export function listPathsWithContent(): readonly CurriculumPath[] {
   for (const item of SPINE) set.add(item.path);
   return CURRICULUM_PATHS.filter((p) => set.has(p));
 }
+
+/**
+ * L3 — Blueprint paths with zero spine items (sorted). Full coverage → [].
+ */
+export function listEmptyCurriculumPaths(): readonly CurriculumPath[] {
+  const inv = inventoryCurriculum();
+  return CURRICULUM_PATHS.filter((p) => inv.byPath[p] === 0);
+}
+
+/**
+ * L3 — kinds present on spine (sorted fixed order playbook/workbook/lesson).
+ */
+export function listKindsWithContent(): readonly CurriculumKind[] {
+  const order: CurriculumKind[] = ['playbook', 'workbook', 'lesson'];
+  const inv = inventoryCurriculum();
+  return order.filter((k) => inv.byKind[k] > 0);
+}

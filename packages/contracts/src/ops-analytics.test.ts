@@ -5,6 +5,8 @@ import {
   ANALYTICS_SOURCE_DBS,
   assertMetricPoint,
   countMetricsByKind,
+  countMetricsUsingSource,
+  listMetricIdsUsingSource,
   listMetricIdsByKind,
   hasAnalyticsMetric,
   lagFreshness,
@@ -114,6 +116,21 @@ describe('L3 wave10 analytics catalog helpers', () => {
     expect(ids.length).toBe(countMetricsByKind('count'));
     for (const id of ids) {
       expect(metricById(id)!.kind).toBe('count');
+    }
+  });
+});
+
+describe('L3 wave13 analytics source catalog helpers', () => {
+  it('countMetricsUsingSource + listMetricIdsUsingSource no invent', () => {
+    const n = countMetricsUsingSource('trade');
+    const ids = listMetricIdsUsingSource('trade');
+    expect(ids.length).toBe(n);
+    expect(ids).toEqual([...ids].sort());
+    expect(n).toBeGreaterThan(0);
+    // every listed metric must declare trade source
+    for (const id of ids) {
+      const def = metricById(id)!;
+      expect(def.sources).toContain('trade');
     }
   });
 });
