@@ -809,4 +809,31 @@ export class MemoryResidencyDesk {
     if (!p) return false;
     return p.total === p.open + p.accepted + p.rejected + p.withdrawn;
   }
+
+  /** L3 — true when open count is within [min,max]. Invalid → false. */
+  openCountInRange(min: number, max: number): boolean {
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+    const n = this.openCount();
+    return n >= min && n <= max;
+  }
+
+  /** L3 — true when open share percent is at least threshold. Empty → false. */
+  openShareAtLeast(percent: number): boolean {
+    if (!Number.isFinite(percent)) return false;
+    const p = this.openSharePercent();
+    return p !== null && p >= percent;
+  }
+
+  /** L3 — clamp open-queue page size into [1, openCount] (empty → 1). */
+  clampOpenQueuePageSize(pageSize: number): number {
+    if (!Number.isFinite(pageSize)) return 1;
+    const total = Math.max(1, this.openCount());
+    return Math.max(1, Math.min(total, Math.floor(pageSize)));
+  }
+
+  /** L3 — true when application density exceeds threshold. */
+  applicationDensityExceeds(n: number): boolean {
+    if (!Number.isFinite(n)) return false;
+    return this.applicationCount() > n;
+  }
 }

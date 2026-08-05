@@ -706,3 +706,29 @@ export function planStatusLineConsistent(line: string): boolean {
   if (!p) return false;
   return p.total === p.send + p.hold + p.skip;
 }
+
+/** L3 — true when plan total is within [min,max]. Invalid → false. */
+export function planTotalInRange(plan: readonly DeliveryDecision[], min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = plan.length;
+  return n >= min && n <= max;
+}
+
+/** L3 — true when send count is at least n. */
+export function planSendCountAtLeast(plan: readonly DeliveryDecision[], n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return planSendCount(plan) >= n;
+}
+
+/** L3 — clamp plan page size into [1, total] (empty → 1). */
+export function clampPlanPageSize(plan: readonly DeliveryDecision[], pageSize: number): number {
+  if (!Number.isFinite(pageSize)) return 1;
+  const total = Math.max(1, plan.length);
+  return Math.max(1, Math.min(total, Math.floor(pageSize)));
+}
+
+/** L3 — true when skip count is at most n. */
+export function planSkipCountAtMost(plan: readonly DeliveryDecision[], n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return planSkipCount(plan) <= n;
+}

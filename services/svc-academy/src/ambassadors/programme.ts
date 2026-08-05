@@ -870,4 +870,31 @@ export class MemoryAmbassadorProgramme {
     if (!p) return false;
     return p.total === p.active + p.frozen;
   }
+
+  /** L3 — true when active count is within [min,max] inclusive. Invalid bounds → false. */
+  activeCountInRange(min: number, max: number): boolean {
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+    const n = this.activeCount();
+    return n >= min && n <= max;
+  }
+
+  /** L3 — true when frozen share percent is at least threshold. Empty → false. */
+  frozenShareAtLeast(percent: number): boolean {
+    if (!Number.isFinite(percent)) return false;
+    const p = this.frozenSharePercent();
+    return p !== null && p >= percent;
+  }
+
+  /** L3 — clamp desired page size into [1, total] (empty → 1). */
+  clampProgrammePageSize(pageSize: number): number {
+    if (!Number.isFinite(pageSize)) return 1;
+    const total = Math.max(1, this.totalCount());
+    return Math.max(1, Math.min(total, Math.floor(pageSize)));
+  }
+
+  /** L3 — true when programme density exceeds threshold. */
+  densityExceeds(n: number): boolean {
+    if (!Number.isFinite(n)) return false;
+    return this.totalCount() > n;
+  }
 }

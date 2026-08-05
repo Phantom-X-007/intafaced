@@ -90,6 +90,10 @@ import {
   fanoutStatusLineMatches,
   parseFanoutStatusLineDetailed,
   fanoutStatusLineConsistent,
+  fanoutTotalInRange,
+  fanoutAcceptedAtLeast,
+  clampFanoutPageSize,
+  fanoutFailedAtMost,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -469,5 +473,16 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutStatusLineMatches(attempts)).toBe(true);
     expect(fanoutStatusLineConsistent(fanoutStatusLine(attempts))).toBe(true);
     expect(parseFanoutStatusLineDetailed(fanoutStatusLineDetailed(attempts))?.mixed).toBe(true);
+  });
+
+  it('L3 wave46 fanout thresholds + clamps', () => {
+    expect(fanoutTotalInRange([], 0, 0)).toBe(true);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(fanoutAcceptedAtLeast(attempts, 1)).toBe(true);
+    expect(clampFanoutPageSize(attempts, 99)).toBe(2);
+    expect(fanoutFailedAtMost(attempts, 1)).toBe(true);
   });
 });

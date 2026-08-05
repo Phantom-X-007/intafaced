@@ -105,6 +105,10 @@ import {
   analyticsStatusLineMatches,
   parseAnalyticsStatusLineDetailed,
   analyticsStatusLineConsistent,
+  catalogSizeInRange,
+  moneyMetricCountAtLeast,
+  clampMetricPageSize,
+  multiSourceCountAtMost,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -470,5 +474,14 @@ describe('L3 wave45 analytics status parse + match', () => {
     expect(analyticsStatusLineConsistent(analyticsStatusLine())).toBe(true);
     expect(parseAnalyticsStatusLine(analyticsStatusLine())).not.toBeNull();
     expect(parseAnalyticsStatusLineDetailed(analyticsStatusLineDetailed())).not.toBeNull();
+  });
+});
+
+describe('L3 wave46 analytics thresholds + clamps', () => {
+  it('range + atLeast + clamp + atMost', () => {
+    expect(catalogSizeInRange(1, 10000)).toBe(true);
+    expect(moneyMetricCountAtLeast(0)).toBe(true);
+    expect(clampMetricPageSize(1)).toBe(1);
+    expect(multiSourceCountAtMost(10000)).toBe(true);
   });
 });

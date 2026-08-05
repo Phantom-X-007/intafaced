@@ -101,6 +101,10 @@ import {
   catalogStatusLineMatches,
   parseCatalogStatusLineDetailed,
   catalogStatusLineConsistent,
+  spineSizeInRange,
+  lessonCountAtLeast,
+  clampCurriculumPageSize,
+  emptyPathCountAtMost,
 } from './catalog.js';
 
 /**
@@ -437,5 +441,12 @@ describe('curriculum catalog', () => {
     expect(p).not.toBeNull();
     expect(catalogStatusLineConsistent(catalogStatusLine())).toBe(true);
     expect(parseCatalogStatusLineDetailed(catalogStatusLineDetailed())).not.toBeNull();
+  });
+
+  it('L3 wave46 catalog thresholds + clamps', () => {
+    expect(spineSizeInRange(1, 10000)).toBe(true);
+    expect(lessonCountAtLeast(0)).toBe(true);
+    expect(clampCurriculumPageSize(1)).toBe(1);
+    expect(emptyPathCountAtMost(10)).toBe(true);
   });
 });
