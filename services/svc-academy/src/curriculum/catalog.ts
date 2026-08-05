@@ -936,3 +936,40 @@ export function curriculumPathCard(path: CurriculumPath): {
 export function curriculumSlugPresent(slug: string): boolean {
   return curriculumSlugCard(slug).present;
 }
+
+/** L3 — search spine slugs by substring. Empty needle → []. */
+export function searchCurriculumSlugs(needle: string): readonly string[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return listCurriculumSlugs().filter((s) => s.includes(n));
+}
+
+/** L3 — search spine titles by substring. Empty needle → []. */
+export function searchCurriculumTitles(needle: string): readonly string[] {
+  const n = needle.trim().toLowerCase();
+  if (!n) return [];
+  return SPINE.filter((item) => item.title.toLowerCase().includes(n))
+    .map((item) => item.title)
+    .sort();
+}
+
+/** L3 — slug cards for one kind. None → []. */
+export function listCurriculumSlugCardsByKind(kind: CurriculumKind): readonly {
+  readonly slug: string;
+  readonly present: boolean;
+  readonly kind: CurriculumKind | null;
+  readonly isLesson: boolean;
+  readonly isPlaybook: boolean;
+  readonly isWorkbook: boolean;
+}[] {
+  return listCurriculumSlugsByKind(kind).map((slug) => curriculumSlugCard(slug));
+}
+
+/** L3 — path cards for all Blueprint paths. */
+export function listAllCurriculumPathCards(): readonly {
+  readonly path: CurriculumPath;
+  readonly count: number;
+  readonly hasContent: boolean;
+}[] {
+  return CURRICULUM_PATHS.map((path) => curriculumPathCard(path));
+}

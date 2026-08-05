@@ -471,3 +471,31 @@ export function fanoutBoardChannels(attempts: readonly ChannelDeliveryAttempt[])
 } {
   return fanoutChannelLists(attempts);
 }
+
+/** L3 — filter attempts by outcome. Empty → []. */
+export function filterAttemptsByOutcome(
+  attempts: readonly ChannelDeliveryAttempt[],
+  outcome: DeliveryOutcome,
+): readonly ChannelDeliveryAttempt[] {
+  return attempts.filter((a) => a.outcome === outcome);
+}
+
+/** L3 — true when any attempt has outcome. */
+export function fanoutIncludesOutcome(attempts: readonly ChannelDeliveryAttempt[], outcome: DeliveryOutcome): boolean {
+  return attempts.some((a) => a.outcome === outcome);
+}
+
+/** L3 — count attempts for outcome. Empty → 0. */
+export function countAttemptsWithOutcome(attempts: readonly ChannelDeliveryAttempt[], outcome: DeliveryOutcome): number {
+  return filterAttemptsByOutcome(attempts, outcome).length;
+}
+
+/** L3 — filter channels by substring among accepted. Empty needle → []. */
+export function filterAcceptedChannels(
+  attempts: readonly ChannelDeliveryAttempt[],
+  needle: string,
+): readonly ChannelDeliveryAttempt['channel'][] {
+  const n = needle.trim();
+  if (!n) return [];
+  return acceptedChannels(attempts).filter((c) => c.includes(n));
+}

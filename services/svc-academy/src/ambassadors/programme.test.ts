@@ -440,4 +440,21 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.listProgrammeRowSummaries()).toHaveLength(2);
     expect(desk.isProgrammeMissing(u1)).toBe(false);
   });
+
+  it('L3 wave37 filter rows + search ids', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.filterProgrammeRows('active')).toEqual([]);
+    expect(desk.searchProgrammeUserIds('')).toEqual([]);
+    expect(desk.programmeSearchHasHits('1111')).toBe(false);
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.filterProgrammeRows('active')).toHaveLength(1);
+    expect(desk.filterProgrammeRows('frozen')).toHaveLength(1);
+    expect(desk.programmeSearchHitCount('1111')).toBe(1);
+    expect(desk.programmeSearchHasHits('3333')).toBe(true);
+  });
 });

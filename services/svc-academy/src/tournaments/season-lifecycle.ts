@@ -531,3 +531,38 @@ export function listSeasonCards(seasons: readonly SeasonRecord[]): readonly {
 export function seasonPresent(seasons: readonly SeasonRecord[], seasonId: string): boolean {
   return seasonCard(seasons, seasonId).present;
 }
+
+/** L3 — filter season cards by status. Empty → []. */
+export function filterSeasonCardsByStatus(
+  seasons: readonly SeasonRecord[],
+  status: SeasonStatus,
+): readonly { readonly id: string; readonly status: SeasonStatus; readonly terminal: boolean; readonly writable: boolean }[] {
+  return listSeasonCards(seasons).filter((c) => c.status === status);
+}
+
+/** L3 — search season ids by substring. Empty needle → []. */
+export function searchSeasonIds(seasons: readonly SeasonRecord[], needle: string): readonly string[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return listSeasonIds(seasons).filter((id) => id.includes(n));
+}
+
+/** L3 — writable season cards only. Empty → []. */
+export function listWritableSeasonCards(seasons: readonly SeasonRecord[]): readonly {
+  readonly id: string;
+  readonly status: SeasonStatus;
+  readonly terminal: boolean;
+  readonly writable: boolean;
+}[] {
+  return listSeasonCards(seasons).filter((c) => c.writable);
+}
+
+/** L3 — terminal season cards only. Empty → []. */
+export function listTerminalSeasonCards(seasons: readonly SeasonRecord[]): readonly {
+  readonly id: string;
+  readonly status: SeasonStatus;
+  readonly terminal: boolean;
+  readonly writable: boolean;
+}[] {
+  return listSeasonCards(seasons).filter((c) => c.terminal);
+}

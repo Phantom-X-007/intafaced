@@ -74,6 +74,10 @@ import {
   analyticsCatalogBoardNonEmpty,
   analyticsMoneyBoard,
   analyticsKindBoard,
+  searchMetricIds,
+  filterMetricIdsByKind,
+  metricSearchHasHits,
+  metricSearchHitCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -358,5 +362,18 @@ describe('L3 wave36 analytics catalog board', () => {
     expect(c.total).toBe(analyticsMetricCatalogSize());
     expect(analyticsMoneyBoard().total).toBe(c.total);
     expect(analyticsKindBoard().total).toBe(c.total);
+  });
+});
+
+describe('L3 wave37 metric search + kind filter', () => {
+  it('search + filter + hit counts', () => {
+    expect(searchMetricIds('')).toEqual([]);
+    expect(metricSearchHasHits('')).toBe(false);
+    const any = listMoneyMetricIds()[0] ?? listNonMoneyMetricIds()[0];
+    if (any) {
+      expect(metricSearchHitCount(any.slice(0, 3))).toBeGreaterThan(0);
+      expect(metricSearchHasHits(any.slice(0, 3))).toBe(true);
+    }
+    expect(filterMetricIdsByKind('count').length).toBe(countKindMetricCount());
   });
 });

@@ -520,3 +520,27 @@ export function drillCardIsRefused(run: DrillRun): boolean {
 export function drillCardIsFresh(run: DrillRun): boolean {
   return drillBoardCard(run).fresh;
 }
+
+/** L3 — filter remaining step ids by substring. Empty needle → []. */
+export function filterRemainingStepIds(run: DrillRun, needle: string): readonly string[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return remainingStepIds(run).filter((id) => id.includes(n));
+}
+
+/** L3 — filter completed step ids by substring. Empty needle → []. */
+export function filterCompletedStepIds(run: DrillRun, needle: string): readonly string[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return run.completedStepIds.filter((id) => id.includes(n));
+}
+
+/** L3 — true when any remaining step matches needle. */
+export function remainingStepsMatch(run: DrillRun, needle: string): boolean {
+  return filterRemainingStepIds(run, needle).length > 0;
+}
+
+/** L3 — true when any completed step matches needle. */
+export function completedStepsMatch(run: DrillRun, needle: string): boolean {
+  return filterCompletedStepIds(run, needle).length > 0;
+}

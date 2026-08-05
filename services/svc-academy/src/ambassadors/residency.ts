@@ -571,4 +571,36 @@ export class MemoryResidencyDesk {
     const s = this.applicationStatusOf(id);
     return s !== null && s !== 'applied';
   }
+
+  /** L3 — filter application ids by status. Empty → []. */
+  filterApplicationIdsByStatus(status: ResidencyStatus): readonly string[] {
+    return [...this.rows.values()]
+      .filter((r) => r.status === status)
+      .map((r) => r.id)
+      .sort();
+  }
+
+  /** L3 — search application ids by substring. Empty needle → []. */
+  searchApplicationIds(needle: string): readonly string[] {
+    const n = needle.trim();
+    if (!n) return [];
+    return [...this.rows.keys()].filter((id) => id.includes(n)).sort();
+  }
+
+  /** L3 — applications for cohort (all statuses). Empty → []. */
+  listApplicationIdsForCohort(cohortSlug: string): readonly string[] {
+    const slug = cohortSlug.trim().toLowerCase();
+    if (!slug) return [];
+    return [...this.rows.values()]
+      .filter((r) => r.cohortSlug === slug)
+      .map((r) => r.id)
+      .sort();
+  }
+
+  /** L3 — open queue depth for cohort. Missing cohort → 0. */
+  openCountForCohort(cohortSlug: string): number {
+    const slug = cohortSlug.trim().toLowerCase();
+    if (!slug) return 0;
+    return this.listOpen(slug).length;
+  }
 }
