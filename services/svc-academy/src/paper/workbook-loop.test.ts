@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completeDrillStep, startPaperDrill } from './workbook-loop.js';
+import { completeDrillStep, startPaperDrill, startPaperDrillForCatalogItem } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
   it('refuses live market — fail closed', () => {
@@ -49,5 +49,14 @@ describe('paper Stage-2 workbook loop', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toBe('unknown_step');
+  });
+
+  it('refuses non-workbook catalog kinds', () => {
+    const r = startPaperDrillForCatalogItem({
+      slug: 'foundations-risk-first',
+      kind: 'playbook',
+      market: { marketId: 'p1', paper: true, symbol: 'PAPER/USD' },
+    });
+    expect(r.ok).toBe(false);
   });
 });
