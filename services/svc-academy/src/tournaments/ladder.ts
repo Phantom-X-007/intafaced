@@ -294,3 +294,20 @@ export function secondPlaceUser(rows: readonly StandingRecord[]): string | null 
   const ranked = rankStandings(rows);
   return ranked[1]?.userId ?? null;
 }
+
+/**
+ * L3 — user id at rank 3. Missing → null (never invent third place).
+ */
+export function thirdPlaceUser(rows: readonly StandingRecord[]): string | null {
+  const ranked = rankStandings(rows);
+  return ranked[2]?.userId ?? null;
+}
+
+/**
+ * L3 — last-ranked user id (lowest score podium). Empty → null.
+ */
+export function lastPlaceUser(rows: readonly StandingRecord[]): string | null {
+  const ranked = rankStandings(rows);
+  if (ranked.length === 0) return null;
+  return ranked[ranked.length - 1]!.userId;
+}

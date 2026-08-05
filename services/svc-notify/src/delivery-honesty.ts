@@ -161,3 +161,19 @@ export function acceptedChannels(attempts: readonly ChannelDeliveryAttempt[]): r
 export function failedChannels(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt['channel'][] {
   return attempts.filter((a) => a.outcome === 'failed').map((a) => a.channel);
 }
+
+/**
+ * L3 — channels that refused (order preserved). Empty → [].
+ */
+export function refusedChannels(attempts: readonly ChannelDeliveryAttempt[]): readonly ChannelDeliveryAttempt['channel'][] {
+  return attempts.filter((a) => a.outcome === 'refused').map((a) => a.channel);
+}
+
+/**
+ * L3 — accepted/total as fixed 4dp string. Empty → null (never invent 0 success).
+ */
+export function fanoutAcceptanceRatio(attempts: readonly ChannelDeliveryAttempt[]): string | null {
+  if (attempts.length === 0) return null;
+  const accepted = attempts.filter((a) => a.outcome === 'accepted').length;
+  return (accepted / attempts.length).toFixed(4);
+}
