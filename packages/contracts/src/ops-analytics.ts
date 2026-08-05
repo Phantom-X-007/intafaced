@@ -449,3 +449,28 @@ export function representedSourceCount(): number {
   if (countMetricsUsingSource('identity') > 0) n += 1;
   return n;
 }
+
+/** L3 — true when catalog size is at least n. */
+export function catalogHasAtLeast(n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return analyticsMetricCatalogSize() >= Math.floor(n);
+}
+
+/** L3 — first money metric id (sorted). None → null. */
+export function firstMoneyMetricId(): string | null {
+  const ids = listMoneyMetricIds();
+  return ids[0] ?? null;
+}
+
+/** L3 — first non-money metric id (sorted). None → null. */
+export function firstNonMoneyMetricId(): string | null {
+  const ids = listNonMoneyMetricIds();
+  return ids[0] ?? null;
+}
+
+/**
+ * L3 — money + non-money counts as pair. Empty zeros.
+ */
+export function moneyNonMoneyPair(): { readonly money: number; readonly nonMoney: number } {
+  return { money: moneyMetricCount(), nonMoney: nonMoneyMetricCount() };
+}

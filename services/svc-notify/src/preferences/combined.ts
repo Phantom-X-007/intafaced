@@ -297,3 +297,26 @@ export function planNonZeroActions(plan: readonly DeliveryDecision[]): readonly 
   if (h.skip_muted > 0) out.push('skip_muted');
   return out;
 }
+
+/** L3 — true when decision count is at least n. */
+export function planHasAtLeastDecisions(plan: readonly DeliveryDecision[], n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return plan.length >= Math.floor(n);
+}
+
+/** L3 — send_now minus hold_digest count. */
+export function planSendMinusHold(plan: readonly DeliveryDecision[]): number {
+  return planSendCount(plan) - planHoldCount(plan);
+}
+
+/** L3 — first send channel in plan order. None → null. */
+export function firstSendChannel(plan: readonly DeliveryDecision[]): (MuteableChannel | 'inapp') | null {
+  const ch = channelsToSendNow(plan);
+  return ch[0] ?? null;
+}
+
+/** L3 — last send channel in plan order. None → null. */
+export function lastSendChannel(plan: readonly DeliveryDecision[]): (MuteableChannel | 'inapp') | null {
+  const ch = channelsToSendNow(plan);
+  return ch.length ? ch[ch.length - 1]! : null;
+}

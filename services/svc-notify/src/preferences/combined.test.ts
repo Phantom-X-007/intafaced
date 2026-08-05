@@ -40,6 +40,10 @@ import {
   planHistogramOnlySkips,
   planHistogramOnlyHolds,
   planNonZeroActions,
+  planHasAtLeastDecisions,
+  planSendMinusHold,
+  firstSendChannel,
+  lastSendChannel,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -235,5 +239,16 @@ describe('notify L3 combined mute + digest', () => {
     expect(planHistogramOnlySkips(plan)).toBe(false);
     expect(planHistogramOnlyHolds(plan)).toBe(false);
     expect(planNonZeroActions(plan)).toEqual(['send_now']);
+  });
+
+  it('L3 wave30 plan at-least + send-hold + first/last send', () => {
+    expect(planHasAtLeastDecisions([], 1)).toBe(false);
+    expect(firstSendChannel([])).toBeNull();
+    expect(lastSendChannel([])).toBeNull();
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planHasAtLeastDecisions(plan, 2)).toBe(true);
+    expect(planSendMinusHold(plan)).toBe(planSendCount(plan));
+    expect(firstSendChannel(plan)).toBe('inapp');
+    expect(lastSendChannel(plan)).toBe('email');
   });
 });

@@ -335,3 +335,26 @@ export function allSeasonsFrozen(seasons: readonly SeasonRecord[]): boolean {
 export function distinctSeasonStatusCount(seasons: readonly SeasonRecord[]): number {
   return new Set(seasons.map((s) => s.status)).size;
 }
+
+/** L3 — true when season list has at least n entries. */
+export function hasAtLeastSeasons(seasons: readonly SeasonRecord[], n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return seasons.length >= Math.floor(n);
+}
+
+/** L3 — first season id (sorted). Empty → null. */
+export function firstSeasonId(seasons: readonly SeasonRecord[]): string | null {
+  const ids = listSeasonIds(seasons);
+  return ids[0] ?? null;
+}
+
+/** L3 — last season id (sorted). Empty → null. */
+export function lastSeasonId(seasons: readonly SeasonRecord[]): string | null {
+  const ids = listSeasonIds(seasons);
+  return ids.length ? ids[ids.length - 1]! : null;
+}
+
+/** L3 — true when statuses mix at least 2 distinct. Empty → false. */
+export function hasMixedSeasonStatuses(seasons: readonly SeasonRecord[]): boolean {
+  return distinctSeasonStatusCount(seasons) >= 2;
+}

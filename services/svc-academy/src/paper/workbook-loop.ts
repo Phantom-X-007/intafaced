@@ -338,3 +338,25 @@ export function hasNoRemainingSteps(run: DrillRun): boolean {
 export function isStepListEmpty(run: DrillRun): boolean {
   return run.steps.length === 0;
 }
+
+/** L3 — true when completion ratio number is 0. */
+export function isDrillUntouched(run: DrillRun): boolean {
+  return drillCompletionRatioNumber(run) === 0 && run.status === 'active';
+}
+
+/** L3 — true when completion ratio number is 1. */
+export function isDrillFullyRatioed(run: DrillRun): boolean {
+  return drillCompletionRatioNumber(run) === 1;
+}
+
+/** L3 — completed/total as percent integer 0..100 (UI only, not money). */
+export function drillCompletionPercent(run: DrillRun): number {
+  return Math.round(drillCompletionRatioNumber(run) * 100);
+}
+
+/** L3 — remaining/total as fixed 4dp. Zero steps → "0.0000". */
+export function remainingStepRatio(run: DrillRun): string {
+  const total = run.steps.length;
+  if (total === 0) return '0.0000';
+  return (remainingStepCount(run) / total).toFixed(4);
+}
