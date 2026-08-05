@@ -31,8 +31,54 @@
  * addon — node-gyp or prebuilt binaries, per platform, per Node ABI — added to
  * the service that holds sellers' bank details. This repo already argued that
  * case about a vendored jar and reached the same answer: a money service does
- * not take a binary dependency it cannot read. Reconsidering it is an owner
- * decision, not a routine one; the note is here so the trade is on the record.
+ * not take a binary dependency it cannot read.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THAT RATIONALE IS NOW HALF WRONG, AND THIS FILE SHOULD NOT OUTLIVE IT.
+ *
+ * The paragraph above was written against the `re2` NATIVE binding. While this
+ * branch was open, `origin/main` landed `@intafaced/safe-regex` (FH-SEC-01) —
+ * a wrapper over `re2js`, which is a PURE-JAVASCRIPT port of RE2. No node-gyp,
+ * no per-ABI binaries, so the dependency objection does not apply to it, and
+ * `packages/events` and `packages/exchange-contract` already consume it. The
+ * FH-SEC-01 commit deliberately skipped this service, in its own words to avoid
+ * PR #428's open paths — not because svc-p2p did not need it.
+ *
+ * The package is on THIS branch's base as of the rebase onto the current
+ * payment-instruments tip, so the swap is not a future possibility — it is
+ * available now. It is left undone deliberately, because it is a trade rather
+ * than a free win, and that was MEASURED rather than argued.
+ *
+ * THE SWAP IS ONE FUNCTION. `compilePattern` in `instruments.ts` is the only
+ * thing that would change; every caller sees `{ test(value): boolean }` and
+ * nothing else. But the two engines do not accept the same language. Both were
+ * run against `RegExp` itself over one corpus plus seeded fuzz — ~4,050
+ * patterns, ~98,700 match checks each:
+ *
+ *     engine             divergences   accepts what JS rejects   refuses what JS accepts
+ *     this file               0                  0                1  — [\D]
+ *     re2js (FH-SEC-01)       0                  0                2  — \uXXXX, [^]
+ *
+ * Neither is unsafe, and neither disagrees with `RegExp` about any pattern it
+ * will answer for. What differs is the REFUSAL SURFACE, in BOTH directions:
+ *
+ *   · RE2 gains `\b`, `\p{…}` and `[\D]`, which this file refuses.
+ *   · RE2 loses `\uXXXX` and `[^]`, which this file accepts. `\uXXXX` is the
+ *     ordinary JavaScript spelling of a non-ASCII literal — RE2 wants `\x{…}` —
+ *     and account identifiers across much of the world are not ASCII. That one
+ *     is a real cost, not a curiosity.
+ *
+ * So it is an owner call and not a tidy-up: it widens the accepted language in
+ * one place and narrows it in another, and either way it deletes ~880 lines of
+ * parser this repo would otherwise have to keep correct. Changing what an
+ * operator is allowed to write is not a decision an agent should make silently
+ * on a money service, so the numbers are recorded here and the call is left
+ * open.
+ *
+ * The differential suite in `linear-pattern.test.ts` is what makes the attempt
+ * safe whenever it is made: it pins what these patterns MEAN against `RegExp`,
+ * so any replacement engine has an executable definition of "same answers" to
+ * satisfy.
  *
  * **A static "is this pattern safe" check at registration.** Pure JS, and it is
  * the answer that ages worst. Detecting catastrophic backtracking exactly is not
