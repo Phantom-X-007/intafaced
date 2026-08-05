@@ -1,9 +1,9 @@
 # Claim TRK-ops.affiliates
 
-**status:** wip
-**owner:** nitro-afk
-**proof:** Slice A tree + attribution pure law + tests (no commission/payout)
-**tip:** fa005d1d
-**updated:** 2026-08-04
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** affiliates Slice A referral tree law (no payout) · PR #776
+**tip:** 1cee3119
+**updated:** 2026-08-05
 
-No money invent. Accrual/payout Class M residual. thrift HARD — local craft only.
+Stage-1 Class N landed on main. Mountain residual (pay/prizes/warehouse/payout) remains for later Class M / owner numbers — not free re-implement of Stage-1.
