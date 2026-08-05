@@ -84,7 +84,30 @@ describe('the reason this engine exists', () => {
     expect(worst.stateCount).toBeLessThanOrEqual(MAX_NFA_STATES);
 
     const ms = elapsed(() => worst.test('a'.repeat(512)));
-    expect(ms).toBeLessThan(250);
+
+    /**
+     * WHY THIS CEILING IS LOOSE, AND WHY IT IS STILL A TEST.
+     *
+     * This budget was 250 ms and it flaked on CI at 263.7 ms — a red build that
+     * said nothing about the engine. This is the only case in the file that does
+     * the full `MAX_NFA_STATES × MAX_VALUE_LENGTH` of work: ~2,000 states against
+     * 512 characters is on the order of a million state visits, and a shared
+     * runner with a cold JIT is several times slower than the machine a
+     * threshold gets written on.
+     *
+     * The property under test is NOT "this takes under X ms on this laptop" —
+     * that is unmeasurable in CI and gets tightened back to flaky by the next
+     * person who runs it locally. It is "the worst input the caps permit
+     * completes at all, in time bounded by the automaton rather than by the
+     * input's shape". `RegExp` on the payload in the test above took 24,674 ms
+     * against 33 characters, and against these 512 would not return. Two orders
+     * of magnitude of headroom still fails instantly if the simulation ever
+     * stops being linear, which is the only regression this can catch.
+     *
+     * The tight budgets live on the two tests above (50 ms and 100 ms), where
+     * the work is small enough for the number to mean something.
+     */
+    expect(ms).toBeLessThan(2_000);
   });
 
   it('refuses an automaton bigger than the budget rather than building it', () => {
