@@ -8,6 +8,7 @@ import { PostgresNotifyStore } from './store.js';
 import { PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
+import { MemoryMuteStore } from './preferences/mute.js';
 import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
@@ -72,15 +73,17 @@ const store = new PostgresNotifyStore(sql);
 const targets = new PostgresTargetStore(sql);
 const deliveries = new PostgresDeliveryStore(sql);
 const channels = channelsFromEnv(env);
+const muteStore = new MemoryMuteStore();
 const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
   maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS,
   outOfAppEnabled: env.NOTIFY_OUT_OF_APP_ENABLED,
+  mutePrefsOf: (userId) => muteStore.get(userId),
 });
 
 const notify = new NotifyService(
   store,
   { fanoutEnabled: env.NOTIFY_FANOUT_ENABLED, verifyTtlMinutes: env.NOTIFY_VERIFY_TTL_MINUTES },
-  { targets, deliveries, channels, dispatcher },
+  { targets, deliveries, channels, dispatcher, muteStore },
 );
 
 export const appRouter = createNotifyRouter(notify);

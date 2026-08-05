@@ -4,6 +4,7 @@ import { normaliseLocale, renderNotification } from './channels/render.js';
 import type { ChannelTarget, DeliveryRecord, DeliveryStore, TargetStore } from './channel-store.js';
 import type { Notification } from './store.js';
 import { withNotifySpan } from './tracing.js';
+import { EMPTY_MUTE_PREFS, isChannelMuted, type ChannelMutePrefs, type MuteableChannel } from './preferences/mute.js';
 
 /**
  * FAN-OUT.
@@ -46,6 +47,11 @@ export interface DispatchOptions {
   readonly maxAttempts: number;
   /** Operator switch for everything that leaves the platform. The inbox is unaffected. */
   readonly outOfAppEnabled: boolean;
+  /**
+   * Optional mute prefs. When absent, nothing is muted (legacy behaviour).
+   * Critical severity never mutes — see preferences/mute.ts.
+   */
+  readonly mutePrefsOf?: (userId: string) => Promise<ChannelMutePrefs> | ChannelMutePrefs;
 }
 
 export interface ChannelOutcome {
@@ -102,6 +108,15 @@ export class NotificationDispatcher {
               outcomes.push(await this.refuse(notification, channel, 'channel.no_target'));
             }
             continue;
+          }
+
+          // Preference mute (info/action only). Critical always attempts.
+          if (this.options.mutePrefsOf) {
+            const prefs = await this.options.mutePrefsOf(notification.userId);
+            if (isChannelMuted(prefs ?? EMPTY_MUTE_PREFS, channel as MuteableChannel, notification.severity)) {
+              outcomes.push(await this.refuse(notification, channel, 'channel.muted'));
+              continue;
+            }
           }
 
           outcomes.push(await this.attempt(notification, channel, target.address, target.locale));
