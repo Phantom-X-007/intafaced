@@ -290,4 +290,30 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     expect(desk.hasWithdrawnApplication()).toBe(true);
     expect(desk.decidedApplicationRatio()).toBe('1.0000');
   });
+
+  it('L3 wave29 all decided + first accepted/rejected + cohort count', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.isAllDecided()).toBe(false);
+    expect(desk.firstAcceptedApplicationId()).toBeNull();
+    expect(desk.firstRejectedApplicationId()).toBeNull();
+    expect(desk.cohortCount()).toBe(0);
+    const a = desk.apply({
+      userId: 'u-w29a',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    const b = desk.apply({
+      userId: 'u-w29b',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    desk.decide({ id: a.id, operatorId: 'op1', decision: 'accepted', now: NOW });
+    desk.decide({ id: b.id, operatorId: 'op1', decision: 'rejected', now: NOW });
+    expect(desk.isAllDecided()).toBe(true);
+    expect(desk.firstAcceptedApplicationId()).toBe(a.id);
+    expect(desk.firstRejectedApplicationId()).toBe(b.id);
+    expect(desk.cohortCount()).toBe(1);
+  });
 });

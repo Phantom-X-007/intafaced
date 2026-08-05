@@ -728,3 +728,24 @@ export function hasMarketsPath(): boolean {
 export function hasBuilderPath(): boolean {
   return hasCurriculumPath('builder');
 }
+
+/** L3 — true when sovereign path has content. */
+export function hasSovereignPath(): boolean {
+  return hasCurriculumPath('sovereign');
+}
+
+/** L3 — empty paths count alias surface. */
+export function emptyCurriculumPathCount(): number {
+  return emptyPathCount();
+}
+
+/** L3 — true when all four Blueprint paths have content. */
+export function allPathsHaveContent(): boolean {
+  return pathCountWithContent() === CURRICULUM_PATHS.length;
+}
+
+/** L3 — first spine slug (sorted). Empty spine → null. */
+export function firstCurriculumSlug(): string | null {
+  const slugs = listCurriculumSlugs();
+  return slugs[0] ?? null;
+}

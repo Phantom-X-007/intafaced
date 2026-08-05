@@ -52,6 +52,10 @@ import {
   tiedForLeadUserIds,
   allScoresEqual,
   minRankForTopK,
+  secondThirdScoreGap,
+  userIdsBelowScore,
+  userIdsAtOrAboveScore,
+  hasClearLeader,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -279,5 +283,16 @@ describe('L3 standings board helpers', () => {
     expect(minRankForTopK(rows, 2)).toBe(2);
     const equal = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 10, '2026-08-01T13:00:00Z')];
     expect(allScoresEqual(equal)).toBe(true);
+  });
+
+  it('L3 wave29 second-third gap + score filters + clear leader', () => {
+    expect(secondThirdScoreGap([])).toBeNull();
+    expect(userIdsBelowScore([], 10)).toEqual([]);
+    expect(hasClearLeader([])).toBe(false);
+    const rows = [row('a', 30, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 10, '2026-08-01T11:00:00Z')];
+    expect(secondThirdScoreGap(rows)).toBe(10);
+    expect(userIdsBelowScore(rows, 25)).toEqual(['b', 'c']);
+    expect(userIdsAtOrAboveScore(rows, 20)).toEqual(['a', 'b']);
+    expect(hasClearLeader(rows)).toBe(true);
   });
 });

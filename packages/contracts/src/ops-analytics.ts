@@ -417,3 +417,35 @@ export function ledgerSourceShare(): string | null {
   if (total === 0) return null;
   return (countMetricsUsingSource('ledger') / total).toFixed(4);
 }
+
+/**
+ * L3 — trade/total share as fixed 4dp. Empty → null.
+ */
+export function tradeSourceShare(): string | null {
+  const total = analyticsMetricCatalogSize();
+  if (total === 0) return null;
+  return (countMetricsUsingSource('trade') / total).toFixed(4);
+}
+
+/**
+ * L3 — identity/total share as fixed 4dp. Empty → null.
+ */
+export function identitySourceShare(): string | null {
+  const total = analyticsMetricCatalogSize();
+  if (total === 0) return null;
+  return (countMetricsUsingSource('identity') / total).toFixed(4);
+}
+
+/** L3 — true when every source DB has ≥1 metric. */
+export function allSourcesRepresented(): boolean {
+  return countMetricsUsingSource('ledger') > 0 && countMetricsUsingSource('trade') > 0 && countMetricsUsingSource('identity') > 0;
+}
+
+/** L3 — how many of the three source DBs appear in the catalog. */
+export function representedSourceCount(): number {
+  let n = 0;
+  if (countMetricsUsingSource('ledger') > 0) n += 1;
+  if (countMetricsUsingSource('trade') > 0) n += 1;
+  if (countMetricsUsingSource('identity') > 0) n += 1;
+  return n;
+}

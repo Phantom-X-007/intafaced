@@ -40,6 +40,10 @@ import {
   hasScoreWritableSeason,
   openSeasonRatio,
   listScoreWritableSeasonIds,
+  allSeasonsLive,
+  allSeasonsScheduled,
+  allSeasonsFrozen,
+  distinctSeasonStatusCount,
 } from './season-lifecycle.js';
 
 const base = {
@@ -356,5 +360,25 @@ describe('L3 wave28 open seasons + writable ids', () => {
     expect(hasScoreWritableSeason(rows)).toBe(true);
     expect(openSeasonRatio(rows)).toBe('0.6667');
     expect(listScoreWritableSeasonIds(rows)).toEqual(['a']);
+  });
+});
+
+describe('L3 wave29 all-status + distinct count', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('all live/scheduled/frozen + distinct', () => {
+    expect(allSeasonsLive([])).toBe(false);
+    expect(distinctSeasonStatusCount([])).toBe(0);
+    expect(allSeasonsLive([mk('a', 'live'), mk('b', 'live')])).toBe(true);
+    expect(allSeasonsScheduled([mk('a', 'scheduled')])).toBe(true);
+    expect(allSeasonsFrozen([mk('a', 'frozen')])).toBe(true);
+    expect(distinctSeasonStatusCount([mk('a', 'live'), mk('b', 'ended'), mk('c', 'live')])).toBe(2);
   });
 });

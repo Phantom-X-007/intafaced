@@ -46,6 +46,10 @@ import {
   hasTradeSourceMetrics,
   hasIdentitySourceMetrics,
   ledgerSourceShare,
+  tradeSourceShare,
+  identitySourceShare,
+  allSourcesRepresented,
+  representedSourceCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -265,5 +269,14 @@ describe('L3 wave28 source presence + ledger share', () => {
     const r = ledgerSourceShare();
     expect(r).not.toBeNull();
     expect(r).toMatch(/^\d+\.\d{4}$/);
+  });
+});
+
+describe('L3 wave29 source shares + representation', () => {
+  it('trade/identity share + all sources + count', () => {
+    expect(tradeSourceShare()).toMatch(/^\d+\.\d{4}$/);
+    expect(identitySourceShare()).toMatch(/^\d+\.\d{4}$/);
+    expect(typeof allSourcesRepresented()).toBe('boolean');
+    expect(representedSourceCount()).toBeGreaterThanOrEqual(1);
   });
 });

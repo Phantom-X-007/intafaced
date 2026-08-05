@@ -444,4 +444,25 @@ export class MemoryAmbassadorProgramme {
     const ids = this.listActiveUserIds();
     return ids.length ? ids[ids.length - 1]! : null;
   }
+
+  /** L3 — balance active-frozen as signed integer (active - frozen). Empty → 0. */
+  activeMinusFrozen(): number {
+    return this.activeCount() - this.frozenCount();
+  }
+
+  /** L3 — true when counts are equal and non-empty. Empty → false. */
+  isActiveFrozenBalanced(): boolean {
+    return this.totalCount() > 0 && this.activeCount() === this.frozenCount();
+  }
+
+  /** L3 — last frozen user id (sorted last). None → null. */
+  lastFrozenUserId(): string | null {
+    const ids = this.listFrozenUserIds();
+    return ids.length ? ids[ids.length - 1]! : null;
+  }
+
+  /** L3 — programme density: total users (alias surface). */
+  programmeDensity(): number {
+    return this.totalCount();
+  }
 }

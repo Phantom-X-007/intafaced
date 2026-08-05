@@ -389,4 +389,26 @@ export class MemoryResidencyDesk {
     const ids = this.openApplicationIds();
     return ids[0] ?? null;
   }
+
+  /** L3 — true when desk has only decided apps (no open). Empty → false. */
+  isAllDecided(): boolean {
+    return this.rows.size > 0 && this.openCount() === 0;
+  }
+
+  /** L3 — first accepted application id (sorted). None → null. */
+  firstAcceptedApplicationId(): string | null {
+    const ids = this.acceptedApplicationIds();
+    return ids[0] ?? null;
+  }
+
+  /** L3 — first rejected application id (sorted). None → null. */
+  firstRejectedApplicationId(): string | null {
+    const ids = this.rejectedApplicationIds();
+    return ids[0] ?? null;
+  }
+
+  /** L3 — cohort count with any application. Empty → 0. */
+  cohortCount(): number {
+    return this.knownCohortSlugsSorted().length;
+  }
 }
