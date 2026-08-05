@@ -179,3 +179,31 @@ export function bottomNStandings(rows: readonly StandingRecord[], n: number): re
   const ranked = rankStandings(rows);
   return ranked.slice(Math.max(0, ranked.length - limit));
 }
+
+/**
+ * L3 — median score among rows. Empty → null (never invent 0 as a score).
+ */
+export function medianScore(rows: readonly StandingRecord[]): number | null {
+  if (rows.length === 0) return null;
+  const scores = rows.map((r) => r.score).sort((a, b) => a - b);
+  const mid = Math.floor(scores.length / 2);
+  if (scores.length % 2 === 1) return scores[mid]!;
+  return (scores[mid - 1]! + scores[mid]!) / 2;
+}
+
+/**
+ * L3 — true when user is in top-N (rank ≤ n). Missing user → false (never invent podium).
+ */
+export function isInTopN(rows: readonly StandingRecord[], userId: string, n: number): boolean {
+  const limit = Math.floor(n);
+  if (limit <= 0) return false;
+  const s = standingOfUser(rows, userId);
+  return s != null && s.rank <= limit;
+}
+
+/**
+ * L3 — distinct user ids in standings (sorted). Empty → [].
+ */
+export function listStandingUserIds(rows: readonly StandingRecord[]): readonly string[] {
+  return [...new Set(rows.map((r) => r.userId))].sort();
+}

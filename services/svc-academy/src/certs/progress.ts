@@ -187,6 +187,13 @@ export class MemoryCertStore {
       .sort();
   }
 
+  /**
+   * L3 — sorted completed item slugs for a user. Missing → [] (never invent).
+   */
+  listCompletedItemSlugs(userId: string): readonly string[] {
+    return [...this.completedSet(userId)].sort();
+  }
+
   /** L3 progress snapshot for one cert — missing items named, no invent grant. */
   progressOf(userId: string, certId: string): ProgressReport {
     return progressReport({

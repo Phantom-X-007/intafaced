@@ -39,6 +39,11 @@ export function listXpPolicyCertIds(): readonly string[] {
   return CERT_XP_V0.map((p) => p.certId).sort();
 }
 
+/** L3 — true when cert has a v0 XP policy. Unknown → false (no invent). */
+export function hasXpPolicy(certId: string): boolean {
+  return xpPolicyFor(certId.trim()) !== null;
+}
+
 export type XpEarnedIntent = {
   readonly userId: string;
   readonly certId: string;

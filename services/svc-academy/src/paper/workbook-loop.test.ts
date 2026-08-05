@@ -5,6 +5,7 @@ import {
   drillProgress,
   isDrillComplete,
   completedStepCount,
+  fillRefCount,
   remainingStepIds,
   listPaperFillRefs,
   startPaperDrill,
@@ -147,5 +148,14 @@ describe('paper Stage-2 workbook loop', () => {
     const mid = completeDrillStep(start.run, 's1');
     if (!mid.ok) throw new Error('expected ok');
     expect(completedStepCount(mid.run)).toBe(1);
+  });
+
+  it('L3 fillRefCount zero without invent', () => {
+    const start = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'p1', paper: true, symbol: 'PAPER/USD' },
+    });
+    if (!start.ok) return;
+    expect(fillRefCount(start.run)).toBe(0);
   });
 });

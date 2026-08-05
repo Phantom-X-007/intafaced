@@ -167,3 +167,13 @@ export function listScheduledSeasons(seasons: readonly SeasonRecord[]): readonly
 export function listEndedSeasons(seasons: readonly SeasonRecord[]): readonly SeasonRecord[] {
   return filterSeasonsByStatus(seasons, 'ended');
 }
+
+/** L3 — frozen seasons only. Empty → []. */
+export function listFrozenSeasons(seasons: readonly SeasonRecord[]): readonly SeasonRecord[] {
+  return filterSeasonsByStatus(seasons, 'frozen');
+}
+
+/** L3 — sorted live season ids. Empty → []. */
+export function listLiveSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
+  return listSeasonIds(filterSeasonsByStatus(seasons, 'live'));
+}

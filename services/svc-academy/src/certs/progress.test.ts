@@ -145,4 +145,12 @@ describe('academy.certs Stage-1 progress spine', () => {
     expect(store.listGrantedCertIds('u1')).toEqual(['foundations-v1']);
     expect(store.listGrantedCertIds('missing')).toEqual([]);
   });
+
+  it('L3 listCompletedItemSlugs sorted without invent', () => {
+    const store = new MemoryCertStore();
+    expect(store.listCompletedItemSlugs('u1')).toEqual([]);
+    store.markComplete('u1', 'foundations-risk', NOW);
+    store.markComplete('u1', 'foundations-intro', NOW);
+    expect(store.listCompletedItemSlugs('u1')).toEqual(['foundations-intro', 'foundations-risk']);
+  });
 });

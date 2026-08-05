@@ -203,4 +203,14 @@ export class MemoryResidencyDesk {
       .map((r) => r.id)
       .sort();
   }
+
+  /** L3 — rejected count across all cohorts. Empty → 0. */
+  rejectedCount(): number {
+    return [...this.rows.values()].filter((r) => r.status === 'rejected').length;
+  }
+
+  /** L3 — withdrawn count across all cohorts. Empty → 0. */
+  withdrawnCount(): number {
+    return [...this.rows.values()].filter((r) => r.status === 'withdrawn').length;
+  }
 }
