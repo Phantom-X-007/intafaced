@@ -22,6 +22,7 @@ import {
   metricCountBySource,
   multiSourceMetricCount,
   singleSourceMetricCount,
+  moneyMetricRatio,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -170,5 +171,11 @@ describe('L3 wave16 analytics money/source helpers', () => {
     const m = multiSourceMetricCount();
     expect(s + m).toBeLessThanOrEqual(analyticsMetricCatalogSize());
     expect(s).toBeGreaterThanOrEqual(0);
+  });
+
+  it('L3 moneyMetricRatio fixed 4dp on tip catalog', () => {
+    const r = moneyMetricRatio();
+    expect(r).not.toBeNull();
+    expect(r).toMatch(/^\d+\.\d{4}$/);
   });
 });

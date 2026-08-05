@@ -248,4 +248,11 @@ export class MemoryResidencyDesk {
   applicationCount(): number {
     return this.rows.size;
   }
+
+  /**
+   * L3 — true when user has at least one applied application. Missing → false.
+   */
+  hasOpenApplication(userId: string): boolean {
+    return this.openForUser(userId).length > 0;
+  }
 }

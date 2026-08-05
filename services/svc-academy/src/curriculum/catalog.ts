@@ -599,3 +599,10 @@ export function listCurriculumTitlesByPath(path: CurriculumPath): readonly strin
 export function isSpineSlug(slug: string): boolean {
   return hasCurriculumSlug(slug);
 }
+
+/**
+ * L3 — true when path has at least one spine item. Empty path → false.
+ */
+export function hasCurriculumPath(path: CurriculumPath): boolean {
+  return countCurriculumByPath(path) > 0;
+}

@@ -18,6 +18,7 @@ import {
   listCurriculumTitlesByPath,
   isLessonSlug,
   isSpineSlug,
+  hasCurriculumPath,
 } from './catalog.js';
 
 /**
@@ -184,5 +185,9 @@ describe('curriculum catalog', () => {
   it('L3 isSpineSlug matches hasCurriculumSlug', () => {
     expect(isSpineSlug('not-real')).toBe(false);
     expect(isSpineSlug('foundations-risk-first')).toBe(hasCurriculumSlug('foundations-risk-first'));
+  });
+
+  it('L3 hasCurriculumPath for foundations', () => {
+    expect(hasCurriculumPath('foundations')).toBe(true);
   });
 });

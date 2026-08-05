@@ -27,6 +27,7 @@ import {
   hasStanding,
   scoreRange,
   rankOfUser,
+  isTopScorer,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -163,5 +164,12 @@ describe('L3 standings board helpers', () => {
     const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
     expect(rankOfUser(rows, 'missing')).toBeNull();
     expect(rankOfUser(rows, 'b')).toBe(1);
+  });
+
+  it('L3 isTopScorer false when missing', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(isTopScorer(rows, 'missing')).toBe(false);
+    expect(isTopScorer(rows, 'b')).toBe(true);
+    expect(isTopScorer(rows, 'a')).toBe(false);
   });
 });

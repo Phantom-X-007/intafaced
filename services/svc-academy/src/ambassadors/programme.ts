@@ -291,4 +291,11 @@ export class MemoryAmbassadorProgramme {
     if (total === 0) return null;
     return (this.activeCount() / total).toFixed(4);
   }
+
+  /**
+   * L3 — alias of listFrozenUserIds (sorted frozen ids).
+   */
+  frozenProgrammeIds(): readonly string[] {
+    return this.listFrozenUserIds();
+  }
 }
