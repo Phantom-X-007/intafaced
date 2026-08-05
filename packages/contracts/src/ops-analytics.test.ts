@@ -78,6 +78,10 @@ import {
   filterMetricIdsByKind,
   metricSearchHasHits,
   metricSearchHitCount,
+  pageMetricIds,
+  pageMoneyMetricIds,
+  metricCatalogPageCount,
+  reverseMetricIds,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -375,5 +379,15 @@ describe('L3 wave37 metric search + kind filter', () => {
       expect(metricSearchHasHits(any.slice(0, 3))).toBe(true);
     }
     expect(filterMetricIdsByKind('count').length).toBe(countKindMetricCount());
+  });
+});
+
+describe('L3 wave38 metric catalog paging', () => {
+  it('page ids + money page + page count + reverse', () => {
+    expect(pageMetricIds({ offset: 0, limit: 1 })).toHaveLength(1);
+    expect(pageMoneyMetricIds({ limit: 100 }).length).toBe(moneyMetricCount());
+    expect(metricCatalogPageCount(5)).toBeGreaterThan(0);
+    const all = pageMetricIds({ limit: 1000 });
+    expect(reverseMetricIds()[0]).toBe(all[all.length - 1]);
   });
 });

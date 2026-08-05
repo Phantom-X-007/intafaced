@@ -973,3 +973,32 @@ export function listAllCurriculumPathCards(): readonly {
 }[] {
   return CURRICULUM_PATHS.map((path) => curriculumPathCard(path));
 }
+
+/** L3 — page spine slugs (sorted). Empty → []. */
+export function pageCurriculumSlugs(options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = listCurriculumSlugs();
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — page lesson slugs. Empty → []. */
+export function pageLessonSlugs(options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = listLessonSlugs();
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — spine page count. */
+export function curriculumSpinePageCount(pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = curriculumSpineSize();
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse sorted spine slugs. Empty → []. */
+export function reverseCurriculumSlugs(): readonly string[] {
+  return [...listCurriculumSlugs()].reverse();
+}

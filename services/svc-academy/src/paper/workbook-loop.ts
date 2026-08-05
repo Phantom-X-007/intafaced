@@ -544,3 +544,32 @@ export function remainingStepsMatch(run: DrillRun, needle: string): boolean {
 export function completedStepsMatch(run: DrillRun, needle: string): boolean {
   return filterCompletedStepIds(run, needle).length > 0;
 }
+
+/** L3 — page remaining step ids. Empty → []. */
+export function pageRemainingStepIds(run: DrillRun, options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = remainingStepIds(run);
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — page completed step ids. Empty → []. */
+export function pageCompletedStepIds(run: DrillRun, options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = run.completedStepIds;
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — remaining steps page count. */
+export function remainingStepsPageCount(run: DrillRun, pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = remainingStepCount(run);
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse remaining step ids. Empty → []. */
+export function reverseRemainingStepIds(run: DrillRun): readonly string[] {
+  return [...remainingStepIds(run)].reverse();
+}

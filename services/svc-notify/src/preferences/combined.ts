@@ -489,3 +489,37 @@ export function filterPlanSendChannels(plan: readonly DeliveryDecision[], needle
   if (!n) return [];
   return channelsToSendNow(plan).filter((c) => c.includes(n));
 }
+
+/** L3 — page plan decisions. Empty → []. */
+export function pagePlanDecisions(
+  plan: readonly DeliveryDecision[],
+  options: { offset?: number; limit?: number } = {},
+): readonly DeliveryDecision[] {
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? plan.length));
+  return plan.slice(offset, offset + limit);
+}
+
+/** L3 — page send channels. Empty → []. */
+export function pagePlanSendChannels(
+  plan: readonly DeliveryDecision[],
+  options: { offset?: number; limit?: number } = {},
+): readonly (MuteableChannel | 'inapp')[] {
+  const all = channelsToSendNow(plan);
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — plan page count. */
+export function planPageCount(plan: readonly DeliveryDecision[], pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = plan.length;
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse plan decisions. Empty → []. */
+export function reversePlanDecisions(plan: readonly DeliveryDecision[]): readonly DeliveryDecision[] {
+  return [...plan].reverse();
+}

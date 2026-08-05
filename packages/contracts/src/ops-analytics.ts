@@ -637,3 +637,32 @@ export function metricSearchHasHits(needle: string): boolean {
 export function metricSearchHitCount(needle: string): number {
   return searchMetricIds(needle).length;
 }
+
+/** L3 — page metric ids (sorted from catalog order filtered). Empty → []. */
+export function pageMetricIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = ANALYTICS_METRICS_V0.map((m) => m.id).sort();
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — page money metric ids. Empty → []. */
+export function pageMoneyMetricIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = listMoneyMetricIds();
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — catalog page count. */
+export function metricCatalogPageCount(pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = analyticsMetricCatalogSize();
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse sorted metric ids. Empty → []. */
+export function reverseMetricIds(): readonly string[] {
+  return [...ANALYTICS_METRICS_V0.map((m) => m.id).sort()].reverse();
+}

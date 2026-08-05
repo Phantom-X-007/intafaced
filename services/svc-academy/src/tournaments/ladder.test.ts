@@ -84,6 +84,10 @@ import {
   filterStandingsMaxScore,
   searchStandingUserIds,
   countStandingsInScoreRange,
+  pageRankedStandings,
+  pageRankedUserIds,
+  standingsPageCount,
+  reverseRankedStandings,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -402,5 +406,14 @@ describe('L3 standings board helpers', () => {
     expect(filterStandingsMaxScore(rows, 20)).toHaveLength(2);
     expect(searchStandingUserIds(rows, 'a')).toEqual(['a']);
     expect(countStandingsInScoreRange(rows, 10, 20)).toBe(2);
+  });
+
+  it('L3 wave38 page ranked + reverse + page count', () => {
+    expect(pageRankedStandings([], { limit: 1 })).toEqual([]);
+    expect(standingsPageCount([], 10)).toBe(0);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z'), row('c', 20, '2026-08-01T11:00:00Z')];
+    expect(pageRankedUserIds(rows, { offset: 0, limit: 2 })).toEqual(['b', 'c']);
+    expect(standingsPageCount(rows, 2)).toBe(2);
+    expect(reverseRankedStandings(rows)[0]!.userId).toBe('a');
   });
 });

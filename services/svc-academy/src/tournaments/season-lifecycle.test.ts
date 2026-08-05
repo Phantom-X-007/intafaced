@@ -72,6 +72,10 @@ import {
   searchSeasonIds,
   listWritableSeasonCards,
   listTerminalSeasonCards,
+  pageSeasonIds,
+  pageLiveSeasonIds,
+  seasonListPageCount,
+  reverseSeasonIds,
 } from './season-lifecycle.js';
 
 const base = {
@@ -562,5 +566,26 @@ describe('L3 wave37 season filters + search', () => {
     expect(searchSeasonIds(rows, 'alpha')).toEqual(['alpha-live']);
     expect(listWritableSeasonCards(rows)).toHaveLength(1);
     expect(listTerminalSeasonCards(rows)).toHaveLength(1);
+  });
+});
+
+describe('L3 wave38 season paging', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('page ids + reverse + page count', () => {
+    expect(pageSeasonIds([], { limit: 1 })).toEqual([]);
+    expect(seasonListPageCount([], 5)).toBe(0);
+    const rows = [mk('a', 'live'), mk('b', 'ended'), mk('c', 'live')];
+    expect(pageSeasonIds(rows, { offset: 0, limit: 2 })).toHaveLength(2);
+    expect(pageLiveSeasonIds(rows, { limit: 10 })).toEqual(['a', 'c']);
+    expect(seasonListPageCount(rows, 2)).toBe(2);
+    expect(reverseSeasonIds(rows)[0]).toBe('c');
   });
 });

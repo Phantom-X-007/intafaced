@@ -457,4 +457,20 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.programmeSearchHitCount('1111')).toBe(1);
     expect(desk.programmeSearchHasHits('3333')).toBe(true);
   });
+
+  it('L3 wave38 page ids + page count', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u1 = '11111111-1111-4111-8111-111111111111';
+    const u2 = '33333333-3333-4333-8333-333333333333';
+    const op = '22222222-2222-4222-8222-222222222222';
+    expect(desk.pageProgrammeUserIds({ offset: 0, limit: 1 })).toEqual([]);
+    expect(desk.programmePageCount(10)).toBe(0);
+    desk.appoint({ userId: u1, appointedBy: op });
+    desk.appoint({ userId: u2, appointedBy: op });
+    desk.freeze({ userId: u2, frozenBy: op, reason: 'hold' });
+    expect(desk.pageProgrammeUserIds({ offset: 0, limit: 1 })).toHaveLength(1);
+    expect(desk.pageActiveUserIds({ limit: 10 })).toEqual([u1]);
+    expect(desk.pageFrozenUserIds({ limit: 10 })).toEqual([u2]);
+    expect(desk.programmePageCount(1)).toBe(2);
+  });
 });

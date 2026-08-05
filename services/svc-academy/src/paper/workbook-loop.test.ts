@@ -58,6 +58,10 @@ import {
   filterCompletedStepIds,
   remainingStepsMatch,
   completedStepsMatch,
+  pageRemainingStepIds,
+  pageCompletedStepIds,
+  remainingStepsPageCount,
+  reverseRemainingStepIds,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -382,5 +386,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(mid.ok).toBe(true);
     if (!mid.ok) return;
     expect(filterCompletedStepIds(mid.run, step.slice(0, 3))).toContain(step);
+  });
+
+  it('L3 wave38 drill step paging', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w38', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(pageRemainingStepIds(started.run, { offset: 0, limit: 1 })).toHaveLength(1);
+    expect(remainingStepsPageCount(started.run, 1)).toBe(started.run.steps.length);
+    expect(reverseRemainingStepIds(started.run)[0]).toBe(started.run.steps[started.run.steps.length - 1]!.id);
+    expect(pageCompletedStepIds(started.run, { limit: 5 })).toEqual([]);
   });
 });
