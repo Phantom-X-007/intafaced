@@ -635,3 +635,8 @@ export function workbookCount(): number {
 export function lessonCount(): number {
   return inventoryCurriculum().byKind.lesson;
 }
+
+/** L3 — how many Blueprint paths have ≥1 spine item. */
+export function pathCountWithContent(): number {
+  return listPathsWithContent().length;
+}

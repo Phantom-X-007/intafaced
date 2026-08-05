@@ -29,6 +29,7 @@ import {
   moneyMetricCount,
   nonMoneyMetricCount,
   catalogHasMoney,
+  catalogIsNonEmpty,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -204,5 +205,9 @@ describe('L3 wave21 money/non-money counts', () => {
 
   it('L3 catalogHasMoney true on tip', () => {
     expect(catalogHasMoney()).toBe(true);
+  });
+
+  it('L3 catalogIsNonEmpty true on tip', () => {
+    expect(catalogIsNonEmpty()).toBe(true);
   });
 });

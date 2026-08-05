@@ -320,3 +320,8 @@ export function nonMoneyMetricCount(): number {
 export function catalogHasMoney(): boolean {
   return hasMoneyMetrics();
 }
+
+/** L3 — true when v0 catalog has at least one metric. */
+export function catalogIsNonEmpty(): boolean {
+  return !isMetricCatalogEmpty();
+}

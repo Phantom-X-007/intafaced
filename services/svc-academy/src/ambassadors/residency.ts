@@ -270,4 +270,9 @@ export class MemoryResidencyDesk {
   acceptedApplicationCount(): number {
     return this.acceptedCount();
   }
+
+  /** L3 — alias of withdrawnCount. */
+  withdrawnApplicationCount(): number {
+    return this.withdrawnCount();
+  }
 }

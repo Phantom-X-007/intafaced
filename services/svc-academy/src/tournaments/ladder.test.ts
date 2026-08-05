@@ -35,6 +35,7 @@ import {
   thirdPlaceUser,
   lastPlaceUser,
   firstPlaceUser,
+  scoreAtRank,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -200,5 +201,13 @@ describe('L3 standings board helpers', () => {
     expect(firstPlaceUser([])).toBeNull();
     const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
     expect(firstPlaceUser(rows)).toBe('b');
+  });
+
+  it('L3 scoreAtRank null when missing rank', () => {
+    expect(scoreAtRank([], 1)).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(scoreAtRank(rows, 1)).toBe(20);
+    expect(scoreAtRank(rows, 2)).toBe(10);
+    expect(scoreAtRank(rows, 3)).toBeNull();
   });
 });
