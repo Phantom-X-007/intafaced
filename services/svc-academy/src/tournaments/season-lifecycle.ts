@@ -157,3 +157,13 @@ export function isSeasonTerminal(status: SeasonStatus): boolean {
 export function listSeasonIds(seasons: readonly SeasonRecord[]): readonly string[] {
   return seasons.map((s) => s.id).sort();
 }
+
+/** L3 — scheduled seasons only. Empty → []. */
+export function listScheduledSeasons(seasons: readonly SeasonRecord[]): readonly SeasonRecord[] {
+  return filterSeasonsByStatus(seasons, 'scheduled');
+}
+
+/** L3 — ended seasons only. Empty → []. */
+export function listEndedSeasons(seasons: readonly SeasonRecord[]): readonly SeasonRecord[] {
+  return filterSeasonsByStatus(seasons, 'ended');
+}

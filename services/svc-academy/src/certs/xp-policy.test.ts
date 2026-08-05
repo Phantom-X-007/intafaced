@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decideGrant, MemoryCertStore } from './progress.js';
-import { xpIntentFromGrant, xpPolicyFor } from './xp-policy.js';
+import { xpIntentFromGrant, xpPolicyFor, listXpPolicyCertIds, xpDeltaForCert } from './xp-policy.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -41,5 +41,13 @@ describe('academy.certs Stage-2 XP policy (no money)', () => {
       now: NOW,
     });
     expect(xpIntentFromGrant(grant)).toBeNull();
+  });
+
+  it('L3 xpDeltaForCert null for unknown; listXpPolicyCertIds sorted', () => {
+    expect(xpDeltaForCert('foundations-v1')).toBe('100');
+    expect(xpDeltaForCert('no-such-cert')).toBeNull();
+    const ids = listXpPolicyCertIds();
+    expect(ids).toEqual([...ids].sort());
+    expect(ids).toContain('foundations-v1');
   });
 });

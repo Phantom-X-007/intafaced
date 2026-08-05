@@ -169,3 +169,13 @@ export function countStandingsAboveScore(rows: readonly StandingRecord[], score:
 export function standingCount(rows: readonly StandingRecord[]): number {
   return rows.length;
 }
+
+/**
+ * L3 — bottom-N ranked standings (lowest scores). n≤0 → empty (never invent).
+ */
+export function bottomNStandings(rows: readonly StandingRecord[], n: number): readonly RankedStanding[] {
+  const limit = Math.floor(n);
+  if (limit <= 0) return [];
+  const ranked = rankStandings(rows);
+  return ranked.slice(Math.max(0, ranked.length - limit));
+}

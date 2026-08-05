@@ -176,6 +176,17 @@ export class MemoryCertStore {
     return [...this.grants.values()].filter((g) => g.userId === userId);
   }
 
+  /**
+   * L3 — sorted cert ids granted to a user. Missing user → [] (never invent grant).
+   */
+  listGrantedCertIds(userId: string): readonly string[] {
+    const id = userId.trim();
+    if (!id) return [];
+    return this.listCerts(id)
+      .map((g) => g.certId)
+      .sort();
+  }
+
   /** L3 progress snapshot for one cert — missing items named, no invent grant. */
   progressOf(userId: string, certId: string): ProgressReport {
     return progressReport({
