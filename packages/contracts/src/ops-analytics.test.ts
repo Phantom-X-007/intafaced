@@ -38,6 +38,10 @@ import {
   hasAmountMetrics,
   hasCountKindMetrics,
   multiSourceMetricRatio,
+  ledgerSourceMetricCount,
+  tradeSourceMetricCount,
+  identitySourceMetricCount,
+  singleSourceMetricRatio,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -233,6 +237,17 @@ describe('L3 wave26 kind presence + multi-source ratio', () => {
     expect(typeof hasAmountMetrics()).toBe('boolean');
     expect(typeof hasCountKindMetrics()).toBe('boolean');
     const r = multiSourceMetricRatio();
+    expect(r).not.toBeNull();
+    expect(r).toMatch(/^\d+\.\d{4}$/);
+  });
+});
+
+describe('L3 wave27 source counts + single-source ratio', () => {
+  it('ledger/trade/identity counts + singleSourceMetricRatio', () => {
+    expect(ledgerSourceMetricCount()).toBe(countMetricsUsingSource('ledger'));
+    expect(tradeSourceMetricCount()).toBe(countMetricsUsingSource('trade'));
+    expect(identitySourceMetricCount()).toBe(countMetricsUsingSource('identity'));
+    const r = singleSourceMetricRatio();
     expect(r).not.toBeNull();
     expect(r).toMatch(/^\d+\.\d{4}$/);
   });

@@ -253,4 +253,22 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     expect(desk.rejectedApplicationRatio()).toBe('0.0000');
     expect(desk.knownCohortSlugsSorted()).toEqual(['bali-2026']);
   });
+
+  it('L3 wave27 accepted/rejected flags + withdrawn ratio + decided count', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.hasAcceptedApplication()).toBe(false);
+    expect(desk.hasRejectedApplication()).toBe(false);
+    expect(desk.withdrawnApplicationRatio()).toBeNull();
+    expect(desk.decidedApplicationCount()).toBe(0);
+    const a = desk.apply({
+      userId: 'u-w27',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    desk.decide({ id: a.id, operatorId: 'op1', decision: 'accepted', now: NOW });
+    expect(desk.hasAcceptedApplication()).toBe(true);
+    expect(desk.decidedApplicationCount()).toBe(1);
+    expect(desk.withdrawnApplicationRatio()).toBe('0.0000');
+  });
 });

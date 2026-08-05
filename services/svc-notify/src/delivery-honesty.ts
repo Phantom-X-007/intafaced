@@ -227,3 +227,25 @@ export function fanoutOutcomesPresent(attempts: readonly ChannelDeliveryAttempt[
   const present = new Set(attempts.map((a) => a.outcome));
   return order.filter((o) => present.has(o));
 }
+
+/** L3 — true when fanout has zero failures. Empty → true. */
+export function fanoutHasNoFailures(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return countFanoutFailures(attempts) === 0;
+}
+
+/** L3 — true when fanout has zero refusals. Empty → true. */
+export function fanoutHasNoRefusals(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return countFanoutRefusals(attempts) === 0;
+}
+
+/**
+ * L3 — accepted count / attempt count as fixed 4dp (alias of fanoutAcceptanceRatio).
+ */
+export function fanoutSuccessRatio(attempts: readonly ChannelDeliveryAttempt[]): string | null {
+  return fanoutAcceptanceRatio(attempts);
+}
+
+/** L3 — true when any attempt refused. Empty → false. */
+export function fanoutHasRefusal(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return countFanoutRefusals(attempts) > 0;
+}

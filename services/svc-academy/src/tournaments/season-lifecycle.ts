@@ -265,3 +265,27 @@ export function liveSeasonRatio(seasons: readonly SeasonRecord[]): string | null
 export function isSeasonListEmpty(seasons: readonly SeasonRecord[]): boolean {
   return seasons.length === 0;
 }
+
+/** L3 — frozen/total as fixed 4dp. Empty → null. */
+export function frozenSeasonRatio(seasons: readonly SeasonRecord[]): string | null {
+  if (seasons.length === 0) return null;
+  return (frozenSeasonCount(seasons) / seasons.length).toFixed(4);
+}
+
+/** L3 — ended/total as fixed 4dp. Empty → null. */
+export function endedSeasonRatio(seasons: readonly SeasonRecord[]): string | null {
+  if (seasons.length === 0) return null;
+  return (endedSeasonCount(seasons) / seasons.length).toFixed(4);
+}
+
+/** L3 — scheduled/total as fixed 4dp. Empty → null. */
+export function scheduledSeasonRatio(seasons: readonly SeasonRecord[]): string | null {
+  if (seasons.length === 0) return null;
+  return (scheduledSeasonCount(seasons) / seasons.length).toFixed(4);
+}
+
+/** L3 — true when every season is ended. Empty → false (not invent all-ended). */
+export function allSeasonsEnded(seasons: readonly SeasonRecord[]): boolean {
+  if (seasons.length === 0) return false;
+  return seasons.every((s) => s.status === 'ended');
+}

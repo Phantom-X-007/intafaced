@@ -271,3 +271,25 @@ export function drillCompletionRatio(run: DrillRun): string {
 export function drillMarketId(run: DrillRun): string {
   return run.marketId;
 }
+
+/** L3 — true when drill has zero fill refs. */
+export function hasNoFillRefs(run: DrillRun): boolean {
+  return run.fillRefs.length === 0;
+}
+
+/** L3 — symbol on the run (never invent). */
+export function drillSymbol(run: DrillRun): string {
+  return run.symbol;
+}
+
+/** L3 — workbook slug on the run. */
+export function drillWorkbookSlug(run: DrillRun): string {
+  return run.workbookSlug;
+}
+
+/**
+ * L3 — true when active with at least one completed step (partial progress).
+ */
+export function hasPartialProgress(run: DrillRun): boolean {
+  return run.status === 'active' && completedStepCount(run) > 0 && remainingStepCount(run) > 0;
+}

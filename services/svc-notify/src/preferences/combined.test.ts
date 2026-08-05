@@ -28,6 +28,10 @@ import {
   planSkipRatio,
   planHasNoHolds,
   planActionsPresent,
+  planIsAllDeferred,
+  planInappSendChannels,
+  planSendsInapp,
+  planOutOfAppSends,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -186,5 +190,17 @@ describe('notify L3 combined mute + digest', () => {
     expect(planSkipRatio(plan)).toMatch(/^\d+\.\d{4}$/);
     expect(typeof planHasNoHolds(plan)).toBe('boolean');
     expect(planActionsPresent(plan).length).toBeGreaterThan(0);
+  });
+
+  it('L3 wave27 deferred + inapp + out-of-app sends', () => {
+    expect(planIsAllDeferred([])).toBe(false);
+    expect(planSendsInapp([])).toBe(false);
+    expect(planInappSendChannels([])).toEqual([]);
+    expect(planOutOfAppSends([])).toEqual([]);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planSendsInapp(plan)).toBe(true);
+    expect(planInappSendChannels(plan)).toEqual(['inapp']);
+    expect(planOutOfAppSends(plan)).toContain('email');
+    expect(planIsAllDeferred(plan)).toBe(false);
   });
 });

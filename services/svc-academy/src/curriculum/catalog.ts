@@ -688,3 +688,23 @@ export function hasWorkbook(): boolean {
 export function hasLesson(): boolean {
   return lessonCount() > 0;
 }
+
+/** L3 — true when spine is non-empty. */
+export function catalogSpineNonEmpty(): boolean {
+  return curriculumSpineSize() > 0;
+}
+
+/** L3 — foundations path item count. */
+export function foundationsItemCount(): number {
+  return countCurriculumByPath('foundations');
+}
+
+/** L3 — markets path item count. */
+export function marketsItemCount(): number {
+  return countCurriculumByPath('markets');
+}
+
+/** L3 — builder path item count. */
+export function builderItemCount(): number {
+  return countCurriculumByPath('builder');
+}

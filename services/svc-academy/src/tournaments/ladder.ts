@@ -389,3 +389,39 @@ export function hasPodiumDepth(rows: readonly StandingRecord[], n: number): bool
 export function rankedCount(rows: readonly StandingRecord[]): number {
   return rankStandings(rows).length;
 }
+
+/**
+ * L3 — average of top-N scores. Empty or n invalid → null.
+ */
+export function averageTopNScore(rows: readonly StandingRecord[], n: number): number | null {
+  if (!Number.isFinite(n) || n < 1) return null;
+  const top = topNStandings(rows, Math.floor(n));
+  if (top.length === 0) return null;
+  const sum = top.reduce((a, r) => a + r.score, 0);
+  return sum / top.length;
+}
+
+/**
+ * L3 — true when user score equals max score. Missing → false.
+ */
+export function isTiedForFirst(rows: readonly StandingRecord[], userId: string): boolean {
+  const max = maxScore(rows);
+  if (max === null) return false;
+  const s = scoreOfUser(rows, userId);
+  return s !== null && s === max;
+}
+
+/**
+ * L3 — count of users with score strictly above threshold. Empty → 0.
+ */
+export function countAboveScore(rows: readonly StandingRecord[], score: number): number {
+  return countStandingsAboveScore(rows, score);
+}
+
+/** L3 — true when standings has unique first place (no tie at max). Empty → false. */
+export function hasUniqueLeader(rows: readonly StandingRecord[]): boolean {
+  if (rows.length === 0) return false;
+  const max = maxScore(rows);
+  if (max === null) return false;
+  return rows.filter((r) => r.score === max).length === 1;
+}
