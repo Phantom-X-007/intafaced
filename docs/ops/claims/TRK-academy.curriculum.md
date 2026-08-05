@@ -1,9 +1,9 @@
 # Claim TRK-academy.curriculum
 
-**status:** wip
-**owner:** nitro-afk
-**proof:** Stage-1 import pipeline — format + brand checklist + count gate (no fake 20+3)
-**tip:** fa005d1d
-**updated:** 2026-08-04
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage-1 import pipeline + honest count gate · PR #778
+**tip:** 1cee3119
+**updated:** 2026-08-05
 
-Stage-1 only. Full library content residual / Class X licence. Batched with ambassadors+tournaments under thrift HARD.
+Stage-1 Class N landed on main. Mountain residual (pay/prizes/warehouse/payout) remains for later Class M / owner numbers — not free re-implement of Stage-1.

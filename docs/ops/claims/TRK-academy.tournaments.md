@@ -1,9 +1,9 @@
 # Claim TRK-academy.tournaments
 
-**status:** wip
-**owner:** nitro-afk
-**proof:** Stage-1 ladder without money — season/standings API + flag
-**tip:** fa005d1d
-**updated:** 2026-08-04
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** Stage-1 ladder (no prize money) · PR #778
+**tip:** 1cee3119
+**updated:** 2026-08-05
 
-Stage-1 only. Prize pools Class M residual (Stage 2). Batched with ambassadors Stage-1 under thrift HARD.
+Stage-1 Class N landed on main. Mountain residual (pay/prizes/warehouse/payout) remains for later Class M / owner numbers — not free re-implement of Stage-1.

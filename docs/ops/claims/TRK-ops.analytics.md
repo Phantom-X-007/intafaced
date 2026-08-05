@@ -1,9 +1,9 @@
 # Claim TRK-ops.analytics
 
-**status:** wip
-**owner:** nitro-afk
-**proof:** Slice A replica contract + lag fail-closed (pure types/tests; no warehouse)
-**tip:** fa005d1d
-**updated:** 2026-08-04
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** analytics Slice A lag fail-closed + metric defs · PR #775
+**tip:** 1cee3119
+**updated:** 2026-08-05
 
-No invent KPIs. No analytics writer. thrift HARD — local craft only.
+Stage-1 Class N landed on main. Mountain residual (pay/prizes/warehouse/payout) remains for later Class M / owner numbers — not free re-implement of Stage-1.

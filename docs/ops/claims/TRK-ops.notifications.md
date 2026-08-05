@@ -1,9 +1,9 @@
 # Claim TRK-ops.notifications
 
-**status:** wip
-**owner:** nitro-afk
-**proof:** preference/mute law Slice A — critical cannot mute; no Class X gateway
-**tip:** fa005d1d
+**status:** merged
+**owner:** nitro-ship-factory
+**proof:** notify mute prefs; critical never silenced · PR #777
+**tip:** 1cee3119
 **updated:** 2026-08-05
 
-Class X credentials residual. thrift HARD — local craft only.
+Stage-1 Class N landed on main. Mountain residual (pay/prizes/warehouse/payout) remains for later Class M / owner numbers — not free re-implement of Stage-1.
