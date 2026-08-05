@@ -87,4 +87,24 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
       reason: 'market_plane_dark',
     });
   });
+
+  it('Stage-2 L3: market allowlist drops out-of-scope ids — no invent ranks', () => {
+    const r = rankFixtures(
+      [
+        row({ marketId: 'BTC-USD', change24hBps: 10 }),
+        row({ marketId: 'ETH-USD', change24hBps: 200 }),
+        row({ marketId: 'SOL-USD', change24hBps: 50 }),
+      ],
+      { now: NOW, marketAllowlist: ['ETH-USD'] },
+    );
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.signals.map((s) => s.marketId)).toEqual(['ETH-USD']);
+    expect(r.skippedIncomplete).toBe(2);
+  });
+
+  it('Stage-2 L3: allowlist with no matches → empty not invent', () => {
+    const r = rankFixtures([row({ marketId: 'BTC-USD' })], { now: NOW, marketAllowlist: ['NOPE-USD'] });
+    expect(r).toEqual({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
+  });
 });

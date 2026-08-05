@@ -172,6 +172,30 @@ export const en = {
   'error.withdrawal.limitReached': 'You have reached your withdrawal limit for {period}.',
   'error.kyc.required': 'Verification is required for this action.',
   'error.region.blocked': 'This is not available in your region.',
+
+  // ── support · KB spine (keys only — svc-support listKb) ───────────────────
+  // No third-party product names (§0.7). Bodies stay general platform help.
+  'support.kb.account_access.title': 'Sign-in and account access',
+  'support.kb.account_access.body':
+    'If you cannot sign in, use account recovery from the sign-in screen. Support never asks for your password or recovery codes in chat.',
+  'support.kb.security_basics.title': 'Security basics',
+  'support.kb.security_basics.body':
+    'Enable two-factor verification, review sessions, and treat unexpected withdrawal prompts as urgent. We never ask you to move funds to “verify” an account.',
+  'support.kb.orders_status.title': 'Order status',
+  'support.kb.orders_status.body':
+    'Open, partial, and filled orders show in your order history. Support can confirm status; it cannot invent fills that the trade service did not record.',
+  'support.kb.deposit_withdraw.title': 'Deposits and withdrawals',
+  'support.kb.deposit_withdraw.body':
+    'Deposits credit when the network confirms; withdrawals follow your account limits. Support cannot invent balances or speed up the chain.',
+  'support.kb.paper_vs_live.title': 'Paper vs live trading',
+  'support.kb.paper_vs_live.body':
+    'Paper drills never move real funds. Live orders do. Labels must stay honest — paper progress is never withdrawable balance.',
+
+  // ── agents · grounded refuse copy ─────────────────────────────────────────
+  'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
+  'agents.scanner.empty': 'No markets to rank right now.',
+  'agents.scanner.unavailable': 'Market ranking is unavailable — quotes are missing, stale, or the market plane is dark.',
+  'agents.refused.tool_not_declared': 'That tool is not allowed for this agent.',
 } as const;
 
 /** The English catalog's exact shape — the thing every other language is measured against. */

@@ -71,12 +71,39 @@ function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
 }
 
 /**
+ * Stage-2 L3: optional allowlist of market ids the scanner may consider.
+ * Empty/missing allowlist → all fixtures (caller already scoped).
+ * Non-empty → only listed markets; others count as incomplete (not invent ghost ranks).
+ */
+export function filterFixturesByAllowlist(
+  fixtures: readonly MarketFixture[],
+  allowlist: ReadonlySet<string> | readonly string[] | undefined,
+): { readonly kept: readonly MarketFixture[]; readonly skippedNotAllowed: number } {
+  if (!allowlist) return { kept: fixtures, skippedNotAllowed: 0 };
+  const set = allowlist instanceof Set ? allowlist : new Set(allowlist);
+  if (set.size === 0) return { kept: fixtures, skippedNotAllowed: 0 };
+  const kept: MarketFixture[] = [];
+  let skippedNotAllowed = 0;
+  for (const row of fixtures) {
+    if (set.has(row.marketId)) kept.push(row);
+    else skippedNotAllowed += 1;
+  }
+  return { kept, skippedNotAllowed };
+}
+
+/**
  * Rank fixture markets by |changeBps| × log1p(volume) when both present and fresh.
  * Incomplete rows are skipped; never zero-filled.
  */
 export function rankFixtures(
   fixtures: readonly MarketFixture[],
-  options: { now?: Date; limit?: number; marketPlane?: MarketPlaneState } = {},
+  options: {
+    now?: Date;
+    limit?: number;
+    marketPlane?: MarketPlaneState;
+    /** Stage-2: only rank these market ids when provided and non-empty. */
+    marketAllowlist?: ReadonlySet<string> | readonly string[];
+  } = {},
 ): RankResult {
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
@@ -85,15 +112,17 @@ export function rankFixtures(
     return { status: 'unavailable', userMessageKey: 'agents.scanner.unavailable', reason: 'market_plane_dark' };
   }
 
-  if (fixtures.length === 0) {
+  const { kept: scoped, skippedNotAllowed } = filterFixturesByAllowlist(fixtures, options.marketAllowlist);
+
+  if (scoped.length === 0) {
     return { status: 'empty', userMessageKey: 'agents.scanner.empty' };
   }
 
   let skippedStale = 0;
-  let skippedIncomplete = 0;
+  let skippedIncomplete = skippedNotAllowed;
   const candidates: { marketId: string; score: number; reasons: string[] }[] = [];
 
-  for (const row of fixtures) {
+  for (const row of scoped) {
     if (!row.marketId) {
       skippedIncomplete += 1;
       continue;
@@ -142,7 +171,7 @@ export function rankFixtures(
   return {
     status: 'ok',
     rankedAt: now.toISOString(),
-    considered: fixtures.length,
+    considered: scoped.length + skippedNotAllowed,
     skippedStale,
     skippedIncomplete,
     signals: top.map((c) => ({
