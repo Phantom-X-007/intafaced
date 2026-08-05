@@ -512,3 +512,19 @@ export function listCurriculumSlugs(): readonly string[] {
 export function countCurriculumByPath(path: CurriculumPath): number {
   return SPINE.filter((item) => item.path === path).length;
 }
+
+/**
+ * L3 — count items by kind on spine only. Never invent residual titles.
+ */
+export function countCurriculumByKind(kind: CurriculumKind): number {
+  return SPINE.filter((item) => item.kind === kind).length;
+}
+
+/**
+ * L3 — sorted slugs for one kind. Empty kind → [].
+ */
+export function listCurriculumSlugsByKind(kind: CurriculumKind): readonly string[] {
+  return SPINE.filter((item) => item.kind === kind)
+    .map((item) => item.slug)
+    .sort();
+}

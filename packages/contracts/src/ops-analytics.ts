@@ -186,3 +186,19 @@ export function assertMetricPoint(metricId: string, value: string | number): { o
   }
   return { ok: true };
 }
+
+/**
+ * L3 — whether catalog defines metric id (unknown → false; never invent series).
+ */
+export function hasAnalyticsMetric(metricId: string): boolean {
+  const id = metricId.trim();
+  if (!id) return false;
+  return metricById(id) != null;
+}
+
+/**
+ * L3 — count of metrics by kind in v0 catalog (no invent).
+ */
+export function countMetricsByKind(kind: 'count' | 'amount' | 'ratio'): number {
+  return ANALYTICS_METRICS_V0.filter((m) => m.kind === kind).length;
+}

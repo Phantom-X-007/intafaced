@@ -4,8 +4,10 @@ import {
   assertMayWriteScore,
   assertScore,
   assertSeasonSlug,
+  countStandingsAboveScore,
   pageStandings,
   rankStandings,
+  scoreOfUser,
   standingNeighbors,
   standingOfUser,
   topNStandings,
@@ -72,4 +74,13 @@ it('L3 standingNeighbors never invents missing place', () => {
   expect(n?.self.userId).toBe('c');
   expect(n?.above?.userId).toBe('b');
   expect(n?.below?.userId).toBe('a');
+});
+
+it('L3 wave10 scoreOfUser + countStandingsAboveScore', () => {
+  const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+  expect(scoreOfUser(rows, 'b')).toBe(20);
+  expect(scoreOfUser(rows, 'missing')).toBeNull();
+  expect(scoreOfUser(rows, '  ')).toBeNull();
+  expect(countStandingsAboveScore(rows, 15)).toBe(1);
+  expect(countStandingsAboveScore([], 0)).toBe(0);
 });

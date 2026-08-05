@@ -197,4 +197,20 @@ export class MemoryReferralTree {
     }
     return max;
   }
+
+  /**
+   * L3 — total attribution edges. Empty tree → 0 (never invent).
+   */
+  edgeCount(): number {
+    return this.parent.size;
+  }
+
+  /**
+   * L3 — whether user has a referrer set. Unknown user → false.
+   */
+  hasReferrer(userId: string): boolean {
+    const id = userId.trim();
+    if (!id) return false;
+    return this.parent.has(id);
+  }
 }

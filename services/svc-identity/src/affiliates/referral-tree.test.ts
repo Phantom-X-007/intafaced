@@ -83,4 +83,16 @@ describe('MemoryReferralTree Slice A', () => {
     expect(tree.maxDirectDownline([U(1), U(2), U(9)])).toBe(2);
     expect(tree.maxDirectDownline([])).toBe(0);
   });
+
+  it('L3 wave10 edgeCount + hasReferrer', () => {
+    const tree = new MemoryReferralTree();
+    expect(tree.edgeCount()).toBe(0);
+    expect(tree.hasReferrer(U(1))).toBe(false);
+    tree.attribute({ userId: U(2), referrerId: U(1) });
+    tree.attribute({ userId: U(3), referrerId: U(1) });
+    expect(tree.edgeCount()).toBe(2);
+    expect(tree.hasReferrer(U(2))).toBe(true);
+    expect(tree.hasReferrer(U(1))).toBe(false);
+    expect(tree.hasReferrer('  ')).toBe(false);
+  });
 });
