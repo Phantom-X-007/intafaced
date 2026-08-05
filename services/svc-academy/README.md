@@ -140,12 +140,12 @@ The service's SQL paths are exercised through the fleet's e2e suite rather than 
 
 Appoint / freeze / public badge. **No pay.** Hosting still uses §4.1 `lobbyHostRights` only.
 
-| Capability | Gate |
-| --- | --- |
+| Capability                        | Gate                             |
+| --------------------------------- | -------------------------------- |
 | Open lobby / invite / run session | `lobbyHostRights` (svc-identity) |
-| Programme badge active | `ambassadors.status = active` |
-| Appoint / freeze | operator `admin:write` |
-| IFC pay / revenue share | **Not built** (Class M Stage-2) |
+| Programme badge active            | `ambassadors.status = active`    |
+| Appoint / freeze                  | operator `admin:write`           |
+| IFC pay / revenue share           | **Not built** (Class M Stage-2)  |
 
 Migration: `drizzle/0001_ambassadors.sql`.
 
@@ -153,11 +153,11 @@ Migration: `drizzle/0001_ambassadors.sql`.
 
 Seasons + ranked standings. **No prize pools.** Kill-switch: `ACADEMY_TOURNAMENT_ENABLED` (flag `academy.tournament`).
 
-| Capability | Gate |
-| --- | --- |
-| List seasons / standings | `academy:read` when enabled |
-| Create season / set status / set score | `admin:write` |
-| Prize fund / payout | **Not built** (Class M Stage-2) |
+| Capability                             | Gate                            |
+| -------------------------------------- | ------------------------------- |
+| List seasons / standings               | `academy:read` when enabled     |
+| Create season / set status / set score | `admin:write`                   |
+| Prize fund / payout                    | **Not built** (Class M Stage-2) |
 
 Anti-cheat basics: scores only while season `live`; rank = score DESC, earlier `updated_at` wins ties; frozen/ended refuse score writes.
 
