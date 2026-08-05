@@ -10,6 +10,8 @@ import {
   listCurriculumSlugs,
   listCurriculumSlugsByKind,
   listPathsWithContent,
+  listEmptyCurriculumPaths,
+  listKindsWithContent,
 } from './catalog.js';
 
 /**
@@ -130,6 +132,21 @@ describe('curriculum catalog', () => {
     for (const p of paths) {
       expect(CURRICULUM_PATHS).toContain(p);
       expect(countCurriculumByPath(p)).toBeGreaterThan(0);
+    }
+  });
+
+  it('L3 wave13 listEmptyCurriculumPaths + listKindsWithContent', () => {
+    const empty = listEmptyCurriculumPaths();
+    expect(Array.isArray(empty)).toBe(true);
+    // empty paths must have zero inventory
+    const inv = inventoryCurriculum();
+    for (const p of empty) {
+      expect(inv.byPath[p]).toBe(0);
+    }
+    const kinds = listKindsWithContent();
+    expect(kinds.length).toBeGreaterThan(0);
+    for (const k of kinds) {
+      expect(inv.byKind[k]).toBeGreaterThan(0);
     }
   });
 });

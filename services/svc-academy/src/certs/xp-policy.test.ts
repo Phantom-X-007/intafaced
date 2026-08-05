@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decideGrant, MemoryCertStore } from './progress.js';
-import { xpIntentFromGrant, xpPolicyFor, listXpPolicyCertIds, xpDeltaForCert } from './xp-policy.js';
+import { xpIntentFromGrant, xpPolicyFor, listXpPolicyCertIds, xpDeltaForCert, hasXpPolicy } from './xp-policy.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -49,5 +49,10 @@ describe('academy.certs Stage-2 XP policy (no money)', () => {
     const ids = listXpPolicyCertIds();
     expect(ids).toEqual([...ids].sort());
     expect(ids).toContain('foundations-v1');
+  });
+
+  it('L3 hasXpPolicy false for unknown', () => {
+    expect(hasXpPolicy('foundations-v1')).toBe(true);
+    expect(hasXpPolicy('nope')).toBe(false);
   });
 });

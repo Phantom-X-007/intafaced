@@ -239,4 +239,17 @@ export class MemoryAmbassadorProgramme {
       .map((r) => r.userId)
       .sort();
   }
+
+  /**
+   * L3 — how many programme rows were appointed by one operator. Unknown → 0.
+   */
+  countAppointedBy(operatorId: string): number {
+    const op = operatorId.trim();
+    if (!op) return 0;
+    let n = 0;
+    for (const r of this.byUser.values()) {
+      if (r.appointedBy === op) n += 1;
+    }
+    return n;
+  }
 }

@@ -103,4 +103,16 @@ describe('MemoryReferralTree Slice A', () => {
     tree.attribute({ userId: U(3), referrerId: U(1) });
     expect(tree.listReferrerIds()).toEqual([U(1)]);
   });
+
+  it('L3 wave13 listAttributedUserIds + referrerOf', () => {
+    const tree = new MemoryReferralTree();
+    expect(tree.listAttributedUserIds()).toEqual([]);
+    expect(tree.referrerOf(U(1))).toBeNull();
+    tree.attribute({ userId: U(2), referrerId: U(1) });
+    tree.attribute({ userId: U(3), referrerId: U(1) });
+    expect(tree.listAttributedUserIds()).toEqual([U(2), U(3)]);
+    expect(tree.referrerOf(U(2))).toBe(U(1));
+    expect(tree.referrerOf(U(1))).toBeNull();
+    expect(tree.referrerOf('  ')).toBeNull();
+  });
 });

@@ -6,10 +6,13 @@ import {
   assertSeasonSlug,
   countStandingsAboveScore,
   bottomNStandings,
+  medianScore,
   standingCount,
   pageStandings,
   rankStandings,
   scoreOfUser,
+  isInTopN,
+  listStandingUserIds,
   standingNeighbors,
   standingOfUser,
   topNStandings,
@@ -100,4 +103,20 @@ describe('L3 standings board helpers', () => {
     expect(bot).toHaveLength(1);
     expect(bot[0]!.userId).toBe('a');
   });
+});
+
+it('L3 wave13 isInTopN + listStandingUserIds', () => {
+  const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+  expect(isInTopN(rows, 'b', 1)).toBe(true);
+  expect(isInTopN(rows, 'a', 1)).toBe(false);
+  expect(isInTopN(rows, 'missing', 3)).toBe(false);
+  expect(isInTopN(rows, 'b', 0)).toBe(false);
+  expect(listStandingUserIds(rows)).toEqual(['a', 'b', 'c']);
+  expect(listStandingUserIds([])).toEqual([]);
+});
+
+it('L3 medianScore null when empty; never invent 0', () => {
+  expect(medianScore([])).toBeNull();
+  const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 30, '2026-08-01T11:00:00Z')];
+  expect(medianScore(rows)).toBe(20);
 });

@@ -133,3 +133,17 @@ export function allChannelsAccepted(attempts: readonly ChannelDeliveryAttempt[])
   if (attempts.length === 0) return false;
   return attempts.every((a) => a.outcome === 'accepted');
 }
+
+/**
+ * L3 — count of refused channel attempts. Empty → 0.
+ */
+export function countFanoutRefusals(attempts: readonly ChannelDeliveryAttempt[]): number {
+  return attempts.filter((a) => a.outcome === 'refused').length;
+}
+
+/**
+ * L3 — true if any channel accepted. Empty → false (no invent success).
+ */
+export function hasAnyFanoutAcceptance(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return attempts.some((a) => a.outcome === 'accepted');
+}

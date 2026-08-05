@@ -100,3 +100,8 @@ export function channelsHeldForDigest(plan: readonly DeliveryDecision[]): readon
 export function channelsSkippedMuted(plan: readonly DeliveryDecision[]): readonly MuteableChannel[] {
   return plan.filter((d): d is Extract<DeliveryDecision, { action: 'skip_muted' }> => d.action === 'skip_muted').map((d) => d.channel);
 }
+
+/** L3 — count of hold_digest decisions. Empty plan → 0. */
+export function countHoldingChannels(plan: readonly DeliveryDecision[]): number {
+  return channelsHeldForDigest(plan).length;
+}

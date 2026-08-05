@@ -211,3 +211,19 @@ export function listMetricIdsByKind(kind: 'count' | 'amount' | 'ratio'): readonl
     .map((m) => m.id)
     .sort();
 }
+
+/**
+ * L3 — how many v0 metrics declare a given source DB (catalog only; no invent series).
+ */
+export function countMetricsUsingSource(source: AnalyticsSourceDb): number {
+  return ANALYTICS_METRICS_V0.filter((m) => m.sources.includes(source)).length;
+}
+
+/**
+ * L3 — sorted metric ids that touch a source. Unknown source key still returns [] via filter.
+ */
+export function listMetricIdsUsingSource(source: AnalyticsSourceDb): readonly string[] {
+  return ANALYTICS_METRICS_V0.filter((m) => m.sources.includes(source))
+    .map((m) => m.id)
+    .sort();
+}

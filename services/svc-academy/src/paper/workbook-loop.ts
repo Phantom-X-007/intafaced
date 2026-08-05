@@ -221,3 +221,8 @@ export function completedStepCount(run: DrillRun): number {
   if (run.status === 'refused') return 0;
   return run.completedStepIds.length;
 }
+
+/** L3 — paper fill ref count. Never invents fills. */
+export function fillRefCount(run: DrillRun): number {
+  return run.fillRefs.length;
+}

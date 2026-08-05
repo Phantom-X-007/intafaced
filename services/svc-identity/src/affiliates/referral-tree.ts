@@ -220,4 +220,20 @@ export class MemoryReferralTree {
   listReferrerIds(): readonly string[] {
     return [...new Set(this.parent.values())].sort();
   }
+
+  /**
+   * L3 — users with a parent (sorted). Empty tree → [] (never invent).
+   */
+  listAttributedUserIds(): readonly string[] {
+    return [...this.parent.keys()].sort();
+  }
+
+  /**
+   * L3 — referrer of user. None → null (never invent edge).
+   */
+  referrerOf(userId: string): string | null {
+    const id = userId.trim();
+    if (!id) return null;
+    return this.parent.get(id) ?? null;
+  }
 }
