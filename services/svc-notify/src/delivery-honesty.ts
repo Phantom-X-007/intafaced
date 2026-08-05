@@ -81,3 +81,25 @@ export function fanoutHonesty(attempts: readonly ChannelDeliveryAttempt[]): Fano
     mayMarkUserVisibleInbox: channels.some((c) => c.mayMarkUserVisibleInbox),
   };
 }
+
+/**
+ * L3 — outcome histogram for a fanout. Empty → zeros (never invent acceptance).
+ */
+export type FanoutOutcomeCounts = {
+  readonly accepted: number;
+  readonly refused: number;
+  readonly failed: number;
+  readonly total: number;
+};
+
+export function countFanoutOutcomes(attempts: readonly ChannelDeliveryAttempt[]): FanoutOutcomeCounts {
+  let accepted = 0;
+  let refused = 0;
+  let failed = 0;
+  for (const a of attempts) {
+    if (a.outcome === 'accepted') accepted += 1;
+    else if (a.outcome === 'refused') refused += 1;
+    else if (a.outcome === 'failed') failed += 1;
+  }
+  return { accepted, refused, failed, total: attempts.length };
+}

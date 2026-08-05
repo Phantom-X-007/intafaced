@@ -198,3 +198,18 @@ export function startPaperDrillForCatalogItem(input: {
     steps: input.steps,
   });
 }
+
+/**
+ * L3 — remaining step ids (not completed). Refused run → all step ids still remaining.
+ * Never invents steps not on the run.
+ */
+export function remainingStepIds(run: DrillRun): readonly string[] {
+  if (run.status === 'refused') return run.steps.map((s) => s.id);
+  const done = new Set(run.completedStepIds);
+  return run.steps.map((s) => s.id).filter((id) => !done.has(id));
+}
+
+/** L3 — true only when every step completed and status is complete. */
+export function isDrillComplete(run: DrillRun): boolean {
+  return run.status === 'complete' && remainingStepIds(run).length === 0;
+}

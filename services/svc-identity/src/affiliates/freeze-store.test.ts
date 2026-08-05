@@ -54,4 +54,11 @@ describe('affiliates L3 freeze store (non-pay)', () => {
     store.freeze({ beneficiaryId: 'a-ref', frozenBy: 'op', reason: 'policy hold' });
     expect(store.listFrozenBeneficiaryIds()).toEqual(['a-ref', 'z-ref']);
   });
+
+  it('L3 freezeReasonOf null when not frozen', () => {
+    const store = new MemoryFreezeStore();
+    expect(store.freezeReasonOf('missing')).toBeNull();
+    store.freeze({ beneficiaryId: 'u-ref', frozenBy: 'op', reason: 'policy hold' });
+    expect(store.freezeReasonOf('u-ref')).toBe('policy hold');
+  });
 });
