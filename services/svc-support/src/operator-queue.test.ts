@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupportTicket } from '@intafaced/contracts';
-import { buildOperatorQueue } from './operator-queue.js';
+import { assignNext, buildOperatorQueue } from './operator-queue.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -38,5 +38,23 @@ describe('support Stage-2 operator queue', () => {
     if (r.status !== 'ok') return;
     expect(r.entries.map((e) => e.ticketId)).toEqual(['c', 'b', 'a']);
     expect(r.entries[0]!.score).toBeGreaterThan(r.entries[2]!.score);
+  });
+
+  it('assignNext returns highest score ticket or null when empty', () => {
+    expect(assignNext([], { now: NOW })).toBeNull();
+    const next = assignNext(
+      [
+        t({ id: 'a', category: 'other', createdAt: '2026-08-05T10:00:00.000Z' }),
+        t({ id: 'b', category: 'deposit_withdraw', createdAt: '2026-08-05T11:00:00.000Z' }),
+      ],
+      { now: NOW },
+    );
+    expect(next?.ticketId).toBe('b');
+    expect(
+      assignNext([t({ id: 'b', category: 'deposit_withdraw', createdAt: '2026-08-05T11:00:00.000Z' })], {
+        now: NOW,
+        excludeTicketIds: new Set(['b']),
+      }),
+    ).toBeNull();
   });
 });

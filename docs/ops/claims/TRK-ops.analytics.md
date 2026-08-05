@@ -2,8 +2,8 @@
 
 **status:** merged
 **owner:** nitro-ship-factory
-**proof:** Stage-2 / Slice B Class N · feat/stage2-analytics-affiliates-crew
+**proof:** L3 slice batch · feat/l3-factory-law-and-slices
 **tip:** pending-merge
 **updated:** 2026-08-05
 
-Slice B landed. Further residual (warehouse process / payout Class M) remains — not free re-Stage-1.
+L3 factory slice. Does not invent L1. Further residual remains.

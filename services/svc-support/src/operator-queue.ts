@@ -64,3 +64,21 @@ export function buildOperatorQueue(tickets: readonly SupportTicket[], options: {
   entries.sort((a, b) => b.score - a.score || a.createdAt.localeCompare(b.createdAt));
   return { status: 'ok', entries: entries.slice(0, limit) };
 }
+
+/**
+ * Pick the next ticket for an operator. Does not invent priority — uses queue order.
+ * Empty queue → null (not a fabricated ticket).
+ */
+export function assignNext(
+  tickets: readonly SupportTicket[],
+  options: { now?: Date; excludeTicketIds?: ReadonlySet<string> } = {},
+): QueueEntry | null {
+  const q = buildOperatorQueue(tickets, { now: options.now });
+  if (q.status === 'empty') return null;
+  const exclude = options.excludeTicketIds;
+  for (const e of q.entries) {
+    if (exclude && exclude.has(e.ticketId)) continue;
+    return e;
+  }
+  return null;
+}

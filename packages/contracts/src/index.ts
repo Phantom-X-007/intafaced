@@ -15,3 +15,4 @@ export * from './example-router.js';
 export * from './support.js';
 export * from './ops-analytics.js';
 export * from './ops-analytics-cube.js';
+export * from './ops-analytics-consume.js';
