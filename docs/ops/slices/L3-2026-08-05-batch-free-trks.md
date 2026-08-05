@@ -14,6 +14,8 @@ This pack deepens: analytics lag rollup · residency cohort summary · commissio
 - Multi-source analytics lag: live only if all sources live
 - Residency cohort status counts
 - Affiliate commission dry-run total (decimal strings, no payout)
+- Tournament standings page (no invent past total)
+- Notify fanoutReadiness (required creds fail closed)
 
 ## Does NOT invent L1/L2
 

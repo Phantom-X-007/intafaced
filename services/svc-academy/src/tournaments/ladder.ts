@@ -80,3 +80,27 @@ export function assertMayWriteScore(status: SeasonStatus): void {
     throw new TournamentError(`Season is ${status} — scores only write while live`, 'academy.season_not_live');
   }
 }
+
+/**
+ * L3 — pure standings page for operator/UI.
+ * offset/limit clamp; never invent rows past the ranked list.
+ */
+export type StandingsPage = {
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly standings: readonly RankedStanding[];
+};
+
+export function pageStandings(rows: readonly StandingRecord[], options: { offset?: number; limit?: number } = {}): StandingsPage {
+  const ranked = rankStandings(rows);
+  const total = ranked.length;
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.min(200, Math.max(1, Math.floor(options.limit ?? 50)));
+  return {
+    total,
+    offset,
+    limit,
+    standings: ranked.slice(offset, offset + limit),
+  };
+}
