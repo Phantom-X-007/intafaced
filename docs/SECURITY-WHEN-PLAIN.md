@@ -43,7 +43,7 @@ The long arsenal list is mostly **Track B**. Track A is smaller and should alrea
 
 1. **Keep existing law green** — brand scan, custody scan, `pnpm verify` on every ship. **Already real.**
 2. **Grow “doctrine as machine checks”** — Semgrep-style + tighter custody/money greps. **Still to grow** — not waiting for Strix.
-3. **Secret scanning** — gitleaks-class as always-on law. **Still missing on main — highest-leverage Track A add.**
+3. **Secret scanning** — gitleaks-class as always-on law. **On tip:** `.github/workflows/gitleaks.yml` + `.gitleaks.toml` (FH-SEC-02) beside `tooling/ci/secret-scan.mjs` assignment law.
 4. **Stronger money tests** — invariants / property tests on ledger holds. Example regression tests exist; **property suite still thin.**
 5. **Catch AI cheating** — on money fix PRs (WAVE-AUDIT process). **Not yet an automated gate.**
 6. **After Denon merges:** run [`WAVE-AUDIT.md`](./WAVE-AUDIT.md) only — full A–E is **closed**.

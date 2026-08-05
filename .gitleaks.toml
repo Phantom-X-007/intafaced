@@ -1,0 +1,35 @@
+# Intafaced gitleaks — entropy/pattern layer beside tooling/ci/secret-scan.mjs (assignment law).
+# Law: docs/INTERNET-LEVERAGE-LAW.md · FH-SEC-02 · SECURITY-WHEN-PLAIN Track A
+# Vendor known-disclosed remains secret-scan KNOWN_DISCLOSED (not silent path exemptions here).
+title = "intafaced"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendor, fixtures, i18n key names, local-dev anvil keys — real product secrets still fail"
+paths = [
+  '''(^|/)vendor/''',
+  '''(^|/)node_modules/''',
+  '''\.pnpm-store''',
+  '''pnpm-lock\.yaml$''',
+  '''package-lock\.json$''',
+  '''yarn\.lock$''',
+  '''(^|/)docs/''',
+  '''\.env\.example$''',
+  '''\.env\.sample$''',
+  '''.*\.test\.(ts|tsx|js|mjs|cjs)$''',
+  '''.*\.spec\.(ts|tsx|js|mjs)$''',
+  '''.*\.mutation\.mjs$''',
+  '''(^|/)tooling/uiproof/''',
+  '''(^|/)services/.*/scripts/.*e2e\.mjs$''',
+]
+regexTarget = "match"
+regexes = [
+  '''(?i)(example|placeholder|changeme|your[-_]?|xxx|dummy|test[-_]?secret|a-mount-test)''',
+  '''(?i)0x[0-9a-f]{40}''',
+  '''bodyKey:\s*'notify\.''',
+  '''titleKey:\s*'notify\.''',
+  # Hardhat/anvil well-known account #1 private key (local sandbox only)
+  '''0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d''',
+]

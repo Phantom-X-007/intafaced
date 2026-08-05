@@ -45,6 +45,7 @@
     "scan:shell-brand": "node tooling/ci/shell-brand-scan.mjs",
     "scan:custody": "node tooling/ci/custody-scan.mjs",
     "scan:secrets": "node tooling/ci/secret-scan.mjs",
+    "scan:gitleaks": "gitleaks detect --source . --no-git --config .gitleaks.toml",
     "scan:wallet-rpc-auth": "node tooling/ci/wallet-rpc-auth-scan.mjs",
     "scan:wallet-rpc-mainnet": "node tooling/ci/wallet-rpc-mainnet-scan.mjs",
     "scan:secrets:mutate": "node tooling/ci/secret-scan.mutation.mjs --verbose",

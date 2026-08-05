@@ -29,18 +29,18 @@
 
 ## 1 · Prior maps status (E1) — tip 2026-08-05
 
-| Prior doc                                             | Status                               | Action                                              |
-| ----------------------------------------------------- | ------------------------------------ | --------------------------------------------------- |
-| ADR adopt vendored product + keep ledger (2026-08-02) | **Law**                              | Keep                                                |
-| ADR retire apps/web → Vue shell (2026-08-03)          | **Law** + **executed** (#757 delete) | Keep port notes only                                |
-| ADR vendored exchange integration (2026-07-28)        | **Law**                              | Keep                                                |
-| VENDORED-SHELL-PEACE-OF-MIND-MAP                      | Useful; paths may lag rename         | Map; path = `vendor/upstream-exchange`              |
-| VENDORED-OVERLAP-AUDIT                                | Historical                           | Don’t cite fleet counts without re-probe            |
-| UPSTREAM-ADOPTION-QUEUE                               | Queue                                | Re-check when acting                                |
-| REDUNDANT-VS-PORT                                     | Port checklist                       | Mostly absorbed by delete; residual port ideas only |
-| ORDER-ROUTE-VENDOR-MONEY-INVENTORY                    | Money seams                          | Dual-book / Java residual                           |
-| ADMIN-0-INVENTORY-VENDOR-VS-APPS                      | Admin map                            | Prefer V-ADMIN                                      |
-| brand/path docs saying coinexchange/Bizzan            | **Stale brand risk**                 | brand-scan; vendor rename                           |
+| Prior doc                                                             | Status                               | Action                                              |
+| --------------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------- |
+| ADR adopt vendored product + keep ledger (2026-08-02)                 | **Law**                              | Keep                                                |
+| ADR retire apps/web → Vue shell (2026-08-03)                          | **Law** + **executed** (#757 delete) | Keep port notes only                                |
+| ADR vendored exchange integration (2026-07-28)                        | **Law**                              | Keep                                                |
+| VENDORED-SHELL-PEACE-OF-MIND-MAP                                      | Useful; paths may lag rename         | Map; path = `vendor/upstream-exchange`              |
+| VENDORED-OVERLAP-AUDIT                                                | Historical                           | Don’t cite fleet counts without re-probe            |
+| UPSTREAM-ADOPTION-QUEUE                                               | Queue                                | Re-check when acting                                |
+| REDUNDANT-VS-PORT                                                     | Port checklist                       | Mostly absorbed by delete; residual port ideas only |
+| ORDER-ROUTE-VENDOR-MONEY-INVENTORY                                    | Money seams                          | Dual-book / Java residual                           |
+| ADMIN-0-INVENTORY-VENDOR-VS-APPS                                      | Admin map                            | Prefer V-ADMIN                                      |
+| brand/path docs saying pre-rename vendor path / upstream product name | **Stale brand risk**                 | brand-scan; vendor rename                           |
 
 ---
 
@@ -59,7 +59,7 @@
 | **V-JAVA-ucenter**            | `00_framework/ucenter-api`                                 | Java        | Shape                                    | D             |
 | **V-JAVA-wallet**             | `00_framework/wallet`                                      | Java        | **Forbidden as book**                    | D-S-17        |
 | **V-JAVA-chat**               | `00_framework/chat`                                        | Java        | Shape only                               | —             |
-| **V-JAVA-job**                | `00_framework/bitrade-job`                                 | Java        | Ops shape                                | —             |
+| **V-JAVA-job**                | `00_framework/job-module`                                  | Java        | Ops shape                                | —             |
 | **V-JAVA-cloud/core/sql/jar** | cloud, core, sql, jar                                      | Support     | Infra/shape                              | —             |
 | **V-WALLET-RPC**              | `01_wallet_rpc/*`                                          | Custody RPC | After **security review** only           | D + X         |
 | **V-DOC**                     | `09_DOC`                                                   | Notes       | Reference                                | —             |
