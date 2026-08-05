@@ -85,6 +85,10 @@ import {
   clampCurriculumPageIndex,
   curriculumSlugsAtPage,
   isValidCurriculumPage,
+  curriculumExportLines,
+  curriculumExportHeader,
+  curriculumExportText,
+  curriculumExportLineCount,
 } from './catalog.js';
 
 /**
@@ -389,5 +393,12 @@ describe('curriculum catalog', () => {
     expect(curriculumSlugsAtPage(0, 1)).toHaveLength(1);
     expect(isValidCurriculumPage(0, 5)).toBe(true);
     expect(isValidCurriculumPage(-1, 5)).toBe(false);
+  });
+
+  it('L3 wave41 curriculum export', () => {
+    expect(curriculumExportHeader()).toBe('slug,kind,path');
+    expect(curriculumExportLines().length).toBe(curriculumSpineSize());
+    expect(curriculumExportLineCount()).toBe(1 + curriculumSpineSize());
+    expect(curriculumExportText()).toContain('slug,kind,path');
   });
 });

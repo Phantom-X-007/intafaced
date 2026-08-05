@@ -74,6 +74,10 @@ import {
   clampFanoutPageIndex,
   fanoutAttemptsAtPage,
   isValidFanoutPage,
+  fanoutExportLines,
+  fanoutExportHeader,
+  fanoutExportText,
+  fanoutExportLineCount,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -412,5 +416,14 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(clampFanoutPageIndex(attempts, 99, 1)).toBe(1);
     expect(fanoutAttemptsAtPage(attempts, 0, 1)).toHaveLength(1);
     expect(isValidFanoutPage(attempts, 0, 1)).toBe(true);
+  });
+
+  it('L3 wave41 fanout export', () => {
+    expect(fanoutExportLines([])).toEqual([]);
+    expect(fanoutExportHeader()).toBe('channel,outcome,code');
+    const attempts = [{ channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' }];
+    expect(fanoutExportLines(attempts)).toEqual(['email,accepted,ok']);
+    expect(fanoutExportText(attempts)).toContain('channel,outcome,code');
+    expect(fanoutExportLineCount(attempts)).toBe(2);
   });
 });

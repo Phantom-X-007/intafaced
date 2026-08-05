@@ -90,6 +90,10 @@ import {
   clampMetricPageIndex,
   metricIdsAtPage,
   isValidMetricPage,
+  metricsExportLines,
+  metricsExportHeader,
+  metricsExportText,
+  metricsExportLineCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -416,5 +420,14 @@ describe('L3 wave40 metric safe paging', () => {
     expect(metricIdsAtPage(0, 1)).toHaveLength(1);
     expect(isValidMetricPage(0, 5)).toBe(true);
     expect(isValidMetricPage(-1, 5)).toBe(false);
+  });
+});
+
+describe('L3 wave41 metrics export', () => {
+  it('export lines/text/count', () => {
+    expect(metricsExportHeader()).toBe('id,kind,money');
+    expect(metricsExportLines().length).toBe(analyticsMetricCatalogSize());
+    expect(metricsExportLineCount()).toBe(1 + analyticsMetricCatalogSize());
+    expect(metricsExportText()).toContain('id,kind,money');
   });
 });

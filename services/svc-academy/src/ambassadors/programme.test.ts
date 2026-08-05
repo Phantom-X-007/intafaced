@@ -502,4 +502,17 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(desk.isValidProgrammePage(0, 1)).toBe(true);
     expect(desk.isValidProgrammePage(5, 1)).toBe(false);
   });
+
+  it('L3 wave41 programme export lines/text', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.programmeExportLines()).toEqual([]);
+    expect(desk.programmeExportHeader()).toBe('userId,status');
+    expect(desk.programmeExportLineCount()).toBe(1);
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op });
+    expect(desk.programmeExportLines()).toEqual([`${u},active`]);
+    expect(desk.programmeExportText()).toContain(u);
+    expect(desk.programmeExportLineCount()).toBe(2);
+  });
 });

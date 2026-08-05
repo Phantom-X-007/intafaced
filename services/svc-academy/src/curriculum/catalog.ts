@@ -1057,3 +1057,26 @@ export function isValidCurriculumPage(pageIndex: number, pageSize: number): bool
   const i = Math.floor(pageIndex);
   return i >= 0 && i < pages;
 }
+
+/** L3 — export lines: slug,kind,path. Empty → []. */
+export function curriculumExportLines(): readonly string[] {
+  return listCurriculumSlugs().map((slug) => {
+    const item = getCurriculumItem(slug)!;
+    return `${item.slug},${item.kind},${item.path}`;
+  });
+}
+
+/** L3 — curriculum export header. */
+export function curriculumExportHeader(): string {
+  return 'slug,kind,path';
+}
+
+/** L3 — full curriculum export text. */
+export function curriculumExportText(): string {
+  return [curriculumExportHeader(), ...curriculumExportLines()].join('\n');
+}
+
+/** L3 — export line count including header. */
+export function curriculumExportLineCount(): number {
+  return 1 + curriculumSpineSize();
+}

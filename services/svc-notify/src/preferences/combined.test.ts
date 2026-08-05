@@ -80,6 +80,10 @@ import {
   clampPlanPageIndex,
   planDecisionsAtPage,
   isValidPlanPage,
+  planExportLines,
+  planExportHeader,
+  planExportText,
+  planExportLineCount,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -372,5 +376,14 @@ describe('notify L3 combined mute + digest', () => {
     expect(clampPlanPageIndex(plan, 99, 2)).toBe(1);
     expect(planDecisionsAtPage(plan, 0, 2)).toHaveLength(2);
     expect(isValidPlanPage(plan, 0, 2)).toBe(true);
+  });
+
+  it('L3 wave41 plan export', () => {
+    expect(planExportLines([])).toEqual([]);
+    expect(planExportHeader()).toBe('channel,action');
+    expect(planExportLineCount([])).toBe(1);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planExportLines(plan).length).toBe(plan.length);
+    expect(planExportText(plan)).toContain('send_now');
   });
 });

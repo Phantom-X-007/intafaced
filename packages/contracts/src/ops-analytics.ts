@@ -721,3 +721,23 @@ export function isValidMetricPage(pageIndex: number, pageSize: number): boolean 
   const i = Math.floor(pageIndex);
   return i >= 0 && i < pages;
 }
+
+/** L3 — export lines: id,kind,moneyFlag. Empty → []. */
+export function metricsExportLines(): readonly string[] {
+  return ANALYTICS_METRICS_V0.map((m) => `${m.id},${m.kind},${m.money ? 'money' : 'non_money'}`).sort();
+}
+
+/** L3 — metrics export header. */
+export function metricsExportHeader(): string {
+  return 'id,kind,money';
+}
+
+/** L3 — full metrics export text. */
+export function metricsExportText(): string {
+  return [metricsExportHeader(), ...metricsExportLines()].join('\n');
+}
+
+/** L3 — export line count including header. */
+export function metricsExportLineCount(): number {
+  return 1 + analyticsMetricCatalogSize();
+}

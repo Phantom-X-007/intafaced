@@ -651,3 +651,23 @@ export function isValidSeasonPage(seasons: readonly SeasonRecord[], pageIndex: n
   const i = Math.floor(pageIndex);
   return i >= 0 && i < pages;
 }
+
+/** L3 — export lines: id,status. Empty → []. */
+export function seasonsExportLines(seasons: readonly SeasonRecord[]): readonly string[] {
+  return listSeasonCards(seasons).map((c) => `${c.id},${c.status}`);
+}
+
+/** L3 — seasons export header. */
+export function seasonsExportHeader(): string {
+  return 'id,status';
+}
+
+/** L3 — full seasons export text. */
+export function seasonsExportText(seasons: readonly SeasonRecord[]): string {
+  return [seasonsExportHeader(), ...seasonsExportLines(seasons)].join('\n');
+}
+
+/** L3 — export line count including header. */
+export function seasonsExportLineCount(seasons: readonly SeasonRecord[]): number {
+  return 1 + totalSeasonCount(seasons);
+}

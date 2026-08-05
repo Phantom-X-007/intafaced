@@ -752,4 +752,27 @@ export class MemoryAmbassadorProgramme {
     const i = Math.floor(pageIndex);
     return i >= 0 && i < pages;
   }
+
+  /**
+   * L3 — CSV-ish export lines: userId,status (no invent header when empty → []).
+   */
+  programmeExportLines(): readonly string[] {
+    return this.listProgrammeRowSummaries().map((r) => `${r.userId},${r.status}`);
+  }
+
+  /** L3 — single header line for programme export. */
+  programmeExportHeader(): string {
+    return 'userId,status';
+  }
+
+  /** L3 — full export text with header; empty store → header only. */
+  programmeExportText(): string {
+    const lines = [this.programmeExportHeader(), ...this.programmeExportLines()];
+    return lines.join('\n');
+  }
+
+  /** L3 — export line count including header. */
+  programmeExportLineCount(): number {
+    return 1 + this.totalCount();
+  }
 }

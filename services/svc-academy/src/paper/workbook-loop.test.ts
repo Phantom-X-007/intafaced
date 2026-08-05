@@ -70,6 +70,10 @@ import {
   clampRemainingStepsPageIndex,
   remainingStepIdsAtPage,
   isValidRemainingStepsPage,
+  remainingStepsExportLines,
+  completedStepsExportLines,
+  drillStepsExportHeader,
+  drillStepsExportText,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -441,5 +445,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(clampRemainingStepsPageIndex(started.run, 99, 1)).toBe(started.run.steps.length - 1);
     expect(remainingStepIdsAtPage(started.run, 0, 1)).toHaveLength(1);
     expect(isValidRemainingStepsPage(started.run, 0, 1)).toBe(true);
+  });
+
+  it('L3 wave41 drill steps export', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w41', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(drillStepsExportHeader()).toBe('stepId,state');
+    expect(remainingStepsExportLines(started.run).length).toBe(started.run.steps.length);
+    expect(completedStepsExportLines(started.run)).toEqual([]);
+    expect(drillStepsExportText(started.run)).toContain('remaining');
   });
 });

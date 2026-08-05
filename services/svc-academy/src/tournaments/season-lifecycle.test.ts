@@ -84,6 +84,10 @@ import {
   clampSeasonPageIndex,
   seasonIdsAtPage,
   isValidSeasonPage,
+  seasonsExportLines,
+  seasonsExportHeader,
+  seasonsExportText,
+  seasonsExportLineCount,
 } from './season-lifecycle.js';
 
 const base = {
@@ -636,5 +640,25 @@ describe('L3 wave40 season safe paging', () => {
     expect(clampSeasonPageIndex(rows, 99, 1)).toBe(1);
     expect(seasonIdsAtPage(rows, 0, 1)).toHaveLength(1);
     expect(isValidSeasonPage(rows, 0, 1)).toBe(true);
+  });
+});
+
+describe('L3 wave41 seasons export', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('export lines/text/count', () => {
+    expect(seasonsExportLines([])).toEqual([]);
+    expect(seasonsExportHeader()).toBe('id,status');
+    const rows = [mk('a', 'live')];
+    expect(seasonsExportLines(rows)).toEqual(['a,live']);
+    expect(seasonsExportText(rows)).toContain('id,status');
+    expect(seasonsExportLineCount(rows)).toBe(2);
   });
 });

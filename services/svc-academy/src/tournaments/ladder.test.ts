@@ -96,6 +96,10 @@ import {
   clampStandingsPageIndex,
   rankedStandingsAtPage,
   isValidStandingsPage,
+  standingsExportLines,
+  standingsExportHeader,
+  standingsExportText,
+  standingsExportLineCount,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -443,5 +447,15 @@ describe('L3 standings board helpers', () => {
     expect(clampStandingsPageIndex(rows, 99, 1)).toBe(1);
     expect(rankedStandingsAtPage(rows, 0, 1)[0]!.userId).toBe('b');
     expect(isValidStandingsPage(rows, 0, 1)).toBe(true);
+  });
+
+  it('L3 wave41 standings export', () => {
+    expect(standingsExportLines([])).toEqual([]);
+    expect(standingsExportHeader()).toBe('rank,userId,score');
+    expect(standingsExportLineCount([])).toBe(1);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    expect(standingsExportLines(rows)[0]).toBe('1,b,30');
+    expect(standingsExportText(rows)).toContain('userId');
+    expect(standingsExportLineCount(rows)).toBe(3);
   });
 });
