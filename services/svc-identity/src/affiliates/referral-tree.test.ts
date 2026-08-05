@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_MAX_REFERRAL_DEPTH,
-  MemoryReferralTree,
-  ReferralError,
-  ancestors,
-  chainDepth,
-  wouldCreateCycle,
-} from './referral-tree.js';
+import { DEFAULT_MAX_REFERRAL_DEPTH, MemoryReferralTree, ReferralError, ancestors, chainDepth, wouldCreateCycle } from './referral-tree.js';
 
 const U = (n: number) => `${n}1111111-1111-4111-8111-11111111111${n}`;
 

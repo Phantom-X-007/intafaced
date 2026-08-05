@@ -15,12 +15,7 @@
 export const DEFAULT_MAX_REFERRAL_DEPTH = 5;
 
 export type ReferralErrorCode =
-  | 'referral.self'
-  | 'referral.cycle'
-  | 'referral.depth'
-  | 'referral.already_set'
-  | 'referral.unknown_referrer'
-  | 'referral.invalid';
+  'referral.self' | 'referral.cycle' | 'referral.depth' | 'referral.already_set' | 'referral.unknown_referrer' | 'referral.invalid';
 
 export class ReferralError extends Error {
   constructor(
@@ -72,11 +67,7 @@ export function chainDepth(parent: ReadonlyMap<string, string>, userId: string):
 }
 
 /** Ancestors of user, nearest parent first, up to maxDepth entries. */
-export function ancestors(
-  parent: ReadonlyMap<string, string>,
-  userId: string,
-  maxDepth: number = DEFAULT_MAX_REFERRAL_DEPTH,
-): string[] {
+export function ancestors(parent: ReadonlyMap<string, string>, userId: string, maxDepth: number = DEFAULT_MAX_REFERRAL_DEPTH): string[] {
   const out: string[] = [];
   let cur: string | undefined = parent.get(userId);
   const seen = new Set<string>();
@@ -125,10 +116,7 @@ export class MemoryReferralTree {
     // Depth of the new user = depth(referrer) + 1 must be ≤ maxDepth
     const referrerDepth = chainDepth(this.parent, referrerId);
     if (referrerDepth + 1 > this.maxDepth) {
-      throw new ReferralError(
-        `Referral depth exceeds max ${this.maxDepth} (referrer chain is already ${referrerDepth})`,
-        'referral.depth',
-      );
+      throw new ReferralError(`Referral depth exceeds max ${this.maxDepth} (referrer chain is already ${referrerDepth})`, 'referral.depth');
     }
 
     const attributedAt = input.now ?? new Date();
