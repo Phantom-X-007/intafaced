@@ -671,3 +671,37 @@ export function seasonsExportText(seasons: readonly SeasonRecord[]): string {
 export function seasonsExportLineCount(seasons: readonly SeasonRecord[]): number {
   return 1 + totalSeasonCount(seasons);
 }
+
+/**
+ * L3 — parse "id,status". Invalid → null.
+ */
+export function parseSeasonsExportLine(line: string): { readonly id: string; readonly status: SeasonStatus } | null {
+  const t = line.trim();
+  if (!t || t === seasonsExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 2) return null;
+  const id = parts[0]!.trim();
+  const status = parts[1]!.trim();
+  if (!id) return null;
+  if (status !== 'scheduled' && status !== 'live' && status !== 'frozen' && status !== 'ended') return null;
+  return { id, status };
+}
+
+/** L3 — count valid seasons export data lines. */
+export function countSeasonsExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parseSeasonsExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when seasons export has header. */
+export function seasonsExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === seasonsExportHeader();
+}
+
+/** L3 — round-trip seasons export line count. */
+export function seasonsExportRoundTripOk(seasons: readonly SeasonRecord[]): boolean {
+  return seasonsExportLineCount(seasons) === 1 + countSeasonsExportDataLines(seasonsExportText(seasons));
+}

@@ -838,3 +838,37 @@ export function standingsExportText(rows: readonly StandingRecord[]): string {
 export function standingsExportLineCount(rows: readonly StandingRecord[]): number {
   return 1 + standingCount(rows);
 }
+
+/**
+ * L3 — parse "rank,userId,score". Invalid → null (never invent rank/score).
+ */
+export function parseStandingsExportLine(line: string): { readonly rank: number; readonly userId: string; readonly score: number } | null {
+  const t = line.trim();
+  if (!t || t === standingsExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 3) return null;
+  const rank = Number(parts[0]);
+  const userId = parts[1]!.trim();
+  const score = Number(parts[2]);
+  if (!userId || !Number.isFinite(rank) || !Number.isFinite(score) || rank < 1) return null;
+  return { rank: Math.floor(rank), userId, score };
+}
+
+/** L3 — count valid standings export data lines. */
+export function countStandingsExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parseStandingsExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when export text has standings header. */
+export function standingsExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === standingsExportHeader();
+}
+
+/** L3 — round-trip line count for standings export. */
+export function standingsExportRoundTripOk(rows: readonly StandingRecord[]): boolean {
+  return standingsExportLineCount(rows) === 1 + countStandingsExportDataLines(standingsExportText(rows));
+}

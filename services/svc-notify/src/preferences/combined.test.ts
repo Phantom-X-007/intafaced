@@ -84,6 +84,10 @@ import {
   planExportHeader,
   planExportText,
   planExportLineCount,
+  parsePlanExportLine,
+  countPlanExportDataLines,
+  planExportHasHeader,
+  planExportRoundTripOk,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -385,5 +389,15 @@ describe('notify L3 combined mute + digest', () => {
     const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
     expect(planExportLines(plan).length).toBe(plan.length);
     expect(planExportText(plan)).toContain('send_now');
+  });
+
+  it('L3 wave42 plan export parse + round-trip', () => {
+    expect(parsePlanExportLine('channel,action')).toBeNull();
+    expect(parsePlanExportLine('email,send_now')).toEqual({ channel: 'email', action: 'send_now' });
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    const text = planExportText(plan);
+    expect(planExportHasHeader(text)).toBe(true);
+    expect(countPlanExportDataLines(text)).toBe(plan.length);
+    expect(planExportRoundTripOk(plan)).toBe(true);
   });
 });

@@ -78,6 +78,10 @@ import {
   fanoutExportHeader,
   fanoutExportText,
   fanoutExportLineCount,
+  parseFanoutExportLine,
+  countFanoutExportDataLines,
+  fanoutExportHasHeader,
+  fanoutExportRoundTripOk,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -425,5 +429,15 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutExportLines(attempts)).toEqual(['email,accepted,ok']);
     expect(fanoutExportText(attempts)).toContain('channel,outcome,code');
     expect(fanoutExportLineCount(attempts)).toBe(2);
+  });
+
+  it('L3 wave42 fanout export parse + round-trip', () => {
+    expect(parseFanoutExportLine('channel,outcome,code')).toBeNull();
+    expect(parseFanoutExportLine('email,accepted,ok')).toEqual({ channel: 'email', outcome: 'accepted', code: 'ok' });
+    const attempts = [{ channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' }];
+    const text = fanoutExportText(attempts);
+    expect(fanoutExportHasHeader(text)).toBe(true);
+    expect(countFanoutExportDataLines(text)).toBe(1);
+    expect(fanoutExportRoundTripOk(attempts)).toBe(true);
   });
 });

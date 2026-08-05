@@ -775,4 +775,38 @@ export class MemoryAmbassadorProgramme {
   programmeExportLineCount(): number {
     return 1 + this.totalCount();
   }
+
+  /**
+   * L3 — parse one programme export line "userId,status". Invalid → null (never invent).
+   */
+  parseProgrammeExportLine(line: string): { readonly userId: string; readonly status: AmbassadorStatus } | null {
+    const t = line.trim();
+    if (!t || t === this.programmeExportHeader()) return null;
+    const parts = t.split(',');
+    if (parts.length !== 2) return null;
+    const userId = parts[0]!.trim();
+    const status = parts[1]!.trim();
+    if (!userId) return null;
+    if (status !== 'active' && status !== 'frozen') return null;
+    return { userId, status };
+  }
+
+  /** L3 — count valid data lines in export text (excludes header). */
+  countProgrammeExportDataLines(text: string): number {
+    return text
+      .split('\n')
+      .map((l) => this.parseProgrammeExportLine(l))
+      .filter((r) => r !== null).length;
+  }
+
+  /** L3 — true when export text starts with correct header. */
+  programmeExportHasHeader(text: string): boolean {
+    const first = text.split('\n')[0]?.trim() ?? '';
+    return first === this.programmeExportHeader();
+  }
+
+  /** L3 — true when live export round-trips line count (header+rows). */
+  programmeExportRoundTripOk(): boolean {
+    return this.programmeExportLineCount() === 1 + this.countProgrammeExportDataLines(this.programmeExportText());
+  }
 }

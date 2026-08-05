@@ -741,3 +741,39 @@ export function metricsExportText(): string {
 export function metricsExportLineCount(): number {
   return 1 + analyticsMetricCatalogSize();
 }
+
+/**
+ * L3 — parse "id,kind,money". Invalid → null.
+ */
+export function parseMetricsExportLine(line: string): { readonly id: string; readonly kind: string; readonly money: boolean } | null {
+  const t = line.trim();
+  if (!t || t === metricsExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 3) return null;
+  const id = parts[0]!.trim();
+  const kind = parts[1]!.trim();
+  const moneyFlag = parts[2]!.trim();
+  if (!id) return null;
+  if (kind !== 'count' && kind !== 'amount' && kind !== 'ratio') return null;
+  if (moneyFlag !== 'money' && moneyFlag !== 'non_money') return null;
+  return { id, kind, money: moneyFlag === 'money' };
+}
+
+/** L3 — count valid metrics export data lines. */
+export function countMetricsExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parseMetricsExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when metrics export has header. */
+export function metricsExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === metricsExportHeader();
+}
+
+/** L3 — round-trip metrics export line count. */
+export function metricsExportRoundTripOk(): boolean {
+  return metricsExportLineCount() === 1 + countMetricsExportDataLines(metricsExportText());
+}

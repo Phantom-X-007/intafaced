@@ -620,3 +620,38 @@ export function fanoutExportText(attempts: readonly ChannelDeliveryAttempt[]): s
 export function fanoutExportLineCount(attempts: readonly ChannelDeliveryAttempt[]): number {
   return 1 + attempts.length;
 }
+
+/**
+ * L3 — parse "channel,outcome,code". Invalid → null.
+ */
+export function parseFanoutExportLine(line: string): { readonly channel: string; readonly outcome: string; readonly code: string } | null {
+  const t = line.trim();
+  if (!t || t === fanoutExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 3) return null;
+  const channel = parts[0]!.trim();
+  const outcome = parts[1]!.trim();
+  const code = parts[2]!.trim();
+  if (!channel || !outcome) return null;
+  if (outcome !== 'accepted' && outcome !== 'refused' && outcome !== 'failed') return null;
+  return { channel, outcome, code };
+}
+
+/** L3 — count valid fanout export data lines. */
+export function countFanoutExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parseFanoutExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when fanout export has header. */
+export function fanoutExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === fanoutExportHeader();
+}
+
+/** L3 — round-trip fanout export line count. */
+export function fanoutExportRoundTripOk(attempts: readonly ChannelDeliveryAttempt[]): boolean {
+  return fanoutExportLineCount(attempts) === 1 + countFanoutExportDataLines(fanoutExportText(attempts));
+}

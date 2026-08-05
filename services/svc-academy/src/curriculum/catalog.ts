@@ -1080,3 +1080,41 @@ export function curriculumExportText(): string {
 export function curriculumExportLineCount(): number {
   return 1 + curriculumSpineSize();
 }
+
+/**
+ * L3 — parse "slug,kind,path". Invalid → null.
+ */
+export function parseCurriculumExportLine(
+  line: string,
+): { readonly slug: string; readonly kind: CurriculumKind; readonly path: CurriculumPath } | null {
+  const t = line.trim();
+  if (!t || t === curriculumExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 3) return null;
+  const slug = parts[0]!.trim();
+  const kind = parts[1]!.trim();
+  const path = parts[2]!.trim();
+  if (!slug) return null;
+  if (kind !== 'lesson' && kind !== 'playbook' && kind !== 'workbook') return null;
+  if (path !== 'foundations' && path !== 'markets' && path !== 'builder' && path !== 'sovereign') return null;
+  return { slug, kind, path };
+}
+
+/** L3 — count valid curriculum export data lines. */
+export function countCurriculumExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parseCurriculumExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when curriculum export has header. */
+export function curriculumExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === curriculumExportHeader();
+}
+
+/** L3 — round-trip curriculum export line count. */
+export function curriculumExportRoundTripOk(): boolean {
+  return curriculumExportLineCount() === 1 + countCurriculumExportDataLines(curriculumExportText());
+}

@@ -89,6 +89,10 @@ import {
   curriculumExportHeader,
   curriculumExportText,
   curriculumExportLineCount,
+  parseCurriculumExportLine,
+  countCurriculumExportDataLines,
+  curriculumExportHasHeader,
+  curriculumExportRoundTripOk,
 } from './catalog.js';
 
 /**
@@ -400,5 +404,15 @@ describe('curriculum catalog', () => {
     expect(curriculumExportLines().length).toBe(curriculumSpineSize());
     expect(curriculumExportLineCount()).toBe(1 + curriculumSpineSize());
     expect(curriculumExportText()).toContain('slug,kind,path');
+  });
+
+  it('L3 wave42 curriculum export parse + round-trip', () => {
+    expect(parseCurriculumExportLine('slug,kind,path')).toBeNull();
+    const line = curriculumExportLines()[0]!;
+    expect(parseCurriculumExportLine(line)).not.toBeNull();
+    const text = curriculumExportText();
+    expect(curriculumExportHasHeader(text)).toBe(true);
+    expect(countCurriculumExportDataLines(text)).toBe(curriculumSpineSize());
+    expect(curriculumExportRoundTripOk()).toBe(true);
   });
 });
