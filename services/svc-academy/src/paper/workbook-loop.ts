@@ -224,5 +224,5 @@ export function completedStepCount(run: DrillRun): number {
 
 /** L3 — paper fill ref count. Never invents fills. */
 export function fillRefCount(run: DrillRun): number {
-  return run.fillsRefs.length;
+  return run.fillRefs.length;
 }

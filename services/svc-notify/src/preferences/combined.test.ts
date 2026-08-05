@@ -75,11 +75,7 @@ describe('notify L3 combined mute + digest', () => {
   it('L3 countHoldingChannels without invent', () => {
     expect(countHoldingChannels([])).toBe(0);
     const digest = applyDigestCadence(DEFAULT_COMBINED_PREFS.digest, 'hourly');
-    const plan = planFanoutDelivery(
-      { mute: DEFAULT_COMBINED_PREFS.mute, digest },
-      ['email', 'push'],
-      'info',
-    );
+    const plan = planFanoutDelivery({ mute: DEFAULT_COMBINED_PREFS.mute, digest }, ['email', 'push'], 'info');
     expect(countHoldingChannels(plan)).toBe(2);
   });
 });
