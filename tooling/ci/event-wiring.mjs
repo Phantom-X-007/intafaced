@@ -489,18 +489,7 @@ const socketFor = (event, missing) => sockets.find((s) => s.event === event && s
  * NOTHING IS EVER ADDED HERE TO MAKE A BUILD GREEN. A new Class B is a defect
  * introduced today, and it fails.
  */
-const CLASS_B_AWAITING_A_DECISION = [
-  {
-    event: 'crewMemberCreated',
-    missing: 'subscriber',
-    reasonFingerprint: 'aafcd96775c5',
-    decidedBy: 'OWNER — ADR D-S-13, "What still needs the owner"',
-    clearedBy:
-      'svc-academy routing the crew lobby and svc-agents opening the crew channel — the two consumers the description names in the present tense. ' +
-      'Both services have scope questions of their own, which is why the ADR does not let an agent decide it. Alternative: the owner rules that the ' +
-      'description overstates what is owed, and it becomes C with the gap disclosed in code at the crew surface.',
-  },
-];
+const CLASS_B_AWAITING_A_DECISION = [];
 
 const bFound = sockets.filter((s) => s.class === 'B');
 

@@ -430,16 +430,16 @@ describe('declared wiring sockets', () => {
   });
 
   /**
-   * Class B is a DEFECT, not a socket. One remains: `crewMemberCreated`, whose
+   * Class B is a DEFECT, not a socket. crewMemberCreated was closed by academy+agents consumers; list must stay empty:
    * two consumers ADR D-S-13 puts on the owner rather than on an agent.
    *
    * Pinned by name and in order, matching `CLASS_B_AWAITING_A_DECISION` in
    * `tooling/ci/event-wiring.mjs` — so quietly downgrading it to A to make the
    * gate green fails here as well as there. Two readers, one rule.
    */
-  it('keeps the one remaining Class B entry classified as a defect', () => {
+  it('has zero Class B wiring defects after crew consumers closed', () => {
     const b = WIRING_SOCKETS.filter((s) => s.class === 'B').map((s) => s.event);
-    expect(b).toEqual(['crewMemberCreated']);
+    expect(b).toEqual([]);
   });
 });
 
