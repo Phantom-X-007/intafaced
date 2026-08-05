@@ -29,8 +29,12 @@ import {
   rankOfUser,
   isTopScorer,
   secondPlaceUser,
+  lastPlaceUser,
+  thirdPlaceUser,
+  firstPlaceUser,
   thirdPlaceUser,
   lastPlaceUser,
+  firstPlaceUser,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -182,13 +186,19 @@ describe('L3 standings board helpers', () => {
     const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
     expect(secondPlaceUser(rows)).toBe('a');
   });
-});
 
-it('L3 wave21 thirdPlaceUser + lastPlaceUser', () => {
-  expect(thirdPlaceUser([])).toBeNull();
-  expect(lastPlaceUser([])).toBeNull();
-  const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
-  expect(thirdPlaceUser(rows)).toBe('a');
-  expect(lastPlaceUser(rows)).toBe('a');
-  expect(thirdPlaceUser([row('b', 20, '2026-08-01T13:00:00Z')])).toBeNull();
+  it('L3 wave21 thirdPlaceUser + lastPlaceUser', () => {
+    expect(thirdPlaceUser([])).toBeNull();
+    expect(lastPlaceUser([])).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+    expect(thirdPlaceUser(rows)).toBe('a');
+    expect(lastPlaceUser(rows)).toBe('a');
+    expect(thirdPlaceUser([row('b', 20, '2026-08-01T13:00:00Z')])).toBeNull();
+  });
+
+  it('L3 firstPlaceUser null when empty', () => {
+    expect(firstPlaceUser([])).toBeNull();
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(firstPlaceUser(rows)).toBe('b');
+  });
 });

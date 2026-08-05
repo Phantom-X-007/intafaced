@@ -315,3 +315,8 @@ export function moneyMetricCount(): number {
 export function nonMoneyMetricCount(): number {
   return listNonMoneyMetricIds().length;
 }
+
+/** L3 — alias of hasMoneyMetrics. */
+export function catalogHasMoney(): boolean {
+  return hasMoneyMetrics();
+}

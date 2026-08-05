@@ -232,4 +232,9 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     desk.appoint({ userId: u, appointedBy: op });
     expect(desk.activeProgrammeIds()).toEqual([u]);
   });
+
+  it('L3 programmeUserCount aliases totalCount', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    expect(desk.programmeUserCount()).toBe(0);
+  });
 });

@@ -328,4 +328,9 @@ export class MemoryAmbassadorProgramme {
   activeProgrammeIds(): readonly string[] {
     return this.listActiveUserIds();
   }
+
+  /** L3 — alias of totalCount. */
+  programmeUserCount(): number {
+    return this.totalCount();
+  }
 }

@@ -155,3 +155,8 @@ export function countSendNow(plan: readonly DeliveryDecision[]): number {
 export function planSkipCount(plan: readonly DeliveryDecision[]): number {
   return countSkippedMuted(plan);
 }
+
+/** L3 — alias of countHoldingChannels. */
+export function planHoldCount(plan: readonly DeliveryDecision[]): number {
+  return countHoldingChannels(plan);
+}

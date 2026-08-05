@@ -205,4 +205,9 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     const desk = new MemoryResidencyDesk();
     expect(desk.rejectedApplicationCount()).toBe(0);
   });
+
+  it('L3 acceptedApplicationCount aliases acceptedCount', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.acceptedApplicationCount()).toBe(0);
+  });
 });
