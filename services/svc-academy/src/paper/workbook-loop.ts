@@ -87,3 +87,28 @@ export function completeDrillStep(run: DrillRun, stepId: string): DrillResult {
     run: { ...run, completedStepIds, status },
   };
 }
+
+/** Catalog kind gate — only workbook slugs may start paper drills. */
+export function assertWorkbookKind(kind: string | null | undefined): boolean {
+  return kind === 'workbook';
+}
+
+export function startPaperDrillForCatalogItem(input: {
+  slug: string;
+  kind: string | null | undefined;
+  market: PaperMarketRef | null;
+  steps?: readonly DrillStep[];
+}): DrillResult {
+  if (!assertWorkbookKind(input.kind)) {
+    return {
+      ok: false,
+      reason: 'unknown_step',
+      message: `Catalog item ${input.slug} is not a workbook — refuse paper drill invent.`,
+    };
+  }
+  return startPaperDrill({
+    workbookSlug: input.slug,
+    market: input.market,
+    steps: input.steps,
+  });
+}
