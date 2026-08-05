@@ -279,3 +279,10 @@ export function rankOfUser(rows: readonly StandingRecord[], userId: string): num
   const s = standingOfUser(rows, userId);
   return s?.rank ?? null;
 }
+
+/**
+ * L3 — true when user has the unique top score (rank 1). Missing → false.
+ */
+export function isTopScorer(rows: readonly StandingRecord[], userId: string): boolean {
+  return rankOfUser(rows, userId) === 1;
+}

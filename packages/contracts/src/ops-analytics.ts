@@ -273,3 +273,12 @@ export function metricCountBySource(): Readonly<Record<AnalyticsSourceDb, number
 export function singleSourceMetricCount(): number {
   return ANALYTICS_METRICS_V0.filter((m) => m.sources.length === 1).length;
 }
+
+/**
+ * L3 — money/total as fixed 4dp string. Empty catalog → null (never invent 0).
+ */
+export function moneyMetricRatio(): string | null {
+  const part = metricMoneyPartition();
+  if (part.total === 0) return null;
+  return (part.money / part.total).toFixed(4);
+}

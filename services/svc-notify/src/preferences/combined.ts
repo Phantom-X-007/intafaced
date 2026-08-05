@@ -130,3 +130,8 @@ export function planIsAllSendNow(plan: readonly DeliveryDecision[]): boolean {
   if (plan.length === 0) return false;
   return plan.every((d) => d.action === 'send_now');
 }
+
+/** L3 — true when fanout plan has no decisions. */
+export function planIsEmpty(plan: readonly DeliveryDecision[]): boolean {
+  return plan.length === 0;
+}
