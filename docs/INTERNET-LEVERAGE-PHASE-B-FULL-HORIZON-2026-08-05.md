@@ -37,7 +37,7 @@
 
 ### Tier A start order (decision order only)
 
-1. `FH-SEC-01` ReDoS pure-JS · 2. Gitleaks · 3. `G-P0-2` decimals / residual IN · 4. Wallet RPC **critical** (#763) · 5. pay residual IN + Class X acquirer socket (**no Hyperswitch**) · 6. P2P human dispute **built/in-flight**
+1. `FH-SEC-01` ReDoS **split locked** (operator `linear-pattern` · engineer `@intafaced/safe-regex`) · 2. Gitleaks · 3. `G-P0-2` decimals / residual IN · 4. Wallet RPC **critical** (#763) · 5. pay residual IN + Class X acquirer socket (**no Hyperswitch**) · 6. P2P human dispute **built/in-flight**
 
 ### Standing order
 
@@ -156,29 +156,29 @@ Re-derived from `tooling/tracker/features.mjs` where `status ≠ done`.
 
 ### Non-tracker rows (Phase A gaps + law + security — still in scope)
 
-| ID                | Need                                    | Path       | Phase        | External                                                                               | Owner         | Depends            |
-| ----------------- | --------------------------------------- | ---------- | ------------ | -------------------------------------------------------------------------------------- | ------------- | ------------------ |
-| `G-P0-1`          | Depth E2E (**proven** Denon 2026-08-05) | **IN**     | **DONE**     | — (fleet image trap was real; rebuild from tip)                                        | **N/D**       | closed             |
-| `G-P0-2`          | Decimal desk bignumber E2E              | **IN**     | **NOW**      | —                                                                                      | **N**         | —                  |
-| `G-P0-3`          | Pay residual after #346                 | **IN+X**   | **MID**      | Class X acquirer socket; no Hyperswitch                                                | **N**         | handoff + D-S-10   |
-| `G-P0-4`          | Denon open work (#428)                  | **IN**     | **NOW**      | —                                                                                      | **D**         | his PR             |
-| `G-P0-5`          | Engine product law                      | **LAW**    | **NOW**      | —                                                                                      | **D**         | D-S-01…05          |
-| `G-P1-1`          | OTC/admin/CMS kit path                  | **IN**     | **MID**      | —                                                                                      | **N**         | law                |
-| `G-P1-2`          | V-ADMIN primary ops                     | **IN**     | **MID**      | —                                                                                      | **N/D**       | —                  |
-| `G-P1-4`          | Wallet RPC **critical defects**         | **IN**     | **NOW**      | Fix #763 freezes (mainnet dual-broadcast class) before MPC                             | **D→N**       | #763               |
-| `G-P1-5`          | Wire ops.support ↔ svc-support          | **IN**     | **MID**      | —                                                                                      | **N**         | —                  |
-| `G-P2-2`          | spine-* disposition                     | **IN**     | **MID**      | —                                                                                      | **D**         | —                  |
-| `FH-SEC-01`       | ReDoS-safe parsers                      | **IN/EXT** | **NOW**      | Prefer pure-JS linear matchers; re2js pure-JS OK; avoid native node-re2 on money paths | **N/D**       | Denon pure-JS note |
-| `FH-SEC-02`       | Secret scanning CI                      | **EXT**    | **NOW**      | Gitleaks                                                                               | **N**         | —                  |
-| `FH-SEC-04`       | Money SAST                              | **EXT**    | **MID**      | Semgrep patterns                                                                       | **N**         | —                  |
-| `FH-SEC-05`       | Property tests money                    | **EXT**    | **MID**      | fast-check                                                                             | **N**         | Class M            |
-| `FH-SEC-06`       | Chaos network trade↔match               | **EXT**    | **LATE**     | Toxiproxy                                                                              | **D/N**       | —                  |
-| `FH-UI-01`        | Runtime edge validation                 | **EXT**    | **MID**      | Zod (or Valibot/ArkType)                                                               | **N**         | —                  |
-| `FH-P2P-D`        | Human dispute desk                      | **IN**     | **NOW**      | **Built/in-flight** (not GF); Kleros still KILL Fiat                                   | **N/D**       | D-S-08             |
-| `FH-ID-01`        | Passkeys                                | **EXT**    | **MID**      | SimpleWebAuthn                                                                         | **N**         | D-S-11             |
-| `FH-ID-02`        | KYC providers                           | **EXT+X**  | **MID–LATE** | Sumsub/Persona/… adapters                                                              | **N + Nitro** | Class X            |
-| `D-S-01`…`D-S-18` | Spec factory                            | **LAW**    | **NOW**      | — mandate kit+ledger                                                                   | **D**         | —                  |
-| `V-MOBILE`        | Mobile apps                             | **GF**     | **LATE**     | Expo/RN or Flutter when product yes                                                    | **N**         | product            |
+| ID                | Need                                    | Path       | Phase        | External                                                                                                                       | Owner         | Depends                     |
+| ----------------- | --------------------------------------- | ---------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------- | --------------------------- |
+| `G-P0-1`          | Depth E2E (**proven** Denon 2026-08-05) | **IN**     | **DONE**     | — (fleet image trap was real; rebuild from tip)                                                                                | **N/D**       | closed                      |
+| `G-P0-2`          | Decimal desk bignumber E2E              | **IN**     | **NOW**      | —                                                                                                                              | **N**         | —                           |
+| `G-P0-3`          | Pay residual after #346                 | **IN+X**   | **MID**      | Class X acquirer socket; no Hyperswitch                                                                                        | **N**         | handoff + D-S-10            |
+| `G-P0-4`          | Denon open work (#428)                  | **IN**     | **NOW**      | —                                                                                                                              | **D**         | his PR                      |
+| `G-P0-5`          | Engine product law                      | **LAW**    | **NOW**      | —                                                                                                                              | **D**         | D-S-01…05                   |
+| `G-P1-1`          | OTC/admin/CMS kit path                  | **IN**     | **MID**      | —                                                                                                                              | **N**         | law                         |
+| `G-P1-2`          | V-ADMIN primary ops                     | **IN**     | **MID**      | —                                                                                                                              | **N/D**       | —                           |
+| `G-P1-4`          | Wallet RPC **critical defects**         | **IN**     | **NOW**      | Fix #763 freezes (mainnet dual-broadcast class) before MPC                                                                     | **D→N**       | #763                        |
+| `G-P1-5`          | Wire ops.support ↔ svc-support          | **IN**     | **MID**      | —                                                                                                                              | **N**         | —                           |
+| `G-P2-2`          | spine-* disposition                     | **IN**     | **MID**      | —                                                                                                                              | **D**         | —                           |
+| `FH-SEC-01`       | ReDoS-safe parsers                      | **IN/EXT** | **NOW**      | **Split locked:** operator patterns → `linear-pattern`; engineer parsers → `@intafaced/safe-regex` (re2js); no native node-re2 | **N/D**       | Law §3.2 · Nitro 2026-08-05 |
+| `FH-SEC-02`       | Secret scanning CI                      | **EXT**    | **NOW**      | Gitleaks                                                                                                                       | **N**         | —                           |
+| `FH-SEC-04`       | Money SAST                              | **EXT**    | **MID**      | Semgrep patterns                                                                                                               | **N**         | —                           |
+| `FH-SEC-05`       | Property tests money                    | **EXT**    | **MID**      | fast-check                                                                                                                     | **N**         | Class M                     |
+| `FH-SEC-06`       | Chaos network trade↔match               | **EXT**    | **LATE**     | Toxiproxy                                                                                                                      | **D/N**       | —                           |
+| `FH-UI-01`        | Runtime edge validation                 | **EXT**    | **MID**      | Zod (or Valibot/ArkType)                                                                                                       | **N**         | —                           |
+| `FH-P2P-D`        | Human dispute desk                      | **IN**     | **NOW**      | **Built/in-flight** (not GF); Kleros still KILL Fiat                                                                           | **N/D**       | D-S-08                      |
+| `FH-ID-01`        | Passkeys                                | **EXT**    | **MID**      | SimpleWebAuthn                                                                                                                 | **N**         | D-S-11                      |
+| `FH-ID-02`        | KYC providers                           | **EXT+X**  | **MID–LATE** | Sumsub/Persona/… adapters                                                                                                      | **N + Nitro** | Class X                     |
+| `D-S-01`…`D-S-18` | Spec factory                            | **LAW**    | **NOW**      | — mandate kit+ledger                                                                                                           | **D**         | —                           |
+| `V-MOBILE`        | Mobile apps                             | **GF**     | **LATE**     | Expo/RN or Flutter when product yes                                                                                            | **N**         | product                     |
 
 ---
 
@@ -200,25 +200,25 @@ Expect: `missing 0`.
 
 ## 4 · External shortlist (where Path contains EXT) — deep evidence in v2
 
-| External                           | Used by IDs / FH rows             | Action                                              |
-| ---------------------------------- | --------------------------------- | --------------------------------------------------- |
-| pure-JS linear matchers (re2js OK) | FH-SEC-01, P2P parsers            | **Prefer pure-JS; avoid native RE2 on money paths** |
-| Gitleaks                           | FH-SEC-02                         | **Adopt NOW**                                       |
-| Hyperswitch                        | pay.routing, pay.gateway, pay.psp | **KILL** — D-S-10 ADR #769                          |
-| Moov ACH/Wire/Fed                  | bank.ramps                        | **Adapt MID**                                       |
-| SimpleWebAuthn                     | FH-ID-01                          | **Trial MID**                                       |
-| KYC SaaS adapters                  | FH-ID-02                          | **Later + X**                                       |
-| SES/Twilio/FCM/APNs                | notify sockets                    | **Adapt MID–LATE**                                  |
-| Zod (or Valibot)                   | FH-UI-01                          | **Trial MID**                                       |
-| fast-check                         | FH-SEC-05                         | **Adopt MID**                                       |
-| Toxiproxy                          | FH-SEC-06                         | **Later**                                           |
-| Semgrep                            | FH-SEC-04                         | **Later**                                           |
-| DFNS / Turnkey                     | socket.mpc-custody                | **Later after review + X**                          |
-| ClickHouse/cube                    | ops.analytics                     | **Later**                                           |
-| Meilisearch/Typesense              | ops.admin search residual         | **Later** if needed                                 |
-| Expo/RN or Flutter                 | V-MOBILE                          | **Later** product yes                               |
-| CometBFT / Cosmos / dYdX v4        | chain.*                           | **REF S only**                                      |
-| WebRTC SFU                         | socket.stream-provider            | **Later**                                           |
+| External                                           | Used by IDs / FH rows             | Action                                                                                      |
+| -------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------- |
+| `linear-pattern` + `@intafaced/safe-regex` (re2js) | FH-SEC-01, P2P operator patterns  | **Split:** operator → linear-pattern; engineer → safe-regex; ban native node-re2 (law §3.2) |
+| Gitleaks                                           | FH-SEC-02                         | **Adopt NOW**                                                                               |
+| Hyperswitch                                        | pay.routing, pay.gateway, pay.psp | **KILL** — D-S-10 ADR #769                                                                  |
+| Moov ACH/Wire/Fed                                  | bank.ramps                        | **Adapt MID**                                                                               |
+| SimpleWebAuthn                                     | FH-ID-01                          | **Trial MID**                                                                               |
+| KYC SaaS adapters                                  | FH-ID-02                          | **Later + X**                                                                               |
+| SES/Twilio/FCM/APNs                                | notify sockets                    | **Adapt MID–LATE**                                                                          |
+| Zod (or Valibot)                                   | FH-UI-01                          | **Trial MID**                                                                               |
+| fast-check                                         | FH-SEC-05                         | **Adopt MID**                                                                               |
+| Toxiproxy                                          | FH-SEC-06                         | **Later**                                                                                   |
+| Semgrep                                            | FH-SEC-04                         | **Later**                                                                                   |
+| DFNS / Turnkey                                     | socket.mpc-custody                | **Later after review + X**                                                                  |
+| ClickHouse/cube                                    | ops.analytics                     | **Later**                                                                                   |
+| Meilisearch/Typesense                              | ops.admin search residual         | **Later** if needed                                                                         |
+| Expo/RN or Flutter                                 | V-MOBILE                          | **Later** product yes                                                                       |
+| CometBFT / Cosmos / dYdX v4                        | chain.*                           | **REF S only**                                                                              |
+| WebRTC SFU                                         | socket.stream-provider            | **Later**                                                                                   |
 
 Detail (license, stars, doctrine): see Phase B REPORT v2.
 
