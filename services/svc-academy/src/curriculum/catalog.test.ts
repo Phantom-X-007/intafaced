@@ -45,6 +45,10 @@ import {
   emptyCurriculumPathCount,
   allPathsHaveContent,
   firstCurriculumSlug,
+  lastCurriculumSlug,
+  hasAtLeastSpineItems,
+  listLessonTitles,
+  listPlaybookTitles,
 } from './catalog.js';
 
 /**
@@ -272,5 +276,12 @@ describe('curriculum catalog', () => {
     expect(emptyCurriculumPathCount()).toBe(emptyPathCount());
     expect(typeof allPathsHaveContent()).toBe('boolean');
     expect(firstCurriculumSlug()).not.toBeNull();
+  });
+
+  it('L3 wave30 last slug + spine at-least + title lists', () => {
+    expect(lastCurriculumSlug()).not.toBeNull();
+    expect(hasAtLeastSpineItems(1)).toBe(true);
+    expect(listLessonTitles().length).toBe(lessonCount());
+    expect(listPlaybookTitles().length).toBe(playbookCount());
   });
 });

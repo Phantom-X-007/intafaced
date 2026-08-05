@@ -749,3 +749,25 @@ export function firstCurriculumSlug(): string | null {
   const slugs = listCurriculumSlugs();
   return slugs[0] ?? null;
 }
+
+/** L3 — last spine slug (sorted). Empty → null. */
+export function lastCurriculumSlug(): string | null {
+  const slugs = listCurriculumSlugs();
+  return slugs.length ? slugs[slugs.length - 1]! : null;
+}
+
+/** L3 — true when spine size is at least n. */
+export function hasAtLeastSpineItems(n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return curriculumSpineSize() >= Math.floor(n);
+}
+
+/** L3 — lesson titles sorted. None → []. */
+export function listLessonTitles(): readonly string[] {
+  return listCurriculumTitlesByKind('lesson');
+}
+
+/** L3 — playbook titles sorted. None → []. */
+export function listPlaybookTitles(): readonly string[] {
+  return listCurriculumTitlesByKind('playbook');
+}

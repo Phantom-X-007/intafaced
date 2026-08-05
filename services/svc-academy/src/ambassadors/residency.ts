@@ -411,4 +411,27 @@ export class MemoryResidencyDesk {
   cohortCount(): number {
     return this.knownCohortSlugsSorted().length;
   }
+
+  /** L3 — last open application id (sorted last). None → null. */
+  lastOpenApplicationId(): string | null {
+    const ids = this.openApplicationIds();
+    return ids.length ? ids[ids.length - 1]! : null;
+  }
+
+  /** L3 — last accepted application id. None → null. */
+  lastAcceptedApplicationId(): string | null {
+    const ids = this.acceptedApplicationIds();
+    return ids.length ? ids[ids.length - 1]! : null;
+  }
+
+  /** L3 — true when application count is at least n. */
+  hasAtLeastApplications(n: number): boolean {
+    if (!Number.isFinite(n) || n < 0) return false;
+    return this.applicationCount() >= Math.floor(n);
+  }
+
+  /** L3 — open minus decided as signed int. Empty → 0. */
+  openMinusDecided(): number {
+    return this.openCount() - this.decidedApplicationCount();
+  }
 }

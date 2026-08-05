@@ -30,6 +30,10 @@ import {
   lastCompletedStepId,
   hasNoRemainingSteps,
   isStepListEmpty,
+  isDrillUntouched,
+  isDrillFullyRatioed,
+  drillCompletionPercent,
+  remainingStepRatio,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -259,5 +263,18 @@ describe('paper Stage-2 workbook loop', () => {
     if (!mid.ok) return;
     expect(firstCompletedStepId(mid.run)).toBe(step);
     expect(lastCompletedStepId(mid.run)).toBe(step);
+  });
+
+  it('L3 wave30 untouched + percent + remaining ratio', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w30', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(isDrillUntouched(started.run)).toBe(true);
+    expect(isDrillFullyRatioed(started.run)).toBe(false);
+    expect(drillCompletionPercent(started.run)).toBe(0);
+    expect(remainingStepRatio(started.run)).toBe('1.0000');
   });
 });

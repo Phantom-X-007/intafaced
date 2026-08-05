@@ -56,6 +56,10 @@ import {
   userIdsBelowScore,
   userIdsAtOrAboveScore,
   hasClearLeader,
+  lastTwoScoreGap,
+  hasAtLeastStandings,
+  midRankUser,
+  totalScoreSum,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -294,5 +298,17 @@ describe('L3 standings board helpers', () => {
     expect(userIdsBelowScore(rows, 25)).toEqual(['b', 'c']);
     expect(userIdsAtOrAboveScore(rows, 20)).toEqual(['a', 'b']);
     expect(hasClearLeader(rows)).toBe(true);
+  });
+
+  it('L3 wave30 last gap + at-least + mid user + sum', () => {
+    expect(lastTwoScoreGap([])).toBeNull();
+    expect(hasAtLeastStandings([], 1)).toBe(false);
+    expect(midRankUser([])).toBeNull();
+    expect(totalScoreSum([])).toBe(0);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z'), row('c', 20, '2026-08-01T11:00:00Z')];
+    expect(hasAtLeastStandings(rows, 3)).toBe(true);
+    expect(totalScoreSum(rows)).toBe(60);
+    expect(midRankUser(rows)).toBe('c');
+    expect(lastTwoScoreGap(rows)).toBe(10);
   });
 });

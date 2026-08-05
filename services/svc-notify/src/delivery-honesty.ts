@@ -300,3 +300,26 @@ export function fanoutHistogramOnlyRefused(attempts: readonly ChannelDeliveryAtt
   const h = fanoutOutcomeHistogram(attempts);
   return h.refused > 0 && h.accepted === 0 && h.failed === 0;
 }
+
+/** L3 — true when attempt count is at least n. */
+export function fanoutHasAtLeastAttempts(attempts: readonly ChannelDeliveryAttempt[], n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return attempts.length >= Math.floor(n);
+}
+
+/** L3 — accepted minus failed count. */
+export function fanoutAcceptedMinusFailed(attempts: readonly ChannelDeliveryAttempt[]): number {
+  return countFanoutAccepted(attempts) - countFanoutFailures(attempts);
+}
+
+/** L3 — first accepted channel in attempt order. None → null. */
+export function firstAcceptedChannel(attempts: readonly ChannelDeliveryAttempt[]): ChannelDeliveryAttempt['channel'] | null {
+  const ch = acceptedChannels(attempts);
+  return ch[0] ?? null;
+}
+
+/** L3 — first failed channel in attempt order. None → null. */
+export function firstFailedChannel(attempts: readonly ChannelDeliveryAttempt[]): ChannelDeliveryAttempt['channel'] | null {
+  const ch = failedChannels(attempts);
+  return ch[0] ?? null;
+}

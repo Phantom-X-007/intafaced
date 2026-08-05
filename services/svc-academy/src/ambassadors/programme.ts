@@ -465,4 +465,25 @@ export class MemoryAmbassadorProgramme {
   programmeDensity(): number {
     return this.totalCount();
   }
+
+  /** L3 — true when density is at least n. Empty → false for n>0. */
+  hasAtLeastUsers(n: number): boolean {
+    if (!Number.isFinite(n) || n < 0) return false;
+    return this.totalCount() >= Math.floor(n);
+  }
+
+  /** L3 — active count as string for operator panels. */
+  activeCountLabel(): string {
+    return String(this.activeCount());
+  }
+
+  /** L3 — frozen count as string. */
+  frozenCountLabel(): string {
+    return String(this.frozenCount());
+  }
+
+  /** L3 — true when programme has both statuses present. */
+  hasBothStatuses(): boolean {
+    return this.activeCount() > 0 && this.frozenCount() > 0;
+  }
 }

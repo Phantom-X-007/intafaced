@@ -44,6 +44,10 @@ import {
   allSeasonsScheduled,
   allSeasonsFrozen,
   distinctSeasonStatusCount,
+  hasAtLeastSeasons,
+  firstSeasonId,
+  lastSeasonId,
+  hasMixedSeasonStatuses,
 } from './season-lifecycle.js';
 
 const base = {
@@ -380,5 +384,28 @@ describe('L3 wave29 all-status + distinct count', () => {
     expect(allSeasonsScheduled([mk('a', 'scheduled')])).toBe(true);
     expect(allSeasonsFrozen([mk('a', 'frozen')])).toBe(true);
     expect(distinctSeasonStatusCount([mk('a', 'live'), mk('b', 'ended'), mk('c', 'live')])).toBe(2);
+  });
+});
+
+describe('L3 wave30 season ends + mixed', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('at-least + first/last id + mixed', () => {
+    expect(hasAtLeastSeasons([], 1)).toBe(false);
+    expect(firstSeasonId([])).toBeNull();
+    expect(lastSeasonId([])).toBeNull();
+    expect(hasMixedSeasonStatuses([])).toBe(false);
+    const rows = [mk('z', 'live'), mk('a', 'ended')];
+    expect(hasAtLeastSeasons(rows, 2)).toBe(true);
+    expect(firstSeasonId(rows)).toBe('a');
+    expect(lastSeasonId(rows)).toBe('z');
+    expect(hasMixedSeasonStatuses(rows)).toBe(true);
   });
 });

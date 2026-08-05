@@ -50,6 +50,10 @@ import {
   identitySourceShare,
   allSourcesRepresented,
   representedSourceCount,
+  catalogHasAtLeast,
+  firstMoneyMetricId,
+  firstNonMoneyMetricId,
+  moneyNonMoneyPair,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -278,5 +282,15 @@ describe('L3 wave29 source shares + representation', () => {
     expect(identitySourceShare()).toMatch(/^\d+\.\d{4}$/);
     expect(typeof allSourcesRepresented()).toBe('boolean');
     expect(representedSourceCount()).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('L3 wave30 catalog at-least + first metrics + pair', () => {
+  it('catalogHasAtLeast + first money/non-money + pair', () => {
+    expect(catalogHasAtLeast(1)).toBe(true);
+    expect(firstMoneyMetricId()).not.toBeNull();
+    expect(firstNonMoneyMetricId()).not.toBeNull();
+    const p = moneyNonMoneyPair();
+    expect(p.money + p.nonMoney).toBe(analyticsMetricCatalogSize());
   });
 });

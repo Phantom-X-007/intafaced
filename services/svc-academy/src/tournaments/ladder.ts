@@ -497,3 +497,35 @@ export function hasClearLeader(rows: readonly StandingRecord[]): boolean {
   const gap = firstSecondScoreGap(rows);
   return gap !== null && gap > 0;
 }
+
+/**
+ * L3 — last-to-second-last score gap. Need ≥2 → null otherwise.
+ */
+export function lastTwoScoreGap(rows: readonly StandingRecord[]): number | null {
+  const ranked = rankStandings(rows);
+  if (ranked.length < 2) return null;
+  const a = ranked[ranked.length - 2]!.score;
+  const b = ranked[ranked.length - 1]!.score;
+  return a - b;
+}
+
+/** L3 — true when standings count is at least n. */
+export function hasAtLeastStandings(rows: readonly StandingRecord[], n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return rows.length >= Math.floor(n);
+}
+
+/**
+ * L3 — mid-rank user id (1-based rank ceil(n/2)). Empty → null.
+ */
+export function midRankUser(rows: readonly StandingRecord[]): string | null {
+  const ranked = rankStandings(rows);
+  if (ranked.length === 0) return null;
+  const i = Math.ceil(ranked.length / 2) - 1;
+  return ranked[i]?.userId ?? null;
+}
+
+/** L3 — sum of all scores. Empty → 0 (no invent average). */
+export function totalScoreSum(rows: readonly StandingRecord[]): number {
+  return rows.reduce((a, r) => a + r.score, 0);
+}

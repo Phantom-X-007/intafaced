@@ -34,6 +34,10 @@ import {
   fanoutHistogramOnlyAccepted,
   fanoutHistogramOnlyFailed,
   fanoutHistogramOnlyRefused,
+  fanoutHasAtLeastAttempts,
+  fanoutAcceptedMinusFailed,
+  firstAcceptedChannel,
+  firstFailedChannel,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -237,5 +241,19 @@ describe('notify Stage-2 delivery honesty', () => {
     expect(fanoutHistogramOnlyFailed(fail)).toBe(true);
     const ref = [{ channel: 'sms' as const, outcome: 'refused' as const, code: 'n' }];
     expect(fanoutHistogramOnlyRefused(ref)).toBe(true);
+  });
+
+  it('L3 wave30 fanout at-least + accepted-failed + first channels', () => {
+    expect(fanoutHasAtLeastAttempts([], 1)).toBe(false);
+    expect(firstAcceptedChannel([])).toBeNull();
+    expect(firstFailedChannel([])).toBeNull();
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'x' },
+    ];
+    expect(fanoutHasAtLeastAttempts(attempts, 2)).toBe(true);
+    expect(fanoutAcceptedMinusFailed(attempts)).toBe(0);
+    expect(firstAcceptedChannel(attempts)).toBe('email');
+    expect(firstFailedChannel(attempts)).toBe('push');
   });
 });
