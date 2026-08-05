@@ -47,3 +47,27 @@ export function missingRequiredCredentials(config: RequiredChannelsConfig, prese
   if (config.mode === 'none') return [];
   return config.channels.filter((c) => !present[c]);
 }
+
+/**
+ * L3 — readiness for out-of-app fanout. Missing required creds → refuse,
+ * never silent partial "success".
+ */
+export type FanoutReadiness =
+  | { readonly ok: true; readonly config: RequiredChannelsConfig }
+  | { readonly ok: false; readonly reason: string; readonly missing: readonly OutOfAppChannel[] };
+
+export function fanoutReadiness(input: { requiredRaw: string | undefined; appEnv: string; present: CredentialPresence }): FanoutReadiness {
+  const parsed = parseRequiredChannels(input.requiredRaw, input.appEnv);
+  if (!parsed.ok) {
+    return { ok: false, reason: parsed.reason, missing: [] };
+  }
+  const missing = missingRequiredCredentials(parsed.config, input.present);
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      reason: `missing credentials for required channels: ${missing.join(',')}`,
+      missing,
+    };
+  }
+  return { ok: true, config: parsed.config };
+}

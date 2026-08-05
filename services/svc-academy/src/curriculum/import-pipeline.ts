@@ -139,7 +139,7 @@ export interface CurriculumInventory {
   /** Tracker title targets. */
   titleTarget: { playbooks: number; workbooks: number };
   /**
-   * true only when spine meets title counts. Today false — residual content.
+   * true only when spine meets title counts (platform-native expansion may close this).
    * Do not flip tracker `done` while this is false unless product renames the title.
    */
   titlePromiseMet: boolean;

@@ -50,6 +50,49 @@ export function mayLabelLive(lagSeconds: number | null | undefined): boolean {
   return lagFreshness(lagSeconds) === 'live';
 }
 
+/**
+ * L3 — multi-source lag rollup. Live label only if EVERY known source is live.
+ * Unknown or missing lag on any source → overall unknown (never invent live).
+ */
+export type SourceLag = {
+  readonly source: AnalyticsSourceDb;
+  readonly lagSeconds: number | null | undefined;
+};
+
+export type AggregateLag = {
+  readonly overall: LagFreshness;
+  readonly mayLabelLive: boolean;
+  readonly bySource: Readonly<Record<AnalyticsSourceDb, LagFreshness>>;
+  readonly worstLagSeconds: number | null;
+};
+
+export function aggregateSourceLags(lags: readonly SourceLag[]): AggregateLag {
+  const bySource = {
+    ledger: 'unknown' as LagFreshness,
+    trade: 'unknown' as LagFreshness,
+    identity: 'unknown' as LagFreshness,
+  };
+  let worst: number | null = null;
+  for (const row of lags) {
+    const f = lagFreshness(row.lagSeconds);
+    bySource[row.source] = f;
+    if (row.lagSeconds != null && Number.isFinite(row.lagSeconds) && row.lagSeconds >= 0) {
+      worst = worst === null ? row.lagSeconds : Math.max(worst, row.lagSeconds);
+    }
+  }
+  const values = Object.values(bySource);
+  let overall: LagFreshness = 'live';
+  if (values.some((v) => v === 'unknown')) overall = 'unknown';
+  else if (values.some((v) => v === 'stale')) overall = 'stale';
+  else if (values.some((v) => v === 'delayed')) overall = 'delayed';
+  return {
+    overall,
+    mayLabelLive: overall === 'live',
+    bySource,
+    worstLagSeconds: worst,
+  };
+}
+
 /** Decimal amount on the wire — never number. */
 export const analyticsAmountString = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'analytics amounts are decimal strings (max 18dp)');
 

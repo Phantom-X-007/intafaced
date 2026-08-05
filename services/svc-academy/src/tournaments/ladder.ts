@@ -52,7 +52,7 @@ export class TournamentError extends Error {
 }
 
 /** Pure: order standings into ranks (1-based). Stable on equal score by earlier update wins? Spec: score DESC, updated_at ASC (first to score keeps rank). */
-export function rankStandings(rows: StandingRecord[]): RankedStanding[] {
+export function rankStandings(rows: readonly StandingRecord[]): RankedStanding[] {
   const sorted = [...rows].sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return a.updatedAt.getTime() - b.updatedAt.getTime();
@@ -79,4 +79,28 @@ export function assertMayWriteScore(status: SeasonStatus): void {
   if (status !== 'live') {
     throw new TournamentError(`Season is ${status} — scores only write while live`, 'academy.season_not_live');
   }
+}
+
+/**
+ * L3 — pure standings page for operator/UI.
+ * offset/limit clamp; never invent rows past the ranked list.
+ */
+export type StandingsPage = {
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly standings: readonly RankedStanding[];
+};
+
+export function pageStandings(rows: readonly StandingRecord[], options: { offset?: number; limit?: number } = {}): StandingsPage {
+  const ranked = rankStandings(rows);
+  const total = ranked.length;
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.min(200, Math.max(1, Math.floor(options.limit ?? 50)));
+  return {
+    total,
+    offset,
+    limit,
+    standings: ranked.slice(offset, offset + limit),
+  };
 }

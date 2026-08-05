@@ -144,3 +144,47 @@ export const DEFAULT_ACCRUAL_TIERS: readonly TierRate[] = [
   { hop: 1, rate: '0.05' },
   { hop: 2, rate: '0.02' },
 ];
+
+/**
+ * L3 — dry-run summary of accrued rows (no payout). Totals are decimal strings.
+ * Empty rows → total "0" (honest zero after zero fee, not invent).
+ */
+export type CommissionSummary = {
+  readonly rowCount: number;
+  readonly byBeneficiary: Readonly<Record<string, string>>;
+  readonly totalCommission: string;
+  readonly asset: string | null;
+};
+
+export function summarizeCommissionRows(rows: readonly CommissionRow[]): CommissionSummary {
+  if (rows.length === 0) {
+    return { rowCount: 0, byBeneficiary: {}, totalCommission: '0', asset: null };
+  }
+  const byBeneficiary: Record<string, string> = {};
+  let total = '0';
+  let asset: string | null = rows[0]!.asset;
+  for (const r of rows) {
+    if (asset !== null && r.asset !== asset) {
+      throw new CommissionError('Cannot summarize mixed assets in one dry-run', 'commission.invalid');
+    }
+    asset = r.asset;
+    byBeneficiary[r.beneficiaryId] = decimalAdd(byBeneficiary[r.beneficiaryId] ?? '0', r.commissionAmount);
+    total = decimalAdd(total, r.commissionAmount);
+  }
+  return { rowCount: rows.length, byBeneficiary, totalCommission: total, asset };
+}
+
+/** Add two non-negative decimal strings (truncate to 18dp). */
+export function decimalAdd(a: string, b: string, dp = 18): string {
+  const aa = assertAmount(a, 'commission.fee');
+  const bb = assertAmount(b, 'commission.fee');
+  const [aw, af = ''] = aa.split('.') as [string, string?];
+  const [bw, bf = ''] = bb.split('.') as [string, string?];
+  const as = BigInt(aw + af.padEnd(dp, '0').slice(0, dp));
+  const bs = BigInt(bw + bf.padEnd(dp, '0').slice(0, dp));
+  const sum = as + bs;
+  const str = sum.toString().padStart(dp + 1, '0');
+  const w = str.slice(0, str.length - dp) || '0';
+  const f = str.slice(str.length - dp).replace(/0+$/, '');
+  return f.length ? `${w}.${f}` : w;
+}

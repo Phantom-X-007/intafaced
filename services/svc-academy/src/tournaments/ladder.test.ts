@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { TournamentError, assertMayWriteScore, assertScore, assertSeasonSlug, rankStandings, type StandingRecord } from './ladder.js';
+import {
+  TournamentError,
+  assertMayWriteScore,
+  assertScore,
+  assertSeasonSlug,
+  pageStandings,
+  rankStandings,
+  type StandingRecord,
+} from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
   seasonId: 's',
@@ -29,5 +37,14 @@ describe('validators', () => {
     expect(() => assertScore(-1)).toThrow(TournamentError);
     expect(() => assertMayWriteScore('frozen')).toThrow(TournamentError);
     expect(() => assertMayWriteScore('live')).not.toThrow();
+  });
+
+  it('L3 pageStandings does not invent rows past total', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+    const page = pageStandings(rows, { offset: 1, limit: 1 });
+    expect(page.total).toBe(3);
+    expect(page.standings).toHaveLength(1);
+    expect(page.standings[0]!.userId).toBe('c');
+    expect(pageStandings(rows, { offset: 50, limit: 10 }).standings).toEqual([]);
   });
 });

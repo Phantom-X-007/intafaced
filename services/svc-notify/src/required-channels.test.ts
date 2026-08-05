@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { missingRequiredCredentials, parseRequiredChannels } from './required-channels.js';
+import { fanoutReadiness, missingRequiredCredentials, parseRequiredChannels } from './required-channels.js';
 
 describe('notify L3 required channels honesty', () => {
   it('prod refuses empty declaration', () => {
@@ -15,5 +15,22 @@ describe('notify L3 required channels honesty', () => {
     expect(p.ok).toBe(true);
     if (!p.ok) return;
     expect(missingRequiredCredentials(p.config, { email: true, push: false, sms: false })).toEqual(['sms']);
+  });
+
+  it('L3 fanoutReadiness refuses missing required creds', () => {
+    expect(
+      fanoutReadiness({
+        requiredRaw: 'email,push',
+        appEnv: 'staging',
+        present: { email: true, push: false, sms: false },
+      }),
+    ).toMatchObject({ ok: false, missing: ['push'] });
+    expect(
+      fanoutReadiness({
+        requiredRaw: 'none',
+        appEnv: 'production',
+        present: { email: false, push: false, sms: false },
+      }),
+    ).toEqual({ ok: true, config: { mode: 'none' } });
   });
 });
