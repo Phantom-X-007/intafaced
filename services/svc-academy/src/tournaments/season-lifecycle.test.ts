@@ -24,6 +24,10 @@ import {
   endedSeasonCount,
   hasLiveSeason,
   scheduledSeasonCount,
+  hasFrozenSeason,
+  hasEndedSeason,
+  hasScheduledSeason,
+  totalSeasonCount,
 } from './season-lifecycle.js';
 
 const base = {
@@ -247,5 +251,29 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
       { ...base, id: 'b', status: 'live' as const },
     ];
     expect(scheduledSeasonCount(seasons)).toBe(1);
+  });
+});
+
+describe('L3 wave25 season presence helpers', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'stage-1 non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+
+  it('hasFrozen/Ended/Scheduled + totalSeasonCount', () => {
+    expect(hasFrozenSeason([])).toBe(false);
+    expect(hasEndedSeason([])).toBe(false);
+    expect(hasScheduledSeason([])).toBe(false);
+    expect(totalSeasonCount([])).toBe(0);
+    const rows = [mk('s1', 'scheduled'), mk('s2', 'frozen'), mk('s3', 'ended')];
+    expect(hasFrozenSeason(rows)).toBe(true);
+    expect(hasEndedSeason(rows)).toBe(true);
+    expect(hasScheduledSeason(rows)).toBe(true);
+    expect(totalSeasonCount(rows)).toBe(3);
   });
 });

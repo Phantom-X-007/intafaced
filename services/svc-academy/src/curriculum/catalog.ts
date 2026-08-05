@@ -640,3 +640,27 @@ export function lessonCount(): number {
 export function pathCountWithContent(): number {
   return listPathsWithContent().length;
 }
+
+/**
+ * L3 — sorted playbook slugs on spine. None → [].
+ */
+export function listPlaybookSlugs(): readonly string[] {
+  return listCurriculumSlugsByKind('playbook');
+}
+
+/**
+ * L3 — sorted workbook slugs on spine. None → [].
+ */
+export function listWorkbookSlugs(): readonly string[] {
+  return listCurriculumSlugsByKind('workbook');
+}
+
+/** L3 — how many curriculum kinds have ≥1 spine item. */
+export function kindCountWithContent(): number {
+  return listKindsWithContent().length;
+}
+
+/** L3 — how many Blueprint paths have zero spine items. */
+export function emptyPathCount(): number {
+  return listEmptyCurriculumPaths().length;
+}

@@ -7,6 +7,10 @@ import {
   completedStepCount,
   fillRefCount,
   remainingStepIds,
+  isDrillRefused,
+  remainingStepCount,
+  totalStepCount,
+  isDrillInProgress,
   listPaperFillRefs,
   startPaperDrill,
   startPaperDrillForCatalogItem,
@@ -157,5 +161,24 @@ describe('paper Stage-2 workbook loop', () => {
     });
     if (!start.ok) return;
     expect(fillRefCount(start.run)).toBe(0);
+  });
+
+  it('L3 wave25 refused/progress step counts', () => {
+    const refused = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm1', paper: false, symbol: 'BTC/USDT' },
+    });
+    expect(refused.ok).toBe(false);
+    // build an open run
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm1', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(isDrillRefused(started.run)).toBe(false);
+    expect(totalStepCount(started.run)).toBe(started.run.steps.length);
+    expect(remainingStepCount(started.run)).toBe(started.run.steps.length);
+    expect(isDrillInProgress(started.run)).toBe(true);
   });
 });

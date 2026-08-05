@@ -329,3 +329,34 @@ export function scoreAtRank(rows: readonly StandingRecord[], rank: number): numb
   const i = Math.floor(rank) - 1;
   return ranked[i]?.score ?? null;
 }
+
+/**
+ * L3 — user id at 1-based rank. Missing rank → null (never invent podium seat).
+ */
+export function userAtRank(rows: readonly StandingRecord[], rank: number): string | null {
+  if (!Number.isFinite(rank) || rank < 1) return null;
+  const ranked = rankStandings(rows);
+  const i = Math.floor(rank) - 1;
+  return ranked[i]?.userId ?? null;
+}
+
+/**
+ * L3 — top-3 user ids in rank order. Fewer than 3 → shorter list; empty → [].
+ */
+export function podiumUserIds(rows: readonly StandingRecord[]): readonly string[] {
+  return topNStandings(rows, 3).map((r) => r.userId);
+}
+
+/**
+ * L3 — true when standings input is empty.
+ */
+export function isEmptyStandings(rows: readonly StandingRecord[]): boolean {
+  return rows.length === 0;
+}
+
+/**
+ * L3 — true when standings has at least one row.
+ */
+export function hasAnyStanding(rows: readonly StandingRecord[]): boolean {
+  return rows.length > 0;
+}

@@ -20,6 +20,10 @@ import {
   planSkipCount,
   planHoldCount,
   planSendCount,
+  planHasSends,
+  planDecisionCount,
+  planSendRatio,
+  planIsMixed,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -149,5 +153,20 @@ describe('notify L3 combined mute + digest', () => {
 
   it('L3 planSendCount aliases countSendNowChannels', () => {
     expect(planSendCount([])).toBe(0);
+  });
+
+  it('L3 wave25 planHasSends + decision count + send ratio + mixed', () => {
+    expect(planHasSends([])).toBe(false);
+    expect(planDecisionCount([])).toBe(0);
+    expect(planSendRatio([])).toBeNull();
+    expect(planIsMixed([])).toBe(false);
+    const muted = applyMuteToggle(DEFAULT_COMBINED_PREFS.mute, { channel: 'email', muted: true });
+    const digest = applyDigestCadence(DEFAULT_COMBINED_PREFS.digest, 'hourly');
+    const prefs = { mute: muted, digest };
+    const plan = planFanoutDelivery(prefs, ['inapp', 'email', 'sms'], 'info');
+    expect(planDecisionCount(plan)).toBe(plan.length);
+    expect(planSendRatio(plan)).toMatch(/^\d+\.\d{4}$/);
+    expect(typeof planHasSends(plan)).toBe('boolean');
+    expect(typeof planIsMixed(plan)).toBe('boolean');
   });
 });

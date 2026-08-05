@@ -30,6 +30,10 @@ import {
   nonMoneyMetricCount,
   catalogHasMoney,
   catalogIsNonEmpty,
+  catalogMetricCount,
+  ratioMetricCount,
+  amountMetricCount,
+  countKindMetricCount,
 } from './ops-analytics.js';
 
 describe('analytics Slice A — sources + lag fail-closed', () => {
@@ -209,5 +213,12 @@ describe('L3 wave21 money/non-money counts', () => {
 
   it('L3 catalogIsNonEmpty true on tip', () => {
     expect(catalogIsNonEmpty()).toBe(true);
+  });
+});
+
+describe('L3 wave25 catalog kind counts', () => {
+  it('catalogMetricCount + kind partitions sum to catalog', () => {
+    expect(catalogMetricCount()).toBe(analyticsMetricCatalogSize());
+    expect(ratioMetricCount() + amountMetricCount() + countKindMetricCount()).toBe(analyticsMetricCatalogSize());
   });
 });

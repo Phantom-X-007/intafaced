@@ -36,6 +36,10 @@ import {
   lastPlaceUser,
   firstPlaceUser,
   scoreAtRank,
+  userAtRank,
+  podiumUserIds,
+  isEmptyStandings,
+  hasAnyStanding,
 } from './ladder.js';
 
 const row = (userId: string, score: number, t: string): StandingRecord => ({
@@ -209,5 +213,19 @@ describe('L3 standings board helpers', () => {
     expect(scoreAtRank(rows, 1)).toBe(20);
     expect(scoreAtRank(rows, 2)).toBe(10);
     expect(scoreAtRank(rows, 3)).toBeNull();
+  });
+
+  it('L3 wave25 userAtRank + podium + empty guards', () => {
+    expect(userAtRank([], 1)).toBeNull();
+    expect(podiumUserIds([])).toEqual([]);
+    expect(isEmptyStandings([])).toBe(true);
+    expect(hasAnyStanding([])).toBe(false);
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z'), row('c', 15, '2026-08-01T11:00:00Z')];
+    expect(userAtRank(rows, 1)).toBe('b');
+    expect(userAtRank(rows, 2)).toBe('c');
+    expect(userAtRank(rows, 0)).toBeNull();
+    expect(podiumUserIds(rows)).toEqual(['b', 'c', 'a']);
+    expect(isEmptyStandings(rows)).toBe(false);
+    expect(hasAnyStanding(rows)).toBe(true);
   });
 });

@@ -25,6 +25,10 @@ import {
   workbookCount,
   lessonCount,
   pathCountWithContent,
+  listPlaybookSlugs,
+  listWorkbookSlugs,
+  kindCountWithContent,
+  emptyPathCount,
 } from './catalog.js';
 
 /**
@@ -217,5 +221,12 @@ describe('curriculum catalog', () => {
 
   it('L3 pathCountWithContent positive on tip', () => {
     expect(pathCountWithContent()).toBeGreaterThan(0);
+  });
+
+  it('L3 wave25 playbook/workbook slugs + kind/empty path counts', () => {
+    expect(listPlaybookSlugs().length).toBe(playbookCount());
+    expect(listWorkbookSlugs().length).toBe(workbookCount());
+    expect(kindCountWithContent()).toBeGreaterThan(0);
+    expect(emptyPathCount()).toBe(listEmptyCurriculumPaths().length);
   });
 });

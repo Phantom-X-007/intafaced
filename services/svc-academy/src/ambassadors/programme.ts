@@ -338,4 +338,35 @@ export class MemoryAmbassadorProgramme {
   frozenProgrammeCount(): number {
     return this.frozenCount();
   }
+
+  /**
+   * L3 — active programme count (appointments not frozen). Empty → 0.
+   */
+  activeProgrammeCount(): number {
+    return this.activeCount();
+  }
+
+  /**
+   * L3 — true when any ambassador is frozen. Empty → false.
+   */
+  hasFrozenAmbassador(): boolean {
+    return this.frozenCount() > 0;
+  }
+
+  /**
+   * L3 — true when any ambassador is active. Empty → false.
+   */
+  hasActiveAmbassador(): boolean {
+    return this.activeCount() > 0;
+  }
+
+  /**
+   * L3 — statuses present in the store (stable order: active then frozen). Empty → [].
+   */
+  listStatusesPresent(): readonly AmbassadorStatus[] {
+    const out: AmbassadorStatus[] = [];
+    if (this.activeCount() > 0) out.push('active');
+    if (this.frozenCount() > 0) out.push('frozen');
+    return out;
+  }
 }

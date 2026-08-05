@@ -14,6 +14,10 @@ import {
   failedChannels,
   refusedChannels,
   fanoutAcceptanceRatio,
+  countFanoutAccepted,
+  fanoutFailureRatio,
+  fanoutIsEmpty,
+  fanoutAttemptCount,
 } from './delivery-honesty.js';
 
 describe('notify Stage-2 delivery honesty', () => {
@@ -143,5 +147,21 @@ describe('notify Stage-2 delivery honesty', () => {
     ];
     expect(refusedChannels(attempts)).toEqual(['push']);
     expect(fanoutAcceptanceRatio(attempts)).toBe('0.5000');
+  });
+
+  it('L3 wave25 accepted count + failure ratio + empty guards', () => {
+    expect(countFanoutAccepted([])).toBe(0);
+    expect(fanoutFailureRatio([])).toBeNull();
+    expect(fanoutIsEmpty([])).toBe(true);
+    expect(fanoutAttemptCount([])).toBe(0);
+    const attempts = [
+      { channel: 'email' as const, outcome: 'accepted' as const, code: 'ok' },
+      { channel: 'push' as const, outcome: 'failed' as const, code: 'timeout' },
+      { channel: 'sms' as const, outcome: 'refused' as const, code: 'no_cred' },
+    ];
+    expect(countFanoutAccepted(attempts)).toBe(1);
+    expect(fanoutFailureRatio(attempts)).toBe('0.3333');
+    expect(fanoutIsEmpty(attempts)).toBe(false);
+    expect(fanoutAttemptCount(attempts)).toBe(3);
   });
 });

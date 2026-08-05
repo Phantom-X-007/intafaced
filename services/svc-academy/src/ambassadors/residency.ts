@@ -275,4 +275,33 @@ export class MemoryResidencyDesk {
   withdrawnApplicationCount(): number {
     return this.withdrawnCount();
   }
+  /**
+   * L3 — applied (open queue) count. Empty → 0.
+   */
+  appliedApplicationCount(): number {
+    return this.openCount();
+  }
+
+  /**
+   * L3 — sorted applied application ids. Empty → [].
+   */
+  appliedApplicationIds(): readonly string[] {
+    return this.openApplicationIds();
+  }
+
+  /**
+   * L3 — open/total as fixed 4dp string. Empty desk → null (never invent 0 queue).
+   */
+  openApplicationRatio(): string | null {
+    const total = this.rows.size;
+    if (total === 0) return null;
+    return (this.openCount() / total).toFixed(4);
+  }
+
+  /**
+   * L3 — true when desk has any application row. Empty → false.
+   */
+  hasAnyApplication(): boolean {
+    return this.rows.size > 0;
+  }
 }

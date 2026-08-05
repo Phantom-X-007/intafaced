@@ -165,3 +165,30 @@ export function planHoldCount(plan: readonly DeliveryDecision[]): number {
 export function planSendCount(plan: readonly DeliveryDecision[]): number {
   return countSendNowChannels(plan);
 }
+
+/** L3 — true when plan has any send_now. Empty → false. */
+export function planHasSends(plan: readonly DeliveryDecision[]): boolean {
+  return planSendCount(plan) > 0;
+}
+
+/** L3 — total decisions in plan. Empty → 0. */
+export function planDecisionCount(plan: readonly DeliveryDecision[]): number {
+  return plan.length;
+}
+
+/**
+ * L3 — send_now / total as fixed 4dp string. Empty plan → null (never invent 0 send).
+ */
+export function planSendRatio(plan: readonly DeliveryDecision[]): string | null {
+  if (plan.length === 0) return null;
+  return (planSendCount(plan) / plan.length).toFixed(4);
+}
+
+/**
+ * L3 — true when plan has mixed actions (not all same). Empty → false.
+ */
+export function planIsMixed(plan: readonly DeliveryDecision[]): boolean {
+  if (plan.length === 0) return false;
+  const first = plan[0]!.action;
+  return plan.some((d) => d.action !== first);
+}
