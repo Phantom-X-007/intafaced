@@ -85,12 +85,38 @@ function winRate(closed: number, winning: number): string | null {
 }
 
 /**
+ * Stage-2 L3: optional allowlist of leader ids.
+ * Empty/missing allowlist → all fixtures. Non-empty → only listed leaders.
+ */
+export function filterLeadersByAllowlist(
+  fixtures: readonly LeaderPerformanceFixture[],
+  allowlist: ReadonlySet<string> | readonly string[] | undefined,
+): { readonly kept: readonly LeaderPerformanceFixture[]; readonly skippedNotAllowed: number } {
+  if (!allowlist) return { kept: fixtures, skippedNotAllowed: 0 };
+  const set = allowlist instanceof Set ? allowlist : new Set(allowlist);
+  if (set.size === 0) return { kept: fixtures, skippedNotAllowed: 0 };
+  const kept: LeaderPerformanceFixture[] = [];
+  let skippedNotAllowed = 0;
+  for (const row of fixtures) {
+    if (set.has(row.leaderId)) kept.push(row);
+    else skippedNotAllowed += 1;
+  }
+  return { kept, skippedNotAllowed };
+}
+
+/**
  * Build audited leader stats from fixtures. Incomplete rows are skipped;
  * empty input → empty; all incomplete → unavailable (never invent green leaders).
  */
 export function buildLeaderStats(
   fixtures: readonly LeaderPerformanceFixture[],
-  options: { now?: Date; idPrefix?: string; copyPlane?: CopyPlaneState } = {},
+  options: {
+    now?: Date;
+    idPrefix?: string;
+    copyPlane?: CopyPlaneState;
+    /** Stage-2 L3: only include these leader ids when provided and non-empty. */
+    leaderAllowlist?: ReadonlySet<string> | readonly string[];
+  } = {},
 ): IntelResult {
   const now = options.now ?? new Date();
   const idPrefix = options.idPrefix ?? 'ci';
@@ -98,16 +124,18 @@ export function buildLeaderStats(
     return { status: 'unavailable', userMessageKey: 'agents.copy_intel.unavailable', reason: 'copy_plane_dark' };
   }
 
-  if (fixtures.length === 0) {
+  const { kept: scoped, skippedNotAllowed } = filterLeadersByAllowlist(fixtures, options.leaderAllowlist);
+
+  if (scoped.length === 0) {
     return { status: 'empty', userMessageKey: 'agents.copy_intel.empty' };
   }
 
-  let skippedIncomplete = 0;
+  let skippedIncomplete = skippedNotAllowed;
   const stats: LeaderStat[] = [];
   const audit: AuditWrite[] = [];
   let seq = 0;
 
-  for (const row of fixtures) {
+  for (const row of scoped) {
     if (!row.leaderId || !row.source) {
       skippedIncomplete += 1;
       continue;

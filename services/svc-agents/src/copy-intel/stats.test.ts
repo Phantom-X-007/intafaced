@@ -70,4 +70,20 @@ describe('copy-intel buildLeaderStats (Stage-1 fixtures)', () => {
       reason: 'copy_plane_dark',
     });
   });
+
+  it('Stage-2 L3: leader allowlist drops out-of-scope — no invent leaders', () => {
+    const r = buildLeaderStats([row({ leaderId: 'L1' }), row({ leaderId: 'L2', realisedPnl: '5' })], {
+      now: NOW,
+      leaderAllowlist: ['L2'],
+    });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.stats.map((s) => s.leaderId)).toEqual(['L2']);
+    expect(r.skippedIncomplete).toBe(1);
+  });
+
+  it('Stage-2 L3: allowlist miss → empty not invent', () => {
+    const r = buildLeaderStats([row({ leaderId: 'L1' })], { now: NOW, leaderAllowlist: ['NOPE'] });
+    expect(r).toEqual({ status: 'empty', userMessageKey: 'agents.copy_intel.empty' });
+  });
 });
