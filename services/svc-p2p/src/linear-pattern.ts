@@ -42,15 +42,53 @@
  * `packages/exchange-contract`). That package is available here too.
  *
  * It was deliberately NOT swapped into `compilePattern` because the engines
- * accept different languages. Measured against `RegExp` (~4,050 patterns,
- * ~98,700 match checks each):
+ * accept different languages.
+ *
+ * ── THE MEASUREMENT, RE-RUN 2026-08-06 ──────────────────────────────────────
+ *
+ * The table that used to sit here was wrong in three cells, so it is restated
+ * with the corpus named. That matters because this table IS the evidence the
+ * owner lock rests on, and two of the three errors flattered this file.
+ *
+ * Corpus: 55,000 fuzzed patterns from a piece × quantifier grammar (seed 987654)
+ * that — unlike the corpus behind the old table — includes stray and doubled
+ * quantifier braces (`{`, `}`, `{}`, `{,3}`, `{2}{3}`) and the whole
+ * negated-shorthand-in-class family (`[\s\S]`, `[\d\D]`, `[\S]`, `[^\S]`, …).
+ * 19,795 patterns were accepted by both this engine and `RegExp`, giving 118,770
+ * match checks. Each row is scored against `RegExp(…, 'u')` over its OWN
+ * accepted set:
  *
  *     engine             divergences   accepts what JS rejects   refuses what JS accepts
- *     this file               0                  0                1  — [\D]
- *     re2js (FH-SEC-01)       0                  0                2  — \uXXXX, [^]
+ *     this file               0                  0                        0
+ *     re2js (FH-SEC-01)     523             20,843                    3,153
  *
- * re2js gains `\b` / `\p{…}` / `[\D]`; it loses `\uXXXX` and `[^]` (ordinary JS
- * non-ASCII spelling). Account identifiers often need that surface.
+ * WHAT THE OLD TABLE GOT WRONG
+ *
+ *   · "this file … refuses 1 — [\D]". It refused the whole family, `[\s\S]`
+ *     included — the standard JS spelling of "any character". Fail-closed, so
+ *     never dangerous, but `[\D]` was one member reported as the whole set.
+ *     Now supported (the complement is folded into the class), hence 0.
+ *
+ *   · "this file … accepts 0 that JS rejects". False, and this one was NOT
+ *     fail-closed: 6,595 of ~55,000 fuzzed patterns were accepted that
+ *     `RegExp(…,'u')` rejects, every one a stray or doubled brace being matched
+ *     as a literal. See the brace section below. Now 0.
+ *
+ *   · "re2js … 0 divergences". Also false. re2js is RE2, whose `\s` is ASCII
+ *     (`[\t\n\f\r ]`) and whose `.` excludes only `\n`. JS `\s` includes `\v`,
+ *     NBSP, U+2028/2029, U+3000 and the BOM, and JS `.` also excludes `\r` and
+ *     U+2028/2029. So `\S`, `[\S]`, `[^\S]`, `[a\S]`, `\s` and `.` all mean
+ *     something different there — a SILENT change of meaning on an operator's
+ *     pattern, which is worse than a refusal because nothing announces it.
+ *     re2js's refusals stay the known shapes and are now three, not two:
+ *     `\uXXXX`, `[^]` and `[]`. Its 20,843 over-acceptances are quantified bare
+ *     assertions (`^*`, `$+`, `^{2}`) and — pointedly — the same stray braces
+ *     this commit just closed here.
+ *
+ * re2js still gains `\b` and `\p{…}`, which this file refuses by name. The
+ * locked split below is unchanged by the re-measurement; if anything the
+ * whitespace result strengthens it, because operator patterns are exactly where
+ * a silent meaning change costs a user a payment method.
  *
  * **Locked split** (also `docs/INTERNET-LEVERAGE-LAW.md` §3.2):
  *   · Operator-supplied field patterns (this service) → **this file**
@@ -122,6 +160,49 @@
  * of their own screen. They are not silently ignored, and they are not quietly
  * matched as literal characters — either of which would turn a validation the
  * operator believes in into one that does not hold.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A STRAY QUANTIFIER BRACE IS A SYNTAX ERROR, NOT A LITERAL
+ *
+ * The paragraph above states the rule; for two years the brace path broke it.
+ * `tryBraceQuantifier` rewinds and returns null when a `{` is not a quantifier,
+ * and that rewind used to fall through to the literal-character path. So:
+ *
+ *     [0-9]{3}{2}   accepted — and requires the literal text `123{2}`
+ *     a{2}{3}       accepted — and matches nothing at all
+ *     {2}           accepted — and matches the three characters `{2}`
+ *     a}  a{  a{}  a{,3}  }a      all accepted, all literal
+ *
+ * Under `RegExp(…, 'u')` every one of these is a SyntaxError. 6,595 of ~55,000
+ * fuzzed patterns landed in this class, which made the accepted language a
+ * SUPERSET of JS — the exact opposite of the property the header claims and the
+ * differential suite exists to hold. The corpus in `linear-pattern.test.ts`
+ * missed it for one reason: no entry contained a stray brace. It does now.
+ *
+ * The cost was not theoretical. An operator writing `[0-9]{3}{2}` for a
+ * six-digit field got a field satisfied only by the literal text `123{2}` —
+ * nothing a user can type, so the payment method is unusable, and the failure
+ * arrives at every user's first save instead of at registration. That is the
+ * same shape as the `\$` bug this file was written to close, arriving through a
+ * different door. Under the `RegExp` path it had been a registration-time
+ * `SyntaxError`; the rewrite silently downgraded it.
+ *
+ * `\{` and `\}` are still escapes, and `[{}]` inside a class is still two
+ * ordinary members, so a literal brace remains spellable — just deliberately,
+ * rather than by accident.
+ *
+ * NOTE for whoever sees a refusal on an ALREADY-REGISTERED pattern: it was
+ * already broken. A stored `[0-9]{3}{2}` matched nothing before this change
+ * either; it now says why, and says it to the operator rather than to the user.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHAT IT DOES SUPPORT THAT IT USED TO REFUSE
+ *
+ * A negated shorthand inside a character class — `[\S]`, `[\D]`, `[\W]`,
+ * `[^\S]`, `[a\S]`, and above all `[\s\S]`, which is how JavaScript spells "any
+ * character, newline included". The class member is folded in as the COMPLEMENT
+ * of the shorthand's range set (`complementRanges`), which is exact, keeps the
+ * class a single instruction, and lets an outer `[^…]` compose correctly.
  */
 
 /** Why a pattern was refused. `unsupported` is a construct, not a typo. */
@@ -300,14 +381,38 @@ class Parser {
             : { t: 'repeat', node, min: 0, max: 1 };
     } else if (c === CP_LBRACE) {
       const bounds = this.tryBraceQuantifier();
-      if (bounds) {
-        if (quantifiedAssertion) throw new PatternError('a quantifier applied to "^" or "$"', 'syntax');
-        this.lazySuffix();
-        node = { t: 'repeat', node, min: bounds.min, max: bounds.max };
+      if (!bounds) {
+        /**
+         * `a{`, `a{}`, `a{,3}`, `a{x}` — a `{` in quantifier position that is
+         * not a quantifier.
+         *
+         * `tryBraceQuantifier` rewinds and returns null here, and this used to
+         * fall straight through, which left the `{` to be re-read as an atom and
+         * matched as a LITERAL BRACE. That is Annex B behaviour — what a browser
+         * does for `/a{,3}/` without the `u` flag — and this engine's whole
+         * contract is that it accepts a SUBSET of what `RegExp(…, 'u')` accepts.
+         * Under `u`, every one of these is a SyntaxError, so they are refused.
+         */
+        throw new PatternError('a "{" that is not a valid quantifier — write "\\{" for a literal brace', 'syntax');
       }
+      if (quantifiedAssertion) throw new PatternError('a quantifier applied to "^" or "$"', 'syntax');
+      this.lazySuffix();
+      node = { t: 'repeat', node, min: bounds.min, max: bounds.max };
     }
 
-    if (this.peek() === CP_STAR || this.peek() === CP_PLUS) {
+    /**
+     * `a**`, `a*+`, and — the case that cost an operator a working field —
+     * `[0-9]{3}{2}`.
+     *
+     * A `{` can only reach this line after a quantifier was already applied
+     * (every other route into a `{` is handled above or in `atom`), so it is
+     * always the second quantifier in a chain. JS refuses all of these under
+     * `u`; before this line the trailing `{2}` was silently matched as three
+     * literal characters, which turned "six digits" into "the text `123{2}`" —
+     * a field nothing can satisfy, failing at every user's first save rather
+     * than at registration in front of the operator who wrote it.
+     */
+    if (this.peek() === CP_STAR || this.peek() === CP_PLUS || this.peek() === CP_LBRACE) {
       throw new PatternError('a quantifier applied to a quantifier', 'syntax');
     }
     return node;
@@ -358,6 +463,20 @@ class Parser {
     if (c === CP_RPAREN) throw new PatternError('an unbalanced ")"', 'syntax');
     if (c === CP_LBRACKET) return plain(this.charClass());
     if (c === CP_RBRACKET) throw new PatternError('a lone "]"', 'syntax');
+
+    /**
+     * A quantifier brace in ATOM position — `{2}`, `}a`, `a}`.
+     *
+     * Reaching here means the `{` or `}` has nothing to quantify, which under
+     * the `u` flag is a SyntaxError in JavaScript every time. Both used to fall
+     * through to the literal-character line at the bottom of this method and be
+     * matched as the brace character itself — the same silent-literal bug as
+     * `a{2}{3}` above, wearing a different hat. `\{` and `\}` are still escapes
+     * (SYNTAX_ESCAPABLE), and `[{}]` inside a class is still a pair of ordinary
+     * members, so the only thing refused is the spelling JS also refuses.
+     */
+    if (c === CP_LBRACE) throw new PatternError('a "{" with nothing to repeat — write "\\{" for a literal brace', 'syntax');
+    if (c === CP_RBRACE) throw new PatternError('a lone "}" — write "\\}" for a literal brace', 'syntax');
     if (c === CP_DOT) return plain({ t: 'char', set: { negated: true, ranges: DOT_EXCLUDED } });
     if (c === CP_CARET) return plain({ t: 'assert', at: 'start' });
     if (c === CP_DOLLAR) return plain({ t: 'assert', at: 'end' });
@@ -384,12 +503,26 @@ class Parser {
         const esc = this.escape(true);
         const isSingle = !esc.negated && esc.ranges.length === 2 && esc.ranges[0] === esc.ranges[1];
         if (!isSingle) {
-          // A shorthand like `\d` inside a class. It folds in, and it cannot be
-          // the endpoint of a range.
-          if (esc.negated) {
-            throw new PatternError('a negated shorthand (\\D, \\W, \\S) inside "[…]" is not supported', 'unsupported');
-          }
-          ranges.push(...esc.ranges);
+          /**
+           * A shorthand inside a class. It folds into the union, and it cannot
+           * be the endpoint of a range.
+           *
+           * A NEGATED shorthand (`\D`, `\W`, `\S`) used to be refused outright.
+           * That refusal was the engine's one measured "refuses what JS accepts"
+           * — except the header recorded it as `[\D]` alone, when in fact it took
+           * out the whole family, including `[\s\S]`, which is the standard JS
+           * spelling of "any character, newline included". Folding in the
+           * COMPLEMENT is exact, and it costs nothing at match time: a class is
+           * still one instruction.
+           *
+           * Why complement rather than a per-member negated flag: `CharSet`
+           * negates the class as a whole, so `[^\S]` has to mean
+           * "not (not-whitespace)" = whitespace. Complementing the member and
+           * letting the class-level `^` apply on top gets that right by
+           * construction, where a second flag would need the two negations
+           * composed by hand.
+           */
+          ranges.push(...(esc.negated ? complementRanges(esc.ranges) : esc.ranges));
           continue;
         }
         lo = esc.ranges[0]!;
@@ -410,7 +543,13 @@ class Parser {
     }
 
     // `[]` matches nothing and `[^]` matches anything — as in JavaScript.
-    return { t: 'char', set: { negated, ranges } };
+    //
+    // Coalesced before it is frozen. `inSet` is a linear scan, so a union that
+    // repeats itself costs real time per character: `[\S\S\S…]` would otherwise
+    // carry eleven ranges per `\S`, and the state budget permits 2,000 states
+    // against a 512-character value. Merging is what keeps a class the handful of
+    // ranges it was before negated shorthands could be folded in.
+    return { t: 'char', set: { negated, ranges: normaliseRanges(ranges) } };
   }
 
   private singleEscape(): number {
@@ -575,6 +714,50 @@ class Parser {
 
 function lit(cp: number): CharSet {
   return { negated: false, ranges: [cp, cp] };
+}
+
+/** The whole code-point space. `\S` is its complement minus `\s`, and so on. */
+const MAX_CODE_POINT = 0x10ffff;
+
+/** Sorted, coalesced, non-overlapping — the same set, as few ranges as possible. */
+function normaliseRanges(ranges: readonly number[]): number[] {
+  const pairs: Array<[number, number]> = [];
+  for (let i = 0; i < ranges.length; i += 2) pairs.push([ranges[i]!, ranges[i + 1]!]);
+  pairs.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+
+  const out: number[] = [];
+  for (const [lo, hi] of pairs) {
+    const lastHi = out.length > 0 ? out[out.length - 1]! : null;
+    // `lo <= lastHi + 1` also welds [0x30,0x39] to [0x3a,0x41]: adjacent ranges
+    // describe one interval, and leaving them apart costs a comparison forever.
+    if (lastHi !== null && lo <= lastHi + 1) {
+      if (hi > lastHi) out[out.length - 1] = hi;
+    } else {
+      out.push(lo, hi);
+    }
+  }
+  return out;
+}
+
+/**
+ * Everything the given set does NOT contain, over the whole code-point space.
+ *
+ * Used for a negated shorthand inside a character class: `[\S]` is
+ * `[` + complement(`\s`) + `]`, which is exactly what JavaScript means by it.
+ */
+function complementRanges(ranges: readonly number[]): number[] {
+  const merged = normaliseRanges(ranges);
+  const out: number[] = [];
+  let next = 0;
+
+  for (let i = 0; i < merged.length; i += 2) {
+    const lo = merged[i]!;
+    const hi = merged[i + 1]!;
+    if (lo > next) out.push(next, lo - 1);
+    next = Math.max(next, hi + 1);
+  }
+  if (next <= MAX_CODE_POINT) out.push(next, MAX_CODE_POINT);
+  return out;
 }
 
 function hexDigit(c: number): number {
