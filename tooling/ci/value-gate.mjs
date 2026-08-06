@@ -65,9 +65,9 @@
  * masquerading as a correctness gate made agents stop shipping. So the stamp
  * verdict has two tiers and the threshold is stated, not implied:
  *
- *   seriesRun < STAMP_BLOCK_RUN  → WARN, loud, exit 0. First offence is visible.
- *   seriesRun ≥ STAMP_BLOCK_RUN  → BLOCK (strict). Default 3, i.e. the FOURTH
- *                                  consecutive near-identical unwired subject.
+ *   seriesHits < STAMP_BLOCK_RUN  → WARN, loud, exit 0. First offence is visible.
+ *   seriesHits ≥ STAMP_BLOCK_RUN  → BLOCK (strict). Default 3, i.e. the FOURTH
+ *                                  near-identical unwired subject in the window.
  *
  * THE ESCAPE, and it is auditable, not silent:
  *
@@ -109,7 +109,8 @@
  *   (d) series similarity ≥0.80 to a previous ancestor subject
  *   (e) ≥1 new named code symbol, and none of them reached from outside
  *   (f) no Serial-Work: trailer
- *   (g) seriesRun ≥ 3 consecutive near-identical ancestors (below that: WARN)
+ *   (g) seriesHits ≥ 3 near-identical ancestors in the 10-commit window
+ *       (below that: WARN and exit 0 — the first offence is loud, not fatal)
  *
  * Wired in .github/workflows/docs-format.yml (docs PRs) AND in the `gates` job
  * of .github/workflows/ci.yml (code PRs) — NOT in gates.mjs. It needs git
@@ -133,9 +134,11 @@ const STRICT = process.env.VALUE_GATE_STRICT === '1' || process.argv.includes('-
 const BASE = process.env.VALUE_GATE_BASE || 'origin/main';
 
 /**
- * How many consecutive near-identical unwired subjects before this stops being
- * a warning. 3 means: waves 2 and 3 of a series WARN in the log, wave 4 is red.
- * A number, in one place, so the threshold is a stated fact and not a mood.
+ * How many near-identical unwired subjects in the ten-commit window before this
+ * stops being a warning. 3 means: the second and third of a series WARN in the
+ * log, the fourth is red. A number, in one place, so the threshold is a stated
+ * fact and not a mood. Counted across the window rather than as a leading run,
+ * because one unrelated PR would otherwise reset a mill's counter forever.
  */
 export const STAMP_BLOCK_RUN = Number(process.env.VALUE_GATE_BLOCK_RUN || 3);
 
@@ -637,10 +640,14 @@ export function decide({
       seriesRaw = rawPrev[i];
     }
   }
-  let seriesRun = 0;
+  // How many of the ancestors in the window belong to this series — counted
+  // ACROSS the window, not as a leading run. A consecutive counter is reset by
+  // one unrelated PR, so alternating mill/real/mill/real would have warned
+  // forever and never blocked. On #832–#876 the two definitions give the same
+  // answer at every commit; they differ only on the mill that tries to dodge.
+  let seriesHits = 0;
   for (let i = 0; i < rawPrev.length; i++) {
-    if (seriesSimilarity(subject, rawPrev[i]) >= threshold) seriesRun++;
-    else break;
+    if (seriesSimilarity(subject, rawPrev[i]) >= threshold) seriesHits++;
   }
   const inSeries = seriesBest >= threshold;
   const symbolCount = (newSymbols || []).length;
@@ -650,7 +657,7 @@ export function decide({
   const unwired = symbolCount > 0 && reachedCount === 0;
   const serialWork = serialWorkReason(body);
   const stamp = inSeries && unwired && !serialWork;
-  const codeBlock = stamp && seriesRun >= blockRun;
+  const codeBlock = stamp && seriesHits >= blockRun;
   const codeWarn = stamp && !codeBlock;
 
   return {
@@ -668,7 +675,7 @@ export function decide({
     norm,
     seriesBest,
     seriesRaw,
-    seriesRun,
+    seriesHits,
     inSeries,
     symbolCount,
     reachedCount,
@@ -864,11 +871,11 @@ function selfTest() {
   assert(wave.docsOnly === false, 'wave: docsOnly is FALSE — this is why the old rule never fired');
   assert(wave.nearDup === false, `wave: whole-title Dice misses it (${wave.best.toFixed(3)}) — the stem is what sees the series`);
   assert(wave.inSeries === true, `wave: series similarity catches it (${wave.seriesBest.toFixed(3)})`);
-  assert(wave.seriesRun === 5, `wave: run length 5, got ${wave.seriesRun}`);
+  assert(wave.seriesHits === 5, `wave: 5 siblings in the window, got ${wave.seriesHits}`);
   assert(wave.unwired === true, 'wave: no new symbol reached from outside');
-  assert(wave.codeBlock === true, 'wave: run 5 ≥ 3 → must BLOCK');
+  assert(wave.codeBlock === true, 'wave: 5 siblings ≥ 3 → must BLOCK');
   assert(wave.block === true, 'wave: block');
-  fixture('code near-dup series + zero reached symbols + run 5 → BLOCK (the #832–#876 shape)');
+  fixture('code near-dup series + zero reached symbols + 5 siblings → BLOCK (the #832–#876 shape)');
 
   // First offence: same shape, run of 1. Loud, but green.
   const firstOffence = decide({
@@ -880,13 +887,13 @@ function selfTest() {
     reached: [],
   });
   assert(firstOffence.stamp === true, 'first offence: is a stamp');
-  assert(firstOffence.seriesRun === 1, `first offence: run 1, got ${firstOffence.seriesRun}`);
+  assert(firstOffence.seriesHits === 1, `first offence: 1 sibling, got ${firstOffence.seriesHits}`);
   assert(firstOffence.codeWarn === true, 'first offence: must WARN');
   assert(firstOffence.codeBlock === false, 'first offence: must NOT block');
   assert(firstOffence.block === false, 'first offence: exit 0');
-  fixture('code near-dup series + zero reached symbols + run 1 → WARN, exit 0 (warn before block)');
+  fixture('code near-dup series + zero reached symbols + 1 sibling → WARN, exit 0 (warn before block)');
 
-  // Threshold is a stated number, not a mood: run 2 warns, run 3 blocks.
+  // Threshold is a stated number, not a mood: 2 siblings warn, 3 block.
   const atThreshold = decide({
     files: waveFiles,
     subject: waveSubject,
@@ -903,12 +910,34 @@ function selfTest() {
     newSymbols: waveSymbols,
     reached: [],
   });
-  assert(atThreshold.seriesRun === 3 && atThreshold.codeBlock === true, `threshold: run 3 blocks (got run ${atThreshold.seriesRun})`);
+  assert(atThreshold.seriesHits === 3 && atThreshold.codeBlock === true, `threshold: 3 siblings blocks (got ${atThreshold.seriesHits})`);
   assert(
-    belowThreshold.seriesRun === 2 && belowThreshold.codeWarn === true,
-    `threshold: run 2 warns (got run ${belowThreshold.seriesRun})`,
+    belowThreshold.seriesHits === 2 && belowThreshold.codeWarn === true,
+    `threshold: 2 siblings warns (got ${belowThreshold.seriesHits})`,
   );
-  fixture(`stated threshold — run ${STAMP_BLOCK_RUN - 1} WARNs, run ${STAMP_BLOCK_RUN} BLOCKs`);
+  fixture(`stated threshold — ${STAMP_BLOCK_RUN - 1} near-identical ancestors WARNs, ${STAMP_BLOCK_RUN} BLOCKs`);
+
+  // Counted across the window, not as a leading run. A mill that alternates
+  // mill / real / mill / real would reset a consecutive counter on every other
+  // PR and warn forever without ever blocking. Interleaving must not launder it.
+  const interleaved = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: [
+      'fix(ci): unrelated (#819)',
+      waveSubjects[0],
+      'chore(deps): bump prettier (#818)',
+      waveSubjects[1],
+      'docs: money baseline (#817)',
+      waveSubjects[2],
+    ],
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  assert(interleaved.seriesHits === 3, `interleave: 3 siblings across the window, got ${interleaved.seriesHits}`);
+  assert(interleaved.codeBlock === true, 'interleave: an unrelated PR between stamps must not reset the counter');
+  fixture('siblings counted across the 10-commit window — interleaving unrelated PRs does not launder a mill');
 
   // The escape, and its floor. A bare `Serial-Work:` is not a reason.
   const escaped = decide({
@@ -1187,7 +1216,7 @@ function mainLive() {
   const noOp = isNoOpOntoBase(BASE, 'HEAD');
   console.log(
     `value-gate: noOp=${noOp} docsOnly=${result.docsOnly} nearDup=${result.nearDup} (best=${result.best.toFixed(3)}) ` +
-      `inSeries=${result.inSeries} (series=${result.seriesBest.toFixed(3)} run=${result.seriesRun}/${result.blockRun}) ` +
+      `inSeries=${result.inSeries} (series=${result.seriesBest.toFixed(3)} hits=${result.seriesHits}/${result.blockRun}) ` +
       `newSymbols=${result.symbolCount} reached=${result.reachedCount} dupBodies=${result.dupBodyClusters} ` +
       `hasBoardDelta=${result.hasDelta} serialWork=${Boolean(result.serialWork)} mode=${mode}`,
   );
@@ -1242,9 +1271,9 @@ function mainLive() {
   if (result.stamp) {
     const verdict = result.codeBlock ? (STRICT ? 'FAIL' : 'WARN') : 'WARN';
     const msg =
-      `value-gate: ${verdict} — near-duplicate subject #${result.seriesRun + 1} in a series, and nothing calls what it added.\n` +
+      `value-gate: ${verdict} — near-duplicate subject #${result.seriesHits + 1} in a series, and nothing calls what it added.\n` +
       `  Series sibling: ${result.seriesRaw}\n` +
-      `  Series similarity: ${result.seriesBest.toFixed(3)} (threshold 0.80) · consecutive run: ${result.seriesRun} (blocks at ${result.blockRun})\n` +
+      `  Series similarity: ${result.seriesBest.toFixed(3)} (threshold 0.80) · near-identical ancestors in the last 10: ${result.seriesHits} (blocks at ${result.blockRun})\n` +
       `  New named symbols: ${result.symbolCount} · reached from a non-test file outside them: ${result.reachedCount}\n` +
       (result.dupBodyClusters
         ? `  Byte-identical bodies after identifier normalisation: ${result.dupBodyClusters} cluster(s) in this diff alone.\n`
@@ -1258,8 +1287,8 @@ function mainLive() {
       `        It is a commit trailer, it is echoed in this log, and it is greppable:\n` +
       `          git log --grep '^Serial-Work:'\n` +
       (result.codeBlock
-        ? `  BLOCKING: this is number ${result.seriesRun + 1} in a row. The first ${result.blockRun - 1} warned.`
-        : `  NOT blocking yet: run ${result.seriesRun} of ${result.blockRun}. The ${result.blockRun + 1}th consecutive one is red.`);
+        ? `  BLOCKING: number ${result.seriesHits + 1} of this shape in the last 11 commits. The first ${result.blockRun} only warned.`
+        : `  NOT blocking yet: ${result.seriesHits} of ${result.blockRun} in the window. The ${result.blockRun + 1}th of this shape is red.`);
     console.error(msg);
     if (result.codeBlock && STRICT) process.exit(1);
     process.exit(0);
