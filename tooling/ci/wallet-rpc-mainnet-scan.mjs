@@ -37,13 +37,19 @@
  *     bitcoinj/litecoinj address-minting controllers. The string "testnet"
  *     appears exactly ONCE in the whole tree, inside a comment. There is no
  *     switch to flip.
- *   · Every ETH/ERC withdrawal is signed by the two-argument
+ *   · Every ETH/ERC withdrawal was signed by the two-argument
  *     `TransactionEncoder.signMessage(rawTx, credentials)` — the pre-EIP-155
- *     form, with NO chain id — so the signature it produces is valid on every
+ *     form, with NO chain id — so the signature it produced was valid on every
  *     EVM chain simultaneously, mainnet included, whatever `coin.rpc` names.
- *     STILL TRUE. Fixing it changes the bytes that get signed, and there is no
- *     JDK here to compile or test that change, so it is specified rather than
- *     applied: docs/SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md.
+ *     NO LONGER TRUE. Both call sites now pass the configured `coin.chain-id`,
+ *     which has no default and stops the service when unset, and the change is
+ *     covered by known-answer fixture tests that assert the exact signed bytes
+ *     against an independent implementation and against the vector published in
+ *     EIP-155 itself. It could be applied because a JDK 8 + Maven build of this
+ *     module exists now: the reactor declared a module that was absent from
+ *     disk, which broke it at POM-read time, and removing that one line made
+ *     `rpc-common` and `eth-support` buildable.
+ *     docs/SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md.
  *   · The same withdrawal was then broadcast a SECOND time to a hardcoded
  *     `https://api.etherscan.io/api` proxy, which is Ethereum mainnet and was
  *     not configurable at all. NO LONGER TRUE — that second broadcast was
@@ -53,11 +59,11 @@
  *     built. The endpoint literal survives on `checkEventLog`, a read-only
  *     deposit-watcher path, and stays frozen under M2.
  *
- * Removing that relay narrows the hole; it does not close it. A testnet-signed
- * withdrawal from this tree is STILL a valid mainnet withdrawal, because the
- * signature still carries no chain id — anyone who observes it can replay it.
- * So "point it at a testnet" is still not available as a mitigation, and the real
- * invariant is narrower and harder: **nothing in this repository may be able to
+ * Removing that relay narrowed the hole; the EIP-155 fix above is what closes
+ * it. A testnet-signed withdrawal from this tree is no longer a valid mainnet
+ * withdrawal, so "point it at a testnet" finally means something — but a
+ * containment property is not an adoption decision, and the real invariant is
+ * unchanged and still narrower and harder: **nothing in this repository may be able to
  * build, boot or ship any module of this tree, and no NEW mainnet constant may
  * be added to it,** until a human completes the review that §A4 requires.
  * That is what this gate asserts.
@@ -151,9 +157,14 @@
  *
  * `docs/security/WALLET-RPC-SECURITY-REVIEW-2026-08-05.md` is the first read of
  * this tree that opened every file. It found three classes of thing this ratchet
- * did not cover. All three are frozen rather than fixed, for the same reason the
- * chain-id fix is specified rather than applied: editing `01_wallet_rpc` without
- * a compiler is how money gets stranded by a change that looks obviously right.
+ * did not cover. All three are frozen rather than fixed, and they stay that way
+ * even though the chain-id fix has since been applied: a compiler now exists for
+ * `eth-support`, but each of these three is a BEHAVIOUR change in a
+ * deposit-crediting or logging path with no fixture to hold it, and editing
+ * `01_wallet_rpc` without one is how money gets stranded by a change that looks
+ * obviously right. What unblocked EIP-155 was not the compiler alone; it was the
+ * compiler plus a known-answer vector from outside this codebase. None of the
+ * three below has one yet.
  *
  *   · **A control that works by accident.** `contract.event-topic0` is 63 hex
  *     digits in both erc modules where a keccak topic is 64, so the Transfer-log
@@ -842,24 +853,49 @@ const FROZEN = [
   },
 
   // ── M3: chain-id-less EVM signatures ─────────────────────────────────────
+  //
+  // FIXED, so there is nothing left to freeze, and the entry is DELETED rather
+  // than retained — the baseline is a ratchet that can only shrink, and a fixed
+  // finding still listed fails as stale. What stood here was:
+  //
+  //   eth-support / PaymentHandler.java, occurrences 2,
+  //   'TransactionEncoder.signMessage(rawTransaction, payment.getCredentials())'
+  //
+  // the two-argument, pre-EIP-155 form on BOTH withdrawal paths. Both call sites
+  // now go through PaymentHandler.signToHex, which passes the configured
+  // coin.chain-id and refuses to sign without one. It is verified rather than
+  // asserted: eth-support now has a JDK 8 + Maven build and a known-answer
+  // fixture suite (PaymentHandlerEip155Test) that signs with a fixed key and
+  // compares the exact raw-transaction bytes against vectors produced by an
+  // independent implementation — and, at chain id 1, against the vector
+  // published in EIP-155 itself.
+  //
+  // The rule is NOT weakened and does not lose its proof-of-life with this
+  // entry: RULE_PROBES below already pushes a two-argument signMessage, the
+  // no-chain-id sentinel constant, a two-argument RawTransactionManager and
+  // Transfer.sendFunds through the REAL matcher and asserts each still fires,
+  // plus a negative probe asserting the three-argument form does not. Blinding
+  // M3 now breaks a probe instead of going quietly green — which is exactly the
+  // case the probe harness was built for.
+
+  // ── M8: EVM addresses pinned in Java ─────────────────────────────────────
   {
-    rule: 'M3',
+    rule: 'M8',
     module: 'eth-support',
-    file: 'PaymentHandler.java',
-    text: 'TransactionEncoder.signMessage(rawTransaction, payment.getCredentials())',
-    occurrences: 2,
+    file: 'PaymentHandlerEip155Test.java',
+    text: '0x3535353535353535353535353535353535353535',
     reason:
-      'Pre-EIP-155 signing on BOTH withdrawal paths (ether transfer and ERC-20 transfer) — the two-argument form takes ' +
-      'no chain id, so the signature is valid on every EVM chain at once, mainnet included. STILL UNFIXED, and ' +
-      'deliberately so: adding a chain id changes the bytes that get signed, and there is no JDK, JRE or Maven on this ' +
-      'host, so the change could not be compiled, let alone tested against a known-good signed-transaction fixture. ' +
-      'Applying it blind to a withdrawal path is how money gets stranded by a change that looks obviously right. The ' +
-      'exact diff, the chain-id source, every call site and the tests that must pass first are specified in ' +
-      'docs/SPEC-EIP155-WALLET-RPC-WITHDRAWAL-SIGNING.md. This is why "just point it at a testnet" is STILL not an ' +
-      'available mitigation for this tree, even with the Etherscan relay deleted: a testnet-signed withdrawal here is ' +
-      'also a valid mainnet withdrawal, and anyone who sees it can replay it themselves. Both call sites are the ' +
-      'identical string, so one frozen entry covers them; a THIRD would fail, and so would changing either. Note that ' +
-      'M3 now also catches ChainId.NONE, which would satisfy this rule’s arity test while changing nothing.',
+      'The recipient from the worked example published in EIP-155 itself, and the only address literal in the ' +
+      'known-answer fixtures that replaced the M3 finding above. Twenty 0x35 bytes — the ASCII digit "5" forty times, ' +
+      'read as hex — which the EIP chose precisely because it is obviously nobody’s account: no private key produces ' +
+      'it and it is not a contract on any chain. Written ONCE, as the TO constant, and reused as the ether recipient, ' +
+      'the ERC-20 contract and the transfer() argument, which is why occurrences is the default 1 — a second literal ' +
+      'is a second address and should fail. It is an input to a specification example, so freezing it is the point ' +
+      'rather than a concession: a known-answer test whose inputs can be edited is not a known-answer test. This ' +
+      'entry is ' +
+      'also what makes the M3 deletion above safe to read — the rule that would catch a live address being moved into ' +
+      'Java is still watching this exact file, and any OTHER address literal added to it is a new finding and fails. ' +
+      'src/test is walked like any other source here; see the act ActClientTest.java entry under M2 for the precedent.',
   },
 
   // ── M4: mainnet-shaped values in .properties ─────────────────────────────
@@ -1236,11 +1272,12 @@ const FROZEN = [
     file: 'PaymentHandler.java',
     text: 'transferToken: logger.info("hexRawValue={}",hexValue)',
     reason:
-      'Logs the COMPLETE SIGNED RAW TRANSACTION on the ERC-20 withdrawal path. Because that signature still carries no ' +
-      'chain id (M3 above, specified and deliberately unfixed), anyone with log-read access holds a transaction that is ' +
-      'valid and replayable on every EVM chain at once — and deleting the Etherscan relay did not change that, it only ' +
-      'removed the relay that did it for them. Not an inference: the value is signMessage output turned to hex two ' +
-      'lines earlier. Owner queue: log the txid only. Review §F3 ("definitely true, no inference needed").',
+      'Logs the COMPLETE SIGNED RAW TRANSACTION on the ERC-20 withdrawal path. It USED to be worse than it is: while ' +
+      'that signature carried no chain id, anyone with log-read access held a transaction replayable on every EVM ' +
+      'chain at once. EIP-155 is now applied (see the retired M3 note above), so what leaks is a transaction valid on ' +
+      'exactly one chain — still a signed spend of the hot wallet, still replayable there by anyone who reads a log, ' +
+      'and still frozen. Not an inference: the value is signMessage output turned to hex on the line before. Owner ' +
+      'queue unchanged: log the txid only. Review §F3 ("definitely true, no inference needed").',
   },
   {
     rule: 'M9',

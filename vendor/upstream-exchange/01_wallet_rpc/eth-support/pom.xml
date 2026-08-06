@@ -71,5 +71,17 @@
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
         </dependency>
+        <!--
+            The known-answer signed-transaction fixtures for the EIP-155
+            withdrawal signing path (PaymentHandlerEip155Test). Version is
+            managed by spring-boot-starter-parent. Plain JUnit rather than
+            spring-boot-starter-test: those tests sign with a fixed key and
+            assert exact bytes, so they need no context, no node, no network.
+        -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
