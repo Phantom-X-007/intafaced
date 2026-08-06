@@ -83,3 +83,82 @@ export function orderSelectedTools(guardrail: Guardrail, selected: readonly stri
   const order = new Map(guardrail.tools.map((t, i) => [t.name, i]));
   return [...selected].sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
 }
+
+/** L3 — true when select ok. */
+export function isToolSelectOk(result: ToolSelectResult): result is ToolSelectOk {
+  return result.status === 'ok';
+}
+
+/** L3 — selected count (refuse → 0, no invent). */
+export function toolSelectSelectedCount(result: ToolSelectResult): number {
+  return result.status === 'ok' ? result.selected.length : 0;
+}
+
+/** L3 — refused count (refuse whole → 0 on list; use reason). */
+export function toolSelectRefusedCount(result: ToolSelectResult): number {
+  return result.status === 'ok' ? result.refused.length : 0;
+}
+
+/** L3 — board card. */
+export function toolSelectBoardCard(result: ToolSelectResult): {
+  readonly ok: boolean;
+  readonly selected: number;
+  readonly refused: number;
+  readonly reason: string | null;
+} {
+  if (result.status === 'ok') {
+    return { ok: true, selected: result.selected.length, refused: result.refused.length, reason: null };
+  }
+  return { ok: false, selected: 0, refused: 0, reason: result.reason };
+}
+
+/** L3 — status line. */
+export function toolSelectStatusLine(result: ToolSelectResult): string {
+  const c = toolSelectBoardCard(result);
+  return `ok=${c.ok ? '1' : '0'} selected=${c.selected} refused=${c.refused} reason=${c.reason ?? '-'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseToolSelectStatusLine(
+  line: string,
+): { readonly ok: boolean; readonly selected: number; readonly refused: number; readonly reason: string | null } | null {
+  const m = line.trim().match(/^ok=([01]) selected=(\d+) refused=(\d+) reason=(\S+)$/);
+  if (!m) return null;
+  return {
+    ok: m[1] === '1',
+    selected: Number(m[2]),
+    refused: Number(m[3]),
+    reason: m[4] === '-' ? null : m[4]!,
+  };
+}
+
+/** L3 — true when status matches. */
+export function toolSelectStatusLineMatches(result: ToolSelectResult): boolean {
+  const p = parseToolSelectStatusLine(toolSelectStatusLine(result));
+  if (!p) return false;
+  const c = toolSelectBoardCard(result);
+  return p.ok === c.ok && p.selected === c.selected && p.refused === c.refused && p.reason === c.reason;
+}
+
+/** L3 — export header. */
+export function toolSelectExportHeader(): string {
+  return 'status,selected,refused,reason';
+}
+
+/** L3 — export line. */
+export function toolSelectExportLine(result: ToolSelectResult): string {
+  const c = toolSelectBoardCard(result);
+  return `${c.ok ? 'ok' : 'refuse'},${c.selected},${c.refused},${c.reason ?? ''}`;
+}
+
+/** L3 — full export. */
+export function toolSelectExportText(result: ToolSelectResult): string {
+  return [toolSelectExportHeader(), toolSelectExportLine(result)].join('\n');
+}
+
+/** L3 — true when selected is within [min,max]. Invalid → false. */
+export function toolSelectSelectedInRange(result: ToolSelectResult, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = toolSelectSelectedCount(result);
+  return n >= min && n <= max;
+}

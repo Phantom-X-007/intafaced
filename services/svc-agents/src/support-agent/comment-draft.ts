@@ -45,3 +45,59 @@ export function draftTicketComment(input: { ticketId: string | null | undefined;
   }
   return { status: 'ok', ticketId, body };
 }
+
+/** L3 — true when draft ok. */
+export function isCommentDraftOk(result: CommentDraftResult): result is CommentDraftOk {
+  return result.status === 'ok';
+}
+
+/** L3 — board card. */
+export function commentDraftBoardCard(result: CommentDraftResult): {
+  readonly ok: boolean;
+  readonly reason: string | null;
+  readonly bodyLen: number;
+} {
+  if (result.status === 'ok') {
+    return { ok: true, reason: null, bodyLen: result.body.length };
+  }
+  return { ok: false, reason: result.reason, bodyLen: 0 };
+}
+
+/** L3 — status line. */
+export function commentDraftStatusLine(result: CommentDraftResult): string {
+  const c = commentDraftBoardCard(result);
+  return `ok=${c.ok ? '1' : '0'} bodyLen=${c.bodyLen} reason=${c.reason ?? '-'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseCommentDraftStatusLine(
+  line: string,
+): { readonly ok: boolean; readonly bodyLen: number; readonly reason: string | null } | null {
+  const m = line.trim().match(/^ok=([01]) bodyLen=(\d+) reason=(\S+)$/);
+  if (!m) return null;
+  return { ok: m[1] === '1', bodyLen: Number(m[2]), reason: m[3] === '-' ? null : m[3]! };
+}
+
+/** L3 — true when status matches. */
+export function commentDraftStatusLineMatches(result: CommentDraftResult): boolean {
+  const p = parseCommentDraftStatusLine(commentDraftStatusLine(result));
+  if (!p) return false;
+  const c = commentDraftBoardCard(result);
+  return p.ok === c.ok && p.bodyLen === c.bodyLen && p.reason === c.reason;
+}
+
+/** L3 — export header. */
+export function commentDraftExportHeader(): string {
+  return 'status,bodyLen,reason';
+}
+
+/** L3 — export line. */
+export function commentDraftExportLine(result: CommentDraftResult): string {
+  const c = commentDraftBoardCard(result);
+  return `${c.ok ? 'ok' : 'refuse'},${c.bodyLen},${c.reason ?? ''}`;
+}
+
+/** L3 — full export. */
+export function commentDraftExportText(result: CommentDraftResult): string {
+  return [commentDraftExportHeader(), commentDraftExportLine(result)].join('\n');
+}

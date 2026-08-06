@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
 import { EMPTY_SESSION_STATE, evaluateCompletion, evaluateToolCall, type SessionState } from '../fleet/guardrails.js';
-import { isNavigatorMoneyWriteTool, NAVIGATOR_MONEY_WRITE_TOOLS, navigatorAgentGuardrail } from './guardrail.js';
+import {
+  isNavigatorMoneyWriteTool,
+  NAVIGATOR_MONEY_WRITE_TOOLS,
+  navigatorAgentGuardrail,
+  navigatorDeclaredTools,
+  navigatorDeclaredToolCount,
+  navigatorMoneyDenylistCount,
+  navigatorGuardrailBoardCard,
+  navigatorGuardrailStatusLine,
+  parseNavigatorGuardrailStatusLine,
+  navigatorGuardrailStatusLineMatches,
+  navigatorGuardrailExportHeader,
+  navigatorGuardrailExportLine,
+  navigatorGuardrailExportText,
+  navigatorDeclaredInRange,
+  navigatorMoneyDenylistComplete,
+} from './guardrail.js';
 
 const state = (overrides: Partial<SessionState> = {}): SessionState => ({
   ...EMPTY_SESSION_STATE,
@@ -63,5 +79,22 @@ describe('navigator agent Stage-1 guardrail', () => {
       allowed: false,
       code: 'agents.tool_not_declared',
     });
+  });
+});
+
+describe('L3 wave50 navigator guardrail status/export', () => {
+  it('board card and denylist honesty', () => {
+    const g = navigatorAgentGuardrail();
+    expect(navigatorDeclaredToolCount(g)).toBe(3);
+    expect(navigatorDeclaredTools(g)).toContain('trade.quote');
+    expect(navigatorMoneyDenylistCount()).toBe(NAVIGATOR_MONEY_WRITE_TOOLS.length);
+    expect(navigatorMoneyDenylistComplete()).toBe(true);
+    expect(navigatorGuardrailBoardCard(g).agentId).toBe('navigator');
+    expect(navigatorGuardrailStatusLineMatches(g)).toBe(true);
+    expect(parseNavigatorGuardrailStatusLine('nope')).toBeNull();
+    expect(navigatorGuardrailExportText(g).startsWith(navigatorGuardrailExportHeader())).toBe(true);
+    expect(navigatorGuardrailExportLine(g)).toContain('navigator,');
+    expect(navigatorDeclaredInRange(1, 10, g)).toBe(true);
+    expect(navigatorDeclaredInRange(10, 1, g)).toBe(false);
   });
 });

@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
 import { EMPTY_SESSION_STATE, evaluateCompletion, evaluateToolCall, type SessionState } from '../fleet/guardrails.js';
-import { isSupportMoneyTool, SUPPORT_MONEY_TOOLS, supportAgentGuardrail } from './guardrail.js';
+import {
+  isSupportMoneyTool,
+  SUPPORT_MONEY_TOOLS,
+  supportAgentGuardrail,
+  supportDeclaredTools,
+  supportDeclaredToolCount,
+  supportMoneyDenylistCount,
+  supportApprovalRequiredCount,
+  supportGuardrailBoardCard,
+  supportGuardrailStatusLine,
+  parseSupportGuardrailStatusLine,
+  supportGuardrailStatusLineMatches,
+  supportGuardrailExportHeader,
+  supportGuardrailExportLine,
+  supportGuardrailExportText,
+  supportDeclaredInRange,
+  supportMoneyDenylistComplete,
+} from './guardrail.js';
 
 const state = (overrides: Partial<SessionState> = {}): SessionState => ({
   ...EMPTY_SESSION_STATE,
@@ -69,5 +86,22 @@ describe('support agent Stage-1 guardrail', () => {
       allowed: false,
       code: 'agents.tool_not_declared',
     });
+  });
+});
+
+describe('L3 wave50 support guardrail status/export', () => {
+  it('board card and denylist honesty', () => {
+    const g = supportAgentGuardrail();
+    expect(supportDeclaredToolCount(g)).toBe(3);
+    expect(supportDeclaredTools(g)).toContain('support.ticket.read');
+    expect(supportApprovalRequiredCount(g)).toBe(1);
+    expect(supportMoneyDenylistCount()).toBe(SUPPORT_MONEY_TOOLS.length);
+    expect(supportMoneyDenylistComplete()).toBe(true);
+    expect(supportGuardrailBoardCard(g).agentId).toBe('support');
+    expect(supportGuardrailStatusLineMatches(g)).toBe(true);
+    expect(parseSupportGuardrailStatusLine('nope')).toBeNull();
+    expect(supportGuardrailExportText(g).startsWith(supportGuardrailExportHeader())).toBe(true);
+    expect(supportDeclaredInRange(1, 10, g)).toBe(true);
+    expect(supportDeclaredInRange(10, 1, g)).toBe(false);
   });
 });
