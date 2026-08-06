@@ -8,6 +8,16 @@ import {
   listCommissionBeneficiaryIds,
   maxCommissionHop,
   summarizeCommissionRows,
+  commissionSummaryBoardCard,
+  commissionSummaryStatusLine,
+  commissionSummaryStatusLineIsEmpty,
+  parseCommissionSummaryStatusLine,
+  commissionSummaryStatusLineMatches,
+  commissionSummaryExportHeader,
+  commissionSummaryExportLine,
+  commissionSummaryExportText,
+  commissionRowCountInRange,
+  commissionSummaryIsZero,
 } from './commission.js';
 
 describe('affiliates Slice B — commission accrual (no payout)', () => {
@@ -104,5 +114,32 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
     expect(listCommissionBeneficiaryIds([])).toEqual([]);
     expect(maxCommissionHop(rows)).toBe(0);
     expect(maxCommissionHop([])).toBeNull();
+  });
+});
+
+describe('L3 wave53 commission summary status/export', () => {
+  it('empty and accrued boards use decimal strings', () => {
+    const empty = summarizeCommissionRows([]);
+    expect(commissionSummaryStatusLineIsEmpty(empty)).toBe(true);
+    expect(commissionSummaryIsZero(empty)).toBe(true);
+    expect(commissionSummaryStatusLineMatches(empty)).toBe(true);
+    expect(parseCommissionSummaryStatusLine('nope')).toBeNull();
+    expect(commissionSummaryExportText(empty).startsWith(commissionSummaryExportHeader())).toBe(true);
+
+    const tree = new MemoryReferralTree();
+    tree.attribute({ userId: 'u2', referrerId: 'u1' });
+    const parent = new Map(tree.listEdges().map((e) => [e.userId, e.referrerId]));
+    const rows = accrueCommission({
+      fee: { feeEventId: 'f1', userId: 'u2', feeAmount: '100', asset: 'USDT', at: new Date() },
+      parent,
+      tiers: DEFAULT_ACCRUAL_TIERS,
+    });
+    const s = summarizeCommissionRows(rows);
+    expect(commissionSummaryBoardCard(s).total).toBe('10');
+    expect(commissionSummaryStatusLine(s)).toContain('total=10');
+    expect(commissionSummaryStatusLineMatches(s)).toBe(true);
+    expect(commissionRowCountInRange(s, 1, 5)).toBe(true);
+    expect(commissionRowCountInRange(s, 5, 1)).toBe(false);
+    expect(commissionSummaryExportLine(s)).toContain('USDT');
   });
 });
