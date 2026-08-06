@@ -195,6 +195,57 @@ export const noCardIssuer: CardIssuerAdapter = {
   },
 };
 
+/**
+ * THE SETTINGS A DEPLOYMENT MAY CHOOSE BETWEEN, AND THERE ARE EXACTLY TWO.
+ *
+ * Closed on purpose. A free-form string would let a typo select the fallback
+ * branch, and the fallback branch is the one deciding whether this deployment
+ * has a card programme at all.
+ */
+export const CARD_ISSUER_SETTINGS = ['none', 'card-sim'] as const;
+export type CardIssuerSetting = (typeof CARD_ISSUER_SETTINGS)[number];
+
+/**
+ * THE ONLY PLACE A DEPLOYMENT'S ISSUER IS CHOSEN.
+ *
+ * ── Why this function has to exist ───────────────────────────────────────────
+ *
+ * `noCardIssuer` above is the right default, and until now it was the entire
+ * story: nothing anywhere constructed `cardSim()` outside a test file, and
+ * `index.ts` never passed a `cards` option to `createBankServices`. So the card
+ * procedures the router mounts refused `bank.no_card_issuer` in EVERY
+ * deployment, with no setting, flag or argument an operator could use to change
+ * that. A refusal nobody can lift is not a safe default — it is an unreachable
+ * module wearing a safe default's clothes, and from the outside it is
+ * indistinguishable from one that works. That is the state D-S-15 named
+ * UNFINISHED.
+ *
+ * ── Why it is still not a default ────────────────────────────────────────────
+ *
+ * `'none'` is what you get by saying nothing, and the mapping is TOTAL — a
+ * `switch` the compiler checks, not a `?? cardSim()`. Choosing the simulator
+ * remains an act somebody performed and wrote into an environment file. The only
+ * thing that changed is that the act is now possible.
+ *
+ * ── What choosing `card-sim` does NOT do ─────────────────────────────────────
+ *
+ * It does not create a card programme. There is no card, no scheme, no issuing
+ * BIN, no network call, and nothing that can be presented at a terminal — see
+ * `cardSim` above, which says so at length. It makes the LEDGER half exercisable
+ * against real postings in the real book, carrying `simulated: true` on the
+ * programme, on every card row and on every router output, so no surface can
+ * render one of these as real. The live rail is `socket.live-issuer`: a sponsor
+ * bank and a contract, never a setting.
+ */
+export function cardIssuerFor(setting: CardIssuerSetting): CardIssuerAdapter {
+  switch (setting) {
+    case 'card-sim':
+      return cardSim();
+    case 'none':
+      return noCardIssuer;
+  }
+}
+
 /** Cashback owed on a captured amount. Integer basis points, rounded DOWN. */
 export function cashbackOn(capturedAmount: Amount, rateBps: number): Amount {
   if (rateBps <= 0) return 0n;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema, internalServiceEnvSchema } from '@intafaced/config';
+import { CARD_ISSUER_SETTINGS } from './cards/issuer.js';
 
 // This service self-mounts /trpc, so it must be able to authenticate the edge.
 // Every procedure here resolves `ctx.principal.userId` into somebody's spaces
@@ -110,6 +111,35 @@ const schema = serviceEnvSchema
 
       /** How many loans one sweep pass marks. Bounds the blast radius of a bad pass. */
       LOAN_SWEEP_BATCH_SIZE: z.coerce.number().int().min(1).max(10_000).default(500),
+
+      // ── Cards (§8.1, ledger half) ──────────────────────────────────────────
+
+      /**
+       * WHICH CARD ISSUER THIS DEPLOYMENT HAS, AND `none` IS A REAL ANSWER.
+       *
+       * Defaults to `none`, and `none` is not a disabled feature — it is the
+       * truthful statement that this deployment has no card programme. Every
+       * procedure needing an issuer then refuses `bank.no_card_issuer` by name,
+       * and `bank.cards.programme` says "No card programme" out loud rather than
+       * leaving a caller to infer it from an error.
+       *
+       * `card-sim` is the only other value and IT IS A SIMULATOR. It creates no
+       * card, makes no network call, and holds no credentials to make one with.
+       * What it does is let the ledger half run end to end against real postings
+       * in the real book, carrying `simulated: true` on the programme, on every
+       * card row and on every router output. The live rail is
+       * `socket.live-issuer` — a card-scheme sponsor and an issuing BIN, a
+       * licence and a contract that no value of this variable produces.
+       *
+       * Why a setting rather than a default to the simulator: the same posture,
+       * for the same reason, as `LOAN_RISK_SWEEP_ENABLED` and the loan price
+       * source. The dangerous default is the plausible one. An environment
+       * somebody believes is live must not quietly begin approving
+       * authorisations against a counterparty that does not exist, so choosing
+       * the simulator has to be an act somebody performed — and `/ready` reports
+       * which act was performed, so it can be checked rather than assumed.
+       */
+      BANK_CARD_ISSUER: z.enum(CARD_ISSUER_SETTINGS).default('none'),
     }),
   );
 

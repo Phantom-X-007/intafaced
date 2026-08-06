@@ -5,6 +5,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
+import { cardIssuerFor } from './cards/issuer.js';
 import { eventMarginCallSink } from './loans/margin-call-publisher.js';
 import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
@@ -67,7 +68,31 @@ const bank = createBankServices(sql, ledger, history, {
     // a database column and svc-notify's finished consumer never sees one.
     marginCalls: eventMarginCallSink(bus),
   },
+  /**
+   * THE OTHER HALF THAT WAS MISSING, and it was missing in the same shape.
+   *
+   * `cards` was never passed here at all, so `CardService` took `noCardIssuer`
+   * in every deployment and the card procedures the router mounts refused
+   * `bank.no_card_issuer` for a reason no operator could act on. The adapter,
+   * the simulator and 36 tests were on main and nothing outside a test file had
+   * ever constructed one — reachable in the suite, unreachable over HTTP.
+   *
+   * `cardIssuerFor` is a total mapping over a closed set, so `none` is still
+   * what a deployment gets by saying nothing. It just is no longer what a
+   * deployment gets by SAYING ANYTHING.
+   */
+  cards: { issuer: cardIssuerFor(env.BANK_CARD_ISSUER) },
 });
+
+/**
+ * What this process will tell anyone who asks what its card programme is.
+ *
+ * Read once at boot from the one adapter that exists, rather than re-derived
+ * from the env var anywhere else: `/ready`, the boot log and
+ * `bank.cards.programme` are then three renderings of a single fact, and they
+ * cannot drift into disagreeing about whether this deployment issues real cards.
+ */
+const cardProgramme = bank.cards.programme();
 
 export const appRouter = createBankRouter(bank);
 export type AppRouter = typeof appRouter;
@@ -87,6 +112,21 @@ app.get('/ready', async () => ({
   // Surfaced because "are we liquidating today" is the first question anyone
   // asks about this service, and it should not require reading an env file.
   loanRiskSweep: env.LOAN_RISK_SWEEP_ENABLED,
+  /**
+   * WHETHER THIS DEPLOYMENT'S CARDS ARE REAL, ON THE READINESS ENDPOINT.
+   *
+   * The other flags here are booleans about jobs. This one is a claim about
+   * whether a counterparty exists, and it is on `/ready` for the same reason the
+   * risk sweep is: an operator asking "what is this process doing to money"
+   * should not have to read an environment file to find out.
+   *
+   * `simulated` is never omitted and never inferred from `id`. There is no
+   * arrangement of these three fields that lets a simulated programme read as a
+   * live one — `none` says there is no programme, `card-sim` says it is a
+   * simulator in its id AND its display name AND this boolean, and a live rail
+   * cannot appear here at all because it is `socket.live-issuer`, a contract.
+   */
+  cardProgramme: { id: cardProgramme.id, simulated: cardProgramme.simulated, displayName: cardProgramme.displayName },
 }));
 
 /**
@@ -223,6 +263,11 @@ app.log.info(
     port: env.HTTP_PORT,
     scheduledTransfers: env.SCHEDULED_TRANSFERS_ENABLED,
     interestAccrual: env.INTEREST_ACCRUAL_ENABLED,
+    // In the boot line, not only on `/ready`: the first place anyone looks after
+    // a deploy is the log, and "this deployment is running a card SIMULATOR" is
+    // exactly the fact that must not be discovered later from a support ticket.
+    cardProgramme: cardProgramme.id,
+    cardProgrammeSimulated: cardProgramme.simulated,
   },
   'svc-bank ready',
 );
