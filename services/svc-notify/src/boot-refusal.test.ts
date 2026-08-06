@@ -64,77 +64,119 @@ const SMS_CREDS = {
  * code. Only `PATH` and `SystemRoot` are carried, because node needs them.
  */
 function boot(over: Record<string, string>): { code: number | null; stderr: string } {
-  const result = spawnSync(process.execPath, ['--import', 'tsx', ENTRYPOINT], {
-    cwd: PKG,
-    encoding: 'utf8',
-    timeout: 60_000,
-    env: {
-      PATH: process.env.PATH ?? '',
-      ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
-      SERVICE_NAME: 'svc-notify',
-      DATABASE_URL: UNREACHABLE_DB,
-      EDGE_PRINCIPAL_SECRET: 'e'.repeat(40),
-      ...over,
+  const result = spawnSync(
+    process.execPath,
+    ['--import', 'tsx', ENTRYPOINT],
+    {
+      cwd: PKG,
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: {
+        PATH: process.env.PATH ?? '',
+        ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+        SERVICE_NAME: 'svc-notify',
+        DATABASE_URL: UNREACHABLE_DB,
+        EDGE_PRINCIPAL_SECRET: 'e'.repeat(40),
+        ...over,
+      },
     },
-  });
+    BOOT_TIMEOUT_MS,
+  );
   return { code: result.status, stderr: result.stderr ?? '' };
 }
 
+/**
+ * Each case spawns the REAL entrypoint through tsx, so the clock covers a cold
+ * TypeScript compile of the whole import graph, not just the gate. On this
+ * machine that is ~0.5s; on a cold CI runner it exceeded vitest's 5s default
+ * and all six timed out — a red that said nothing about the gate.
+ *
+ * Raised deliberately rather than by making the tests cheaper: the thing worth
+ * asserting is that the real process refuses to start, and a test that stopped
+ * spawning it would pass without proving that. The spawn itself already caps at
+ * 60s, so a genuinely hung boot still fails rather than hanging the suite.
+ */
+const BOOT_TIMEOUT_MS = 30_000;
+
 describe('svc-notify does not start when a channel it depends on has no credentials', () => {
-  it('refuses to boot, names both missing variables, and never reaches the database', () => {
-    const { code, stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms' });
+  it(
+    'refuses to boot, names both missing variables, and never reaches the database',
+    () => {
+      const { code, stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms' });
 
-    expect(code).not.toBe(0);
-    expect(stderr).toContain(REFUSED_AT_THE_GATE);
-    // The message is an ops instruction, so it must name the variables verbatim.
-    expect(stderr).toContain('NOTIFY_SMS_GATEWAY_URL');
-    expect(stderr).toContain('NOTIFY_SMS_GATEWAY_TOKEN');
-    // The half that makes this a boot gate rather than a late error: the process
-    // died before it opened a socket, not after it had come up and started
-    // serving with a channel that silently refuses everything.
-    expect(stderr).not.toContain(PAST_THE_GATE);
-  });
+      expect(code).not.toBe(0);
+      expect(stderr).toContain(REFUSED_AT_THE_GATE);
+      // The message is an ops instruction, so it must name the variables verbatim.
+      expect(stderr).toContain('NOTIFY_SMS_GATEWAY_URL');
+      expect(stderr).toContain('NOTIFY_SMS_GATEWAY_TOKEN');
+      // The half that makes this a boot gate rather than a late error: the process
+      // died before it opened a socket, not after it had come up and started
+      // serving with a channel that silently refuses everything.
+      expect(stderr).not.toContain(PAST_THE_GATE);
+    },
+    BOOT_TIMEOUT_MS,
+  );
 
-  it('gets past the gate once the credentials are set — proving the gate is what stopped it', () => {
-    const { code, stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms', ...SMS_CREDS });
+  it(
+    'gets past the gate once the credentials are set — proving the gate is what stopped it',
+    () => {
+      const { code, stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms', ...SMS_CREDS });
 
-    expect(code).not.toBe(0); // the dead database port, deliberately
-    expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
-    expect(stderr).toContain(PAST_THE_GATE);
-  });
+      expect(code).not.toBe(0); // the dead database port, deliberately
+      expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
+      expect(stderr).toContain(PAST_THE_GATE);
+    },
+    BOOT_TIMEOUT_MS,
+  );
 
-  it('refuses in prod when nothing is declared at all', () => {
-    const { stderr } = boot({ APP_ENV: 'prod' });
+  it(
+    'refuses in prod when nothing is declared at all',
+    () => {
+      const { stderr } = boot({ APP_ENV: 'prod' });
 
-    expect(stderr).toContain(REFUSED_AT_THE_GATE);
-    expect(stderr).toContain('must state which out-of-app channels');
-    expect(stderr).not.toContain(PAST_THE_GATE);
-  });
+      expect(stderr).toContain(REFUSED_AT_THE_GATE);
+      expect(stderr).toContain('must state which out-of-app channels');
+      expect(stderr).not.toContain(PAST_THE_GATE);
+    },
+    BOOT_TIMEOUT_MS,
+  );
 
-  it('refuses a declaration made of separators — punctuation is not a stated posture', () => {
-    // `blankAsAbsent` catches `""`. `","` is typed, so without the guard in
-    // `parseRequiredChannels` it satisfies "you must declare something" while
-    // declaring nothing, and prod boots depending on no channel.
-    const { stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: ',' });
+  it(
+    'refuses a declaration made of separators — punctuation is not a stated posture',
+    () => {
+      // `blankAsAbsent` catches `""`. `","` is typed, so without the guard in
+      // `parseRequiredChannels` it satisfies "you must declare something" while
+      // declaring nothing, and prod boots depending on no channel.
+      const { stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: ',' });
 
-    expect(stderr).toContain(REFUSED_AT_THE_GATE);
-    expect(stderr).toContain('NOTIFY_REQUIRED_CHANNELS');
-    expect(stderr).not.toContain(PAST_THE_GATE);
-  });
+      expect(stderr).toContain(REFUSED_AT_THE_GATE);
+      expect(stderr).toContain('NOTIFY_REQUIRED_CHANNELS');
+      expect(stderr).not.toContain(PAST_THE_GATE);
+    },
+    BOOT_TIMEOUT_MS,
+  );
 
-  it('boots past the gate on an explicit `none` — a decision is allowed to be recorded', () => {
-    const { stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'none' });
+  it(
+    'boots past the gate on an explicit `none` — a decision is allowed to be recorded',
+    () => {
+      const { stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'none' });
 
-    expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
-    expect(stderr).toContain(PAST_THE_GATE);
-  });
+      expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
+      expect(stderr).toContain(PAST_THE_GATE);
+    },
+    BOOT_TIMEOUT_MS,
+  );
 
-  it('leaves dev frictionless — no gateway credentials are needed to run the stack', () => {
-    const { stderr } = boot({ APP_ENV: 'dev' });
+  it(
+    'leaves dev frictionless — no gateway credentials are needed to run the stack',
+    () => {
+      const { stderr } = boot({ APP_ENV: 'dev' });
 
-    expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
-    expect(stderr).toContain(PAST_THE_GATE);
-  });
+      expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
+      expect(stderr).toContain(PAST_THE_GATE);
+    },
+    BOOT_TIMEOUT_MS,
+  );
 });
 
 describe('exactly one function decides whether svc-notify may start', () => {
@@ -148,21 +190,27 @@ describe('exactly one function decides whether svc-notify may start', () => {
    * A structural assertion is the only kind that can catch a rival gate,
    * because a rival gate's defining property is that no behaviour runs it.
    */
-  it('has one definition of parseRequiredChannels in src/, and it is the one env.ts imports', () => {
-    const files: string[] = [];
-    const walk = (dir: string) => {
-      for (const entry of readdirSync(dir)) {
-        if (entry === 'node_modules' || entry === 'dist') continue;
-        const full = join(dir, entry);
-        if (statSync(full).isDirectory()) walk(full);
-        else if (/\.ts$/.test(entry) && !/\.test\.ts$/.test(entry)) files.push(full);
-      }
-    };
-    walk(HERE);
+  it(
+    'has one definition of parseRequiredChannels in src/, and it is the one env.ts imports',
+    () => {
+      const files: string[] = [];
+      const walk = (dir: string) => {
+        for (const entry of readdirSync(dir)) {
+          if (entry === 'node_modules' || entry === 'dist') continue;
+          const full = join(dir, entry);
+          if (statSync(full).isDirectory()) walk(full);
+          else if (/\.ts$/.test(entry) && !/\.test\.ts$/.test(entry)) files.push(full);
+        }
+      };
+      walk(HERE);
 
-    const definitions = files.filter((f) => /(?:export\s+)?(?:async\s+)?function\s+parseRequiredChannels\b/.test(readFileSync(f, 'utf8')));
+      const definitions = files.filter((f) =>
+        /(?:export\s+)?(?:async\s+)?function\s+parseRequiredChannels\b/.test(readFileSync(f, 'utf8')),
+      );
 
-    expect(definitions.map((f) => f.slice(HERE.length + 1).replace(/\\/g, '/'))).toEqual(['channels/registry.ts']);
-    expect(readFileSync(join(HERE, 'env.ts'), 'utf8')).toMatch(/parseRequiredChannels[\s\S]{0,120}from '\.\/channels\/registry\.js'/);
-  });
+      expect(definitions.map((f) => f.slice(HERE.length + 1).replace(/\\/g, '/'))).toEqual(['channels/registry.ts']);
+      expect(readFileSync(join(HERE, 'env.ts'), 'utf8')).toMatch(/parseRequiredChannels[\s\S]{0,120}from '\.\/channels\/registry\.js'/);
+    },
+    BOOT_TIMEOUT_MS,
+  );
 });
