@@ -110,3 +110,77 @@ export class MemoryFreezeStore {
     });
   }
 }
+
+/** L3 — freeze board card from store. */
+export function freezeStoreBoardCard(store: MemoryFreezeStore): {
+  readonly frozen: number;
+  readonly any: boolean;
+  readonly ids: readonly string[];
+} {
+  return {
+    frozen: store.freezeCount(),
+    any: store.hasAnyFreeze(),
+    ids: store.listFrozenBeneficiaryIds(),
+  };
+}
+
+/** L3 — freeze status line. */
+export function freezeStoreStatusLine(store: MemoryFreezeStore): string {
+  const c = freezeStoreBoardCard(store);
+  return `frozen=${c.frozen} any=${c.any ? '1' : '0'}`;
+}
+
+/** L3 — true when no freezes. */
+export function freezeStoreStatusLineIsEmpty(store: MemoryFreezeStore): boolean {
+  return store.freezeCount() === 0;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseFreezeStoreStatusLine(line: string): { readonly frozen: number; readonly any: boolean } | null {
+  const m = line.trim().match(/^frozen=(\d+) any=([01])$/);
+  if (!m) return null;
+  return { frozen: Number(m[1]), any: m[2] === '1' };
+}
+
+/** L3 — true when status matches store. */
+export function freezeStoreStatusLineMatches(store: MemoryFreezeStore): boolean {
+  const p = parseFreezeStoreStatusLine(freezeStoreStatusLine(store));
+  if (!p) return false;
+  const c = freezeStoreBoardCard(store);
+  return p.frozen === c.frozen && p.any === c.any;
+}
+
+/** L3 — true when any flag matches frozen>0. */
+export function freezeStoreStatusLineConsistent(line: string): boolean {
+  const p = parseFreezeStoreStatusLine(line);
+  if (!p) return false;
+  return p.any === p.frozen > 0;
+}
+
+/** L3 — export header. */
+export function freezeStoreExportHeader(): string {
+  return 'beneficiaryId,frozenBy,reason';
+}
+
+/** L3 — export lines (one per freeze). Empty → []. */
+export function freezeStoreExportLines(store: MemoryFreezeStore): readonly string[] {
+  return store.list().map((r) => `${r.beneficiaryId},${r.frozenBy},${r.reason.replace(/,/g, ' ')}`);
+}
+
+/** L3 — full export text. */
+export function freezeStoreExportText(store: MemoryFreezeStore): string {
+  return [freezeStoreExportHeader(), ...freezeStoreExportLines(store)].join('\n');
+}
+
+/** L3 — true when freeze count is within [min,max]. Invalid → false. */
+export function freezeCountInRange(store: MemoryFreezeStore, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = store.freezeCount();
+  return n >= min && n <= max;
+}
+
+/** L3 — true when freeze count is at least n. */
+export function freezeCountAtLeast(store: MemoryFreezeStore, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return store.freezeCount() >= n;
+}

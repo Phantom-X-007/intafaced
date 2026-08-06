@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { FreezeError, MemoryFreezeStore } from './freeze-store.js';
+import {
+  FreezeError,
+  MemoryFreezeStore,
+  freezeStoreBoardCard,
+  freezeStoreStatusLine,
+  freezeStoreStatusLineIsEmpty,
+  parseFreezeStoreStatusLine,
+  freezeStoreStatusLineMatches,
+  freezeStoreStatusLineConsistent,
+  freezeStoreExportHeader,
+  freezeStoreExportLines,
+  freezeStoreExportText,
+  freezeCountInRange,
+  freezeCountAtLeast,
+} from './freeze-store.js';
 
 describe('affiliates L3 freeze store (non-pay)', () => {
   it('freeze / unfreeze with audit reason; refuse double freeze', () => {
@@ -67,5 +81,26 @@ describe('affiliates L3 freeze store (non-pay)', () => {
     expect(store.hasAnyFreeze()).toBe(false);
     store.freeze({ beneficiaryId: 'u-ref', frozenBy: 'op', reason: 'policy hold' });
     expect(store.hasAnyFreeze()).toBe(true);
+  });
+});
+
+describe('L3 wave52 freeze-store status/export', () => {
+  it('empty and frozen boards', () => {
+    const store = new MemoryFreezeStore();
+    expect(freezeStoreStatusLineIsEmpty(store)).toBe(true);
+    expect(freezeStoreStatusLineMatches(store)).toBe(true);
+    expect(freezeStoreStatusLineConsistent(freezeStoreStatusLine(store))).toBe(true);
+    expect(parseFreezeStoreStatusLine('nope')).toBeNull();
+    expect(freezeCountInRange(store, 0, 0)).toBe(true);
+    store.freeze({ beneficiaryId: 'u-ref', frozenBy: 'op-1', reason: 'Chargeback investigation' });
+    expect(freezeStoreBoardCard(store).frozen).toBe(1);
+    expect(freezeStoreStatusLine(store)).toBe('frozen=1 any=1');
+    expect(freezeStoreStatusLineMatches(store)).toBe(true);
+    expect(freezeStoreExportText(store).startsWith(freezeStoreExportHeader())).toBe(true);
+    expect(freezeStoreExportLines(store)).toHaveLength(1);
+    expect(freezeCountInRange(store, 1, 2)).toBe(true);
+    expect(freezeCountInRange(store, 2, 1)).toBe(false);
+    expect(freezeCountAtLeast(store, 1)).toBe(true);
+    expect(freezeCountAtLeast(store, Number.NaN)).toBe(false);
   });
 });

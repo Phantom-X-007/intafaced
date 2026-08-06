@@ -195,3 +195,96 @@ export function buildLeaderStats(
 
   return { status: 'ok', stats, audit, skippedIncomplete };
 }
+
+/** L3 — true when intel ok. */
+export function isIntelOk(result: IntelResult): result is IntelOk {
+  return result.status === 'ok';
+}
+
+/** L3 — leader count (ok only; else 0 — no invent). */
+export function intelLeaderCount(result: IntelResult): number {
+  return result.status === 'ok' ? result.stats.length : 0;
+}
+
+/** L3 — skipped incomplete count (ok only). */
+export function intelSkippedCount(result: IntelResult): number {
+  return result.status === 'ok' ? result.skippedIncomplete : 0;
+}
+
+/** L3 — board card. */
+export function intelBoardCard(result: IntelResult): {
+  readonly status: IntelResult['status'];
+  readonly leaders: number;
+  readonly skipped: number;
+  readonly reason: string | null;
+} {
+  if (result.status === 'ok') {
+    return { status: 'ok', leaders: result.stats.length, skipped: result.skippedIncomplete, reason: null };
+  }
+  if (result.status === 'empty') {
+    return { status: 'empty', leaders: 0, skipped: 0, reason: null };
+  }
+  return { status: 'unavailable', leaders: 0, skipped: 0, reason: result.reason };
+}
+
+/** L3 — status line. */
+export function intelStatusLine(result: IntelResult): string {
+  const c = intelBoardCard(result);
+  return `status=${c.status} leaders=${c.leaders} skipped=${c.skipped} reason=${c.reason ?? '-'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseIntelStatusLine(
+  line: string,
+): { readonly status: string; readonly leaders: number; readonly skipped: number; readonly reason: string | null } | null {
+  const m = line.trim().match(/^status=(\S+) leaders=(\d+) skipped=(\d+) reason=(\S+)$/);
+  if (!m) return null;
+  return { status: m[1]!, leaders: Number(m[2]), skipped: Number(m[3]), reason: m[4] === '-' ? null : m[4]! };
+}
+
+/** L3 — true when status matches. */
+export function intelStatusLineMatches(result: IntelResult): boolean {
+  const p = parseIntelStatusLine(intelStatusLine(result));
+  if (!p) return false;
+  const c = intelBoardCard(result);
+  return p.status === c.status && p.leaders === c.leaders && p.skipped === c.skipped && p.reason === c.reason;
+}
+
+/** L3 — export header. */
+export function intelExportHeader(): string {
+  return 'status,leaders,skipped,reason';
+}
+
+/** L3 — export line. */
+export function intelExportLine(result: IntelResult): string {
+  const c = intelBoardCard(result);
+  return `${c.status},${c.leaders},${c.skipped},${c.reason ?? ''}`;
+}
+
+/** L3 — full export. */
+export function intelExportText(result: IntelResult): string {
+  return [intelExportHeader(), intelExportLine(result)].join('\n');
+}
+
+/** L3 — leader export header. */
+export function leaderStatExportHeader(): string {
+  return 'leaderId,closedTrades,winRate,realisedPnl';
+}
+
+/** L3 — leader export lines from ok result. Empty/unavailable → []. */
+export function leaderStatExportLines(result: IntelResult): readonly string[] {
+  if (result.status !== 'ok') return [];
+  return result.stats.map((s) => `${s.leaderId},${s.closedTrades},${s.winRate},${s.realisedPnl}`);
+}
+
+/** L3 — true when leader count is within [min,max]. Invalid → false. */
+export function intelLeaderCountInRange(result: IntelResult, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = intelLeaderCount(result);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when status is empty. */
+export function isIntelEmpty(result: IntelResult): result is IntelEmpty {
+  return result.status === 'empty';
+}
