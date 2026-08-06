@@ -2769,8 +2769,8 @@ const RULE_PROBES = [
     fires: true,
     verdict: 'TRANSCRIPTION',
     source:
-      'class P { private static final String DISCLOSED_SECRET_SHA256 = "feafc645a12b90d5ddd2aac44494fb61ccb8ef49a2f5af0b022942ef2c7dd89"; }',
-    note: 'THE OTHER FAIL-OPEN ONE, and it is OUR code, not the vendor’s: 63 digits in the guard that refuses to boot on the disclosed ECT withdrawal secret. It can then never equal a computed digest, the check silently stops firing, and ect boots on the compromised key with a green build. Nothing asserted this width before this branch',
+      'class P { private static final String DISCLOSED_DIGEST_SHA256 = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f"; }',
+    note: 'Synthetic 63-hex, deliberately NOT the real digest — the probe asserts WIDTH, so the value is irrelevant and copying the real one into tooling/ put a 64-hex-shaped literal on a path gitleaks does not exempt (vendor/ is exempt; tooling/ is not). THE OTHER FAIL-OPEN ONE, and it is OUR code, not the vendor’s: 63 digits in the guard that refuses to boot on the disclosed ECT withdrawal secret. It can then never equal a computed digest, the check silently stops firing, and ect boots on the compromised key with a green build. Nothing asserted this width before this branch',
   },
   {
     rule: 'M11',
@@ -2778,7 +2778,7 @@ const RULE_PROBES = [
     fires: true,
     verdict: 'WELL-FORMED',
     source:
-      'class P { private static final String DISCLOSED_SECRET_SHA256 = requireSha256Hex("feafc645a12b90d5ddd2aac44494fb61ccb8ef49a2f5af0b022942ef2c7dd89b"); }',
+      'class P { private static final String DISCLOSED_DIGEST_SHA256 = requireSha256Hex("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"); }',
     note: 'the constant as it now stands, WRAPPED in the width assertion added on this branch. The wrapper is the remediation M11 asks for, so the rule has to keep seeing through it — a rule that went blind the moment the value was guarded would reward removing the guard',
   },
   {
