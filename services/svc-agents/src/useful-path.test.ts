@@ -3,7 +3,21 @@ import { AgentError, ProviderError } from './errors.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { DEFAULT_ROUTING_TABLE, parseRoutingTable } from './gateway/routing.js';
 import { MockModelProvider } from './providers/mock.js';
-import { firstCompletionTask, runUsefulPath } from './useful-path.js';
+import {
+  firstCompletionTask,
+  runUsefulPath,
+  usefulPathProbeMessage,
+  hasUsefulPathTask,
+  usefulPathResultBoardCard,
+  usefulPathResultStatusLine,
+  parseUsefulPathResultStatusLine,
+  usefulPathResultStatusLineMatches,
+  usefulPathResultExportHeader,
+  usefulPathResultExportLine,
+  usefulPathResultExportText,
+  usefulPathTextLenInRange,
+  isMockUsefulPathText,
+} from './useful-path.js';
 
 /**
  * THE GATEWAY USEFUL PATH — Board Clear A-P5-AGENTS.
@@ -86,5 +100,22 @@ describe('useful path on the existing gateway', () => {
     const gateway = new ModelGateway([new MockModelProvider({ id: 'primary' })], table);
     expect(firstCompletionTask(gateway)).toBeNull();
     await expect(runUsefulPath(gateway)).rejects.toThrow(/no completion route/);
+  });
+});
+
+describe('L3 wave55 useful-path status/export', () => {
+  it('boards from mock probe result', async () => {
+    const gateway = new ModelGateway([new MockModelProvider({ id: 'primary' })], DEFAULT_ROUTING_TABLE);
+    expect(hasUsefulPathTask(gateway)).toBe(true);
+    expect(usefulPathProbeMessage()).toBe('agents.useful_path.probe');
+    const result = await runUsefulPath(gateway);
+    expect(usefulPathResultBoardCard(result).providerId).toBe('primary');
+    expect(usefulPathResultStatusLineMatches(result)).toBe(true);
+    expect(parseUsefulPathResultStatusLine('nope')).toBeNull();
+    expect(usefulPathResultExportText(result).startsWith(usefulPathResultExportHeader())).toBe(true);
+    expect(usefulPathResultExportLine(result)).toContain('navigator.plan');
+    expect(isMockUsefulPathText(result)).toBe(true);
+    expect(usefulPathTextLenInRange(result, 1, 10_000)).toBe(true);
+    expect(usefulPathTextLenInRange(result, 10_000, 1)).toBe(false);
   });
 });

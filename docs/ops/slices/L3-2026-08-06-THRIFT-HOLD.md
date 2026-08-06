@@ -18,11 +18,12 @@
 | 51 | 3041acb4 | grounded + copy-intel + referral-tree honesty |
 | 52 | a86ff233 | freeze-store + copy-intel stats honesty |
 | 53 | 8d59024d | commission summary + freeze filter honesty |
-| 54 | (this) | channel catalog + agents readiness honesty |
+| 54 | 889d3c4d | channel catalog + agents readiness honesty |
+| 55 | (this) | useful-path + render-boards honesty |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–54
+2. Open one Class N PR covering waves 46–55
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 
