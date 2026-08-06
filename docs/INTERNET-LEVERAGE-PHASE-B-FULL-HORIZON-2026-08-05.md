@@ -200,6 +200,9 @@ Expect: `missing 0`.
 
 ## 4 · External shortlist (where Path contains EXT) — deep evidence in v2
 
+> **Corrected 2026-08-06 — read [`INTERNET-LEVERAGE-PHASE-C-GATEWAY-SOCKETS-2026-08-06.md`](INTERNET-LEVERAGE-PHASE-C-GATEWAY-SOCKETS-2026-08-06.md) before acting on the notify or MPC rows.**
+> `svc-notify` and `svc-agents` terminate at operator-set URLs and name no vendor below the adapter (§0.7). Installing the SDKs this table lists would put a vendor name in source and re-couple provider choice to a release — the exact property those files were written to have. The capability rows are right; what you install to get them is not. Phase C also adds two rows this table has no line for: supply-chain scanning and a perf harness.
+
 | External                                           | Used by IDs / FH rows             | Action                                                                                      |
 | -------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------- |
 | `linear-pattern` + `@intafaced/safe-regex` (re2js) | FH-SEC-01, P2P operator patterns  | **Split:** operator → linear-pattern; engineer → safe-regex; ban native node-re2 (law §3.2) |
