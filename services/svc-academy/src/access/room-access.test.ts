@@ -1,6 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
-import { decideSeat, inviteIsLive, needsStakeCheck, type RoomTerms, type SeatRequest } from './room-access.js';
+import {
+  decideSeat,
+  inviteIsLive,
+  needsStakeCheck,
+  type RoomTerms,
+  type SeatRequest,
+  seatDecisionBoardCard,
+  seatDecisionStatusLine,
+  parseSeatDecisionStatusLine,
+  seatDecisionStatusLineMatches,
+  seatDecisionStatusLineConsistent,
+  seatDecisionExportHeader,
+  seatDecisionExportLine,
+  seatDecisionExportText,
+  roomAccessKindBoardCard,
+  isRoomAccessKind,
+  seatNeedsStakeHonesty,
+  ROOM_ACCESS_KINDS,
+} from './room-access.js';
 
 /**
  * WHO GETS A SEAT (§8.3 "capacity tiers: free/staked/invite").
@@ -152,5 +170,35 @@ describe('needsStakeCheck', () => {
 
   it('never asks for the host, who bypasses the gate anyway', () => {
     expect(needsStakeCheck({ access: 'staked' }, true)).toBe(false);
+  });
+});
+
+describe('L3 wave60 seat decision honesty', () => {
+  it('allowed and refuse boards', () => {
+    const freeRoom = { access: 'free' as const, minStake: amt('0'), capacity: 10 };
+    const ok = decideSeat(freeRoom, { occupancy: 0, stake: amt('0'), invited: false, isHost: false });
+    expect(ok.allowed).toBe(true);
+    expect(seatDecisionBoardCard(ok).allowed).toBe(true);
+    expect(seatDecisionStatusLineMatches(ok)).toBe(true);
+    expect(seatDecisionStatusLineConsistent(seatDecisionStatusLine(ok))).toBe(true);
+    expect(parseSeatDecisionStatusLine('nope')).toBeNull();
+    expect(seatDecisionExportText(ok).startsWith(seatDecisionExportHeader())).toBe(true);
+    expect(seatDecisionExportLine(ok)).toBe('1,,0');
+
+    const staked = { access: 'staked' as const, minStake: amt('100'), capacity: 10 };
+    const refuse = decideSeat(staked, { occupancy: 0, stake: amt('0'), invited: false, isHost: false });
+    expect(refuse.allowed).toBe(false);
+    if (refuse.allowed) return;
+    expect(seatDecisionBoardCard(refuse).code).toBe('academy.stake_required');
+    expect(seatDecisionStatusLineMatches(refuse)).toBe(true);
+    expect(seatDecisionStatusLineConsistent(seatDecisionStatusLine(refuse))).toBe(true);
+    expect(seatDecisionExportLine(refuse)).toContain('academy.stake_required');
+
+    expect(roomAccessKindBoardCard().total).toBe(3);
+    expect(isRoomAccessKind('free')).toBe(true);
+    expect(isRoomAccessKind('vip')).toBe(false);
+    expect(ROOM_ACCESS_KINDS).toContain('invite');
+    expect(seatNeedsStakeHonesty({ access: 'staked' }, false)).toBe(true);
+    expect(seatNeedsStakeHonesty({ access: 'staked' }, true)).toBe(false);
   });
 });

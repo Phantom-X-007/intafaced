@@ -23,11 +23,12 @@
 | 56 | 20449e51 | SMS compose honesty boards |
 | 57 | 938aa291 | dispatch report honesty boards |
 | 58 | 967e5dde | host-rights status/export honesty |
-| 59 | (this) | academy error catalog honesty |
+| 59 | 6d534076 | academy error catalog honesty |
+| 60 | (this) | seat decision + access kind honesty |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–59
+2. Open one Class N PR covering waves 46–60
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 

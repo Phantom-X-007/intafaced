@@ -96,3 +96,87 @@ export function inviteIsLive(invite: { expiresAt: Date | null } | null, now: Dat
 export function needsStakeCheck(room: { access: RoomAccessKind }, isHost: boolean): boolean {
   return !isHost && room.access === 'staked';
 }
+
+/** L3 — room access kinds catalog. */
+export const ROOM_ACCESS_KINDS: readonly RoomAccessKind[] = ['free', 'staked', 'invite'];
+
+/** L3 — true when kind is known. */
+export function isRoomAccessKind(value: string): value is RoomAccessKind {
+  return (ROOM_ACCESS_KINDS as readonly string[]).includes(value);
+}
+
+/** L3 — seat decision board card. */
+export function seatDecisionBoardCard(decision: SeatDecision): {
+  readonly allowed: boolean;
+  readonly code: string | null;
+  readonly refused: boolean;
+} {
+  if (decision.allowed) {
+    return { allowed: true, code: null, refused: false };
+  }
+  return { allowed: false, code: decision.code, refused: true };
+}
+
+/** L3 — status line. */
+export function seatDecisionStatusLine(decision: SeatDecision): string {
+  const c = seatDecisionBoardCard(decision);
+  return `allowed=${c.allowed ? '1' : '0'} code=${c.code ?? '-'} refused=${c.refused ? '1' : '0'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseSeatDecisionStatusLine(
+  line: string,
+): { readonly allowed: boolean; readonly code: string | null; readonly refused: boolean } | null {
+  const m = line.trim().match(/^allowed=([01]) code=(\S+) refused=([01])$/);
+  if (!m) return null;
+  return {
+    allowed: m[1] === '1',
+    code: m[2] === '-' ? null : m[2]!,
+    refused: m[3] === '1',
+  };
+}
+
+/** L3 — true when status matches decision. */
+export function seatDecisionStatusLineMatches(decision: SeatDecision): boolean {
+  const p = parseSeatDecisionStatusLine(seatDecisionStatusLine(decision));
+  if (!p) return false;
+  const c = seatDecisionBoardCard(decision);
+  return p.allowed === c.allowed && p.code === c.code && p.refused === c.refused;
+}
+
+/** L3 — true when allowed implies no code and refused equals !allowed. */
+export function seatDecisionStatusLineConsistent(line: string): boolean {
+  const p = parseSeatDecisionStatusLine(line);
+  if (!p) return false;
+  if (p.allowed) return p.code === null && p.refused === false;
+  return p.code !== null && p.refused === true;
+}
+
+/** L3 — export header. */
+export function seatDecisionExportHeader(): string {
+  return 'allowed,code,refused';
+}
+
+/** L3 — export line. */
+export function seatDecisionExportLine(decision: SeatDecision): string {
+  const c = seatDecisionBoardCard(decision);
+  return `${c.allowed ? '1' : '0'},${c.code ?? ''},${c.refused ? '1' : '0'}`;
+}
+
+/** L3 — full export. */
+export function seatDecisionExportText(decision: SeatDecision): string {
+  return [seatDecisionExportHeader(), seatDecisionExportLine(decision)].join('\n');
+}
+
+/** L3 — access kind catalog board. */
+export function roomAccessKindBoardCard(): {
+  readonly total: number;
+  readonly kinds: readonly RoomAccessKind[];
+} {
+  return { total: ROOM_ACCESS_KINDS.length, kinds: ROOM_ACCESS_KINDS };
+}
+
+/** L3 — true when stake check is required for non-host staked room. */
+export function seatNeedsStakeHonesty(room: { access: RoomAccessKind }, isHost: boolean): boolean {
+  return needsStakeCheck(room, isHost);
+}
