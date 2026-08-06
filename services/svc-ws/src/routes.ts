@@ -84,11 +84,12 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     }
 
     try {
-      // Checked against the engine's own market list BEFORE any depth call.
-      // `engine.depth()` upstream creates the book if it is missing, so an
-      // unchecked id here is a way to grow svc-matching's memory over HTTP.
+      // Checked against the LISTING before any depth call — not against the
+      // engine's book list, which omits every market that has not traded yet
+      // (`depth/registry.ts`). A listed market with no book is not a 404 here;
+      // it is an empty book, which is what `source.snapshot` returns for it.
       if (!(await hub.ensureKnownMarket(marketId))) {
-        return reply.code(404).send({ code: 'MarketNotFound', message: `svc-matching has no book for "${marketId}"` });
+        return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
       }
 
       // Prefer the hub's own book: it is the exact state every delta on the

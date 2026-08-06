@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { isModuleId } from '@intafaced/config';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ALWAYS_ALLOWED_REST, KillSwitchState, MODULE_BY_PREFIX, procedureLeaf, procedureOf } from './kill-switch.js';
 import { UPSTREAMS } from './routes.js';
 
@@ -133,6 +136,18 @@ describe('a killed market still lets users out through the REST contract', () =>
     expect(state().decide('/api/v1/orders', 'DELETE')).toMatchObject({ refused: false, reason: 'lets-the-user-out' });
   });
 
+  it('allows DELETE /api/v1/positions/:id — close futures so kill does not trap margin', () => {
+    expect(state().decide('/api/v1/positions/8f3c1d2e-0000-4000-8000-000000000099', 'DELETE')).toMatchObject({
+      module: 'trade',
+      refused: false,
+      reason: 'lets-the-user-out',
+    });
+  });
+
+  it('refuses POST /api/v1/positions — new risk under kill', () => {
+    expect(state().decide('/api/v1/positions', 'POST')).toMatchObject({ module: 'trade', refused: true, reason: 'module-killed' });
+  });
+
   it('allows cancel-all with a symbol filter — a query string must not decide whether you can leave', () => {
     expect(state().decide('/api/v1/orders?symbol=BTC/USDT', 'DELETE').refused).toBe(false);
   });
@@ -208,5 +223,20 @@ describe('failing closed', () => {
       expect(() => s.decide(bad as unknown as string, 'POST')).not.toThrow();
       expect(s.decide(bad as unknown as string, 'POST').refused).toBe(true);
     }
+  });
+});
+
+describe('optional restart durability (EDGE_KILL_STATE_PATH)', () => {
+  it('rehydrates killed modules from disk after a new process', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edge-kill-'));
+    const path = join(dir, 'state.json');
+    const a = new KillSwitchState({ statePath: path });
+    a.set('trade', true, OPERATOR, WHY);
+    expect(a.isKilled('trade')).toBe(true);
+    expect(JSON.parse(readFileSync(path, 'utf8')).killed).toEqual(expect.arrayContaining([expect.objectContaining({ module: 'trade' })]));
+
+    const b = new KillSwitchState({ statePath: path });
+    expect(b.isKilled('trade')).toBe(true);
+    expect(b.decide('/api/v1/orders', 'POST')).toMatchObject({ refused: true, reason: 'module-killed' });
   });
 });

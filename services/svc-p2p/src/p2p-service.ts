@@ -17,6 +17,7 @@ import {
   DEFAULT_DEADLINES,
   assertTransition,
   deadlineFor,
+  escalationDeadline,
   holdsEscrow,
   isTerminal,
   timeoutActionFor,
@@ -40,6 +41,8 @@ import {
   type TradeOutcome,
   type XpPolicy,
 } from './reputation.js';
+import { methodIdKey } from './instruments.js';
+import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
 /**
@@ -94,7 +97,9 @@ export type P2pErrorCode =
   | 'p2p.dispute_already_open'
   | 'p2p.dispute_already_resolved'
   | 'p2p.escrow_missing'
-  | 'p2p.trading_disabled';
+  | 'p2p.trading_disabled'
+  | 'p2p.dispute_evidence_rejected'
+  | 'p2p.erase_blocked';
 
 export class P2pError extends Error {
   constructor(
@@ -106,19 +111,96 @@ export class P2pError extends Error {
   }
 }
 
+/**
+ * The half of `InstrumentService` this file is allowed to know about.
+ *
+ * Narrow on purpose. svc-p2p's escrow paths need exactly one thing from payment
+ * instruments — "freeze the seller's destination onto this trade, or refuse the
+ * take" — and nothing here should be able to reach a disclosure path by
+ * accident. The reveal rules live in `instrument-service.ts`, behind an
+ * interface this file cannot call.
+ */
+export interface TradeInstrumentAttacher {
+  /**
+   * THE FLUSH BOUNDARY, and the only source of a `DenialSink`.
+   *
+   * `reserveTrade`'s transaction runs inside this. A refusal raised in there
+   * cannot write its own access-log row: writing on `tx` loses the row to the
+   * abort the refusal itself causes, and writing on the service's pool asks for
+   * a second connection while this transaction holds the first — which, ten
+   * concurrent refusals deep on a pool of ten, is a permanent deadlock nothing
+   * times out of. So a refusal queues its row on the sink, and this wrapper
+   * writes it after the transaction has settled and released its connection.
+   */
+  duringTake<T>(run: (sink: DenialSink) => Promise<T>): Promise<T>;
+
+  attachToTrade(
+    tx: Sql,
+    input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string; sink: DenialSink },
+  ): Promise<{ instrumentId: string; fingerprint: string }>;
+
+  /**
+   * THE ONE REFUSAL. Queues the attempt against the seller, then throws.
+   *
+   * On the interface rather than built here because it produces an access-log
+   * row, and this file must not own a second way to describe a payment
+   * instrument. Both reasons a take can fail on the method — the OFFER not
+   * accepting it, and the SELLER not holding a destination for it — go through
+   * it, so a caller cannot tell them apart.
+   *
+   * The `sink` is required by the type system rather than by a comment: a
+   * refusal that cannot be raised without one cannot be raised outside the
+   * `duringTake` scope that ends by writing it down.
+   */
+  refuseTake(input: { takerId: string; sellerId: string; tradeId?: string; sink: DenialSink }): Promise<never>;
+}
+
 export interface P2pServiceOptions {
+  /**
+   * Where the buyer will be told to send the fiat.
+   *
+   * NOT optional, and the compiler enforcing that is the point: a P2pService
+   * built without one would take offers, lock escrow, and leave every buyer
+   * with nowhere to pay — the exact hole this collaborator exists to close.
+   */
+  instruments: TradeInstrumentAttacher;
   /** Platform fee taken off the escrowed amount at release. */
   feeBps?: number;
   deadlines?: DeadlinePolicy;
   xp?: XpPolicy;
   /** Kill-switch. Blocks new offers and takes; never blocks settlement. */
   tradingEnabled?: boolean;
-  /** Backstop decision for a dispute no moderator ruled on. Never "neither". */
-  disputeBackstopResolution?: 'release' | 'refund';
-  backstopModeratorId?: string;
   /** Floating offers need one. Absent = floating offers cannot be taken. */
   referencePrices?: ReferencePriceSource;
 }
+
+/**
+ * ONE PIECE OF EVIDENCE, AND WHO PUT IT THERE.
+ *
+ * Stored as an envelope rather than the bare item, for two reasons that are the
+ * same reason twice:
+ *
+ *   · the record of a dispute has to say who said what, or a moderator ruling
+ *     on it is ruling on an anonymous pile;
+ *   · `disputes.get` shows a party their OWN submissions and nobody else's,
+ *     which is not expressible without attribution on each entry.
+ *
+ * `seq` is assigned under the dispute's row lock and is dense from 1, so a gap
+ * is visible. Nothing here is ever rewritten — the database refuses
+ * (`p2p_disputes_evidence_append_only_trg`).
+ */
+export interface EvidenceEntry {
+  readonly seq: number;
+  /** `null` only for rows written before evidence was attributed. Never guessed. */
+  readonly submittedBy: string | null;
+  readonly submittedAt: Date | null;
+  readonly item: unknown;
+}
+
+/** Caps, enforced here AND by the column's CHECK constraints. */
+export const MAX_EVIDENCE_ENTRIES = 200;
+export const MAX_EVIDENCE_PER_CALL = 10;
+export const MAX_EVIDENCE_ITEM_BYTES = 8_192;
 
 export interface OfferRecord {
   id: string;
@@ -169,7 +251,7 @@ export interface DisputeRecord {
   tradeId: string;
   openedBy: string;
   reason: string;
-  evidence: unknown;
+  evidence: readonly EvidenceEntry[];
   moderatorId: string | null;
   resolution: 'release' | 'refund' | null;
   resolutionNotes: string | null;
@@ -177,6 +259,11 @@ export interface DisputeRecord {
   deadlineAt: Date;
   openedAt: Date;
   resolvedAt: Date | null;
+  /** Non-null iff this row has actually been served to a moderator. */
+  lastSeenByModeratorAt: Date | null;
+  moderatorViews: number;
+  escalatedAt: Date | null;
+  escalations: number;
 }
 
 interface TradeRow {
@@ -236,6 +323,52 @@ interface DisputeRow {
   deadline_at: Date;
   opened_at: Date;
   resolved_at: Date | null;
+  last_seen_by_moderator_at: Date | null;
+  moderator_views: number;
+  escalated_at: Date | null;
+  escalations: number;
+}
+
+/**
+ * WHY ONE TRADE THE SWEEP TOUCHED DID NOT MOVE.
+ *
+ * The sweeps deliberately keep going when one trade fails — one bad trade must
+ * not stop the next from settling — and the price of that used to be a bare
+ * `catch { failed++ }`: a counter, and the reason discarded. Which is how the
+ * escrow guard's refusal ("a disputed escrow terminates only on a human
+ * ruling") reached a `catch`, was thrown away, and surfaced as an assertion
+ * failure in another branch's test run that named nothing at all.
+ *
+ * The message is carried, not the Error: the caller logs this, and an Error
+ * dragged into a log line brings a stack that says where the sweep is rather
+ * than what refused.
+ */
+export interface SweepFailure {
+  readonly tradeId: string;
+  readonly status: TradeStatus;
+  /** The service's own code where there is one — `p2p.escrow_missing`, etc. */
+  readonly code: string | null;
+  readonly error: string;
+}
+
+export interface SweepResult {
+  readonly swept: number;
+  readonly failed: number;
+  readonly escalated: number;
+  readonly failures: SweepFailure[];
+}
+
+function describeFailure(tradeId: string, status: TradeStatus, err: unknown): SweepFailure {
+  const code =
+    err instanceof P2pError || err instanceof TradeStateError || err instanceof PricingError
+      ? err.code
+      : ((err as { code?: unknown })?.code ?? null);
+  return {
+    tradeId,
+    status,
+    code: typeof code === 'string' ? code : null,
+    error: err instanceof Error ? err.message : String(err),
+  };
 }
 
 /** Who authorised a terminal decision. Goes on the event and into the trace. */
@@ -286,23 +419,21 @@ export class P2pService {
   private readonly feeBps: number;
   private readonly deadlines: DeadlinePolicy;
   private readonly xpPolicy: XpPolicy;
-  private readonly backstopResolution: 'release' | 'refund';
-  private readonly backstopModeratorId: string;
   private readonly referencePrices: ReferencePriceSource | undefined;
+  private readonly instruments: TradeInstrumentAttacher;
   private tradingEnabled: boolean;
 
   constructor(
     private readonly sql: Sql,
     private readonly ledger: LedgerClient,
     private readonly bus: EventBus,
-    options: P2pServiceOptions = {},
+    options: P2pServiceOptions,
   ) {
+    this.instruments = options.instruments;
     this.feeBps = options.feeBps ?? 0;
     this.deadlines = options.deadlines ?? DEFAULT_DEADLINES;
     this.xpPolicy = options.xp ?? DEFAULT_XP_POLICY;
     this.tradingEnabled = options.tradingEnabled ?? true;
-    this.backstopResolution = options.disputeBackstopResolution ?? 'refund';
-    this.backstopModeratorId = options.backstopModeratorId ?? 'system:p2p-backstop';
     this.referencePrices = options.referencePrices;
   }
 
@@ -341,6 +472,24 @@ export class P2pService {
       // §6.2: 100+ fiat currencies are config, not code. The registry in
       // packages/config decides what we serve; this service never has a list.
       throw new PricingError(`Fiat currency "${fiatCurrency}" is not enabled`, 'p2p.unsupported_fiat');
+    }
+
+    // AN OFFER MUST DECLARE HOW IT CAN BE PAID.
+    //
+    // `methodAllowed` treats an offer with no declared methods as accepting
+    // ANYTHING, which used to be a reasonable "the terms text is the contract"
+    // default. It is not reasonable next to the take refusal: on an offer that
+    // declares nothing, the ONLY thing that can refuse a take is the seller's
+    // instrument set, so every method id a caller cares to try is answered
+    // cleanly. That is the take oracle again, in its sharpest form — an offer
+    // whose maker never chose to publish anything becomes a per-method probe of
+    // its own seller.
+    //
+    // Refused at creation, for NEW offers only. Existing ones keep working and
+    // refuse at take, honestly — breaking live offers to close a hole would
+    // cost makers real liquidity for a fix they did not ask for.
+    if (!Array.isArray(input.methods) || input.methods.length === 0) {
+      throw new PricingError('An offer must declare at least one payment method it accepts', 'p2p.offer_methods_required');
     }
 
     const totalAmt = input.totalAmt ?? input.maxAmt;
@@ -503,77 +652,125 @@ export class P2pService {
     const referencePrice =
       preview.priceType === 'float' ? ((await this.referencePrices?.price(preview.asset, preview.fiatCurrency)) ?? null) : null;
 
-    return transaction(
-      this.sql,
-      async (tx) => {
-        const rows = await tx<OfferRow[]>`SELECT * FROM p2p.offers WHERE id = ${input.offerId} FOR UPDATE`;
-        const row = rows[0];
-        if (!row) throw new P2pError(`Offer ${input.offerId} not found`, 'p2p.offer_not_found');
+    /**
+     * `duringTake` wraps the transaction, not the other way round.
+     *
+     * A refused take has to be written to the access log and the row has to
+     * survive the abort the refusal causes, so it cannot go on `tx`. It also
+     * cannot go on the service's own pool from in here: this transaction is
+     * holding a connection, and a second request against the same pool is a
+     * queue entry that only clears when this transaction ends — which it cannot
+     * do, because it is waiting on that request. Ten of those, on the default
+     * pool of ten, and svc-p2p never serves another request; the ten offers
+     * stay row-locked too. Neither `statement_timeout` nor the transaction
+     * retry can reach it, because no statement is running.
+     *
+     * So the refusal is queued in memory and written by `duringTake`'s
+     * `finally`, once `transaction` has rolled back and given the connection
+     * back. Same row, same reason, one connection at a time.
+     */
+    return this.instruments.duringTake((sink) =>
+      transaction(
+        this.sql,
+        async (tx) => {
+          const rows = await tx<OfferRow[]>`SELECT * FROM p2p.offers WHERE id = ${input.offerId} FOR UPDATE`;
+          const row = rows[0];
+          if (!row) throw new P2pError(`Offer ${input.offerId} not found`, 'p2p.offer_not_found');
 
-        const offer = toOffer(row);
-        if (offer.status !== 'active') {
-          throw new P2pError(`Offer ${offer.id} is ${offer.status} and cannot be taken`, 'p2p.offer_not_active');
-        }
-        if (offer.makerId === input.takerId) {
-          // Self-trading manufactures a completion record, and a flawless P2P
-          // record raises limits platform-wide (§6.2 → §4.1).
-          throw new P2pError('A maker cannot take their own offer', 'p2p.self_trade');
-        }
-        if (!methodAllowed(offer.methods, input.method)) {
-          throw new P2pError(`Offer ${offer.id} does not accept "${input.method}"`, 'p2p.offer_method_unsupported');
-        }
+          const offer = toOffer(row);
+          if (offer.status !== 'active') {
+            throw new P2pError(`Offer ${offer.id} is ${offer.status} and cannot be taken`, 'p2p.offer_not_active');
+          }
+          if (offer.makerId === input.takerId) {
+            // Self-trading manufactures a completion record, and a flawless P2P
+            // record raises limits platform-wide (§6.2 → §4.1).
+            throw new P2pError('A maker cannot take their own offer', 'p2p.self_trade');
+          }
+          // Computed here rather than after pricing, because the refusal below
+          // has to name the seller in the access log.
+          const { sellerId, buyerId } = partiesFor(offer.side, offer.makerId, input.takerId);
 
-        // BEFORE ANY LOCK. Both bounds and the remaining liquidity, under the
-        // row lock, so two concurrent takers cannot both pass the same check.
-        assertWithinBounds(input.amount, { minAmt: offer.minAmt, maxAmt: offer.maxAmt, remainingAmt: offer.remainingAmt });
+          if (!methodAllowed(offer.methods, input.method)) {
+            // NOT a distinct error any more. "The offer does not accept that
+            // method" and "the seller holds no destination for that method" are
+            // the same sentence to the caller, deliberately: any difference
+            // between them is a bit of information about someone else's bank
+            // accounts, handed out for free. See `TAKE_REFUSED_MESSAGE`.
+            await this.instruments.refuseTake({ takerId: input.takerId, sellerId, tradeId: input.tradeId, sink });
+          }
 
-        const priced = quote({
-          amount: input.amount,
-          priceType: offer.priceType,
-          price: offer.price,
-          referencePrice,
-          fiatCurrency: offer.fiatCurrency,
-        });
+          // BEFORE ANY LOCK. Both bounds and the remaining liquidity, under the
+          // row lock, so two concurrent takers cannot both pass the same check.
+          assertWithinBounds(input.amount, { minAmt: offer.minAmt, maxAmt: offer.maxAmt, remainingAmt: offer.remainingAmt });
 
-        const { sellerId, buyerId } = partiesFor(offer.side, offer.makerId, input.takerId);
-        const now = await txNow(tx);
-        const deadlineAt = deadlineFor('created', now, this.deadlines);
-        const deadlines = withDeadline({}, 'created', deadlineAt);
-        const feeBps = input.feeBps ?? this.feeBps;
+          const priced = quote({
+            amount: input.amount,
+            priceType: offer.priceType,
+            price: offer.price,
+            referencePrice,
+            fiatCurrency: offer.fiatCurrency,
+          });
 
-        await tx`
-          UPDATE p2p.offers
-             SET remaining_amt = remaining_amt - ${formatAmount(input.amount)}::numeric,
-                 updated_at = now()
-           WHERE id = ${offer.id}
-        `;
+          const now = await txNow(tx);
+          const deadlineAt = deadlineFor('created', now, this.deadlines);
+          const deadlines = withDeadline({}, 'created', deadlineAt);
+          const feeBps = input.feeBps ?? this.feeBps;
 
-        const inserted = await tx<TradeRow[]>`
-          INSERT INTO p2p.p2p_trades (
-            id, offer_id, taker_id, maker_id, seller_id, buyer_id, asset, fiat_currency,
-            amount, price, fiat_amount, method, fee_bps, status, deadlines, deadline_at, created_at
-          )
-          VALUES (
-            ${input.tradeId}, ${offer.id}, ${input.takerId}, ${offer.makerId}, ${sellerId}, ${buyerId},
-            ${offer.asset}, ${offer.fiatCurrency},
-            ${formatAmount(priced.amount)}::numeric, ${formatAmount(priced.price)}::numeric,
-            ${formatAmount(priced.fiatAmount)}::numeric, ${input.method}, ${feeBps},
-            'created', ${tx.json(deadlines as never)}, ${deadlineAt}, ${now}
-          )
-          ON CONFLICT (id) DO NOTHING
-          RETURNING *
-        `;
+          await tx`
+            UPDATE p2p.offers
+               SET remaining_amt = remaining_amt - ${formatAmount(input.amount)}::numeric,
+                   updated_at = now()
+             WHERE id = ${offer.id}
+          `;
 
-        if (!inserted[0]) {
-          // A retry of the same take. The inventory was already reserved by the
-          // original, so it must not be reserved again — abort the transaction
-          // rather than let the decrement above stand.
-          throw new P2pError(`Trade ${input.tradeId} already exists`, 'p2p.trade_exists');
-        }
+          const inserted = await tx<TradeRow[]>`
+            INSERT INTO p2p.p2p_trades (
+              id, offer_id, taker_id, maker_id, seller_id, buyer_id, asset, fiat_currency,
+              amount, price, fiat_amount, method, fee_bps, status, deadlines, deadline_at, created_at
+            )
+            VALUES (
+              ${input.tradeId}, ${offer.id}, ${input.takerId}, ${offer.makerId}, ${sellerId}, ${buyerId},
+              ${offer.asset}, ${offer.fiatCurrency},
+              ${formatAmount(priced.amount)}::numeric, ${formatAmount(priced.price)}::numeric,
+              ${formatAmount(priced.fiatAmount)}::numeric, ${input.method}, ${feeBps},
+              'created', ${tx.json(deadlines as never)}, ${deadlineAt}, ${now}
+            )
+            ON CONFLICT (id) DO NOTHING
+            RETURNING *
+          `;
 
-        return toTrade(inserted[0]);
-      },
-      { isolation: 'read committed', maxAttempts: 5 },
+          if (!inserted[0]) {
+            // A retry of the same take. The inventory was already reserved by the
+            // original, so it must not be reserved again — abort the transaction
+            // rather than let the decrement above stand.
+            throw new P2pError(`Trade ${input.tradeId} already exists`, 'p2p.trade_exists');
+          }
+
+          // WHERE THE BUYER WILL SEND THE MONEY, frozen onto the trade in the same
+          // transaction that created it. Two things follow from it being here:
+          //
+          //   · a trade with no destination is not a state that can be committed,
+          //     so the buyer is never shown a payment step with nothing in it;
+          //   · a seller with no destination is refused BEFORE any lock, with the
+          //     rest of phase A. The alternative is escrowing their asset against
+          //     a payment nobody can make and letting them find out fifteen
+          //     minutes later, via a timeout, that it was knowable up front.
+          //
+          // The snapshot is taken now and never re-read, which is also what stops
+          // a seller swapping the destination once the buyer has started paying.
+          await this.instruments.attachToTrade(tx, {
+            tradeId: input.tradeId,
+            sellerId,
+            takerId: input.takerId,
+            methodId: input.method,
+            fiatCurrency: offer.fiatCurrency,
+            sink,
+          });
+
+          return toTrade(inserted[0]);
+        },
+        { isolation: 'read committed', maxAttempts: 5 },
+      ),
     );
   }
 
@@ -781,17 +978,18 @@ export class P2pService {
     tradeId: string;
     openedBy: string;
     reason?: string;
-    evidence?: unknown;
+    evidence?: readonly unknown[];
     disputeId?: string;
   }): Promise<DisputeRecord> {
     return withSpan('p2p.openDispute', async () => this.openDisputeInner(input, 'party'));
   }
 
   private async openDisputeInner(
-    input: { tradeId: string; openedBy: string; reason?: string; evidence?: unknown; disputeId?: string },
+    input: { tradeId: string; openedBy: string; reason?: string; evidence?: readonly unknown[]; disputeId?: string },
     origin: 'party' | 'timeout',
   ): Promise<DisputeRecord> {
     const disputeId = input.disputeId ?? crypto.randomUUID();
+    const supplied = assertEvidenceAcceptable(input.evidence ?? [], 0);
 
     const dispute = await transaction(
       this.sql,
@@ -807,11 +1005,17 @@ export class P2pService {
         const deadlineAt = deadlineFor('disputed', now, this.deadlines);
         const deadlines = withDeadline(trade.deadlines, 'disputed', deadlineAt);
 
+        // Attributed from the first entry, not from the first APPEND. Evidence
+        // filed at open and evidence filed on Tuesday are the same kind of
+        // record and a moderator should not have to tell them apart by which
+        // API call happened to carry them.
+        const opening = envelopesFor(supplied, input.openedBy, now, 0);
+
         const rows = await tx<DisputeRow[]>`
           INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, reason, evidence, status, deadline_at, opened_at)
           VALUES (
             ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${input.reason ?? ''},
-            ${tx.json((input.evidence ?? []) as never)}, 'open', ${deadlineAt}, ${now}
+            ${tx.json(opening as never)}, 'open', ${deadlineAt}, ${now}
           )
           ON CONFLICT (trade_id) DO NOTHING
           RETURNING *
@@ -849,6 +1053,182 @@ export class P2pService {
   }
 
   /**
+   * A PARTY ADDS EVIDENCE AFTER THE FACT.
+   *
+   * Before this, evidence could only be supplied in the single `disputes.open`
+   * call — and a dispute opened by the release timeout carries a reason and
+   * nothing else, so the party who was handed a dispute they did not ask for
+   * had no way to put anything into it at all. A buyer who gets their bank
+   * receipt an hour later had nowhere to put it.
+   *
+   * APPEND-ONLY, three times over, because the three are not the same promise:
+   *
+   *   · there is no update or delete procedure — the API has no verb for it;
+   *   · the write is `evidence = evidence || …`, so this code cannot rewrite
+   *     history even by mistake;
+   *   · the database refuses any update whose evidence is not the old evidence
+   *     with entries added on the end, from any client at all.
+   *
+   * Only while the dispute is OPEN. Once a moderator has ruled, the record the
+   * ruling was made against must stay the record the ruling was made against.
+   */
+  async appendDisputeEvidence(input: { tradeId: string; actorId: string; evidence: readonly unknown[] }): Promise<DisputeRecord> {
+    return withSpan('p2p.appendDisputeEvidence', async () =>
+      transaction(
+        this.sql,
+        async (tx) => {
+          const trade = await this.lockTrade(tx, input.tradeId);
+          if (trade.sellerId !== input.actorId && trade.buyerId !== input.actorId) {
+            throw new P2pError('Only a party to the trade can add evidence to its dispute', 'p2p.not_a_party');
+          }
+
+          const rows = await tx<DisputeRow[]>`
+            SELECT * FROM p2p.p2p_disputes WHERE trade_id = ${input.tradeId} FOR UPDATE
+          `;
+          const row = rows[0];
+          if (!row) throw new P2pError(`Trade ${input.tradeId} has no dispute`, 'p2p.dispute_not_found');
+          if (row.status === 'resolved') {
+            throw new P2pError(
+              `Dispute ${row.id} has been ruled on — the evidence a ruling was made against cannot change afterwards`,
+              'p2p.dispute_already_resolved',
+            );
+          }
+
+          const existing = normaliseEvidence(row.evidence);
+          const supplied = assertEvidenceAcceptable(input.evidence, existing.length);
+          const now = await txNow(tx);
+          const added = envelopesFor(supplied, input.actorId, now, existing.length);
+
+          const updated = await tx<DisputeRow[]>`
+            UPDATE p2p.p2p_disputes
+               SET evidence = evidence || ${tx.json(added as never)}::jsonb
+             WHERE id = ${row.id} AND status = 'open'
+            RETURNING *
+          `;
+          return toDispute(updated[0] ?? row);
+        },
+        { isolation: 'read committed', maxAttempts: 5 },
+      ),
+    );
+  }
+
+  // ── The moderator queue ────────────────────────────────────────────────────
+
+  /**
+   * THE QUEUE. Open disputes, most overdue first.
+   *
+   * Two things about this method are load-bearing and neither is the SELECT:
+   *
+   *   1 · **It stamps what it serves, in the same statement.** A row can only
+   *       leave here if `last_seen_by_moderator_at` was written for it — the
+   *       final SELECT reads out of the UPDATE's RETURNING, not out of the
+   *       page CTE, so "served but unrecorded" is not a state this code can
+   *       produce. That stamp is the only fact in the schema that distinguishes
+   *       "we shipped a queue endpoint" from "a human reached this dispute",
+   *       and the first one is a claim about our repo rather than about the
+   *       world.
+   *
+   *   2 · **The order is the SLA.** `deadline_at ASC` over `status = 'open'` is
+   *       exactly `p2p_disputes_open_idx`, which existed from the first
+   *       migration and which, until this method, nothing queried. An escalated
+   *       dispute keeps its original (now past) deadline precisely so it stays
+   *       at the top of this list instead of being pushed down by the re-arm.
+   *
+   * Keyset pagination on `(deadline_at, id)`: an offset would let a dispute
+   * resolved mid-page shift a later one out of view, and "the queue silently
+   * skipped one" is the failure this whole exercise exists to end.
+   */
+  async listDisputes(input: {
+    /** Who is reading. Recorded, because an unattributed queue read proves nothing. */
+    moderatorId: string;
+    status?: 'open' | 'resolved';
+    limit?: number;
+    cursor?: string | null;
+  }): Promise<{ disputes: DisputeRecord[]; nextCursor: string | null }> {
+    const status = input.status ?? 'open';
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const after = assertDisputeCursor(input.cursor ?? null);
+
+    const rows = await this.sql<DisputeRow[]>`
+      WITH page AS (
+        SELECT id FROM p2p.p2p_disputes
+         WHERE status = ${status}
+           AND (
+             ${after}::uuid IS NULL
+             OR (deadline_at, id) > (
+                  (SELECT c.deadline_at FROM p2p.p2p_disputes c WHERE c.id = ${after}::uuid),
+                  ${after}::uuid
+                )
+           )
+         ORDER BY deadline_at ASC, id ASC
+         LIMIT ${limit}
+      ),
+      seen AS (
+        UPDATE p2p.p2p_disputes d
+           SET last_seen_by_moderator_at = now(), moderator_views = d.moderator_views + 1
+          FROM page
+         WHERE d.id = page.id
+        RETURNING d.*
+      )
+      SELECT * FROM seen ORDER BY deadline_at ASC, id ASC
+    `;
+
+    const disputes = rows.map(toDispute);
+    const last = disputes[disputes.length - 1];
+    // A short page is the end of the queue. A full one may not be, so it hands
+    // back a cursor rather than guessing.
+    const nextCursor = disputes.length === limit && last ? last.id : null;
+    return { disputes, nextCursor };
+  }
+
+  /**
+   * One dispute, served to a moderator and stamped like the queue is.
+   *
+   * Separate from `getDispute` on purpose: a party reading their own dispute is
+   * not evidence that moderation is reachable, and counting it as such would
+   * make the one honest signal in this file dishonest.
+   */
+  async getDisputeAsModerator(tradeId: string, moderatorId: string): Promise<DisputeRecord> {
+    void moderatorId;
+    const rows = await this.sql<DisputeRow[]>`
+      UPDATE p2p.p2p_disputes
+         SET last_seen_by_moderator_at = now(), moderator_views = moderator_views + 1
+       WHERE trade_id = ${tradeId}
+      RETURNING *
+    `;
+    const row = rows[0];
+    if (!row) throw new P2pError(`Trade ${tradeId} has no dispute`, 'p2p.dispute_not_found');
+    return toDispute(row);
+  }
+
+  /**
+   * What an operator alarm reads.
+   *
+   * The old backstop made this number invisible: a dispute nobody could reach
+   * disappeared into a refund seven days later and the queue looked empty
+   * because it was. Nothing disposes of these now, so the backlog is a real
+   * number that grows if nobody is on shift — which is the point of measuring
+   * it.
+   */
+  async moderationBacklog(): Promise<{ open: number; overdue: number; escalated: number; neverSeen: number }> {
+    const rows = await this.sql<Array<{ open: string; overdue: string; escalated: string; never_seen: string }>>`
+      SELECT
+        count(*) AS open,
+        count(*) FILTER (WHERE deadline_at <= now()) AS overdue,
+        count(*) FILTER (WHERE escalated_at IS NOT NULL) AS escalated,
+        count(*) FILTER (WHERE last_seen_by_moderator_at IS NULL) AS never_seen
+      FROM p2p.p2p_disputes WHERE status = 'open'
+    `;
+    const row = rows[0]!;
+    return {
+      open: Number(row.open),
+      overdue: Number(row.overdue),
+      escalated: Number(row.escalated),
+      neverSeen: Number(row.never_seen),
+    };
+  }
+
+  /**
    * A moderator rules. Release to the buyer, or refund the seller. There is no
    * third option and no "leave it open" — §6.2's escrow promise is that every
    * dispute terminates.
@@ -859,10 +1239,14 @@ export class P2pService {
    */
   async resolveDispute(input: {
     tradeId: string;
+    /**
+     * A PERSON. The database refuses a `system:` principal here on the trade's
+     * terminal write (`p2p_trades_disputed_needs_ruling_trg`), so a future
+     * timer cannot quietly become a moderator again.
+     */
     moderatorId: string;
     resolution: 'release' | 'refund';
     notes?: string;
-    automatic?: boolean;
   }): Promise<TradeRecord> {
     return withMoneySpan(
       'p2p.resolveDispute',
@@ -932,7 +1316,12 @@ export class P2pService {
             tradeId: input.tradeId,
             moderatorId: input.moderatorId,
             resolution: input.resolution,
-            automatic: input.automatic ?? false,
+            // Always false, and now provably so: nothing in this service can
+            // reach `resolveDispute` without a human moderator id, and the
+            // database refuses the terminal write if one is missing. The field
+            // stays because the event contract declares it and a contract is
+            // not this service's to change unilaterally (§15.1).
+            automatic: false,
             ...(input.notes ? { notes: input.notes } : {}),
           },
           { idempotencyKey: `p2p.dispute.resolved:${disputeId}` },
@@ -1157,8 +1546,13 @@ export class P2pService {
    *
    * Trades are processed one at a time and independently. One trade that fails
    * to settle must not stop the sweep reaching the next.
+   *
+   * `escalated` is counted separately from `swept` because it is the one
+   * outcome where nothing was resolved. Folding it into `swept` would let a
+   * growing pile of unreachable disputes read on a dashboard as a busy,
+   * healthy sweep.
    */
-  async sweepDeadlines(now?: Date, limit = 100): Promise<{ swept: number; failed: number }> {
+  async sweepDeadlines(now?: Date, limit = 100): Promise<SweepResult> {
     // Every `deadline_at` was derived from the server clock, so the cutoff this
     // compares them against has to come from there too. A caller may still pass
     // its own instant — that is how a test asks "what would be due at T?" — but
@@ -1173,25 +1567,35 @@ export class P2pService {
     `;
 
     let swept = 0;
-    let failed = 0;
+    let escalated = 0;
+    const failures: SweepFailure[] = [];
 
     for (const row of due) {
       try {
-        await this.applyTimeout(row.id, row.status);
-        swept++;
-      } catch {
+        const outcome = await this.applyTimeout(row.id, row.status);
+        if (outcome === 'escalated') escalated++;
+        else swept++;
+      } catch (err) {
         // Left with its deadline in the past, so the next sweep retries it. A
         // trade that cannot be resolved must keep asking, not go quiet.
-        failed++;
+        //
+        // AND IT SAYS WHY. This `catch` used to be bare — `catch { failed++ }`
+        // — so the sweep counted a number and threw the reason away. The cost
+        // of that is not theoretical: the escrow guard's refusal ("a disputed
+        // escrow terminates only on a human ruling") reached this line, was
+        // discarded, and surfaced three files away as an assertion failure that
+        // named nothing. A refusal a human never sees is most of the way back
+        // to the problem this service exists to fix.
+        failures.push(describeFailure(row.id, row.status, err));
       }
     }
 
-    return { swept, failed };
+    return { swept, failed: failures.length, escalated, failures };
   }
 
-  private async applyTimeout(tradeId: string, status: TradeStatus): Promise<void> {
+  private async applyTimeout(tradeId: string, status: TradeStatus): Promise<'acted' | 'escalated'> {
     const action = timeoutActionFor(status);
-    if (!action) return;
+    if (!action) return 'acted';
 
     switch (action) {
       case 'settle_or_void': {
@@ -1199,7 +1603,7 @@ export class P2pService {
         // whether anything is in escrow, then unwind whatever we find.
         const result = await this.unwind(tradeId, 'timeout.escrow_incomplete');
         await this.publishExpired(tradeId, status, result.resolution === 'voided' ? 'voided' : 'refunded');
-        return;
+        return 'acted';
       }
 
       case 'refund': {
@@ -1207,7 +1611,7 @@ export class P2pService {
         // asset goes home in full.
         await this.unwind(tradeId, 'timeout.payment_window_elapsed');
         await this.publishExpired(tradeId, status, 'refunded');
-        return;
+        return 'acted';
       }
 
       case 'open_dispute': {
@@ -1223,26 +1627,68 @@ export class P2pService {
           'timeout',
         );
         await this.publishExpired(tradeId, status, 'disputed');
-        return;
+        return 'acted';
       }
 
-      case 'backstop_resolve': {
-        // `disputed` — no moderator ruled within the SLA. A dispute that can
-        // stay open forever is the same bug as an escrow that can stay locked
-        // forever; it just has a person's name attached to the delay. So the
-        // backstop decides, and the decision is attributed to a named system
-        // moderator in the audit trail rather than happening anonymously.
-        await this.resolveDispute({
-          tradeId,
-          moderatorId: this.backstopModeratorId,
-          resolution: this.backstopResolution,
-          notes: 'Resolved by the moderator-SLA backstop — no ruling within the dispute window',
-          automatic: true,
-        });
-        await this.publishExpired(tradeId, status, this.backstopResolution === 'release' ? 'released' : 'refunded');
-        return;
+      case 'escalate_dispute': {
+        // `disputed` — the moderator SLA has passed and nobody has ruled.
+        //
+        // WHAT USED TO HAPPEN HERE: `resolveDispute` with
+        // `moderatorId: 'system:p2p-backstop'` and a refund, seven days after
+        // the dispute opened. That is an automated resolution of a disputed
+        // release, which SPEC-OTC-RFQ-AND-EARN §33 says is the one place in the
+        // platform where a human decision is the design rather than the
+        // fallback — and it fired while there was no queue to find the dispute
+        // in, no way to read its evidence, and no session that could hold
+        // `admin:compliance`. A timer that acts because nobody could have
+        // looked is not a fallback; it is the only path.
+        //
+        // It escalates instead. Nothing moves.
+        await this.escalateDispute(tradeId);
+        return 'escalated';
       }
     }
+  }
+
+  /**
+   * SLA BREACHED. Re-arm, record, raise. Do not decide.
+   *
+   * The one real tension is `p2p_trades_live_has_deadline_ck`, which makes "a
+   * trade sits in escrow with no clock on it" unrepresentable — and that
+   * constraint is right. It is satisfied here without disposing of anything:
+   * **the constraint requires a live trade to carry a deadline; it does not
+   * require the deadline to dispose of value.** So the trade's deadline moves
+   * to the next re-check and the sweeper keeps picking the trade up, forever if
+   * that is what it takes.
+   *
+   * The DISPUTE's own `deadline_at` is deliberately left in the past. It is the
+   * SLA, the SLA was missed, and the queue orders by it — moving it would push
+   * the most neglected dispute to the bottom of the list a moderator reads.
+   */
+  private async escalateDispute(tradeId: string): Promise<void> {
+    await transaction(
+      this.sql,
+      async (tx) => {
+        const trade = await this.lockTrade(tx, tradeId);
+        if (trade.status !== 'disputed' || trade.resolution !== null) return;
+
+        const now = await txNow(tx);
+        const nextCheck = escalationDeadline(now, this.deadlines);
+
+        await tx`
+          UPDATE p2p.p2p_disputes
+             SET escalated_at = COALESCE(escalated_at, ${now}), escalations = escalations + 1
+           WHERE trade_id = ${tradeId} AND status = 'open'
+        `;
+
+        // `deadlines.disputeBy` keeps the ORIGINAL SLA. The re-check is not a
+        // new promise to the parties and must not be recorded as one.
+        await tx`
+          UPDATE p2p.p2p_trades SET deadline_at = ${nextCheck} WHERE id = ${tradeId} AND resolution IS NULL
+        `;
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
   }
 
   private async publishExpired(
@@ -1261,27 +1707,32 @@ export class P2pService {
    * late. This closes it, and it is self-healing because every recipe is keyed
    * on the trade id.
    */
-  async sweepSettlements(limit = 100): Promise<{ settled: number; failed: number }> {
-    const pending = await this.sql<Array<{ id: string }>>`
-      SELECT id FROM p2p.p2p_trades
+  async sweepSettlements(limit = 100): Promise<{ settled: number; failed: number; failures: SweepFailure[] }> {
+    const pending = await this.sql<Array<{ id: string; status: TradeStatus }>>`
+      SELECT id, status FROM p2p.p2p_trades
        WHERE resolved_at IS NOT NULL AND settled_at IS NULL
        ORDER BY resolved_at ASC
        LIMIT ${limit}
     `;
 
     let settled = 0;
-    let failed = 0;
+    const failures: SweepFailure[] = [];
 
     for (const row of pending) {
       try {
         await this.settle(row.id);
         settled++;
-      } catch {
-        failed++;
+      } catch (err) {
+        // The sharpest case in the service. A trade here has a COMMITTED
+        // decision and no ledger post: value that is late. Swallowing the
+        // reason left it sitting `resolved` and unsettled with nothing but a
+        // counter to show for it, and `escrowIntegrity()` counts it as still
+        // holding escrow — correctly — so it does not flag either.
+        failures.push(describeFailure(row.id, row.status, err));
       }
     }
 
-    return { settled, failed };
+    return { settled, failed: failures.length, failures };
   }
 
   // ── Reads ──────────────────────────────────────────────────────────────────
@@ -1526,7 +1977,7 @@ function toDispute(row: DisputeRow): DisputeRecord {
     tradeId: row.trade_id,
     openedBy: row.opened_by,
     reason: row.reason,
-    evidence: row.evidence,
+    evidence: normaliseEvidence(row.evidence),
     moderatorId: row.moderator_id,
     resolution: row.resolution,
     resolutionNotes: row.resolution_notes,
@@ -1534,16 +1985,164 @@ function toDispute(row: DisputeRow): DisputeRecord {
     deadlineAt: row.deadline_at,
     openedAt: row.opened_at,
     resolvedAt: row.resolved_at,
+    lastSeenByModeratorAt: row.last_seen_by_moderator_at ?? null,
+    moderatorViews: Number(row.moderator_views ?? 0),
+    escalatedAt: row.escalated_at ?? null,
+    escalations: Number(row.escalations ?? 0),
   };
 }
 
+// ── Evidence ─────────────────────────────────────────────────────────────────
+
+interface EvidenceEnvelope {
+  seq: number;
+  submittedBy: string;
+  submittedAt: string;
+  item: unknown;
+}
+
+/**
+ * What the caller sent, checked before a transaction is opened.
+ *
+ * The caps are here AND on the column, and that is not belt-and-braces: the
+ * column's CHECK is the one that survives a migration, a fixture script, or a
+ * future append path somebody adds without reading this function.
+ */
+function assertEvidenceAcceptable(items: readonly unknown[], existingCount: number): readonly unknown[] {
+  if (!Array.isArray(items)) {
+    throw new P2pError('Evidence must be a list', 'p2p.dispute_evidence_rejected');
+  }
+  if (items.length > MAX_EVIDENCE_PER_CALL) {
+    throw new P2pError(`At most ${MAX_EVIDENCE_PER_CALL} pieces of evidence can be submitted at once`, 'p2p.dispute_evidence_rejected');
+  }
+  if (existingCount + items.length > MAX_EVIDENCE_ENTRIES) {
+    throw new P2pError(`A dispute holds at most ${MAX_EVIDENCE_ENTRIES} pieces of evidence`, 'p2p.dispute_evidence_rejected');
+  }
+  for (const item of items) {
+    if (item === undefined) {
+      throw new P2pError('Evidence entries cannot be empty', 'p2p.dispute_evidence_rejected');
+    }
+    // Sized as JSON because that is what the column stores. A cap measured on
+    // anything else is a cap on the wrong number.
+    if (Buffer.byteLength(JSON.stringify(item) ?? '', 'utf8') > MAX_EVIDENCE_ITEM_BYTES) {
+      throw new P2pError(`A piece of evidence must be under ${MAX_EVIDENCE_ITEM_BYTES} bytes`, 'p2p.dispute_evidence_rejected');
+    }
+  }
+  return items;
+}
+
+/** Wrap raw items in attributed envelopes, numbered on from what is already there. */
+function envelopesFor(items: readonly unknown[], submittedBy: string, at: Date, existingCount: number): EvidenceEnvelope[] {
+  return items.map((item, i) => ({
+    seq: existingCount + i + 1,
+    submittedBy,
+    submittedAt: at.toISOString(),
+    item,
+  }));
+}
+
+/**
+ * Read the column back as entries.
+ *
+ * An element that is not an envelope is NOT attributed to the dispute's opener
+ * on the assumption that it probably was theirs. It is returned with
+ * `submittedBy: null` — unattributed, and visibly so. A guess recorded as a
+ * fact is how an audit trail starts lying, and this one would be lying about
+ * who accused whom.
+ */
+function normaliseEvidence(raw: unknown): readonly EvidenceEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((element, i) => {
+    if (element && typeof element === 'object' && !Array.isArray(element) && 'item' in element && 'submittedBy' in element) {
+      const e = element as Partial<EvidenceEnvelope>;
+      const at = typeof e.submittedAt === 'string' ? new Date(e.submittedAt) : null;
+      return {
+        seq: typeof e.seq === 'number' ? e.seq : i + 1,
+        submittedBy: typeof e.submittedBy === 'string' ? e.submittedBy : null,
+        submittedAt: at && !Number.isNaN(at.getTime()) ? at : null,
+        item: e.item,
+      };
+    }
+    return { seq: i + 1, submittedBy: null, submittedAt: null, item: element };
+  });
+}
+
+/**
+ * What a party is allowed to see of the evidence: their own.
+ *
+ * The alternative — showing each side the other's submissions — is a product
+ * decision with a legal shadow, not a serialisation detail. Evidence is
+ * free-form and unmoderated: it carries bank references, names, and whatever
+ * else a frightened counterparty pastes into a box, about a person who did not
+ * consent to it being handed back to the person they are in dispute with.
+ * There is no attachment store, no redaction, and no erase path
+ * (`docs/adr/2026-08-04-p2p-escrow-and-dispute-law.md` Decision 5), so a
+ * disclosure made here cannot be taken back.
+ *
+ * So the moderator-scoped read gets everything, and each party gets what they
+ * filed. Widening it is one line and an owner's decision.
+ */
+function evidenceVisibleTo(dispute: DisputeRecord, viewerId: string): readonly EvidenceEntry[] {
+  return dispute.evidence.filter((e) => e.submittedBy !== null && e.submittedBy === viewerId);
+}
+
+// ── The moderator queue cursor ───────────────────────────────────────────────
+
+/**
+ * THE QUEUE CURSOR IS A DISPUTE ID, AND NOTHING ELSE.
+ *
+ * Keyset, not offset: the queue is ordered by a column that changes underneath
+ * a reader (a dispute resolves, a new one arrives, an escalation lands), and an
+ * offset would let one of those shift a dispute past a page boundary and out of
+ * view entirely. "The queue skipped one" is the exact failure this whole
+ * surface exists to end.
+ *
+ * The obvious keyset cursor is `<deadline>|<id>`, and it is wrong here for a
+ * reason worth writing down. Postgres describes `$n::timestamptz` as a
+ * timestamptz parameter, so the driver serialises whatever it is given THROUGH
+ * A JS DATE — which holds milliseconds, while the column holds microseconds. A
+ * cursor built from the last row therefore lands a fraction of a millisecond
+ * BEFORE that row, and every page repeats its predecessor's last entry. A
+ * queue that repeats is the same broken promise as one that skips, arrived at
+ * from the other side. (`.799344+00` went in; `.799+00` was compared.)
+ *
+ * So the timestamp never leaves the database. The cursor carries the id, and
+ * the ordering key is looked up server-side at full precision. An unknown id
+ * yields an empty page rather than an error — dispute rows are never deleted,
+ * so the only way to present one is to have invented it.
+ */
+function assertDisputeCursor(cursor: string | null): string | null {
+  if (!cursor) return null;
+  if (!/^[0-9a-fA-F-]{36}$/.test(cursor)) {
+    throw new P2pError('Malformed queue cursor', 'p2p.dispute_not_found');
+  }
+  return cursor;
+}
+
+export { evidenceVisibleTo };
+
+/**
+ * Does this offer accept this payment method?
+ *
+ * CASE IS NOT MEANING. An offer's `methods` are stored exactly as the maker
+ * typed them; a method id is lowercased everywhere it is stored as an
+ * instrument. Comparing the two with `===` made `"Bank_Transfer"` and
+ * `"bank_transfer"` different methods — a distinction no maker or taker was
+ * ever shown, and one that failed on both spellings: the take was refused here,
+ * or it passed here and was refused a layer down by `attachToTrade`. Keyed
+ * comparison is the same rule on both sides of the door.
+ */
 function methodAllowed(methods: unknown[], method: string): boolean {
   // An offer with no declared methods accepts anything — the maker's terms text
   // is the contract in that case. An offer WITH methods accepts only those.
   if (methods.length === 0) return true;
+  const wanted = methodIdKey(method);
   return methods.some((m) => {
-    if (typeof m === 'string') return m === method;
-    if (m && typeof m === 'object' && 'id' in m) return (m as { id: unknown }).id === method;
+    if (typeof m === 'string') return methodIdKey(m) === wanted;
+    if (m && typeof m === 'object' && 'id' in m) {
+      const id = (m as { id: unknown }).id;
+      return typeof id === 'string' && methodIdKey(id) === wanted;
+    }
     return false;
   });
 }

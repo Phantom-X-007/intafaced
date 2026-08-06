@@ -1,11 +1,12 @@
 import { MODULES, type ModuleId, type Plane } from './modules.js';
 import {
-  EMPTY_SCREENING_LIST,
-  MATRIX_SOURCE,
   SANCTIONS_REGIONS_ENV,
+  SANCTIONS_SOURCE_ENV,
+  SCREENING_REVIEWED_EMPTY,
   envScreeningList,
-  mergeScreeningLists,
+  type BlockAuthority,
   type ScreenedRegion,
+  type ScreeningDeclaration,
   type ScreeningList,
 } from './screening.js';
 
@@ -28,12 +29,43 @@ import {
  * is called by the DoD gate for launch markets.
  *
  * THE SANCTIONS BLOCKLIST IS EMPTY, ON PURPOSE, AND STILL NEEDS COUNSEL.
- * No entry below carries `blocked: true`, and no list ships configured. What
- * changed is that the empty state is no longer invisible: every decision now
- * reports whether a list was consulted (`AccessDecision.screening`), and
- * `assertScreeningConfigured()` refuses to let a production-like process boot
- * without one. See `screening.ts` for the shape counsel's answer goes into —
- * supplying it is a config change, not an engineering project.
+ * No list ships configured. What changed is that the empty state is no longer
+ * invisible: every decision reports whether a list was consulted
+ * (`AccessDecision.screening`), and `assertScreeningConfigured()` refuses to let
+ * a production-like process boot without one. See `screening.ts` for the shape
+ * counsel's answer goes into — supplying it is a config change, not an
+ * engineering project.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THIS FILE IS BUSINESS CONFIGURATION. IT IS NOT THE SANCTIONS AUTHORITY.
+ *
+ * Everything in `JURISDICTION_MATRIX` — `status`, `minTier`, `limitMultiplier`,
+ * and `blocked` — is business configuration: which markets we open, at what
+ * tier, with what limits. It is edited by ordinary contributors in ordinary PRs
+ * for licensing, commercial and product reasons.
+ *
+ * The sanctions screening list is a DIFFERENT authority with a DIFFERENT owner
+ * (counsel, per DIRECTION §8) and it lives in `screening.ts`, supplied as
+ * configuration at deploy time.
+ *
+ * They used to be able to satisfy each other. A `blocked: true` entry here was
+ * folded into a `ScreeningList` and merged with the counsel-supplied one, so
+ * ONE region blocked for a commercial reason flipped `assertScreeningConfigured`
+ * from "refuse to start" to "satisfied" while the sanctions list was still empty
+ * and nobody in counsel had supplied anything. Two authorities sharing one
+ * literal, and the weaker one silently vouching for the stronger.
+ *
+ * They are separated now, and the separation runs both ways:
+ *
+ *   · A `blocked: true` entry here STILL REFUSES THE REGION. Nothing about the
+ *     existing refusal is weakened — see `businessBlockFor` and `checkAccess`.
+ *   · It CANNOT satisfy the screening guard. Only `screening.ts` can.
+ *   · Every refusal records WHICH authority refused (`AccessDecision.blockedBy`),
+ *     so a legal control and a commercial one are never read as the same thing.
+ *
+ * Where the two cannot be told apart — a `blocked: true` entry whose reason
+ * nobody wrote down — the ambiguous case refuses in both directions: the region
+ * stays blocked, and the boot guard stays unsatisfied.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -72,10 +104,22 @@ export interface JurisdictionEntry {
   /**
    * Region is not served at all — overrides every module rule.
    *
-   * The other way to block a region is `INTAFACED_SANCTIONS_REGIONS`
-   * (screening.ts); both are read by `checkAccess` in the same place. Prefer
-   * the env list for anything sanctions-driven: it moves at the speed of a
-   * deploy rather than a release, and it carries provenance.
+   * THIS IS A BUSINESS DECISION, NOT A SANCTIONS ONE. Set it for a licence we
+   * do not hold, a market we have not opened, a commercial choice, a
+   * placeholder. It refuses the region completely and always has.
+   *
+   * WHAT IT DELIBERATELY DOES NOT DO is count as sanctions screening. It cannot
+   * satisfy `assertScreeningConfigured()`, and adding an entry here will not
+   * make a production boot stop complaining that no screening list exists. That
+   * is not an oversight — it is the point. This array is edited in ordinary PRs
+   * by ordinary contributors, and one commercially-blocked region used to be
+   * enough to tell the whole platform that counsel had supplied a sanctions
+   * list when counsel had supplied nothing.
+   *
+   * ANYTHING SANCTIONS-DRIVEN GOES IN `INTAFACED_SANCTIONS_REGIONS`
+   * (screening.ts). Not merely preferred — required, because that is the list
+   * with a named owner, provenance on every decision, and a boot guard behind
+   * it. It also moves at the speed of a deploy rather than a release.
    */
   readonly blocked?: boolean;
   readonly reason?: string;
@@ -125,6 +169,7 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   'mining-pool': OPEN_BASIC,
   agents: { status: 'open', minTier: 'none' },
   'core-ops': { status: 'open', minTier: 'none' },
+  support: { status: 'open', minTier: 'none' },
   // Inbox only — no custody, no money movement. minTier none so a user can
   // always read their own notifications regardless of verification tier.
   notify: { status: 'open', minTier: 'none' },
@@ -168,43 +213,124 @@ export const JURISDICTION_MATRIX: readonly JurisdictionEntry[] = [
 
 const BY_REGION = new Map(JURISDICTION_MATRIX.map((e) => [e.region.toUpperCase(), e]));
 
-// ── Sanctions / region screening ────────────────────────────────────────────
-// The list itself lives in configuration (see screening.ts). This section is
-// only the wiring: how the matrix's own `blocked` entries fold in with the
-// configured list, and how a decision reports WHETHER A LIST WAS CONSULTED.
+// ── The two authorities, wired separately ───────────────────────────────────
 //
-// That last part is the whole point. Before this, "screened and clear" and
-// "screened nothing, because there was nothing to screen against" produced
-// identical decisions, so nothing downstream — no log, no test, no dashboard —
-// could tell them apart, and the empty state read as a green tick.
+// BUSINESS BLOCKS (below) — `blocked: true` in the matrix. Commercial and
+// licensing decisions, edited here in ordinary PRs. They refuse regions.
+//
+// SCREENING (screening.ts) — counsel-supplied sanctions content, supplied as
+// configuration. It refuses regions too, and it is the ONLY thing that can
+// satisfy the boot guard.
+//
+// `checkAccess` consults both in the same place, so the two sources cannot
+// start disagreeing about whether a region is served; what it never does is let
+// one stand in for the other.
+//
+// And every decision reports WHETHER A SCREENING LIST WAS CONSULTED. Before
+// that existed, "screened and clear" and "screened nothing, because there was
+// nothing to screen against" produced identical decisions, so nothing
+// downstream — no log, no test, no dashboard — could tell them apart, and the
+// empty state read as a green tick.
 
-/** Regions the matrix itself blocks outright. Currently none — see `blocked`. */
-const MATRIX_SCREENING: ScreeningList = (() => {
-  const regions: ScreenedRegion[] = JURISDICTION_MATRIX.filter((e) => e.blocked === true).map((e) => ({
-    region: e.region.toUpperCase(),
-    reason: e.reason ?? `Not served in ${e.region}`,
-    source: MATRIX_SOURCE,
-  }));
-  return regions.length > 0 ? { regions, configured: true, source: MATRIX_SOURCE } : EMPTY_SCREENING_LIST;
-})();
-
-let activeCache: { fromEnv: ScreeningList; list: ScreeningList } | null = null;
+/** Provenance label for a refusal that came from this file rather than counsel. */
+export const BUSINESS_BLOCK_SOURCE = 'JURISDICTION_MATRIX';
 
 /**
- * The screening list this process is actually using: the configured list plus
- * any `blocked: true` matrix entries.
+ * A region the BUSINESS refuses to serve. Deliberately not a `ScreenedRegion`.
  *
- * Env first, so a deploy-time correction beats a stale matrix entry without a
- * code change. Cached on the env list's identity, which is itself stable per
- * raw env string — so changing the variable in a test is picked up with no
- * reset hook to forget.
+ * Two types rather than one flag on a shared type, because a shared type is
+ * what let a matrix entry be counted as counsel's work. These cannot be
+ * assigned into each other's collections, so re-merging them is a change
+ * somebody has to write on purpose and defend in review — not a one-line
+ * `filter().map()` that nobody reads again.
+ */
+export interface BusinessBlock {
+  readonly region: RegionCode;
+  /** Optional, exactly as on the entry — see `checkAccess` for the fallbacks. */
+  readonly reason?: string;
+  readonly source: string;
+  /** Always `'business'`. Never `'screening'`. */
+  readonly authority: 'business';
+}
+
+/**
+ * The business blocks in a set of matrix entries.
+ *
+ * Takes the entries rather than reading the module constant so the rule can be
+ * tested against a matrix that actually contains a `blocked: true` entry. The
+ * shipped matrix contains none, and a rule about the blocked case that can only
+ * be exercised when somebody adds one is a rule with no test.
+ */
+export function businessBlocksFrom(entries: readonly JurisdictionEntry[]): readonly BusinessBlock[] {
+  return entries
+    .filter((e) => e.blocked === true)
+    .map((e) => ({ region: e.region.toUpperCase(), reason: e.reason, source: BUSINESS_BLOCK_SOURCE, authority: 'business' as const }));
+}
+
+/**
+ * The business blocks the shipped matrix actually declares. Currently none.
+ *
+ * EXPORTED, AND THAT IS THE SEAM. Every function below that consults business
+ * blocks takes them as a defaulted parameter defaulting to this — because the
+ * shipped matrix has ZERO `blocked: true` entries, and a rule that can only be
+ * exercised once somebody adds one is a rule no test can hold to account.
+ *
+ * The specific failure this prevents: a test named "a business block leaves the
+ * boot guard refusing" that stages no business block. It passes. It passed
+ * before the fix too, against the exact code that let a commercial block satisfy
+ * a sanctions guard, because the guard had nothing to be satisfied by. A
+ * compliance test that cannot fail is not evidence, and this is a compliance
+ * control — so the blocked case gets a way in.
+ */
+export const SHIPPED_BUSINESS_BLOCKS: readonly BusinessBlock[] = businessBlocksFrom(JURISDICTION_MATRIX);
+
+let businessLookupCache: { blocks: readonly BusinessBlock[]; byRegion: ReadonlyMap<string, BusinessBlock> } | null = null;
+
+/**
+ * The business block for a region, if the business refuses it outright.
+ *
+ * `business` is the injection seam — pass a staged set to exercise the blocked
+ * case. Production callers pass nothing and get the shipped matrix. Cached on
+ * the array's identity, the same way `screenedRegion` caches on the list's, so
+ * repeated production lookups stay a single map build.
+ */
+export function businessBlockFor(
+  region: RegionCode,
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
+): BusinessBlock | undefined {
+  if (!businessLookupCache || businessLookupCache.blocks !== business) {
+    businessLookupCache = { blocks: business, byRegion: new Map(business.map((b) => [b.region, b])) };
+  }
+  return businessLookupCache.byRegion.get(region.toUpperCase());
+}
+
+/**
+ * Regions this file refuses for commercial or licensing reasons.
+ *
+ * Surfaced separately from `screeningStatus().blockedRegions` on purpose: an
+ * operator counting "regions we block" must be able to see which of them are a
+ * legal control and which are a business choice, because only one of those is
+ * counsel's to change.
+ */
+export function businessBlockedRegions(business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS): readonly RegionCode[] {
+  return business.map((b) => b.region);
+}
+
+/**
+ * The screening list this process is actually using.
+ *
+ * A pass-through to the env-supplied list, and that is the fix: this function
+ * used to merge `blocked: true` matrix entries in, which is how business
+ * configuration came to satisfy a sanctions guard. Kept as a named seam because
+ * it is where a second SCREENING-authority source (a file, a fetched list)
+ * would legitimately be folded in — a business source never would be.
+ *
+ * Nothing was weakened by removing the fold: `checkAccess` and `isRegionBlocked`
+ * have always consulted the matrix's own `blocked` flag directly and still do,
+ * so the merged copy contributed no refusal that is not still made.
  */
 export function activeScreeningList(env: Record<string, string | undefined> = process.env): ScreeningList {
-  const fromEnv = envScreeningList(env);
-  if (activeCache && activeCache.fromEnv === fromEnv) return activeCache.list;
-  const list = mergeScreeningLists(fromEnv, MATRIX_SCREENING);
-  activeCache = { fromEnv, list };
-  return list;
+  return envScreeningList(env);
 }
 
 let lookupCache: { list: ScreeningList; byRegion: ReadonlyMap<string, ScreenedRegion> } | null = null;
@@ -228,13 +354,27 @@ function screenedRegion(list: ScreeningList, region: RegionCode): ScreenedRegion
 export interface ScreeningProvenance {
   /** Was a real blocklist consulted at all? `false` means nothing was screened. */
   readonly listConfigured: boolean;
+  /**
+   * Which of the three screening states this decision was made under.
+   *
+   * Needed alongside `listConfigured` because `true` with a count of zero is now
+   * reachable and means something specific: `reviewed-empty`, a recorded
+   * decision that no region is screened out. A reader with only the boolean and
+   * the count cannot tell that from a list that happens to be short.
+   */
+  readonly declaration: ScreeningDeclaration;
   readonly blockedRegionCount: number;
-  /** Where the list came from — env provenance string, matrix, or `unconfigured`. */
+  /** Where the list came from — governance record, env var name, or `unconfigured`. */
   readonly source: string;
 }
 
 function provenanceOf(list: ScreeningList): ScreeningProvenance {
-  return { listConfigured: list.configured, blockedRegionCount: list.regions.length, source: list.source };
+  return {
+    listConfigured: list.configured,
+    declaration: list.declaration,
+    blockedRegionCount: list.regions.length,
+    source: list.source,
+  };
 }
 
 export interface AccessQuery {
@@ -249,6 +389,22 @@ export interface AccessQuery {
    * — which is every production call site — means `activeScreeningList()`.
    */
   readonly screening?: ScreeningList;
+  /**
+   * Use these business blocks instead of the shipped matrix's.
+   *
+   * The counterpart seam to `screening`, and it exists for the same reason that
+   * one does — with one difference that matters. `screening` could always be
+   * pointed at a populated list, so the screened-region branches of this
+   * function were genuinely exercised. The business branches were not: the
+   * shipped matrix declares ZERO `blocked: true` entries, so
+   * `businessBlockFor` returned `undefined` in every test that has ever run,
+   * and `blockedBy: 'business'`, the business half of the region check, and the
+   * §24 Lane A ordering for a commercially-blocked region were all unreachable.
+   * Tests over them would have passed against code that did not implement them.
+   *
+   * Omitted — every production call site — means the shipped matrix.
+   */
+  readonly business?: readonly BusinessBlock[];
 }
 
 export interface AccessDecision {
@@ -273,6 +429,19 @@ export interface AccessDecision {
    * nobody". This field can.
    */
   readonly screening: ScreeningProvenance;
+  /**
+   * WHICH AUTHORITY refused the region, on a `denied.region_blocked`.
+   *
+   * `'screening'` is a legal control that counsel owns. `'business'` is a
+   * commercial or licensing choice that a contributor can change in a PR. They
+   * produce the same refusal and they are not the same fact, and an auditor who
+   * cannot tell them apart cannot tell whether a refusal that disappeared was a
+   * market opening or a sanctions control being tuned away.
+   *
+   * Absent on every other outcome — including allowed ones, where nothing
+   * refused anything.
+   */
+  readonly blockedBy?: BlockAuthority;
 }
 
 /**
@@ -299,9 +468,17 @@ export function ruleFor(module: ModuleId, region: RegionCode): JurisdictionRule 
  *
  * Note what a `false` here does NOT mean: it does not mean screened-and-clear.
  * Use `screeningStatus()` if you need to know whether anything was screened.
+ *
+ * `business` is the seam, for the same reason `screening` is one: the shipped
+ * matrix has no `blocked: true` entry, so the business half of this OR has
+ * never once returned `true` under test.
  */
-export function isRegionBlocked(region: RegionCode, screening: ScreeningList = activeScreeningList()): boolean {
-  if (BY_REGION.get(region.toUpperCase())?.blocked === true) return true;
+export function isRegionBlocked(
+  region: RegionCode,
+  screening: ScreeningList = activeScreeningList(),
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
+): boolean {
+  if (businessBlockFor(region, business) !== undefined) return true;
   return screenedRegion(screening, region) !== undefined;
 }
 
@@ -339,16 +516,22 @@ export function checkAccess(q: AccessQuery): AccessDecision {
     };
   }
 
-  const entry = BY_REGION.get(q.region.toUpperCase());
   const rule = ruleFor(q.module, q.region);
 
-  // A region is refused if the matrix blocks it outright OR the configured
-  // screening list names it. Both are the same answer to the same question, so
-  // both are read in the same place — a second `blocked` check somewhere else
-  // is how the two sources start disagreeing.
+  // A region is refused if the BUSINESS blocks it outright OR the SCREENING list
+  // names it. Two authorities, one question — "do we serve this region" — so
+  // both are read in the same place; a second `blocked` check somewhere else is
+  // how two sources start disagreeing.
+  //
+  // What the decision keeps separate is WHO refused. Screening wins the
+  // attribution when both name the region: the legal control is the more
+  // consequential fact, and it is the one that must not look removable by
+  // editing the matrix.
   const screened = screenedRegion(screening, q.region);
-  const regionBlocked = entry?.blocked === true || screened !== undefined;
-  const regionBlockReason = screened?.reason ?? entry?.reason;
+  const businessBlock = businessBlockFor(q.region, q.business ?? SHIPPED_BUSINESS_BLOCKS);
+  const regionBlocked = businessBlock !== undefined || screened !== undefined;
+  const blockedBy: BlockAuthority | undefined = screened ? 'screening' : businessBlock ? 'business' : undefined;
+  const regionBlockReason = screened?.reason ?? businessBlock?.reason;
 
   // ── Sovereignty law ──────────────────────────────────────────────────────
   // Protocol plane + non-custodial module = there is nothing to KYC.
@@ -370,6 +553,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
         limitMultiplier: 0,
         reason: regionBlockReason ?? `Hosted access unavailable in ${q.region}`,
         screening: provenance,
+        blockedBy,
       };
     }
     return {
@@ -391,6 +575,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: regionBlockReason ?? `Not served in ${q.region}`,
       screening: provenance,
+      blockedBy,
     };
   }
 
@@ -458,7 +643,23 @@ export function regionsWithEntries(): RegionCode[] {
 export interface ScreeningStatus {
   /** `false` = nothing was screened. Not "clear". Never render this as a tick. */
   readonly configured: boolean;
+  /**
+   * Which of the three states. Read this, not just `configured` — `configured`
+   * is `true` for a real list AND for a recorded "deliberately empty", and those
+   * are different things to show an operator.
+   */
+  readonly declaration: ScreeningDeclaration;
+  /** Regions the SCREENING authority refuses. Counsel's list, and only that. */
   readonly blockedRegions: readonly RegionCode[];
+  /**
+   * Regions the BUSINESS refuses (`blocked: true` in the matrix).
+   *
+   * Reported separately and never added to `blockedRegions`. A dashboard that
+   * summed them would be showing a total that a contributor can move in an
+   * ordinary PR while presenting it as sanctions coverage — the same conflation
+   * that let a commercial block satisfy the boot guard, moved to the screen.
+   */
+  readonly businessBlockedRegions: readonly RegionCode[];
   readonly source: string;
   /** One line an operator can read in a log or on a dashboard. */
   readonly summary: string;
@@ -471,34 +672,83 @@ export interface ScreeningStatus {
  * Exists because "how many regions are we blocking" and "are we blocking
  * anything on purpose" are different questions, and the answer to both used to
  * be an indistinguishable zero.
+ *
+ * `business` is a parameter so the rule can be tested against a matrix that
+ * actually has a `blocked: true` entry in it; production callers pass neither.
  */
-export function screeningStatus(screening: ScreeningList = activeScreeningList()): ScreeningStatus {
+export function screeningStatus(
+  screening: ScreeningList = activeScreeningList(),
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
+): ScreeningStatus {
   const blockedRegions = screening.regions.map((r) => r.region);
+  const businessBlockedRegions = business.map((b) => b.region);
 
-  const summary = screening.configured
-    ? `sanctions screening: ${blockedRegions.length} region(s) blocked [${blockedRegions.join(', ')}] from ${screening.source}`
-    : `sanctions screening: NOT CONFIGURED — 0 regions blocked because no list was consulted. ` +
-      `This is not "everywhere is clear"; nothing has been screened. Supply ${SANCTIONS_REGIONS_ENV}.`;
+  // Named separately in the unconfigured summary, because "we block 2 regions"
+  // is exactly what somebody reads as "screening is doing something".
+  const businessNote =
+    businessBlockedRegions.length === 0
+      ? ''
+      : ` (${businessBlockedRegions.length} region(s) [${businessBlockedRegions.join(', ')}] are blocked by ` +
+        `${BUSINESS_BLOCK_SOURCE} for commercial/licensing reasons — that is business configuration, not screening.)`;
 
-  return { configured: screening.configured, blockedRegions, source: screening.source, summary };
+  const summary =
+    screening.declaration === 'listed'
+      ? `sanctions screening: ${blockedRegions.length} region(s) blocked [${blockedRegions.join(', ')}] from ${screening.source}` +
+        businessNote
+      : screening.declaration === 'reviewed-empty'
+        ? `sanctions screening: REVIEWED, DELIBERATELY EMPTY — 0 regions screened out, on the authority of ` +
+          `${screening.source}. This is a recorded decision, not an unset default.` +
+          businessNote
+        : `sanctions screening: NOT CONFIGURED — 0 regions blocked because no list was consulted. ` +
+          `This is not "everywhere is clear"; nothing has been screened. Supply ${SANCTIONS_REGIONS_ENV}.` +
+          businessNote;
+
+  return {
+    configured: screening.configured,
+    declaration: screening.declaration,
+    blockedRegions,
+    businessBlockedRegions,
+    source: screening.source,
+    summary,
+  };
 }
 
 export class UnscreenedJurisdictionError extends Error {
-  constructor(readonly appEnv: string) {
+  constructor(
+    readonly appEnv: string,
+    readonly businessBlockedRegions: readonly RegionCode[] = [],
+  ) {
     super(
       `SANCTIONS SCREENING IS NOT CONFIGURED (§24 Lane A) and APP_ENV=${appEnv}. Refusing to start.\n\n` +
         `The screening MECHANISM works; it has no list to screen against, so every region resolves to ` +
         `allowed and no call site, log line or dashboard can tell that apart from a region that was ` +
         `checked and cleared. Serving traffic in that state means telling users they were screened when ` +
         `they were not.\n\n` +
-        `Fix it by supplying the list as configuration:\n` +
-        `  ${SANCTIONS_REGIONS_ENV}="AA:reason,BB:reason"    (ISO-3166 alpha-2, comma separated)\n` +
-        `  INTAFACED_SANCTIONS_LIST_SOURCE="<governance record>"\n\n` +
+        (businessBlockedRegions.length === 0
+          ? ''
+          : `NOTE — ${BUSINESS_BLOCK_SOURCE} does block ${businessBlockedRegions.length} region(s) ` +
+            `[${businessBlockedRegions.join(', ')}], and those refusals are live. They do NOT satisfy this ` +
+            `guard and they are not meant to: a matrix entry is business configuration edited in ordinary ` +
+            `PRs — a licence we lack, a market we have not opened, a placeholder — and letting one vouch ` +
+            `for a sanctions list would mean a commercial decision could arm a legal control nobody had ` +
+            `supplied. Sanctions content has a different owner and comes in below.\n\n`) +
+        `THERE ARE EXACTLY TWO WAYS TO SATISFY THIS, and both are a deliberate, attributable act:\n\n` +
+        `  1. Supply the list:\n` +
+        `       ${SANCTIONS_REGIONS_ENV}="AA:reason,BB:reason"   (ISO-3166 alpha-2, comma separated)\n` +
+        `       ${SANCTIONS_SOURCE_ENV}="<governance record>"\n\n` +
+        `  2. Record that it was reviewed and is deliberately empty:\n` +
+        `       ${SANCTIONS_REGIONS_ENV}="${SCREENING_REVIEWED_EMPTY}"\n` +
+        `       ${SANCTIONS_SOURCE_ENV}="<governance record>"      (REQUIRED for this one)\n\n` +
+        `     Option 2 is a real answer, not a bypass — "we looked, and no region is screened out" is a ` +
+        `legitimate conclusion and the platform must be able to record it. It demands attribution ` +
+        `precisely because it has no content: without a named record it would be indistinguishable from ` +
+        `somebody silencing this message.\n\n` +
         `WHAT GOES IN THE LIST IS A COMPLIANCE DECISION, NOT AN ENGINEERING ONE. It needs counsel for ` +
         `the jurisdictions served. Do not guess it: too few entries is a sanctions breach, too many is ` +
-        `unlawful discrimination. See packages/config/src/screening.ts.\n\n` +
-        `Development and test are deliberately unaffected — APP_ENV=dev boots with an empty list and ` +
-        `logs the gap instead.`,
+        `unlawful discrimination. And do not answer it by adding \`blocked: true\` to the matrix — that ` +
+        `is the wrong authority and will not clear this. See packages/config/src/screening.ts.\n\n` +
+        `Development and test are deliberately unaffected — APP_ENV=dev boots unconfigured and logs the ` +
+        `gap instead.`,
     );
     this.name = 'UnscreenedJurisdictionError';
   }
@@ -522,13 +772,45 @@ export const SCREENING_ENFORCED_ENVS = ['staging', 'prod'] as const;
  * claims is checked at startup rather than assumed, and the process refuses to
  * run rather than quietly mislead users about it.
  *
+ * SATISFIABLE ONLY BY THE SCREENING AUTHORITY. It gates on the screening list's
+ * own `declaration`, and the only thing that can produce a declaration other
+ * than `unset` is `parseScreeningList` reading `INTAFACED_SANCTIONS_REGIONS`.
+ * The business matrix is not an input to this decision at all — it is read below
+ * solely so the refusal message can name blocks that exist and say why they do
+ * not count. That is the fix: this used to gate on a merged list, and one
+ * `blocked: true` matrix entry cleared it.
+ *
+ * FAIL CLOSED. `unset` is the only state that throws, and it is also the state
+ * every ambiguous input resolves to — an absent variable, a blank one, one
+ * holding only commas, and a matrix block whose authority cannot be established.
+ * Nothing here treats "we could not tell" as "supplied".
+ *
  * Returns the status so the caller can log it — in dev, where this does not
  * throw, the log line IS the control's visibility.
+ *
+ * `business` IS AN INJECTION SEAM AND IT IS NOT DECORATION. The claim this
+ * function makes — "a commercial block cannot satisfy a sanctions guard" — is
+ * a claim about what happens WHEN A COMMERCIAL BLOCK EXISTS, and the shipped
+ * matrix declares none. Without a way to stage one, a test named "a business
+ * block leaves the prod boot guard refusing" calls this with zero business
+ * blocks: it asserts that an empty matrix does not satisfy the guard, which is
+ * true of the buggy code too. It passes either way, and a compliance test that
+ * cannot fail is worth less than no test, because it is read as evidence.
+ *
+ * Production callers pass one argument. The second exists so the blocked case
+ * is reachable at the guard, and so re-merging the two authorities makes a test
+ * go red instead of going unnoticed.
  */
-export function assertScreeningConfigured(env: Record<string, string | undefined> = process.env): ScreeningStatus {
-  const status = screeningStatus(activeScreeningList(env));
+export function assertScreeningConfigured(
+  env: Record<string, string | undefined> = process.env,
+  business: readonly BusinessBlock[] = SHIPPED_BUSINESS_BLOCKS,
+): ScreeningStatus {
+  const list = activeScreeningList(env);
+  const status = screeningStatus(list, business);
   const appEnv = env.APP_ENV ?? 'dev';
   const enforced = (SCREENING_ENFORCED_ENVS as readonly string[]).includes(appEnv);
-  if (enforced && !status.configured) throw new UnscreenedJurisdictionError(appEnv);
+  if (enforced && list.declaration === 'unset') {
+    throw new UnscreenedJurisdictionError(appEnv, status.businessBlockedRegions);
+  }
   return status;
 }

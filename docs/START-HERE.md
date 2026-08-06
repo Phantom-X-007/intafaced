@@ -2,9 +2,25 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
-**Snapshot date:** 2026-07-29 evening · trust floor = mega-wave after #86 (re-check `git rev-parse origin/main` + [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md)).
+**Re-derive every session (do not trust frozen SHAs in chat):**  
+`git fetch origin main && git rev-parse --short origin/main` · `gh pr list --state open`  
+**Anti-drift pack (2026-08-03):** product + recovery + owners live in  
+[`VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md`](VENDORED-KIT-PEACE-OF-MIND-MAP-2026-08-03.md) ·  
+[`WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md`](WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md) ·  
+[`ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md`](ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md) ·  
+[`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md) ·  
+[`DENON-CALL-EXTRACT-2026-08-03.md`](DENON-CALL-EXTRACT-2026-08-03.md).  
+**Local tip hygiene (agents, not Nitro):** `node tooling/scripts/worktree-gc.mjs` dry-run · `--apply` removes clean cherry-empty ghosts · never code on main checkout · after merge `pnpm wt:rm`.
+Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md).
 
 ---
+
+- **Internet leverage LAW (agents must obey — you do not pick):** [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md) — Phase A is enough for **now**; wire shell + ledger + services; no rebuild.
+- **Phase A map (what we already own):** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md).
+- **Full residual paths (every open tracker row):** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — not a thrift “top 5 only” list.
+- **Send to Denon / partner agent:** [`INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md`](INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md) — full context pack, no compromise.
+- **Post-Denon close-out (2026-08-05):** [`POST-DENON-REUSE-CLOSEOUT-2026-08-05.md`](POST-DENON-REUSE-CLOSEOUT-2026-08-05.md) — law aligned; what remains Denon vs Nitro residual.
+- **You do not manage this day-to-day.** Agents load it from `AGENTS.md`; CI fails if that chain is removed.
 
 ## What we are building (one breath)
 
@@ -25,15 +41,17 @@ Two **planes** (lanes of risk):
 
 ## The “law” vs the “pitch”
 
-| Doc                                        | What it is                                                                             |
-| ------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `INTAFACED_DEFINITIVE_BUILD.md`            | **Engineering law** — what to build, doctrines, phases. Same file Denon shared (v2.2). |
-| `INTAFACED SOVEREIGN OS.pdf`               | **Product vision** (Vol. I) — story and features; not the build checklist.             |
-| `tooling/agent-protocol/AGENT_PROTOCOL.md` | **How agents change code** (hard bans).                                                |
-| `CONTRIBUTING.md`                          | **How we collab** (worktrees, PRs).                                                    |
-| `docs/TRACKER.md`                          | **Scoreboard** of every feature — ready / blocked / done.                              |
+| Doc                                            | What it is                                                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `INTAFACED_DEFINITIVE_BUILD.md`                | **Engineering law** — what to build, doctrines, phases. Same file Denon shared (v2.2).          |
+| `INTAFACED SOVEREIGN OS.pdf`                   | **Product vision** (Vol. I) — story and features; not the build checklist.                      |
+| `tooling/agent-protocol/AGENT_PROTOCOL.md`     | **How agents change code** (hard bans).                                                         |
+| `CONTRIBUTING.md`                              | **How we collab** (worktrees, PRs).                                                             |
+| `docs/TRACKER.md`                              | **Product feature map** — ready / blocked / done / owner (not campaign micro-next).             |
+| `docs/COORDINATION-TRUTH-LAYERS.md`            | **Which file answers which question** (tracker vs Board Clear vs LIVE-LANES). **Finished law.** |
+| `docs/COORDINATION-FINISH-AUDIT-2026-08-02.md` | How to re-audit F1–F10; what “done” means for this program.                                     |
 
-If two docs disagree: **law + tracker win** over memory or Telegram.
+If two docs disagree on **product ownership / free work:** **law + tracker** win over memory, Telegram, or campaign boards. Campaign **NEXT** only wins for “what to ship next in Board Clear,” never to erase human locks.
 
 ---
 
@@ -46,13 +64,20 @@ Phase 2 Trade+       ████████░░ mounted behind edge; termina
 Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox still not live product
 ```
 
-**Snapshot date:** 2026-07-29 · main tip includes audit **#80 + #81** (`88e5e33`).
+**Live status:** re-derive tip (command above). Historical July snapshots below are **orientation only**, not the tip SHA.
 
-- **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists.
+- **On main:** full fleet + apps. Routers mounted. Purpose-keyed holds **and** purpose-keyed escrow/stake. `pnpm platform:up` exists. Shell deployable on **:8090** (Dockerfile + compose). Major shell rewire waves landed (#412 deploy, #418 OTC/identity, #419 nav, #421 trading edge, #426 promo honesty — re-check `gh` for newer).
 - **Not a live money product:** rails/sandbox, chain feed propped — see trust floor.
-- **Do not rebuild** services already on main.
+- **Do not rebuild** services already on main. **Do not rebuild vendored exchange kit screens from scratch** — rewire / honesty / i18n / brand only ([`VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md`](VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md)).
 - **Trust floor (open first):** [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md) · what “proper cleanup” means: [`PROPER-CLEANUP-AFTER-DENON.md`](PROPER-CLEANUP-AFTER-DENON.md)
-- **Product UI:** vendored exchange shell → http://localhost:8090 (`vendor/<exchange-tree>/05_Web_Front`). `apps/web` is **not** the product.
+- **Product UI (law):** vendored exchange shell → http://localhost:8090 (`vendor/*/05_Web_Front`). **`apps/web` is not the product** (retire ADR: [`adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`](adr/2026-08-03-retire-apps-web-port-to-vue-shell.md); port map: [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md)).
+- **Denon same-day product queue (build this):** [`REGROUP-2026-08-03.md`](REGROUP-2026-08-03.md) — shell money/landing/wire queue + WS integrity blocker.
+- **Insane parallel / swarms (agents):** [`SWARM-ALL-OUT-ORIENT-2026-08-03.md`](SWARM-ALL-OUT-ORIENT-2026-08-03.md) — discovery ritual, free matrix, anti-negatives, GO paste.
+- **Denon hard board (platform/money — not shell craft):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — mega judgment + **D-S-\*** product-law spec factory — what Nitro agents leave for Denon while AFK-swarming free shell.
+- **Three-way distribution (BINDING):** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) — Denon hard · Shehzad chain only · Nitro agents rest.
+- **Shehzad Protocol Plane + INTACHAIN board:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) — sole chain runway; not shell/pay/bank.
+- **Custody honesty:** some money screens may be **CustodyNotBuilt** until wallet-RPC security review — do not re-paint fake withdraw/recharge UI over that.
+- **Owners:** Nitro agents = shell + reclaimed custodial residual · Denon = direction + open integrity/money PRs · Shehzad `@shehzad002` = Protocol Plane + INTACHAIN only (agents babysit chain paths).
 - **Residual after #86:** [`POST-MERGE-RESIDUAL-AFTER-86.md`](POST-MERGE-RESIDUAL-AFTER-86.md)
 - **Security when-to:** [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) · tooling floor: [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md)
 - **After a big ship wave:** [`MEGA-AUDIT-PASTE-2026-07-29.md`](MEGA-AUDIT-PASTE-2026-07-29.md) or [`WAVE-AUDIT.md`](WAVE-AUDIT.md) — full A–E is **closed**
@@ -60,11 +85,11 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Next product gates:** dual-book discipline + real rails/chain → not another full audit
 - **Denon handover (2026-07-29):** [`HANDOVER-NITRO-BRANCHES.md`](HANDOVER-NITRO-BRANCHES.md) · owner decisions closed: [`OWNER-DECISIONS-OPEN.md`](OWNER-DECISIONS-OPEN.md)
 - - **Denon return board (2026-07-29):** [`DENON-RETURN-GITHUB-STATE-2026-07-29.md`](DENON-RETURN-GITHUB-STATE-2026-07-29.md) — what Nitro agents landed; do not rebuild
-- **Nitro’s product lane (Stream A):** trader shell — claim + checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · issue **#83**. Frontend lock: [`FRONTEND-STATE-OF-TRUTH-2026-07-31.md`](FRONTEND-STATE-OF-TRUTH-2026-07-31.md) when present on tip.
-- **BOARD CLEAR CAMPAIGN (active — finish the product table):** mega [`BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`](BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md) · preflight [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md) · law [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-01.md) · engineering [`BOARD-CLEAR-ENGINEERING-STANDARD.md`](BOARD-CLEAR-ENGINEERING-STANDARD.md) · subagents [`BOARD-CLEAR-SUBAGENT-PROTOCOL.md`](BOARD-CLEAR-SUBAGENT-PROTOCOL.md) · loops [`BOARD-CLEAR-PROCESS-LOOPS.md`](BOARD-CLEAR-PROCESS-LOOPS.md) · plan [`BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md`](BOARD-CLEAR-EXECUTION-PLAN-2026-08-01.md) · scoreboard [`BOARD-CLEAR-SCOREBOARD.md`](BOARD-CLEAR-SCOREBOARD.md) · next [`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md) · **GO paste** [`BOARD-CLEAR-AUTONOMOUS-RUN.md`](BOARD-CLEAR-AUTONOMOUS-RUN.md) · readiness [`BOARD-CLEAR-GO-READINESS.md`](BOARD-CLEAR-GO-READINESS.md). **Supersedes residual-only / grind product-law wait.**
-- **Shehzad hard ownership (human spine — long backlog):** [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) · GitHub **`@shehzad002`** · LIVE-LANES H-PAY / H-PROT / H-TRADE-HARD / H-P5-MONEY / H-ID-SUB. Agents keep shell + #289 + light trade. Message him that doc + scoreboard.
+- **Nitro’s product lane (Stream A):** trader shell — claim + checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · issue **#83**. Frontend lock: [`FRONTEND-STATE-OF-TRUTH-2026-07-31.md`](FRONTEND-STATE-OF-TRUTH-2026-07-31.md) when present on tip. **AFK drain (no continue):** [`FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md`](FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md) + `pnpm frontend:residual` / `node tooling/frontend/residual-print.mjs afk`.
+- **BOARD CLEAR CAMPAIGN (active):** after compact open **[`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md) first** for _campaign sequence_ · parallel [`BOARD-CLEAR-PARALLEL-SESSIONS.md`](BOARD-CLEAR-PARALLEL-SESSIONS.md) · AFK [`BOARD-CLEAR-AFK-CONTRACT.md`](BOARD-CLEAR-AFK-CONTRACT.md) · GO [`BOARD-CLEAR-AUTONOMOUS-RUN.md`](BOARD-CLEAR-AUTONOMOUS-RUN.md). **NEXT is not the product ownership map** — free/human-owned still = tracker + LIVE-LANES ([`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)).
+- **Shehzad ownership (chain only — collision wall):** one-screen [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · board [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) · historical M1–M7 detail **superseded for scope** [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) · lanes [`LIVE-LANES.md`](LIVE-LANES.md) · CODEOWNERS on protocol/dex. Agents never implement his **chain** paths; pay/bank reclaimed.
 - **Residual campaign (older partial-first mode):** [`NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`](NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md) · lanes [`LIVE-LANES.md`](LIVE-LANES.md) — use only if Board Clear docs missing.
-- **Order-route / DEX–CEX harden (now claimed in Board Clear):** [`ORDER-ROUTE-PROGRAM-INDEX.md`](ORDER-ROUTE-PROGRAM-INDEX.md) — close #289; do not leave orphan.
+- **Order-route:** #289 merged under Board Clear A-OR-1; residual Java dual-book = shehzad M7.
 - **Who owns what (durable — not a status board):** [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) · also in [`AGENTS.md`](../AGENTS.md) · paste [`NITRO-SESSION-PROMPT.md`](NITRO-SESSION-PROMPT.md). **Denon = direction; Nitro agents = ship + merge when gates pass.** Live tip/PRs: re-derive with git/`gh`, never from memory.
 - **GitHub CI money (Actions thrift — active law):** [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · also in `AGENTS.md`. Parallel/autonomous shipping stays; cut waste + cheaper runners. Not a Denon review gate.
 - **#86 landed on main** (shell rebrand + custody locks). **Board Clear** authorizes trade-mountain Done bars (thin/§13, never invent prices) without waiting on new Denon chat — see constitution + ownership precedence.

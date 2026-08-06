@@ -45,7 +45,36 @@ const FORBIDDEN = [
   { pattern: /\bPayKwik\b/i, reason: 'rail partner name' },
   { pattern: /\bNTG\b/, reason: 'rail partner name' },
   { pattern: /\bAnthropic\b/i, reason: 'model provider — agents are "Sovereign Intelligence"' },
-  { pattern: /\bClaude\b/i, reason: 'model provider' },
+  // NOT `CLAUDE.md`. That filename is mandated by this repo's own root
+  // instructions and is cited by name in AGENTS.md, the agent protocol, and
+  // every coordination doc — so the bare pattern fired on documents whose only
+  // offence was naming a file we require. A false positive that recurs on every
+  // new doc is a gate people learn to route around, and that costs more than the
+  // rule protects. The provider name on its own is still forbidden.
+  // All-caps `CLAUDE` is the FILENAME this repo's own root instructions mandate,
+  // and it is cited constantly — `CLAUDE.md`, and bare in slash-lists like
+  // "AGENTS/CLAUDE/protocol". The bare pattern fired on documents whose only
+  // offence was naming a file we require, which made this gate red on main twice
+  // in two days. A false positive that recurs on every new doc is a gate people
+  // learn to route around, and that costs more than the rule protects.
+  //
+  // The distinction is reliable because the two are written differently: the file
+  // is CLAUDE, the model is Claude. Every other casing stays forbidden.
+  // CASE-SENSITIVE ON PURPOSE, and the `i` flag must not come back.
+  //
+  // All-caps `CLAUDE` is the FILENAME this repo's own root instructions mandate.
+  // It is cited constantly — `CLAUDE.md`, and bare in slash-lists like
+  // "AGENTS/CLAUDE/protocol". The case-insensitive pattern fired on documents
+  // whose only offence was naming a file we require, and it turned main red twice
+  // in two days. A false positive that recurs on every new doc is a gate people
+  // learn to route around, which costs more than the rule protects.
+  //
+  // The distinction is reliable because the two are spelled differently: the file
+  // is CLAUDE, the model is Claude. Written as alternation rather than a negative
+  // lookahead — `(?!CLAUDE\b)…/i` looks correct and is not: under `i` the
+  // lookahead matches every casing too, so it excludes everything and the rule
+  // silently stops firing. That version was written, tested, and caught here.
+  { pattern: /\b(?:Claude|claude)\b/, reason: 'model provider' },
   { pattern: /\bOpenAI\b/i, reason: 'model provider' },
   { pattern: /\bGPT-\d/i, reason: 'model provider' },
 
@@ -83,6 +112,19 @@ const SKIP_DIRS = new Set([
   // are what catch it if it tries. Note the trade-off this makes: our own code
   // would go unscanned if it were ever parked under a `vendor/` directory.
   // Don't do that.
+  //
+  // 2026-08-03: that paragraph was describing a hole while calling it a
+  // trade-off. The vendored Vue shell became the SOLE product surface, so the
+  // one tree this scan never opens is now the only one whose copy a user reads,
+  // and the file count printed at the bottom has never included a single file
+  // of it. Deleting this entry is still the wrong fix — measured, it takes the
+  // repo-wide result from 0 findings to 59, of which 51 are build tooling,
+  // compose bind-mount paths and the upstream's own attribution documents — and
+  // it would not even work, because EXTENSIONS below has no `.vue` and the
+  // shell is 70 single-file components. `tooling/ci/shell-brand-scan.mjs`
+  // covers it instead: the same FORBIDDEN list, PARSED OUT OF THIS FILE so the
+  // two cannot drift, plus `.vue`, against a frozen baseline that can only
+  // shrink. The Java trees stay skipped, for the reason above.
   'vendor',
 ]);
 
@@ -111,6 +153,25 @@ const ALLOWLIST = [
     path: join('docs', 'audit'),
     reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
+  {
+    path: join('docs', 'ops'),
+    reason:
+      'internal swarm FREEZE/report board; must list real shell paths so agents can claim work without paraphrasing territory. Not user-facing product copy. Remove once the vendor directory is renamed.',
+  },
+  // REMOVED 2026-08-05, both on the terms their own reasons set:
+  //
+  //   `tooling/scripts/swarm.mjs`      — existed because that file assembled the
+  //     vendor token at runtime to get past this scan. The directory rename means
+  //     the path is `vendor/upstream-exchange/...`, so the line is written plainly
+  //     and the exemption has nothing left to cover.
+  //   `docker-compose.apps.yml`        — "Remove once the vendor directory is
+  //     renamed." It is renamed. A build context still must be a real directory on
+  //     disk, and now that directory has a clean name.
+  //
+  // Both files are back under the scan with nothing to hide, which is the point of
+  // the rename: fewer exemptions, not more. 36 further entries are now dead by the
+  // same test and are deliberately NOT pruned here — mixing a policy tightening
+  // into a 1,764-file move would make a red CI ambiguous. See the PR for the list.
   {
     path: join('docs', 'NITRO-AGENT-PACKAGES-2026-07-30.md'),
     reason:
@@ -142,6 +203,16 @@ const ALLOWLIST = [
       'internal security work product (board item A1.4); names the exact module and file each committed credential sits in. A finding that says "a password in some properties file" is not actionable — the whole value of the document is that an engineer can go straight to the key and rotate it. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
   },
   {
+    path: join('docs', 'SECRET-ROTATION-READINESS-2026-08-03.md'),
+    reason:
+      'internal security work product; the owner action list for rotating what A1.4 found. Identical rationale to the A1.4 entry above and over the same file set: an owner cannot act on "a seed in some wallet module", so every item names the exact module, file and line. The document deliberately contains no secret VALUES — only locations — which is exactly what makes the paths load-bearing. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
+    path: join('tooling', 'ci', 'secret-scan.mjs'),
+    reason:
+      'its KNOWN_DISCLOSED register keys each finding by exact tracked path, and the scan FAILS on a register entry that no longer matches — so a paraphrased path would not merely be unhelpful, it would break the rule that stops the register rotting into an exemption list. Seven entries, each a real path plus line and check name, no values. The synthetic paths in secret-scan.mutation.mjs need no such exception and deliberately use none. Remove this entry once the Java package root is renamed.',
+  },
+  {
     path: join('docs', 'RUNBOOK-ETH-KEYSTORE-REENCRYPTION.md'),
     reason:
       'internal custody runbook; an operator following it must be able to copy the real module paths and MongoDB collection names verbatim. A runbook that paraphrases the path it wants you to act on is how the wrong directory gets re-encrypted. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
@@ -158,6 +229,82 @@ const ALLOWLIST = [
   },
   { path: 'CLAUDE.md', reason: 'internal agent instructions' },
   { path: '.claude', reason: 'internal tooling config' },
+  {
+    path: join('tooling', 'ci', 'agent-autoload-scan.mjs'),
+    reason:
+      'internal CI guard that must name auto-load entry files including CLAUDE.md (itself allowlisted). Not user-facing product copy.',
+  },
+  {
+    path: join('docs', 'COORDINATION-TRUTH-LAYERS.md'),
+    reason: 'internal multi-dev agent law; must name AGENTS.md/CLAUDE.md auto-load paths. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'COORDINATION-FINISH-AUDIT-2026-08-02.md'),
+    reason: 'internal agent finish audit for multi-dev law. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md'),
+    reason: 'internal agent stress-test of multi-dev law. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md'),
+    reason: 'internal planning for multi-dev coordination. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md'),
+    reason: 'internal audit of tracker multi-dev intent. Not shipped to users.',
+  },
+  // Stream A agent law / handoffs — name planner vs implementer roles and on-disk
+  // shell paths so territory is enforceable. Not user-facing product copy.
+  {
+    path: join('docs', 'FRONTEND-MASTER-METHODOLOGY-2026-07-31.md'),
+    reason: 'internal Stream A methodology law; must name agent roles and tooling for operators. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-MASTER-PLAN-WAVE-A-B-2026-07-31.md'),
+    reason: 'internal Stream A wave plan; agent/tooling names are process, not product. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-OPS-NOW-2026-07-30.md'),
+    reason: 'internal Stream A ops runbook; names agent runtimes and sandbox limits. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-AUTONOMOUS-OPERATING-SYSTEM-2026-08-02.md'),
+    reason: 'internal AOS architecture for agents. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-LEVEL-RECOVERY-AND-GO-READY-2026-08-02.md'),
+    reason: 'internal go-ready hole-poke for agents. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-GO-READY-BRIEF-2026-08-02.md'),
+    reason: 'internal paste brief for go sessions. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-STATE-OF-TRUTH-2026-07-31.md'),
+    reason: 'internal SoT for Stream A sessions. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'FRONTEND-CLAUDE-ENHANCE-RETURN-2026-07-31.md'),
+    reason: 'internal agent return pack filename is historical evidence; content is process not product. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'NITRO-SESSION-PROMPT.md'),
+    reason: 'internal session paste for Nitro/agents. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'NITRO-FRONTEND-NEW-CHAT-HANDOFF-2026-07-31.md'),
+    reason: 'internal chat handoff. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'NITRO-STREAM-A-CLAIM.md'),
+    reason: 'internal claim/territory brief. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md'),
+    reason:
+      'internal board backlog; must name exact shell paths an agent may touch or territory is unenforceable. Not shipped to users. Remove once vendor dir is renamed.',
+  },
 ];
 
 /** Only these extensions can carry shipped copy. */
@@ -210,4 +357,33 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ brand-scan clean — ${scanned} files, 0 forbidden names (Doctrine §0.7)`);
+/**
+ * A walk that read nothing is a failure, not a pass.
+ *
+ * This scan has printed `clean — N files` since it was written, and nobody has
+ * ever had to ask what happens when N is 0 — because `walk` would throw on a
+ * missing ROOT and CI would go red for a different reason. That is luck, not a
+ * guard: an over-broad SKIP_DIRS entry, or an ALLOWLIST prefix that swallows
+ * more than its author meant, produces `clean — 0 files, 0 forbidden names` and
+ * a green tick, which is the single most confident-sounding wrong answer this
+ * file can give. Four scans in this repo have already been caught reporting
+ * clean about a tree they never opened.
+ */
+if (scanned === 0) {
+  console.error('\n✖ BRAND SCAN FAILED — 0 files were read. NOTHING WAS SCANNED.');
+  console.error('  This is not a clean repo; it is a scan that opened nothing. Check SKIP_DIRS,');
+  console.error('  ALLOWLIST and EXTENSIONS — one of them is now matching everything.\n');
+  process.exit(1);
+}
+
+// The count is qualified on purpose, and on the SAME line, because `gates.mjs`
+// prints only the last non-empty line as a gate's summary — a caveat on a second
+// line is a caveat nobody reads in CI.
+//
+// `vendor` is in SKIP_DIRS, so this number has never included one file of the
+// product shell, and an unqualified "clean" over a repo whose only user-facing
+// surface is skipped reads as a far larger claim than this scan can make. That
+// wording is what let the hole survive: the line was true and sounded total.
+console.log(
+  `✓ brand-scan clean — ${scanned} files, 0 forbidden names (Doctrine §0.7) · vendored trees excluded, product surface covered by shell-brand-scan`,
+);

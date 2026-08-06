@@ -84,7 +84,75 @@ export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/indexer', module: 'indexer', envVar: 'INDEXER_URL', devUrl: 'http://localhost:4013' },
   { prefix: '/api/notify', module: 'notify', envVar: 'NOTIFY_URL', devUrl: 'http://localhost:4015' },
   { prefix: '/api/academy', module: 'academy', envVar: 'ACADEMY_URL', devUrl: 'http://localhost:4016' },
+  { prefix: '/api/support', module: 'support', envVar: 'SUPPORT_URL', devUrl: 'http://localhost:4017' },
 ] as const;
+
+/**
+ * The set of modules the edge can actually enforce a kill on.
+ *
+ * Derived from the route table, never written by hand. `decide()` refuses a
+ * request by matching its path against a prefix in `UPSTREAMS`; a module with no
+ * prefix here has no path to match, so a kill against it can never refuse
+ * anything.
+ */
+export const ENFORCEABLE_MODULES: ReadonlySet<ModuleId> = new Set(UPSTREAMS.map((u) => u.module));
+
+/**
+ * Modules that are DEPLOYED but do not sit behind this edge — and are therefore
+ * NOT killable from the operator control plane.
+ *
+ * ── Why this list has to exist, and why it must stay short ──────────────────
+ *
+ * "Enforced at the door" is only a real property if the door is the only way in.
+ * The kill-switch is an `onRequest` hook on svc-edge, so it can refuse exactly
+ * what svc-edge serves. A service the browser reaches on its own published port
+ * is not behind the door, and no hook on the edge can stop it.
+ *
+ * Until this list existed, `admin-api.ts` accepted a kill for EVERY `ModuleId`,
+ * including these. An operator could halt `ws`, receive 200, and read
+ * `disabledModules: ["ws"]` back from `/admin/status` while svc-ws kept
+ * streaming — the exact failure `kill-switch.ts` opens by describing: "the
+ * operator believes the market is halted, the console says it is halted, and
+ * orders are being accepted."
+ *
+ * So the control plane now refuses to arm these, with the reason below in the
+ * message. A refusal an operator can read beats a halt that never happened.
+ *
+ * The gate `tooling/ci/killswitch-reachability.mjs` cross-checks this list
+ * against `docker-compose.apps.yml`: any `svc-*` container that publishes a host
+ * port and has no edge prefix must appear here, so a service added later cannot
+ * become silently unkillable — it either goes behind the door or it is recorded
+ * here as a known gap.
+ */
+export const OUTSIDE_THE_DOOR: Readonly<Record<string, string>> = {
+  /**
+   * SOCKET §13 · `socket.ws-behind-the-edge`
+   *
+   * svc-ws publishes 4014 and the browser connects to it directly
+   * (`NEXT_PUBLIC_WS_URL`); the vendored shell's nginx proxies `/ws` straight to
+   * `svc-ws:4014`. Neither path crosses svc-edge, so the operator kill-switch
+   * cannot reach it. Closing this means terminating the socket at the edge (or
+   * giving svc-ws a control-plane-fed switch of its own) — a routing change well
+   * beyond the control plane, and it is recorded here rather than pretended away.
+   *
+   * Blast radius today: svc-ws is `custodial: false`, holds no balance, no
+   * database, no bus and no service secret. It re-broadcasts public market data.
+   * It cannot move value, which is why this is a gap and not an emergency.
+   */
+  ws: 'svc-ws is reached directly by the browser on its own port, not through this edge (SOCKET §13 socket.ws-behind-the-edge)',
+
+  /**
+   * Deliberately not proxied at all — see the header of this file. svc-ledger's
+   * operator surface is the DURABLE `posting_freeze` row, reached through the
+   * explicit `/admin/ledger/*` routes, which is a stronger control than an
+   * in-memory module flag. Arming `ledger` here would shadow it with a switch
+   * that does nothing.
+   */
+  ledger: 'the money plane is halted with POST /admin/ledger/freeze (durable, attributed, admin:treasury) — not with a module flag',
+
+  /** Service-to-service only (#50/#55), no published port, no browser path. */
+  matching: 'svc-matching serves no browser traffic and is not proxied by this edge; halt `trade` to stop new risk',
+};
 
 export interface Resolved {
   readonly upstream: Upstream;

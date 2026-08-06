@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createPublicClient, createWalletClient, defineChain, http, pad, stringToHex, toHex } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 import type { Abi, Address, Hex, HDAccount, PublicClient, WalletClient } from 'viem';
+import { describeError, recordInfraProbe } from '@intafaced/db';
 
 /**
  * THE DEV CHAIN, FROM THE INDEXER'S SIDE — everything that must never ship.
@@ -79,13 +80,28 @@ export function reorgRpcUrl(): string {
   return process.env.INDEXER_REORG_RPC_URL || 'http://127.0.0.1:8546';
 }
 
-/** True when a JSON-RPC endpoint answers at all. Never throws. */
+/**
+ * True when a JSON-RPC endpoint answers at all. Never throws.
+ *
+ * Journalled either way. A chain-backed suite that skips is invisible in turbo's
+ * "N successful" exactly like a database-backed one was, and the reorg proof is
+ * the last thing that should be able to disappear quietly. See
+ * `packages/db/src/infra-journal.ts` and `tooling/ci/infra-verdict.mjs`.
+ */
 export async function devChainReachable(rpcUrl = devRpcUrl()): Promise<boolean> {
   try {
     const client = createPublicClient({ chain: devChain(rpcUrl), transport: http(rpcUrl, { timeout: 2_000, retryCount: 0 }) });
     await client.getChainId();
+    recordInfraProbe({ dependency: 'evm-chain', outcome: 'ran', target: rpcUrl });
     return true;
-  } catch {
+  } catch (err) {
+    const reason = describeError(err);
+    recordInfraProbe({
+      dependency: 'evm-chain',
+      outcome: devChainRequired() ? 'required-failed' : 'skipped',
+      target: rpcUrl,
+      reason,
+    });
     return false;
   }
 }

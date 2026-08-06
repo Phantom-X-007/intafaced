@@ -192,3 +192,35 @@ export interface BookState {
   /** Ascending by acceptance sequence — that ordering is what makes trigger cascades deterministic. */
   readonly stops: readonly StopOrderState[];
 }
+
+// ── Liveness (reconciliation) ────────────────────────────────────────────────
+
+/**
+ * One order the engine is holding right now, flattened out of the books.
+ *
+ * WHY THIS TYPE EXISTS. Until it did, there was exactly one way to ask the
+ * engine "do you still have order X": `DELETE /markets/:m/orders/:id`. That is
+ * not a question, it is an instruction — the probe and the repair were the same
+ * call, so anything that wanted to *look* had to be willing to *cancel*, and a
+ * sweep built on it would empty a book to inspect it.
+ *
+ * `depth()` cannot substitute: it folds a price level down to a total, so order
+ * ids and account ids are gone by the time a caller sees it. Reconciling needs
+ * the ids, which means a read that keeps them.
+ *
+ * Decimal strings, not `Amount`: this crosses a wire, and a scaled bigint is
+ * our private representation (see `journal.ts`).
+ */
+export interface EngineLiveOrder {
+  readonly marketId: MarketId;
+  readonly orderId: OrderId;
+  readonly accountId: AccountId;
+  /** Where it is sitting: the limit book, or the pending-trigger stop book. */
+  readonly kind: 'book' | 'stop';
+  readonly side: OrderSide;
+  /** Limit price for `book`, trigger price for `stop`. Matches `RestingRef`. */
+  readonly price: string;
+  /** Quantity still working. A stop has not traded, so this is its full qty. */
+  readonly remaining: string;
+  readonly sequence: number;
+}

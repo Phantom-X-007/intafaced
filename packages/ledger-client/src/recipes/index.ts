@@ -3,6 +3,7 @@ import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
 import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
 import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
+import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfallRecovered } from './chargeback.js';
 import {
   burnAccount,
   houseFees,
@@ -983,6 +984,7 @@ export function rewardPay(input: RewardPayInput): PostRequest {
 
 export * from './bank.js';
 export * from './loans.js';
+export * from './chargeback.js';
 
 export const recipes = {
   deposit,
@@ -1010,6 +1012,15 @@ export const recipes = {
   merchantSettlement,
   paymentRefund,
   paymentRefundReverse,
+  // §6.1 chargebacks — see ./chargeback.ts. ⚠ NEW RECIPES, OWNER SIGN-OFF
+  // REQUIRED BEFORE MERGE (DIRECTION §3 Class M). Nothing calls them yet: they
+  // exist so a card rail can be honest about a dispute before one is written,
+  // which is clause 3 of the 2026-08-04 ADR's done bar for `pay.rails`.
+  // No existing recipe was modified to add them.
+  chargebackOpen,
+  chargebackShortfall,
+  chargebackWon,
+  chargebackShortfallRecovered,
   stake,
   unstake,
   mintEmission,

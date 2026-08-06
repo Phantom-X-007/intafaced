@@ -1,31 +1,56 @@
 # Board Clear — NEXT
 
-**Campaign status:** `RUNNING`
+> **READ THIS FIRST AFTER COMPACT / continue** for campaign micro-sequence.  
+> **Post-pile deep audit:** **AGENT-COMPLETE** — seal `docs/audit/2026-08-02-post-pile-deep/AGENT-COMPLETE-SEAL-2026-08-02.md`  
+> **Product free / human-owned** → `tooling/tracker/features.mjs` · [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)  
+> **Parallel law:** `docs/BOARD-CLEAR-PARALLEL-SESSIONS.md`  
+> Authority: (1) this file → (2) fetch + `gh pr list` → (3) SCOREBOARD → (4) freezes
 
-## On main (agent wave)
+**Campaign status:** `AGENT-COMPLETE` (board open on human M1–M7 only)  
+**AFK:** `docs/BOARD-CLEAR-AFK-CONTRACT.md`  
+**Tip:** re-check every turn
 
-| Ship            | PR   | Row                  |
-| --------------- | ---- | -------------------- |
-| A-OR-1          | #289 | order-route **DONE** |
-| A-WS-1          | #336 | ws **WIP**           |
-| A-UI-1          | #337 | terminal **WIP**     |
-| A-TRADE-MM-1    | #338 | mm recovery          |
-| A-TRADE-MM-2    | #340 | mm reseed            |
-| A-P5-2          | #341 | academy curriculum   |
-| A-TRADE-VENUE-1 | #344 | venue mark mount     |
-| prettier        | #347 | main format seal     |
+---
 
-## Active
+## EXACT NEXT SHIP (do this now — single primary)
 
-1. Merge **#345** A-TRADE-SPOT-1 after CI (rebased onto venue tip)
-2. Babysit **#343/#346** shehzad M1 pay — Class M, no steal
-3. Next agent ships: A-TRADE-MM-3 mid port · A-UI-2/3 · A-P5-3 ops/agents · A-WS residual B-WS-2 waits human futures events
-4. L0 until all DONE/CUT
+| Field               | Value                                                                                                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ship ID**         | **BABYSIT-HUMAN**                                                                                                                                                       |
+| **Program**         | P-TRACK + babysit                                                                                                                                                       |
+| **Objective**       | Keep human PRs unblocked: **#346** pay (shehzad only) · Denon specs · optional craft free paths. **Do not invent product. Do not re-open deep-audit as open residual.** |
+| **PATHS_ONLY**      | Board docs · non-colliding frontend craft                                                                                                                               |
+| **Collision check** | `gh pr list` + claim-check every turn                                                                                                                                   |
+| **After merge**     | Stay on babysit until BOARD-COMPLETE or new Nitro program                                                                                                               |
 
-## Human M1–M7
+**Secondary:** none required.
 
-Shehzad #343/#346 pay OS in flight. Protocol/futures/OTC/bank/id still open.
+---
+
+## Pre-code ritual
+
+```
+git fetch origin main && git log origin/main -1 --oneline
+gh pr list --state open
+read docs/audit/2026-08-02-post-pile-deep/AGENT-COMPLETE-SEAL-2026-08-02.md
+path-intersect before any code ship
+if only human OPEN → babysit only
+```
+
+---
+
+## Open PRs (snapshot — re-derive)
+
+| PR          | Owner         | Note                  |
+| ----------- | ------------- | --------------------- |
+| #346        | shehzad002    | M1 pay — babysit only |
+| Denon specs | Phantom-X-007 | do not steal          |
+| Craft PRs   | Nitro agents  | path-intersect        |
+
+## Freezes
+
+M1–M7 no implement · invent ban · no dual-build same paths · deep-audit program closed
 
 ## Last updated
 
-2026-08-01 wave2 — #345 babysit; human pay PR open.
+2026-08-02 — post-pile deep audit AGENT-COMPLETE seal. Human X + shehzad M1–M7 remain.

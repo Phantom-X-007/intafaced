@@ -35,7 +35,7 @@
  * Exit 0 = the workspace, the image and the fleet agree.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 const ROOT = process.cwd();
 
@@ -48,6 +48,68 @@ function servicesInRepo() {
     .map((d) => d.name)
     .sort();
 }
+
+/** Every workspace directory under `dir` that carries a package.json. */
+function workspacesUnder(dir) {
+  const root = join(ROOT, dir);
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(root, d.name, 'package.json')))
+    .map((d) => d.name)
+    .sort();
+}
+
+const packagesInRepo = () => workspacesUnder('packages');
+const appsInRepo = () => workspacesUnder('apps');
+
+/**
+ * Every package under `vendor/`, at ANY depth. Used by check 7 below.
+ *
+ * `workspacesUnder` cannot do this job and check 7 used to ask it to — twice,
+ * nested — which is why check 7 discovered NOTHING under `vendor/` for the two
+ * days it existed. `workspacesUnder('vendor')` only returns directories that
+ * THEMSELVES carry a package.json, and the vendored tree's top level is a plain
+ * directory: the manifests sit one level below it. So the outer call returned
+ * `[]`, the inner call never ran, and the front-end this check was written for
+ * — 92 Vue files — was invisible to it. The gate reported clean while looking
+ * at nothing.
+ *
+ * `apps/` and `packages/` are OUR layout and are exactly one level deep, so
+ * `workspacesUnder` remains right for them. A vendored tree has whatever layout
+ * upstream chose, and pinning a depth is how the next one escapes. So this
+ * walks until it finds manifests rather than assuming where they are.
+ *
+ * Directories are NOT named here — discovered. Spelling the vendored path in
+ * this file would put the upstream vendor's identity in our own source and trip
+ * `brand-scan` (§0.7, and `tooling/ci/` is not allowlisted there). Discovery is
+ * also the better rule regardless: a second vendored tree is covered the moment
+ * it lands, with no edit here.
+ *
+ * The walk stops at a package boundary. A package's own internals (its build
+ * directory, its bundled tooling) are not separately deployable things, and
+ * descending into them is how a gate starts reporting on a webpack config.
+ */
+function vendoredPackages() {
+  // Build output and dependency trees: full of manifests, none of them ours.
+  const SKIP = new Set(['node_modules', '.git', 'target', 'dist', '.next', '.turbo', 'coverage']);
+  const found = [];
+
+  const visit = (rel) => {
+    if (!existsSync(join(ROOT, rel))) return;
+    for (const d of readdirSync(join(ROOT, rel), { withFileTypes: true })) {
+      if (!d.isDirectory() || SKIP.has(d.name)) continue;
+      const child = join(rel, d.name);
+      if (existsSync(join(ROOT, child, 'package.json'))) found.push({ name: d.name, dir: child });
+      else visit(child);
+    }
+  };
+
+  visit('vendor');
+  return found.sort((a, b) => a.dir.localeCompare(b.dir));
+}
+
+/** A discovered directory name goes into a RegExp; discovered names are not ours to trust. */
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function read(file) {
   const path = join(ROOT, file);
@@ -64,17 +126,126 @@ function migrationCount(svc) {
 const services = servicesInRepo();
 const failures = [];
 
+// What this run actually OPENED. Printed on the summary line, because the whole
+// class of bug this file is for has a second half nothing here covered: a check
+// that runs, finds nothing to look at, and reports clean. `0 service(s) reach
+// both the image and the fleet` was a passing line. It should never have been.
+let copyPathsChecked = 0;
+let frontendsInspected = 0;
+let vendoredInspected = 0;
+
+// ── 0 · this gate looked at something ───────────────────────────────────────
+//
+// Checks 1–10 are all `for (const svc of services)`. An empty `services` makes
+// every one of them a no-op and the run exits 0 — and it does not take a deleted
+// directory to get there. `servicesInRepo` reads `services/` from `process.cwd()`,
+// so ANY caller that runs this from the wrong directory gets a green tick for a
+// tree it never opened. That is not hypothetical: `pnpm verify` and CI invoke
+// gates from the repo root today, and nothing enforces it.
+//
+// This is the house rule from `tooling/ci/fabricated-money-scan.mjs`: discovery
+// finding nothing is a REPORT, never a silent pass. There it is a loud exit 0
+// because the shell may legitimately be gone. Here it is a failure, because a
+// monorepo with no services is not a state this repo can be in — it is a broken
+// invocation, and passing it would clear the gate for every other check too.
+if (services.length === 0) {
+  failures.push({
+    file: 'services/',
+    reason:
+      'no service packages found, so checks 1-10 below each iterated an empty list and had nothing to say. This gate cannot pass on a tree it did not open — either the directory is gone, or this ran from somewhere that is not the repo root',
+  });
+}
+
 // ── 1 · the image can install every workspace ───────────────────────────────
+//
+// This checked `services/` only, and on 2026-08-02 that gap broke the image
+// build on `main`: `packages/venue-contracts` was added without its COPY line,
+// so pnpm installed it as a workspace with no dependencies, `ledger-client`
+// never linked, and the build died with
+//
+//   Cannot find module '@intafaced/ledger-client/money'
+//
+// plus a nonsense `number`/`bigint` comparison error downstream, because the
+// missing module made `Amount` resolve to something else. Neither error names
+// the Dockerfile. The gate that exists to catch exactly this was looking at the
+// wrong half of the workspace.
+//
+// A package is no less required than a service — arguably more, since every
+// service imports several. So both are checked.
 const dockerfile = read('Dockerfile');
 if (dockerfile === null) {
   failures.push({ file: 'Dockerfile', reason: 'missing entirely' });
 } else {
-  for (const svc of services) {
-    if (!dockerfile.includes(`services/${svc}/package.json`)) {
+  const workspaces = [
+    ...services.map((name) => `services/${name}`),
+    ...packagesInRepo().map((name) => `packages/${name}`),
+    ...appsInRepo().map((name) => `apps/${name}`),
+  ];
+
+  for (const ws of workspaces) {
+    if (!dockerfile.includes(`${ws}/package.json`)) {
       failures.push({
         file: 'Dockerfile',
-        reason: `no COPY for services/${svc}/package.json — pnpm will install it as if it had no dependencies, and the build fails later with a misleading "cannot find module"`,
+        reason: `no COPY for ${ws}/package.json — pnpm will install it as if it had no dependencies, and the build fails later with a misleading "cannot find module" that never names this file`,
       });
+    }
+  }
+
+  // ── 1b · and no COPY names a path that is no longer there ─────────────────
+  //
+  // The check above is one-directional: it asks whether every workspace HAS a
+  // COPY. It never asks whether every COPY still has a workspace. So the list
+  // above catches an addition and is completely blind to a REMOVAL, which is
+  // the half that is about to matter — `apps/web` is being retired, and its
+  // COPY line will outlive it unless something says so.
+  //
+  // What that costs, precisely, is why this is worth the lines. `pnpm verify`
+  // does not build images. Nothing in the gate set does. So a stale COPY is
+  // clean through every check we own and fails in CI at
+  //
+  //   COPY failed: file not found in build context ... apps/web/package.json
+  //
+  // which names the Dockerfile and not the deletion three commits back that
+  // caused it — and it fails at image build, after the whole test suite has
+  // gone green, which is the most expensive place in the pipeline to find it.
+  // Deleting a directory is the moment this is obvious; CI is the moment it is
+  // not. This check moves it to the first one.
+  //
+  // Sources are resolved against the BUILD CONTEXT, which is the repo root
+  // (see `docker-compose.apps.yml` build.context), so `existsSync` from ROOT is
+  // the same question Docker will ask.
+  //
+  // Not covered, deliberately: a path that exists here but is excluded by
+  // `.dockerignore` fails identically at build time and is invisible to this.
+  // Every source in this file today is a `package.json`, and `.dockerignore`
+  // excludes no manifests, so the gap is currently empty — but it is a gap, and
+  // the fix is to read `.dockerignore` here the day a COPY source needs it.
+  //
+  // A line continuation makes one COPY out of several lines; join them before
+  // splitting, or the tail of a wrapped COPY parses as a command of its own.
+  for (const line of dockerfile.replace(/\\\r?\n/g, ' ').split('\n')) {
+    const match = /^\s*COPY\s+(.+)$/i.exec(line);
+    if (!match) continue;
+    const tokens = match[1].trim().split(/\s+/);
+
+    // `--from=<stage>` copies out of an earlier BUILD STAGE, not out of the
+    // context. Those paths are produced by the build and are not on this disk;
+    // testing them here would fail on `/app` every single run.
+    if (tokens.some((t) => t.startsWith('--from='))) continue;
+
+    // Last token is the destination — inside the image, nothing to check here.
+    for (const src of tokens.filter((t) => !t.startsWith('--') && !t.startsWith('<')).slice(0, -1)) {
+      // `.` is the whole context. A wildcard may legitimately match nothing at
+      // build time and is not resolvable with `existsSync`; both are skipped
+      // rather than guessed at, and neither appears in this file today.
+      if (src === '.' || src === './' || /[*?[\]]/.test(src)) continue;
+      copyPathsChecked++;
+      if (!existsSync(join(ROOT, src))) {
+        failures.push({
+          file: 'Dockerfile',
+          reason: `COPY names "${src}", which does not exist in the build context — nothing in "pnpm verify" builds an image, so this is clean through every gate we own and then fails CI with "COPY failed: file not found", naming this file rather than the deletion that caused it`,
+        });
+      }
     }
   }
 }
@@ -110,6 +281,39 @@ if (compose !== null) {
       failures.push({
         file: 'docker-compose.apps.yml',
         reason: `${svc} merges edgeEnvSchema but its compose block does not receive *edge-secret — it will crash-loop on EDGE_PRINCIPAL_SECRET`,
+      });
+    }
+  }
+}
+
+// ── 3b · same rule, second secret: authEnvSchema needs JWT_ACCESS_SECRET ────
+//
+// Check 3 caught `edgeEnvSchema` and stopped there, so the identical mistake
+// with a different secret went straight through it. On 2026-08-03 svc-ledger —
+// THE LEDGER — crash-looped on `JWT_ACCESS_SECRET: Required`. It merges
+// `authEnvSchema` for its operator surface, three other blocks are handed the
+// variable, and its own block never was.
+//
+// It stayed hidden because the failure needs a container RECREATE to surface:
+// a long-running container keeps the environment it started with, so the fleet
+// looked healthy for as long as nobody restarted it. It took an unrelated
+// `--force-recreate` of another service to expose it.
+//
+// A gate that names one secret is a gate for one secret. Both are checked.
+if (compose !== null) {
+  for (const svc of services) {
+    const env = read(`services/${svc}/src/env.ts`);
+    if (!env?.includes('authEnvSchema')) continue;
+
+    // `\\s` — inside a template literal a single backslash is dropped, so `\s`
+    // becomes the letter s and the block never matches. The first draft of this
+    // check reported clean against a service that was crash-looping in front of
+    // me. Same trap as check 7's first draft.
+    const block = new RegExp(`^  ${svc}:([\\s\\S]*?)(?=^  \\S|\\Z)`, 'm').exec(compose);
+    if (block && !block[1].includes('JWT_ACCESS_SECRET')) {
+      failures.push({
+        file: 'docker-compose.apps.yml',
+        reason: `${svc} merges authEnvSchema but its compose block does not set JWT_ACCESS_SECRET — it will crash-loop the moment the container is recreated, and look fine until then`,
       });
     }
   }
@@ -381,8 +585,149 @@ if (compose !== null) {
   }
 }
 
+// ── 7 · a user-facing app that cannot be run ────────────────────────────────
+//
+// The failure this exists for, in full, because it cost four days:
+//
+// The vendored trading shell is the stated product — 74 screens, and the
+// direction has always been that our features go on top of it. It had no
+// `dist`, no Dockerfile and no compose entry. The only way to see it was
+// `npm run dev` by hand. Documents sent readers to `:8090`; nothing ever served
+// that port.
+//
+// So one developer put 48 commits into it WITHOUT EVER SEEING IT RENDER, while
+// a different app — added two days before the shell was vendored — stayed on
+// :3000 as the de-facto product purely because it was the only one that
+// started. Nobody chose that. It is what happens when the intended thing cannot
+// be run and the unintended thing can.
+//
+// No gate caught it, because every gate here asked "does this service reach the
+// fleet?" and a front-end is not a service.
+//
+// So: a directory with a build script is a thing somebody expects to be able to
+// look at, and it either appears in compose or carries a written `# no-deploy:`
+// reason. Silence is the thing being forbidden.
+//
+// The trigger is the build script ALONE — deliberately, and not because a
+// tighter test was unavailable. Requiring an `index.html` or a Next config too
+// would read as more precise and would fail in the direction that has no
+// remedy: a front-end this gate does not recognise is silent again, which is
+// the entire bug. A false positive costs one `# no-deploy:` line with a reason,
+// which is a sentence someone should have written anyway.
+{
+  const composeApps = read('docker-compose.apps.yml') ?? '';
+  // Two views of the same file, and the asymmetry is deliberate.
+  //
+  // "Is it deployed?" is answered against CONFIG only — comment lines removed.
+  // The test is a substring match on the directory, and this file is heavily
+  // commented (rightly), so prose that merely MENTIONS a front-end would
+  // otherwise satisfy it. That is the quiet direction of the same bug: a gate
+  // reporting deployed because someone wrote a paragraph about the thing they
+  // did not deploy. The `no-deploy` block below this one is exactly such a
+  // paragraph.
+  //
+  // "Was a reason written?" is answered against the RAW text, because a written
+  // reason IS a comment. Blank comments for both and the escape hatch stops
+  // working; keep them for both and the escape hatch is accidental.
+  //
+  // Full-line comments only — a `#` mid-line can be inside a YAML value.
+  const composeConfig = composeApps
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('#'))
+    .join('\n');
+  // Vendored front-ends are DISCOVERED, not named — see `vendoredPackages`
+  // above for why (brand-scan §0.7, and a second vendored tree must not
+  // escape), and for the discovery bug that made this line return nothing at
+  // all for the first two days of this check's life.
+  const vendored = vendoredPackages();
+  const frontends = [...workspacesUnder('apps').map((n) => ({ name: n, dir: join('apps', n) })), ...vendored];
+
+  // The bug this check just came back from was not a wrong answer. It was a
+  // right answer to nothing: `vendoredPackages`'s predecessor returned `[]`,
+  // every loop below ran zero times, and the gate printed a tick. Discovery
+  // silently returning empty is the failure mode, so it is now stated rather
+  // than assumed — and the counts go on the summary line, so the next time
+  // coverage collapses it is visible in the passing output instead of only in
+  // the failing output.
+  //
+  // The two directions are not the same fault and do not get the same answer:
+  //
+  //  - `vendor/` is THERE and the walk found nothing in it — discovery is
+  //    broken, exactly as it was until today. Fail. The tree is what this check
+  //    was written for; being unable to see it is not a pass.
+  //  - `vendor/` is not there at all — a legitimate end state if the vendored
+  //    shell is ever fully retired. Pass, but say so out loud, so nobody reads
+  //    a tick as coverage. That is the `fabricated-money-scan` rule.
+  if (!existsSync(join(ROOT, 'vendor'))) {
+    console.log('  · workspace-sync check 7: no vendor/ directory — NO VENDORED FRONT-END WAS INSPECTED.');
+    console.log('    If the vendored shell still exists, discovery is broken; fix vendoredPackages rather than ignoring this line.');
+  } else if (vendored.length === 0) {
+    failures.push({
+      file: 'vendor/',
+      reason:
+        'vendor/ exists but no package.json was found anywhere beneath it, so check 7 inspected no vendored front-end at all. That is the exact state this check was in until 2026-08-03 — reporting clean while looking at nothing. Fix vendoredPackages, do not delete this failure',
+    });
+  }
+  vendoredInspected = vendored.length;
+
+  for (const fe of frontends) {
+    if (!existsSync(join(ROOT, fe.dir, 'package.json'))) continue;
+    frontendsInspected++;
+    // Repo-relative, forward slashes. CI is Linux; half of us are on Windows,
+    // and a reported path nobody can paste back is a reported path nobody acts
+    // on. Only for MESSAGES — `fe.dir` stays platform-native for the fs calls.
+    const shown = fe.dir.split(sep).join('/');
+
+    // A vendored manifest is upstream's file, not ours. An unparseable one used
+    // to throw out of the whole gate — which loses every other failure in this
+    // run behind a stack trace that names no check. Report it and continue.
+    let pkg;
+    try {
+      pkg = JSON.parse(readFileSync(join(ROOT, fe.dir, 'package.json'), 'utf8'));
+    } catch (err) {
+      failures.push({
+        file: `${shown}/package.json`,
+        reason: `cannot be parsed (${err.message}) — this check cannot tell whether it builds a user-facing app, so it is reported rather than skipped`,
+      });
+      continue;
+    }
+    if (!pkg.scripts?.build) continue;
+
+    // `\s` inside a template literal is just the letter s — the first version
+    // of this line matched nothing and flagged apps/admin, which is plainly in
+    // the file. A gate that cries wolf gets switched off, and then the real
+    // failure it was written for goes through it unnoticed. Both `\\s` below
+    // survive the template literal as `\s`; the mutation battery proves it by
+    // adding an app and watching this fire.
+    //
+    // The path match ends at a path boundary. A bare `includes` is satisfied by
+    // any LONGER name that starts the same way, so a sibling directory left
+    // behind by a rename — `…/05_Web_Front_old` — would report the real one as
+    // deployed. Found by a mutation that meant to delete the shell from compose
+    // and accidentally only renamed it, which the gate then called clean.
+    const boundary = new RegExp(`${escapeRe(shown)}(?![\\w.-])`);
+    const named = boundary.test(composeConfig) || new RegExp(`^\\s{2}${escapeRe(fe.name)}:`, 'm').test(composeConfig);
+    if (!named && !composeApps.includes(`# no-deploy: ${fe.name}`)) {
+      failures.push({
+        file: 'docker-compose.apps.yml',
+        reason: `${shown} builds a user-facing app but nothing in the fleet serves it — so it can be worked on for weeks without anyone seeing it, while whichever app DOES start becomes the product by default. If that is deliberate, add "# no-deploy: ${fe.name}" saying why`,
+      });
+    }
+  }
+}
+
 if (failures.length === 0) {
-  console.log(`  ✓ workspace-sync clean — ${services.length} service(s) reach both the image and the fleet`);
+  // The counts, not just the tick.
+  //
+  // `✓ workspace-sync clean — 0 service(s) reach both the image and the fleet`
+  // was a PASSING line, and check 7 printed a tick for two days while looking at
+  // an empty list. A gate that reports what it opened cannot make that claim
+  // quietly: the number is on the line every run, so coverage collapsing is
+  // visible in the green output rather than only in the red.
+  console.log(
+    `  ✓ workspace-sync clean — ${services.length} service(s) reach both the image and the fleet ` +
+      `(${copyPathsChecked} Dockerfile COPY source(s), ${frontendsInspected} front-end(s) inspected, ${vendoredInspected} of them vendored)`,
+  );
   process.exitCode = 0;
 } else {
   console.error(`  ✖ workspace-sync — ${failures.length} problem(s)`);

@@ -9,14 +9,20 @@
  */
 export * from './columns.js';
 export * from './connection.js';
+export * from './infra-journal.js';
 export * from './migrate.js';
 export {
   assertTestDatabase,
+  createTestDatabase,
   createTestDb,
   postgresAvailable,
   postgresRequired,
   resolveTestDatabaseUrl,
   rewriteSchemaSql,
+  sweepStaleTestDatabases,
+  sweepStaleTestSchemas,
+  type TestDatabase,
+  type TestDatabaseOptions,
   type TestDb,
   type TestDbOptions,
   type TestMigration,

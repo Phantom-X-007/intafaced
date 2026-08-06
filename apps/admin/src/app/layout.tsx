@@ -4,7 +4,9 @@ import { Inter, Orbitron } from 'next/font/google';
 import { color } from '@intafaced/ui';
 import '@intafaced/ui/tokens.css';
 import './globals.css';
+import { ConsoleStatusBanner } from '@/components/console-status-banner';
 import { Nav } from '@/components/nav';
+import { readConsoleStatus } from '@/lib/console-status';
 import { dropLabel } from '@/lib/drops';
 import { readOperatorEnv } from '@/lib/operator-env';
 
@@ -41,6 +43,10 @@ export const dynamic = 'force-dynamic';
 export default function RootLayout({ children }: { children: ReactNode }) {
   const env = readOperatorEnv();
   const overrideCount = Object.keys(env.flagEnv).length;
+  // Read here, not on one page: whether this console can halt anything is a
+  // property of the deployment, and an operator must meet it on whichever screen
+  // they happened to open. See `components/console-status-banner.tsx`.
+  const consoleStatus = readConsoleStatus();
 
   return (
     <html lang="en" className={`${orbitron.variable} ${inter.variable}`}>
@@ -68,6 +74,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               </span>
             </span>
           </header>
+
+          <ConsoleStatusBanner status={consoleStatus} />
 
           <main className="adm-main">{children}</main>
         </div>

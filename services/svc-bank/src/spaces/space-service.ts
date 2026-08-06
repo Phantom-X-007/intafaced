@@ -130,14 +130,32 @@ export class SpaceService {
     return toRecord(rows[0]!);
   }
 
-  async get(spaceId: string): Promise<SpaceRecord> {
+  /**
+   * A space by id, or `null`. THE LOOKUP THAT DOES NOT THROW.
+   *
+   * `get` below is right for a caller that is entitled to the row: a missing
+   * space is exceptional there, and the exception carries a message saying so.
+   *
+   * This one exists for the caller that has to decide whether it may say
+   * ANYTHING about the row — the destination gate in `router.ts`. For that
+   * caller "does not exist" cannot be an exception, because an exception is a
+   * message, and whether a message was produced is itself the oracle the
+   * refusal-shape ADR closes. It also does exactly one query in both cases, so
+   * absent and not-yours cost the same work as well as saying the same thing.
+   */
+  async find(spaceId: string): Promise<SpaceRecord | null> {
     const rows = await this.sql<SpaceRow[]>`
       SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
         FROM bank.spaces WHERE id = ${spaceId}
     `;
     const row = rows[0];
-    if (!row) throw new BankError(`Space ${spaceId} not found`, 'bank.space_not_found');
-    return toRecord(row);
+    return row ? toRecord(row) : null;
+  }
+
+  async get(spaceId: string): Promise<SpaceRecord> {
+    const space = await this.find(spaceId);
+    if (!space) throw new BankError(`Space ${spaceId} not found`, 'bank.space_not_found');
+    return space;
   }
 
   async list(userId: string, assetId?: string): Promise<SpaceRecord[]> {

@@ -38,9 +38,16 @@ export interface CurriculumItem extends CurriculumItemSummary {
 }
 
 /**
- * Day-one spine. One item per path is enough to prove the content path;
- * foundations carries a short playbook + lesson so list + detail both have
- * something non-trivial to return.
+ * Shared short body for Stage-2 platform-native expansion.
+ * Not a licensed third-party library import — residual title counts still apply.
+ */
+function seedBody(title: string, bullets: string[]): string {
+  return ['# ' + title, '', ...bullets.map((b) => '- ' + b), '', 'No money moves in this item. No partner brand names.'].join('\n');
+}
+
+/**
+ * Day-one spine + Stage-2 platform-native expansion (TRK-academy.curriculum).
+ * Title promise (20 playbooks + 3 workbooks) remains residual when counts lag.
  */
 const SPINE: readonly CurriculumItem[] = [
   {
@@ -194,6 +201,250 @@ const SPINE: readonly CurriculumItem[] = [
       'market and the certification path — both named elsewhere on the tracker.',
     ].join('\n'),
   },
+  // ── Stage-2 platform-native expansion (not licensed library invent) ───────
+  {
+    slug: 'foundations-position-sizing',
+    title: 'Position sizing without invent',
+    kind: 'playbook',
+    path: 'foundations',
+    order: 20,
+    summary: 'Size from invalidation distance and account risk — never from a green candle.',
+    body: seedBody('Position sizing without invent', [
+      'Write the invalidation first; size is a consequence of distance and risk budget.',
+      'If you cannot name the loss if wrong, do not place the order.',
+      'Paper first when the paper market flag is on.',
+    ]),
+  },
+  {
+    slug: 'foundations-journal-discipline',
+    title: 'Trade journal discipline',
+    kind: 'playbook',
+    path: 'foundations',
+    order: 25,
+    summary: 'What you write before and after a trade so the next one is not amnesia.',
+    body: seedBody('Trade journal discipline', [
+      'Thesis, invalidation, size, and why this time — before the order.',
+      'After: what the book did, not what you hoped it would do.',
+      'No retroactive thesis edits that invent skill.',
+    ]),
+  },
+  {
+    slug: 'markets-spread-and-slippage',
+    title: 'Spread and slippage honesty',
+    kind: 'playbook',
+    path: 'markets',
+    order: 20,
+    summary: 'When the book is thin, the fill is not the mid you stared at.',
+    body: seedBody('Spread and slippage honesty', [
+      'Mid is not a promise; the next tradeable level is.',
+      'Market orders pay for urgency — name the urgency or use a limit.',
+      'Empty books are a true state, not a UI failure.',
+    ]),
+  },
+  {
+    slug: 'markets-session-structure',
+    title: 'Session structure',
+    kind: 'playbook',
+    path: 'markets',
+    order: 25,
+    summary: 'Open, mid, and close behaviours without inventing a regime label.',
+    body: seedBody('Session structure', [
+      'Liquidity and noise change by session — observe before you name a pattern.',
+      'Do not paste a vendor calendar as if it were platform law.',
+    ]),
+  },
+  {
+    slug: 'builder-kill-switch-drill',
+    title: 'Kill-switch drill',
+    kind: 'playbook',
+    path: 'builder',
+    order: 20,
+    summary: 'Prove you can stop a run from a surface you control.',
+    body: seedBody('Kill-switch drill', [
+      'Name the button or command that stops the strategy before you start it.',
+      'Paper run that stop once on purpose; a stop never tested is decoration.',
+    ]),
+  },
+  {
+    slug: 'builder-logs-not-vibes',
+    title: 'Logs not vibes',
+    kind: 'playbook',
+    path: 'builder',
+    order: 25,
+    summary: 'What an automation must record so a human can audit it later.',
+    body: seedBody('Logs not vibes', [
+      'Every decision needs a timestamp, inputs, and the rule that fired.',
+      'Missing logs are not privacy — they are unprovable behaviour.',
+    ]),
+  },
+  {
+    slug: 'sovereign-rail-map',
+    title: 'Rail map',
+    kind: 'playbook',
+    path: 'sovereign',
+    order: 20,
+    summary: 'Custodial ledger vs self-custody rails — ask who holds the keys.',
+    body: seedBody('Rail map', [
+      'For each balance: house custody under the ledger, or a wallet you control?',
+      'If the process dies, whose money is stranded and how does it return?',
+    ]),
+  },
+  {
+    slug: 'sovereign-withdrawal-hygiene',
+    title: 'Withdrawal hygiene',
+    kind: 'playbook',
+    path: 'sovereign',
+    order: 25,
+    summary: 'Address check, small test send, no urgency theatre.',
+    body: seedBody('Withdrawal hygiene', [
+      'Verify the address offline; urgency is how people send to the wrong rail.',
+      'Test size first when the rail is new to you.',
+    ]),
+  },
+  {
+    slug: 'markets-tape-reading-workbook',
+    title: 'Tape reading (outline workbook)',
+    kind: 'workbook',
+    path: 'markets',
+    order: 30,
+    summary: 'Outline drills for reading public prints without inventing volume.',
+    body: seedBody('Tape reading (outline workbook)', [
+      'Drill: mark aggressor side only when the print carries it.',
+      'Drill: empty tape is empty — do not paint green for silence.',
+      'Fills stay paper until the paper market path is on.',
+    ]),
+  },
+  {
+    slug: 'builder-automation-workbook',
+    title: 'Automation checklist (outline workbook)',
+    kind: 'workbook',
+    path: 'builder',
+    order: 30,
+    summary: 'Outline workbook for pre-flight of a paper automation.',
+    body: seedBody('Automation checklist (outline workbook)', [
+      'Kill-switch named and tested.',
+      'Max loss and max size written before arming.',
+      'No live keys in paper mode.',
+    ]),
+  },
+  // ── Stage-2 L3 platform-native expansion toward title promise (not licensed invent) ──
+  {
+    slug: 'foundations-invalidation-first',
+    title: 'Invalidation before entry',
+    kind: 'playbook',
+    path: 'foundations',
+    order: 30,
+    summary: 'Name the level that proves you wrong before you name the target.',
+    body: seedBody('Invalidation before entry', [
+      'If invalidation is vague, size is guesswork.',
+      'Write it; size from distance; only then consider entry.',
+      'Paper first when the paper market path is on.',
+    ]),
+  },
+  {
+    slug: 'foundations-fees-are-real',
+    title: 'Fees are real cost',
+    kind: 'playbook',
+    path: 'foundations',
+    order: 35,
+    summary: 'Fee drag is not optional flavour — it is part of the edge math.',
+    body: seedBody('Fees are real cost', [
+      'Round-trip fees shrink the gap you need the market to give you.',
+      'Do not invent a zero-fee world in the journal.',
+      'Empty fee field is unknown, not free.',
+    ]),
+  },
+  {
+    slug: 'markets-order-types-honest',
+    title: 'Order types without magic',
+    kind: 'playbook',
+    path: 'markets',
+    order: 30,
+    summary: 'Limit, market, and cancel behaviour without inventing fills.',
+    body: seedBody('Order types without magic', [
+      'A limit that never trades is not a failed UI — it is the book refusing your price.',
+      'Cancel is a first-class action; practice it on paper.',
+      'Never paint a working order as filled.',
+    ]),
+  },
+  {
+    slug: 'markets-correlation-caution',
+    title: 'Correlation caution',
+    kind: 'playbook',
+    path: 'markets',
+    order: 35,
+    summary: 'Two books can move together without becoming one idea.',
+    body: seedBody('Correlation caution', [
+      'Stacking the same risk under different symbols is still one bet.',
+      'If you cannot name the shared driver, you cannot size the stack.',
+      'No invented hedge that the book does not prove.',
+    ]),
+  },
+  {
+    slug: 'builder-preflight-checklist',
+    title: 'Automation preflight',
+    kind: 'playbook',
+    path: 'builder',
+    order: 30,
+    summary: 'What must be true before a paper automation is armed.',
+    body: seedBody('Automation preflight', [
+      'Kill-switch, max loss, max size, and paper-only gate — written before arm.',
+      'If any line is missing, the run does not start.',
+      'Live keys never ride along in paper mode.',
+    ]),
+  },
+  {
+    slug: 'builder-failure-modes',
+    title: 'Failure modes of agents',
+    kind: 'playbook',
+    path: 'builder',
+    order: 35,
+    summary: 'How an agent fails closed when tools or data are dark.',
+    body: seedBody('Failure modes of agents', [
+      'Dark data plane → refuse invent quotes; say unavailable.',
+      'Undeclared tool → refuse before dispatch.',
+      'Silence is not success — log the refuse.',
+    ]),
+  },
+  {
+    slug: 'sovereign-custody-posture',
+    title: 'Custody posture in one page',
+    kind: 'playbook',
+    path: 'sovereign',
+    order: 20,
+    summary: 'What the platform holds vs what never leaves your control surface.',
+    body: seedBody('Custody posture in one page', [
+      'Know which assets sit in platform custody and which never do.',
+      'Withdraw paths are product law, not a chat promise.',
+      'Support cannot invent balances.',
+    ]),
+  },
+  {
+    slug: 'sovereign-limits-and-tiers',
+    title: 'Limits and verification tiers',
+    kind: 'playbook',
+    path: 'sovereign',
+    order: 25,
+    summary: 'Why a limit refuses — and why inventing a bypass is forbidden.',
+    body: seedBody('Limits and verification tiers', [
+      'A limit is a fail-closed gate, not a suggestion.',
+      'Raising limits requires the verification path the product owns.',
+      'No support chat can mint a higher limit without that path.',
+    ]),
+  },
+  {
+    slug: 'sovereign-incident-hygiene',
+    title: 'Incident hygiene for operators',
+    kind: 'playbook',
+    path: 'sovereign',
+    order: 30,
+    summary: 'What to freeze, what to write, and what never to invent under load.',
+    body: seedBody('Incident hygiene for operators', [
+      'Freeze first when money path is unclear; invent never.',
+      'Write both sides of a reconcile finding — not a single “fixed” claim.',
+      'User-facing copy stays brand-clean under pressure.',
+    ]),
+  },
 ] as const;
 
 const BY_SLUG = new Map(SPINE.map((item) => [item.slug, item]));
@@ -211,3 +462,730 @@ export function getCurriculumItem(slug: string): CurriculumItem | null {
 
 /** Stable set of paths the catalog recognises — matches Blueprint curriculumPath. */
 export const CURRICULUM_PATHS: readonly CurriculumPath[] = ['foundations', 'markets', 'builder', 'sovereign'];
+
+/**
+ * L3 — inventory of seeded spine only. Never invents DERIV//DESK residual titles.
+ * Empty path → zero counts (honest emptiness, not a fabricated library).
+ */
+export type CurriculumInventory = {
+  readonly total: number;
+  readonly byPath: Readonly<Record<CurriculumPath, number>>;
+  readonly byKind: Readonly<Record<CurriculumKind, number>>;
+};
+
+export function inventoryCurriculum(): CurriculumInventory {
+  const byPath: Record<CurriculumPath, number> = {
+    foundations: 0,
+    markets: 0,
+    builder: 0,
+    sovereign: 0,
+  };
+  const byKind: Record<CurriculumKind, number> = {
+    playbook: 0,
+    workbook: 0,
+    lesson: 0,
+  };
+  for (const item of SPINE) {
+    byPath[item.path] += 1;
+    byKind[item.kind] += 1;
+  }
+  return { total: SPINE.length, byPath, byKind };
+}
+
+/**
+ * L3 — slug existence on spine only. Unknown → false (never invent residual titles).
+ */
+export function hasCurriculumSlug(slug: string): boolean {
+  return BY_SLUG.has(slug.trim());
+}
+
+/**
+ * L3 — sorted spine slugs only. Never invents residual library titles.
+ */
+export function listCurriculumSlugs(): readonly string[] {
+  return [...BY_SLUG.keys()].sort();
+}
+
+/**
+ * L3 — count items on one path. Unknown path key still returns 0 via filter.
+ */
+export function countCurriculumByPath(path: CurriculumPath): number {
+  return SPINE.filter((item) => item.path === path).length;
+}
+
+/**
+ * L3 — count items by kind on spine only. Never invent residual titles.
+ */
+export function countCurriculumByKind(kind: CurriculumKind): number {
+  return SPINE.filter((item) => item.kind === kind).length;
+}
+
+/**
+ * L3 — true when slug exists and is a workbook. Unknown/non-workbook → false.
+ */
+export function isWorkbookSlug(slug: string): boolean {
+  const item = BY_SLUG.get(slug.trim());
+  return item?.kind === 'workbook';
+}
+
+/**
+ * L3 — true when slug exists and is a playbook. Unknown/non-playbook → false.
+ */
+export function isPlaybookSlug(slug: string): boolean {
+  const item = BY_SLUG.get(slug.trim());
+  return item?.kind === 'playbook';
+}
+
+/**
+ * L3 — true when slug exists and is a lesson. Unknown/non-lesson → false.
+ */
+export function isLessonSlug(slug: string): boolean {
+  const item = BY_SLUG.get(slug.trim());
+  return item?.kind === 'lesson';
+}
+
+/**
+ * L3 — sorted slugs for one kind. Empty kind → [].
+ */
+export function listCurriculumSlugsByKind(kind: CurriculumKind): readonly string[] {
+  return SPINE.filter((item) => item.kind === kind)
+    .map((item) => item.slug)
+    .sort();
+}
+
+/**
+ * L3 — paths that have at least one spine item (sorted). Empty catalog → [].
+ */
+export function listPathsWithContent(): readonly CurriculumPath[] {
+  const set = new Set<CurriculumPath>();
+  for (const item of SPINE) set.add(item.path);
+  return CURRICULUM_PATHS.filter((p) => set.has(p));
+}
+
+/**
+ * L3 — Blueprint paths with zero spine items (sorted). Full coverage → [].
+ */
+export function listEmptyCurriculumPaths(): readonly CurriculumPath[] {
+  const inv = inventoryCurriculum();
+  return CURRICULUM_PATHS.filter((p) => inv.byPath[p] === 0);
+}
+
+/**
+ * L3 — kinds present on spine (sorted fixed order playbook/workbook/lesson).
+ */
+export function listKindsWithContent(): readonly CurriculumKind[] {
+  const order: CurriculumKind[] = ['playbook', 'workbook', 'lesson'];
+  const inv = inventoryCurriculum();
+  return order.filter((k) => inv.byKind[k] > 0);
+}
+
+/**
+ * L3 — total spine items. Seed spine never empty on tip; still pure.
+ */
+export function curriculumSpineSize(): number {
+  return SPINE.length;
+}
+
+/**
+ * L3 — sorted titles for one path. Empty path → [].
+ */
+export function listCurriculumTitlesByPath(path: CurriculumPath): readonly string[] {
+  return SPINE.filter((item) => item.path === path)
+    .map((item) => item.title)
+    .sort();
+}
+
+/** L3 — alias of hasCurriculumSlug (spine existence only). */
+export function isSpineSlug(slug: string): boolean {
+  return hasCurriculumSlug(slug);
+}
+
+/**
+ * L3 — true when path has at least one spine item. Empty path → false.
+ */
+export function hasCurriculumPath(path: CurriculumPath): boolean {
+  return countCurriculumByPath(path) > 0;
+}
+
+/** L3 — total spine items (same as inventory total). */
+export function spineItemCount(): number {
+  return inventoryCurriculum().total;
+}
+
+/**
+ * L3 — sorted lesson slugs on spine only. None → [].
+ */
+export function listLessonSlugs(): readonly string[] {
+  return listCurriculumSlugsByKind('lesson');
+}
+
+/**
+ * L3 — playbook count on spine.
+ */
+export function playbookCount(): number {
+  return countCurriculumByKind('playbook');
+}
+
+/** L3 — spine workbook count. */
+export function workbookCount(): number {
+  return inventoryCurriculum().byKind.workbook;
+}
+
+/** L3 — spine lesson count. */
+export function lessonCount(): number {
+  return inventoryCurriculum().byKind.lesson;
+}
+
+/** L3 — how many Blueprint paths have ≥1 spine item. */
+export function pathCountWithContent(): number {
+  return listPathsWithContent().length;
+}
+
+/**
+ * L3 — sorted playbook slugs on spine. None → [].
+ */
+export function listPlaybookSlugs(): readonly string[] {
+  return listCurriculumSlugsByKind('playbook');
+}
+
+/**
+ * L3 — sorted workbook slugs on spine. None → [].
+ */
+export function listWorkbookSlugs(): readonly string[] {
+  return listCurriculumSlugsByKind('workbook');
+}
+
+/** L3 — how many curriculum kinds have ≥1 spine item. */
+export function kindCountWithContent(): number {
+  return listKindsWithContent().length;
+}
+
+/** L3 — how many Blueprint paths have zero spine items. */
+export function emptyPathCount(): number {
+  return listEmptyCurriculumPaths().length;
+}
+
+/**
+ * L3 — sorted titles for one kind. None → [].
+ */
+export function listCurriculumTitlesByKind(kind: CurriculumKind): readonly string[] {
+  return SPINE.filter((item) => item.kind === kind)
+    .map((item) => item.title)
+    .sort();
+}
+
+/** L3 — true when spine has at least one playbook. */
+export function hasPlaybook(): boolean {
+  return playbookCount() > 0;
+}
+
+/** L3 — true when spine has at least one workbook. */
+export function hasWorkbook(): boolean {
+  return workbookCount() > 0;
+}
+
+/** L3 — true when spine has at least one lesson. */
+export function hasLesson(): boolean {
+  return lessonCount() > 0;
+}
+
+/** L3 — true when spine is non-empty. */
+export function catalogSpineNonEmpty(): boolean {
+  return curriculumSpineSize() > 0;
+}
+
+/** L3 — foundations path item count. */
+export function foundationsItemCount(): number {
+  return countCurriculumByPath('foundations');
+}
+
+/** L3 — markets path item count. */
+export function marketsItemCount(): number {
+  return countCurriculumByPath('markets');
+}
+
+/** L3 — builder path item count. */
+export function builderItemCount(): number {
+  return countCurriculumByPath('builder');
+}
+
+/** L3 — sovereign path item count. */
+export function sovereignItemCount(): number {
+  return countCurriculumByPath('sovereign');
+}
+
+/** L3 — true when foundations path has content. */
+export function hasFoundationsPath(): boolean {
+  return hasCurriculumPath('foundations');
+}
+
+/** L3 — true when markets path has content. */
+export function hasMarketsPath(): boolean {
+  return hasCurriculumPath('markets');
+}
+
+/** L3 — true when builder path has content. */
+export function hasBuilderPath(): boolean {
+  return hasCurriculumPath('builder');
+}
+
+/** L3 — true when sovereign path has content. */
+export function hasSovereignPath(): boolean {
+  return hasCurriculumPath('sovereign');
+}
+
+/** L3 — empty paths count alias surface. */
+export function emptyCurriculumPathCount(): number {
+  return emptyPathCount();
+}
+
+/** L3 — true when all four Blueprint paths have content. */
+export function allPathsHaveContent(): boolean {
+  return pathCountWithContent() === CURRICULUM_PATHS.length;
+}
+
+/** L3 — first spine slug (sorted). Empty spine → null. */
+export function firstCurriculumSlug(): string | null {
+  const slugs = listCurriculumSlugs();
+  return slugs[0] ?? null;
+}
+
+/** L3 — last spine slug (sorted). Empty → null. */
+export function lastCurriculumSlug(): string | null {
+  const slugs = listCurriculumSlugs();
+  return slugs.length ? slugs[slugs.length - 1]! : null;
+}
+
+/** L3 — true when spine size is at least n. */
+export function hasAtLeastSpineItems(n: number): boolean {
+  if (!Number.isFinite(n) || n < 0) return false;
+  return curriculumSpineSize() >= Math.floor(n);
+}
+
+/** L3 — lesson titles sorted. None → []. */
+export function listLessonTitles(): readonly string[] {
+  return listCurriculumTitlesByKind('lesson');
+}
+
+/** L3 — playbook titles sorted. None → []. */
+export function listPlaybookTitles(): readonly string[] {
+  return listCurriculumTitlesByKind('playbook');
+}
+
+/** L3 — spine size label. */
+export function spineSizeLabel(): string {
+  return String(curriculumSpineSize());
+}
+
+/** L3 — comma-joined lesson slugs. Empty → "". */
+export function lessonSlugsJoined(): string {
+  return listLessonSlugs().join(',');
+}
+
+/** L3 — comma-joined playbook slugs. Empty → "". */
+export function playbookSlugsJoined(): string {
+  return listPlaybookSlugs().join(',');
+}
+
+/** L3 — workbook titles sorted. None → []. */
+export function listWorkbookTitles(): readonly string[] {
+  return listCurriculumTitlesByKind('workbook');
+}
+
+/** L3 — workbook slugs joined. Empty → "". */
+export function workbookSlugsJoined(): string {
+  return listWorkbookSlugs().join(',');
+}
+
+/** L3 — all spine slugs joined. Empty → "". */
+export function curriculumSlugsJoined(): string {
+  return listCurriculumSlugs().join(',');
+}
+
+/** L3 — paths with content joined. Empty → "". */
+export function pathsWithContentJoined(): string {
+  return listPathsWithContent().join(',');
+}
+
+/** L3 — kinds with content joined. Empty → "". */
+export function kindsWithContentJoined(): string {
+  return listKindsWithContent().join(',');
+}
+
+/** L3 — path count with content label. */
+export function pathCountWithContentLabel(): string {
+  return String(pathCountWithContent());
+}
+
+/** L3 — kind count with content label. */
+export function kindCountWithContentLabel(): string {
+  return String(kindCountWithContent());
+}
+
+/** L3 — empty path count label. */
+export function emptyPathCountLabel(): string {
+  return String(emptyPathCount());
+}
+
+/** L3 — first curriculum slug label or empty. */
+export function firstCurriculumSlugLabel(): string {
+  return firstCurriculumSlug() ?? '';
+}
+
+/** L3 — kind count snapshot. */
+export function curriculumKindSnapshot(): {
+  readonly lesson: number;
+  readonly playbook: number;
+  readonly workbook: number;
+  readonly total: number;
+} {
+  return {
+    lesson: lessonCount(),
+    playbook: playbookCount(),
+    workbook: workbookCount(),
+    total: curriculumSpineSize(),
+  };
+}
+
+/** L3 — true when kind counts sum to spine size. */
+export function curriculumKindCountsConsistent(): boolean {
+  const s = curriculumKindSnapshot();
+  return s.total === s.lesson + s.playbook + s.workbook;
+}
+
+/** L3 — path content snapshot counts. */
+export function curriculumPathSnapshot(): {
+  readonly foundations: number;
+  readonly markets: number;
+  readonly builder: number;
+  readonly sovereign: number;
+} {
+  return {
+    foundations: foundationsItemCount(),
+    markets: marketsItemCount(),
+    builder: builderItemCount(),
+    sovereign: sovereignItemCount(),
+  };
+}
+
+/** L3 — true when path counts sum to spine size. */
+export function curriculumPathCountsConsistent(): boolean {
+  const s = curriculumPathSnapshot();
+  return curriculumSpineSize() === s.foundations + s.markets + s.builder + s.sovereign;
+}
+
+/** L3 — catalog board headline. */
+export function catalogBoardHeadline(): {
+  readonly spine: number;
+  readonly lessons: number;
+  readonly playbooks: number;
+  readonly workbooks: number;
+  readonly pathsWithContent: number;
+  readonly emptyPaths: number;
+  readonly nonEmpty: boolean;
+} {
+  return {
+    spine: curriculumSpineSize(),
+    lessons: lessonCount(),
+    playbooks: playbookCount(),
+    workbooks: workbookCount(),
+    pathsWithContent: pathCountWithContent(),
+    emptyPaths: emptyPathCount(),
+    nonEmpty: catalogSpineNonEmpty(),
+  };
+}
+
+/** L3 — one slug card. Missing → null kind. */
+export function curriculumSlugCard(slug: string): {
+  readonly slug: string;
+  readonly present: boolean;
+  readonly kind: CurriculumKind | null;
+  readonly isLesson: boolean;
+  readonly isPlaybook: boolean;
+  readonly isWorkbook: boolean;
+} {
+  const s = slug.trim();
+  const item = getCurriculumItem(s);
+  if (!item) {
+    return { slug: s, present: false, kind: null, isLesson: false, isPlaybook: false, isWorkbook: false };
+  }
+  return {
+    slug: s,
+    present: true,
+    kind: item.kind,
+    isLesson: item.kind === 'lesson',
+    isPlaybook: item.kind === 'playbook',
+    isWorkbook: item.kind === 'workbook',
+  };
+}
+
+/** L3 — path content card. */
+export function curriculumPathCard(path: CurriculumPath): {
+  readonly path: CurriculumPath;
+  readonly count: number;
+  readonly hasContent: boolean;
+} {
+  return {
+    path,
+    count: countCurriculumByPath(path),
+    hasContent: hasCurriculumPath(path),
+  };
+}
+
+/** L3 — true when slug card is present. */
+export function curriculumSlugPresent(slug: string): boolean {
+  return curriculumSlugCard(slug).present;
+}
+
+/** L3 — search spine slugs by substring. Empty needle → []. */
+export function searchCurriculumSlugs(needle: string): readonly string[] {
+  const n = needle.trim();
+  if (!n) return [];
+  return listCurriculumSlugs().filter((s) => s.includes(n));
+}
+
+/** L3 — search spine titles by substring. Empty needle → []. */
+export function searchCurriculumTitles(needle: string): readonly string[] {
+  const n = needle.trim().toLowerCase();
+  if (!n) return [];
+  return SPINE.filter((item) => item.title.toLowerCase().includes(n))
+    .map((item) => item.title)
+    .sort();
+}
+
+/** L3 — slug cards for one kind. None → []. */
+export function listCurriculumSlugCardsByKind(kind: CurriculumKind): readonly {
+  readonly slug: string;
+  readonly present: boolean;
+  readonly kind: CurriculumKind | null;
+  readonly isLesson: boolean;
+  readonly isPlaybook: boolean;
+  readonly isWorkbook: boolean;
+}[] {
+  return listCurriculumSlugsByKind(kind).map((slug) => curriculumSlugCard(slug));
+}
+
+/** L3 — path cards for all Blueprint paths. */
+export function listAllCurriculumPathCards(): readonly {
+  readonly path: CurriculumPath;
+  readonly count: number;
+  readonly hasContent: boolean;
+}[] {
+  return CURRICULUM_PATHS.map((path) => curriculumPathCard(path));
+}
+
+/** L3 — page spine slugs (sorted). Empty → []. */
+export function pageCurriculumSlugs(options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = listCurriculumSlugs();
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — page lesson slugs. Empty → []. */
+export function pageLessonSlugs(options: { offset?: number; limit?: number } = {}): readonly string[] {
+  const all = listLessonSlugs();
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  return all.slice(offset, offset + limit);
+}
+
+/** L3 — spine page count. */
+export function curriculumSpinePageCount(pageSize: number): number {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return 0;
+  const n = curriculumSpineSize();
+  if (n === 0) return 0;
+  return Math.ceil(n / Math.floor(pageSize));
+}
+
+/** L3 — reverse sorted spine slugs. Empty → []. */
+export function reverseCurriculumSlugs(): readonly string[] {
+  return [...listCurriculumSlugs()].reverse();
+}
+
+/** L3 — slugs only in kind A vs kind B sets. */
+export function curriculumSlugsOnlyInKind(kind: CurriculumKind, excludeKind: CurriculumKind): readonly string[] {
+  const exclude = new Set(listCurriculumSlugsByKind(excludeKind));
+  return listCurriculumSlugsByKind(kind).filter((s) => !exclude.has(s));
+}
+
+/** L3 — path count delta (left path - right path). */
+export function curriculumPathCountDelta(left: CurriculumPath, right: CurriculumPath): number {
+  return countCurriculumByPath(left) - countCurriculumByPath(right);
+}
+
+/** L3 — true when two kinds have same count. */
+export function curriculumKindsSameSize(a: CurriculumKind, b: CurriculumKind): boolean {
+  return countCurriculumByKind(a) === countCurriculumByKind(b);
+}
+
+/** L3 — true when two paths have same count. */
+export function curriculumPathsSameSize(a: CurriculumPath, b: CurriculumPath): boolean {
+  return countCurriculumByPath(a) === countCurriculumByPath(b);
+}
+
+/** L3 — safe page spine slugs with clamped bounds. */
+export function safePageCurriculumSlugs(offset: number, limit: number): readonly string[] {
+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];
+  const all = listCurriculumSlugs();
+  const o = Math.max(0, Math.min(all.length, Math.floor(offset)));
+  const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));
+  return all.slice(o, o + l);
+}
+
+/** L3 — clamp curriculum page index. */
+export function clampCurriculumPageIndex(pageIndex: number, pageSize: number): number {
+  const pages = curriculumSpinePageCount(pageSize);
+  if (pages === 0) return 0;
+  if (!Number.isFinite(pageIndex)) return 0;
+  return Math.max(0, Math.min(pages - 1, Math.floor(pageIndex)));
+}
+
+/** L3 — spine slugs at clamped page. */
+export function curriculumSlugsAtPage(pageIndex: number, pageSize: number): readonly string[] {
+  if (!Number.isFinite(pageSize) || pageSize < 1) return [];
+  const idx = clampCurriculumPageIndex(pageIndex, pageSize);
+  const size = Math.floor(pageSize);
+  return safePageCurriculumSlugs(idx * size, size);
+}
+
+/** L3 — true when curriculum page is valid. */
+export function isValidCurriculumPage(pageIndex: number, pageSize: number): boolean {
+  const pages = curriculumSpinePageCount(pageSize);
+  if (pages === 0) return false;
+  if (!Number.isFinite(pageIndex)) return false;
+  const i = Math.floor(pageIndex);
+  return i >= 0 && i < pages;
+}
+
+/** L3 — export lines: slug,kind,path. Empty → []. */
+export function curriculumExportLines(): readonly string[] {
+  return listCurriculumSlugs().map((slug) => {
+    const item = getCurriculumItem(slug)!;
+    return `${item.slug},${item.kind},${item.path}`;
+  });
+}
+
+/** L3 — curriculum export header. */
+export function curriculumExportHeader(): string {
+  return 'slug,kind,path';
+}
+
+/** L3 — full curriculum export text. */
+export function curriculumExportText(): string {
+  return [curriculumExportHeader(), ...curriculumExportLines()].join('\n');
+}
+
+/** L3 — export line count including header. */
+export function curriculumExportLineCount(): number {
+  return 1 + curriculumSpineSize();
+}
+
+/**
+ * L3 — parse "slug,kind,path". Invalid → null.
+ */
+export function parseCurriculumExportLine(
+  line: string,
+): { readonly slug: string; readonly kind: CurriculumKind; readonly path: CurriculumPath } | null {
+  const t = line.trim();
+  if (!t || t === curriculumExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 3) return null;
+  const slug = parts[0]!.trim();
+  const kind = parts[1]!.trim();
+  const path = parts[2]!.trim();
+  if (!slug) return null;
+  if (kind !== 'lesson' && kind !== 'playbook' && kind !== 'workbook') return null;
+  if (path !== 'foundations' && path !== 'markets' && path !== 'builder' && path !== 'sovereign') return null;
+  return { slug, kind, path };
+}
+
+/** L3 — count valid curriculum export data lines. */
+export function countCurriculumExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => parseCurriculumExportLine(l))
+    .filter((r) => r !== null).length;
+}
+
+/** L3 — true when curriculum export has header. */
+export function curriculumExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === curriculumExportHeader();
+}
+
+/** L3 — round-trip curriculum export line count. */
+export function curriculumExportRoundTripOk(): boolean {
+  return curriculumExportLineCount() === 1 + countCurriculumExportDataLines(curriculumExportText());
+}
+
+/** L3 — one-line catalog status. */
+export function catalogStatusLine(): string {
+  const h = catalogBoardHeadline();
+  return `spine=${h.spine} lessons=${h.lessons} playbooks=${h.playbooks} workbooks=${h.workbooks}`;
+}
+
+/** L3 — true when catalog status shows empty spine. */
+export function catalogStatusLineIsEmpty(): boolean {
+  return catalogStatusLine().startsWith('spine=0');
+}
+
+/** L3 — detailed catalog status with paths. */
+export function catalogStatusLineDetailed(): string {
+  const h = catalogBoardHeadline();
+  return `${catalogStatusLine()} paths=${h.pathsWithContent} emptyPaths=${h.emptyPaths}`;
+}
+
+/** L3 — token count on detailed catalog status. */
+export function catalogStatusLineTokenCount(): number {
+  return catalogStatusLineDetailed().split(/\s+/).filter(Boolean).length;
+}
+
+/** L3 — parse catalog status line. Invalid → null. */
+export function parseCatalogStatusLine(line: string): {
+  readonly spine: number;
+  readonly lessons: number;
+  readonly playbooks: number;
+  readonly workbooks: number;
+} | null {
+  const m = line.trim().match(/^spine=(\d+) lessons=(\d+) playbooks=(\d+) workbooks=(\d+)$/);
+  if (!m) return null;
+  return { spine: Number(m[1]), lessons: Number(m[2]), playbooks: Number(m[3]), workbooks: Number(m[4]) };
+}
+
+/** L3 — true when status line matches live catalog. */
+export function catalogStatusLineMatches(): boolean {
+  const p = parseCatalogStatusLine(catalogStatusLine());
+  if (!p) return false;
+  return (
+    p.spine === curriculumSpineSize() && p.lessons === lessonCount() && p.playbooks === playbookCount() && p.workbooks === workbookCount()
+  );
+}
+
+/** L3 — parse detailed catalog status. Invalid → null. */
+export function parseCatalogStatusLineDetailed(line: string): {
+  readonly spine: number;
+  readonly lessons: number;
+  readonly playbooks: number;
+  readonly workbooks: number;
+  readonly paths: number;
+  readonly emptyPaths: number;
+} | null {
+  const m = line.trim().match(/^spine=(\d+) lessons=(\d+) playbooks=(\d+) workbooks=(\d+) paths=(\d+) emptyPaths=(\d+)$/);
+  if (!m) return null;
+  return {
+    spine: Number(m[1]),
+    lessons: Number(m[2]),
+    playbooks: Number(m[3]),
+    workbooks: Number(m[4]),
+    paths: Number(m[5]),
+    emptyPaths: Number(m[6]),
+  };
+}
+
+/** L3 — true when kinds sum to spine. */
+export function catalogStatusLineConsistent(line: string): boolean {
+  const p = parseCatalogStatusLine(line);
+  if (!p) return false;
+  return p.spine === p.lessons + p.playbooks + p.workbooks;
+}

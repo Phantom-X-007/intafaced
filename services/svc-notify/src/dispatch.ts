@@ -4,6 +4,7 @@ import { normaliseLocale, renderNotification } from './channels/render.js';
 import type { ChannelTarget, DeliveryRecord, DeliveryStore, TargetStore } from './channel-store.js';
 import type { Notification } from './store.js';
 import { withNotifySpan } from './tracing.js';
+import { EMPTY_MUTE_PREFS, isChannelMuted, type ChannelMutePrefs, type MuteableChannel } from './preferences/mute.js';
 
 /**
  * FAN-OUT.
@@ -17,7 +18,7 @@ import { withNotifySpan } from './tracing.js';
  *    consumer would each hold their own set and each send.
  *
  * 2. A CHANNEL THAT DID NOT DELIVER MUST NOT READ AS DELIVERED. Every outcome
- *    is written back: delivered, refused with a code, failed with the detail.
+ *    is written back: accepted, refused with a code, failed with the detail.
  *    There is no path through this file where a message is dropped and nothing
  *    is written.
  *
@@ -25,7 +26,7 @@ import { withNotifySpan } from './tracing.js';
  *    report says whether the caller should let the bus redeliver. Nak'ing a
  *    permanently broken address would burn the redelivery budget of every other
  *    channel on the same message and eventually park a notification that three
- *    channels delivered perfectly.
+ *    other channels handled perfectly.
  *
  * WHICH CHANNELS ARE TRIED
  *
@@ -46,11 +47,16 @@ export interface DispatchOptions {
   readonly maxAttempts: number;
   /** Operator switch for everything that leaves the platform. The inbox is unaffected. */
   readonly outOfAppEnabled: boolean;
+  /**
+   * Optional mute prefs. When absent, nothing is muted (legacy behaviour).
+   * Critical severity never mutes — see preferences/mute.ts.
+   */
+  readonly mutePrefsOf?: (userId: string) => Promise<ChannelMutePrefs> | ChannelMutePrefs;
 }
 
 export interface ChannelOutcome {
   readonly channel: ChannelId;
-  readonly status: 'delivered' | 'refused' | 'failed' | 'abandoned' | 'already_delivered';
+  readonly status: 'accepted' | 'refused' | 'failed' | 'abandoned' | 'already_accepted';
   readonly code: RefusalCode | null;
   readonly detail: string | null;
   /** True when the bus should redeliver so this channel gets another go. */
@@ -104,12 +110,21 @@ export class NotificationDispatcher {
             continue;
           }
 
+          // Preference mute (info/action only). Critical always attempts.
+          if (this.options.mutePrefsOf) {
+            const prefs = await this.options.mutePrefsOf(notification.userId);
+            if (isChannelMuted(prefs ?? EMPTY_MUTE_PREFS, channel as MuteableChannel, notification.severity)) {
+              outcomes.push(await this.refuse(notification, channel, 'channel.muted'));
+              continue;
+            }
+          }
+
           outcomes.push(await this.attempt(notification, channel, target.address, target.locale));
         }
 
         const retry = outcomes.some((o) => o.retryable);
         span.setAttribute('intafaced.notify.channels_attempted', outcomes.length);
-        span.setAttribute('intafaced.notify.channels_delivered', outcomes.filter((o) => o.status === 'delivered').length);
+        span.setAttribute('intafaced.notify.channels_accepted', outcomes.filter((o) => o.status === 'accepted').length);
         span.setAttribute('intafaced.notify.dispatch_retry', retry);
 
         return { notificationId: notification.id, outcomes, retry };
@@ -154,8 +169,8 @@ export class NotificationDispatcher {
         idempotencyKey: `${notification.id}:${channel}`,
       });
 
-      await this.deliveries.settle({ id: claim.id, status: 'delivered', reference: receipt.reference, attempted: true });
-      return { channel, status: 'delivered', code: null, detail: null, retryable: false };
+      await this.deliveries.settle({ id: claim.id, status: 'accepted', reference: receipt.reference, attempted: true });
+      return { channel, status: 'accepted', code: null, detail: null, retryable: false };
     } catch (err) {
       if (err instanceof ChannelRefusal) {
         // The adapter declined before doing anything — no credentials, typically.
@@ -184,7 +199,7 @@ export class NotificationDispatcher {
 
 /**
  * A claim we did not get. Never an error: the common case is a redelivery of
- * something already delivered, which is the guard doing its job.
+ * something already accepted, which is the guard doing its job.
  *
  * The outcome reports the row's OWN status rather than a status inferred from
  * why the claim was refused. A row that was abandoned must not come back as
@@ -193,17 +208,17 @@ export class NotificationDispatcher {
  */
 function fromExistingClaim(
   channel: ChannelId,
-  reason: 'already_delivered' | 'terminal' | 'exhausted',
+  reason: 'already_accepted' | 'terminal' | 'exhausted',
   record: DeliveryRecord,
 ): ChannelOutcome {
-  if (reason === 'already_delivered') {
-    return { channel, status: 'already_delivered', code: null, detail: null, retryable: false };
+  if (reason === 'already_accepted') {
+    return { channel, status: 'already_accepted', code: null, detail: null, retryable: false };
   }
   return {
     channel,
     // 'pending' cannot reach here — claim only blocks on terminal or exhausted —
     // but the map is total so a future status cannot slip through as `undefined`.
-    status: record.status === 'pending' ? 'failed' : record.status === 'delivered' ? 'already_delivered' : record.status,
+    status: record.status === 'pending' ? 'failed' : record.status === 'accepted' ? 'already_accepted' : record.status,
     code: record.refusalCode,
     detail: record.detail,
     retryable: false,

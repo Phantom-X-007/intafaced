@@ -1,16 +1,31 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    # Documentation cannot break a typecheck, a test or a doctrine gate, and a
-    # full run is four parallel Linux jobs. On 30 July eight docs-only PRs each
-    # burned the full matrix -- roughly 90 billable minutes spent formatting
-    # Markdown, out of a 2,000-minute monthly pool. The gates that DO apply to
-    # docs (brand-scan, tracker) are cheap and still run on any PR touching code.
-    paths-ignore: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+  # THRIFT 2026-08-04: no push:main full matrix.
+  # Re-running 4 jobs (~11–12 min billable sum) on every merge doubled thrash-day
+  # spend. PR CI is the merge seal; workflow_dispatch re-checks main if needed.
+  #
+  # Documentation cannot break a typecheck, a test or a doctrine gate, and a
+  # full run is four parallel Linux jobs. On 30 July eight docs-only PRs each
+  # burned the full matrix -- roughly 90 billable minutes spent formatting
+  # Markdown, out of a 2,000-minute monthly pool. The gates that DO apply to
+  # docs (brand-scan, tracker) are cheap and still run on any PR touching code.
+  #
+  # ONE MARKDOWN FILE IS NOT DOCUMENTATION. INTAFACED_DEFINITIVE_BUILD.md is
+  # the law, and coverage-check reads it: a chapter appearing there is exactly
+  # the event that gate exists to catch. Under a blanket `**/*.md` ignore,
+  # adding §39 would skip CI entirely and no gate would ever see it — which is
+  # a fair description of how §27–§37 arrived with nobody noticing. Negation
+  # needs `paths` rather than `paths-ignore`; the last matching pattern wins.
   pull_request:
-    paths-ignore: ['docs/**', '**/*.md', 'NOTICE', 'LICENSE']
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - '!NOTICE'
+      - '!LICENSE'
+      - INTAFACED_DEFINITIVE_BUILD.md
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,48 +39,78 @@ jobs:
     name: Doctrine gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      # fetch-depth: 0 — the value-gate step at the end of this job needs
+      # `origin/main` and ten ancestor subjects. The default is 1, which gives
+      # it neither, and a gate that can see nothing must never print clean.
+      # 49 MiB of pack for 818 commits; the pnpm install below costs more.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # These run first and independently: a branding leak or a custody
-      # violation is not something to discover after a ten-minute test run.
-      - name: Brand scan (Doctrine §0.7)
-        run: pnpm scan:brand
-      - name: Custody scan (Doctrine §16.10)
-        run: pnpm scan:custody
-      - name: Vendor shell residue (mass-credit / CORS *)
-        run: pnpm scan:vendor-shell
-      - name: Vendor Java money mutators (dual-book Option B)
-        run: pnpm scan:vendor-java-money
-      - name: Dual-book door-kill registration (Architect A1)
-        run: pnpm scan:dual-book-door
-      # Cheap, needs no database, and catches at review time the mistake that
-      # otherwise only shows up as someone else's `main` going red.
-      - name: Test DB isolation scan
-        run: pnpm scan:test-db
-      - name: Workspace sync
-        run: pnpm scan:workspace
-      - name: Migration check (§14)
-        run: pnpm db:check
+      # ONE STEP, ON PURPOSE — and this is the point of the change.
+      #
+      # This was eleven hand-written steps. `pnpm verify` kept its own separate
+      # list in package.json, and the two were maintained by nobody in
+      # particular. They drifted: `scan:dual-book-door-paths` and `scan:test-db`
+      # ran here and nowhere local, so an engineer could run `pnpm verify`
+      # green, push, and land red on a gate they had no local way of running.
+      # AGENTS.md tells every human and every agent that verify is the
+      # pre-flight check. That promise only holds if verify runs what this job
+      # runs, and the only way to guarantee that is one list.
+      #
+      # `tooling/ci/gates.mjs` is that list. It fails if this workflow stops
+      # calling it, and it fails if a scan appears in tooling/ci/ that neither
+      # the gate list nor the documented exclusions claim — which is how
+      # i18n-scan.mjs sat wired to nothing for weeks. Individual scans keep
+      # their `pnpm scan:*` scripts for running one at a time.
+      #
+      # It also de-duplicates: six of these scans used to run twice per CI run,
+      # once here and again inside dod-gate.mjs in the `dod` job below.
+      #
+      # Still first, still its own job: a branding leak or a custody violation
+      # is not something to discover after a ten-minute test run. The runner
+      # does not stop at the first failure, so every broken gate shows up in one
+      # run rather than one per push.
+      - name: Doctrine gates (the same list `pnpm verify` runs)
+        run: pnpm gates
 
-      # A tracker that drifts from the code is worse than no tracker. This
-      # fails if docs/TRACKER.md is stale, or if a feature claims "done" while
-      # the service it lives in does not exist.
-      - name: Tracker is honest
-        run: pnpm tracker:check
+      # THE STAMP-MILL GATE, CODE HALF — and deliberately NOT inside gates.mjs.
+      #
+      # It lived only on `docs-format.yml`, which fires only on markdown. Its
+      # blocking condition also led with `docsOnly`, so subject similarity was
+      # never evaluated on anything that touched source. #832–#876 — forty-five
+      # PRs, same title shape, source + tests + one slice doc each — walked
+      # straight through both halves of that hole. Wiring it here closes the
+      # second half: a PR with no markdown in it never reaches docs-format at
+      # all, so a mill that simply stopped writing slice docs would be invisible.
+      #
+      # NOT a gates.mjs entry, for the reason its NOT_GATES note has always
+      # given and which is now doubly true: it needs a CURRENT `origin/main` and
+      # real ancestry, which a laptop `pnpm verify` cannot promise, and failing
+      # someone's local verify because their fetch is a day old is how a gate
+      # gets deleted. `pnpm value-gate:self-test` is the local pre-flight.
+      #
+      # Warn-before-block is inside the rule, not in this flag: a first
+      # near-duplicate warns in the log and exits 0; the fourth consecutive one
+      # blocks. Escape is an auditable `Serial-Work:` commit trailer.
+      - name: value gate (code stamp-mill)
+        env:
+          VALUE_GATE_STRICT: '1'
+        run: node tooling/ci/value-gate.mjs
 
   build:
     name: Typecheck & build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
           cache: pnpm
@@ -141,9 +186,9 @@ jobs:
       INDEXER_REORG_RPC_URL: http://127.0.0.1:8546
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
           cache: pnpm
@@ -247,14 +292,29 @@ jobs:
 
       - run: pnpm test
 
+      # The backstop. REQUIRE_POSTGRES / REQUIRE_EVM_CHAIN make the shared probes
+      # throw, which turns most missing infrastructure into a red suite before
+      # this step runs. What they cannot cover is a suite whose own required-gate
+      # is narrower than the run's — svc-pay's crypto rail gates on
+      # REQUIRE_PAY_EVM, which is not set here, so until now it could skip on CI
+      # and be counted as a pass. This reads the journal every probe writes and
+      # fails the job when something did not execute.
+      #
+      # `always()` because a red suite is the moment you most want to know how
+      # much of the rest was real — the exact question the agent who reported
+      # "92 successful, 92 total" could not answer.
+      - name: Every infrastructure-backed suite actually ran
+        if: always()
+        run: node tooling/ci/infra-verdict.mjs
+
   dod:
     name: Definition of Done
     runs-on: ubuntu-latest
     needs: [gates, build, test]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
           cache: pnpm

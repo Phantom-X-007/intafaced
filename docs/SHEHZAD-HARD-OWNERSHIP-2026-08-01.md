@@ -1,3 +1,11 @@
+# SUPERSEDED FOR SCOPE (2026-08-04)
+
+**Who may code / what Shehzad owns now:** [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) + [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) + [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md).
+
+This file remains as **historical** Board Clear mountain detail (M1–M7). **Do not** treat M1/M3–M7 as human-locked for agents anymore. Protocol (old M2) + INTACHAIN continue under the blockchain board.
+
+---
+
 # Shehzad hard ownership — big spine mountains · 2026-08-01
 
 **Status:** BINDING on main · re-audit after Board Clear GO started  
@@ -95,7 +103,7 @@ These are **product mountains**, not chores. Each can occupy a strong senior for
 - **pay.public-api** REST + webhooks + sandbox discipline
 - **Crypto rail regression:** #226 path must stay green
 
-**Done when:** Board Clear `pay.gateway` bar met (card required, sandbox OK) **and** you have either shipped or honestly §13-scoped the adjacent pay.* rows you touched.  
+**Done when:** Board Clear `pay.gateway` bar met (card required, sandbox OK) **and** you have either shipped or honestly §13-scoped the adjacent pay.\* rows you touched.  
 **Not yours:** prod PSP keys, go-live yes, shell retheme.
 
 ---

@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, createTranslator, isSupportedLocale, type ParamValue } from '@intafaced/i18n';
+import { DEFAULT_LOCALE, createTranslator, hasCatalog, type ParamValue } from '@intafaced/i18n';
 import type { Notification } from '../store.js';
 
 /**
@@ -54,9 +54,23 @@ function toParamValues(params: Record<string, unknown>): Record<string, ParamVal
   return out;
 }
 
-/** Fall back to the default locale rather than handing `Intl` something it will throw on. */
+/**
+ * The locale this message is actually IN — not the one the row asked for.
+ *
+ * This used to accept any code in `SUPPORTED_LOCALES`, which is 28 of them, and
+ * hand it straight to the adapter as `locale:`. Exactly one of those 28 has a
+ * catalog. So a target row saying `locale: 'ar'` produced an English email
+ * stamped Arabic, and a gateway that honours the field would mirror the layout
+ * right-to-left around left-to-right words — on a margin call, which is the
+ * worst message we send to be hard to read.
+ *
+ * Asking `hasCatalog` instead of `isSupportedLocale` closes that. It is also
+ * self-maintaining: the day an Arabic catalog lands, this returns `'ar'` again
+ * with no code change here, which is the "translation files, not refactors"
+ * promise in §9 actually holding.
+ */
 export function normaliseLocale(locale: string | null | undefined): string {
-  return locale && isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
+  return locale && hasCatalog(locale) ? locale : DEFAULT_LOCALE;
 }
 
 export function renderNotification(notification: Notification, locale: string): RenderedCopy {

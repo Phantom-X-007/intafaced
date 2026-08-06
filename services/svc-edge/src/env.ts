@@ -32,7 +32,9 @@ const schema = baseEnvSchema
        */
       JWT_ACCESS_SECRET: z.string().min(32),
       JWT_ISSUER: z.string().default('intafaced'),
-      JWT_AUDIENCE: z.string().default('intafaced'),
+      // Must match identity / platform default (`intafaced.api`) or all bearer
+      // auth (including operator kill) fails closed with opaque 401s.
+      JWT_AUDIENCE: z.string().default('intafaced.api'),
       JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
 
       /**
@@ -42,6 +44,26 @@ const schema = baseEnvSchema
        * unknown, so a deployment that forgets to configure this is restrictive
        * rather than permissive. A wrong-but-open default would let a caller
        * reach modules their actual jurisdiction forbids.
+       *
+       * ── READ THIS BEFORE TRUSTING ANY REGION-BASED CONTROL ─────────────────
+       * IT IS ONE CONSTANT FOR EVERY REQUEST. The value is read once and stamped
+       * onto the principal of every caller in the platform (`index.ts`, the
+       * `exchangePrincipal` call). No geo-IP resolution exists anywhere in this
+       * repo — no `cf-ipcountry`, no `x-vercel-ip-country`, no provider lookup.
+       *
+       * So sanctions screening and the jurisdiction matrix both work, and both
+       * evaluate THE SAME SINGLE REGION for all traffic. A counsel-supplied
+       * `INTAFACED_SANCTIONS_REGIONS` will never meet a real caller's actual
+       * jurisdiction; it can only ever match if that jurisdiction happens to be
+       * the one configured here. `assertScreeningConfigured()` passing at boot
+       * means A LIST WAS SUPPLIED. It does not mean traffic is screened.
+       *
+       * Declared as §13 `socket.geo-region-resolution` (tooling/tracker/features.mjs).
+       * Closing it is not a one-line header read: region must never come from
+       * the caller — one who could set it would choose its own regulator — so it
+       * needs a trusted upstream geo header, a stated precedence, proof the
+       * header cannot be forged by reaching origin directly, and a fail-closed
+       * answer when it is absent.
        */
       DEFAULT_REGION: z.string().length(2).default('XX'),
 
@@ -69,6 +91,52 @@ const schema = baseEnvSchema
        * the platform healthy.
        */
       LEDGER_URL: z.string().url().optional(),
+
+      /**
+       * Optional path for kill-switch restart durability (JSON). Empty = memory
+       * only. Multi-replica share still §13 residual — file is per process host.
+       */
+      EDGE_KILL_STATE_PATH: z.string().default('.data/edge-kill-state.json'),
+
+      /**
+       * Request throttle (see `hardening.ts`). On by default: the front door
+       * proxies to svc-identity, so "off" means unlimited password attempts.
+       */
+      EDGE_RATE_LIMIT_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
+       * Requests per window per key, per replica.
+       *
+       * 300/minute is chosen to be invisible to a person and to a terminal
+       * polling depth, while making a credential-stuffing run cost real time.
+       * It is not a capacity limit and must not be tuned as one — counters are
+       * in-process, so the fleet's true allowance is this times the replica
+       * count.
+       */
+      EDGE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(300),
+      EDGE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).max(3_600_000).default(60_000),
+
+      /**
+       * Who may set `X-Forwarded-For`, passed straight to Fastify's `trustProxy`.
+       *
+       * UNSET IS THE SAFE DEFAULT AND THE USELESS ONE, and both halves matter.
+       * Trusting the header unconditionally lets any caller forge their own
+       * identity and walk around the throttle one fake address at a time. Not
+       * trusting it behind a proxy collapses every caller onto the proxy's
+       * address, so the limit becomes one shared global budget — a control that
+       * converts one attacker into an outage for everybody.
+       *
+       * There is no default that is right for both topologies, so there is no
+       * clever default: state the proxy, or be told at boot what you actually
+       * got (`rateLimitSummary`).
+       *
+       * Accepts what Fastify accepts — `true`, a hop count, an IP, or a
+       * comma-separated CIDR list.
+       */
+      EDGE_TRUST_PROXY: z.string().optional(),
     }),
   );
 

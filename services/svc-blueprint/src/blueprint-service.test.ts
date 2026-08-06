@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
-import { assertTestDatabase } from '@intafaced/db';
+import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { CARD_DIMENSIONS, cardRenderSchema, type BlueprintProfile, type CardRaster, type OnboardInput } from '@intafaced/contracts';
@@ -36,19 +36,21 @@ const USER_A = uuid(101);
 const USER_B = uuid(102);
 const USER_C = uuid(103);
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 });
-  }
-}
-
-const available = await reachable();
+/**
+ * The Postgres probe comes from `@intafaced/db` on purpose.
+ *
+ * This file used to open its own two-line `reachable()`. That helper swallowed
+ * every error and returned `false` regardless of `CI` or `REQUIRE_POSTGRES=1`,
+ * so on CI — where an unreachable database is supposed to be a hard failure —
+ * this money suite would have skipped in silence and been counted as a pass.
+ * Five suites carried the same private probe and the same hole.
+ *
+ * `postgresAvailable` is the one probe that honours `postgresRequired()`, and it
+ * journals its decision so `pnpm verify` can name what did not run instead of
+ * letting turbo's "N successful" imply that everything did.
+ * (`tooling/ci/skip-honesty-scan.mjs` fails a build that re-adds a private probe.)
+ */
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-blueprint (Postgres unavailable — start docker compose)', () => {
@@ -987,6 +989,24 @@ if (!available) {
 
       await service.card({ userId: USER_A, size: 'portrait' });
       expect((await service.get({ userId: USER_A }))?.cardAssetUrl).toBe(rendered.url);
+    });
+
+    it('Stage-1 shareMode is svg when raster is unavailable (product share artifact)', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const card = await blueprint.card({ userId: USER_A, size: 'portrait' });
+      expect(card.shareMode).toBe('svg');
+      expect(card.raster.status).toBe('unavailable');
+      expect(card.svg.length).toBeGreaterThan(0);
+      expect(cardRenderSchema.safeParse(card).success).toBe(true);
+    });
+
+    it('Stage-1 shareMode is png when raster rendered', async () => {
+      const service = withRenderer(new StubRenderer(rendered));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const card = await service.card({ userId: USER_A, size: 'portrait' });
+      expect(card.shareMode).toBe('png');
+      expect(card.raster.status).toBe('rendered');
+      expect(cardRenderSchema.safeParse(card).success).toBe(true);
     });
 
     it('is stable: the same Blueprint yields a byte-identical card', async () => {

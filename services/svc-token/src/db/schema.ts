@@ -29,9 +29,23 @@ export const stakeStatusEnum = token.enum('stake_status', ['pending', 'active', 
 export const proposalKindEnum = token.enum('proposal_kind', ['listing', 'fee_param', 'curriculum', 'grant']);
 
 /**
- * §4.3 leaves the proposal status open; it is an enum rather than free text
- * because the tally job and the executor both branch on it, and a typo'd status
- * would silently make a passed proposal un-executable.
+ * §4.3 leaves the proposal status open; it is an enum rather than free text so
+ * a future tally job and executor can branch on it without a typo silently
+ * making a passed proposal un-executable.
+ *
+ * READ THIS BEFORE BELIEVING THE ENUM. Four of these six values are declared and
+ * never written. Nothing in this repo issues `UPDATE token.proposals`: the only
+ * status write is the draft/open choice made once at INSERT
+ * (token-service.ts:950). There is no tally job, no close job, no quorum, no
+ * threshold and no executor, so no proposal has ever moved to `passed`,
+ * `rejected`, `executed` or `cancelled` — and none can. `draft` is likewise
+ * terminal: a proposal opened with a future `opens_at` can never become `open`,
+ * so it can never be voted on.
+ *
+ * The enum is kept, rather than trimmed to the two reachable values, because
+ * the shape is §4.3's and the gap is a missing mechanism, not a wrong column.
+ * §13 socket `token.governance` (tooling/tracker/features.mjs) is the record of
+ * that decision and of why the outcome half is an owner call, not an agent one.
  */
 export const proposalStatusEnum = token.enum('proposal_status', ['draft', 'open', 'passed', 'rejected', 'executed', 'cancelled']);
 
@@ -103,7 +117,12 @@ export const stakes = token.table(
   (t) => [
     /** The `stakeOf` read path: every gate in the OS hits this index. */
     index('stakes_user_status_idx').on(t.userId, t.status),
-    /** The weekly real-yield job sweeps active stakes to distribute pro-rata. */
+    /**
+     * The pro-rata sweep over active stakes. §4.3 calls for a weekly job here;
+     * there is no such job — `distributeRevenue` runs only when an operator
+     * invokes it by hand (§13 socket `token.yield`). The index serves that
+     * manual path today and the job when it is built.
+     */
     index('stakes_status_idx').on(t.status),
     /** The unlock sweep asks "what matures next" — ordered by lock end. */
     index('stakes_unlocks_idx').on(t.unlocksAt),
@@ -136,11 +155,19 @@ export const emissionEpochs = token.table('emission_epochs', {
 });
 
 /**
- * One executed buyback-and-burn cycle (§4.3).
+ * One recorded burn cycle (§4.3 calls this buyback-and-burn).
  *
- * The flywheel's audit trail: structural, scheduled, and logged so the split
- * between burn and rewards is verifiable from outside. Each row must reconcile
- * against the ledger postings it caused (§4.4 exit criteria).
+ * WHAT A ROW ACTUALLY MEANS TODAY. §4.3 specifies "structural, scheduled" —
+ * a market-buy of revenue on the internal book, then a split. Neither half is
+ * built. `tokens_bought` is a figure an operator types into `recordBuyback`
+ * (router.ts:346), `revenue_total` is an unvalidated jsonb blob from the same
+ * caller, and the only ledger movement the write causes is the burn leg debited
+ * out of the rewards engine. Nothing is purchased, so a row here is an operator
+ * assertion with a burn attached, not evidence of buy pressure. §13 socket
+ * `token.buyback`.
+ *
+ * The columns still reconcile against the postings the burn caused (§4.4 exit
+ * criteria) — that part holds. What they do not evidence is a buyback.
  */
 export const buybackRuns = token.table(
   'buyback_runs',
@@ -197,7 +224,12 @@ export const proposals = token.table(
     createdAt: createdAt(),
   },
   (t) => [
-    /** The tally job's query: open proposals whose window has now closed. */
+    /**
+     * The query a tally job would run — open proposals whose window has closed.
+     * No such job exists (§13 socket `token.governance`), so nothing reads this
+     * index today. Kept because the index is right and the job is what is
+     * missing, not the shape.
+     */
     index('proposals_status_closes_idx').on(t.status, t.closesAt),
     index('proposals_kind_idx').on(t.kind),
   ],

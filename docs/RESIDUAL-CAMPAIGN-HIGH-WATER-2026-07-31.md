@@ -20,7 +20,7 @@ Use [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-
 | protocol.smart-accounts | ready      | Dev CREATE2 honesty                              | Prod/audit/bundler X           |
 | protocol.amm            | ready      | Factory + mint/swap                              | Audit · prod factory           |
 | trade.futures           | wip        | Full residual stack #291–#315                    | Live index · ops jobs ON       |
-| trade.mm-bot            | ready      | seedMarket + **job host OFF** (TRADE_MM_SEED_*)  | House fill · live mid oracle   |
+| trade.mm-bot            | ready      | seedMarket + **job host OFF** (TRADE*MM_SEED*\*) | House fill · live mid oracle   |
 | Phase 5                 | ready many | Shell honesty                                    | Full products                  |
 
 ## Merged residual (do not redo)

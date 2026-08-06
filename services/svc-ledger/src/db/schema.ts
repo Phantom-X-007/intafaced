@@ -1,4 +1,19 @@
-import { bigserial, boolean, index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  bigint,
+  bigserial,
+  boolean,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgSchema,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { amount, createdAt, tstz } from '@intafaced/db';
 
 /**
@@ -7,6 +22,71 @@ import { amount, createdAt, tstz } from '@intafaced/db';
  * This service's schema, and only this service's schema. Nothing else in the OS
  * reads these tables — Doctrine §0.6 and the per-service Postgres roles both
  * enforce it.
+ *
+ *
+ * THIS FILE IS A DESCRIPTION OF THE DATABASE, NOT A PROPOSAL FOR ONE.
+ *
+ * `drizzle/*.sql` is the source of truth: those files have run against real
+ * data and cannot be rewritten. This file must say the same thing they do —
+ * every column, every index, every CHECK.
+ *
+ * It had drifted, and the drift was loaded. Until this commit the file had no
+ * `purpose` column (added by 0001), still declared the pre-0001 identity index,
+ * declared `chain_tip.seq` as `bigserial` rather than the `bigint DEFAULT 0` the
+ * migration wrote, and declared none of the eight CHECK constraints.
+ *
+ * Diffing the drifted file against a snapshot of the database as it actually is
+ * emits 21 statements, 15 of which drop something. Measured with drizzle-kit
+ * 0.30.6 — not estimated, and reproduced in full rather than summarised,
+ * because a header that rounds its own evidence is not evidence:
+ *
+ *      1  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_non_negative_ck";
+ *      2  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_purpose_len_ck";
+ *      3  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_hold_purposed_ck";
+ *      4  ALTER TABLE "ledger"."accounts" DROP CONSTRAINT "accounts_owner_id_space_ck";
+ *      5  ALTER TABLE "ledger"."chain_tip" DROP CONSTRAINT "chain_tip_singleton_ck";
+ *      6  ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_positive_ck";
+ *      7  ALTER TABLE "ledger"."posting_freeze" DROP CONSTRAINT "posting_freeze_singleton_ck";
+ *      8  ALTER TABLE "ledger"."posting_freeze" DROP CONSTRAINT "posting_freeze_attributed_ck";
+ *      9  ALTER TABLE "ledger"."balance_snapshots" DROP CONSTRAINT "balance_snapshots_account_id_fkey";
+ *     10  ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_tx_id_fkey";
+ *     11  ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT "ledger_entries_account_id_fkey";
+ *     12  DROP INDEX "ledger"."accounts_identity_purpose_idx";
+ *     13  DROP INDEX "ledger"."accounts_hold_purpose_idx";
+ *     14  ALTER TABLE "ledger"."accounts" ALTER COLUMN "balance" SET DEFAULT '0';
+ *     15  ALTER TABLE "ledger"."chain_tip" ALTER COLUMN "seq" SET DATA TYPE bigserial;
+ *     16  ALTER TABLE "ledger"."chain_tip" ALTER COLUMN "seq" DROP DEFAULT;
+ *     17  ALTER TABLE "ledger"."balance_snapshots" ADD CONSTRAINT "balance_snapshots_account_id_accounts_id_fk" FOREIGN KEY …;
+ *     18  ALTER TABLE "ledger"."ledger_entries" ADD CONSTRAINT "ledger_entries_tx_id_ledger_tx_id_fk" FOREIGN KEY …;
+ *     19  ALTER TABLE "ledger"."ledger_entries" ADD CONSTRAINT "ledger_entries_account_id_accounts_id_fk" FOREIGN KEY …;
+ *     20  CREATE UNIQUE INDEX "accounts_identity_idx" ON "ledger"."accounts" ("owner_type","owner_id","asset_id","kind");
+ *     21  ALTER TABLE "ledger"."accounts" DROP COLUMN "purpose";
+ *
+ * Lines 1-8 are all eight of §4.2's database-level money invariants. Line 12 is
+ * the identity index that keeps two holds in one asset from unsecuring each
+ * other, and line 20 puts the pre-0001 four-column version back — which is the
+ * commingled-hold bug, restored. Line 21 drops the column `assertPurposedHolds`
+ * and `accounts_hold_purposed_ck` are both keyed on. All of it removed by
+ * someone doing nothing more reckless than regenerating a migration.
+ *
+ * Lines 9-11 and 17-19 are the same three foreign keys dropped and immediately
+ * re-added under drizzle's default names — no invariant changes, but each
+ * re-add revalidates the whole journal table, so the "harmless rename" half of
+ * this diff is also the half that takes the longest lock. That is why the FKs
+ * below are named explicitly: see the note on `ledger_entries`.
+ *
+ * HOW CLOSE IS THAT, HONESTLY. Not one command away today: svc-ledger has no
+ * `drizzle.config.ts`, no `db:generate` script and no `drizzle/meta/` snapshot,
+ * so a bare generate against an empty snapshot emits only CREATEs. It is one
+ * `drizzle-kit pull` — or one service adopting the `db:generate` line that
+ * tooling/agent-protocol/SERVICE_TEMPLATE.md prescribes as standard — away.
+ * The gate exists so that step is safe to take rather than something nobody
+ * dares do.
+ *
+ * `schema-drift.test.ts` now fails if this file and `drizzle/` ever disagree
+ * again. Read that file before changing this one: the answer to a red drift
+ * test is almost always to correct THIS file, because the migrations have
+ * already run somewhere and this has not.
  */
 export const ledger = pgSchema('ledger');
 
@@ -43,13 +123,60 @@ export const accounts = ledger.table(
      *
      * This is the one denormalisation the doctrine permits, and only because it
      * comes with that job.
+     *
+     * The default is raw SQL rather than the string `'0'`: the migration wrote a
+     * bare numeric literal, so the stored default is `0`, not `'0'::numeric`.
+     * Money is still never a JS `number` here — this is DDL text, not a value.
      */
-    balance: amount('balance').notNull().default('0'),
+    balance: amount('balance')
+      .notNull()
+      .default(sql`0`),
     createdAt: createdAt(),
+    /**
+     * The fifth component of account identity (0001, P0-3).
+     *
+     * `NOT NULL DEFAULT ''` rather than nullable, because a UNIQUE index treats
+     * NULLs as DISTINCT — a nullable `purpose` would let the commingled hold
+     * bucket back in as duplicate rows that look identical. See
+     * 0001_purpose_keyed_holds.sql, which explains it at length.
+     */
+    purpose: text('purpose').notNull().default(''),
   },
   (t) => [
-    uniqueIndex('accounts_identity_idx').on(t.ownerType, t.ownerId, t.assetId, t.kind),
+    /**
+     * Identity, including `purpose` (0001). The pre-0001 `accounts_identity_idx`
+     * — the same four columns without `purpose` — was dropped by that migration
+     * and must NOT reappear here: it is the index whose missing fifth column
+     * was the commingled-hold bug.
+     */
+    uniqueIndex('accounts_identity_purpose_idx').on(t.ownerType, t.ownerId, t.assetId, t.kind, t.purpose),
     index('accounts_owner_idx').on(t.ownerType, t.ownerId),
+    /** "What is held for this user, and what for" — without a sequential scan. */
+    index('accounts_hold_purpose_idx')
+      .on(t.ownerId, t.assetId, t.purpose)
+      .where(sql`kind = 'hold'`),
+
+    /** Only the treasury boundary may run negative (0000). */
+    check('accounts_non_negative_ck', sql`owner_type = 'treasury' OR balance >= 0`),
+    /** A purpose is a business key, and it participates in an index (0001). */
+    check('accounts_purpose_len_ck', sql`length(purpose) <= 128`),
+    /** Every hold names its claim, in the database and not only in the service (0001). */
+    check('accounts_hold_purposed_ck', sql`kind <> 'hold' OR length(purpose) > 0`),
+    /**
+     * Every `owner_id` is drawn from the space its `owner_type` declares (0005).
+     * Kept character-for-character identical to `isValidOwnerId` in
+     * packages/ledger-client/src/types.ts; equivalence is asserted against a
+     * live Postgres in src/ledger/owner-identity.test.ts.
+     */
+    check(
+      'accounts_owner_id_space_ck',
+      sql`CASE
+      WHEN owner_type IN ('user', 'subaccount')
+        THEN owner_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ELSE owner_id ~ '^[a-z][a-z0-9_-]*(:[A-Za-z0-9._-]+)*$'
+       AND owner_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    END`,
+    ),
   ],
 );
 
@@ -80,34 +207,46 @@ export const ledgerEntries = ledger.table(
   'ledger_entries',
   {
     id: bigserial('id', { mode: 'bigint' }).primaryKey(),
-    txId: uuid('tx_id')
-      .notNull()
-      .references(() => ledgerTx.id),
-    accountId: uuid('account_id')
-      .notNull()
-      .references(() => accounts.id),
+    txId: uuid('tx_id').notNull(),
+    accountId: uuid('account_id').notNull(),
     assetId: text('asset_id').notNull(),
     direction: directionEnum('direction').notNull(),
     amount: amount('amount').notNull(),
     /** Account balance immediately after this entry — the audit trail. */
     balanceAfter: amount('balance_after').notNull(),
   },
-  (t) => [index('ledger_entries_tx_idx').on(t.txId), index('ledger_entries_account_idx').on(t.accountId, t.id)],
+  (t) => [
+    index('ledger_entries_tx_idx').on(t.txId),
+    index('ledger_entries_account_idx').on(t.accountId, t.id),
+    /**
+     * Named explicitly to match the database. 0000 declared these inline
+     * (`REFERENCES "ledger"."ledger_tx"("id")`), so Postgres named them
+     * `<table>_<column>_fkey`. Drizzle's default name would be
+     * `ledger_entries_tx_id_ledger_tx_id_fk` — a different name for the
+     * identical constraint, which the drift gate would correctly report as a
+     * difference. The database is the truth, so the database's names win.
+     */
+    foreignKey({ columns: [t.txId], foreignColumns: [ledgerTx.id], name: 'ledger_entries_tx_id_fkey' }),
+    foreignKey({ columns: [t.accountId], foreignColumns: [accounts.id], name: 'ledger_entries_account_id_fkey' }),
+    /** Direction carries the sign; the amount never does (0000). */
+    check('ledger_entries_positive_ck', sql`amount > 0`),
+  ],
 );
 
 export const balanceSnapshots = ledger.table(
   'balance_snapshots',
   {
     id: bigserial('id', { mode: 'bigint' }).primaryKey(),
-    accountId: uuid('account_id')
-      .notNull()
-      .references(() => accounts.id),
+    accountId: uuid('account_id').notNull(),
     asOf: tstz('as_of').notNull(),
     balance: amount('balance').notNull(),
     /** Last entry included — where a replay check starts from. */
     throughEntryId: text('through_entry_id'),
   },
-  (t) => [index('balance_snapshots_account_idx').on(t.accountId, t.asOf)],
+  (t) => [
+    index('balance_snapshots_account_idx').on(t.accountId, t.asOf),
+    foreignKey({ columns: [t.accountId], foreignColumns: [accounts.id], name: 'balance_snapshots_account_id_fkey' }),
+  ],
 );
 
 /**
@@ -119,12 +258,30 @@ export const balanceSnapshots = ledger.table(
  * accepted trade-off at soft-launch volume, and the §13 socket for sharding it
  * (per-asset chains with a periodic cross-chain anchor) is noted in the README.
  */
-export const chainTip = ledger.table('chain_tip', {
-  id: boolean('id').primaryKey().default(true),
-  hash: text('hash'),
-  seq: bigserial('seq', { mode: 'bigint' }).notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-});
+export const chainTip = ledger.table(
+  'chain_tip',
+  {
+    id: boolean('id').primaryKey().default(true),
+    hash: text('hash'),
+    /**
+     * `bigint DEFAULT 0`, not `bigserial`.
+     *
+     * This column mirrors `ledger_tx.seq`; it is assigned from that sequence,
+     * never from one of its own. The file previously declared `bigserial` here,
+     * which the generator turned into `truncate table chain_tip cascade` —
+     * emptying the hash chain's tip in order to change a column type, on the
+     * table whose single row IS the chain's anchor.
+     *
+     * Raw SQL for the default because drizzle-kit cannot JSON-serialise a
+     * BigInt and throws while generating.
+     */
+    seq: bigint('seq', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  () => [check('chain_tip_singleton_ck', sql`id = true`)],
+);
 
 /**
  * Single-row table holding the posting freeze — the platform kill-switch.
@@ -137,14 +294,22 @@ export const chainTip = ledger.table('chain_tip', {
  * takes (see postgres-ledger.ts) — so the check costs no extra round trip and,
  * more importantly, cannot be raced by a post already in flight.
  */
-export const postingFreeze = ledger.table('posting_freeze', {
-  id: boolean('id').primaryKey().default(true),
-  frozen: boolean('frozen').notNull().default(false),
-  /** What a human reads at 3am to decide whether the halt can be lifted. */
-  reason: text('reason'),
-  /** Operator principal id, 'reconciliation', or 'env:LEDGER_POSTING_ENABLED'. */
-  actor: text('actor'),
-  changedAt: timestamp('changed_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-});
+export const postingFreeze = ledger.table(
+  'posting_freeze',
+  {
+    id: boolean('id').primaryKey().default(true),
+    frozen: boolean('frozen').notNull().default(false),
+    /** What a human reads at 3am to decide whether the halt can be lifted. */
+    reason: text('reason'),
+    /** Operator principal id, 'reconciliation', or 'env:LEDGER_POSTING_ENABLED'. */
+    actor: text('actor'),
+    changedAt: timestamp('changed_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  },
+  () => [
+    check('posting_freeze_singleton_ck', sql`id = true`),
+    /** A freeze with no reason and no actor is unactionable (0002). */
+    check('posting_freeze_attributed_ck', sql`frozen = false OR (length(coalesce(reason, '')) > 0 AND length(coalesce(actor, '')) > 0)`),
+  ],
+);
 
 export const schema = { assets, accounts, ledgerTx, ledgerEntries, balanceSnapshots, chainTip, postingFreeze };

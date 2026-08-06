@@ -119,6 +119,16 @@ services:
       SERVICE_NAME: svc-ledger
       HTTP_PORT: '4001'
       DATABASE_URL: postgres://svc_ledger:svc_ledger@postgres:5432/intafaced
+      # svc-ledger merges `authEnvSchema` for its OPERATOR surface
+      # (operator-http.ts), so this is required at boot with no default — and it
+      # was never set here. The service crash-looped on `JWT_ACCESS_SECRET:
+      # Required` the first time its container was recreated.
+      #
+      # It hid for so long because a running container keeps the environment it
+      # started with: the fleet looked healthy until an unrelated
+      # `--force-recreate` of another service pulled the dependency chain with
+      # it. workspace-sync check 3b now fails on this shape.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4001']
     healthcheck: *healthcheck
@@ -212,6 +222,7 @@ services:
       INDEXER_URL: http://svc-indexer:4013
       NOTIFY_URL: http://svc-notify:4015
       ACADEMY_URL: http://svc-academy:4016
+      SUPPORT_URL: http://svc-support:4017
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are
@@ -311,6 +322,17 @@ services:
       LEDGER_URL: http://svc-ledger:4001
       IDENTITY_URL: http://svc-identity:4002
       MATCHING_URL: http://svc-matching:4005
+      # THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM — its balance is the
+      # ceiling, and a payout that would exceed it refuses rather than
+      # overdrawing (docs/adr/2026-08-05-futures-risk-and-mark-law.md).
+      #
+      # Passed through from the environment with NO DEFAULT, and svc-trade
+      # refuses to start while it is empty. Deliberate: which pot funds profit
+      # is a fee and revenue recipe and an owner decision (DIRECTION §8 item 6),
+      # so a value written here would be this file quietly making it. Set it in
+      # `.env` — see `.env.example`. A container that will not start is a better
+      # outcome than one paying profit out of a pot nobody chose.
+      TRADE_FUTURES_PROFIT_SOURCE: ${TRADE_FUTURES_PROFIT_SOURCE:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4004']
     healthcheck: *healthcheck
@@ -345,6 +367,17 @@ services:
       # 4014: 4013 is svc-indexer, and everything below it is taken.
       HTTP_PORT: '4014'
       MATCHING_URL: http://svc-matching:4005
+      # WHICH MARKETS EXIST, as opposed to which ones have traded.
+      #
+      # svc-matching's `/markets` is the books the engine currently holds. It is
+      # not the listing, and after a `trade.markets` reseed it is not even a
+      # subset of it: this fleet had ten journal-replayed engine ids and sixteen
+      # listed ids with an EMPTY intersection, so the socket refused every market
+      # the browser could legitimately discover. svc-trade's
+      # `GET /api/v1/markets` is that listing, and it is unauthenticated public
+      # market data — so svc-ws still holds no credential. See
+      # services/svc-ws/src/depth/registry.ts.
+      TRADE_URL: http://svc-trade:4004
       WS_DEPTH_LIMIT: ${WS_DEPTH_LIMIT:-50}
       WS_POLL_INTERVAL_MS: ${WS_POLL_INTERVAL_MS:-250}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
@@ -455,12 +488,24 @@ services:
       DATABASE_URL: postgres://svc_bank:svc_bank@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
+      # `none` means this deployment has NO CARD PROGRAMME, and every card
+      # procedure refuses `bank.no_card_issuer` by name. The only other value is
+      # `card-sim`, which is a SIMULATOR — no card, no scheme, no issuing BIN, no
+      # network call, and `simulated: true` on every card and every response. The
+      # live rail is §13 `socket.live-issuer`: a sponsor bank and a contract,
+      # which no value of this variable can supply. Written out with its default
+      # rather than left unset, so the choice is visible in the file an operator
+      # actually reads instead of living only in a zod schema.
+      BANK_CARD_ISSUER: ${BANK_CARD_ISSUER:-none}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4009']
     healthcheck: *healthcheck
     depends_on:
-      # No `nats` — svc-bank publishes no subject yet (its index.ts says so).
-      <<: *needs-schema
+      # `nats` is now required. svc-bank owns INTAFACED_BANK and creates it at
+      # boot — the stream has never existed, so svc-notify's finished margin-call
+      # consumer has parked on it since it shipped. A margin call raised with no
+      # transport is a grace clock running against a borrower who was never told.
+      <<: [*needs-schema, *needs-bus]
       svc-ledger:
         condition: service_healthy
 
@@ -500,7 +545,17 @@ services:
       svc-ledger:
         condition: service_healthy
 
-  # In-app inbox only. No ledger. Push / email / SMS are §13 sockets.
+  # In-app inbox always; email / push / SMS whenever the owner supplies a gateway.
+  #
+  # The six gateway variables below have NO DEFAULT AND NO PLACEHOLDER, which is
+  # the point. Unset, the channel refuses every message by name and the refusal
+  # lands on the delivery row — users still get everything in the inbox. Invented
+  # here, the same channel would fail sends against a URL nobody runs, and the
+  # difference between "not wired" and "broken" would be lost.
+  #
+  # NOTIFY_REQUIRED_CHANNELS is what turns a refusal into a boot failure: in
+  # APP_ENV=staging|prod it must be set, and every channel it lists must have its
+  # pair. See .env.example and docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md.
   svc-notify:
     <<: *app
     container_name: intafaced-svc-notify
@@ -511,11 +566,35 @@ services:
       HTTP_PORT: '4015'
       DATABASE_URL: postgres://svc_notify:svc_notify@postgres:5432/intafaced
       NOTIFY_FANOUT_ENABLED: ${NOTIFY_FANOUT_ENABLED:-true}
+      NOTIFY_OUT_OF_APP_ENABLED: ${NOTIFY_OUT_OF_APP_ENABLED:-true}
+      NOTIFY_EMAIL_GATEWAY_URL: ${NOTIFY_EMAIL_GATEWAY_URL:-}
+      NOTIFY_EMAIL_GATEWAY_TOKEN: ${NOTIFY_EMAIL_GATEWAY_TOKEN:-}
+      NOTIFY_PUSH_GATEWAY_URL: ${NOTIFY_PUSH_GATEWAY_URL:-}
+      NOTIFY_PUSH_GATEWAY_TOKEN: ${NOTIFY_PUSH_GATEWAY_TOKEN:-}
+      NOTIFY_SMS_GATEWAY_URL: ${NOTIFY_SMS_GATEWAY_URL:-}
+      NOTIFY_SMS_GATEWAY_TOKEN: ${NOTIFY_SMS_GATEWAY_TOKEN:-}
+      NOTIFY_REQUIRED_CHANNELS: ${NOTIFY_REQUIRED_CHANNELS:-}
+      NOTIFY_MAX_DELIVERY_ATTEMPTS: ${NOTIFY_MAX_DELIVERY_ATTEMPTS:-3}
+      NOTIFY_GATEWAY_TIMEOUT_MS: ${NOTIFY_GATEWAY_TIMEOUT_MS:-5000}
+      NOTIFY_SMS_MAX_CHARS: ${NOTIFY_SMS_MAX_CHARS:-480}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4015']
     healthcheck: *healthcheck
     depends_on:
       <<: [*needs-schema, *needs-bus]
+
+  # Support desk tickets + KB (ops.support Stage-1). Non-custodial: no
+  # LEDGER_URL, no DATABASE_URL — in-memory ticket spine only.
+  svc-support:
+    <<: *app
+    container_name: intafaced-svc-support
+    command: ['node', 'services/svc-support/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-support
+      HTTP_PORT: '4017'
+    expose: ['4017']
+    healthcheck: *healthcheck
 
   # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
   # LEDGER_URL, and nothing in this process could reach anything that moves
@@ -535,7 +614,21 @@ services:
     container_name: intafaced-svc-academy
     command: ['node', 'services/svc-academy/dist/index.js']
     environment:
-      <<: [*service-env, *edge-secret]
+      # *internal-secret is required here. src/env.ts merges
+      # `internalServiceEnvSchema` for its two callees, and
+      # INTERNAL_SERVICE_SECRET has no default — so without it the process dies
+      # at import with `EnvError: INTERNAL_SERVICE_SECRET: Required` and the
+      # container is never created at all. That is why there are no
+      # restart-loop logs for anyone to read: a service that fails to boot is
+      # loud, a service nobody started is silent.
+      #
+      # Restored 2026-08-04. #442 landed exactly this line at 16:39 on
+      # 2026-08-03; #447 had branched before that, and its merge dropped it
+      # again at 17:05 — 26 minutes of fix, undone by a PR about the admin
+      # console that never mentioned academy. Nobody noticed, for the reason
+      # above. compose-secret-parity is what noticed; it lands in the same
+      # commit as this line, on purpose.
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-academy
       # 4016: every port from 4000 to 4015 is already claimed above.
       HTTP_PORT: '4016'
@@ -675,35 +768,127 @@ services:
 
   # ── Apps ───────────────────────────────────────────────────────────────────
   #
-  # Both are Next 15, both are served by `next start` from the build already in
-  # the image. Neither declares a `depends_on` on a service, and that is not an
-  # oversight: these are BROWSER-side URLs. The container never calls them, so
-  # ordering the container behind a service would buy nothing — a browser that
-  # loads the page before svc-ws is up sees the panel say so and recovers on the
-  # next render, which is the behaviour we want anyway.
+  # The customer surface is `vendor-shell` below, on :8090. It is the SOLE
+  # product surface — ADR `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`.
   #
-  # `NEXT_PUBLIC_*` values are inlined at BUILD time by Next, so these take
-  # effect only for a build that saw them. They are here so a deployment has one
-  # place to look, and so the defaults in `app/layout.tsx` are visible next to
-  # the services they point at.
+  # There WAS a `web` service here (apps/web, Next, `3000:3000`). It is removed,
+  # and removing it is the point rather than a tidy-up: that ADR's own root cause
+  # is that :3000 was the only surface that started, and so it "quietly became
+  # the de-facto product. Nobody decided that." A running port outranks a stated
+  # direction every time, so the port goes with the direction.
+  #
+  # no-deploy: web — `apps/web`, the retired Next scaffold. Deliberate, and this
+  # line is the deliberateness: the gate below is right that an app nobody serves
+  # can be worked on for weeks unseen, and that is precisely the history here —
+  # it was served, on 3000, and that is HOW it became the product against a
+  # stated direction. The answer is not to serve it again; it is to stop working
+  # on it. The directory is still on disk pending an owner go on deletion, and
+  # the tracker row `web.shell` carries the same statement.
+  #
+  # The one Next app still served is `admin` (the operator console, 3100). It
+  # declares no `depends_on`, and that is not an oversight: its service URLs are
+  # BROWSER-side, so ordering the container behind a service would buy nothing —
+  # a browser that loads before a service is up sees the panel say so and
+  # recovers on the next render, which is the behaviour we want anyway.
 
-  web:
-    <<: *app
-    container_name: intafaced-web
-    command: ['pnpm', '--filter', '@intafaced/web', 'start']
-    environment:
-      NODE_ENV: production
-      PORT: '3000'
-      HOSTNAME: 0.0.0.0
-      HEALTHCHECK_PORT: '3000'
-      HEALTHCHECK_PATH: /
-      # The front door, and the depth stream. Two origins, because svc-edge
-      # buffers and cannot proxy a socket (services/svc-ws/README.md).
-      NEXT_PUBLIC_EDGE_URL: ${NEXT_PUBLIC_EDGE_URL:-http://localhost:4000}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-http://localhost:4014}
-    ports: ['3000:3000']
-    healthcheck: *healthcheck
+  # The vendored trading shell — the app the product direction has always said
+  # we ARE, and which until now could not be run at all.
+  #
+  # 74 Vue screens with no `dist`, no Dockerfile and no compose entry. Every
+  # document pointing readers at `:8090` was pointing at a port nothing served,
+  # while `web` above quietly became the de-facto product. That is how a stated
+  # direction and a running system drift apart without anyone deciding to.
+  #
+  # It does NOT use *app: this tree is Vue 2.5 / webpack 3 with its own npm
+  # lockfile, deliberately outside the pnpm workspace so a 2017 dependency graph
+  # cannot reach our services. Its own Dockerfile builds it and nginx serves it.
+  vendor-shell:
+    build:
+      context: ./vendor/upstream-exchange/05_Web_Front
+      dockerfile: Dockerfile
+      target: runtime
+    image: intafaced/vendor-shell:dev
+    container_name: intafaced-vendor-shell
+    restart: unless-stopped
+    # 8090 because that is the port every existing doc already claims. Making
+    # the docs true is cheaper than correcting all of them.
+    ports: ['8090:80']
+    # nginx proxies /api to the edge and /ws to the socket by SERVICE NAME, so
+    # both must be resolvable on this network — the browser stays same-origin
+    # and never learns a port.
+    depends_on:
+      svc-edge: { condition: service_healthy }
+      svc-ws: { condition: service_started }
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost/']
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
+  # no-deploy: 04_Web_Admin — the vendored STAFF console (92 Vue files), and the
+  # one front-end in this repo that is deliberately not served.
+  #
+  # It is a decision, not an oversight, and it was taken in
+  # `docs/ADMIN-0-INVENTORY-VENDOR-VS-APPS-2026-08-02.md`: that console speaks
+  # to the legacy Java backend over its own HTTP API, not to svc-edge, so
+  # starting it in this fleet would either 404 against a backend that is not
+  # here or — worse — reach one that is, unauthenticated. Hard block 1 of that
+  # doc: "Do not connect 04_Web_Admin webpack to monorepo services without edge
+  # auth." The staff surface we DO serve is `admin` below, on 3100.
+  #
+  # This line exists because `workspace-sync` check 7 forbids SILENCE, not
+  # absence. Until 2026-08-03 the check could not see anything under `vendor/`
+  # at all, so this directory was absent AND silent — the exact state that let
+  # the trading shell take 48 commits with nobody able to look at it.
+  #
+  # Not permanent. ADMIN-0 phase A2 ports the screens that must move (withdraw
+  # examine, fee manage) one at a time through contracts; phase A3 is the
+  # quarantine path for what is left. When either lands, this line goes.
+
+  # THE OPERATOR CONSOLE — and the one container in this file that is a SAFETY
+  # CONTROL rather than a surface.
+  #
+  # ── Why this block grew ────────────────────────────────────────────────────
+  #
+  # #186 wired `apps/admin` to svc-edge: `src/lib/control-plane-client.ts` reads
+  # `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` and posts module kills, and
+  # `ADMIN_TREASURY_TOKEN` reaches the ledger freeze. This block set NONE of the
+  # three. So the deployed console fell into `unconfigured` on every request and
+  # an operator flipping a switch changed a React boolean — the exact failure the
+  # client file's own header describes, reintroduced by the deployment rather
+  # than by the code.
+  #
+  # A wire that exists in `src/` and not in the environment is not a wire. This
+  # is where that is fixed.
+  #
+  # ── EDGE_URL has a default; the tokens deliberately do not ─────────────────
+  #
+  # An address is not a credential. `http://svc-edge:4000` is the edge's name on
+  # this network and nothing else — getting it wrong costs an operator an hour,
+  # and there is no version of this stack where it is anything else.
+  #
+  # The two tokens are OWNER-SUPPLIED SECRETS and are written in pass-through
+  # form (key, no value) exactly like `AGENTS_UPSTREAM_API_KEY` above: compose
+  # forwards them only if they are set in `.env`, and omits them entirely
+  # otherwise. `${VAR:-}` would instead set them to the EMPTY STRING, which is a
+  # present-but-invalid value — `docker inspect` would show the variable, and the
+  # console's `config()` would still refuse. "Configured, blank" and "not
+  # configured" must not look the same to somebody debugging at 3am.
+  #
+  # They are NOT `:?`-required like EDGE_PRINCIPAL_SECRET. Refusing to start the
+  # console because it has no operator token would remove the surface that tells
+  # you it has no operator token — and the launch, drop and jurisdiction screens
+  # do not need one. Absent means the console SAYS, on every page, that it cannot
+  # halt anything. See `src/lib/console-status.ts`.
+  #
+  # ── No `depends_on: svc-edge` ──────────────────────────────────────────────
+  #
+  # Unlike the note above about browser-side URLs, this container now DOES call
+  # svc-edge server-side (`/` and `/ledger` server-load the control plane before
+  # first paint). Ordering it behind the edge would still be wrong: the moment an
+  # operator most needs this console is the moment the edge is unhealthy, and a
+  # console that will not boot then is a console that is absent during exactly
+  # the incident it exists for. Both pages render `unreachable` and say why.
   admin:
     <<: *app
     container_name: intafaced-admin
@@ -717,6 +902,19 @@ services:
       HOSTNAME: 0.0.0.0
       HEALTHCHECK_PORT: '3100'
       HEALTHCHECK_PATH: /
+      # The control plane this console reaches (§14.6). Container port 4000, not
+      # the host's — the console calls the edge across the compose network.
+      EDGE_URL: ${EDGE_URL:-http://svc-edge:4000}
+      # `admin:write` + MFA — reaches the module kill-switches.
+      ADMIN_OPERATOR_TOKEN:
+      # `admin:treasury` — reaches the ledger freeze. A SEPARATE authority on
+      # purpose: a console holding only the operator token cannot stop the money
+      # plane, and svc-edge enforces that split independently.
+      ADMIN_TREASURY_TOKEN:
+      # Until operator SSO lands, the optional shared-secret gate on the BFF
+      # routes (`x-intafaced-admin-bff`), injected by a reverse proxy. Unset
+      # means network ACL is the only thing in front of these routes.
+      ADMIN_BFF_SHARED_SECRET:
     ports: ['3100:3100']
     healthcheck: *healthcheck
 

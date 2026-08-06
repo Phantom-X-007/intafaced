@@ -51,34 +51,60 @@ const schema = serviceEnvSchema
         .default(30 * 60),
 
       /**
-       * `disputed` → no moderator ruled within the SLA.
+       * `disputed` → THE MODERATOR SLA, and nothing more than that.
        *
-       * Past this the backstop decides, because a dispute that can stay open
-       * forever is the same bug as an escrow that can stay locked forever — it
-       * just has a person's name attached to the delay.
+       * Past this the dispute ESCALATES: it is raised, it keeps its (now past)
+       * deadline so it stays at the top of the moderator queue, and the escrow
+       * does not move. There is no setting here that resolves a dispute,
+       * because there is no code path that does.
+       *
+       * `P2P_DISPUTE_BACKSTOP_SECONDS`, `P2P_DISPUTE_BACKSTOP_RESOLUTION` and
+       * `P2P_BACKSTOP_MODERATOR_ID` are gone rather than deprecated. Leaving a
+       * `…_RESOLUTION` knob in the environment would say the platform still has
+       * an opinion about how to auto-settle a disagreement, and it does not.
        */
-      P2P_DISPUTE_BACKSTOP_SECONDS: z.coerce
+      P2P_DISPUTE_SLA_SECONDS: z.coerce
         .number()
         .int()
         .min(3600)
         .default(7 * 24 * 60 * 60),
 
       /**
-       * How an un-adjudicated dispute resolves when the backstop fires.
+       * How often an escalated dispute is raised again.
        *
-       * `refund` by default, and the asymmetry is deliberate: releasing to a
-       * buyer who never paid destroys the seller's asset irrecoverably, while
-       * refunding a buyer who did pay leaves them a fiat claim they can still
-       * pursue through their bank. When we must decide without evidence, we
-       * decide the recoverable way.
+       * `p2p_trades_live_has_deadline_ck` requires a live trade to carry a
+       * deadline. This is the deadline it carries once the SLA is blown — a
+       * re-check, not a disposition.
        */
-      P2P_DISPUTE_BACKSTOP_RESOLUTION: z.enum(['release', 'refund']).default('refund'),
-
-      /** The identity recorded as moderator when the backstop rules. Never a real person. */
-      P2P_BACKSTOP_MODERATOR_ID: z.string().default('system:p2p-backstop'),
+      P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: z.coerce
+        .number()
+        .int()
+        .min(60)
+        .default(60 * 60),
 
       /** How often the timeout + settlement sweeps run. */
       P2P_SWEEP_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
+
+      /**
+       * How long a CLOSED trade keeps the account details it showed the buyer.
+       *
+       * The API already refuses to disclose a terminal trade's snapshot; this
+       * is the other half of the same promise, because "you cannot read it" and
+       * "we no longer have it" are different statements and only the second
+       * survives a database being copied. The purge keeps the fingerprint, so
+       * a late appeal can still be told whether the account a seller now names
+       * is the one the buyer was shown — without us holding the account to say
+       * so.
+       *
+       * The NUMBER is an operator decision, not an engineering one: it trades
+       * the ability to adjudicate a late appeal against holding personal data
+       * we no longer need, and where a market imposes its own retention rule
+       * that rule wins. The default is set well clear of the 7-day dispute SLA
+       * (P2P_DISPUTE_BACKSTOP_SECONDS) so a purge can never race an open
+       * appeal; the floor below enforces that relationship rather than trusting
+       * it.
+       */
+      P2P_INSTRUMENT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3_650).default(90),
     }),
   );
 

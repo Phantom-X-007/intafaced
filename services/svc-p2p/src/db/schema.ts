@@ -1,4 +1,5 @@
-import { bigint, index, integer, jsonb, numeric, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, jsonb, numeric, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -191,19 +192,39 @@ export const p2pDisputes = p2p.table(
       .references(() => p2pTrades.id),
     openedBy: text('opened_by').notNull(),
     reason: text('reason').notNull().default(''),
+    /**
+     * APPEND-ONLY, and the database enforces it
+     * (`p2p_disputes_evidence_append_only_trg`). A jsonb array of attributed
+     * envelopes: `{ seq, submittedBy, submittedAt, item }`. Evidence that can be
+     * edited after the fact is not a record of a dispute, it is a draft.
+     */
     evidence: jsonb('evidence').notNull().default([]),
     moderatorId: text('moderator_id'),
     resolution: disputeResolutionEnum('resolution'),
     resolutionNotes: text('resolution_notes'),
     status: disputeStatusEnum('status').notNull().default('open'),
-    /** Moderator SLA. Past it, the backstop decides — see the migration comment. */
+    /**
+     * Moderator SLA. Past it the dispute ESCALATES — it is never resolved by a
+     * clock. A disputed escrow terminates only on a ruling attributed to a
+     * human (`p2p_trades_disputed_needs_ruling_trg`).
+     */
     deadlineAt: tstz('deadline_at').notNull(),
     openedAt: tstz('opened_at').notNull().defaultNow(),
     resolvedAt: tstz('resolved_at'),
+    /**
+     * Written by the statement that SERVES this row to a moderator, and by
+     * nothing else. "A queue exists" and "a human reached this dispute" are
+     * different claims, and only one of them is a fact about the world.
+     */
+    lastSeenByModeratorAt: tstz('last_seen_by_moderator_at'),
+    moderatorViews: integer('moderator_views').notNull().default(0),
+    /** SLA breached: re-armed and raised, never disposed of. */
+    escalatedAt: tstz('escalated_at'),
+    escalations: integer('escalations').notNull().default(0),
   },
   (t) => [
     uniqueIndex('p2p_disputes_trade_idx').on(t.tradeId),
-    /** The moderator queue, and the backstop sweep. */
+    /** THE MODERATOR QUEUE — `disputes.list` orders by exactly this. */
     index('p2p_disputes_open_idx').on(t.status, t.deadlineAt),
   ],
 );
@@ -240,4 +261,194 @@ export const p2pReputation = p2p.table(
   (t) => [index('p2p_reputation_completed_idx').on(t.completed)],
 );
 
-export const schema = { offers, p2pTrades, p2pDisputes, p2pReputation };
+/**
+ * PAYMENT INSTRUMENTS (0001) — where the buyer actually sends the money.
+ *
+ * Everything above this line is a decision about value that lives in
+ * svc-ledger. Everything below it is **personal data**, and it is the most
+ * attractive thing in this service to steal: an account number, a name, and the
+ * knowledge that its owner trades crypto.
+ *
+ * So the design question is not "can we store it" but "who can read it, for how
+ * long, and can we prove afterwards who did". The answer, in one line and
+ * enforced in `instrument-service.ts`:
+ *
+ *   An instrument is disclosed only while the escrow it is attached to is HELD,
+ *   and a disclosure that is not logged cannot happen.
+ */
+
+/**
+ * WHAT A METHOD NEEDS, PER COUNTRY — supplied by an operator, not by us.
+ *
+ * Ships EMPTY, and that is the design. What a payer needs in order to send
+ * money differs by method and by country and it is not this repo's knowledge to
+ * invent; a seeded list of plausible field names is a wrong answer wearing the
+ * costume of a right one. An operator registers what a market really requires;
+ * until they do, that market refuses instruments — loudly, which is the point.
+ *
+ * `country` is ISO 3166-1 alpha-2 or `*` ("the same everywhere"). An exact
+ * country always beats the wildcard.
+ */
+export const paymentMethodSchemas = p2p.table(
+  'payment_method_schemas',
+  {
+    methodId: text('method_id').notNull(),
+    country: text('country').notNull(),
+    label: text('label').notNull(),
+    /** `FieldSpec[]` — key, label, required, pattern, lengths, sensitive, help. */
+    fields: jsonb('fields').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.methodId, t.country] })],
+);
+
+/**
+ * One destination a seller will accept money at.
+ *
+ * `status` is `active | removed`, and removal is a state rather than a DELETE:
+ * an in-flight trade's snapshot points here, the access log points here, and an
+ * appeal months later may ask which destination a trade used. "The seller
+ * deleted their account details" is precisely the moment those records matter.
+ *
+ * Removal keeps the row and NOT the data: `details` goes NULL in the same
+ * statement that sets the status, and `payment_instruments_details_ck` makes
+ * `removed` with details a row Postgres will not accept. The fingerprint stays,
+ * so an appeal can still ask "was the buyer shown this account" without us
+ * holding the account in order to answer.
+ *
+ * The unique partial index below is the load-bearing one — see the migration.
+ * One active destination per `(owner, method, currency)` is what makes "which
+ * account does the buyer pay?" have exactly one answer at take time, on the one
+ * field where picking the wrong row sends a stranger's money to a stranger.
+ */
+export const paymentInstruments = p2p.table(
+  'payment_instruments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: text('owner_id').notNull(),
+    methodId: text('method_id').notNull(),
+    country: text('country').notNull(),
+    /** The currency this destination can actually receive. Part of the match key. */
+    fiatCurrency: text('fiat_currency').notNull(),
+    /** The owner's own name for it. Shown to the payer, so it is not a public handle. */
+    label: text('label').notNull().default(''),
+    /**
+     * THE PERSONAL DATA. Exactly the declared fields — an undeclared key is
+     * refused, not dropped. NULL exactly when `status = 'removed'`; the CHECK
+     * constraint, not this column, is what enforces both halves.
+     */
+    details: jsonb('details'),
+    /** sha256 over the canonical details. Outlives them, so an appeal survives the purge. */
+    fingerprint: text('fingerprint').notNull(),
+    status: text('status').notNull().default('active'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    removedAt: tstz('removed_at'),
+  },
+  (t) => [
+    uniqueIndex('payment_instruments_active_slot_idx')
+      .on(t.ownerId, t.methodId, t.fiatCurrency)
+      .where(sql`status = 'active'`),
+    index('payment_instruments_owner_idx').on(t.ownerId, t.status),
+  ],
+);
+
+/**
+ * WHAT THE BUYER WAS TOLD TO PAY, FROZEN WHEN THE TRADE WAS OPENED.
+ *
+ * A snapshot rather than a pointer, for two reasons and the second is the
+ * bigger one:
+ *
+ *   1. the owner may edit or remove their instrument without blanking the
+ *      screen a buyer is copying an account number out of;
+ *   2. **the destination cannot change mid-trade.** Show account A, let the
+ *      buyer start paying, switch to account B, then truthfully report that
+ *      nothing arrived — a scam with a clean audit trail, and a live pointer is
+ *      what makes it possible.
+ *
+ * `details` goes NULL when the retention sweep purges a closed trade; the
+ * fingerprint stays, so "was this the account the buyer was shown" is still
+ * answerable without us still holding the account.
+ */
+export const tradePaymentInstruments = p2p.table(
+  'trade_payment_instruments',
+  {
+    tradeId: uuid('trade_id')
+      .primaryKey()
+      .references(() => p2pTrades.id),
+    instrumentId: uuid('instrument_id')
+      .notNull()
+      .references(() => paymentInstruments.id),
+    /** Denormalised: an authorisation check must not join a row that may since have been removed. */
+    ownerId: text('owner_id').notNull(),
+    methodId: text('method_id').notNull(),
+    country: text('country').notNull(),
+    fiatCurrency: text('fiat_currency').notNull(),
+    label: text('label').notNull().default(''),
+    details: jsonb('details'),
+    fingerprint: text('fingerprint').notNull(),
+    attachedAt: tstz('attached_at').notNull().defaultNow(),
+    purgedAt: tstz('purged_at'),
+  },
+  (t) => [
+    index('trade_payment_instruments_owner_idx').on(t.ownerId),
+    index('trade_payment_instruments_unpurged_idx')
+      .on(t.attachedAt)
+      .where(sql`purged_at IS NULL`),
+  ],
+);
+
+/**
+ * WHO LOOKED AT WHOSE ACCOUNT DETAILS, WHEN, AND WHETHER THEY WERE ALLOWED TO.
+ *
+ * A table and not a log line, because the question it answers is asked after
+ * something has gone wrong, by someone who needs an answer that survived log
+ * rotation. Not having it is the problem.
+ *
+ * Refusals are recorded too, and they are the more interesting half: one reveal
+ * is a buyer paying, eleven refusals against eleven sellers in an hour is
+ * someone harvesting — and that looks like nothing at all in a table that only
+ * records successes.
+ *
+ * The migration adds a BEFORE UPDATE OR DELETE trigger that raises. The service
+ * writes this row in the same statement that reads the details, so a read
+ * cannot happen without a record; the trigger is why the record cannot be
+ * tidied away afterwards.
+ */
+export const instrumentAccessLog = p2p.table(
+  'instrument_access_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Nullable: a refusal on a trade with no instrument has none to name. */
+    instrumentId: uuid('instrument_id').references(() => paymentInstruments.id),
+    ownerId: text('owner_id'),
+    viewerId: text('viewer_id').notNull(),
+    /** `owner | counterparty | moderator | other`. */
+    viewerRole: text('viewer_role').notNull(),
+    tradeId: uuid('trade_id').references(() => p2pTrades.id),
+    /** `revealed | denied`. */
+    outcome: text('outcome').notNull(),
+    denyReason: text('deny_reason'),
+    at: tstz('at').notNull().defaultNow(),
+  },
+  (t) => [
+    /** The owner's own "who has seen my account details" view. */
+    index('instrument_access_log_owner_idx').on(t.ownerId, t.at),
+    /** The abuse query: everything one viewer has reached for. */
+    index('instrument_access_log_viewer_idx').on(t.viewerId, t.at),
+    index('instrument_access_log_trade_idx').on(t.tradeId),
+  ],
+);
+
+export const schema = {
+  offers,
+  p2pTrades,
+  p2pDisputes,
+  p2pReputation,
+  paymentMethodSchemas,
+  paymentInstruments,
+  tradePaymentInstruments,
+  instrumentAccessLog,
+};

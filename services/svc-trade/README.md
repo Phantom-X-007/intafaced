@@ -116,7 +116,65 @@ whose caller chose not to supply a client id — and that order is the only one 
 | **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)         |
 | **F8**            | seed↔seed prints never inflate public tape                                     |
 
-Seeder process resume (SD-1/SD-6, branch `feat/spine-market-seeder`) is a separate eng residual.
+### OHLCV / candles (A-TRADE-SPOT-1 + A-TRADE-SPOT-OPS)
+
+| Path                                 | Behavior                                                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **REST** `GET /api/v1/ohlcv/:symbol` | Live SQL aggregation from non-seeded taker fills (`queryCandlesFromFills`). Empty market → `[]`. Gaps stay gaps — never zero-filled.             |
+| **Job** `TRADE_CANDLE_JOBS_*`        | Default **OFF**. When enabled + market ids set, materializes _closed_ buckets into `trade.spot_candles`. Never invents markets or empty candles. |
+
+#### Ops enable path (default safe)
+
+Job stays **OFF** until an operator deliberately enables it. Missing market list or empty mids → job host not scheduled (never invent a market list).
+
+| Env                             | Default | Meaning                                                           |
+| ------------------------------- | ------- | ----------------------------------------------------------------- |
+| `TRADE_CANDLE_JOBS_ENABLED`     | `false` | Master kill. Only `1` / `true` / `on` / `yes` turns on.           |
+| `TRADE_CANDLE_JOBS_INTERVAL_MS` | `60000` | Tick interval when enabled (5s–1h).                               |
+| `TRADE_CANDLE_JOBS_MARKET_IDS`  | `""`    | Comma-separated **market UUIDs**. Empty → no job even if enabled. |
+| `TRADE_CANDLE_JOBS_TIMEFRAMES`  | `1m`    | e.g. `1m,5m,1h`. Invalid tokens dropped.                          |
+
+**Enable checklist (ops):**
+
+1. Confirm REST ohlcv already honest for a traded symbol (`[]` if never filled — not fake zeros).
+2. Set `TRADE_CANDLE_JOBS_MARKET_IDS` to real `trade.markets.id` values only.
+3. Set `TRADE_CANDLE_JOBS_ENABLED=true` on the svc-trade process you intend to materialize (not every replica blindly).
+4. Watch logs for `candle materialize ok` with `written > 0` only when closed buckets have real fill volume.
+5. Kill: set enabled false or clear market ids — REST path keeps working from fills.
+
+**Honesty bans:** invent candles, invent markets, zero-fill gaps, include seed volume in public ohlcv (seeded fills excluded — SD-3).
+
+### Venue fabric mark (A-TRADE-VENUE-1 + A-TRADE-VENUE-OPS)
+
+Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matching depth for futures mark ticks when configured. **Default OFF** — empty venue id means depth-only marks (or null when book empty). Never invents a mid.
+
+| Path                                      | Behavior                                                                                                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from public book snapshot; futures jobs prefer it, then depth. |
+| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.           |
+
+#### Ops enable path (default safe)
+
+| Env                            | Default | Meaning                                                                                                                                     |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapter today: **`binance-spot`** (no keys). Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                       |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                |
+
+**Enable checklist (ops):**
+
+1. Confirm `packages/venue-adapter` Binance spot public path is acceptable for this environment (egress, rate limits).
+2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols).
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls).
+4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
+5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
+6. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; never invent.
+
+**Honesty bans:** invent mid, invent second venue adapter without fabric support, treat empty/one-sided book as a price, treat account observations as ledger truth, enable trading half of venue (credentials / Vault) as if public mark worked.
+
+**Second venue:** only when a real `MarketDataAdapter` exists in fabric and `createVenueMarketDataAdapter` knows the id — do not stub a name.
+
+Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
 ### Reconcile open ↔ hold ↔ engine (Spec CX-9)
 

@@ -2,9 +2,27 @@
 
 **The native economy — IFC (§4.3).** Third and last of the Phase 1 Core services.
 
-Owns the emission schedule, the staking ladder, real-yield distribution, and buyback & burn.
+Owns the emission schedule and the staking ladder. Holds the maths and the ledger recipes for real-yield distribution and burn — and, as of 2026-08-03, says plainly that those last two are operator actions rather than the §4.3 flywheel.
 
 **What this service is not:** it does not hold balances and it does not price anything. `stakes` records who staked what and when; the value lives in the ledger's `stake` accounts. Pricing and execution are svc-trade's job — this service never decides a price.
+
+---
+
+## What is automatic, and what is a person (read before quoting §4.3 at a user)
+
+Staking, access tiers and emissions are live end to end. The other three §4.3 economy surfaces are **§13 sockets** in `tooling/tracker/features.mjs`, corrected there from `done` on 2026-08-03 after an audit found the tracker describing operator mutations as live flywheels.
+
+| §4.3 says                                                                       | What actually runs                                                                                                                                                                                                                                                                                                           | Socket             |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| "weekly job aggregates house fee accounts per asset → distributes"              | `distributeRevenue`, invoked by hand. **No caller exists** outside tests — no cron, no bus subscriber, no admin form. `sources[].amount` is validated for decimal shape only; nothing reads the `houseFees` balance it claims to sweep (audit T-03).                                                                         | `token.yield`      |
+| "market-buy on internal book → split to burn + rewards. Structural, scheduled." | `recordBuyback`, invoked by hand. **Nothing is bought** — `tokensBought` is typed by the operator, `revenueTotal` is unvalidated jsonb, and the only ledger movement is the burn leg out of the rewards engine. `buybackBudget()` has no caller but its own tests.                                                           | `token.buyback`    |
+| "IFC-weighted voting" with `proposals.status`                                   | Ballots are recorded and weighted correctly. **No proposal can change status.** `passed` / `rejected` / `executed` / `cancelled` are declared on the enum and written by no code in this repo; there is no quorum, threshold, tally job, close job or executor. `draft` is terminal too — a future `opensAt` can never open. | `token.governance` |
+
+None of the three is a rename away from working. Yield needs the aggregation job plus a service-side window claim; buyback needs svc-trade to execute a real purchase; governance needs an owner to set quorum and threshold (numbers an agent must not invent) and a decision on how each proposal kind executes — three cross a service boundary and `grant` moves value, which makes it a ledger recipe and a DIRECTION §3 carve-out.
+
+### And IFC is a ledger asset, not a coin
+
+Worth stating here because the word "token" invites the wrong inference. No `.sol` file in this repo mentions IFC; there is no contract, no chain, no deposit or withdrawal path. Supply is rows in `token.emission_epochs` and balances in svc-ledger. The "burn address" is `house/burn` (`packages/ledger-client/src/accounts.ts:155-157`) — an ordinary operator-owned internal account of kind `available`; "tokens debited to the burn account never move again" is a convention this codebase observes, not a constraint anything enforces. No holder can self-custody IFC, withdraw it, or verify total supply independently of us. `burnedSupply` is the only supply-side read on the router and it is `token:read` scoped.
 
 ---
 
@@ -19,9 +37,11 @@ Owns the emission schedule, the staking ladder, real-yield distribution, and buy
 | tRPC `listStakes`                      | `token:read`            | Stakes owned by the signed principal                                                                                      |
 | tRPC `stakeOf` / `accessOf`            | `token:read`            | Total active stake / access tier + fee discount                                                                           |
 | tRPC `mintEpoch` / `nextEmissionEpoch` | `admin:treasury` / read | Operator mint (optional `epoch`) and next index                                                                           |
-| tRPC `distributeRevenue`               | `admin:treasury` + MFA  | Live real-yield: sweep fee sources → pro-rata staker payouts (window + sources on the wire)                               |
-| tRPC `recordBuyback`                   | `admin:treasury` + MFA  | Live buyback settle: caller supplies `tokensBought` (trade prices elsewhere); burn + rewards split                        |
-| tRPC `burnedSupply`                    | `token:read`            | Permanently burned IFC balance                                                                                            |
+| tRPC `distributeRevenue`               | `admin:treasury` + MFA  | **Operator action, no caller.** Sweeps the fee sources the operator names → pro-rata staker payouts. Not a scheduled job  |
+| tRPC `recordBuyback`                   | `admin:treasury` + MFA  | **Operator action, no caller.** Records an asserted `tokensBought` and burns the split from rewards. Buys nothing         |
+| tRPC `burnedSupply`                    | `token:read`            | Balance of the `house/burn` ledger account                                                                                |
+| tRPC `createProposal` / `castVote`     | `token:stake` / admin   | Records a ballot, weight = `stakeOf` snapshot taken inside the vote transaction                                           |
+| tRPC `listProposals` / `getProposal`   | `token:read`            | Reads proposals; `getProposal` recomputes a tally that **nothing acts on**                                                |
 
 Optional auto-tick: set `EMISSIONS_AUTO_TICK=true` (and leave `EMISSIONS_ENABLED=true`) to mint the next sequential epoch every `EMISSIONS_TICK_MS` (default 1 day). Prefer external cron → `/internal/emissions/mint-next` or tRPC `mintEpoch` so the job is pauseable.
 
@@ -34,9 +54,9 @@ Optional auto-tick: set `EMISSIONS_AUTO_TICK=true` (and leave `EMISSIONS_ENABLED
 | Subject                             | When                                    |
 | ----------------------------------- | --------------------------------------- |
 | `intafaced.token.stake.created`     | a stake opens — gates unlock downstream |
-| `intafaced.token.buyback.completed` | a buyback run settles                   |
+| `intafaced.token.buyback.completed` | a burn record is written (no purchase)  |
 
-**Consumes** — nothing yet. In Phase 2 it consumes trade fills to compute revenue windows automatically; today the window's revenue is supplied by the caller.
+**Consumes — nothing, and that is the gap, not a phase.** §4.3's yield job and buyback schedule would both be consumers; neither exists. Today every revenue figure this service acts on is supplied by an operator on the wire, and no subscriber anywhere turns a trade fill into one.
 
 ---
 
@@ -81,11 +101,13 @@ The service checks these; the database enforces them regardless.
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
 | `emission_epochs_within_schedule_ck` | **the mint ceiling** — a retried allocation minting unauthorised supply                                   |
 | `buyback_runs_split_conserved_ck`    | a rounding bug promising the rewards engine tokens that do not exist                                      |
-| `buyback_runs_window_idx` (unique)   | a re-scheduled job spending the same revenue twice                                                        |
+| `buyback_runs_window_idx` (unique)   | the same revenue window being recorded twice — but see the note below, it fires late                      |
 | `stakes_lock_required_ck`            | an m3/m12 stake with no `unlocks_at` — a lock multiplier on withdrawable-on-demand funds, i.e. free yield |
 | `stakes_amount_positive_ck`          | a negative stake dragging the pro-rata denominator down and overpaying everyone else                      |
 | `governance_votes_one_per_user_idx`  | ballot stuffing                                                                                           |
 | `token_params_singleton_ck`          | two rows = two economies, whichever a job reads first wins                                                |
+
+> **Known ordering gap, not introduced by the honesty pass — flagged, not fixed.** `recordBuyback` posts the burn to the ledger _before_ inserting the `buyback_runs` row, and that insert is `ON CONFLICT (id) DO NOTHING`, which only dedupes on the run id. A second call over the same `revenueWindow` under a _different_ `runId` therefore burns first and only then trips `buyback_runs_window_idx`, leaving a burn with no run row. The ledger key `token.burn:${runId}` makes a retry of the _same_ run safe; it does not make a re-windowed run safe. Fixing it means claiming the window row before the post — the same claim-before-post shape `stake` already uses — which is a money-path change and belongs in its own reviewed PR alongside the `token.buyback` socket work.
 
 ---
 

@@ -52,7 +52,7 @@ P2P’s **decide-then-post** + **re-drive-don’t-interrogate** design is doctri
 | `ledger-client.ts` | S2S post/balance; body-bound auth headers                          |
 | `router.ts`        | scopes, party checks, decimal I/O                                  |
 | `index.ts`         | edge context, internal auth, dual sweeps before listen             |
-| `recipes` escrow*  | purpose-keyed pots + business idempotency keys                     |
+| `recipes` escrow\* | purpose-keyed pots + business idempotency keys                     |
 
 ### svc-trade convert
 

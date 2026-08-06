@@ -1,8 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
-import { assertTestDatabase } from '@intafaced/db';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { AuthError } from '@intafaced/auth';
@@ -43,21 +42,30 @@ import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principa
  */
 
 /**
- * A DEDICATED database, not the shared dev one.
+ * A PER-RUN DATABASE, created and dropped by this suite.
  *
  * This test applies every forward migration, which means it MUTATES THE SCHEMA
  * of whatever it points at. Pointed at the shared `intafaced` database it
  * applied an unmerged branch's migration there, and `main`'s own svc-trade
- * tests — which apply only the first migration and call `listMarket` without
- * the column that migration made mandatory — began failing on a branch that had
- * never touched them. A test that changes shared state is not a test, it is a
- * deployment.
+ * tests began failing on a branch that had never touched them. A test that
+ * changes shared state is not a test, it is a deployment. #211 moved it to
+ * `intafaced_test`, which fixed that and left the smaller version of it:
+ * `intafaced_test` is shared across worktrees too, so two agents running THIS
+ * FILE still truncated each other's `trade.orders` mid-test.
  *
- * Create it once:
- *   psql -U intafaced -c "CREATE DATABASE intafaced_test OWNER intafaced"
- *   psql -U intafaced -d intafaced_test -c "CREATE SCHEMA trade AUTHORIZATION svc_trade"
+ * trade's SQL is schema-qualified (`trade.…`) on purpose — §2 keeps a service
+ * physically unable to reach outside its own schema. That is exactly why
+ * `createTestDb`'s generated schema (`test_trade_4711_1`) cannot host it, the
+ * way it hosts svc-ledger. `createTestDatabase` moves the isolation boundary
+ * from the schema to the DATABASE and creates `trade` under its real name
+ * inside it. Every statement below, and every migration, is unchanged.
+ *
+ * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_TRADE`:
+ * creating a database needs CREATEDB, which the per-service roles deliberately
+ * lack. It must still name a `*_test` database — `assertTestDatabase` refuses
+ * anything else, and asks the server rather than trusting the string.
  */
-const URL = process.env.TEST_DATABASE_URL_TRADE ?? 'postgres://svc_trade:svc_trade@localhost:5433/intafaced_test';
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -79,36 +87,15 @@ const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
 const CAROL = '33333333-3333-4333-8333-333333333333';
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 });
-  }
-}
-
-const available = await reachable();
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-trade (Postgres unavailable — start docker compose)', () => {
     it('skipped', () => undefined);
   });
 } else {
-  const sql = postgres(URL, {
-    max: 8,
-    connection: { search_path: 'trade,public', application_name: 'svc-trade-test' },
-    onnotice: () => undefined,
-  });
-
-  // Owns its database, or does not run. This suite TRUNCATEs — pointed at the
-  // shared database that is destruction of live rows, which has happened here.
-  await assertTestDatabase(sql, 'svc-trade');
-
-  for (const migration of migrations) await sql.unsafe(migration);
+  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
+  const sql = db.sql;
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -194,9 +181,15 @@ if (!available) {
     });
   });
 
+  /**
+   * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
+   * pool, and when several suite files tear down at the same moment Postgres
+   * serialises the drops. The work still finishes well inside this; the default
+   * was sized for `sql.end()`, which is all this hook used to do.
+   */
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
-  });
+    await db.drop();
+  }, 30_000);
 
   // ── The happy path ────────────────────────────────────────────────────────
 
@@ -315,6 +308,31 @@ if (!available) {
       `;
       expect(legs).toHaveLength(2);
       expect(legs.find((l) => l.liquidity === 'taker')?.user_id).toBe(ALICE);
+    });
+
+    it('second partial take against house MM still uses marketMakerMakerFill (not user tradeFill)', async () => {
+      // Regression: first fill inserts a stub trade.orders row; second match must
+      // not route classic tradeFill against HOUSE_MM_USER_UUID (unfunded hold).
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-partial-1' }));
+      const mmOrderId = mmSeedOrderIdFor('partial-run', btcusdt.id, 'sell', 1);
+      await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrderId, assetId: 'BTC', amount: amt('1') }));
+      await fund(ALICE, 'USDT', '5000');
+      await fund(BOB, 'USDT', '5000');
+
+      matching.scriptFills([{ makerOrderId: mmOrderId, makerAccountId: MM_MATCHING_ACCOUNT_ID, price: '100', qty: '0.4' }]);
+      await rest(ALICE, btcusdt, 'buy', '0.4', '100', 'alice-mm-p1');
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(1);
+
+      matching.scriptFills([{ makerOrderId: mmOrderId, makerAccountId: MM_MATCHING_ACCOUNT_ID, price: '100', qty: '0.6' }]);
+      await rest(BOB, btcusdt, 'buy', '0.6', '100', 'bob-mm-p2');
+
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(2);
+      expect(postsWithReason('trade.fill')).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe('0');
+      const stub = await sql<Array<{ seeded: boolean }>>`
+        SELECT seeded FROM trade.orders WHERE id = ${mmOrderId}
+      `;
+      expect(stub[0]?.seeded).toBe(true);
     });
   });
 
@@ -1525,6 +1543,81 @@ if (!available) {
       const candles = await trade.candles(btcusdt.id, '1m');
       expect(candles).toHaveLength(1);
       expect(formatAmount(candles[0]!.volume)).toBe('3');
+    });
+  });
+
+  /**
+   * academy.paper-trading Stage-1 — paper market flag + ledger isolation.
+   * Live markets keep the funded placeOrder path; paper never posts holds.
+   */
+  describe('paper market isolation (Stage-1)', () => {
+    it('lists a paper market with paper=true; live default is false', async () => {
+      expect(btcusdt.paper).toBe(false);
+      const paperMkt = await trade.listMarket({
+        symbol: 'BTC/USDT-PAPER',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: amt('1000'),
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        paper: true,
+      });
+      expect(paperMkt.paper).toBe(true);
+    });
+
+    it('placeOrder on paper never debits real available balances', async () => {
+      const paperMkt = await trade.listMarket({
+        symbol: 'ETH/USDT-PAPER',
+        baseAsset: 'ETH',
+        quoteAsset: 'USDT',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.001'),
+        minQty: amt('0.001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        paper: true,
+      });
+      await fund(ALICE, 'USDT', '10000');
+      const before = await avail(ALICE, 'USDT');
+      const journalBefore = ledger.journal().length;
+
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: paperMkt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('1'),
+        price: amt('100'),
+        clientOrderId: 'paper-buy-1',
+      });
+
+      expect(order.status).toBe('open');
+      expect(formatAmount(order.holdAmount)).toBe('0');
+      expect(await avail(ALICE, 'USDT')).toBe(before);
+      expect(await held(ALICE, 'USDT')).toBe('0');
+      expect(ledger.journal().length).toBe(journalBefore);
+      expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('live market placeOrder still holds real funds (unchanged)', async () => {
+      await fund(ALICE, 'USDT', '5000');
+      matching.script1((req, next) => restsInFull(req, next()));
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('0.01'),
+        price: amt('100'),
+        clientOrderId: 'live-buy-1',
+      });
+      expect(order.status).toBe('open');
+      expect(formatAmount(order.holdAmount)).not.toBe('0');
+      expect(await held(ALICE, 'USDT')).not.toBe('0');
     });
   });
 }

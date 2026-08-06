@@ -11,7 +11,7 @@
 | #119 | **Private order stream** — `orderUpdated` event, trade publish, `/private/stream` JWT |
 | #120 | **Payment links** — createLink + public resolveLink + migration 0002                  |
 
-Plus prior night still on main: #110–#117 (yield/buyback, apikeys, edge ifc_, subaccounts, parallel-ops).
+Plus prior night still on main: #110–#117 (yield/buyback, apikeys, edge ifc\_, subaccounts, parallel-ops).
 
 ## Audit (local)
 

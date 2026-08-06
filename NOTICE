@@ -25,7 +25,7 @@ Two rules were applied without exception while compiling it:
      states exactly what was checked. An invented attribution is a false legal
      statement and is worse than an admission of ignorance.
 
-`vendor/coinexchange/NOTICE` and `vendor/coinexchange/LICENSE` are the upstream
+`vendor/upstream-exchange/NOTICE` and `vendor/upstream-exchange/LICENSE` are the upstream
 provenance record and are unmodified. This file adds to them; it does not
 replace or correct them.
 
@@ -52,11 +52,11 @@ different obligations:
 ================================================================================
 
 Component:   CoinExchange_CryptoExchange_Java
-Path:        vendor/coinexchange/
+Path:        vendor/upstream-exchange/
 Source:      https://github.com/jammy928/CoinExchange_CryptoExchange_Java
 Licence:     Apache License 2.0
-Evidence:    vendor/coinexchange/LICENSE — full Apache-2.0 text, 201 lines.
-             Retrieval recorded in vendor/coinexchange/NOTICE as 2026-07-28.
+Evidence:    vendor/upstream-exchange/LICENSE — full Apache-2.0 text, 201 lines.
+             Retrieval recorded in vendor/upstream-exchange/NOTICE as 2026-07-28.
 Scale:       1,822 tracked files. 878 `.java`, 149 `.vue`, 204 `.png`.
 Identifiers: Maven groupId `com.bizzan.bitrade`; wallet modules
              `com.bizzan.bc.wallet`; database and module naming `bitrade`.
@@ -66,14 +66,14 @@ IMPORTANT — THE APACHE-2.0 GRANT COVERS ONLY WHAT THE GRANTOR OWNED.
 An Apache-2.0 LICENSE file at the root of a repository is a grant by that
 repository's copyright holder over that holder's own work. It does not, and
 cannot, relicense third-party material the holder bundled in. Sections 2 to 5
-below list material inside `vendor/coinexchange/` that the upstream author did
+below list material inside `vendor/upstream-exchange/` that the upstream author did
 not write and had no evident right to sublicense to us. Each is assessed on its
 own terms, not on the root LICENSE file.
 
 Direct evidence that this tree has been re-badged at least once, which is why
 the above matters in practice rather than in theory:
 
-  vendor/coinexchange/01_wallet_rpc/act/bin/ contained 8 committed `.class`
+  vendor/upstream-exchange/01_wallet_rpc/act/bin/ contained 8 committed `.class`
   files under the package root `com/ztuo/bc/wallet/`, while the `.java` sources
   beside them are `com/bizzan/bc/wallet/`. The compiled output was from a build
   of the same code under a different vendor identity. Whatever chain of custody
@@ -247,9 +247,9 @@ have no published counterpart: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6.
 ================================================================================
 §3 · BROWSER ASSETS REDISTRIBUTED IN THE TRADING FRONT END
 ================================================================================
-Path: vendor/coinexchange/05_Web_Front/
+Path: vendor/upstream-exchange/05_Web_Front/
 
-The front end itself carries `vendor/coinexchange/05_Web_Front/LICENSE`: MIT,
+The front end itself carries `vendor/upstream-exchange/05_Web_Front/LICENSE`: MIT,
 "Copyright (c) 2018", holder recorded as a pseudonymous account name. The
 `package.json` names a different author under a personal contact address, which
 is not reproduced here (Doctrine §0.7). The relationship between the LICENSE
@@ -413,7 +413,7 @@ MIT text remains verbatim in the vendored file, which is what MIT requires.
                   should reach a shipped surface.
 
 3.13 · Upstream operator screenshots
-      Path        vendor/coinexchange/09_DOC/ — product screenshots of the
+      Path        vendor/upstream-exchange/09_DOC/ — product screenshots of the
                   upstream operator's live site, carrying their branding.
       Assessment  Documentation-only. Redistributed under §1's Apache-2.0
                   grant insofar as the author owned them; the marks within them
@@ -423,7 +423,7 @@ MIT text remains verbatim in the vendored file, which is what MIT requires.
 ================================================================================
 §4 · BROWSER ASSETS REDISTRIBUTED IN THE ADMIN FRONT END
 ================================================================================
-Path: vendor/coinexchange/04_Web_Admin/
+Path: vendor/upstream-exchange/04_Web_Admin/
 
 4.1 · iview-admin — MIT
       Evidence    package.json declares
@@ -431,7 +431,7 @@ Path: vendor/coinexchange/04_Web_Admin/
                     "repository": { "type": "git",
                       "url": "https://github.com/iview/iview-admin.git" }
                     "description": "a management bases on iview"
-      Licence file vendor/coinexchange/04_Web_Admin/LICENSE — MIT text,
+      Licence file vendor/upstream-exchange/04_Web_Admin/LICENSE — MIT text,
                   "Copyright (c) 2018", holder recorded as a personal name in
                   CJK script. The name is NOT transliterated or reproduced
                   here: this repository is English-only, and transliterating a
@@ -527,7 +527,7 @@ operator's.
 ================================================================================
 
 91 distinct `groupId:artifactId` coordinates are declared across 31 `pom.xml`
-files in `vendor/coinexchange/`. They are not committed here; they are pulled
+files in `vendor/upstream-exchange/`. They are not committed here; they are pulled
 from Maven Central during a build and land inside any image built from this
 tree.
 
@@ -746,5 +746,5 @@ that nothing in this repository entitles anyone to assume one.
   lightweight-charts 3.8.0
     Copyright (c) 2023 TradingView, Inc.
     License: Apache-2.0
-    Path: vendor/coinexchange/05_Web_Front/src/assets/js/market-chart/
+    Path: vendor/upstream-exchange/05_Web_Front/src/assets/js/market-chart/
     Source: https://github.com/tradingview/lightweight-charts

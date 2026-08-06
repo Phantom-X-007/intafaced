@@ -176,6 +176,6 @@ Ordered by money-risk / regression prevention, not novelty:
 
 - `git fetch` + `origin/main` @ `60031cf`
 - PR #80, #81, #82 bodies + merge SHAs; CI conclusions for #80/#81
-- On-main: PEACE, WAVE-AUDIT, FULL-AUDIT-PROGRAM, AUDIT-V2 banner, audit/2026-07-29/*
+- On-main: PEACE, WAVE-AUDIT, FULL-AUDIT-PROGRAM, AUDIT-V2 banner, audit/2026-07-29/\*
 - On-main tooling: `package.json` scripts, `.github/workflows/ci.yml`, `tooling/ci/*`
 - Local draft maps: SECURITY-WHEN-PLAIN, BULLETPROOF-ARSENAL, STRIX-ASSESSMENT (not on main at verify)

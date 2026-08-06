@@ -10,23 +10,23 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **41%** — 44 of 108 features shipped
+`████████░░░░░░░░░░░░` **41%** — 45 of 109 features shipped
 
-Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 7/16 · **3P** 1/8 · **4** 2/5 · **4P** 0/3 · **5** 4/32 · **5P** 0/2
+Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 5/17 · **3P** 1/8 · **4** 4/5 · **4P** 0/3 · **5** 8/35 · **5P** 0/2
 
-**In progress:** Perps: cross/isolated margin, funding, liquidation ladder (Nitro) · Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro)
+**In progress:** Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro) · Payment instruments — where the buyer actually pays (nitro-agent)
 
-**🟢 39 ready to claim** — nothing blocks these:
+**🟢 31 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
+- `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
 - `trade.otc` — OTC RFQ desk, staked-tier gate
 - `trade.copy` — Copy trading, audited leaders, profit share
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
 - `trade.mm-bot` — Internal market-maker seeding books at launch
-- `venue.aggregation` — External venue adapters via CCXT (cross-venue)
-- …and 31 more
+- …and 23 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
@@ -112,14 +112,29 @@ Scopes (note: there is no `ledger:write` — balances never move on a user token
 
 ### `tooling/ci` — the doctrines, enforced
 
-| Gate                | Doctrine | What it does                                                                                                    |
-| ------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
-| `pnpm scan:brand`   | §0.7     | Fails the build if a vendor name reaches user-facing copy                                                       |
-| `pnpm scan:custody` | §16.10   | Fails if a Protocol Plane service imports a ledger write recipe, or a contract grants platform withdrawal power |
-| `pnpm db:check`     | §14      | Every migration has a reversal; destructive statements must be declared                                         |
-| `pnpm gate`         | §14      | The full Definition of Done, per service                                                                        |
+`pnpm gates` runs all fourteen in about two seconds, from **one list — `tooling/ci/gates.mjs` — that `pnpm verify` and CI's `gates` job both consume.** One list is the point: they were previously maintained separately and drifted, so two gates ran in CI and nowhere local.
 
-All four are verified against deliberate violations, not just against a clean tree.
+| Gate                             | Doctrine  | What it does                                                                                                    |
+| -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `pnpm scan:brand`                | §0.7      | Fails the build if a vendor name reaches user-facing copy                                                       |
+| `pnpm scan:custody`              | §16.10    | Fails if a Protocol Plane service imports a ledger write recipe, or a contract grants platform withdrawal power |
+| `pnpm scan:secrets`              | §16       | Fails on a credential-shaped assignment that is not a declared placeholder                                      |
+| `pnpm scan:vendor-shell`         | vendor    | Mass-credit endpoints and `CORS *` inherited from the vendored shell                                            |
+| `pnpm scan:vendor-java-money`    | dual-book | A Java money mutator is a second book, and there is only one book                                               |
+| `pnpm scan:dual-book-door`       | A1        | The door-kill interceptor is registered on every vendored app                                                   |
+| `pnpm scan:dual-book-door-paths` | A1        | Proves the door-kill path fragments block what they claim, without a JVM                                        |
+| `pnpm scan:test-db`              | isolation | Every Postgres-capable suite is on a `*_test` database, never the shared one                                    |
+| `pnpm db:check`                  | §14       | Every migration has a reversal; destructive statements must be declared                                         |
+| _killswitch reachability_        | §14.6     | Every route killable, enforced at the door, failing closed, reachable from `apps/admin`                         |
+| `pnpm scan:workspace`            | fleet     | No service that builds but never reaches the image or the fleet                                                 |
+| `pnpm tracker:check`             | honesty   | `docs/TRACKER.md` matches the code; nothing claims `done` without the service existing                          |
+| `pnpm scan:agent-autoload`       | multi-dev | Coordination law stays in the files a cold agent auto-loads                                                     |
+| `pnpm scan:i18n`                 | §9        | Reports hardcoded user-facing strings. **Advisory** — runs and prints, does not fail                            |
+| `pnpm gate`                      | §14       | The full Definition of Done, per service. Runs separately, after build and test                                 |
+
+They are verified against deliberate violations, not just against a clean tree.
+
+**`scan:custody` is narrower than its name suggests** — it walks four named Protocol Plane services (three exist today) and `svc-protocol`'s Solidity, 97 files. It covers no Java and no other service. The header of `tooling/ci/custody-scan.mjs` states the coverage exactly; read it before citing the gate.
 
 ---
 

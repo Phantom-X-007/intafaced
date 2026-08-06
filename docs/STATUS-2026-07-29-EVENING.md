@@ -4,7 +4,7 @@ Denon is offline for 1–2 hours. **You have full access to the whole app** — 
 territory split in `SPLIT-BOARD.md` is suspended. Build anywhere.
 
 **Start here:** `docs/SPLIT-BOARD.md` §"WHERE THE APP ACTUALLY IS". The product
-is the vendored exchange under `vendor/coinexchange/`, served at
+is the vendored exchange under `vendor/upstream-exchange/`, served at
 **http://localhost:8090**. `apps/web` is not the product.
 
 ---

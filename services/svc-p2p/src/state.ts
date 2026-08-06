@@ -18,16 +18,25 @@
  *                                    ▲
  *                       either party, or the release timeout
  *
- * THE LAW OF THIS FILE, in one line:
+ * THE LAW OF THIS FILE, in two lines:
  *
  *   Every state that holds value has at least one edge out of it that some
- *   clock will eventually take on its own.
+ *   clock will eventually take on its own — EXCEPT `disputed`, where the only
+ *   edges out are a human's two options, and the clock's job is to shout.
  *
  * `created`, `escrowed`, `fiat_sent` and `disputed` all carry a deadline (the
  * database enforces it: `p2p_trades_live_has_deadline_ck`). `released` and
- * `cancelled` are terminal and carry a resolution. There is no state that is
- * neither swept nor settled — which is the same sentence as "funds cannot be
- * stranded", written as a graph.
+ * `cancelled` are terminal and carry a resolution.
+ *
+ * The exception is not a hole in the guarantee, it is the guarantee being
+ * honest about what it covers. A stall — nobody escrowed, nobody paid, nobody
+ * confirmed — is a thing a clock can correctly unwind, because unwinding is
+ * what everyone's silence meant. A DISPUTE is two people who have both spoken
+ * and disagree; there is nothing for a timer to infer, and the timer that used
+ * to sit here inferred "refund" seven days later and recorded it as a
+ * resolution. Past its SLA a dispute escalates and re-arms
+ * (`timeoutActionFor`), so the trade always carries a deadline and the queue
+ * always says so, and the escrow does not move until somebody rules.
  */
 
 export const TRADE_STATUSES = ['created', 'escrowed', 'fiat_sent', 'released', 'cancelled', 'disputed'] as const;
@@ -142,8 +151,20 @@ export interface DeadlinePolicy {
   readonly paymentSeconds: number;
   /** `fiat_sent` → the seller never confirmed. Opens a dispute; never auto-releases. */
   readonly releaseSeconds: number;
-  /** `disputed` → no moderator ruled. The backstop rules instead. */
+  /**
+   * `disputed` → the moderator SLA. Past it the dispute ESCALATES; it is never
+   * resolved by a clock. See `timeoutActionFor`.
+   */
   readonly disputeSeconds: number;
+  /**
+   * How long an escalated dispute waits before it is raised again.
+   *
+   * This exists because `p2p_trades_live_has_deadline_ck` requires a live trade
+   * to carry a deadline — correctly. The constraint requires a deadline; it
+   * does not require the deadline to dispose of value. So an escalated dispute
+   * re-arms on this interval and keeps asking.
+   */
+  readonly escalationRecheckSeconds: number;
 }
 
 export const DEFAULT_DEADLINES: DeadlinePolicy = {
@@ -151,6 +172,7 @@ export const DEFAULT_DEADLINES: DeadlinePolicy = {
   paymentSeconds: 15 * 60,
   releaseSeconds: 30 * 60,
   disputeSeconds: 7 * 24 * 60 * 60,
+  escalationRecheckSeconds: 60 * 60,
 };
 
 /** The full deadline record stored in `p2p_trades.deadlines` (§6.2 jsonb). */
@@ -179,6 +201,19 @@ export function deadlineFor(status: TradeStatus, from: Date, policy: DeadlinePol
   }
 }
 
+/**
+ * The next time an escalated dispute is raised again.
+ *
+ * Separate from `deadlineFor` because it is not the SLA: the SLA was breached
+ * once and stays breached (the dispute row's `deadline_at` is left in the past
+ * on purpose, so the queue's "most overdue first" ordering keeps telling the
+ * truth). This is only the trade's re-arm, which exists to satisfy
+ * `p2p_trades_live_has_deadline_ck` without disposing of anything.
+ */
+export function escalationDeadline(from: Date, policy: DeadlinePolicy): Date {
+  return new Date(from.getTime() + policy.escalationRecheckSeconds * 1000);
+}
+
 export const DEADLINE_KEY: Readonly<Record<TradeStatus, keyof Deadlines | null>> = {
   created: 'escrowBy',
   escrowed: 'paymentBy',
@@ -196,11 +231,21 @@ export function withDeadline(existing: Deadlines, status: TradeStatus, at: Date 
 }
 
 /**
- * What a timeout does, per state. This table IS the guarantee that a trade
- * cannot sit in escrow forever — every live state maps to an action, and none
- * of them map to "wait longer".
+ * What a timeout does, per state. Every live state maps to an action and none
+ * of them maps to "do nothing" — so no trade is ever invisible to the sweeper.
+ *
+ * `escalate_dispute` is the one action that does not dispose of value, and that
+ * is the whole point of it existing: it re-arms the deadline so the row stays
+ * swept and stays loud, without a clock ruling on a disagreement.
  */
-export type TimeoutAction = 'settle_or_void' | 'refund' | 'open_dispute' | 'backstop_resolve';
+export type TimeoutAction = 'settle_or_void' | 'refund' | 'open_dispute' | 'escalate_dispute';
+
+/**
+ * The actions that move value. `escalate_dispute` is deliberately NOT among
+ * them, and this set is asserted in the suite: a clock may unwind a stall, it
+ * may never adjudicate a disagreement.
+ */
+export const VALUE_MOVING_TIMEOUT_ACTIONS: ReadonlySet<TimeoutAction> = new Set<TimeoutAction>(['settle_or_void', 'refund']);
 
 export function timeoutActionFor(status: TradeStatus): TimeoutAction | null {
   switch (status) {
@@ -216,7 +261,12 @@ export function timeoutActionFor(status: TradeStatus): TimeoutAction | null {
       // hand the asset to anyone willing to press a button and wait 30 minutes.
       return 'open_dispute';
     case 'disputed':
-      return 'backstop_resolve';
+      // TWO PEOPLE DISAGREE AND ONE OF THEM IS WRONG. A timer cannot tell which,
+      // and it never could — the old `backstop_resolve` refunded on a 7-day
+      // clock and called the refund a resolution. It escalates instead: the SLA
+      // is breached, the dispute is raised, the escrow stays exactly where it
+      // is until a human rules. SPEC-OTC-RFQ-AND-EARN §33.
+      return 'escalate_dispute';
     case 'released':
     case 'cancelled':
       return null;

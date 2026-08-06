@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, marketMaker, MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import type { EngineCancelResult, EngineDepth, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
-import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './seed-jobs.js';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { loadMmSeedLastRun, parseMmSeedMids, parseMmSeedTargets, saveMmSeedLastRun, startMmSeedJobs } from './seed-jobs.js';
 import { MM_MATCHING_ACCOUNT_ID } from './seed-market.js';
 
 class JobStubMatching implements Pick<MatchingClient, 'submit' | 'depth' | 'cancel'> {
@@ -86,6 +89,23 @@ describe('parseMmSeedMids', () => {
     expect(m.get('btc-usdt')).toBe('100');
     expect(m.get('eth-usdt')).toBe('3000');
     expect(m.get('missing')).toBeUndefined();
+  });
+});
+
+describe('mm seed last-run durability', () => {
+  it('round-trips last-run map; corrupt/missing → empty', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mm-seed-'));
+    const path = join(dir, 'last-run.json');
+    expect(loadMmSeedLastRun(undefined).size).toBe(0);
+    expect(loadMmSeedLastRun(path).size).toBe(0);
+
+    const map = new Map([['m1', { runId: 'ops-seed:m1:1', levels: 3 }]]);
+    saveMmSeedLastRun(path, map);
+    const loaded = loadMmSeedLastRun(path);
+    expect(loaded.get('m1')).toEqual({ runId: 'ops-seed:m1:1', levels: 3 });
+
+    writeFileSync(path, '{not json', 'utf8');
+    expect(loadMmSeedLastRun(path).size).toBe(0);
   });
 });
 

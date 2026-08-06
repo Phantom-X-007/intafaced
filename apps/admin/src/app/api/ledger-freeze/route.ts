@@ -1,3 +1,4 @@
+import { adminBffGate } from '@/lib/admin-bff-gate';
 import { readFreeze, setFreeze } from '@/lib/control-plane-client';
 
 /**
@@ -16,12 +17,17 @@ import { readFreeze, setFreeze } from '@/lib/control-plane-client';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const gate = adminBffGate(request);
+  if (gate) return gate;
   const result = await readFreeze();
   return Response.json(result, { status: result.ok ? 200 : result.status });
 }
 
 export async function POST(request: Request) {
+  const gate = adminBffGate(request);
+  if (gate) return gate;
+
   let body: unknown;
   try {
     body = await request.json();

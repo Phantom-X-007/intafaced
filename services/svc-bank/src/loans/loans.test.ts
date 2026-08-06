@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import {
   InvalidEntryError,
@@ -39,19 +39,19 @@ import {
  * WHICH DATABASE THIS RUNS AGAINST, AND WHY IT IS NOT THE SHARED ONE
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * `bank-service.test.ts` connects to the shared `intafaced` database and
- * truncates the live `bank` schema in `beforeEach`. That has already broken
- * `main` once from an unrelated branch, and adding a second file that does it
- * would make the race worse, not equal.
+ * `bank-service.test.ts` truncates the `bank` schema in `beforeEach`. Done on a
+ * shared database that has already broken `main` once from an unrelated branch,
+ * and a second file doing it makes the race worse, not equal.
  *
- * So this suite points at a DEDICATED database (`intafaced_bank_loans_test`) and
- * builds a per-run schema inside it with `createTestDb` + `rewriteSchemaSql` —
- * the mechanism svc-ledger already uses for schema-qualified SQL. It issues no
- * DDL and no TRUNCATE against anything shared, and the URL is read from
- * `TEST_DATABASE_URL_BANK_LOANS` ONLY — deliberately not falling through to
- * `TEST_DATABASE_URL`, which points at the shared database in the checked-in
- * `.env`. A fallback that could silently land on `intafaced` is exactly the
- * failure this comment exists to prevent.
+ * This suite therefore gets a database of its OWN, created and dropped per run
+ * by `createTestDatabase`. It issues no DDL and no TRUNCATE against anything
+ * shared, so `bank-service.test.ts` running in a parallel vitest worker — or in
+ * another worktree entirely — cannot see any of it.
+ *
+ * The URL names the ADMIN database it creates that database FROM, and must end
+ * in `_test`: `assertTestDatabase` asks the server for `current_database()` and
+ * refuses anything else, so a `TEST_DATABASE_URL` still pointing at the shared
+ * `intafaced` in someone's stale `.env` fails loudly rather than truncating it.
  *
  * The pure-arithmetic and recipe suites below need no database at all and always
  * run.
@@ -62,11 +62,23 @@ const BANK_INIT = readFileSync(join(here, '..', '..', 'drizzle', '0000_bank_init
 const POSITION_PENDING = readFileSync(join(here, '..', '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
 const LOANS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
 
-const LOANS_DB_URL =
-  process.env.TEST_DATABASE_URL_BANK_LOANS ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_bank_loans_test';
+const LOANS_DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
 const BORROWER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
+
+/**
+ * Funding stand-ins for the market maker and the insurance fund.
+ *
+ * They were `'mm-funder'`, `'mm'` and `'ins'`. A `user` owner_id is now
+ * required to be a UUID (§4.2 `accounts_owner_id_space_ck`) — an account is
+ * never opened for an owner whose identifier space is undeclared — so these
+ * carry real ones. The names are kept in the comment because that is all they
+ * ever were: a wallet to push value out of, not an assertion about handles.
+ */
+const MM_FUNDER = '33333333-3333-4333-8333-333333333333';
+const MM_SWEEP = '44444444-4444-4444-8444-444444444444';
+const INSURANCE_FUNDER = '55555555-5555-4555-8555-555555555555';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -701,7 +713,7 @@ describe('loan recipes', () => {
   it('seizes, sells and repays atomically across two assets', async () => {
     await fundReserve('USDT', '10000');
     await fund(BORROWER, 'BTC', '1');
-    await fund('mm-funder', 'USDT', '20000');
+    await fund(MM_FUNDER, 'USDT', '20000');
 
     // The market maker must actually hold cash to buy with.
     await ledger.post({
@@ -709,7 +721,7 @@ describe('loan recipes', () => {
       module: 'test',
       reason: 'seed',
       entries: [
-        { account: userAvailable('mm-funder', 'USDT'), direction: 'credit', amount: amt('20000') },
+        { account: userAvailable(MM_FUNDER, 'USDT'), direction: 'credit', amount: amt('20000') },
         { account: marketMaker('USDT'), direction: 'debit', amount: amt('20000') },
       ],
     });
@@ -821,13 +833,13 @@ describe('loan recipes', () => {
     );
 
     // Fund the insurance fund and it works, moving the loss where it belongs.
-    await fund('ins', 'USDT', '1000');
+    await fund(INSURANCE_FUNDER, 'USDT', '1000');
     await ledger.post({
       idempotencyKey: 'seed-insurance-fund',
       module: 'test',
       reason: 'seed',
       entries: [
-        { account: userAvailable('ins', 'USDT'), direction: 'credit', amount: amt('1000') },
+        { account: userAvailable(INSURANCE_FUNDER, 'USDT'), direction: 'credit', amount: amt('1000') },
         { account: insuranceFund('USDT'), direction: 'debit', amount: amt('1000') },
       ],
     });
@@ -845,73 +857,40 @@ describe('loan recipes', () => {
 /**
  * The service's SQL is schema-qualified (`bank.loans`) on purpose, so
  * `createTestDb`'s per-run schema cannot isolate it — the same reason
- * `bank-service.test.ts` gives. The isolation here is therefore a whole
- * DATABASE, not a schema: a real `bank` schema inside
- * `intafaced_bank_loans_test`, which nothing else in the platform connects to.
+ * `bank-service.test.ts` gives. The isolation is therefore a whole DATABASE,
+ * not a schema: a real `bank` schema in a database nothing else connects to.
  *
- * That is what makes the `TRUNCATE` below safe, and it is the specific thing that
- * broke `main` when it was done against the shared database. Same mechanism,
- * different blast radius.
+ * That much was already true. What it was NOT is per-run.
+ * `intafaced_bank_loans_test` is one fixed database, so "nothing else in the
+ * platform connects to it" quietly meant "nothing except this same suite
+ * running in another of the ~85 worktrees" — which truncates `bank.loans`
+ * in `beforeEach` exactly as destructively as the shared database did. Two
+ * checkouts running this file at once failed 25 and 23 tests respectively.
+ *
+ * `createTestDatabase` makes the database per-run rather than merely dedicated.
+ * The migrations below are applied verbatim to a database that did not exist a
+ * moment ago, which also retires the `IF NOT EXISTS` dance: they were guarded
+ * because a fixed database is only migrated once, and a fresh one is migrated
+ * exactly once by construction.
  */
-async function connect(): Promise<ReturnType<typeof postgres> | null> {
-  const probe = postgres(LOANS_DB_URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-  } catch {
-    return null;
-  } finally {
-    await probe.end({ timeout: 2 }).catch(() => undefined);
-  }
+const available = await postgresAvailable(LOANS_DB_URL);
 
-  const client = postgres(LOANS_DB_URL, {
-    max: 8,
-    connection: { search_path: 'bank,public', application_name: 'svc-bank-loans-test' },
-    onnotice: () => undefined,
-  });
-
-  // Guard rail with teeth: refuse to run against anything but the dedicated
-  // database, whatever an env var says. A suite that truncates `bank.*` must not
-  // be one misconfiguration away from doing it to the platform's live schema.
-  const [{ current_database: dbName }] = await client<Array<{ current_database: string }>>`SELECT current_database()`;
-  if (!/bank_loans_test$/.test(dbName)) {
-    await client.end({ timeout: 2 });
-    throw new Error(
-      `Refusing to run the loans suite against "${dbName}". It truncates bank.* and must only ever ` +
-        `point at a dedicated *_bank_loans_test database (set TEST_DATABASE_URL_BANK_LOANS).`,
-    );
-  }
-
-  // Migrations are not re-runnable (`CREATE TYPE` has no IF NOT EXISTS), so they
-  // are applied once and skipped thereafter. Failures are NOT swallowed: a suite
-  // that silently ran against a half-built schema would report green on tables
-  // that do not exist.
-  await client.unsafe('CREATE SCHEMA IF NOT EXISTS bank');
-
-  const [{ exists }] = await client<Array<{ exists: boolean }>>`
-    SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'bank' AND table_name = 'loans') AS exists
-  `;
-
-  if (!exists) {
-    await client.unsafe(BANK_INIT);
-    await client.unsafe(POSITION_PENDING);
-    await client.unsafe(LOANS_MIGRATION);
-  }
-
-  return client;
-}
-
-const client = await connect();
-
-if (client === null) {
-  describe.skip('svc-bank loans (Postgres unavailable — start docker compose, or set TEST_DATABASE_URL_BANK_LOANS)', () => {
+if (!available) {
+  describe.skip('svc-bank loans (Postgres unavailable — start docker compose)', () => {
     it('skipped', () => undefined);
   });
 } else {
-  const sql = client;
-
-  afterAll(async () => {
-    await sql.end({ timeout: 5 });
+  const db: TestDatabase = await createTestDatabase({
+    service: 'bank',
+    url: LOANS_DB_URL,
+    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION],
   });
+  const sql = db.sql;
+
+  /** 30s: dropping a database is heavier than closing a pool. See bank-service.test.ts. */
+  afterAll(async () => {
+    await db.drop();
+  }, 30_000);
 
   describe('LoanService', () => {
     let ledger: MemoryLedger;
@@ -1334,13 +1313,13 @@ if (client === null) {
         await fundReserve('USDT', '100000');
         await fund(BORROWER, 'BTC', '1');
         // Seed the market maker so a liquidation has a funded counterparty.
-        await fund('mm', 'USDT', '100000');
+        await fund(MM_SWEEP, 'USDT', '100000');
         await ledger.post({
           idempotencyKey: `seed-mm-${Math.random()}`,
           module: 'test',
           reason: 'seed',
           entries: [
-            { account: userAvailable('mm', 'USDT'), direction: 'credit', amount: amt('100000') },
+            { account: userAvailable(MM_SWEEP, 'USDT'), direction: 'credit', amount: amt('100000') },
             { account: marketMaker('USDT'), direction: 'debit', amount: amt('100000') },
           ],
         });

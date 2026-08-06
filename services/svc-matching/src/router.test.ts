@@ -251,3 +251,199 @@ describe('depth does not allocate a book', () => {
     expect(engine.markets).toHaveLength(0);
   });
 });
+
+// ── The reconciliation surface ───────────────────────────────────────────────
+//
+// `reconcile.ts` is unit-tested against a real engine in `reconcile.test.ts`.
+// What is tested here is the part a function cannot test about itself: that it
+// is REACHABLE, that reaching it needs credentials, and that reaching it does
+// not cancel anything. A reconciler nobody can call is not a safety net, and a
+// reconciler anyone can call is a way to enumerate whose orders rest where.
+
+describe('the reconciliation routes', () => {
+  const SECRET = 'matching-internal-service-secret-32c';
+
+  const RESTING = {
+    marketId: 'BTC-USDT',
+    orderId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    accountId: 'acct-1',
+    kind: 'book' as const,
+    side: 'buy' as const,
+    price: '100',
+    remaining: '2',
+    sequence: 1,
+  };
+
+  /** Fails loudly if the read routes ever reach for a write. */
+  function fakeEngine(over: Record<string, unknown> = {}) {
+    return {
+      markets: ['BTC-USDT'],
+      hasMarket: (m: string) => m === 'BTC-USDT',
+      restingOrders: () => [RESTING],
+      cancel: () => {
+        throw new Error('a read route cancelled an order');
+      },
+      submit: () => {
+        throw new Error('a read route submitted an order');
+      },
+      ...over,
+    };
+  }
+
+  async function mount(engine: unknown) {
+    const app = Fastify({ logger: false });
+    registerRoutes(app, engine as never, SECRET, {});
+    await app.ready();
+    return app;
+  }
+
+  // ── GET /markets/:marketId/orders ──────────────────────────────────────────
+
+  it('refuses an unauthenticated liveness read, and the engine is never asked', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders' });
+
+    // Depth is public because a price is not a secret. A list of whose orders
+    // rest where is a different fact, and an order id is all you need to cancel.
+    expect(res.statusCode).toBe(401);
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('returns the resting orders to a signed caller without cancelling them', async () => {
+    let calls = 0;
+    const app = await mount(fakeEngine({ restingOrders: () => (calls++, [RESTING]) }));
+
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+    const first = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+    const second = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({ marketId: 'BTC-USDT', orders: [RESTING] });
+    // The whole point of the read: asking twice gives the same answer. `cancel`
+    // on this fake throws, so a probe that repaired would have failed the suite.
+    expect(second.json()).toEqual(first.json());
+    expect(calls).toBe(2);
+    await app.close();
+  });
+
+  it('separates "no such market" from "a market with nothing resting"', async () => {
+    const app = await mount(fakeEngine({ restingOrders: () => [] }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const unknown = await app.inject({ method: 'GET', url: '/markets/NOT-A-MARKET/orders', headers });
+    const empty = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+
+    // A reconciler that cannot tell these apart reports a whole live book as
+    // missing — or reports a deleted market as clean.
+    expect(unknown.statusCode).toBe(404);
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json().orders).toEqual([]);
+    await app.close();
+  });
+
+  // ── POST /reconcile ────────────────────────────────────────────────────────
+
+  it('refuses an unauthenticated reconcile', async () => {
+    const app = await mount(fakeEngine());
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/reconcile',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ orders: [] }),
+    });
+
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('reports the stranded-hold case as a 200 refusal naming both sides', async () => {
+    const app = await mount(fakeEngine({ restingOrders: () => [] }));
+
+    const body = JSON.stringify({
+      orders: [
+        {
+          orderId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          marketId: 'BTC-USDT',
+          state: 'open',
+          remaining: '2',
+          funded: true,
+          detail: 'hold=200 USDT',
+        },
+      ],
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/reconcile',
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', SECRET, body) },
+      payload: body,
+    });
+
+    // 200, not 4xx: a refusal is a correct answer to the question asked. A
+    // caller polling this must not have to tell "engine unreachable" apart from
+    // "engine found stranded money".
+    expect(res.statusCode).toBe(200);
+
+    const report = res.json();
+    expect(report.ok).toBe(false);
+    expect(report.refusals).toBe(1);
+    expect(report.findings[0].case).toBe('counterpart_open_engine_missing');
+    expect(report.findings[0].engine).toContain('NOT LIVE');
+    expect(report.findings[0].counterpart).toContain('hold=200 USDT');
+    await app.close();
+  });
+
+  it('rejects a malformed counterpart view instead of reconciling against it', async () => {
+    const app = await mount(fakeEngine());
+
+    // `funded` missing. Nothing in this file may guess it: `funded: false` is
+    // the one verdict that authorises deleting a row without asking.
+    const body = JSON.stringify({
+      orders: [{ orderId: 'x', marketId: 'BTC-USDT', state: 'open', remaining: '1' }],
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/reconcile',
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', SECRET, body) },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.stringify(res.json().issues)).toContain('funded');
+    await app.close();
+  });
+
+  it('moves nothing — a clean run and a refusing run both leave the engine untouched', async () => {
+    // `cancel` and `submit` on the fake throw. If reconciliation ever grows a
+    // repair, this is the test that fails first.
+    const app = await mount(fakeEngine());
+
+    const body = JSON.stringify({
+      orders: [{ orderId: RESTING.orderId, marketId: 'BTC-USDT', state: 'open', remaining: '2', funded: true }],
+    });
+    const clean = await app.inject({
+      method: 'POST',
+      url: '/reconcile',
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', SECRET, body) },
+      payload: body,
+    });
+
+    expect(clean.json()).toMatchObject({ ok: true, agreed: 1, refusals: 0 });
+
+    // And the engine still has it — the read did not consume the order.
+    const empty = JSON.stringify({ orders: [] });
+    const orphaned = await app.inject({
+      method: 'POST',
+      url: '/reconcile',
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', SECRET, empty) },
+      payload: empty,
+    });
+
+    expect(orphaned.json()).toMatchObject({ ok: false, refusals: 1 });
+    expect(orphaned.json().findings[0].case).toBe('engine_only');
+    await app.close();
+  });
+});

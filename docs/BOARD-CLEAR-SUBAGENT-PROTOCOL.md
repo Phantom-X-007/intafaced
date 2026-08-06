@@ -9,14 +9,16 @@
 
 Every cycle:
 
-1. Read SCOREBOARD + NEXT + open PRs + main tip
-2. Babysit red CI (own program PRs first)
-3. Pick unblocked ships (Wave A then B)
-4. Spawn ≤ N workers (default **3–5** concurrent code workers; thrift)
-5. On worker return: verify evidence block; merge if gates pass
-6. Update SCOREBOARD + NEXT + DECISION-LOG if plan changed
-7. Wave audit every 4 product merges
-8. **Never** stop with OPEN rows and empty NEXT
+1. Read NEXT + tip + open PRs (PARALLEL-SESSIONS §2 collision ritual)
+2. Read SCOREBOARD + AGENT-BACKLOG + LIVE-LANES
+3. Babysit red CI; shehzad PRs per DECISION-AUTHORITY
+4. Pick **path-clear** agent ships (skip SHIPPED; never M1–M7; no dual-build)
+5. Spawn ≤ N workers with PATHS_ONLY exclusive (default **3–5**; thrift)
+6. On worker return: verify evidence; merge if gates pass
+7. Update SCOREBOARD + NEXT (tip + exact ship + open PRs) + DECISION-LOG if needed
+8. Wave audit every 4 product merges
+9. **Never** stop with OPEN rows and empty NEXT
+10. **Never** idle because human rows are OPEN
 
 Orchestrator may do **small** Class N fixes itself; large ships go to workers.
 
@@ -27,15 +29,17 @@ Orchestrator may do **small** Class N fixes itself; large ships go to workers.
 ```text
 You are a Board Clear WORKER. Nitro is not in the loop.
 
-PROGRAM: <P-ID>
-SHIP_ID: <e.g. A-PAY-1>
+PROGRAM: <P-ID agent only — never H-PAY/H-PROT/H-TRADE-HARD/H-ID/H-P5-MONEY>
+SHIP_ID: <e.g. A-TRADE-MM-3 from AGENT-BACKLOG>
 OBJECTIVE: <one sentence>
-DONE_BAR_SLICE: <quote from constitution / plan>
-PATHS_ONLY: <glob list — do not edit outside>
+DONE_BAR_SLICE: <quote from constitution / agent backlog>
+PATHS_ONLY: <glob from backlog §0 — do not edit outside>
 BANS: no invent mid/depth/rates/balances/candles; no apps/web as product UI;
-      no force-push spine; no Class X go-live; worktree only; one concern PR
+      no force-push spine; no Class X go-live; worktree only; one concern PR;
+      no M1–M7 implementation; pro-trader / Stream A design bar if UI
 LOOPS: R1 research → S1 spec → P1 plan → B1 build → V1 verify → RV1 review → M1 PR
 STANDARD: docs/BOARD-CLEAR-ENGINEERING-STANDARD.md (anti-slop + evidence block)
+AUTHORITY: docs/BOARD-CLEAR-DECISION-AUTHORITY.md
 PROOF_COMMANDS: <e.g. pnpm --filter X test …>
 RETURN: PR URL + evidence block + any blocker for orchestrator (one line)
 

@@ -8,6 +8,21 @@ import type { QuoteVenue } from './quote/venue.js';
 import { IndexerQuoteVenue } from './quote/indexer-venue.js';
 import { MatchingQuoteVenue } from './quote/matching-venue.js';
 import { ExternalQuoteVenue } from './quote/external-venue.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-dex — the Protocol Plane's front door (§8.6, §17.5).

@@ -2,10 +2,15 @@
  * The message catalog — §9: "all surfaces keyed from day one; 100+ languages =
  * translation files, not refactors".
  *
- * English is the source of truth. Every other language is a `Catalog` derived
- * from it, and the type system enforces that derivation: a translation missing
- * a key is a COMPILE error, not a `undefined` that reaches a user as a blank
- * button. That is the entire reason this package exists before the surfaces do.
+ * English is the source of truth, and as of 2026-08-03 it is the ONLY language
+ * in this repo: there is no second catalog file, and no surface in `apps/web`
+ * renders through this one. §9 is the target this file is shaped for, not a
+ * description of where we are. `catalogs.ts` holds the measured version.
+ *
+ * Every other language is a `Catalog` derived from English, and the type system
+ * enforces that derivation: a translation missing a key is a COMPILE error, not
+ * a `undefined` that reaches a user as a blank button. That is the entire reason
+ * this package exists before the surfaces do.
  *
  * Conventions:
  *  - Keys are dot-namespaced by surface: `<surface>.<area>.<thing>`.
@@ -167,6 +172,32 @@ export const en = {
   'error.withdrawal.limitReached': 'You have reached your withdrawal limit for {period}.',
   'error.kyc.required': 'Verification is required for this action.',
   'error.region.blocked': 'This is not available in your region.',
+
+  // ── support · KB spine (keys only — svc-support listKb) ───────────────────
+  // No third-party product names (§0.7). Bodies stay general platform help.
+  'support.kb.account_access.title': 'Sign-in and account access',
+  'support.kb.account_access.body':
+    'If you cannot sign in, use account recovery from the sign-in screen. Support never asks for your password or recovery codes in chat.',
+  'support.kb.security_basics.title': 'Security basics',
+  'support.kb.security_basics.body':
+    'Enable two-factor verification, review sessions, and treat unexpected withdrawal prompts as urgent. We never ask you to move funds to “verify” an account.',
+  'support.kb.orders_status.title': 'Order status',
+  'support.kb.orders_status.body':
+    'Open, partial, and filled orders show in your order history. Support can confirm status; it cannot invent fills that the trade service did not record.',
+  'support.kb.deposit_withdraw.title': 'Deposits and withdrawals',
+  'support.kb.deposit_withdraw.body':
+    'Deposits credit when the network confirms; withdrawals follow your account limits. Support cannot invent balances or speed up the chain.',
+  'support.kb.paper_vs_live.title': 'Paper vs live trading',
+  'support.kb.paper_vs_live.body':
+    'Paper drills never move real funds. Live orders do. Labels must stay honest — paper progress is never withdrawable balance.',
+
+  // ── agents · grounded refuse copy ─────────────────────────────────────────
+  'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
+  'agents.scanner.empty': 'No markets to rank right now.',
+  'agents.scanner.unavailable': 'Market ranking is unavailable — quotes are missing, stale, or the market plane is dark.',
+  'agents.refused.tool_not_declared': 'That tool is not allowed for this agent.',
+  'agents.support.unavailable': 'Support desk data is unavailable — the agent will not invent answers.',
+  'agents.support.comment_refused': 'That comment cannot be posted — missing ticket, empty body, or forbidden invent language.',
 } as const;
 
 /** The English catalog's exact shape — the thing every other language is measured against. */
@@ -221,9 +252,13 @@ export function isPluralMessage(message: Message | undefined): message is Plural
 }
 
 /**
- * Translation coverage for a language, as a fraction of the English key set.
- * Used by the language dashboard so "we support 100+ languages" is a measured
- * claim rather than a marketing one.
+ * Translation coverage for ONE language, as a fraction of the English key set.
+ *
+ * For the whole picture use `localeCoverage()` in `catalogs.ts` — it reports a
+ * row per declared locale including the 27 that have no catalog at all, which is
+ * the part a dashboard built on this function alone would silently omit. "We
+ * support 100+ languages" is a §9 target; what these two functions return is the
+ * measurement, and today it is one.
  */
 export function coverage(catalog: PartialCatalog): { translated: number; total: number; missing: MessageKey[] } {
   const missing = MESSAGE_KEYS.filter((key) => catalog[key] === undefined);

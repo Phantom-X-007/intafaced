@@ -68,6 +68,8 @@ export interface Market {
    * forex pair is permanently `active` and shut every weekend.
    */
   readonly schedule: ScheduleKey;
+  /** Paper / simulated market — never posts real ledger holds (academy paper drills). */
+  readonly paper: boolean;
 }
 
 export interface OrderRecord {

@@ -135,3 +135,37 @@ That is the answer to the question this codebase asks everywhere — _if the pro
 All five are pure and need **no database** — none opens a connection, and none points at the shared `intafaced` instance.
 
 The service's SQL paths are exercised through the fleet's e2e suite rather than a per-service Postgres harness: this service holds no value, and its failure mode is an empty room rather than a lost balance, so the harness cost is better spent on services that move money. The one SQL path that would repay a harness is the capacity race under `FOR UPDATE`, and that is the honest gap in this suite.
+
+## Ambassador programme (Stage-1 — status only)
+
+Appoint / freeze / public badge. **No pay.** Hosting still uses §4.1 `lobbyHostRights` only.
+
+| Capability                        | Gate                             |
+| --------------------------------- | -------------------------------- |
+| Open lobby / invite / run session | `lobbyHostRights` (svc-identity) |
+| Programme badge active            | `ambassadors.status = active`    |
+| Appoint / freeze                  | operator `admin:write`           |
+| IFC pay / revenue share           | **Not built** (Class M Stage-2)  |
+
+Migration: `drizzle/0001_ambassadors.sql`.
+
+## Tournament ladders (Stage-1 — no prize money)
+
+Seasons + ranked standings. **No prize pools.** Kill-switch: `ACADEMY_TOURNAMENT_ENABLED` (flag `academy.tournament`).
+
+| Capability                             | Gate                            |
+| -------------------------------------- | ------------------------------- |
+| List seasons / standings               | `academy:read` when enabled     |
+| Create season / set status / set score | `admin:write`                   |
+| Prize fund / payout                    | **Not built** (Class M Stage-2) |
+
+Anti-cheat basics: scores only while season `live`; rank = score DESC, earlier `updated_at` wins ties; frozen/ended refuse score writes.
+
+Migration: `drizzle/0002_tournaments.sql`.
+
+## Curriculum import pipeline (Stage-1)
+
+- Content source on tip: **platform-native-expansion** (licensed import pending product/Class X).
+- `curriculumInventory` reports spine counts vs title 20 playbooks + 3 workbooks — `titlePromiseMet` stays false until residual lands.
+- Import records validated by `validateImportRecord` / brand checklist (no outbound URLs, no empty stubs).
+- Do **not** invent proprietary library titles as if the import landed.

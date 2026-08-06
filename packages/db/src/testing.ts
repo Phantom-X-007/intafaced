@@ -1,4 +1,9 @@
 import postgres from 'postgres';
+import { describeError, recordInfraProbe } from './infra-journal.js';
+
+// `@intafaced/db/testing` is an entry point in its own right; anything reaching
+// for the harness should get the journal that reports on it from the same import.
+export * from './infra-journal.js';
 
 /**
  * Test database harness (§1 Testing: "drizzle test DB").
@@ -31,8 +36,33 @@ let counter = 0;
 
 const SAFE_IDENT = /^[a-z][a-z0-9_]*$/i;
 
+const DEFAULT_ADMIN_URL = 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+
+/**
+ * How long a per-run schema or database may live before the sweeper treats it
+ * as abandoned. Suites here run in seconds; two hours is orders of magnitude of
+ * headroom and still bounds the leak (see `sweepStaleTestObjects`).
+ */
+const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
+
+/** Marker written into the object's COMMENT so the sweeper can date it. */
+const STAMP = 'intafaced-test-run';
+
+const stampFor = () => `${STAMP} ${new Date().toISOString()}`;
+
+/**
+ * Parse the creation stamp back out of a COMMENT.
+ * Anything not written by us returns null and is therefore never swept.
+ */
+function stampAgeMs(comment: string | null): number | null {
+  if (!comment || !comment.startsWith(`${STAMP} `)) return null;
+  const at = Date.parse(comment.slice(STAMP.length + 1));
+  if (Number.isNaN(at)) return null;
+  return Date.now() - at;
+}
+
 export async function createTestDb(options: TestDbOptions): Promise<TestDb> {
-  const url = options.url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+  const url = options.url ?? process.env.TEST_DATABASE_URL ?? DEFAULT_ADMIN_URL;
 
   const schema = `test_${options.service}_${process.pid}_${++counter}`;
   if (!SAFE_IDENT.test(schema)) {
@@ -51,8 +81,12 @@ export async function createTestDb(options: TestDbOptions): Promise<TestDb> {
    */
   await assertTestDatabase(admin, `createTestDb(${options.service})`);
 
+  await sweepStaleTestSchemas(admin);
+
   await admin.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
   await admin.unsafe(`CREATE SCHEMA "${schema}"`);
+  // Dates the schema so an abandoned one can be swept. See sweepStaleTestSchemas.
+  await admin.unsafe(`COMMENT ON SCHEMA "${schema}" IS '${stampFor()}'`);
 
   const sql = postgres(url, {
     max: 4,
@@ -83,6 +117,278 @@ export async function createTestDb(options: TestDbOptions): Promise<TestDb> {
       await admin.end({ timeout: 5 });
     },
   };
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * PER-RUN DATABASE — isolation for services whose SQL is schema-qualified
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * `createTestDb` above isolates by SCHEMA. That only works when the service's
+ * SQL is search_path-relative, because the generated schema has a name nobody
+ * can predict (`test_ledger_4711_1`). svc-pay, svc-trade and svc-bank write
+ * `pay.merchants`, `trade.markets`, `bank.spaces` — fully qualified, on purpose
+ * (§2: a service physically cannot reach outside its own schema). Their SQL
+ * cannot run inside a schema called anything else, which is exactly why
+ * `bank-service.test.ts` documented schema isolation as unavailable to it and
+ * stayed on the shared `bank` schema instead.
+ *
+ * The unstated assumption in that reasoning is that the isolation boundary has
+ * to be the schema. It does not. Give the run its own DATABASE and create the
+ * service's REAL schema name inside it: `trade.markets` resolves, every
+ * migration applies verbatim, and no production statement changes by a
+ * character. Two worktrees running the same suite now truncate different
+ * `trade.orders` tables in different databases.
+ *
+ * Why this and not "make the production SQL schema-agnostic": stripping the
+ * qualification makes every production query depend on the connection having
+ * `search_path` set correctly. That trades a test-harness problem for a
+ * production one, in three services that move money, two of which are owned by
+ * a human on a claimed mountain. The cost here is instead ~130 ms of
+ * `CREATE DATABASE` per suite file, paid once.
+ *
+ * The `assertTestDatabase` guard from #211 is not weakened. It runs twice: once
+ * on the ADMIN connection, which must itself be a `*_test` database before we
+ * are willing to issue `CREATE DATABASE` from it, and once on the per-run
+ * database. Both ask the server for `current_database()`, so a lying URL is
+ * still caught.
+ */
+
+export interface TestDatabaseOptions {
+  /**
+   * The service under test. Also the name of the schema created inside the
+   * per-run database — that is the whole point, so `trade.markets` resolves.
+   */
+  service: string;
+  /**
+   * Admin URL. Must be a `*_test` database whose role may CREATE DATABASE.
+   * Defaults to `TEST_DATABASE_URL`, then the local compose ops role.
+   */
+  url?: string;
+  /** Applied verbatim, in order. These are the service's real migrations. */
+  migrations?: readonly string[];
+  /** Extensions the migrations rely on. Both defaults are PG13+ trusted. */
+  extensions?: readonly string[];
+  /** search_path for the returned client. Defaults to `<service>,public`. */
+  searchPath?: string;
+}
+
+export interface TestDatabase {
+  /** Connection URL of the per-run database. */
+  readonly url: string;
+  /** Name of the per-run database. Always ends in `_test`. */
+  readonly database: string;
+  /** The service schema inside it — the real one, e.g. `trade`. */
+  readonly schema: string;
+  readonly sql: postgres.Sql;
+  truncateAll(): Promise<void>;
+  drop(): Promise<void>;
+}
+
+/** Prefix that marks a database as ours, so the sweeper can recognise it. */
+const RUN_DB_PREFIX = 'itf_run_';
+
+function withDatabase(url: string, database: string): string {
+  const parsed = new URL(url);
+  parsed.pathname = `/${database}`;
+  return parsed.toString();
+}
+
+export async function createTestDatabase(options: TestDatabaseOptions): Promise<TestDatabase> {
+  const adminUrl = options.url ?? process.env.TEST_DATABASE_URL ?? DEFAULT_ADMIN_URL;
+  const schema = options.service;
+
+  if (!SAFE_IDENT.test(schema)) {
+    throw new Error(`Refusing to create test schema with unsafe name: ${schema}`);
+  }
+
+  /**
+   * pid alone is not unique — CI runs suites in containers that can share one.
+   * The random tail costs nothing and removes the class of bug entirely.
+   * The `_test` SUFFIX is load-bearing: `assertTestDatabase` keys off it.
+   */
+  const database = `${RUN_DB_PREFIX}${schema}_${process.pid}_${++counter}_${Math.random().toString(36).slice(2, 8)}_test`;
+  if (!SAFE_IDENT.test(database) || database.length > 63) {
+    throw new Error(`Refusing to create test database with unsafe name: ${database}`);
+  }
+
+  const admin = postgres(adminUrl, { max: 1, onnotice: () => undefined });
+
+  /**
+   * The admin connection must itself own a test database before it is allowed
+   * to create more. Pointed at the shared `intafaced` this would still only
+   * CREATE (never drop anything pre-existing), but a suite that is willing to
+   * talk to the live database at all is one URL typo away from truncating it.
+   */
+  await assertTestDatabase(admin, `createTestDatabase(${schema})`);
+
+  await sweepStaleTestDatabases(admin);
+
+  try {
+    await admin.unsafe(`CREATE DATABASE "${database}"`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/permission denied to create database/i.test(msg)) throw err;
+    /**
+     * The single most likely failure on a machine whose Postgres volume predates
+     * this harness: the init script only runs on a FRESH volume, so an existing
+     * `intafaced_ops` never picked up CREATEDB. Say the fix rather than leaving
+     * 85 worktrees to each rediscover it.
+     */
+    await admin.end({ timeout: 5 }).catch(() => undefined);
+    throw new Error(
+      `createTestDatabase(${schema}) cannot create a database: ${msg}\n\n` +
+        `This suite isolates itself with a per-run database, which needs the CREATEDB\n` +
+        `role attribute. tooling/infra/postgres-init/02-intafaced-test-db.sh grants it,\n` +
+        `but postgres-init scripts run ONLY when the data volume is first created — so an\n` +
+        `existing local Postgres will not have it.\n\n` +
+        `Fix, either one:\n` +
+        `  docker compose exec postgres psql -U intafaced -c "ALTER ROLE intafaced_ops WITH CREATEDB"\n` +
+        `  docker compose down -v && docker compose up -d    (destroys local dev data)`,
+    );
+  }
+  // Dates the database so an abandoned one can be swept. See sweepStaleTestDatabases.
+  await admin.unsafe(`COMMENT ON DATABASE "${database}" IS '${stampFor()}'`);
+
+  const url = withDatabase(adminUrl, database);
+  const sql = postgres(url, {
+    max: 8,
+    connection: { search_path: options.searchPath ?? `${schema},public`, application_name: database },
+    onnotice: () => undefined,
+  });
+
+  try {
+    // Second guard, on the database the destructive statements will actually hit.
+    await assertTestDatabase(sql, `createTestDatabase(${schema}) → ${database}`);
+
+    // pgcrypto: gen_random_uuid() is a column default in these migrations.
+    // citext: case-insensitive keys. Both are trusted in PG13+, so the role
+    // that owns this freshly created database may install them without
+    // superuser — which is why the suites can run as `intafaced_ops`.
+    for (const ext of options.extensions ?? ['pgcrypto', 'citext']) {
+      if (!SAFE_IDENT.test(ext)) throw new Error(`Unsafe extension name: ${ext}`);
+      await sql.unsafe(`CREATE EXTENSION IF NOT EXISTS "${ext}"`);
+    }
+
+    /**
+     * The service schema, under its REAL name. In production this is created by
+     * the database bootstrap (tooling/infra/postgres-init/01-service-schemas.sql)
+     * rather than by a migration, so the migrations below assume it exists.
+     */
+    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+
+    // Verbatim. Not rewritten, not de-qualified — this is the production SQL.
+    for (const migration of options.migrations ?? []) {
+      await sql.unsafe(migration);
+    }
+  } catch (err) {
+    await sql.end({ timeout: 5 }).catch(() => undefined);
+    await admin.unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => undefined);
+    await admin.end({ timeout: 5 }).catch(() => undefined);
+    throw err;
+  }
+
+  return {
+    url,
+    database,
+    schema,
+    sql,
+    truncateAll: async () => {
+      const tables = await sql<Array<{ tablename: string }>>`
+        SELECT tablename FROM pg_tables WHERE schemaname = ${schema}
+      `;
+      if (tables.length === 0) return;
+      const list = tables.map((t) => `"${schema}"."${t.tablename}"`).join(', ');
+      await sql.unsafe(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
+    },
+    drop: async () => {
+      /**
+       * `timeout: 0` closes the pool immediately instead of waiting up to five
+       * seconds for a graceful drain. There is nothing to drain gracefully into
+       * — the next statement destroys the database these connections point at,
+       * and FORCE would terminate them anyway. Those five seconds were most of
+       * a vitest `afterAll` budget spent waiting to throw work away.
+       */
+      await sql.end({ timeout: 0 }).catch(() => undefined);
+      // FORCE terminates leftover backends; without it a straggler connection
+      // makes DROP fail and the database leaks until the sweeper catches it.
+      await admin.unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => undefined);
+      await admin.end({ timeout: 0 }).catch(() => undefined);
+    },
+  };
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SWEEPERS — the leak is bounded, not eliminated
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Both helpers drop their object in `drop()`. A process killed between create
+ * and drop — Ctrl-C, an OOM, a crashed vitest worker — leaves it behind, and
+ * "leaves it behind" compounds: the shared `intafaced_test` had 27 abandoned
+ * `test_%` schemas by the time this was written, from runs weeks old.
+ *
+ * So every create sweeps first. Two conditions must BOTH hold before anything
+ * is dropped, because dropping a live run's schema would be worse than the leak:
+ *
+ *   1. It carries OUR stamp and the stamp is older than STALE_AFTER_MS (2h).
+ *      Unstamped objects are never touched — they were not created by this code
+ *      and we cannot date them.
+ *   2. No backend is connected to it.
+ *
+ * Suites here finish in seconds, so (1) alone has ~700x headroom; (2) is the
+ * belt to its braces. The cost is one indexed catalog query per suite file.
+ */
+
+/** Drop abandoned per-run schemas left by `createTestDb`. Best-effort. */
+export async function sweepStaleTestSchemas(admin: postgres.Sql, staleAfterMs = STALE_AFTER_MS): Promise<string[]> {
+  const dropped: string[] = [];
+  try {
+    const rows = await admin<Array<{ nspname: string; comment: string | null }>>`
+      SELECT n.nspname, obj_description(n.oid, 'pg_namespace') AS comment
+        FROM pg_namespace n
+       WHERE n.nspname LIKE 'test\\_%'
+    `;
+    for (const row of rows) {
+      const age = stampAgeMs(row.comment);
+      if (age === null || age < staleAfterMs) continue;
+      const busy = await admin<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name = ${row.nspname}
+      `;
+      if ((busy[0]?.n ?? 0) > 0) continue;
+      if (!SAFE_IDENT.test(row.nspname)) continue;
+      await admin.unsafe(`DROP SCHEMA IF EXISTS "${row.nspname}" CASCADE`);
+      dropped.push(row.nspname);
+    }
+  } catch {
+    // A sweep failure must never fail the suite that triggered it.
+  }
+  return dropped;
+}
+
+/** Drop abandoned per-run databases left by `createTestDatabase`. Best-effort. */
+export async function sweepStaleTestDatabases(admin: postgres.Sql, staleAfterMs = STALE_AFTER_MS): Promise<string[]> {
+  const dropped: string[] = [];
+  try {
+    const rows = await admin<Array<{ datname: string; comment: string | null; backends: number }>>`
+      SELECT d.datname,
+             shobj_description(d.oid, 'pg_database') AS comment,
+             (SELECT count(*)::int FROM pg_stat_activity a WHERE a.datid = d.oid) AS backends
+        FROM pg_database d
+       WHERE d.datname LIKE ${`${RUN_DB_PREFIX}%\\_test`}
+    `;
+    for (const row of rows) {
+      const age = stampAgeMs(row.comment);
+      if (age === null || age < staleAfterMs) continue;
+      if (row.backends > 0) continue;
+      if (!SAFE_IDENT.test(row.datname) || !row.datname.endsWith('_test')) continue;
+      await admin.unsafe(`DROP DATABASE IF EXISTS "${row.datname}" WITH (FORCE)`);
+      dropped.push(row.datname);
+    }
+  } catch {
+    // A sweep failure must never fail the suite that triggered it.
+  }
+  return dropped;
 }
 
 /**
@@ -173,21 +479,40 @@ export async function assertTestDatabase(sql: postgres.Sql, context: string): Pr
 /**
  * True when a live Postgres is reachable — lets *local* suites skip rather than fail.
  * On CI / REQUIRE_POSTGRES, unreachable Postgres is a hard failure (no silent green).
+ *
+ * THIS IS THE ONLY SANCTIONED POSTGRES PROBE. Five suites used to open their own
+ * two-line `reachable()` helper instead, which swallowed the error and returned
+ * `false` no matter what — so `REQUIRE_POSTGRES=1` and `CI=true` did nothing to
+ * them and five money suites could silently skip on CI. `tooling/ci/skip-honesty-scan.mjs`
+ * now fails a build that re-introduces a private probe. Use this one.
+ *
+ * Every call is journalled (`packages/db/src/infra-journal.ts`) whichever way it
+ * goes, so `pnpm verify` can say out loud which suites did not run instead of
+ * letting turbo's "N successful" imply that they did.
  */
 export async function postgresAvailable(url?: string): Promise<boolean> {
   const target = url ?? process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
-  const sql = postgres(target, { max: 1, connect_timeout: 2, onnotice: () => undefined });
+  /**
+   * Three seconds, not two. Five suites carried a private probe with a 3s
+   * timeout; folding them onto this one at 2s would have manufactured skips
+   * under exactly the parallel load that started this. A probe must never be
+   * stingier than the suites it gates.
+   */
+  const sql = postgres(target, { max: 1, connect_timeout: 3, onnotice: () => undefined });
   try {
     await sql`SELECT 1`;
+    recordInfraProbe({ dependency: 'postgres', outcome: 'ran', target });
     return true;
   } catch (err) {
+    const msg = describeError(err);
     if (postgresRequired()) {
-      const msg = err instanceof Error ? err.message : String(err);
+      recordInfraProbe({ dependency: 'postgres', outcome: 'required-failed', target, reason: msg });
       throw new Error(
         `Postgres required in CI (residual #9) but unreachable at ${target}: ${msg}. ` +
           `Bootstrap service roles and set TEST_DATABASE_URL_* (see .github/workflows/ci.yml).`,
       );
     }
+    recordInfraProbe({ dependency: 'postgres', outcome: 'skipped', target, reason: msg });
     return false;
   } finally {
     await sql.end({ timeout: 1 }).catch(() => undefined);

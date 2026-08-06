@@ -14,11 +14,30 @@ import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
+import { profitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
-import { createConfiguredVenueMarkSource } from './futures/mark-from-venue.js';
+import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
-import { parseMmSeedMids, parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
+import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
+import { createMmMidSourceFromConfig } from './mm/mid-source.js';
+import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
+import { startCandleJobs } from './spot/candle-jobs.js';
 import { parseAmount } from '@intafaced/ledger-client';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-trade — the product layer over the matching engine (§5.2).
@@ -63,8 +82,6 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   subAccounts,
 });
 
-const positions = new PositionService(sql, ledger, bus);
-
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
 export const appRouter = createTradeRouter(trade);
@@ -76,9 +93,12 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 // Venue fabric public mid → mark path (A-TRADE-VENUE-1). Empty venue = off.
 // Unknown venue id → null (refuse invent). Symbol map required per market.
+// Shared adapter also feeds MM mid port when TRADE_MM_SEED_MID_FROM_VENUE (A-TRADE-MM-3).
+const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
 const venueMarkConfigured = createConfiguredVenueMarkSource({
   venueId: env.TRADE_VENUE_MARK_VENUE,
   symbols: env.TRADE_VENUE_MARK_SYMBOLS,
+  adapter: venuePublicAdapter,
 });
 if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
   // Typo / unsupported venue — say so once; do not invent a mid adapter.
@@ -104,12 +124,62 @@ const futuresJobs = startFuturesJobs({
   onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
 });
 
+/**
+ * WHERE REALISED FUTURES PROFIT COMES FROM.
+ *
+ * Not defaulted. `profitSourceFromConfig` throws when `TRADE_FUTURES_PROFIT_SOURCE`
+ * is unset or names an account the profit recipe does not draw from, and that
+ * throw happens HERE — at boot, before a position can be opened — rather than
+ * on the first profitable close. Which account and how it is capitalised is an
+ * owner decision (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`).
+ */
+const profitSource = profitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
+app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
+
+/**
+ * Positions price from `futuresJobs.marks` — the same venue-fabric-then-depth
+ * port liquidation reads. Constructed after the jobs for that reason: there is
+ * no second price path, and no request body anywhere near one.
+ */
+const positions = new PositionService(sql, ledger, {
+  marks: futuresJobs.marks,
+  profitSource,
+  bus,
+});
+
+// Spot candle materialization — default OFF. REST OHLCV still live from fills.
+const candleJobs = startCandleJobs({
+  sql,
+  config: {
+    enabled: env.TRADE_CANDLE_JOBS_ENABLED,
+    intervalMs: env.TRADE_CANDLE_JOBS_INTERVAL_MS,
+    marketIds: parseCandleMarketIds(env.TRADE_CANDLE_JOBS_MARKET_IDS),
+    timeframes: parseCandleTimeframes(env.TRADE_CANDLE_JOBS_TIMEFRAMES),
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'candle job tick failed'),
+  onResult: (r) => {
+    if (r.written > 0) {
+      app.log.info(
+        { marketId: r.marketId, timeframe: r.timeframe, candleCount: r.candleCount, written: r.written },
+        'candle materialize ok',
+      );
+    }
+  },
+});
+
 // MM seed job — default OFF. Empty markets or missing mids → no invent.
-const mmSeedMids = parseMmSeedMids(env.TRADE_MM_SEED_MIDS);
+// Mid port (A-TRADE-MM-3): env map first; optional venue public mid when enabled.
+const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
+const mmMidSource = createMmMidSourceFromConfig({
+  midsEnv: env.TRADE_MM_SEED_MIDS,
+  midFromVenue: env.TRADE_MM_SEED_MID_FROM_VENUE,
+  venueAdapter: venuePublicAdapter,
+  resolveVenueSymbol: (marketId) => venueMarkSymbols.get(marketId) ?? null,
+});
 const mmSeedJobs = startMmSeedJobs({
   ledger,
   matching,
-  midSource: (marketId) => mmSeedMids.get(marketId) ?? null,
+  midSource: mmMidSource,
   config: {
     enabled: env.TRADE_MM_SEED_ENABLED,
     intervalMs: env.TRADE_MM_SEED_INTERVAL_MS,
@@ -119,6 +189,7 @@ const mmSeedJobs = startMmSeedJobs({
     qtyPerLevel: env.TRADE_MM_SEED_QTY,
     targets: parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS),
   },
+  statePath: env.TRADE_MM_SEED_STATE_PATH,
   onError: (name, err) => app.log.error({ err, job: name }, 'mm seed job tick failed'),
   onResult: (marketId, result) => {
     if ('skipped' in result) {
@@ -199,11 +270,10 @@ registerPrivateRest(app, {
       symbol: input.symbol,
       side: input.side,
       size: parseAmount(input.size),
-      entryPrice: parseAmount(input.entryPrice),
       leverage: parseAmount(input.leverage),
       marginMode: input.marginMode,
     }),
-  closePosition: (principal, positionId, exitPrice) => positions.close(principal.userId, positionId, exitPrice),
+  closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -222,6 +292,8 @@ app.log.info(
     futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     futuresJobs: futuresJobs.host.list(),
     venueMark: venueMarkConfigured ? { venueId: venueMarkConfigured.venueId, symbols: venueMarkConfigured.symbolCount } : null,
+    candleJobsEnabled: env.TRADE_CANDLE_JOBS_ENABLED,
+    candleJobs: candleJobs.host.list(),
     mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
     mmSeedJobs: mmSeedJobs.host.list(),
     trpc: true,
@@ -258,6 +330,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       futuresJobs.stop();
+      candleJobs.stop();
       mmSeedJobs.stop();
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();

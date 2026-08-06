@@ -64,6 +64,9 @@ export const SCOPES = [
   // caller's own rows; there is no path that targets another user.
   'notify:read',
   'notify:write',
+  'support:read',
+  'support:write',
+  'support:ops',
 
   // Protocol plane (read-only by definition: keys are the user's, not ours)
   'protocol:read',
@@ -106,6 +109,8 @@ const IMPLIED: Partial<Record<Scope, readonly Scope[]>> = {
   'academy:write': ['academy:read'],
   'agents:execute': ['agents:read'],
   'notify:write': ['notify:read'],
+  'support:write': ['support:read'],
+  'support:ops': ['support:read', 'support:write'],
 };
 
 /** Expand a scope list to everything it actually grants. */
@@ -233,6 +238,9 @@ const SESSION_SCOPE_LIST = [
   // Non-custodial in-app inbox. Self-only mark-read; minTier none.
   'notify:read',
   'notify:write',
+  // Support desk (ops.support Stage-1) — non-custodial tickets.
+  'support:read',
+  'support:write',
   // Read-only by construction, on a plane that has no write scope to hold:
   // svc-protocol's own suite asserts `SCOPES` contains no `protocol:write`.
   // Non-custodial and `minTier: 'none'`, so §22 says permissionless — and a
@@ -286,6 +294,10 @@ export const WITHHELD_FROM_SESSION: Readonly<Record<Exclude<Scope, SessionScope>
   'launch:write': 'svc-launch not built',
   'market:read': 'svc-market not built',
   'market:write': 'svc-market not built',
+
+  // Support operator actions (assign/resolve). Users get support:read/write on
+  // session; ops is staff-only.
+  'support:ops': 'Operator scope — support desk staff actions',
 
   // Operator scopes. Never on a user session, whatever the account.
   // `admin:compliance` is the sharp one: it approves KYC records, so a session

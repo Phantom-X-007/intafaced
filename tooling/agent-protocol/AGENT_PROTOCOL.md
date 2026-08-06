@@ -9,6 +9,8 @@
 1. Read `INTAFACED_DEFINITIVE_BUILD.md`. It is the law, not context.
 2. Read the target service's `README.md`.
 3. Read this file.
+4. Multi-dev: read `docs/COORDINATION-TRUTH-LAYERS.md` (or the coordination section in `AGENTS.md`). **Nitro does not paste this** — it is binding on cold start.
+5. Internet leverage: read `docs/INTERNET-LEVERAGE-LAW.md` before product code. Prefer Phase A in-repo assets (shell, ledger, `svc-*`). **Do not ask Nitro for a pick list.**
 
 If the task is ambiguous, **the doctrine (§0) decides**. If the doctrine does not decide, **stop and ask D.** Do not guess on money, custody, or jurisdiction.
 
@@ -31,33 +33,55 @@ Never the reverse. Never both at once. The contract is the design review.
 
 These are not style preferences. A PR that does any of them is rejected without discussion.
 
-| Never                                                              | Why                                                                                                                   | Instead                                                           |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Write raw SQL against another service's tables                     | §2 — services never import each other's schemas. The dev DB enforces this with per-service roles; production will too | tRPC via `packages/contracts`, or an event via `packages/events`  |
-| Move value outside `packages/ledger-client`                        | Doctrine §0.6 — ledger is law                                                                                         | Add a recipe in `packages/ledger-client/src/recipes/`             |
-| Hold a balance in your service                                     | Doctrine §0.6 — no module holds its own balance                                                                       | An account kind in the ledger                                     |
-| Store money in a `number`                                          | 0.1 + 0.2 ≠ 0.3, and the book reconciles to 18dp                                                                      | `parseAmount` / `formatAmount`, `numeric(38,18)`                  |
-| Assemble ledger entries inline                                     | Recipes are the reviewable unit of a money path                                                                       | Call or write a recipe                                            |
-| Publish an undeclared NATS subject                                 | §10 — the bus is a contract                                                                                           | Add it to `packages/events/src/catalog.ts`                        |
-| Name a partner or model vendor in user-facing copy                 | Doctrine §0.7                                                                                                         | Identity Blueprint · Sovereign Intelligence · Neural Engine       |
-| Import `ledger-client` write recipes from a Protocol Plane service | Doctrine §16.10 — provably non-custodial                                                                              | `ReadOnlyLedgerClient`, or reconsider the design                  |
-| Add a fourth shared system                                         | Doctrine §0.3 — Identity, Balance, Token. That is all                                                                 | Redesign. The need for a fourth means the design is wrong         |
-| Leave a "temporary" anything                                       | Doctrine §0.1 — never half done                                                                                       | Finish it, or add a §13 socket entry and reference it in the TODO |
+| Never                                                                                                                | Why                                                                                                                   | Instead                                                               |
+| -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Write raw SQL against another service's tables                                                                       | §2 — services never import each other's schemas. The dev DB enforces this with per-service roles; production will too | tRPC via `packages/contracts`, or an event via `packages/events`      |
+| Move value outside `packages/ledger-client`                                                                          | Doctrine §0.6 — ledger is law                                                                                         | Add a recipe in `packages/ledger-client/src/recipes/`                 |
+| Hold a balance in your service                                                                                       | Doctrine §0.6 — no module holds its own balance                                                                       | An account kind in the ledger                                         |
+| Store money in a `number`                                                                                            | 0.1 + 0.2 ≠ 0.3, and the book reconciles to 18dp                                                                      | `parseAmount` / `formatAmount`, `numeric(38,18)`                      |
+| Assemble ledger entries inline                                                                                       | Recipes are the reviewable unit of a money path                                                                       | Call or write a recipe                                                |
+| Publish an undeclared NATS subject                                                                                   | §10 — the bus is a contract                                                                                           | Add it to `packages/events/src/catalog.ts`                            |
+| Name a partner or model vendor in user-facing copy                                                                   | Doctrine §0.7                                                                                                         | Identity Blueprint · Sovereign Intelligence · Neural Engine           |
+| Import `ledger-client` write recipes from a Protocol Plane service                                                   | Doctrine §16.10 — provably non-custodial                                                                              | `ReadOnlyLedgerClient`, or reconsider the design                      |
+| Add a fourth shared system                                                                                           | Doctrine §0.3 — Identity, Balance, Token. That is all                                                                 | Redesign. The need for a fourth means the design is wrong             |
+| Leave a "temporary" anything                                                                                         | Doctrine §0.1 — never half done                                                                                       | Finish it, or add a §13 socket entry and reference it in the TODO     |
+| Implement on **HUMAN-CLAIMED** Shehzad chain mountains / tracker `owner: shehzad002` (protocol/INTACHAIN) as if free | Multi-dev conflict; Denon/shehzad ownership                                                                           | Babysit only; see `docs/COORDINATION-TRUTH-LAYERS.md` + LIVE-LANES    |
+| Code without LIVE-LANES (or equivalent) claim when other agents may run                                              | Dual-build same paths                                                                                                 | Claim session row + path-intersect open PRs first                     |
+| Mark tracker `done` without path evidence / DoD                                                                      | False product map                                                                                                     | Mountain event: `requires` + real proof; `pnpm tracker:check`         |
+| Require every craft PR to edit `features.mjs`                                                                        | Speed tax — **not** the law                                                                                           | mountain events only (claim / handoff / done / optional wave note)    |
+| Rebuild product UI as a new SPA / second exchange kit while vendored shell is product law                            | Internet leverage Phase A — V-SHELL is sole product UI                                                                | Craft/wire `vendor/upstream-exchange/05_Web_Front` + overlays         |
+| Adopt a second money book (Java balances as SoT, external ledger as SoT, service-held balances)                      | Doctrine §0.6 + Phase A forbidden leverage                                                                            | `packages/ledger-client` recipes only                                 |
+| Invent mids/depth/prices so charts or books “look live”                                                              | Honesty doctrine                                                                                                      | Real feeds or honest empty; see Phase A                               |
+| Skip Phase A / full-horizon path and greenfield a domain that already has `svc-*` + shell surface                    | Rebuild tax; agents “forget leverage”                                                                                 | Read `docs/INTERNET-LEVERAGE-LAW.md` before first product edit        |
+| Adopt Hyperswitch (or peer PSP orchestrators) as pay connectivity                                                    | D-S-10 ADR #769; Doctrine 5 no third-party connectivity lib in money path; orchestrator ≠ acquirer                    | Class X `socket.psp-partners`; thin relationship-backed adapters only |
+| Share one migrate-on-startup test Postgres across concurrent agent worktrees                                         | Contaminates peers; false reds (Denon #428 A/B)                                                                       | Dedicated test DB per branch / worktree                               |
 
 ---
 
 ## 3 · Every PR must pass
 
 ```bash
-pnpm typecheck        # no `any` escapes, no implicit widening
-pnpm test             # unit + invariant suites
-pnpm db:check         # migrations reversible, journal consistent
-pnpm scan:brand       # Doctrine §0.7
-pnpm scan:custody     # Doctrine §16.10
-pnpm gate <service>   # the full §14 Definition of Done
+pnpm verify           # everything below, in this order — run this one
 ```
 
-CI runs all six. A red gate is not a discussion.
+`pnpm verify` is:
+
+```bash
+pnpm gates            # 14 doctrine gates, ~2s — brand §0.7 · custody §16.10 ·
+                      # secrets · vendor-shell · vendor-java-money ·
+                      # dual-book door + door-paths · test-db isolation ·
+                      # killswitch §14.6 · migrations §14 · workspace · tracker ·
+                      # agent-autoload · i18n (advisory)
+pnpm format:check     # prettier
+pnpm build            # turbo
+pnpm typecheck        # no `any` escapes, no implicit widening
+pnpm test             # unit + invariant suites
+pnpm gate             # the full §14 Definition of Done, per service
+```
+
+**CI runs the same gate list from the same file** — `tooling/ci/gates.mjs`. That is deliberate: verify and CI used to keep separate lists and drifted, so two gates ran in CI and nowhere local. The file fails if `.github/workflows/ci.yml` stops calling `pnpm gates`, and fails if a scan lands in `tooling/ci/` that neither the list nor its documented exclusions claim.
+
+A red gate is not a discussion.
 
 **Actions thrift (private repo — metered):** run the local equivalents green **before** the push that opens/updates a code PR. Do not use remote CI as the first debugger. Parallel PRs remain fine. Never weaken these gates or open the repo to “save money.” Full law: `docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md` · thrift section in `AGENTS.md`.
 

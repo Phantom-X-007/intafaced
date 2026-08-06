@@ -38,6 +38,13 @@ export class TokenError extends Error {
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
+      // Buyback refusals. Every one of these must fire BEFORE the burn posts —
+      // the burn is irreversible, so a refusal that arrives after it is not a
+      // refusal (0002 / token-economics ADR).
+      | 'token.buyback_window_overlap'
+      | 'token.buyback_window_invalid'
+      | 'token.buyback_run_conflict'
+      | 'token.buyback_revenue_invalid'
       | 'token.params_missing'
       | 'token.params_invalid'
       | 'token.proposal_not_found'
@@ -51,6 +58,15 @@ export class TokenError extends Error {
     this.name = 'TokenError';
   }
 }
+
+/**
+ * Lifecycle of a buyback run (0002).
+ *
+ * `pending` means the run owns its revenue window but its burn is not yet on
+ * the ledger. It exists so the window can be claimed BEFORE the irreversible
+ * leg posts — the same reason `token.stakes` has a `pending` status.
+ */
+export type BuybackRunStatus = 'pending' | 'settled';
 
 /** §4.3 proposal surface — what an IFC-weighted vote may decide. */
 export type ProposalKind = 'listing' | 'fee_param' | 'curriculum' | 'grant';
@@ -608,6 +624,20 @@ export class TokenService {
    * "Real revenue, not emissions" — the value comes from `houseFees`, swept
    * into the rewards engine and paid out. Nothing is minted here.
    *
+   * ── THIS IS NOT THE §4.3 WEEKLY JOB (§13 socket `token.yield`) ─────────────
+   *
+   * §4.3 specifies a weekly job that aggregates house fee accounts per asset.
+   * That job does not exist. This method has no caller in the repo outside its
+   * own tests: no cron, no bus subscriber, no admin form. It runs when a human
+   * holding admin:treasury + MFA calls the tRPC mutation, and otherwise never.
+   *
+   * `input.sources` is therefore trusted operator input. The router validates
+   * decimal shape only; nothing here compares the claimed amount against the
+   * `houseFees` balance it says it is sweeping, so an operator can under-sweep,
+   * over-sweep or invent a windowId (audit T-03). The maths below is exact and
+   * the postings are correct — the number they are exact ABOUT is typed by a
+   * person. Describe this as an operator settlement, never as a flywheel.
+   *
    * Each payout is its OWN ledger transaction keyed on (window, user), so a
    * crash halfway through is resumable: re-running pays only whoever was
    * missed. A single giant transaction would be atomic but unresumable, and
@@ -715,23 +745,41 @@ export class TokenService {
     return { windowId: input.windowId, distributed, recipients, skipped };
   }
 
-  // ── Buyback & burn (§4.3, §17.3) ───────────────────────────────────────────
+  // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────
 
   /**
-   * Record and settle a buyback run.
+   * Record an operator-asserted burn.
    *
-   * T-01 residual (explicit): this is **operator burn-from-rewards**, not a structural
-   * market-buy of revenue. `tokensBought` is trusted input; `toRewards` is not a second
-   * ledger credit — funds must already sit in the rewards engine. Full §4.3 flywheel
-   * (auto market-buy + budget from `buybackBudget`) is a product socket, not this path.
+   * NOTHING IS BOUGHT BACK HERE, and the method name is the §4.3 vocabulary
+   * rather than a description of what runs. §13 socket `token.buyback`.
    *
-   * `tokensBought` is supplied by the caller because pricing and execution are
-   * svc-trade's job, not this service's — svc-token never decides a price.
-   * Until the internal book exists (Phase 2) an operator supplies the executed
-   * amount from apps/admin.
+   * - `tokensBought` is a figure the caller types. No market-buy is executed by
+   *   this service or any other, so the platform acquires no IFC and creates no
+   *   buy pressure. Pricing and execution are svc-trade's job and svc-trade
+   *   cannot yet do it.
+   * - The only ledger movement is the burn leg, debited from the rewards
+   *   engine — value that is already ours. `toRewards` is not a second credit;
+   *   it is the remainder, which never moves.
+   * - There is no caller: no cron, no bus subscriber, no admin form. An
+   *   operator with admin:treasury + MFA invokes the mutation or it never runs.
+   * - `buybackBudget()` (economics/buyback.ts) is what would size the spend from
+   *   revenue. It is called from nowhere but its own tests.
    *
-   * §13 socket: automated market-buy against the internal book once svc-trade
-   * lands, which turns this into a scheduled job rather than an operator action.
+   * ORDERING (0002, and the reason this method was rewritten): the window is
+   * CLAIMED before the burn posts — the same claim -> post -> activate order
+   * `stake` uses above, for the same reason. Previously the burn posted first
+   * and the row followed `ON CONFLICT (id) DO NOTHING`, while the guard was a
+   * unique index on the WINDOW. A new run id over a spent window therefore
+   * burned for real and then failed on an index its conflict clause did not
+   * name: tokens irreversibly gone, no row, no event, and an opaque 500.
+   *
+   * Windows are half-open `[from, to)` and may not overlap (0002). This method
+   * decides no economic number — not a window length, not a cadence, not a
+   * rate. Those are the owner's (see the token-economics ADR).
+   *
+   * Turning this into the §4.3 flywheel needs a real market-buy against the
+   * internal book plus a schedule — a product decision and an svc-trade
+   * dependency, not a rename.
    */
   async recordBuyback(input: {
     runId: string;
@@ -740,30 +788,78 @@ export class TokenService {
     revenueTotal: Record<string, string>;
     tokensBought: Amount;
   }): Promise<{ runId: string; burned: Amount; toRewards: Amount }> {
-    const buyback = await this.buybackParams();
-    const { toBurn, toRewards } = splitBuyback(input.tokensBought, buyback);
+    return withMoneySpan('token.recordBuyback', { operation: 'buyback', amount: formatAmount(input.tokensBought) }, async () =>
+      this.recordBuybackInner(input),
+    );
+  }
 
-    // toBurn + toRewards === tokensBought exactly (splitBuyback derives one side
-    // by subtraction). The burn is the only leg that needs a ledger movement —
-    // the remainder is already in the rewards engine.
-    if (toBurn > 0n) {
-      await this.ledger.post(
-        recipes.burn({ runId: input.runId, assetId: this.assetId, amount: toBurn, from: rewardsEngine(this.assetId) }),
+  private async recordBuybackInner(input: {
+    runId: string;
+    revenueWindow: { from: Date; to: Date };
+    revenueTotal: Record<string, string>;
+    tokensBought: Amount;
+  }): Promise<{ runId: string; burned: Amount; toRewards: Amount }> {
+    // Validate before anything is claimed and long before anything burns. The
+    // DB has a `to > from` check, but reaching it as a raw 23514 would be the
+    // same unnamed-500 failure this method was rewritten to remove.
+    if (!(input.revenueWindow.from.getTime() < input.revenueWindow.to.getTime())) {
+      throw new TokenError(
+        `Revenue window [${iso(input.revenueWindow.from)}, ${iso(input.revenueWindow.to)}) is empty or inverted`,
+        'token.buyback_window_invalid',
       );
     }
 
+    const revenueTotal = normaliseRevenueTotal(input.revenueTotal);
+
+    const buyback = await this.buybackParams();
+    // toBurn + toRewards === tokensBought exactly (splitBuyback derives one side
+    // by subtraction). Pure arithmetic over the params — no ledger read — so the
+    // final figures are known at claim time and the claimed row is never a
+    // placeholder that has to be corrected later.
+    const { toBurn, toRewards } = splitBuyback(input.tokensBought, buyback);
+
+    // ── CLAIM ────────────────────────────────────────────────────────────────
+    const claimed = await this.claimBuybackWindow({
+      runId: input.runId,
+      window: input.revenueWindow,
+      revenueTotal,
+      tokensBought: input.tokensBought,
+      toBurn,
+      toRewards,
+    });
+
+    if (claimed.status === 'settled') {
+      // Exact retry of a run that already finished. Return the book row rather
+      // than recomputing: what this run actually burned is what the row says,
+      // even if the params have moved since. Never re-post.
+      return { runId: claimed.id, burned: claimed.burned, toRewards: claimed.toRewards };
+    }
+
+    // ── POST ─────────────────────────────────────────────────────────────────
+    // The window is ours from here. A crash between claim and settle leaves a
+    // `pending` row, which is recoverable — the ledger post is idempotent on
+    // `runId`, so the retry re-posts as a no-op and settles.
+    if (toBurn > 0n) {
+      try {
+        await this.ledger.post(
+          recipes.burn({ runId: input.runId, assetId: this.assetId, amount: toBurn, from: rewardsEngine(this.assetId) }),
+        );
+      } catch (err) {
+        // The ledger refused, so no value moved and this run never happened.
+        // Release the claim or the window would be held hostage by a run that
+        // burned nothing — same guarantee `stake` gives its pending row.
+        await this.sql`
+          DELETE FROM token.buyback_runs WHERE id = ${claimed.id} AND status = 'pending'
+        `;
+        throw err;
+      }
+    }
+
+    // ── SETTLE ───────────────────────────────────────────────────────────────
     await this.sql`
-      INSERT INTO token.buyback_runs (
-        id, revenue_window_from, revenue_window_to, revenue_total,
-        tokens_bought, tokens_burned, tokens_to_rewards, executed_at
-      )
-      VALUES (
-        ${input.runId}, ${input.revenueWindow.from}, ${input.revenueWindow.to},
-        ${this.sql.json(input.revenueTotal as never)},
-        ${formatAmount(input.tokensBought)}::numeric, ${formatAmount(toBurn)}::numeric,
-        ${formatAmount(toRewards)}::numeric, now()
-      )
-      ON CONFLICT (id) DO NOTHING
+      UPDATE token.buyback_runs
+         SET status = 'settled', executed_at = now()
+       WHERE id = ${claimed.id} AND status = 'pending'
     `;
 
     await this.bus.publish(
@@ -774,12 +870,129 @@ export class TokenService {
         tokensBurned: formatAmount(toBurn),
         tokensToRewards: formatAmount(toRewards),
         // Dates do not survive JSON — the event contract carries ISO strings.
-        revenueWindow: { from: input.revenueWindow.from.toISOString(), to: input.revenueWindow.to.toISOString() },
+        revenueWindow: { from: iso(input.revenueWindow.from), to: iso(input.revenueWindow.to) },
       },
       { idempotencyKey: `token.buyback:${input.runId}` },
     );
 
     return { runId: input.runId, burned: toBurn, toRewards };
+  }
+
+  /**
+   * Take ownership of a revenue window, or refuse by name.
+   *
+   * Deliberately NOT wrapped in an explicit transaction. The overlap guard
+   * raises 23P01, and inside a transaction that error would poison the session
+   * before we could ask WHICH run already holds the window — so the refusal
+   * would lose the only detail that makes it actionable.
+   *
+   * Mirrors `claimStakePending`: insert, or on an id conflict re-read and refuse
+   * a row whose identity does not match what the caller is asking to post.
+   */
+  private async claimBuybackWindow(input: {
+    runId: string;
+    window: { from: Date; to: Date };
+    revenueTotal: Record<string, string>;
+    tokensBought: Amount;
+    toBurn: Amount;
+    toRewards: Amount;
+  }): Promise<{ id: string; status: BuybackRunStatus; burned: Amount; toRewards: Amount }> {
+    type Row = {
+      id: string;
+      revenue_window_from: Date;
+      revenue_window_to: Date;
+      tokens_bought: string;
+      tokens_burned: string;
+      tokens_to_rewards: string;
+      status: BuybackRunStatus;
+    };
+
+    let inserted: Row[];
+    try {
+      inserted = await this.sql<Row[]>`
+        INSERT INTO token.buyback_runs (
+          id, revenue_window_from, revenue_window_to, revenue_total,
+          tokens_bought, tokens_burned, tokens_to_rewards, status, executed_at
+        )
+        VALUES (
+          ${input.runId}, ${input.window.from}, ${input.window.to},
+          ${this.sql.json(input.revenueTotal as never)},
+          ${formatAmount(input.tokensBought)}::numeric, ${formatAmount(input.toBurn)}::numeric,
+          ${formatAmount(input.toRewards)}::numeric, 'pending', now()
+        )
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
+      `;
+    } catch (err) {
+      // 23P01 from the non-overlap exclusion constraint — the window, or part of
+      // it, is already spent. This is THE refusal the old code reached only
+      // after burning. Nothing has moved at this point.
+      if (isExclusionViolation(err) || isUniqueViolation(err)) {
+        throw await this.windowAlreadyClaimed(input.runId, input.window);
+      }
+      throw err;
+    }
+
+    const row = inserted[0];
+    if (row) {
+      return {
+        id: row.id,
+        status: row.status,
+        burned: parseAmount(row.tokens_burned),
+        toRewards: parseAmount(row.tokens_to_rewards),
+      };
+    }
+
+    // The id already exists. Re-read it and refuse to post the caller's figures
+    // against another run's identity (same class as `token.stake_conflict`).
+    const rows = await this.sql<Row[]>`
+      SELECT id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
+        FROM token.buyback_runs WHERE id = ${input.runId} FOR UPDATE
+    `;
+    const existing = rows[0];
+    if (!existing) {
+      throw new TokenError(`Buyback run ${input.runId} disappeared after conflict`, 'token.buyback_run_conflict');
+    }
+
+    const mismatch =
+      existing.revenue_window_from.getTime() !== input.window.from.getTime() ||
+      existing.revenue_window_to.getTime() !== input.window.to.getTime() ||
+      parseAmount(existing.tokens_bought) !== input.tokensBought;
+
+    if (mismatch) {
+      throw new TokenError(
+        `Buyback run ${input.runId} was already claimed for [${iso(existing.revenue_window_from)}, ` +
+          `${iso(existing.revenue_window_to)}) buying ${formatAmount(parseAmount(existing.tokens_bought))} — ` +
+          `refusing to post [${iso(input.window.from)}, ${iso(input.window.to)}) buying ${formatAmount(input.tokensBought)} against it`,
+        'token.buyback_run_conflict',
+      );
+    }
+
+    return {
+      id: existing.id,
+      status: existing.status,
+      burned: parseAmount(existing.tokens_burned),
+      toRewards: parseAmount(existing.tokens_to_rewards),
+    };
+  }
+
+  /** Name the run that already holds the window. A refusal a human can act on. */
+  private async windowAlreadyClaimed(runId: string, window: { from: Date; to: Date }): Promise<TokenError> {
+    const rows = await this.sql<Array<{ id: string; revenue_window_from: Date; revenue_window_to: Date; status: BuybackRunStatus }>>`
+      SELECT id, revenue_window_from, revenue_window_to, status
+        FROM token.buyback_runs
+       WHERE tstzrange(revenue_window_from, revenue_window_to, '[)')
+          && tstzrange(${window.from}, ${window.to}, '[)')
+       ORDER BY revenue_window_from
+       LIMIT 5
+    `;
+    const held = rows.map((r) => `${r.id} [${iso(r.revenue_window_from)}, ${iso(r.revenue_window_to)}) ${r.status}`).join(', ');
+
+    return new TokenError(
+      `Revenue window [${iso(window.from)}, ${iso(window.to)}) overlaps an already-claimed buyback run, so run ${runId} was refused ` +
+        `and NOTHING was burned. Windows are half-open [from, to) and may not overlap. Already claimed: ${held || '(unknown)'}`,
+      'token.buyback_window_overlap',
+    );
   }
 
   /** Tokens permanently removed from circulation. */
@@ -810,12 +1023,12 @@ export class TokenService {
    * epoch cannot be minted twice, and the ledger's idempotency key on
    * `token.emission:<epoch>` is the backstop if this check is ever bypassed.
    */
-  async mintEpoch(epoch: number, destination = rewardsEngine('IFC')): Promise<{ epoch: number; minted: Amount }> {
+  async mintEpoch(epoch: number, destination = rewardsEngine(this.assetId)): Promise<{ epoch: number; minted: Amount }> {
     return withMoneySpan('token.mintEpoch', { operation: 'emission', epoch }, async () => this.mintEpochInner(epoch, destination));
   }
 
   /** Mint the next sequential epoch. Used by the auto-tick and operator surface. */
-  async mintNextEpoch(destination = rewardsEngine('IFC')): Promise<{ epoch: number; minted: Amount }> {
+  async mintNextEpoch(destination = rewardsEngine(this.assetId)): Promise<{ epoch: number; minted: Amount }> {
     const epoch = await this.nextEmissionEpoch();
     return this.mintEpoch(epoch, destination);
   }
@@ -827,6 +1040,19 @@ export class TokenService {
     epoch: number;
     minted: Amount;
   }> {
+    // The mint recipe credits `this.assetId`, so a destination keyed to another
+    // asset would put this deployment's tokens into a foreign asset's account.
+    // The default used to be a hardcoded `rewardsEngine('IFC')` while
+    // TOKEN_ASSET_ID is configurable (env.ts) — a testnet running its own symbol
+    // minted that symbol into an IFC account. Fixing the default is not enough:
+    // an explicit caller can still pass a mismatch, and this is a mint.
+    if (destination.assetId !== this.assetId) {
+      throw new TokenError(
+        `Emission destination is an ${destination.assetId} account but this service mints ${this.assetId}`,
+        'token.params_invalid',
+      );
+    }
+
     const emission = await this.emissionParams();
     return transaction(
       this.sql,
@@ -860,7 +1086,14 @@ export class TokenService {
     );
   }
 
-  // ── Governance (§4.3) ──────────────────────────────────────────────────────
+  // ── Governance — ballots only (§4.3) ───────────────────────────────────────
+  //
+  // Everything below records or reads an election. Nothing below decides one,
+  // and nothing elsewhere does either: `passed`, `rejected`, `executed` and
+  // `cancelled` are declared on the enum and written by no code in this repo.
+  // §13 socket `token.governance`. Do not add a status-flip mutation to close
+  // this gap — see the note above createProposal in router.ts for why a flip
+  // with no action behind it is the worse outcome.
 
   /**
    * Open a proposal for IFC-weighted voting.
@@ -903,9 +1136,21 @@ export class TokenService {
 
     const id = input.proposalId ?? crypto.randomUUID();
     const body = input.body ?? {};
-    // Open immediately when the window already includes `now`; otherwise draft
-    // until an operator (or a future open job) flips status. Voters still check
-    // the window, so a draft never accepts ballots.
+    /**
+     * Open immediately when the window already includes `now`; otherwise draft.
+     *
+     * THIS IS THE ONLY LINE IN THE REPO THAT SETS A PROPOSAL STATUS, and it runs
+     * once, at insert. There is no open job and no operator procedure to flip a
+     * draft later, so `draft` is terminal: a proposal created with a future
+     * `opensAt` can never be voted on, because castVote requires status='open'.
+     * Callers who want a votable proposal must leave `opensAt` unset or set it
+     * at or before now.
+     *
+     * Not fixed here by auto-opening on first read, which would make the window
+     * depend on who happened to fetch the row. The fix is the open/close job in
+     * §13 socket `token.governance`, together with the tally and executor that
+     * are missing for the same reason.
+     */
     const status: ProposalStatus = opensAt.getTime() <= now.getTime() && closesAt.getTime() > now.getTime() ? 'open' : 'draft';
 
     const rows = await this.sql<
@@ -1067,6 +1312,15 @@ export class TokenService {
     }));
   }
 
+  /**
+   * One proposal plus a tally computed at read time.
+   *
+   * The tally is a REPORT, not a decision. It is recomputed on every call and
+   * stored nowhere, no quorum or threshold is applied to it, and no code
+   * consumes it — a proposal whose `forWeight` dwarfs its `againstWeight` stays
+   * `open` forever. Anything rendering this must say so; a bare "for vs
+   * against" bar reads as an outcome. §13 socket `token.governance`.
+   */
   async getProposal(proposalId: string): Promise<ProposalDetail> {
     const rows = await this.sql<
       Array<{
@@ -1094,18 +1348,7 @@ export class TokenService {
        GROUP BY choice
     `;
 
-    let forWeight = 0n;
-    let againstWeight = 0n;
-    let abstainWeight = 0n;
-    let voterCount = 0;
-    for (const t of tallies) {
-      const w = parseAmount(t.weight);
-      const n = Number(t.n);
-      voterCount += n;
-      if (t.choice === 'for') forWeight = w;
-      else if (t.choice === 'against') againstWeight = w;
-      else abstainWeight = w;
-    }
+    const { forWeight, againstWeight, abstainWeight, voterCount } = foldTally(tallies);
 
     return {
       id: row.id,
@@ -1126,7 +1369,138 @@ export class TokenService {
   }
 }
 
+/**
+ * Fold grouped vote rows into a tally.
+ *
+ * ACCUMULATES. It used to ASSIGN (`forWeight = w`) while `voterCount` in the
+ * very same loop accumulated — two idioms in one loop, correct today only
+ * because `GROUP BY choice` happens to yield at most one row per choice. Under
+ * assignment, any grouping that returns a choice more than once (per asset, per
+ * snapshot, a UNION for delegated weight) silently keeps the LAST row and drops
+ * the rest, and dropped weight in a tally is a misreported election.
+ *
+ * Exported so the invariant is testable at all: with one row per choice the two
+ * idioms are indistinguishable from outside, which is exactly why the bug
+ * survived. It is not exported for callers — `getProposal` is the caller.
+ *
+ * The tally remains a REPORT, not a decision. Nothing in this repo closes a
+ * proposal; see the note above the governance section.
+ */
+export function foldTally(rows: Array<{ choice: VoteChoice; weight: string; n: string }>): {
+  forWeight: Amount;
+  againstWeight: Amount;
+  abstainWeight: Amount;
+  voterCount: number;
+} {
+  let forWeight = 0n;
+  let againstWeight = 0n;
+  let abstainWeight = 0n;
+  let voterCount = 0;
+
+  for (const t of rows) {
+    const w = parseAmount(t.weight);
+    voterCount += Number(t.n);
+    if (t.choice === 'for') forWeight += w;
+    else if (t.choice === 'against') againstWeight += w;
+    else abstainWeight += w;
+  }
+
+  return { forWeight, againstWeight, abstainWeight, voterCount };
+}
+
 /** postgres.js surfaces PG error codes on `err.code` (string). */
+function pgCode(err: unknown): string | undefined {
+  if (typeof err !== 'object' || err === null || !('code' in err)) return undefined;
+  const code = (err as { code: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
 function isUniqueViolation(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === '23505';
+  return pgCode(err) === '23505';
+}
+
+/**
+ * 23P01 `exclusion_violation` — what the non-overlap constraint raises (0002).
+ * A different SQLSTATE from a unique violation, so it needs naming separately
+ * or it falls through to an unnamed 500, which is the failure mode this whole
+ * change exists to remove.
+ */
+function isExclusionViolation(err: unknown): boolean {
+  return pgCode(err) === '23P01';
+}
+
+/** Dates are half-open window bounds here; always render them unambiguously. */
+function iso(d: Date): string {
+  return d.toISOString();
+}
+
+/**
+ * Asset id sanity, not an asset registry.
+ *
+ * Deliberately permissive: this service does not own the list of tradable
+ * assets, and inventing one here would be inventing product law. It rejects
+ * only what cannot be an identifier at all — empty, whitespace-bearing, or
+ * absurdly long keys, which are the shapes that indicate a caller sent the
+ * wrong structure entirely.
+ */
+const ASSET_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+
+/**
+ * Validate and canonicalise `revenueTotal` before it reaches jsonb.
+ *
+ * This column is the audit record of what a run was sized against — the only
+ * written answer to "which revenue did we burn against". It was previously
+ * `z.record(z.string())` on the wire and written through untouched, so
+ * `{"IFC":"not-a-number","USDT":"-999","BTC":"1e400"}` stored cleanly. That is
+ * not a cosmetic defect: an unparseable audit figure cannot be reconciled
+ * against the ledger later, which is the one thing it is for.
+ *
+ * Money law (§0.6): decimal strings on the wire, scaled bigint in memory, never
+ * a `number`. `parseAmount` is the only thing that decides what a valid amount
+ * is, so it is the thing used here — and the value is re-emitted through
+ * `formatAmount` so that "1000", "1000.0" and "1000.000" are stored as the one
+ * number they are, rather than three spellings of it.
+ */
+function normaliseRevenueTotal(raw: Record<string, string>): Record<string, string> {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new TokenError('revenueTotal must be an object of assetId → decimal amount string', 'token.buyback_revenue_invalid');
+  }
+
+  const out: Record<string, string> = {};
+
+  for (const [assetId, value] of Object.entries(raw)) {
+    if (!ASSET_ID_RE.test(assetId)) {
+      throw new TokenError(`revenueTotal key ${JSON.stringify(assetId)} is not a usable asset id`, 'token.buyback_revenue_invalid');
+    }
+
+    if (typeof value !== 'string') {
+      throw new TokenError(
+        `revenueTotal[${JSON.stringify(assetId)}] must be a decimal STRING — a ${typeof value} cannot carry money (§0.6)`,
+        'token.buyback_revenue_invalid',
+      );
+    }
+
+    let amount: Amount;
+    try {
+      amount = parseAmount(value);
+    } catch (err) {
+      // A MoneyError is neither a TokenError nor a LedgerError, so letting it
+      // escape would be another opaque 500. Name it.
+      throw new TokenError(
+        `revenueTotal[${JSON.stringify(assetId)}] is not a valid amount: ${err instanceof Error ? err.message : String(err)}`,
+        'token.buyback_revenue_invalid',
+      );
+    }
+
+    if (amount < 0n) {
+      throw new TokenError(
+        `revenueTotal[${JSON.stringify(assetId)}] is negative (${value}) — revenue collected cannot be negative`,
+        'token.buyback_revenue_invalid',
+      );
+    }
+
+    out[assetId] = formatAmount(amount);
+  }
+
+  return out;
 }

@@ -1,9 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { subject, parseSubject, assertValidSubject, InvalidSubjectError, wildcard, streamName } from './subject.js';
-import { ALL_EVENTS, EVENT_CATALOG } from './catalog.js';
+import { ALL_EVENTS, EVENT_CATALOG, WIRING_SOCKETS, wiringSocketReason } from './catalog.js';
 import { MemoryEventBus } from './memory-bus.js';
-import { EventValidationError, MemorySeenStore, idempotent, validatePayload } from './bus.js';
-import { decodeEnvelope, encodeEnvelope } from './envelope.js';
+import {
+  EventSchemaDriftError,
+  EventValidationError,
+  EventVersionMismatchError,
+  MemorySeenStore,
+  acceptEnvelope,
+  droppedPaths,
+  idempotent,
+  validatePayload,
+} from './bus.js';
+import { createEnvelope, decodeEnvelope, encodeEnvelope, type Envelope } from './envelope.js';
 
 describe('§10 subject law: intafaced.<service>.<entity>.<verb>', () => {
   it('builds a valid subject', () => {
@@ -202,6 +212,243 @@ describe('bus', () => {
   it('rejects a corrupted envelope on decode', () => {
     const bytes = new TextEncoder().encode(JSON.stringify({ id: 'nope', subject: 'x' }));
     expect(() => decodeEnvelope(bytes)).toThrow(/Malformed event envelope/);
+  });
+});
+
+describe('schema drift: the bus refuses rather than strips', () => {
+  const fill = (extra: Record<string, unknown> = {}) => ({
+    marketId: 'btc-usdt',
+    makerOrderId: crypto.randomUUID(),
+    takerOrderId: crypto.randomUUID(),
+    price: '64000.5',
+    qty: '0.25',
+    sequence: 41,
+    ts: new Date().toISOString(),
+    ...extra,
+  });
+
+  /**
+   * THE DISEASE, demonstrated on plain zod so nobody has to take it on faith.
+   *
+   * This is what every consumer in this repo used to do with every payload, and
+   * it is the whole of the `orderFilled` incident: an account id arrives, the
+   * schema does not know the key, `success` is true, and the id is gone. No
+   * throw, no log, no counter — the only evidence is a field that was there on
+   * one side of the bus and not the other.
+   */
+  it('zod strips an unknown key silently — success: true, field gone', () => {
+    const staleSchema = z.object({ marketId: z.string(), qty: z.string() });
+    const result = staleSchema.safeParse({ marketId: 'btc-usdt', qty: '0.25', makerAccountId: 'house:market-maker' });
+
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('makerAccountId');
+    // Nothing anywhere records that a field was dropped. That is the bug.
+    expect(Object.keys(result.data!)).toEqual(['marketId', 'qty']);
+  });
+
+  it('refuses the payload instead, naming the dropped field and the producer', () => {
+    expect(() => validatePayload('orderFilled', fill({ settlementAccountId: 'acct-1' }), 'svc-matching')).toThrow(EventSchemaDriftError);
+
+    try {
+      validatePayload('orderFilled', fill({ settlementAccountId: 'acct-1' }), 'svc-matching');
+      expect.unreachable('drift must not pass');
+    } catch (err) {
+      const drift = err as EventSchemaDriftError;
+      expect(drift.dropped).toEqual(['settlementAccountId']);
+      // An error that says "somebody is stale" is a search. This one is a fix.
+      expect(drift.message).toContain('svc-matching');
+      expect(drift.message).toContain('settlementAccountId');
+      expect(drift.message).toContain('intafaced.matching.order.filled');
+    }
+  });
+
+  /**
+   * The expensive shape. `entries[].accountId` is a double-entry line naming
+   * whose money moved; a top-level-only check would call this payload clean.
+   */
+  it('catches a money-adjacent id dropped from INSIDE an array', () => {
+    const entry = { accountId: crypto.randomUUID(), assetId: 'USDT', direction: 'debit' as const, amount: '10.00' };
+    const posted = {
+      txId: crypto.randomUUID(),
+      module: 'trade',
+      reason: 'trade.fill',
+      hash: 'h1',
+      previousHash: null,
+      entries: [entry, { ...entry, direction: 'credit' as const, subAccountId: 'sub-7' }],
+      postedAt: new Date().toISOString(),
+    };
+
+    try {
+      validatePayload('ledgerTxPosted', posted, 'svc-ledger');
+      expect.unreachable('nested drift must not pass');
+    } catch (err) {
+      expect(err).toBeInstanceOf(EventSchemaDriftError);
+      expect((err as EventSchemaDriftError).dropped).toEqual(['entries[1].subAccountId']);
+    }
+  });
+
+  it('reports every dropped path, not just the first', () => {
+    expect(droppedPaths({ a: 1, b: { c: 2, d: 3 } }, { a: 1, b: { c: 2 } })).toEqual(['b.d']);
+    expect(droppedPaths({ a: 1, b: 2 }, {})).toEqual(['a', 'b']);
+  });
+
+  // The other half of not crying wolf. Every one of these is a payload that
+  // must keep working, and a drift check that fired on any of them would be
+  // switched off within a day.
+  it('does not fire on anything legitimate', () => {
+    // Optional fields present.
+    expect(() =>
+      validatePayload('orderFilled', fill({ makerAccountId: 'house:market-maker', takerAccountId: crypto.randomUUID() })),
+    ).not.toThrow();
+    // Optional fields absent.
+    expect(() => validatePayload('orderFilled', fill())).not.toThrow();
+    // An explicit `undefined` is not a field the wire ever carried.
+    expect(() => validatePayload('orderFilled', fill({ makerAccountId: undefined }))).not.toThrow();
+    // A nullable field that is null.
+    expect(() =>
+      validatePayload('orderUpdated', {
+        orderId: crypto.randomUUID(),
+        userId: crypto.randomUUID(),
+        marketId: 'btc-usdt',
+        status: 'open',
+        side: 'buy',
+        type: 'limit',
+        qty: '1',
+        filledQty: '0',
+        price: null,
+        clientOrderId: null,
+        ts: new Date().toISOString(),
+      }),
+    ).not.toThrow();
+    // `z.record(z.unknown())` is a declared open bag — its keys are not drift.
+    expect(() =>
+      validatePayload('xpEarned', {
+        userId: crypto.randomUUID(),
+        sourceModule: 'p2p',
+        action: 'trade.completed',
+        xpDelta: 10,
+        meta: { tradeId: 'abc', anythingAtAll: { nested: true } },
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses on the wire too — a consumer never receives a stripped payload', async () => {
+    const bus = new MemoryEventBus('svc-matching');
+    const handler = vi.fn();
+    await bus.subscribe('orderFilled', handler, { durable: 'drift-test' });
+
+    await expect(bus.publish('orderFilled', fill({ settlementAccountId: 'acct-1' }) as never)).rejects.toThrow(EventSchemaDriftError);
+    // Refused at the producer, so nothing was delivered half-formed either.
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  /**
+   * VERSION IS NOT THE ANSWER TO THIS, and the test says so out loud.
+   *
+   * The envelope has carried a `version` all along and the consume path never
+   * looked at it. It does now — but `makerAccountId` was added as `.optional()`
+   * at version 1, correctly, because the change was additive. So a version
+   * comparison would have found the two sides in perfect agreement while one of
+   * them was deleting a field the other sent. Version catches a DECLARED break;
+   * drift catches an UNDECLARED one, and the undeclared one is the bug that cost
+   * a day.
+   */
+  it('detects a version mismatch — which would NOT have caught the orderFilled bug', () => {
+    const ahead = createEnvelope({
+      subject: EVENT_CATALOG.orderFilled.subject,
+      version: EVENT_CATALOG.orderFilled.version + 1,
+      producer: 'svc-matching',
+      idempotencyKey: 'k1',
+      payload: fill(),
+    }) as Envelope;
+
+    expect(() => acceptEnvelope('orderFilled', ahead)).toThrow(EventVersionMismatchError);
+
+    // Same fields, same version, one key this build does not know: version says
+    // nothing, drift is the only thing that speaks.
+    const same = createEnvelope({
+      subject: EVENT_CATALOG.orderFilled.subject,
+      version: EVENT_CATALOG.orderFilled.version,
+      producer: 'svc-matching',
+      idempotencyKey: 'k2',
+      payload: fill({ makerAccountId: 'house:market-maker', settlementAccountId: 'acct-1' }),
+    }) as Envelope;
+
+    expect(() => acceptEnvelope('orderFilled', same)).not.toThrow(EventVersionMismatchError);
+    expect(() => acceptEnvelope('orderFilled', same)).toThrow(EventSchemaDriftError);
+  });
+});
+
+describe('declared wiring sockets', () => {
+  it('names only events that exist — a socket cannot outlive its event', () => {
+    for (const socket of WIRING_SOCKETS) expect(EVENT_CATALOG).toHaveProperty(socket.event);
+  });
+
+  it('carries a reason substantial enough to be one', () => {
+    for (const socket of WIRING_SOCKETS) {
+      expect(socket.reason.trim().length, `${socket.event}/${socket.missing}`).toBeGreaterThanOrEqual(40);
+      expect(socket.reason, `${socket.event}/${socket.missing}`).not.toMatch(/^(TODO|TBD|later|n\/a)/i);
+    }
+  });
+
+  it('records at most one reason per end', () => {
+    const keys = WIRING_SOCKETS.map((s) => `${s.event}::${s.missing}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  /**
+   * THE TWO FINDINGS THAT STARTED THIS ARE BOTH CLOSED.
+   *
+   * `bankMarginCalled` had no publisher anywhere and svc-bank publishes it now;
+   * `xpEarned` had no consumer and svc-identity consumes it now. Both socket
+   * entries are therefore gone, which is exactly what the old form of this
+   * assertion was written to force: a socket must not outlive the gap it
+   * describes, so the entry going and this flipping to `toBeNull()` are one
+   * event, not two.
+   */
+  it('no longer records either of the two findings that started this — both ends are wired', () => {
+    expect(wiringSocketReason('xpEarned', 'subscriber')).toBeNull();
+    expect(wiringSocketReason('bankMarginCalled', 'publisher')).toBeNull();
+    // And says nothing about ends that were always wired.
+    expect(wiringSocketReason('bankMarginCalled', 'subscriber')).toBeNull();
+    expect(wiringSocketReason('orderFilled', 'publisher')).toBeNull();
+  });
+
+  /**
+   * THE CLASS IS THE POINT (ADR D-S-13).
+   *
+   * A written reason proves somebody thought about it; the class is where they
+   * say what the answer was. `satisfies readonly WiringSocket[]` already makes a
+   * missing class a compile error — this asserts the runtime value too, because
+   * `tooling/ci/event-wiring.mjs` parses this file as TEXT, and a rule that only
+   * one of those two readers enforces is a rule with a hole in it.
+   */
+  it('classifies every socket A, B or C', () => {
+    for (const socket of WIRING_SOCKETS) {
+      expect(['A', 'B', 'C'], `${socket.event}/${socket.missing}`).toContain(socket.class);
+    }
+  });
+
+  /**
+   * Class B is a DEFECT, not a socket. `crewMemberCreated` is the one that
+   * remains: two consumers ADR D-S-13 puts on the owner rather than on an agent.
+   *
+   * THIS ASSERTION PREVIOUSLY READ `toEqual([])`, and it was wrong in the way
+   * that matters. It was changed to empty alongside e1b95844, which added a
+   * `crew-events.ts` to svc-academy and svc-agents and deleted the socket entry —
+   * except NEITHER SUBSCRIBER IS MOUNTED. Nothing imports either file outside its
+   * own unit test, and svc-academy has no bus connection at all. So this test
+   * spent two days asserting, in the same file as the catalog it guards, that a
+   * defect had been fixed by code that has never run. A test written to match a
+   * wrong answer is worse than no test: it is a second voice agreeing.
+   *
+   * Pinned by name and in order, matching `CLASS_B_AWAITING_A_DECISION` in
+   * `tooling/ci/event-wiring.mjs` — so quietly downgrading it to A to make the
+   * gate green fails here as well as there. Two readers, one rule.
+   */
+  it('records exactly the Class B wiring defects that are pinned for a named decision', () => {
+    const b = WIRING_SOCKETS.filter((s) => s.class === 'B').map((s) => `${s.event}::${s.missing}`);
+    expect(b).toEqual(['crewMemberCreated::subscriber']);
   });
 });
 

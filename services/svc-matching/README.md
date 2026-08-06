@@ -21,9 +21,14 @@ HTTP + JSON. Amounts in and out are **decimal strings**, never JSON numbers.
 | `POST /markets/:marketId/orders`            | `{ orderId, accountId, type, side, qty, price?, stopPrice?, tif }` | `{ accepted, sequence, fills[], resting, rejected, cancellations[], triggered[] }` |
 | `DELETE /markets/:marketId/orders/:orderId` | —                                                                  | `{ cancelled, orderId, sequence, cancellation }` · `404` if not live               |
 | `GET /markets/:marketId/depth?limit=`       | —                                                                  | `{ marketId, bids: [price, qty][], asks: [price, qty][], sequence }`               |
+| `GET /markets/:marketId/orders`             | — · **service-only**                                               | `{ marketId, orders: EngineLiveOrder[] }` · `404` if not a market                  |
+| `POST /reconcile`                           | `{ orders: CounterpartOrder[] }` · **service-only**                | `{ checked, agreed, findings[], refusals, ok }`                                    |
 | `GET /markets`                              | —                                                                  | `{ markets: string[] }`                                                            |
-| `GET /health`                               | —                                                                  | `{ ok, service, enabled, markets, journalRecords }`                                |
+| `GET /health`                               | —                                                                  | `{ ok, service, enabled, markets, restingOrders, journalRecords }`                 |
 | `GET /ready`                                | —                                                                  | `503` when the engine is disabled                                                  |
+
+Depth and the market list are public — a price is not a secret. The two reconciliation routes are **not**: they
+carry order ids and account ids, and an order id is all anyone needs to cancel someone's order.
 
 A **rejection is a 200 with `accepted: false`**, not a 4xx. Post-only refusing to cross is the feature working; a
 bot's retry logic must not read it as an outage. Only a malformed body is a `400`.
@@ -166,6 +171,76 @@ resumes at `seq > journalSeq` and lands on exactly the state a full replay reach
 > log (a `matching.engine_journal` table, or a JetStream work queue) drops in behind `EngineJournal`'s three
 > methods when the engine goes multi-replica. The Redis snapshot sink for ws-gateway depth streaming lands the same
 > way: `SnapshotSink` is one method.
+
+---
+
+## Reconciliation — the engine and the money have separate lifecycles
+
+The journal is durable and the database is separate, so **the two can disagree and nothing used to notice.** The
+books live in memory and come back at boot by replaying `engine_journal.ndjson`; `trade.orders` and the ledger's
+`order:<id>` hold accounts live in Postgres. Reset one, and the other keeps its version of events.
+
+Observed on the dev fleet on 2026-08-03, with every health check green: the engine held books for **10 market ids,
+not one of which still existed in `trade.markets`**. `trade.orders` was empty, so nothing was stranded — that was
+luck, not a property. **The inverse strands user money:** the ledger holds funds for an order the engine has
+forgotten, no cancel path will ever fire for it, and the funds are simply unreachable.
+
+### The failure modes, in both directions
+
+`src/reconcile.ts` is a pure function over (what the engine holds, what the caller believes). It is the whole table:
+
+| Case                                  | Engine      | Counterpart       | Verdict    | Why                                                                                            |
+| ------------------------------------- | ----------- | ----------------- | ---------- | ---------------------------------------------------------------------------------------------- |
+| `agreed`                              | live, qty N | open, qty N       | **clean**  | Nothing to say. Amounts compared as parsed amounts, so `2` and `2.000…0` agree.                |
+| `counterpart_unfunded_engine_missing` | absent      | pending, unfunded | **auto**   | An intent row nobody funded. Deleting it provably moves no value.                              |
+| `counterpart_open_engine_missing`     | absent      | open, **funded**  | **REFUSE** | **The one that strands money.** See below.                                                     |
+| `engine_only`                         | live        | unknown           | **REFUSE** | The engine can fill against a hold that does not exist — but the caller's view may be partial. |
+| `quantity_disagreement`               | live, qty N | open, qty M       | **REFUSE** | One side mis-tracked a partial fill; the hold no longer matches the exposure.                  |
+| `counterpart_terminal_engine_live`    | live        | terminal          | **REFUSE** | Free book risk: a fill would settle against a released hold.                                   |
+| `market_disagreement`                 | live in A   | open in B         | **REFUSE** | A cancel sent to either market is aimed at the wrong book.                                     |
+| `unreadable_amount`                   | —           | malformed decimal | **REFUSE** | Refuse rather than coerce a number out of it.                                                  |
+| `duplicate_counterpart_id`            | any         | same id twice     | **REFUSE** | The caller's view contradicts itself, so no verdict computed from it is trustworthy.           |
+
+**One case auto-resolves. Eight refuse.** That ratio is the design.
+
+### Why the answer is a report and not a repair
+
+The money-stranding case looks like the easy one — the ledger holds funds for an order the engine is not working,
+so release them. It is not. **An engine fill whose `order.filled` event was lost produces exactly this shape**, and
+in that world the funds are owed to the taker, not back to the user. The two are indistinguishable from the two
+states alone; the difference lives in the fills, which this function cannot see and must not guess at. Releasing on
+a guess pays a user money the exchange owes someone else.
+
+So reconciliation here **writes nothing, cancels nothing, and moves no value.** It classifies, and where it cannot
+resolve without choosing a winner it produces a finding naming the order id and **both** states, which is what an
+operator needs and did not have. Silently reconciling a money disagreement is worse than reporting it.
+
+`POST /reconcile` answers **200 with `ok: false`** on a refusal, not a 4xx: a refusal is a correct answer to the
+question asked, and a caller polling this must not have to tell "the engine is unreachable" apart from "the engine
+found stranded money".
+
+### Reachable and observable
+
+- **`GET /markets/:marketId/orders`** — the non-destructive liveness read. Before it existed, the only way to ask
+  the engine "do you still have order X" was `DELETE`: the probe and the repair were the same call, so anything
+  that wanted to _look_ had to be willing to _cancel_. `depth()` cannot substitute — it folds a price level into a
+  total, so the order ids are gone before a caller sees them. Untriggered stops are included: they never appear in
+  depth, and the caller is holding funds for them exactly as if they did.
+- **`POST /reconcile`** — the comparison. Give it your view, get the table above back.
+- **`GET /health`** carries `restingOrders`, and **boot logs a warning** when the engine replayed live orders,
+  naming both routes. "The engine came back up" and "the engine came back up still working N orders that may have
+  nothing funding them" read identically on every other field.
+
+Boot **checks and warns; it does not repair and does not exit non-zero.** This service has no `DATABASE_URL`, so it
+cannot know whether anyone holds funds against these orders — comparing requires the counterpart's view. And an
+engine that replayed orders is the only thing that can cancel them; a process that dies on the way up cannot even
+be asked what it is holding.
+
+> **SOCKET §13 — the scheduled cross-service sweep.** `POST /reconcile` is reachable and authenticated, and the
+> engine half is done. The caller is not: **svc-trade owns the counterpart view** (`trade.orders` + ledger hold
+> balances), and `services/svc-trade/**` is a human mountain (M3/M4, `docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`).
+> Until its owner builds that caller, nothing compares the two sides on a schedule — an operator must call
+> `POST /reconcile` by hand. What is owed on that side is written up in `docs/ENGINE-LEDGER-RECONCILE-HANDOFF.md`.
 
 ---
 

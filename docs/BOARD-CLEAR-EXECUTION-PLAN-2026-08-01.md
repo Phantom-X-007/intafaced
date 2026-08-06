@@ -1,8 +1,10 @@
 # Board Clear Execution Plan — 2026-08-01
 
 **Binding with:** [`BOARD-CLEAR-CONSTITUTION-2026-08-01.md`](BOARD-CLEAR-CONSTITUTION-2026-08-01.md)  
+**Agent residual (canonical after Wave A):** [`BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`](BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md)  
+**Decisions:** [`BOARD-CLEAR-DECISION-AUTHORITY.md`](BOARD-CLEAR-DECISION-AUTHORITY.md)  
 **Purpose:** Spec + decompose so orchestrators execute without Nitro.  
-**Rule:** No code for a row until its slice has a Done-linked ship list below (or an addendum PR updates this file first).
+**Rule:** No code for a row until its slice has a Done-linked ship list (agent backlog or below). Prefer agent backlog when Wave A ships are marked SHIPPED.
 
 ---
 
@@ -52,23 +54,25 @@ Agent Wave A parallel on AGENT programs only. Human runs H-\* on his schedule.
 - [x] START-HERE + session prompt pointers
 - [x] Preflight audit + LIVE-LANES Board Clear rewrite
 
-### Wave A — fan-out (start immediately after Wave 0 merges)
+### Wave A — fan-out (historical; many SHIPPED on main)
 
-| Ship ID         | Program       | Deliverable                                                             | Proof                                            |
-| --------------- | ------------- | ----------------------------------------------------------------------- | ------------------------------------------------ |
-| A-UI-1          | P-UI          | Hotkeys + order ticket keyboard path                                    | tests / e2e / manual script in PR                |
-| A-UI-2          | P-UI          | Sub-accounts selector wired or §13                                      | PR                                               |
-| A-UI-3          | P-UI          | Honesty pass: empty book, errors, envelope                              | PR                                               |
-| A-TRADE-MM-1    | P-TRADE-LIGHT | orderFilled makerAccountId + MM recovery                                | tests                                            |
-| A-TRADE-MM-2    | P-TRADE-LIGHT | Cancel/reseed lifecycle                                                 | tests                                            |
-| A-TRADE-MM-3    | P-TRADE-LIGHT | Mid oracle port (config + optional venue)                               | tests                                            |
-| A-TRADE-SPOT-1  | P-TRADE-LIGHT | Candle aggregation job or honest pipeline                               | tests                                            |
-| A-TRADE-VENUE-1 | P-TRADE-LIGHT | Mount venue fabric into mark or public path                             | tests                                            |
-| A-OR-1          | P-OR          | **#289 rebase onto main** then merge/absorb                             | green merged or closed                           |
-| A-P5-2          | P-P5-LIGHT    | Academy thin slice or §13                                               | PR                                               |
-| A-P5-3          | P-P5-LIGHT    | Ops surface + agents usefulness or §13                                  | PR                                               |
-| A-WS-1          | P-WS          | Harden private channels + tests (may mock until B)                      | CI                                               |
-| —               | **H-\***      | **All PAY / PROT / FUT risk / OTC / COPY / ALGO / BANK money / ID-SUB** | **shehzad002 only** — see SHEHZAD-HARD-OWNERSHIP |
+| Ship ID          | Program       | Deliverable                                                             | Status (2026-08-02) |
+| ---------------- | ------------- | ----------------------------------------------------------------------- | ------------------- |
+| A-UI-1           | P-UI          | Hotkeys + order ticket keyboard path                                    | **SHIPPED** #337    |
+| A-UI-2 / SUB     | P-UI          | Sub-accounts selector wired or §13                                      | **OPEN** (A-UI-SUB) |
+| A-UI-3 / HONESTY | P-UI          | Honesty pass: empty book, errors, envelope                              | **SHIPPED** #349    |
+| A-TRADE-MM-1     | P-TRADE-LIGHT | orderFilled makerAccountId + MM recovery                                | **SHIPPED** #338    |
+| A-TRADE-MM-2     | P-TRADE-LIGHT | Cancel/reseed lifecycle                                                 | **SHIPPED** #340    |
+| A-TRADE-MM-3     | P-TRADE-LIGHT | Mid oracle port (config + optional venue)                               | **OPEN**            |
+| A-TRADE-SPOT-1   | P-TRADE-LIGHT | Candle aggregation job or honest pipeline                               | **SHIPPED** #345    |
+| A-TRADE-VENUE-1  | P-TRADE-LIGHT | Mount venue fabric into mark or public path                             | **SHIPPED** #344    |
+| A-OR-1           | P-OR          | **#289 rebase onto main** then merge/absorb                             | **DONE** #289       |
+| A-P5-2           | P-P5-LIGHT    | Academy thin slice or §13                                               | **SHIPPED** #341    |
+| A-P5-3           | P-P5-LIGHT    | Ops surface (A-P5-OPS) + agents usefulness or §13                       | **OPS SHIPPING**    |
+| A-WS-1           | P-WS          | Harden private channels + tests (may mock until B)                      | **SHIPPED** #336    |
+| —                | **H-\***      | **All PAY / PROT / FUT risk / OTC / COPY / ALGO / BANK money / ID-SUB** | **shehzad002 only** |
+
+**Canonical residual list:** [`BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md`](BOARD-CLEAR-AGENT-BACKLOG-2026-08-02.md) (Wave A2). Prefer backlog over this table when they disagree.
 
 ### Wave B — integrate
 
@@ -148,13 +152,15 @@ loop until scoreboard all Done|Cut:
 
 ### Priority when overloaded (agent orchestrator)
 
-1. #289 P-OR close
-2. web.terminal P-UI Done (visible product)
-3. P-TRADE-LIGHT (mm/spot/venue)
-4. P-WS E2E (mock until human futures events)
-5. P-P5-LIGHT academy/ops
-6. Babysit shehzad Class M PRs
-7. **Never** “help” by coding H-PAY/H-PROT/H-TRADE-HARD
+1. Sync scoreboard/NEXT to tip; babysit open PRs
+2. web.terminal residual (A-UI-SUB / A11Y / PRO) — visible product
+3. A-TRADE-MM-3 mid port (P-TRADE-LIGHT)
+4. P-P5-LIGHT ops/agents
+5. P-WS mock-E2E (live B-WS-2 waits M3)
+6. Spot/venue ops honesty
+7. Babysit shehzad Class M PRs
+8. **Never** “help” by coding H-PAY/H-PROT/H-TRADE-HARD
+9. **Never** re-primary-ship A-OR-1 / shipped Wave A IDs
 
 ---
 

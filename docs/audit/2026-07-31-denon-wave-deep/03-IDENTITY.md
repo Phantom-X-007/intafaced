@@ -92,13 +92,13 @@ Step-up remains **TOTP-only** (`auth.stepUp`). WebAuthn-only users cannot elevat
 
 **YES — soft-disable, self-only, no money movement, S2S-visible.**
 
-| Claim                          | Evidence                                                             |
-| ------------------------------ | -------------------------------------------------------------------- |
-| Soft `revoked=true` only       | `auth-service.ts:981-989`; migration `0002_sub_accounts_revoke.sql`  |
-| Parent gate (no cross-user)    | `WHERE parent_user_id = ${userId}`; tests `identity.test.ts:553-560` |
-| Row survives (ledger owner id) | schema comment `schema.ts:198-206`; list still returns revoked       |
-| No ledger post                 | Explicit `auth-service.ts:975-978`; doctrine hold                    |
-| S2S ownership after revoke     | Returns `{…, revoked: true}`                                         | `identity.test.ts:563-577`; `index.ts:101-109` |
+| Claim | Evidence |
+| ------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------- |
+| Soft `revoked=true` only | `auth-service.ts:981-989`; migration `0002_sub_accounts_revoke.sql` |
+| Parent gate (no cross-user) | `WHERE parent_user_id = ${userId}`; tests `identity.test.ts:553-560` |
+| Row survives (ledger owner id) | schema comment `schema.ts:198-206`; list still returns revoked |
+| No ledger post | Explicit `auth-service.ts:975-978`; doctrine hold |
+| S2S ownership after revoke | Returns `{…, revoked: true}` | `identity.test.ts:563-577`; `index.ts:101-109` |
 
 Trade fail-closed before hold was prior #246 PASS — not re-litigated here.
 

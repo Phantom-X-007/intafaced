@@ -45,12 +45,12 @@ const notificationOutput = z.object({
 
 const deliveryOutput = z.object({
   channel: channelSchema,
-  status: z.enum(['pending', 'delivered', 'refused', 'failed', 'abandoned']),
+  status: z.enum(['pending', 'accepted', 'refused', 'failed', 'abandoned']),
   attempts: z.number().int().nonnegative(),
   /** Non-null means a send was attempted. */
   attemptedAt: z.string().nullable(),
   /** Non-null means a transport accepted it. Two different facts, two columns. */
-  deliveredAt: z.string().nullable(),
+  acceptedAt: z.string().nullable(),
   /** A code, never a sentence — the client renders copy from `@intafaced/i18n`. */
   refusalCode: z.string().nullable(),
 });
@@ -111,7 +111,7 @@ function deliveryToWire(d: DeliveryRecord) {
     status: d.status,
     attempts: d.attempts,
     attemptedAt: d.attemptedAt?.toISOString() ?? null,
-    deliveredAt: d.deliveredAt?.toISOString() ?? null,
+    acceptedAt: d.acceptedAt?.toISOString() ?? null,
     refusalCode: d.refusalCode,
   };
 }
@@ -271,6 +271,33 @@ export function createNotifyRouter(notify: NotifyService) {
         .input(z.object({ notificationId: z.string().uuid() }))
         .output(z.array(deliveryOutput))
         .query(async ({ ctx, input }) => (await notify.deliveriesFor(ctx.principal.userId, input.notificationId)).map(deliveryToWire)),
+
+      /** Out-of-app mute prefs. Critical severity never respects mute (dispatch law). */
+      mutePrefs: scopedProcedure('notify:read', { module: 'notify' })
+        .output(
+          z.array(
+            z.object({
+              channel: z.enum(['email', 'push', 'sms']),
+              muted: z.boolean(),
+            }),
+          ),
+        )
+        .query(({ ctx }) => notify.listMutePrefs(ctx.principal.userId)),
+
+      setMute: scopedProcedure('notify:write', { module: 'notify' })
+        .input(z.object({ channel: z.enum(['email', 'push', 'sms']), muted: z.boolean() }))
+        .output(
+          z.array(
+            z.object({
+              channel: z.enum(['email', 'push', 'sms']),
+              muted: z.boolean(),
+            }),
+          ),
+        )
+        .mutation(({ ctx, input }) => {
+          notify.setChannelMute(ctx.principal.userId, input.channel, input.muted);
+          return notify.listMutePrefs(ctx.principal.userId);
+        }),
     }),
   });
 }

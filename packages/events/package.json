@@ -13,13 +13,15 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && node ../../tooling/ci/test-typecheck.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rimraf dist .turbo"
+    "clean": "rimraf dist .turbo",
+    "cx8-streams": "node ./scripts/cx8-ensure-streams.mjs"
   },
   "dependencies": {
     "@intafaced/config": "workspace:*",
+    "@intafaced/safe-regex": "workspace:^",
     "nats": "^2.28.2",
     "zod": "^3.24.1"
   },

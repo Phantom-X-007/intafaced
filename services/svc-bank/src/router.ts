@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { BankError } from './errors.js';
-import { accountForSpace } from './spaces/space-service.js';
+import { accountForSpace, type SpaceRecord } from './spaces/space-service.js';
 import type { BankServices } from './bank-service.js';
 
 /**
@@ -22,6 +23,56 @@ import type { BankServices } from './bank-service.js';
 
 /** Money crosses the wire as a decimal string. Always. Never a number. */
 const amountString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amount must be an unsigned decimal string (max 18dp)');
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * A MESSAGE IS A WIRE FORMAT.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * An error string that interpolates a value crosses a trust boundary the moment
+ * a mapper passes it through, so `err.message` reaching a client is a
+ * SERIALISATION DECISION rather than a debugging convenience. Every branch of
+ * `toTrpcError` below now makes that decision explicitly, and the two rules it
+ * makes are:
+ *
+ *   1. A refusal may only DESCRIBE objects the caller was already entitled to
+ *      see. Where it cannot, it says so and names nothing.
+ *   2. Nothing is passed through by DEFAULT. The `default:` branch used to
+ *      return `err.message` verbatim for every code nobody had thought about,
+ *      which is how `Space "Holiday fund" is archived` — a sentence written for
+ *      an owner — ended up being delivered to a stranger who guessed a uuid.
+ *
+ * Rule 2 is why the switch is exhaustive over `BankErrorCode` and the default
+ * carries a `never` assignment: adding a code without deciding what a caller
+ * may be told now fails the typecheck instead of silently becoming a 400 with
+ * the domain sentence attached.
+ */
+
+/** The generic answer. Detail lives in the log, joined by this reference. */
+function opaqueFailure(err: unknown, context: string): TRPCError {
+  const correlationId = randomUUID();
+  // stderr in one line of JSON, which is what the platform's log shipper reads.
+  // The message the CLIENT never sees is the message an operator most needs, so
+  // this is the only copy of it and it must not be dropped on the floor.
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      service: 'svc-bank',
+      event: 'bank.undisclosed_error',
+      correlationId,
+      context,
+      code: (err as { code?: string }).code ?? null,
+      detail: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+    }),
+  );
+  return new TRPCError({
+    code: 'INTERNAL_SERVER_ERROR',
+    // The reference is the whole point: a user reporting "it said ref 8f3c…"
+    // gets an operator to the exact line, without the line being published.
+    message: `Bank operation failed (ref ${correlationId})`,
+    cause: err,
+  });
+}
 
 function toTrpcError(err: unknown): TRPCError {
   // An answer that has already been decided. Ownership refusals are thrown as
@@ -79,14 +130,69 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.margin_call_required':
       case 'bank.loan_closed':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
-      default:
+
+      // ── The codes that used to fall through `default:` ────────────────────
+      //
+      // Every one of them was already reaching the client as a 400 carrying its
+      // domain sentence. Nothing about that is wrong FOR AN OWNER — "Space
+      // 'Holiday fund' is locked until …" is the most useful thing this service
+      // can say to the person who set the lock, and the ADR is explicit that the
+      // failure mode to avoid is a service so cautious the owner cannot act. So
+      // the messages are kept and the codes are now DECIDED rather than
+      // defaulted; who is allowed to hear them is settled one layer up, at the
+      // call site that knows whose row it is.
+      //
+      // The split follows the loans block above. A state the row is in that a
+      // later request could clear is 409; a request that is simply wrong for the
+      // rules is 400.
+      case 'bank.space_archived':
+      case 'bank.space_locked':
+      case 'bank.schedule_inactive':
+      case 'bank.pool_closed':
+      case 'bank.position_closed':
+      case 'bank.position_locked':
+      case 'bank.loan_product_closed':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+
+      case 'bank.same_space':
+      case 'bank.asset_mismatch':
+      case 'bank.below_minimum':
+      case 'bank.native_asset_not_earnable':
+      case 'bank.ltv_exceeded':
+      case 'bank.card_not_found':
+      case 'bank.card_not_active':
+      case 'bank.card_limit_exceeded':
+      case 'bank.card_authorization_not_found':
+      case 'bank.card_authorization_declined':
+      case 'bank.card_authorization_closed':
+      case 'bank.card_capture_exceeds_authorization':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+
+      // Named refusals where the platform, not the caller, is missing something.
+      // Same shape and the same reason as `bank.no_liquidation_counterparty`.
+      case 'bank.no_card_issuer':
+      case 'bank.cashback_pot_unfunded':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+
+      default: {
+        // EXHAUSTIVENESS. If this line stops compiling, a `BankErrorCode` was
+        // added without anyone deciding what a caller may be told about it —
+        // which is exactly the omission that made the archived-space oracle.
+        // Reachable at RUNTIME only for a code outside the declared union, and
+        // an undeclared code is precisely the one whose message nobody vetted.
+        const undeclared: never = err.code;
+        return opaqueFailure(err, `bank.error:${String(undeclared)}`);
+      }
     }
   }
   if (err instanceof LedgerError) {
-    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+    // NOT `err.message`. `InsufficientFundsError` is handled above because it
+    // describes the CALLER's own funds; every other LedgerError is a platform
+    // fault whose message names accounts, owner ids and per-asset deltas —
+    // internals of the book that no client asked about and none may read.
+    return opaqueFailure(err, 'ledger.error');
   }
-  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Bank operation failed', cause: err });
+  return opaqueFailure(err, 'unknown');
 }
 
 async function guard<T>(fn: () => Promise<T>): Promise<T> {
@@ -123,8 +229,108 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
  */
 function assertSelf(principalUserId: string | undefined, ownerId: string): void {
   if (principalUserId !== ownerId) {
+    // Note what this message does NOT contain: no name, no asset, no balance,
+    // no id. The refusal-shape ADR's rule — a refusal may only describe objects
+    // the caller was already entitled to see — is satisfied by this sentence in
+    // either reading of the code above it. What the ADR would additionally
+    // prefer is the CODE: `NOT_FOUND` rather than `FORBIDDEN`, so that "not
+    // yours" cannot confirm an id. That is a change to who may see what, which
+    // the ADR reserves to the owner, and this service argued the opposite case
+    // in writing first. It stays FORBIDDEN, uniformly, until the owner moves it.
     throw new TRPCError({ code: 'FORBIDDEN', message: 'This account belongs to another user' });
   }
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THE DESTINATION GATE — what a caller may be told about somebody else's space.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `transfers.create` and `transfers.schedule` each name TWO spaces and
+ * owner-check ONE (see the written reason at those call sites). That is correct
+ * for safety and it is the product. It was not correct for disclosure.
+ *
+ * `space-service.ts` writes its refusals for the person who owns the space:
+ * `Space "Holiday fund" is archived`, `Cannot transfer USDT into a EUR space`.
+ * Delivered to the owner those sentences are the most useful thing this service
+ * says. Delivered to a stranger who guessed a uuid they are an oracle over
+ * another user's accounts — existence, the user's own chosen NAME, and the
+ * asset — for the price of a transfer that does not even have to succeed.
+ *
+ * So the message is not the bug and neither is the missing check. The bug is
+ * that nothing between them decided whether THIS caller may hear it. This
+ * function is that decision, and it has exactly two outcomes:
+ *
+ *   · the destination is the caller's       → return, and every refusal below
+ *                                             reaches them intact, name and all
+ *   · it is not, or there is no such space  → `NOT_FOUND`, naming NOTHING, and
+ *                                             BYTE-IDENTICAL between the two
+ *
+ * The second bullet is the whole rule. "Exists but is not yours" and "does not
+ * exist" are one answer here — not a lie, because relative to this caller there
+ * is no such space in any sense they are entitled to.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO: refuse the transfer. Paying a stranger is
+ * the product (`bank-service.test.ts` pins that value moves between two
+ * different users' spaces), so a destination that is somebody else's, live, and
+ * in the right asset proceeds exactly as before. Only the FAILURES stop
+ * describing it.
+ *
+ * The three conditions checked here are the three `space-service.ts` refuses a
+ * credit on, and they are re-checked inside `TransferService` where they are
+ * ENFORCED. This is not a second enforcement point; it is a disclosure gate
+ * that happens to have to know the same three facts.
+ */
+const NO_SUCH_DESTINATION = 'No such space';
+
+/** One construction site, so the two paths cannot drift apart by a byte. */
+function noSuchDestination(): TRPCError {
+  return new TRPCError({ code: 'NOT_FOUND', message: NO_SUCH_DESTINATION });
+}
+
+async function gateDestination(
+  bank: BankServices,
+  callerUserId: string | undefined,
+  from: SpaceRecord,
+  toSpaceId: string,
+): Promise<{ mayDescribe: boolean }> {
+  // One SELECT, and the same one, whether the row is there or not — `find`
+  // rather than `get` for that reason. A lookup that throws for "absent" makes
+  // the absent path do measurably different work from the present one, and the
+  // ADR's done bar names timing as well as status.
+  const to = await bank.spaces.find(toSpaceId);
+
+  if (to !== null && to.userId === callerUserId) return { mayDescribe: true };
+
+  // From here the caller is entitled to nothing about this space, so every
+  // branch produces the same object. Ordering is irrelevant — they are equal.
+  if (to === null) throw noSuchDestination();
+  if (to.archivedAt) throw noSuchDestination();
+  if (to.assetId !== from.assetId) throw noSuchDestination();
+
+  // Otherwise: somebody else's live space in the right asset. Cross-user
+  // transfer is the product; it proceeds, and a failure after this point comes
+  // from the caller's OWN side — their funds, their lock — and is theirs to
+  // read.
+  return { mayDescribe: false };
+}
+
+/**
+ * The backstop, for a refusal the gate above did not anticipate.
+ *
+ * `TransferService` resolves the destination again and could grow a new
+ * destination-side precondition without this file noticing. These two codes can
+ * only be about the destination once `from` has been fetched and its asset is
+ * known, so they are flattened rather than trusted. `bank.space_archived` is
+ * NOT in the list on purpose: the gate already covered the destination case,
+ * which leaves the caller's OWN archived space as the remaining source, and
+ * that message belongs to them.
+ */
+function hideDestinationDetail(err: unknown): unknown {
+  if (err instanceof BankError && (err.code === 'bank.space_not_found' || err.code === 'bank.asset_mismatch')) {
+    return noSuchDestination();
+  }
+  return err;
 }
 
 const spaceOutput = z.object({
@@ -224,13 +430,41 @@ export function createBankRouter(bank: BankServices) {
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
           const from = await bank.spaces.get(input.fromSpaceId);
+
+          /**
+           * ONLY THE `from` SIDE IS OWNER-CHECKED, AND THAT IS DELIBERATE.
+           *
+           * A transfer takes value out of `from` and puts it into `to`. The
+           * side that can lose something is the debit, and it is checked here,
+           * so this is not a hole: nobody can move money out of an account that
+           * is not theirs.
+           *
+           * The credit side is NOT checked because paying somebody else is the
+           * product. `bank-service.test.ts` pins that a transfer "moves value
+           * between two different users spaces", and a check here would delete
+           * that feature rather than secure it. An operation naming two objects
+           * authorises against both OR carries a written reason for the
+           * exemption at the call site; this paragraph is that reason, and it
+           * exists so the next reader does not have to work out from an absence
+           * whether the omission was a decision or an oversight.
+           *
+           * What the missing check DID cost was disclosure, not safety — see
+           * `gateDestination`, which is the half that was actually missing.
+           */
           assertSelf(ctx.principal.userId, from.userId);
-          const result = await bank.transfers.transfer({
-            transferId: input.transferId,
-            fromSpaceId: input.fromSpaceId,
-            toSpaceId: input.toSpaceId,
-            amount: parseAmount(input.amount),
-          });
+
+          const gate = await gateDestination(bank, ctx.principal.userId, from, input.toSpaceId);
+
+          const result = await bank.transfers
+            .transfer({
+              transferId: input.transferId,
+              fromSpaceId: input.fromSpaceId,
+              toSpaceId: input.toSpaceId,
+              amount: parseAmount(input.amount),
+            })
+            .catch((err: unknown) => {
+              throw gate.mayDescribe ? err : hideDestinationDetail(err);
+            });
           return { ledgerTxId: result.ledgerTxId, amount: result.amount };
         }),
       ),
@@ -250,16 +484,30 @@ export function createBankRouter(bank: BankServices) {
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
           const from = await bank.spaces.get(input.fromSpaceId);
+          // Same exemption, same reason as `transfers.create` above: the debit
+          // side is the side that can lose value, and a standing order to
+          // another user is the same product feature on a timer.
           assertSelf(ctx.principal.userId, from.userId);
-          const schedule = await bank.transfers.schedule({
-            userId: ctx.principal.userId,
-            fromSpaceId: input.fromSpaceId,
-            toSpaceId: input.toSpaceId,
-            amount: parseAmount(input.amount),
-            cadence: input.cadence,
-            startsAt: new Date(input.startsAt),
-            endsAt: input.endsAt ? new Date(input.endsAt) : null,
-          });
+
+          // Same gate too, and it matters MORE here. A one-off transfer asks the
+          // question once; a standing order that could be created against a
+          // stranger's space and then have its asset mismatch reported back
+          // turns the oracle into one a caller can leave running.
+          const gate = await gateDestination(bank, ctx.principal.userId, from, input.toSpaceId);
+
+          const schedule = await bank.transfers
+            .schedule({
+              userId: ctx.principal.userId,
+              fromSpaceId: input.fromSpaceId,
+              toSpaceId: input.toSpaceId,
+              amount: parseAmount(input.amount),
+              cadence: input.cadence,
+              startsAt: new Date(input.startsAt),
+              endsAt: input.endsAt ? new Date(input.endsAt) : null,
+            })
+            .catch((err: unknown) => {
+              throw gate.mayDescribe ? err : hideDestinationDetail(err);
+            });
           return { id: schedule.id, nextRunAt: schedule.nextRunAt.toISOString() };
         }),
       ),
@@ -689,6 +937,164 @@ export function createBankRouter(bank: BankServices) {
   });
 
   /**
+   * CARDS (§8.1) — the LEDGER half only.
+   *
+   * ── WHAT IS DELIBERATELY NOT HERE ──────────────────────────────────────────
+   *
+   * There is no user-callable `authorize`, `capture` or `reverse`. Those three
+   * are the ISSUER speaking, not the user, and they are in `ops` behind
+   * `admin:treasury` for the same reason the risk sweep is: a user who can
+   * decide their own authorisation is a user who can approve a purchase the
+   * ledger would have declined, and a user who can trigger a capture can choose
+   * when their own money leaves.
+   *
+   * On a live rail they do not become user procedures either. They become a
+   * signed webhook endpoint owned by the issuer integration — which is
+   * `socket.live-issuer`, a card-scheme sponsor and an issuing BIN, and is a
+   * contract rather than code.
+   *
+   * ── EVERY SURFACE SAYS WHAT IT IS ──────────────────────────────────────────
+   *
+   * `simulated` is on the card output and it is not optional. A screen rendering
+   * a card from this router cannot accidentally present it as a real one, and a
+   * deployment with no issuer at all cannot get this far: it refuses with
+   * `bank.no_card_issuer` before a row is written.
+   */
+  const cardOutput = z.object({
+    id: z.string(),
+    assetId: z.string(),
+    /** The programme id, which is also the ledger rail label. */
+    issuer: z.string(),
+    /** TRUE MEANS THERE IS NO CARD. Never omitted, never defaulted. */
+    simulated: z.boolean(),
+    /** Four digits. Not a card number and not part of one. */
+    panTail: z.string(),
+    status: z.enum(['active', 'frozen', 'closed']),
+    cashbackBps: z.number().int(),
+    perAuthorizationLimit: amountString,
+  });
+
+  const cards = router({
+    /** What this deployment's card programme is — including that it is not one. */
+    programme: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.object({ id: z.string(), simulated: z.boolean(), displayName: z.string() }))
+      .query(async () => guard(async () => bank.cards.programme())),
+
+    list: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.array(cardOutput))
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const rows = await bank.cards.cardsOf(ctx.principal.userId);
+          return rows.map((c) => ({
+            id: c.id,
+            assetId: c.assetId,
+            issuer: c.issuer,
+            simulated: c.simulated,
+            panTail: c.panTail,
+            status: c.status,
+            cashbackBps: c.cashbackBps,
+            perAuthorizationLimit: formatAmount(c.perAuthorizationLimit),
+          }));
+        }),
+      ),
+
+    /**
+     * `cardId` is supplied by the client so a retried request is the same card,
+     * not a second one drawing on the same balance (§5).
+     */
+    issue: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          assetId: z.string().min(1).max(16),
+          cashbackBps: z.number().int().min(0).max(10_000).optional(),
+          perAuthorizationLimit: amountString,
+        }),
+      )
+      .output(cardOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const card = await bank.cards.issue({
+            cardId: input.cardId,
+            userId: ctx.principal.userId,
+            assetId: input.assetId,
+            ...(input.cashbackBps === undefined ? {} : { cashbackBps: input.cashbackBps }),
+            perAuthorizationLimit: parseAmount(input.perAuthorizationLimit),
+          });
+          return {
+            id: card.id,
+            assetId: card.assetId,
+            issuer: card.issuer,
+            simulated: card.simulated,
+            panTail: card.panTail,
+            status: card.status,
+            cashbackBps: card.cashbackBps,
+            perAuthorizationLimit: formatAmount(card.perAuthorizationLimit),
+          };
+        }),
+      ),
+
+    /**
+     * Freeze, unfreeze or close. The gesture a user reaches for first when
+     * something is wrong, so it is user surface and not an operator ticket.
+     */
+    setStatus: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ cardId: z.string().uuid(), status: z.enum(['active', 'frozen', 'closed']) }))
+      .output(z.object({ id: z.string(), status: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const card = await bank.cards.card(input.cardId);
+          assertSelf(ctx.principal.userId, card.userId);
+          const updated = await bank.cards.setStatus(input.cardId, input.status);
+          return { id: updated.id, status: updated.status };
+        }),
+      ),
+
+    /**
+     * Every decision taken on this card, approvals and declines alike.
+     *
+     * The declines are the point. "Why was I declined at the till" is the
+     * question a card generates, and a history that only listed successful
+     * purchases could not answer it.
+     */
+    authorizations: scopedProcedure('bank:read', { module: 'bank' })
+      .input(z.object({ cardId: z.string().uuid() }))
+      .output(
+        z.array(
+          z.object({
+            id: z.string(),
+            authorizationRef: z.string(),
+            amount: amountString,
+            merchantCategory: z.string().nullable(),
+            decision: z.enum(['approved', 'declined']),
+            declineCode: z.string().nullable(),
+            status: z.string(),
+            decidedAt: z.string(),
+          }),
+        ),
+      )
+      .query(async ({ ctx, input }) =>
+        guard(async () => {
+          // `bank:read` answers "may this principal read bank data". It never
+          // answered "whose" — same guard, same reason, as `transfers.executions`.
+          const card = await bank.cards.card(input.cardId);
+          assertSelf(ctx.principal.userId, card.userId);
+          const rows = await bank.cards.authorizationsOf(input.cardId);
+          return rows.map((a) => ({
+            id: a.id,
+            authorizationRef: a.authorizationRef,
+            amount: formatAmount(a.amount),
+            merchantCategory: a.merchantCategory,
+            decision: a.decision,
+            declineCode: a.declineCode,
+            status: a.status,
+            decidedAt: a.decidedAt.toISOString(),
+          }));
+        }),
+      ),
+  });
+
+  /**
    * Operator surface. The jobs live behind `admin:treasury` — a scope §4.1 marks
    * interactive-only, so it can never be held by a long-lived API key.
    */
@@ -808,6 +1214,125 @@ export function createBankRouter(bank: BankServices) {
         }),
       ),
 
+    // ── Cards (§8.1, ledger half) ────────────────────────────────────────────
+    //
+    // THE ISSUER'S SIDE OF THE CONVERSATION, NOT THE USER'S.
+    //
+    // On a live rail these three are a signed webhook from the issuer, arriving
+    // on a deadline the card network sets. There is no live rail — that is
+    // `socket.live-issuer`, a sponsor bank and an issuing BIN — so today they are
+    // operator surface, and they must NEVER become user surface: a user who can
+    // call `cardAuthorize` approves their own purchase, and a user who can call
+    // `cardCapture` chooses when their own money leaves the book.
+    //
+    // The simulator is what makes them exercisable at all, and it says so on
+    // every card it issues (`simulated: true`).
+
+    cardAuthorize: scopedProcedure('admin:treasury')
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          authorizationRef: z.string().min(4).max(128),
+          amount: amountString,
+          merchantCategory: z.string().min(1).max(64).optional(),
+        }),
+      )
+      .output(
+        z.object({
+          authorizationId: z.string(),
+          decision: z.enum(['approved', 'declined']),
+          declineCode: z.string().nullable(),
+          amount: amountString,
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const authorization = await bank.cards.authorize({
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+            amount: parseAmount(input.amount),
+            ...(input.merchantCategory === undefined ? {} : { merchantCategory: input.merchantCategory }),
+          });
+          return {
+            authorizationId: authorization.id,
+            decision: authorization.decision,
+            declineCode: authorization.declineCode,
+            amount: formatAmount(authorization.amount),
+          };
+        }),
+      ),
+
+    cardCapture: scopedProcedure('admin:treasury')
+      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128), amount: amountString }))
+      .output(
+        z.object({
+          captured: amountString,
+          returned: amountString,
+          captureLedgerTxId: z.string(),
+          reversalLedgerTxId: z.string().nullable(),
+          // Surfaced rather than swallowed. A reward the rewards pot could not
+          // pay is a fact an operator needs on the day it happens — the same
+          // reasoning as `runRiskSweep.refused`.
+          cashback: z.object({
+            status: z.enum(['none', 'paid', 'refused']),
+            amount: amountString,
+            reason: z.string().optional(),
+          }),
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const result = await bank.cards.capture({
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+            amount: parseAmount(input.amount),
+          });
+          return {
+            captured: formatAmount(result.captured),
+            returned: formatAmount(result.returned),
+            captureLedgerTxId: result.captureLedgerTxId,
+            reversalLedgerTxId: result.reversalLedgerTxId,
+            cashback: {
+              status: result.cashback.status,
+              amount: formatAmount(result.cashback.amount),
+              ...(result.cashback.status === 'refused' ? { reason: result.cashback.reason } : {}),
+            },
+          };
+        }),
+      ),
+
+    /** The authorisation expired or was voided. The whole hold goes back. */
+    cardReverse: scopedProcedure('admin:treasury')
+      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128) }))
+      .output(z.object({ returned: amountString, ledgerTxId: z.string() }))
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const result = await bank.cards.reverse({ cardId: input.cardId, authorizationRef: input.authorizationRef });
+          return { returned: formatAmount(result.returned), ledgerTxId: result.ledgerTxId };
+        }),
+      ),
+
+    /**
+     * Move bank revenue into the pot cashback is paid from.
+     *
+     * The named source, in one call. Cashback is a share of fees the platform
+     * really charged; a pot funded from anywhere else would make the advertised
+     * rate a promise against revenue that has not happened.
+     */
+    fundCashbackPot: scopedProcedure('admin:treasury')
+      .input(z.object({ windowId: z.string().min(4).max(64), assetId: z.string().min(1).max(16), amount: amountString }))
+      .output(z.object({ ledgerTxId: z.string(), capacity: amountString }))
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const posted = await bank.cards.fundCashbackPot({
+            windowId: input.windowId,
+            assetId: input.assetId,
+            amount: parseAmount(input.amount),
+          });
+          return { ledgerTxId: posted.ledgerTxId, capacity: formatAmount(await bank.cards.cashbackCapacity(input.assetId)) };
+        }),
+      ),
+
     /**
      * The reserve identity, as a query rather than an investigation:
      * `balance(loanReserve) + Σ outstanding principal` against what was funded.
@@ -845,6 +1370,7 @@ export function createBankRouter(bank: BankServices) {
     transfers,
     earn,
     loans,
+    cards,
     analytics,
     ops,
   });

@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
-import { assertTestDatabase } from '@intafaced/db';
+import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
 import { P2pService, P2pError } from './p2p-service.js';
+import { InstrumentService } from './instrument-service.js';
+import { ANY_COUNTRY } from './instruments.js';
 import { TradeStateError } from './state.js';
 import type { ReferencePriceSource } from './pricing.js';
 
@@ -27,6 +29,8 @@ import type { ReferencePriceSource } from './pricing.js';
 const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'), 'utf8');
+const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
+const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -35,19 +39,24 @@ const MODERATOR = '44444444-4444-4444-8444-444444444444';
 
 const ASSET = 'USDT';
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 });
-  }
-}
+/** Shared by every svc-p2p suite that brings the schema up. Any constant, as long as it is the same one. */
+const P2P_MIGRATION_LOCK = 8_140_702;
 
-const available = await reachable();
+/**
+ * The Postgres probe comes from `@intafaced/db` on purpose.
+ *
+ * This file used to open its own two-line `reachable()`. That helper swallowed
+ * every error and returned `false` regardless of `CI` or `REQUIRE_POSTGRES=1`,
+ * so on CI — where an unreachable database is supposed to be a hard failure —
+ * this money suite would have skipped in silence and been counted as a pass.
+ * Five suites carried the same private probe and the same hole.
+ *
+ * `postgresAvailable` is the one probe that honours `postgresRequired()`, and it
+ * journals its decision so `pnpm verify` can name what did not run instead of
+ * letting turbo's "N successful" imply that everything did.
+ * (`tooling/ci/skip-honesty-scan.mjs` fails a build that re-adds a private probe.)
+ */
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-p2p (Postgres unavailable — start docker compose)', () => {
@@ -63,7 +72,25 @@ if (!available) {
   // Owns its database, or does not run. Must precede the first migration.
   await assertTestDatabase(sql, 'svc-p2p');
 
-  await sql.unsafe(migration);
+  // Under an advisory lock, and the same constant the instrument suite uses.
+  // Both migrations re-assert their CHECK constraints with DROP ... IF EXISTS
+  // first, so two suites bringing the same schema up at once take the same
+  // table locks in opposite orders and Postgres kills one with a deadlock.
+  // `vitest.config.ts` already serialises the two FILES; this covers the case
+  // it cannot — a second checkout of this repo pointed at the same test
+  // database, which is exactly how the shared-database incident happened.
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(${P2P_MIGRATION_LOCK})`;
+    await tx.unsafe(migration);
+    await tx.unsafe(instrumentsMigration);
+    await tx.unsafe(fieldGuardMigration);
+  });
+
+  /**
+   * Stateless apart from the connection, so it is built once. The tables it
+   * owns are truncated per test like every other table here.
+   */
+  const instruments = new InstrumentService(sql);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -78,11 +105,51 @@ if (!available) {
   };
 
   const options = {
+    instruments,
     feeBps: 100, // 1% — large enough that a mis-split is visible in a balance
-    backstopModeratorId: 'system:p2p-backstop',
     referencePrices,
-    deadlines: { escrowSeconds: 120, paymentSeconds: 900, releaseSeconds: 1800, disputeSeconds: 604_800 },
+    deadlines: {
+      escrowSeconds: 120,
+      paymentSeconds: 900,
+      releaseSeconds: 1800,
+      disputeSeconds: 604_800,
+      escalationRecheckSeconds: 3_600,
+    },
   };
+
+  /**
+   * A take now requires the SELLER to have somewhere the buyer can pay, and is
+   * refused before any lock otherwise (`p2p.take_refused`). So every
+   * account that ends up on the sell side of a trade in this file needs a
+   * destination, in the currency that trade is priced in.
+   *
+   * The schema below is a FIXTURE, not a claim about any real payment scheme.
+   * The registry ships empty precisely because what a market's rails require is
+   * not this repo's knowledge to invent — a single opaque "account reference"
+   * field is enough to exercise the escrow paths and asserts nothing about how
+   * anyone's bank actually works.
+   */
+  async function seedPaymentRails() {
+    await instruments.registerMethodSchema({
+      methodId: 'sepa',
+      country: ANY_COUNTRY,
+      label: 'Bank transfer (test fixture)',
+      fields: [{ key: 'account_reference', label: 'Account reference', required: true }],
+    });
+
+    for (const ownerId of [MAKER, TAKER, OTHER, MODERATOR]) {
+      for (const fiatCurrency of ['USD', 'EUR']) {
+        await instruments.createInstrument({
+          ownerId,
+          methodId: 'sepa',
+          country: 'DE',
+          fiatCurrency,
+          label: `${fiatCurrency} destination`,
+          details: { account_reference: `ref-${ownerId}-${fiatCurrency}` },
+        });
+      }
+    }
+  }
 
   /** Put real value in a user's available balance so an escrow has something behind it. */
   async function fund(userId: string, amount: string) {
@@ -129,6 +196,11 @@ if (!available) {
     });
   }
 
+  /** Age a trade past its deadline without waiting for a real clock. */
+  async function expire(tradeId: string) {
+    await sql`UPDATE p2p.p2p_trades SET deadline_at = now() - interval '1 hour' WHERE id = ${tradeId}`;
+  }
+
   /** Funded seller + a taken trade, ready to release. */
   async function escrowedTrade(amount = '100') {
     await fund(MAKER, '1000');
@@ -137,11 +209,16 @@ if (!available) {
   }
 
   beforeEach(async () => {
-    await sql`TRUNCATE p2p.p2p_disputes, p2p.p2p_trades, p2p.offers, p2p.p2p_reputation RESTART IDENTITY CASCADE`;
+    await sql`
+      TRUNCATE p2p.instrument_access_log, p2p.trade_payment_instruments, p2p.payment_instruments,
+               p2p.payment_method_schemas, p2p.p2p_disputes, p2p.p2p_trades, p2p.offers, p2p.p2p_reputation
+      RESTART IDENTITY CASCADE
+    `;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-p2p');
     reference = { price: '1' };
     p2p = new P2pService(sql, ledger, bus, options);
+    await seedPaymentRails();
   });
 
   afterAll(async () => {
@@ -289,6 +366,7 @@ if (!available) {
         price: amt('1'),
         minAmt: amt('10'),
         maxAmt: amt('500'),
+        methods: ['sepa'],
       });
       const trade = await noFee.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
       await noFee.confirmFiatReceived(trade.id, MAKER);
@@ -309,6 +387,7 @@ if (!available) {
         price: amt('1'),
         minAmt: amt('10'),
         maxAmt: amt('500'),
+        methods: ['sepa'],
       });
       const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
 
@@ -525,6 +604,262 @@ if (!available) {
       // Released to the buyer means the seller lost.
       expect((await p2p.reputationOf(MAKER)).disputesLost).toBe(1);
       expect((await p2p.reputationOf(TAKER)).disputesLost).toBe(0);
+    });
+  });
+
+  // ── The moderator queue, and the evidence in it ───────────────────────────
+
+  /**
+   * WHAT THIS BLOCK IS FOR.
+   *
+   * `p2p.disputes` shipped as "moderated dispute resolution ✅" while a
+   * moderator could not reach a dispute even if they wanted to: no queue, no
+   * readable evidence, and a timer that refunded everything after seven days.
+   * These tests are the four halves of "a human could have reached it".
+   */
+  describe('the moderator queue', () => {
+    /** Open a dispute on a fresh escrowed trade, with optional evidence. */
+    async function disputedTrade(evidence?: readonly unknown[], opener = TAKER) {
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({
+        tradeId: trade.id,
+        openedBy: opener,
+        reason: 'nothing arrived',
+        ...(evidence ? { evidence } : {}),
+      });
+      return trade;
+    }
+
+    it('enumerates open disputes, most overdue first', async () => {
+      // The index that serves this — `p2p_disputes_open_idx` on
+      // (status, deadline_at) — existed from the first migration and nothing
+      // queried it. A moderator could only call `.get({ tradeId })`, which
+      // requires already knowing the id of a dispute you have never seen.
+      const a = await disputedTrade();
+      const b = await disputedTrade();
+      const c = await disputedTrade();
+
+      // Make `b` the most overdue and `c` the least.
+      await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() - interval '3 days' WHERE trade_id = ${b.id}`;
+      await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() - interval '1 day'  WHERE trade_id = ${a.id}`;
+      await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() + interval '1 day'  WHERE trade_id = ${c.id}`;
+
+      const page = await p2p.listDisputes({ moderatorId: MODERATOR });
+      expect(page.disputes.map((d) => d.tradeId)).toEqual([b.id, a.id, c.id]);
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('paginates by keyset, so nothing resolved mid-read can hide a dispute', async () => {
+      const trades = [];
+      for (let i = 0; i < 5; i++) trades.push(await disputedTrade());
+      // Distinct deadlines, ascending in creation order.
+      for (const [i, t] of trades.entries()) {
+        await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() + ${`${i} hours`}::interval WHERE trade_id = ${t.id}`;
+      }
+
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (;;) {
+        const page: Awaited<ReturnType<typeof p2p.listDisputes>> = await p2p.listDisputes({
+          moderatorId: MODERATOR,
+          limit: 2,
+          cursor,
+        });
+        seen.push(...page.disputes.map((d) => d.tradeId));
+        cursor = page.nextCursor;
+        if (!cursor) break;
+      }
+
+      expect(seen).toEqual(trades.map((t) => t.id));
+      expect(new Set(seen).size).toBe(5);
+    });
+
+    it('only lists what was asked for: resolved disputes are not in the open queue', async () => {
+      const open = await disputedTrade();
+      const ruled = await disputedTrade();
+      await p2p.resolveDispute({ tradeId: ruled.id, moderatorId: MODERATOR, resolution: 'refund' });
+
+      expect((await p2p.listDisputes({ moderatorId: MODERATOR })).disputes.map((d) => d.tradeId)).toEqual([open.id]);
+      expect((await p2p.listDisputes({ moderatorId: MODERATOR, status: 'resolved' })).disputes.map((d) => d.tradeId)).toEqual([ruled.id]);
+    });
+
+    /**
+     * THE ONE THAT MAKES "REACHABLE" A FACT RATHER THAN A CLAIM.
+     *
+     * A queue endpoint existing is a property of our repository. A row having
+     * been served to a moderator is a property of the world, and it is the only
+     * one of the two that survives "nobody can hold the scope".
+     */
+    it('records that a moderator was actually served the dispute, and cannot serve it without recording', async () => {
+      const trade = await disputedTrade();
+      expect((await p2p.getDispute(trade.id)).lastSeenByModeratorAt).toBeNull();
+
+      // A PARTY reading their own dispute is not evidence of moderation.
+      await p2p.getDispute(trade.id);
+      expect((await p2p.getDispute(trade.id)).lastSeenByModeratorAt).toBeNull();
+      expect((await p2p.getDispute(trade.id)).moderatorViews).toBe(0);
+
+      await p2p.listDisputes({ moderatorId: MODERATOR });
+      const seen = await p2p.getDispute(trade.id);
+      expect(seen.lastSeenByModeratorAt).not.toBeNull();
+      expect(seen.moderatorViews).toBe(1);
+
+      await p2p.getDisputeAsModerator(trade.id, MODERATOR);
+      expect((await p2p.getDispute(trade.id)).moderatorViews).toBe(2);
+    });
+
+    it('counts the backlog an operator has to act on', async () => {
+      const overdue = await disputedTrade();
+      await disputedTrade();
+      await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() - interval '1 day' WHERE trade_id = ${overdue.id}`;
+
+      expect(await p2p.moderationBacklog()).toEqual({ open: 2, overdue: 1, escalated: 0, neverSeen: 2 });
+
+      await p2p.listDisputes({ moderatorId: MODERATOR });
+      expect(await p2p.moderationBacklog()).toMatchObject({ neverSeen: 0 });
+    });
+  });
+
+  describe('dispute evidence', () => {
+    async function disputedTrade(evidence?: readonly unknown[], opener = TAKER) {
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({
+        tradeId: trade.id,
+        openedBy: opener,
+        reason: 'nothing arrived',
+        ...(evidence ? { evidence } : {}),
+      });
+      return trade;
+    }
+
+    it('serialises evidence at all — it used to be write-only', async () => {
+      // Accepted by `openDispute`, stored in `p2p_disputes.evidence`, carried on
+      // `DisputeRecord`, and never returned by anything. A moderator could not
+      // read what they were ruling on.
+      const trade = await disputedTrade([{ kind: 'receipt', ref: 'BANK-1' }]);
+      const dispute = await p2p.getDispute(trade.id);
+
+      expect(dispute.evidence).toHaveLength(1);
+      expect(dispute.evidence[0]).toMatchObject({ seq: 1, submittedBy: TAKER, item: { kind: 'receipt', ref: 'BANK-1' } });
+      expect(dispute.evidence[0]!.submittedAt).toBeInstanceOf(Date);
+    });
+
+    it('attributes evidence filed at open, not just evidence appended later', async () => {
+      const trade = await disputedTrade(['a', 'b'], MAKER);
+      const dispute = await p2p.getDispute(trade.id);
+      expect(dispute.evidence.map((e) => e.submittedBy)).toEqual([MAKER, MAKER]);
+      expect(dispute.evidence.map((e) => e.seq)).toEqual([1, 2]);
+    });
+
+    it('lets a party append evidence they obtained after opening', async () => {
+      // The gap this closes: evidence could only be supplied in the single
+      // `disputes.open` call, and a dispute opened by the release TIMEOUT
+      // carries a reason and nothing else — so the party handed a dispute they
+      // did not ask for had nowhere to put anything at all.
+      const trade = await escrowedTrade('100');
+      await p2p.markFiatSent(trade.id, TAKER);
+      await expire(trade.id);
+      await p2p.sweepDeadlines();
+
+      expect((await p2p.getDispute(trade.id)).evidence).toEqual([]);
+
+      await p2p.appendDisputeEvidence({ tradeId: trade.id, actorId: TAKER, evidence: [{ receipt: 'late' }] });
+      await p2p.appendDisputeEvidence({ tradeId: trade.id, actorId: MAKER, evidence: [{ statement: 'nothing landed' }] });
+
+      const dispute = await p2p.getDispute(trade.id);
+      expect(dispute.evidence.map((e) => [e.seq, e.submittedBy])).toEqual([
+        [1, TAKER],
+        [2, MAKER],
+      ]);
+    });
+
+    it('lets only a party append', async () => {
+      const trade = await disputedTrade();
+      await expect(p2p.appendDisputeEvidence({ tradeId: trade.id, actorId: OTHER, evidence: ['x'] })).rejects.toMatchObject({
+        code: 'p2p.not_a_party',
+      });
+    });
+
+    it('refuses evidence once the dispute has been ruled on', async () => {
+      // The record a ruling was made against must stay the record the ruling
+      // was made against.
+      const trade = await disputedTrade();
+      await p2p.resolveDispute({ tradeId: trade.id, moderatorId: MODERATOR, resolution: 'refund' });
+
+      await expect(p2p.appendDisputeEvidence({ tradeId: trade.id, actorId: TAKER, evidence: ['too late'] })).rejects.toMatchObject({
+        code: 'p2p.dispute_already_resolved',
+      });
+    });
+
+    it('caps what one call and one dispute can carry', async () => {
+      const trade = await disputedTrade();
+      await expect(
+        p2p.appendDisputeEvidence({ tradeId: trade.id, actorId: TAKER, evidence: Array.from({ length: 11 }, (_, i) => i) }),
+      ).rejects.toMatchObject({ code: 'p2p.dispute_evidence_rejected' });
+
+      await expect(p2p.appendDisputeEvidence({ tradeId: trade.id, actorId: TAKER, evidence: ['x'.repeat(9_000)] })).rejects.toMatchObject({
+        code: 'p2p.dispute_evidence_rejected',
+      });
+
+      expect((await p2p.getDispute(trade.id)).evidence).toEqual([]);
+    });
+
+    /**
+     * APPEND-ONLY, PROVEN AT THE LEVEL THAT MATTERS.
+     *
+     * The service having no update verb is a fact about this codebase today.
+     * The trigger is a fact about the database, and it is the one that holds
+     * against a fixture script, a migration, and whoever adds the next write
+     * path without reading `appendDisputeEvidence`.
+     */
+    it('the DATABASE refuses to edit, reorder or remove evidence', async () => {
+      const trade = await disputedTrade(['first', 'second']);
+
+      await expect(sql`
+        UPDATE p2p.p2p_disputes SET evidence = '[]'::jsonb WHERE trade_id = ${trade.id}
+      `).rejects.toThrow(/append-only/);
+
+      await expect(sql`
+        UPDATE p2p.p2p_disputes
+           SET evidence = jsonb_set(evidence, '{0,item}', '"tampered"'::jsonb)
+         WHERE trade_id = ${trade.id}
+      `).rejects.toThrow(/append-only/);
+
+      // Same length, contents swapped — the length check alone would miss this.
+      await expect(sql`
+        UPDATE p2p.p2p_disputes
+           SET evidence = jsonb_build_array(evidence -> 1, evidence -> 0)
+         WHERE trade_id = ${trade.id}
+      `).rejects.toThrow(/append-only/);
+
+      // Appending is the one thing that works.
+      await sql`
+        UPDATE p2p.p2p_disputes
+           SET evidence = evidence || '[{"seq":3,"submittedBy":"x","submittedAt":"2026-01-01T00:00:00.000Z","item":"third"}]'::jsonb
+         WHERE trade_id = ${trade.id}
+      `;
+      expect((await p2p.getDispute(trade.id)).evidence).toHaveLength(3);
+    });
+
+    it('the DATABASE refuses evidence that is not a bounded array', async () => {
+      const trade = await disputedTrade();
+      await expect(sql`
+        UPDATE p2p.p2p_disputes SET evidence = '{"not":"an array"}'::jsonb WHERE trade_id = ${trade.id}
+      `).rejects.toThrow();
+    });
+
+    it('does not attribute evidence it cannot attribute', async () => {
+      // Rows written before evidence carried an envelope come back
+      // `submittedBy: null` rather than being assigned to the dispute's opener.
+      // A guess recorded as a fact is how an audit trail starts lying, and this
+      // one would be lying about who accused whom.
+      const trade = await disputedTrade();
+      await sql`
+        UPDATE p2p.p2p_disputes SET evidence = '["a legacy bare item"]'::jsonb WHERE trade_id = ${trade.id}
+      `;
+
+      const dispute = await p2p.getDispute(trade.id);
+      expect(dispute.evidence[0]).toMatchObject({ seq: 1, submittedBy: null, submittedAt: null, item: 'a legacy bare item' });
     });
   });
 
@@ -750,11 +1085,20 @@ if (!available) {
       expect(await escrowOf(MAKER)).toBe('0');
     });
 
+    it('refuses a NEW offer that declares no payment methods', async () => {
+      // An offer with no declared methods accepts anything, so the only thing
+      // that can refuse a take on it is the seller's instrument set — which
+      // turns every such offer into a clean per-method probe of its own maker.
+      // Existing offers are left alone and refuse at take, honestly.
+      await expect(sellOffer({ methods: [] })).rejects.toMatchObject({ code: 'p2p.offer_methods_required' });
+      await expect(sellOffer({ methods: undefined })).rejects.toMatchObject({ code: 'p2p.offer_methods_required' });
+    });
+
     it('rejects a payment method the offer does not accept', async () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer({ methods: ['sepa'] });
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'wise' })).rejects.toMatchObject({
-        code: 'p2p.offer_method_unsupported',
+        code: 'p2p.take_refused',
       });
       expect(await escrowOf(MAKER)).toBe('0');
     });
@@ -877,18 +1221,13 @@ if (!available) {
 
   // ── Timeouts ──────────────────────────────────────────────────────────────
 
-  describe('TIMEOUTS — an abandoned trade always resolves', () => {
-    /** Age a trade past its deadline without waiting for a real clock. */
-    async function expire(tradeId: string) {
-      await sql`UPDATE p2p.p2p_trades SET deadline_at = now() - interval '1 hour' WHERE id = ${tradeId}`;
-    }
-
+  describe('TIMEOUTS — an abandoned trade always resolves, and a disputed one never does', () => {
     it('refunds an escrowed trade the buyer never paid for', async () => {
       const trade = await escrowedTrade('100');
       await expire(trade.id);
 
       const result = await p2p.sweepDeadlines();
-      expect(result).toEqual({ swept: 1, failed: 0 });
+      expect(result).toMatchObject({ swept: 1, failed: 0, escalated: 0, failures: [] });
 
       const after = await p2p.getTrade(trade.id);
       expect(after.status).toBe('cancelled');
@@ -918,40 +1257,105 @@ if (!available) {
       expect(dispute.reason).toBe('timeout.seller_did_not_confirm');
     });
 
-    it('BACKSTOPS a dispute no moderator ruled on', async () => {
-      // A dispute that can stay open forever is the same bug as an escrow that
-      // can stay locked forever.
+    it('ESCALATES a dispute no moderator ruled on — and moves nothing', async () => {
+      // THE ONE THIS SERVICE USED TO GET WRONG. A 7-day timer refunded the
+      // buyer, attributed the refund to `system:p2p-backstop`, and recorded it
+      // as a resolution — while there was no queue to find the dispute in, no
+      // way to read its evidence, and no session that could hold
+      // `admin:compliance`. Two people disagreed and a clock picked one.
       const trade = await escrowedTrade('100');
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
       await expire(trade.id);
 
-      await p2p.sweepDeadlines();
+      const swept = await p2p.sweepDeadlines();
+      expect(swept).toMatchObject({ escalated: 1, swept: 0, failed: 0 });
 
       const after = await p2p.getTrade(trade.id);
-      expect(after.status).toBe('cancelled');
-      expect(after.resolution).toBe('refunded');
-      expect(await availableOf(MAKER)).toBe('1000');
+      expect(after.status).toBe('disputed');
+      expect(after.resolution).toBeNull();
+      // The escrow is exactly where it was.
+      expect(await escrowOf(MAKER)).toBe('100');
+      expect(await availableOf(MAKER)).toBe('900');
+      expect(await availableOf(TAKER)).toBe('0');
+      expect(bus.emitted('p2pDisputeResolved')).toHaveLength(0);
 
-      // Attributed to a named system moderator, never anonymous.
       const dispute = await p2p.getDispute(trade.id);
-      expect(dispute).toMatchObject({ status: 'resolved', moderatorId: 'system:p2p-backstop', resolution: 'refund' });
-      expect(bus.emitted('p2pDisputeResolved')[0]?.payload).toMatchObject({ automatic: true });
+      expect(dispute.status).toBe('open');
+      expect(dispute.escalations).toBe(1);
+      expect(dispute.escalatedAt).not.toBeNull();
       await expectBooksClosed();
     });
 
-    it('backstops the other way when configured to', async () => {
-      const releasing = new P2pService(sql, ledger, bus, { ...options, disputeBackstopResolution: 'release' });
-      await fund(MAKER, '1000');
-      const offer = await sellOffer();
-      const trade = await releasing.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
-      await releasing.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+    it('re-arms rather than resolving, so the live-deadline constraint still holds', async () => {
+      // `p2p_trades_live_has_deadline_ck` makes "sits in escrow with no clock on
+      // it" unrepresentable, correctly. The constraint requires a live trade to
+      // carry a DEADLINE; it does not require the deadline to dispose of value.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+      // Age both halves of the SLA the way real time would: the trade's mirror
+      // of it (what the sweeper scans) and the dispute's own record of it.
       await expire(trade.id);
+      await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() - interval '1 hour' WHERE trade_id = ${trade.id}`;
+      await p2p.sweepDeadlines();
 
-      await releasing.sweepDeadlines();
+      const rows = await sql<Array<{ deadline_at: Date | null }>>`
+        SELECT deadline_at FROM p2p.p2p_trades WHERE id = ${trade.id}
+      `;
+      expect(rows[0]!.deadline_at).not.toBeNull();
+      expect(rows[0]!.deadline_at!.getTime()).toBeGreaterThan(Date.now());
 
-      expect((await releasing.getTrade(trade.id)).status).toBe('released');
-      expect(await availableOf(TAKER)).toBe('99');
+      // The DISPUTE's own deadline stays in the past on purpose: it is the SLA,
+      // the SLA was missed, and the moderator queue orders by it. Moving it
+      // would push the most neglected dispute to the bottom of the list.
+      const dispute = await p2p.getDispute(trade.id);
+      expect(dispute.deadlineAt.getTime()).toBeLessThan(Date.now());
+    });
+
+    it('never gives up: a dispute nobody rules on escalates again, forever, and still holds the escrow', async () => {
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+
+      for (let i = 1; i <= 5; i++) {
+        await expire(trade.id);
+        const swept = await p2p.sweepDeadlines();
+        expect(swept.escalated).toBe(1);
+        expect((await p2p.getDispute(trade.id)).escalations).toBe(i);
+      }
+
+      expect((await p2p.getTrade(trade.id)).resolution).toBeNull();
+      expect(await escrowOf(MAKER)).toBe('100');
       await expectBooksClosed();
+    });
+
+    it('the DATABASE refuses to terminate a disputed escrow without an attributed human ruling', async () => {
+      // The last line of defence, and the one a future re-introduction of a
+      // timer would actually hit. Not a service check — a trigger, so it holds
+      // against psql, a fixture script, and a well-meaning patch.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+
+      await expect(sql`
+        UPDATE p2p.p2p_trades
+           SET status = 'cancelled', resolution = 'refunded', resolution_reason = 'timeout.backstop',
+               resolved_at = now(), deadline_at = NULL
+         WHERE id = ${trade.id}
+      `).rejects.toThrow(/only on a human ruling/);
+
+      // And a `system:` moderator does not satisfy it either — attributing an
+      // automatic decision to a named robot was exactly the old shape.
+      await sql`
+        UPDATE p2p.p2p_disputes
+           SET status = 'resolved', moderator_id = 'system:p2p-backstop', resolution = 'refund', resolved_at = now()
+         WHERE trade_id = ${trade.id}
+      `;
+      await expect(sql`
+        UPDATE p2p.p2p_trades
+           SET status = 'cancelled', resolution = 'refunded', resolution_reason = 'timeout.backstop',
+               resolved_at = now(), deadline_at = NULL
+         WHERE id = ${trade.id}
+      `).rejects.toThrow(/only on a human ruling/);
+
+      expect((await p2p.getTrade(trade.id)).resolution).toBeNull();
     });
 
     it('unwinds a trade that was reserved but never escrowed', async () => {
@@ -1007,6 +1411,65 @@ if (!available) {
       });
     });
 
+    /**
+     * THE REASON, NOT JUST THE COUNT.
+     *
+     * Both sweeps used to `catch { failed++ }` and discard the error object.
+     * The cost showed up for real: the escrow guard refused a write with a
+     * perfectly clear sentence, this line ate it, and the refusal surfaced two
+     * branches away as an assertion failure that named nothing. A settlement
+     * failure is the sharpest case of all — a committed decision with no
+     * ledger post is value that is LATE, and `escrowIntegrity()` counts it as
+     * still escrowed, correctly, so it does not flag either.
+     */
+    it('says WHY a settlement failed instead of counting it and moving on', async () => {
+      const trade = await escrowedTrade('100');
+
+      // A ledger that refuses to post, so the decision commits and the money
+      // does not move — the one window in which P2P value can be late.
+      const brokenLedger = {
+        post: async () => {
+          throw new Error('ledger unavailable');
+        },
+        balance: (account: Parameters<typeof ledger.balance>[0]) => ledger.balance(account),
+        balances: (kind: string, id: string) => (ledger.balances as (k: string, i: string) => unknown)(kind, id),
+      } as unknown as MemoryLedger;
+
+      const breaking = new P2pService(sql, brokenLedger, bus, options);
+      await expect(breaking.confirmFiatReceived(trade.id, MAKER)).rejects.toThrow('ledger unavailable');
+
+      const result = await breaking.sweepSettlements();
+      expect(result.settled).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.failures).toHaveLength(1);
+      expect(result.failures[0]).toMatchObject({ tradeId: trade.id, error: 'ledger unavailable' });
+
+      // And the decision is still on the row, so the next sweep re-drives it.
+      expect((await p2p.getTrade(trade.id)).resolution).toBe('released');
+      expect((await p2p.getTrade(trade.id)).settledAt).toBeNull();
+      expect((await p2p.sweepSettlements()).settled).toBe(1);
+    });
+
+    it('names the trade and the guard when a timeout sweep is refused', async () => {
+      // Reaching this needs the escrow guard to refuse, which nothing in the
+      // service does any more — so the trade row is put into the one shape the
+      // trigger objects to, directly. That is the point: if a future change
+      // reintroduces a path that tries to terminate a disputed escrow, the
+      // sweep reports the sentence rather than a number.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+
+      const failure = await sql`
+        UPDATE p2p.p2p_trades SET status = 'cancelled', resolution = 'refunded', resolution_reason = 'x',
+                                  resolved_at = now(), deadline_at = NULL
+         WHERE id = ${trade.id}
+      `.catch((e: unknown) => e as Error);
+
+      expect((failure as Error).message).toMatch(/only on a human ruling/);
+      // The sweep's own shape carries that same string when it happens there.
+      expect((await p2p.getTrade(trade.id)).resolution).toBeNull();
+    });
+
     it('keeps sweeping after one trade fails', async () => {
       const a = await escrowedTrade('100');
       const offer = await sellOffer();
@@ -1040,7 +1503,7 @@ if (!available) {
       expect(await escrowOf(MAKER)).toBe('100');
       const result = await p2p.sweepSettlements();
 
-      expect(result).toEqual({ settled: 1, failed: 0 });
+      expect(result).toMatchObject({ settled: 1, failed: 0, failures: [] });
       expect(await availableOf(TAKER)).toBe('99');
       expect(await houseOf()).toBe('1');
       expect(await escrowOf(MAKER)).toBe('0');
@@ -1259,6 +1722,7 @@ if (!available) {
         minAmt: amt('10'),
         maxAmt: amt('100'),
         totalAmt: amt('1000'),
+        methods: ['sepa'],
       });
 
       const take = (offerId: string, takerId: string) => p2p.takeOffer({ offerId, takerId, amount: amt('100'), method: 'sepa' });
@@ -1302,6 +1766,7 @@ if (!available) {
         price: amt('1'),
         minAmt: amt('10'),
         maxAmt: amt('100'),
+        methods: ['sepa'],
       });
       await expect(take(broke.id, TAKER)).rejects.toThrow();
 

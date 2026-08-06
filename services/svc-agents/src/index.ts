@@ -12,7 +12,23 @@ import { MockModelProvider } from './providers/mock.js';
 import { UpstreamModelProvider } from './providers/upstream.js';
 import type { ModelProvider } from './providers/provider.js';
 import { AgentRuntime } from './runtime.js';
+import { agentsReadiness } from './readiness.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-agents — the agent fleet runtime and model gateway (§8.2).
@@ -67,7 +83,9 @@ function buildRoutingTable(): RoutingTable {
   return parseRoutingTable(JSON.parse(env.AGENTS_ROUTING_TABLE));
 }
 
-const gateway = new ModelGateway([buildPrimaryProvider()], buildRoutingTable());
+const primaryProvider = buildPrimaryProvider();
+const providers: readonly ModelProvider[] = [primaryProvider];
+const gateway = new ModelGateway(providers, buildRoutingTable());
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
@@ -99,14 +117,25 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({
-  ready: true,
-  // Deliberately reports the LOGICAL provider id and the task list. An operator
-  // needs to know routing is loaded; nobody needs a vendor name on a health
-  // endpoint (Doctrine §0.7).
-  meteringEnabled: env.AGENTS_METERING_ENABLED,
-  tasks: gateway.routingTable.routes.map((r) => r.task),
-}));
+
+/**
+ * Honest readiness (Board Clear A-P5-AGENTS).
+ *
+ * Process ready stays true after boot: sessions, logs and settlement still
+ * work when the engine is down. What an operator must not misread:
+ *   · `providerMode: mock` is not production inference
+ *   · `usefulPath.available` is whether a completion can leave the process now
+ *   · product agents are not registered by this service — residual says so
+ * Never a vendor name (Doctrine §0.7).
+ */
+app.get('/ready', async () =>
+  agentsReadiness({
+    providerMode: env.AGENTS_PROVIDER,
+    providers,
+    table: gateway.routingTable,
+    meteringEnabled: env.AGENTS_METERING_ENABLED,
+  }),
+);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',

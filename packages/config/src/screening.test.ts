@@ -1,14 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   SCREENING_ENFORCED_ENVS,
+  SHIPPED_BUSINESS_BLOCKS,
   UnscreenedJurisdictionError,
   activeScreeningList,
   assertScreeningConfigured,
+  businessBlockFor,
+  businessBlockedRegions,
+  businessBlocksFrom,
   checkAccess,
   isRegionBlocked,
   screeningStatus,
+  type JurisdictionEntry,
 } from './jurisdiction.js';
-import { EMPTY_SCREENING_LIST, ScreeningListError, parseScreeningList } from './screening.js';
+import { SCREENING_REVIEWED_EMPTY, ScreeningListError, UNSET_SCREENING_LIST, parseScreeningList } from './screening.js';
 
 /**
  * THE GAP THIS CLOSES.
@@ -79,7 +84,7 @@ describe('parsing the configured list', () => {
 
 describe('the state is observable — "screened and clear" vs "screened nothing"', () => {
   it('says NOT CONFIGURED rather than reporting a comfortable zero', () => {
-    const status = screeningStatus(EMPTY_SCREENING_LIST);
+    const status = screeningStatus(UNSET_SCREENING_LIST);
     expect(status.configured).toBe(false);
     expect(status.blockedRegions).toEqual([]);
     expect(status.summary).toContain('NOT CONFIGURED');
@@ -101,7 +106,7 @@ describe('the state is observable — "screened and clear" vs "screened nothing"
   it('carries the difference on an ALLOWED decision, where it used to be invisible', () => {
     const query = { module: 'dex', plane: 'protocol', region: 'QQ', kycTier: 'none' } as const;
 
-    const unscreened = checkAccess({ ...query, screening: EMPTY_SCREENING_LIST });
+    const unscreened = checkAccess({ ...query, screening: UNSET_SCREENING_LIST });
     const screened = checkAccess({ ...query, screening: POPULATED });
 
     // Same outcome...
@@ -156,7 +161,7 @@ describe('a populated list actually screens', () => {
   it('isRegionBlocked answers from the configured list, not only the matrix', () => {
     expect(isRegionBlocked('AA', POPULATED)).toBe(true);
     expect(isRegionBlocked('QQ', POPULATED)).toBe(false);
-    expect(isRegionBlocked('AA', EMPTY_SCREENING_LIST)).toBe(false);
+    expect(isRegionBlocked('AA', UNSET_SCREENING_LIST)).toBe(false);
   });
 });
 
@@ -251,6 +256,410 @@ describe('the process-wide list is read from the environment', () => {
 });
 
 /**
+ * TWO AUTHORITIES, AND NEITHER MAY VOUCH FOR THE OTHER.
+ *
+ * THE BUG. `MATRIX_SCREENING` turned every `blocked: true` entry in
+ * `JURISDICTION_MATRIX` into a `ScreeningList` and `activeScreeningList` merged
+ * it with the counsel-supplied one. `mergeScreeningLists` set `configured: true`
+ * if EITHER side had anything, and `assertScreeningConfigured` gated on exactly
+ * that flag.
+ *
+ * So one region blocked for a commercial reason — a licence we lack, a market we
+ * have not opened, a placeholder somebody left — flipped the production boot
+ * guard from "refuse to start" to "satisfied", with the sanctions list still
+ * empty and nobody in counsel having supplied a thing. Business configuration,
+ * edited in ordinary PRs by ordinary contributors, silently arming a legal
+ * control. Latent only because the shipped matrix happens to contain no
+ * `blocked: true` entry; live the first time anybody adds one.
+ *
+ * These tests use a SYNTHETIC matrix, because the shipped one has no blocked
+ * entry and a rule about the blocked case that can only be exercised once
+ * somebody adds one is a rule with no test.
+ *
+ * ── AND THAT IS NOT A STYLE POINT ────────────────────────────────────────────
+ *
+ * `SHIPPED_BUSINESS_BLOCKS` is EMPTY — asserted below, and asserted again under
+ * "what ships". So any test in this file that exercises the business authority
+ * WITHOUT passing a staged set is not testing the business authority. It is
+ * asserting that nothing fails to satisfy a guard, which was true of the
+ * merged-authority code this change replaced: it would have passed identically
+ * before the fix.
+ *
+ * That is exactly what the previous version of `leaves the prod boot guard
+ * refusing` did. It called `assertScreeningConfigured({ APP_ENV: 'prod' })` with
+ * no business blocks anywhere near it, under a name that claims a business block
+ * was present and was refused. A compliance test that cannot fail is worse than
+ * no test, because the name is read as evidence.
+ *
+ * So every test below passes `COMMERCIAL_BLOCKS` explicitly, and the ones about
+ * the guard additionally assert that the guard SAW the staged block — by
+ * checking that the refusal names it. Losing the argument then turns the test
+ * red instead of turning it vacuous.
+ */
+describe('a business block cannot satisfy the screening guard', () => {
+  /** A commercially-blocked region. QQ is unassigned in ISO-3166. */
+  const COMMERCIAL: readonly JurisdictionEntry[] = [
+    { region: '*' },
+    { region: 'QQ', blocked: true, reason: 'No licence in this market yet — commercial, not sanctions' },
+  ];
+
+  /** The staged set, passed to every seam below. Never the shipped one. */
+  const COMMERCIAL_BLOCKS = businessBlocksFrom(COMMERCIAL);
+
+  /**
+   * The precondition the rest of this block depends on. If the shipped matrix
+   * ever gains a `blocked: true` entry this fails FIRST, and the reader learns
+   * that the "no business block staged" baseline used below is no longer a
+   * baseline — rather than the tests below quietly starting to pass for the
+   * wrong reason.
+   */
+  it('the shipped matrix stages nothing, so an unstaged test would prove nothing', () => {
+    expect(SHIPPED_BUSINESS_BLOCKS).toEqual([]);
+    expect(COMMERCIAL_BLOCKS).toHaveLength(1);
+  });
+
+  it('still blocks the region — nothing about the existing refusal is weakened', () => {
+    expect(COMMERCIAL_BLOCKS.map((b) => b.region)).toEqual(['QQ']);
+    expect(COMMERCIAL_BLOCKS[0]?.authority).toBe('business');
+  });
+
+  it('is NOT counted as screening coverage, however many there are', () => {
+    const status = screeningStatus(UNSET_SCREENING_LIST, COMMERCIAL_BLOCKS);
+
+    // The whole finding, as an assertion.
+    expect(status.configured).toBe(false);
+    expect(status.declaration).toBe('unset');
+
+    // Reported, and reported as a different number under a different name.
+    expect(status.blockedRegions).toEqual([]);
+    expect(status.businessBlockedRegions).toEqual(['QQ']);
+  });
+
+  it('says out loud that the business blocks are not screening', () => {
+    const status = screeningStatus(UNSET_SCREENING_LIST, COMMERCIAL_BLOCKS);
+    expect(status.summary).toContain('NOT CONFIGURED');
+    expect(status.summary).toContain('not screening');
+  });
+
+  /**
+   * THE GUARD ITSELF, WITH A COMMERCIAL BLOCK ACTUALLY IN FRONT OF IT.
+   *
+   * The claim under test — "a commercial block cannot satisfy a sanctions
+   * guard" — is a claim about what happens WHEN ONE EXISTS. Calling the guard
+   * with none tests nothing; the merged-authority code refused that input too.
+   *
+   * So: stage one, call the guard, and then prove the guard SAW it, by reading
+   * the staged region back off the refusal. A future edit that drops the second
+   * argument makes `businessBlockedRegions` come back empty and this goes red.
+   */
+  it('leaves the prod boot guard refusing, with a commercial block staged and seen', () => {
+    let thrown: unknown;
+    try {
+      assertScreeningConfigured({ APP_ENV: 'prod' }, COMMERCIAL_BLOCKS);
+      expect.unreachable('a commercial block must not satisfy the sanctions guard');
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(UnscreenedJurisdictionError);
+    const error = thrown as UnscreenedJurisdictionError;
+
+    // The guard saw the block — this is the assertion that keeps the test from
+    // going vacuous again.
+    expect(error.businessBlockedRegions).toEqual(['QQ']);
+    expect(error.message).toContain('QQ');
+    // ...and said, in the refusal itself, why seeing it changed nothing.
+    expect(error.message).toContain('do NOT satisfy this');
+  });
+
+  it.each(SCREENING_ENFORCED_ENVS)('and refuses the same way for APP_ENV=%s', (appEnv) => {
+    expect(() => assertScreeningConfigured({ APP_ENV: appEnv }, COMMERCIAL_BLOCKS)).toThrow(UnscreenedJurisdictionError);
+  });
+
+  /** Not a threshold that a busy enough matrix eventually clears. */
+  it('is not satisfied by many commercial blocks either', () => {
+    const many = businessBlocksFrom([
+      { region: '*' },
+      { region: 'QQ', blocked: true, reason: 'no licence' },
+      { region: 'XA', blocked: true, reason: 'market not opened' },
+      { region: 'XB', blocked: true, reason: 'placeholder' },
+    ]);
+    expect(many).toHaveLength(3);
+    expect(() => assertScreeningConfigured({ APP_ENV: 'prod' }, many)).toThrow(UnscreenedJurisdictionError);
+  });
+
+  /**
+   * THE OTHER HALF, AND THE ONE THAT PROVES THE TWO ARE SEPARATED RATHER THAN
+   * BOTH REFUSED. The same staged commercial block, plus counsel's list: the
+   * guard is satisfied — by the screening authority, alone — and the two
+   * region sets stay under two names and are never summed.
+   */
+  it('and the guard IS satisfied by the screening authority with the same block still staged', () => {
+    const status = assertScreeningConfigured({ APP_ENV: 'prod', INTAFACED_SANCTIONS_REGIONS: 'AA:placeholder' }, COMMERCIAL_BLOCKS);
+    expect(status.configured).toBe(true);
+    expect(status.declaration).toBe('listed');
+    expect(status.blockedRegions).toEqual(['AA']); // counsel's
+    expect(status.businessBlockedRegions).toEqual(['QQ']); // the business's, still separate
+  });
+
+  it('a business block does not become a ScreenedRegion, so it cannot be merged back in by accident', () => {
+    // Types keep them apart; this asserts the runtime tag agrees, which is what
+    // a log or an audit row actually reads.
+    for (const b of COMMERCIAL_BLOCKS) expect(b.authority).not.toBe('screening');
+  });
+
+  /**
+   * Ambiguity fails closed. A `blocked: true` entry with no reason at all —
+   * nobody can tell whether it was commercial or legal — refuses in BOTH
+   * directions: the region stays blocked, and the guard stays unsatisfied.
+   */
+  it('an unexplained block refuses in both directions rather than being read as either', () => {
+    const unexplained: readonly JurisdictionEntry[] = [{ region: '*' }, { region: 'QQ', blocked: true }];
+    const blocks = businessBlocksFrom(unexplained);
+
+    expect(blocks).toHaveLength(1); // still refuses the region
+    const status = screeningStatus(UNSET_SCREENING_LIST, blocks);
+    expect(status.configured).toBe(false); // and still does not satisfy screening
+    // And the region is genuinely refused, not merely counted — the "both
+    // directions" in the name is two assertions, not one.
+    expect(isRegionBlocked('QQ', UNSET_SCREENING_LIST, blocks)).toBe(true);
+  });
+
+  /**
+   * The seam changes no default. Production call sites pass one argument and
+   * get the shipped matrix, exactly as before it existed.
+   */
+  it('production callers pass nothing and get the shipped matrix', () => {
+    expect(businessBlockedRegions()).toEqual([]);
+    expect(businessBlockFor('QQ')).toBeUndefined();
+    expect(screeningStatus(UNSET_SCREENING_LIST).businessBlockedRegions).toEqual([]);
+    expect(() => assertScreeningConfigured({ APP_ENV: 'prod' })).toThrow(UnscreenedJurisdictionError);
+  });
+});
+
+/**
+ * THE BUSINESS AUTHORITY'S REFUSAL, EXERCISED FOR THE FIRST TIME.
+ *
+ * Everything here was unreachable until the `business` seam existed. The
+ * shipped matrix declares no `blocked: true` entry, so `businessBlockFor`
+ * returned `undefined` in every test that had ever run against this file: the
+ * business half of `isRegionBlocked`, `blockedBy: 'business'`, and the §24
+ * Lane A ordering FOR A COMMERCIALLY-BLOCKED REGION were all code that no
+ * assertion had ever entered. Tests over them would have passed against an
+ * implementation that did not have them.
+ *
+ * Each test below is paired with the same query and no staged block, so the
+ * refusal is attributable to the block rather than to the query.
+ */
+describe('a commercial block refuses the region, and says the business refused it', () => {
+  const COMMERCIAL_BLOCKS = businessBlocksFrom([
+    { region: '*' },
+    { region: 'QQ', blocked: true, reason: 'No licence in this market yet — commercial, not sanctions' },
+  ]);
+
+  it('refuses on the custodial plane and attributes it to the business', () => {
+    const query = { module: 'trade', plane: 'fiat', region: 'QQ', kycTier: 'institutional', screening: UNSET_SCREENING_LIST } as const;
+
+    const blocked = checkAccess({ ...query, business: COMMERCIAL_BLOCKS });
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.code).toBe('denied.region_blocked');
+    expect(blocked.blockedBy).toBe('business');
+    expect(blocked.reason).toBe('No licence in this market yet — commercial, not sanctions');
+
+    // The control: same caller, same region, nothing staged. Allowed. So the
+    // refusal above came from the block and not from the query.
+    expect(checkAccess(query).allowed).toBe(true);
+  });
+
+  it('refuses regardless of the case the region arrives in', () => {
+    const d = checkAccess({
+      module: 'trade',
+      plane: 'fiat',
+      region: 'qq',
+      kycTier: 'institutional',
+      screening: UNSET_SCREENING_LIST,
+      business: COMMERCIAL_BLOCKS,
+    });
+    expect(d.code).toBe('denied.region_blocked');
+  });
+
+  /**
+   * §24 LANE A, FOR THE BUSINESS AUTHORITY.
+   *
+   * `dex` on the `protocol` plane is the exact shape that short-circuits to
+   * `allowed.permissionless` before any tier is read. The region check runs
+   * BEFORE that return — sovereign does not mean unserved-region-served — and
+   * that ordering has to hold for both authorities, not only the one that
+   * happened to be testable. Lifting the permissionless return above the region
+   * check turns this red.
+   */
+  it('§24 Lane A: the region check runs BEFORE the permissionless short-circuit', () => {
+    const query = { module: 'dex', plane: 'protocol', region: 'QQ', kycTier: 'none', screening: UNSET_SCREENING_LIST } as const;
+
+    const blocked = checkAccess({ ...query, business: COMMERCIAL_BLOCKS });
+    expect(blocked.code).toBe('denied.region_blocked');
+    expect(blocked.blockedBy).toBe('business');
+
+    // Unstaged, the very same query short-circuits — which is what makes the
+    // line above an ordering assertion rather than a KYC one.
+    expect(checkAccess(query).code).toBe('allowed.permissionless');
+  });
+
+  it('and a permissionless caller in a region nobody blocks is still allowed', () => {
+    const d = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'ZY',
+      kycTier: 'none',
+      screening: UNSET_SCREENING_LIST,
+      business: COMMERCIAL_BLOCKS,
+    });
+    expect(d.code).toBe('allowed.permissionless');
+    expect(d.blockedBy).toBeUndefined();
+  });
+
+  /**
+   * When both authorities name the region, SCREENING takes the attribution and
+   * the screening reason is the one the user is given. The legal control is the
+   * more consequential fact and it is the one that must not look removable by
+   * editing the matrix.
+   */
+  it('screening wins the attribution when both authorities name the same region', () => {
+    const both = businessBlocksFrom([{ region: '*' }, { region: 'AA', blocked: true, reason: 'commercial reason' }]);
+    const d = checkAccess({ module: 'dex', plane: 'protocol', region: 'AA', kycTier: 'none', screening: POPULATED, business: both });
+
+    expect(d.code).toBe('denied.region_blocked');
+    expect(d.blockedBy).toBe('screening');
+    expect(d.reason).toBe('placeholder programme');
+    expect(d.reason).not.toContain('commercial');
+  });
+
+  it('isRegionBlocked answers true from the business half of the OR', () => {
+    expect(isRegionBlocked('QQ', UNSET_SCREENING_LIST, COMMERCIAL_BLOCKS)).toBe(true);
+    expect(isRegionBlocked('qq', UNSET_SCREENING_LIST, COMMERCIAL_BLOCKS)).toBe(true);
+    // Same region, shipped matrix: the seam is what made the line above reachable.
+    expect(isRegionBlocked('QQ', UNSET_SCREENING_LIST, SHIPPED_BUSINESS_BLOCKS)).toBe(false);
+  });
+
+  it('businessBlockFor and businessBlockedRegions read the staged set', () => {
+    expect(businessBlockedRegions(COMMERCIAL_BLOCKS)).toEqual(['QQ']);
+    expect(businessBlockFor('qq', COMMERCIAL_BLOCKS)?.authority).toBe('business');
+    expect(businessBlockFor('qq', COMMERCIAL_BLOCKS)?.source).toBe('JURISDICTION_MATRIX');
+    expect(businessBlockFor('QQ', SHIPPED_BUSINESS_BLOCKS)).toBeUndefined();
+  });
+});
+
+/**
+ * WHICH AUTHORITY REFUSED, on the decision itself.
+ *
+ * A legal control and a commercial choice produce the same `denied.region_blocked`,
+ * and they are not the same fact. An auditor who cannot tell them apart cannot
+ * tell whether a refusal that disappeared was a market opening or a sanctions
+ * control being tuned away while somebody adjusted something else.
+ */
+describe('every refusal records which authority made it', () => {
+  it('attributes a screening-list refusal to the screening authority', () => {
+    const d = checkAccess({ module: 'dex', plane: 'protocol', region: 'AA', kycTier: 'none', screening: POPULATED });
+    expect(d.code).toBe('denied.region_blocked');
+    expect(d.blockedBy).toBe('screening');
+  });
+
+  it('leaves it absent when nothing refused', () => {
+    const d = checkAccess({ module: 'dex', plane: 'protocol', region: 'QQ', kycTier: 'none', screening: POPULATED });
+    expect(d.allowed).toBe(true);
+    expect(d.blockedBy).toBeUndefined();
+  });
+});
+
+/**
+ * "REVIEWED, AND DELIBERATELY EMPTY" IS NOT "NOBODY HAS DONE THIS YET".
+ *
+ * Both screen zero regions. One is a conclusion somebody reached and signed;
+ * the other is a gap. A platform that cannot record the first has only two
+ * options once counsel answers "no regions" — lie by inventing an entry, or run
+ * forever with a boot guard it cannot satisfy — and both are worse than a state.
+ */
+describe('the deliberately-empty list is a distinct, attributable state', () => {
+  const ATTESTED = {
+    APP_ENV: 'prod',
+    INTAFACED_SANCTIONS_REGIONS: SCREENING_REVIEWED_EMPTY,
+    INTAFACED_SANCTIONS_LIST_SOURCE: 'counsel-memo-placeholder-ref',
+  };
+
+  it('satisfies the boot guard when it is attributed', () => {
+    const status = assertScreeningConfigured(ATTESTED);
+    expect(status.declaration).toBe('reviewed-empty');
+    expect(status.configured).toBe(true);
+    expect(status.blockedRegions).toEqual([]);
+  });
+
+  it('REFUSES without attribution — an unsigned "none" is indistinguishable from silencing the guard', () => {
+    expect(() => assertScreeningConfigured({ APP_ENV: 'prod', INTAFACED_SANCTIONS_REGIONS: SCREENING_REVIEWED_EMPTY })).toThrow(
+      ScreeningListError,
+    );
+  });
+
+  it('the refusal tells the reader that leaving it unset is the honest alternative', () => {
+    try {
+      parseScreeningList(SCREENING_REVIEWED_EMPTY);
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ScreeningListError);
+      expect((e as Error).message).toContain('leave INTAFACED_SANCTIONS_REGIONS unset');
+    }
+  });
+
+  it('is a DIFFERENT state from unset, not merely a different summary', () => {
+    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-placeholder-ref');
+    expect(reviewed.declaration).toBe('reviewed-empty');
+    expect(UNSET_SCREENING_LIST.declaration).toBe('unset');
+
+    // Same zero regions. Different states. That is the entire point.
+    expect(reviewed.regions).toEqual(UNSET_SCREENING_LIST.regions);
+    expect(reviewed.declaration).not.toBe(UNSET_SCREENING_LIST.declaration);
+  });
+
+  it('names the authority in the summary rather than reading as a clean tick', () => {
+    const status = screeningStatus(parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-placeholder-ref'), []);
+    expect(status.summary).toContain('DELIBERATELY EMPTY');
+    expect(status.summary).toContain('counsel-memo-placeholder-ref');
+    // It must not read as "we screened everyone and everyone is fine".
+    expect(status.summary).toContain('recorded decision');
+  });
+
+  /**
+   * The state reaches the decision, not just the dashboard. `listConfigured:
+   * true` with a count of zero used to be unreachable; now it means something
+   * specific, and a reader with only the boolean and the count cannot tell it
+   * from a short list.
+   */
+  it('rides on every decision, so a zero count is legible', () => {
+    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-placeholder-ref');
+    const d = checkAccess({ module: 'dex', plane: 'protocol', region: 'QQ', kycTier: 'none', screening: reviewed });
+
+    expect(d.allowed).toBe(true);
+    expect(d.screening.listConfigured).toBe(true);
+    expect(d.screening.blockedRegionCount).toBe(0);
+    expect(d.screening.declaration).toBe('reviewed-empty');
+  });
+
+  it('an unset list still says unset on the decision', () => {
+    const d = checkAccess({ module: 'dex', plane: 'protocol', region: 'QQ', kycTier: 'none', screening: UNSET_SCREENING_LIST });
+    expect(d.screening.declaration).toBe('unset');
+  });
+
+  it('is case-insensitive, because config files are typed by people', () => {
+    expect(parseScreeningList('NONE', 'ref').declaration).toBe('reviewed-empty');
+    expect(parseScreeningList(' None ', 'ref').declaration).toBe('reviewed-empty');
+  });
+
+  /** It must be the WHOLE value — never a member of a list. */
+  it('is not a list entry — "none,AA" is a malformed list, not an attestation', () => {
+    expect(() => parseScreeningList('none,AA', 'ref')).toThrow(ScreeningListError);
+  });
+});
+
+/**
  * The list SHIPS EMPTY, deliberately. Asserted so that nobody can merge a
  * guessed sanctions list into the repo without this failing and a human having
  * to say who signed it off.
@@ -259,6 +668,17 @@ describe('what ships', () => {
   it('ships no blocklist — the mechanism is armed, the contents are counsel’s', () => {
     const shipped = activeScreeningList({});
     expect(shipped.configured).toBe(false);
+    expect(shipped.declaration).toBe('unset');
     expect(shipped.regions).toEqual([]);
+  });
+
+  /**
+   * And ships no business block either. If this fails, somebody added
+   * `blocked: true` to the matrix — which is allowed, and is a commercial
+   * decision — and this test is where they confirm they meant a commercial
+   * block and not a sanctions one, which belongs in `screening.ts`.
+   */
+  it('ships no business block — and if one lands, it is a commercial decision, not a legal one', () => {
+    expect(screeningStatus(UNSET_SCREENING_LIST).businessBlockedRegions).toEqual([]);
   });
 });

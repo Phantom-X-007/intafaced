@@ -1,0 +1,115 @@
+# Docs formatting — the cheap half of CI that docs-only changes still need.
+#
+# WHY THIS EXISTS. `ci.yml` excludes `docs/**` and `**/*.md` from the full
+# matrix — expressed as negated `paths:` since coverage-check landed, because
+# INTAFACED_DEFINITIVE_BUILD.md is law rather than documentation and has to be
+# re-included. That exclusion is correct and worth keeping: a Markdown edit
+# cannot break a typecheck, a test or a doctrine gate, and eight docs-only PRs
+# once burned roughly 90 billable minutes of a 2,000-minute pool running the
+# full matrix to format prose.
+#
+# But `format:check` is STEP ONE of `pnpm verify`, and it covers `**/*.md`. So
+# the exclusion had a hole in it: an unformatted Markdown file could land on
+# `main` without any CI running at all, and then EVERY developer's next local
+# `pnpm verify` failed at the first step, on a file they had never touched, with
+# every gate behind it unreachable.
+#
+# That happened three times in three days. Each time it was diagnosed as a
+# broken merge before someone noticed it was prose.
+#
+# So: run the one cheap check that docs actually can break, on the exact paths
+# `ci.yml` skips. One job, no matrix, no services, no database — a fraction of a
+# minute against the full run it deliberately avoids. This is thrift, not an
+# exception to it: the alternative is not "no CI", it is a red `main` and three
+# people debugging their own checkouts.
+#
+# THRIFT 2026-08-04: pull_request ONLY — do not re-run on push to main after merge.
+# Squash/merge already paid for Docs format on the PR; a second main run doubled
+# the mill (~half of 619 Docs-format runs in one thrash day). Local `pnpm verify`
+# still catches unformatted md before the next code PR. Manual: workflow_dispatch.
+name: Docs format
+
+on:
+  pull_request:
+    # Negation: claim locks + FREEZE regen alone must not burn Docs-format.
+    # (Swarm claim files / FREEZE-LIVE are ops meters, not prose that needs CI.)
+    paths:
+      - 'docs/**'
+      - '**/*.md'
+      - 'NOTICE'
+      - 'LICENSE'
+      - '!docs/ops/FREEZE-LIVE.md'
+      - '!docs/ops/FREEZE-LIVE.json'
+      - '!docs/ops/claims/**'
+      - '!docs/ops/R00-INVENTORY.md'
+      - '!docs/ops/R01-PR-MATRIX.md'
+      - '!docs/ops/R02-FREE-CLAIMS.md'
+      - '!docs/ops/DASHBOARD.md'
+      - '!docs/ops/DASHBOARD.html'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  format:
+    name: Prettier (docs)
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0, and this is not incidental.
+      #
+      # `actions/checkout@v4` defaults to fetch-depth: 1. Under that checkout
+      # `origin/main` does not exist and `git log HEAD -11` returns one line, so
+      # value-gate's `previousSubjects()` caught, returned `[]`, and `decide()`
+      # compared the subject against an empty list: best 0, nearDup false,
+      # `value-gate: OK`. The stamp-mill detector has been printing clean on
+      # every docs PR while comparing nothing to nothing — the exact zero-walk
+      # defect four gates in this repo exist to close, inside the gate itself.
+      # It now exits 1 rather than pretend, which needs history to be here.
+      #
+      # 49 MiB of pack for 818 commits: a rounding error next to pnpm install.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # Prettier only. No workspace build, no services, no Postgres — the whole
+      # point is that this stays cheap enough to be worth running every time.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: format:check
+        run: pnpm format:check
+
+      # Stamp-mill detector. Git-only — no gh.
+      # MUST live here, not gates.mjs: ci.yml paths-ignore docs/** so gates never
+      # run on coordinator PRs. STRICT after advisory cycle (#722–#725).
+      # The CODE half of the same gate runs in ci.yml's `gates` job, because a
+      # PR with no markdown in it never reaches this workflow at all.
+      # Law: S-CORE §3 · BOARD-CLEAR-PROCESS-LOOPS L0 · SWARM-MANDATE.
+      - name: value gate
+        env:
+          VALUE_GATE_STRICT: '1'
+        run: node tooling/ci/value-gate.mjs
+
+      # Brand scan, for the SAME reason the value gate lives here rather than in
+      # gates.mjs: ci.yml matches `'!docs/**'` and `'!**/*.md'`, so a docs-only PR
+      # never runs the doctrine gates and brand-scan cannot see a brand regression
+      # in markdown at all.
+      #
+      # This is not hypothetical. #756 was docs-only, landed a forbidden vendor
+      # name in `docs/INTERNET-LEVERAGE-PHASE-B-PLAN-2026-08-04.md:15`, and turned
+      # `main` red — where it stayed until a code PR happened to run the gates and
+      # inherit the failure. A gate that cannot run on the files most likely to
+      # break it is not a gate.
+      #
+      # Free to add: brand-scan imports `node:fs` and `node:path` and nothing else.
+      - name: brand scan
+        run: node tooling/ci/brand-scan.mjs

@@ -78,6 +78,25 @@ const schema = serviceEnvSchema
       TRADE_FUTURES_FUNDING_MARKET_IDS: z.string().default(''),
 
       /**
+       * THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM, and therefore the
+       * ceiling on what a winning position can be paid.
+       *
+       * `ownerType:ownerId:kind[:purpose]`, e.g. `house:fees:trade:available`.
+       *
+       * NO DEFAULT, and that is the decision. `futuresRealizeProfit` used to
+       * draw on a fee pot with no ceiling — a house account is not an insurance
+       * fund and a fee balance is not a risk budget. Which account funds profit,
+       * and how it is capitalised, is a fee and revenue recipe and an owner
+       * decision (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`,
+       * `DIRECTION` §8 item 6). A default here would BE that decision, made
+       * silently by whoever wrote this line.
+       *
+       * Unset, the service refuses to boot rather than picking a pot. See
+       * `futures/profit-source.ts`.
+       */
+      TRADE_FUTURES_PROFIT_SOURCE: z.string().default(''),
+
+      /**
        * Market-maker seed job (trade.mm-bot residual).
        * Default OFF — ops must enable + fund pot + set markets + mids.
        * Never invents mid or market list.
@@ -102,10 +121,26 @@ const schema = serviceEnvSchema
        */
       TRADE_MM_SEED_MIDS: z.string().default(''),
 
+      /**
+       * When true, after env mid map miss, try public venue book mid
+       * (same venue id + symbol map as TRADE_VENUE_MARK_*). Default OFF.
+       * Never invents if venue down / unmapped / empty book.
+       */
+      TRADE_MM_SEED_MID_FROM_VENUE: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
       TRADE_MM_SEED_HALF_SPREAD_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
       TRADE_MM_SEED_STEP_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
       TRADE_MM_SEED_LEVELS: z.coerce.number().int().min(1).max(50).default(3),
       TRADE_MM_SEED_QTY: z.string().default('1'),
+
+      /**
+       * Durable last-run map for MM seed cancel/reseed across process restarts.
+       * Empty = in-memory only (legacy). Relative paths resolve from process cwd.
+       */
+      TRADE_MM_SEED_STATE_PATH: z.string().default('.data/mm-seed-last-run.json'),
 
       /**
        * Venue fabric mark source (A-TRADE-VENUE-1 / venue.aggregation).
@@ -121,6 +156,32 @@ const schema = serviceEnvSchema
        * Unmapped market → null mark for that id (never invent symbol).
        */
       TRADE_VENUE_MARK_SYMBOLS: z.string().default(''),
+
+      /**
+       * Spot candle materialization job (A-TRADE-SPOT-1).
+       * Default OFF — REST OHLCV always reads live fills; this job only
+       * copies closed non-seeded buckets into trade.spot_candles.
+       * Never invents empty candles or a market list.
+       */
+      TRADE_CANDLE_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** Materialization tick interval when enabled. Default 60s. */
+      TRADE_CANDLE_JOBS_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
+
+      /**
+       * Comma-separated market UUIDs to materialize.
+       * Empty (default) = job not scheduled even when enabled.
+       */
+      TRADE_CANDLE_JOBS_MARKET_IDS: z.string().default(''),
+
+      /**
+       * Comma-separated timeframes (e.g. `1m,1h`). Invalid tokens dropped.
+       * Empty → `1m` only when markets are set.
+       */
+      TRADE_CANDLE_JOBS_TIMEFRAMES: z.string().default('1m'),
     }),
   );
 

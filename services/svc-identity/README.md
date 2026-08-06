@@ -74,7 +74,11 @@ A live session plus a fresh TOTP code buys an access token that is weaker than a
 
 `rank.updated` fires on rank change, not on every XP award. Every module caches perks; an event per award would be a cache-invalidation storm for no benefit.
 
-**Consumes** — nothing yet. In Phase 2 it consumes `intafaced.identity.xp.earned` from every module; today modules call `rank.awardXp` directly.
+**Consumes** — `intafaced.blueprint.blueprint.created` / `.deleted` (the §7.2 profile-pointer cascade), and `intafaced.identity.xp.earned` from every module.
+
+The XP consumer closes a hole rather than adding a feature. svc-p2p and svc-trade have published `xpEarned` since they shipped, both naming svc-identity in their own comments as the way into `rank_state`, and nothing subscribed — so XP earned by trading or by completing a P2P trade was retained by JetStream and read by nobody, and every rank shown to those users was wrong by exactly that much. The producers already shaped their idempotency keys to land in `xp_events.idempotency_key`, so the envelope's key goes through untranslated and `ON CONFLICT (idempotency_key) DO NOTHING` is the durable dedupe. See `src/events.ts`.
+
+Modules may still call `rank.awardXp` directly — it is a `serviceProcedure` on the router. The bus is a fourth caller of the same method, not a second way of writing `rank_state`, and the two key namespaces (`p2p:*` / `trade.order.xp:*` versus `identity.*`) do not collide on the unique index.
 
 ---
 

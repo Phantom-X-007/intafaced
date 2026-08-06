@@ -1,12 +1,55 @@
 #!/bin/sh
 #
-# Refuse a direct push to main.
+# Refuse direct push to main + require format:check before any push.
+# THRIFT: thrift-preflight meters + WARNs only (never exit 1 on run counts).
+# Stamp mill = value-gate content on Docs format. Local-first is habit.
+# Safety net only — --no-verify bypasses; real enforcement is branch protection (needs Pro).
 #
-# This is a SAFETY NET, not enforcement — `--no-verify` bypasses it, and it only
-# exists on machines that have run `pnpm install`. Real enforcement is GitHub
-# branch protection, which needs GitHub Pro on a private repo (see CONTRIBUTING.md
-# §1). Until that is enabled, this catches the accident, which is the realistic
-# failure mode with a small team: muscle memory, not malice.
+# P1: format:check covers tooling/scripts/*.mjs (what red-trunked main via #471).
+# Worktrees often lack node_modules — resolve prettier from git-common-dir parent.
+
+TOP=$(git rev-parse --show-toplevel)
+
+# --- thrift meter (warn only — never blocks delivery) ---
+if command -v node >/dev/null 2>&1 && [ -f "$TOP/tooling/ci/thrift-preflight.mjs" ]; then
+  (CDPATH= cd -- "$TOP" && node tooling/ci/thrift-preflight.mjs) || true
+fi
+COMMON_GIT=$(git rev-parse --git-common-dir)
+# git-common-dir is e.g. /repo/.git or /repo/.git/worktrees/x → parent of .git is main checkout
+REPO_ROOT=$(CDPATH= cd -- "$(dirname "$COMMON_GIT")" && pwd)
+# when common-dir is /repo/.git, dirname is /repo; when relative .git, resolve
+case "$COMMON_GIT" in
+  /*) ;;
+  *) REPO_ROOT=$(CDPATH= cd -- "$TOP/$(dirname "$COMMON_GIT")" && pwd) ;;
+esac
+
+PRETTIER=""
+if [ -x "$TOP/node_modules/.bin/prettier" ]; then
+  PRETTIER="$TOP/node_modules/.bin/prettier"
+elif [ -x "$REPO_ROOT/node_modules/.bin/prettier" ]; then
+  PRETTIER="$REPO_ROOT/node_modules/.bin/prettier"
+fi
+
+if [ -n "$PRETTIER" ]; then
+  if ! (CDPATH= cd -- "$TOP" && "$PRETTIER" --check "**/*.{ts,tsx,mjs,js,md,json,yml,yaml}"); then
+    cat >&2 <<'MSG'
+
+  ✖ format:check failed — refuse push.
+
+    Fix: prettier --write on the named files (or pnpm format from a full install).
+    This is the gate that failed when #471 merged before CI (swarm.mjs).
+
+MSG
+    exit 1
+  fi
+elif command -v pnpm >/dev/null 2>&1; then
+  if ! (CDPATH= cd -- "$TOP" && pnpm format:check); then
+    echo "✖ pnpm format:check failed — refuse push." >&2
+    exit 1
+  fi
+else
+  echo "warn: no prettier binary found; skipping format:check on push" >&2
+fi
 
 protected="main"
 remote_ref_prefix="refs/heads/"
@@ -15,22 +58,19 @@ while read -r local_ref _local_sha remote_ref _remote_sha; do
   branch="${remote_ref#$remote_ref_prefix}"
 
   if [ "$branch" = "$protected" ]; then
-    # Pushing main is legitimate when it is a fast-forward of what you just
-    # pulled — e.g. an admin sync. It is never legitimate as a way to land work.
     cat >&2 <<'MESSAGE'
 
   ✖ Direct push to main refused.
 
     main is always deployable and changes reach it through a reviewed PR
-    (CONTRIBUTING.md §1). Nothing here is urgent enough to skip that.
+    (CONTRIBUTING.md §1).
 
     Instead:
-      pnpm wt feat/your-change      # worktree for the branch
-      cd ../intafaced-worktrees/feat-your-change
+      pnpm wt feat/your-change
       git push -u origin feat/your-change
       gh pr create --fill
 
-    If you genuinely need to push main (initial import, protection repair):
+    If you genuinely need to push main:
       git push --no-verify
 
 MESSAGE

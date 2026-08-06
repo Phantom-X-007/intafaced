@@ -10,8 +10,21 @@ import { TokenError, type TokenService } from './token-service.js';
  * Hot path for other services remains GET /internal/stake/:userId (index.ts).
  * This router mounts under /trpc for edge/principal-aware callers.
  *
- * Mutations: `token:stake` (users stake/unstake/vote), `admin:treasury` (mint / yield / buyback).
- * Governance (#97), stake/emissions (#94), yield+buyback live paths — all on this router.
+ * Mutations: `token:stake` (users stake/unstake/vote), `admin:treasury` (mint / yield / burn).
+ *
+ * WHAT IS AND IS NOT AUTOMATIC ON THIS ROUTER. Staking and emissions are live
+ * end to end. The three §4.3 economy surfaces are not, and are §13 sockets in
+ * tooling/tracker/features.mjs rather than shipped features:
+ *
+ *   token.yield      `distributeRevenue` is a hand-invoked operator mutation.
+ *                    No cron, no bus subscriber, no caller anywhere outside
+ *                    tests. `sources` amounts are trusted input.
+ *   token.buyback    `recordBuyback` records a burn. No market-buy exists, so
+ *                    nothing is bought back.
+ *   token.governance ballots are recorded and weighted correctly; no code can
+ *                    move a proposal to passed/rejected/executed/cancelled.
+ *
+ * Say so wherever these are described. An operator mutation is not a flywheel.
  */
 
 /** Money crosses the wire as a decimal string. Always. Never a number. */
@@ -72,6 +85,16 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.proposal_not_allowed':
       case 'token.already_voted':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      // 409: the request is well-formed, but the revenue window (or the run id)
+      // is already spoken for. This is the refusal that used to arrive as a raw
+      // PG 23505 — an opaque INTERNAL_SERVER_ERROR, *after* the burn had already
+      // posted irreversibly.
+      case 'token.buyback_window_overlap':
+      case 'token.buyback_run_conflict':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'token.buyback_window_invalid':
+      case 'token.buyback_revenue_invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
       case 'token.stake_locked':
       case 'token.stake_closed':
       case 'token.stake_conflict':
@@ -268,12 +291,21 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       .output(z.object({ epoch: z.number().int().nonnegative() }))
       .query(async () => guard(async () => ({ epoch: await token.nextEmissionEpoch() }))),
 
-    // ── Real yield + buyback (§4.3) ─────────────────────────────────────────
-    // Maths + ledger recipes already lived in TokenService; they were only
-    // reachable from tests. Same hole stake/emissions had before #94: no live
-    // path. Operator (admin:treasury + MFA) supplies the revenue window until
-    // Phase 2 auto-consumes trade fills. Buyback: caller supplies tokensBought
-    // because pricing/execution is svc-trade — this service never decides a price.
+    // ── Operator yield settlement + burn (§4.3 flywheel NOT built) ──────────
+    // Both procedures below are OPERATOR ACTIONS, and calling them "live paths"
+    // (as the tracker did until 2026-08-03) overstated them by a category:
+    //
+    //  - Nothing calls either one. No cron, no bus subscriber, no admin form.
+    //    A human with admin:treasury + MFA invokes them by hand or they never
+    //    run at all.
+    //  - Every figure they act on is typed by that human. `sources[].amount` is
+    //    validated for decimal SHAPE only — no code reads the houseFees balance
+    //    it claims to sweep (audit T-03) — and `tokensBought` is asserted, not
+    //    executed, because no market-buy exists in this or any other service.
+    //
+    // The maths and the ledger recipes underneath are real and tested; the
+    // automation and the input validation are the missing halves. §13 sockets
+    // `token.yield` and `token.buyback`.
 
     distributeRevenue: scopedProcedure('admin:treasury')
       .input(
@@ -316,11 +348,23 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       .input(
         z.object({
           runId: z.string().uuid(),
+          /** Half-open `[from, to)` — `to` belongs to the next window (0002). */
           revenueWindow: z.object({
             from: z.string().datetime({ offset: true }),
             to: z.string().datetime({ offset: true }),
           }),
-          revenueTotal: z.record(z.string()),
+          /**
+           * assetId → revenue collected, as decimal strings.
+           *
+           * Was `z.record(z.string())`, which accepted any string at all and
+           * wrote it straight to jsonb: `{"IFC":"not-a-number","USDT":"-999"}`
+           * stored cleanly. This is the audit record of what the run was sized
+           * against, so an unparseable figure here cannot be reconciled against
+           * the ledger later — the one thing the column is for. `amountString`
+           * is the same unsigned-decimal money-law shape every other amount on
+           * this router uses; the service re-validates and canonicalises.
+           */
+          revenueTotal: z.record(z.string(), amountString),
           tokensBought: amountString,
         }),
       )
@@ -363,7 +407,20 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         })),
       ),
 
-    // ── Governance (§4.3) ──────────────────────────────────────────────────
+    // ── Governance — ballots only (§4.3) ───────────────────────────────────
+    //
+    // These four procedures record and read an election. They do not decide one.
+    // `getProposal` returns a tally that nothing acts on, and no procedure here
+    // or job anywhere can set a proposal to passed, rejected, executed or
+    // cancelled — see the note on proposalStatusEnum in db/schema.ts.
+    //
+    // No `closeProposal` / `executeProposal` is offered deliberately. A mutation
+    // that flipped the status column would read to a caller as the outcome being
+    // enacted while nothing outside this table changed, which is a worse lie
+    // than the current silence. §13 socket `token.governance` records what has
+    // to be decided by an owner first: quorum, pass threshold, and how each of
+    // the four proposal kinds executes (three cross a service boundary; `grant`
+    // moves value and is therefore a ledger recipe — DIRECTION §3 carve-out).
 
     createProposal: protectedProcedure
       .input(

@@ -1,10 +1,18 @@
 /**
- * The supported-locale registry — §9: "100+ languages = translation files, not
- * refactors".
+ * The supported-locale registry — the locales this OS is willing to be asked
+ * for. §9 wants "100+ languages = translation files, not refactors"; this table
+ * is 28 rows, and 27 of them have no words behind them yet.
  *
- * Adding a language is two changes: a row here, and a catalog file. No surface
- * is touched, no component is edited, nothing is rebuilt but the bundle. That
- * is the whole promise of keying from day one.
+ * READ THAT AGAIN BEFORE QUOTING A NUMBER FROM THIS FILE. A row here declares a
+ * code and reserves it. It does not mean the language is translated — that is
+ * `CATALOGS` in `catalogs.ts`, which today holds exactly one entry. The two used
+ * to sit apart with nothing joining them, and `SUPPORTED_LOCALES.length` read as
+ * coverage to everything that touched it.
+ *
+ * Adding a language is three changes: a row here, a catalog file, and a line in
+ * `CATALOGS`. No surface is touched, no component is edited, nothing is rebuilt
+ * but the bundle. That is the whole promise of keying from day one — and it is
+ * the only part of §9 this package delivers today.
  *
  * `code` is what the app stores and puts in a URL. `intlTag` is what we hand to
  * `Intl.*` — sometimes region-qualified, because number and date conventions
@@ -25,9 +33,15 @@ export interface LocaleDescriptor {
 }
 
 /**
- * The launch set. Chosen to cover the markets the §25 matrix implies — the fiat
- * registry in `@intafaced/config` already carries 100+ currencies, and this
- * table grows to meet it one row at a time.
+ * The declared set — 28 codes we will accept and negotiate against. Chosen to
+ * cover the markets the §25 matrix implies; the fiat registry in
+ * `@intafaced/config` already carries 100+ currencies, and this table would
+ * grow to meet it one row at a time.
+ *
+ * It is NOT a launch set and it is not coverage: requesting any of these except
+ * `en` gets English today. Growth here is cheap and means nothing on its own —
+ * growth in `CATALOGS` is what costs a human writing 118 strings of money copy,
+ * and is what a user would notice.
  */
 export const SUPPORTED_LOCALES = [
   { code: 'en', englishName: 'English', nativeName: 'English', rtl: false, intlTag: 'en-US' },

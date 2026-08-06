@@ -1,35 +1,27 @@
-# Dual-book residual — non-HTTP setBalance (P2-4 residual)
+# Dual-book residual — classified setBalance (post deep-audit finish)
 
-**Brand-safe paths.** Controllers covered by DualBookMoneyDoorInterceptor are excluded.
+**Generated:** 2026-08-02 · `node tooling/scripts/dual-book-setbalance-classify.mjs`  
+**Brand-safe paths** use `vendor/<exchange>/…` in prose.
 
-| File                                                                                                                | Line | Snippet                                                                                                              |
-| ------------------------------------------------------------------------------------------------------------------- | ---: | -------------------------------------------------------------------------------------------------------------------- |
-| \`vendor/<exchange>/00_framework/admin/src/main/java/com/<vendor>/<module>/event/OrderEvent.java\`                  |   49 | \`memberWallet1.setBalance(add(memberWallet1.getBalance(), amount1));\`                                              |
-| \`vendor/<exchange>/00_framework/admin/src/main/java/com/<vendor>/<module>/event/OrderEvent.java\`                  |   62 | \`memberWallet2.setBalance(add(memberWallet2.getBalance(), amount2));\`                                              |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/LegalWalletRechargeService.java\` |   71 | \`wallet.setBalance(BigDecimalUtils.add(wallet.getBalance(), legalWalletRecharge.getAmount()));//充值到账\`          |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/LegalWalletWithdrawService.java\` |   50 | \`wallet.setBalance(BigDecimalUtils.sub(wallet.getBalance(), legalWalletWithdraw.getAmount()));\`                    |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/LegalWalletWithdrawService.java\` |   51 | \`wallet.setFrozenBalance(BigDecimalUtils.add(wallet.getFrozenBalance(), legalWalletWithdraw.getAmount()));\`        |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/LegalWalletWithdrawService.java\` |   58 | \`wallet.setFrozenBalance(BigDecimalUtils.sub(wallet.getFrozenBalance(), withdraw.getAmount()));//冻结金额减少\`     |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/LegalWalletWithdrawService.java\` |   59 | \`wallet.setBalance(BigDecimalUtils.add(wallet.getBalance(), withdraw.getAmount()));//本金增加\`                     |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/LegalWalletWithdrawService.java\` |   70 | \`wallet.setFrozenBalance(BigDecimalUtils.sub(wallet.getFrozenBalance(), withdraw.getAmount()));//钱包冻结金额减少\` |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/MemberApplicationService.java\`   |  150 | \`memberWallet.setBalance(BigDecimalUtils.add(memberWallet.getBalance(), amount1));\`                                |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/MemberApplicationService.java\`   |  193 | \`memberWallet1.setBalance(BigDecimalUtils.add(memberWallet1.getBalance(), amount1));\`                              |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/MemberApplicationService.java\`   |  242 | \`memberWallet2.setBalance(BigDecimalUtils.add(memberWallet2.getBalance(), amount2));\`                              |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/MemberService.java\`              |  192 | \`memberWallet.setBalance(BigDecimalUtils.add(memberWallet.getBalance(), sign.getAmount()));//签到收益\`             |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/MemberTransactionService.java\`   |  198 | \`gccWallet.setBalance(gccWallet.getBalance().subtract(deltaAmount));\`                                              |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/MemberTransactionService.java\`   |  199 | \`gcxWallet.setBalance(gcxWallet.getBalance().add(deltaAmount));\`                                                   |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/MemberTransactionService.java\`   |  211 | \`gccWallet.setBalance(BigDecimal.ZERO);\`                                                                           |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/WithdrawRecordService.java\`      |  137 | \`wallet.setBalance(wallet.getBalance().add(withdrawRecord.getTotalAmount()));\`                                     |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/WithdrawRecordService.java\`      |  138 | \`wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(withdrawRecord.getTotalAmount()));\`                    |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/WithdrawRecordService.java\`      |  161 | \`wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(record.getTotalAmount()));\`                            |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/WithdrawRecordService.java\`      |  191 | \`wallet.setBalance(wallet.getBalance().add(record.getTotalAmount()));\`                                             |
-| \`vendor/<exchange>/00_framework/core/src/main/java/com/<vendor>/<module>/service/WithdrawRecordService.java\`      |  192 | \`wallet.setFrozenBalance(wallet.getFrozenBalance().subtract(record.getTotalAmount()));\`                            |
-| \`vendor/<exchange>/00_framework/otc-api/src/main/java/com/<vendor>/<module>/event/OrderEvent.java\`                |   56 | \`memberWallet1.setBalance(add(memberWallet1.getBalance(), amount1));\`                                              |
-| \`vendor/<exchange>/00_framework/otc-api/src/main/java/com/<vendor>/<module>/event/OrderEvent.java\`                |   69 | \`memberWallet2.setBalance(add(memberWallet2.getBalance(), amount2));\`                                              |
-| \`vendor/<exchange>/00_framework/wallet/src/main/java/com/<vendor>/<module>/consumer/MemberConsumer.java\`          |  149 | \`memberWallet.setBalance(BigDecimalUtils.add(memberWallet.getBalance(),amount3));\`                                 |
+## Summary (re-derived this turn)
 
-**Count:** 23 non-controller live setBalance/setFrozenBalance call sites.
+| Kind                    | Count | Meaning                                                    |
+| ----------------------- | ----: | ---------------------------------------------------------- |
+| **LIVE**                | **0** | Non-HTTP money mints                                       |
+| **WALLET_INIT_ZERO**    |     6 | Register zeros — not value mint                            |
+| **DEAD_NULL**           |     8 | Behind dual-book null / early-return                       |
+| **HTTP_DOOR_COVERED**   |    13 | Controllers — door fragment likely listed (incl. dividend) |
+| **HTTP_DOOR_UNCOVERED** | **0** | Would need door list or M7                                 |
+| **RECORD_NOT_WALLET**   |     1 | HotTransferRecord log field — not MemberWallet             |
 
-**Next:** disable service callers / job entry points (same PEACE throw pattern) or scan-ban entity mutators after service throws.
+## Remaining (honest)
 
-Generated for order-route harden. Not go-live.
+| Item                                                       | Owner        |
+| ---------------------------------------------------------- | ------------ |
+| Entity `MemberWalletService.save` still can write balances | M7 shehzad   |
+| JVM live 410 smoke                                         | Ops / Docker |
+| Human X                                                    | Nitro        |
+
+## Not go-live
+
+Classify LIVE=0 + door scans ≠ production Java boot proof.

@@ -8,7 +8,22 @@ import { AuthService } from './auth/auth-service.js';
 import { RankService } from './rank/rank-service.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
-import { subscribeBlueprintProfileEvents } from './events.js';
+import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-identity — one account, one verification, one rank (§4.1).
@@ -16,6 +31,8 @@ import { subscribeBlueprintProfileEvents } from './events.js';
  * Graph W1-C: mount tRPC; verify edge-signed principal (mount-boundary #48).
  * Blueprint cascade: subscribe to blueprintCreated/Deleted so profiles.blueprint_id
  * tracks svc-blueprint without writing across service tables (§2 / §7.2).
+ * XP: subscribe to xpEarned, so awards published by svc-p2p and svc-trade reach
+ * rank_state. Until this consumer existed they reached nothing — see ./events.ts.
  */
 
 if (env.APP_ENV === 'prod') await assertArgon2Available();
@@ -43,6 +60,17 @@ await rank.seedTiers();
 
 /** §7.2 cascade — must be wired before traffic; durable consumers catch up on restart. */
 const blueprintSubs = await subscribeBlueprintProfileEvents(bus, sql);
+
+/**
+ * XP from every other module. Wired here rather than inside `RankService`
+ * because the service is also called directly by our own auth flows and by
+ * `awardXp` over tRPC — the bus is a fourth caller of the same method, not a
+ * different way of writing rank_state.
+ *
+ * `identity` is our own stream, so this cannot fail on a stream that does not
+ * exist yet; svc-p2p and svc-trade publish into it.
+ */
+const xpSub = await subscribeXpEvents(bus, rank);
 
 const auth = new AuthService(
   sql,
@@ -127,7 +155,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
-      await Promise.all(blueprintSubs.map((s) => s.unsubscribe()));
+      await Promise.all([...blueprintSubs, xpSub].map((s) => s.unsubscribe()));
       await bus.close();
       await sql.end({ timeout: 5 });
       process.exit(0);

@@ -58,7 +58,6 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
 COPY apps/admin/package.json                 apps/admin/
-COPY apps/web/package.json                   apps/web/
 
 COPY packages/auth/package.json              packages/auth/
 COPY packages/config/package.json            packages/config/
@@ -69,8 +68,11 @@ COPY packages/exchange-contract/package.json packages/exchange-contract/
 COPY packages/i18n/package.json              packages/i18n/
 COPY packages/ledger-client/package.json     packages/ledger-client/
 COPY packages/market-data/package.json       packages/market-data/
+COPY packages/safe-regex/package.json        packages/safe-regex/
+COPY packages/telemetry/package.json         packages/telemetry/
 COPY packages/ui/package.json                packages/ui/
 COPY packages/venue-adapter/package.json     packages/venue-adapter/
+COPY packages/venue-contracts/package.json   packages/venue-contracts/
 
 COPY services/svc-academy/package.json       services/svc-academy/
 COPY services/svc-agents/package.json        services/svc-agents/
@@ -80,6 +82,7 @@ COPY services/svc-identity/package.json      services/svc-identity/
 COPY services/svc-ledger/package.json        services/svc-ledger/
 COPY services/svc-matching/package.json      services/svc-matching/
 COPY services/svc-notify/package.json        services/svc-notify/
+COPY services/svc-support/package.json       services/svc-support/
 COPY services/svc-p2p/package.json           services/svc-p2p/
 COPY services/svc-pay/package.json           services/svc-pay/
 COPY services/svc-protocol/package.json      services/svc-protocol/

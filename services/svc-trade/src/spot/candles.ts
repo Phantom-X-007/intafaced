@@ -1,0 +1,159 @@
+/**
+ * Spot OHLCV — aggregate from real taker fills only (A-TRADE-SPOT-1).
+ *
+ * Source of truth: `trade.fills` where `liquidity = 'taker'`, excluding any
+ * fill that touches a seeded order (SD-3). Empty buckets are absent, never
+ * zero-filled. Nothing is modelled, interpolated, or carried forward.
+ *
+ * REST `fetchOHLCV` always reads live via `queryCandlesFromFills`. The optional
+ * materialization job (`candle-jobs.ts`, default OFF) may copy *closed* buckets
+ * into `trade.spot_candles` for durable consumers — it never invents rows.
+ */
+import type { Sql } from 'postgres';
+import { TIMEFRAME_MS, timeframeSchema, type Timeframe } from '@intafaced/exchange-contract';
+import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import type { Candle } from './types.js';
+
+export interface QueryCandlesOpts {
+  marketId: string;
+  timeframe: Timeframe;
+  /** Max buckets to return (newest kept, then oldest→newest). Clamped 1..1000. */
+  limit?: number;
+  /** Inclusive lower bound on fill `ts` (unix ms). */
+  sinceMs?: number;
+}
+
+/**
+ * Candles for a market, aggregated in SQL from the public taker tape.
+ *
+ * Bucketing is epoch-floor arithmetic (not `date_bin`) so it runs on the
+ * declared Postgres floor. Open/close use engine `sequence`, not wall `ts`,
+ * so two fills in the same millisecond stay deterministic.
+ */
+export async function queryCandlesFromFills(sql: Sql, opts: QueryCandlesOpts): Promise<Candle[]> {
+  const capped = Math.min(Math.max(Math.floor(opts.limit ?? 500), 1), 1000);
+  const spanMs = TIMEFRAME_MS[opts.timeframe];
+  const sinceDate = opts.sinceMs !== undefined ? new Date(opts.sinceMs) : undefined;
+
+  type CandleRow = { bucket_ms: string; open: string; high: string; low: string; close: string; volume: string };
+
+  // `bucket_ms` is bigint ms returned as text by postgres.js — Number is exact
+  // for timestamps for the next ~285,000 years (not money).
+  const bucketExpr = sql`(floor(extract(epoch from ts) * 1000 / ${spanMs}::bigint)::bigint * ${spanMs}::bigint)`;
+
+  // SD-3: exclude fills involving any seeded order.
+  const rows = await sql<CandleRow[]>`
+    SELECT bucket_ms::text                                              AS bucket_ms,
+           (array_agg(price ORDER BY sequence ASC))[1]                  AS open,
+           max(price)                                                   AS high,
+           min(price)                                                   AS low,
+           (array_agg(price ORDER BY sequence DESC))[1]                 AS close,
+           sum(qty)                                                     AS volume
+      FROM (
+        SELECT ${bucketExpr} AS bucket_ms, f.price, f.qty, f.sequence
+          FROM trade.fills f
+          INNER JOIN trade.orders o ON o.id = f.order_id
+          INNER JOIN trade.orders c ON c.id = f.counter_order_id
+         WHERE f.market_id = ${opts.marketId}
+           AND f.liquidity = 'taker'
+           AND o.seeded = false
+           AND c.seeded = false
+           ${sinceDate ? sql`AND f.ts >= ${sinceDate}` : sql``}
+      ) AS binned
+     GROUP BY bucket_ms
+     -- Newest buckets are the ones a chart opens on; LIMIT keeps those.
+     ORDER BY bucket_ms DESC
+     LIMIT ${capped}
+  `;
+
+  return rows
+    .map((row) => ({
+      openTimeMs: Number(row.bucket_ms),
+      open: parseAmount(row.open),
+      high: parseAmount(row.high),
+      low: parseAmount(row.low),
+      close: parseAmount(row.close),
+      volume: parseAmount(row.volume),
+    }))
+    .reverse(); // CCXT fetchOHLCV: oldest → newest
+}
+
+/**
+ * Persist only *closed* buckets with volume > 0.
+ *
+ * The open (current) bucket is skipped: materializing a half-formed OHLC and
+ * serving it later as complete would invent a close that never finished.
+ * Empty buckets are never written — a gap stays a gap.
+ *
+ * @returns number of rows upserted
+ */
+export async function materializeClosedCandles(
+  sql: Sql,
+  opts: {
+    marketId: string;
+    timeframe: Timeframe;
+    candles: readonly Candle[];
+    nowMs?: number;
+  },
+): Promise<number> {
+  const spanMs = TIMEFRAME_MS[opts.timeframe];
+  const nowMs = opts.nowMs ?? Date.now();
+  let written = 0;
+
+  for (const candle of opts.candles) {
+    // Open bucket still accepting fills — do not freeze it.
+    if (candle.openTimeMs + spanMs > nowMs) continue;
+    // Zero / negative volume is not a real print.
+    if (candle.volume <= 0n) continue;
+
+    await sql`
+      INSERT INTO trade.spot_candles (
+        market_id, timeframe, open_time_ms,
+        open, high, low, close, volume
+      ) VALUES (
+        ${opts.marketId},
+        ${opts.timeframe},
+        ${candle.openTimeMs},
+        ${formatAmount(candle.open)},
+        ${formatAmount(candle.high)},
+        ${formatAmount(candle.low)},
+        ${formatAmount(candle.close)},
+        ${formatAmount(candle.volume)}
+      )
+      ON CONFLICT (market_id, timeframe, open_time_ms) DO UPDATE SET
+        open   = EXCLUDED.open,
+        high   = EXCLUDED.high,
+        low    = EXCLUDED.low,
+        close  = EXCLUDED.close,
+        volume = EXCLUDED.volume
+    `;
+    written += 1;
+  }
+
+  return written;
+}
+
+/** Comma-separated market UUIDs. Empty → [] (never invent a market list). */
+export function parseCandleMarketIds(raw: string | undefined): string[] {
+  if (raw == null || !raw.trim()) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/**
+ * Comma-separated timeframes. Empty → `['1m']` when the job has markets
+ * (primary chart TF). Invalid tokens are dropped, not coerced into fakes.
+ */
+export function parseCandleTimeframes(raw: string | undefined): Timeframe[] {
+  if (raw == null || !raw.trim()) return ['1m'];
+  const out: Timeframe[] = [];
+  for (const part of raw.split(',')) {
+    const t = part.trim();
+    if (!t) continue;
+    const parsed = timeframeSchema.safeParse(t);
+    if (parsed.success && !out.includes(parsed.data)) out.push(parsed.data);
+  }
+  return out.length > 0 ? out : ['1m'];
+}

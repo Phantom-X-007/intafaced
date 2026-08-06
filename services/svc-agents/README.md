@@ -49,7 +49,24 @@ Internal tRPC (§1). Every log query is scoped to `ctx.principal.userId` — an 
 
 `requestId` on `run.complete` is supplied by the caller and is the anti-double-bill handle: a client that retries after a timeout reuses it.
 
-Also `GET /health` and `GET /ready`. `/ready` reports the routing task list and whether metering is on — never a provider name.
+Also `GET /health` and `GET /ready`.
+
+### `/ready` — honest, not decorative
+
+| Field                  | Meaning                                                                  |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `ready`                | Process is up (schema + listen succeeded). Always true after boot.       |
+| `providerMode`         | `mock` (default) or `upstream`. **Mock is not production inference.**    |
+| `providers[]`          | Logical provider ids + usable/healthy (no vendor names — §0.7).          |
+| `meteringEnabled`      | Billing kill-switch. Usage is still recorded when off.                   |
+| `tasks`                | Routing task ids currently configured.                                   |
+| `usefulPath.available` | Whether a **completion** can leave this process right now.               |
+| `usefulPath.task`      | First completion task that is currently servable, or null.               |
+| `usefulPath.residual`  | Why not / what this still is not (mock residual, orphan routes, outage). |
+
+A green container with `providerMode: mock` and `usefulPath.available: true` means the gateway answers with the deterministic stand-in. It does **not** mean Navigator / Support / the rest of the product fleet are registered — those agents are separate work. Process stays in the fleet when the engine is down so operators can still read session logs; degradation is `usefulPath.available: false`, not 503.
+
+The thin useful path on the gateway itself is `runUsefulPath` in `src/useful-path.ts` (one completion, no session/ledger). Fleet metering still goes through `openSession → think → settle`.
 
 ---
 
@@ -220,9 +237,15 @@ pnpm --filter @intafaced/svc-agents test
 
 ## Tests
 
-100 tests.
+Pure layers (no database): cost arithmetic, guardrails, adapters, **readiness honesty**, **gateway useful path**. Cost is a pure function of counts and rates, so it is tested exhaustively and cheaply, including the two assertions about _where_ the rounding happens that justify the whole `usage_records` design.
 
-The pure layers — cost arithmetic, guardrail evaluation, the adapters — run without a database. Cost is a pure function of counts and rates, so it is tested exhaustively and cheaply, including the two assertions about _where_ the rounding happens that justify the whole `usage_records` design.
+### Residual (honest — not Done by this package alone)
+
+| Gap                                             | Why it is residual                                       |
+| ----------------------------------------------- | -------------------------------------------------------- |
+| Product agents (Navigator, Support, Scanner, …) | Register guardrails + drive the runtime; not seeded here |
+| Production inference                            | Requires `AGENTS_PROVIDER=upstream` + vault credentials  |
+| Full premium-tier product surface               | Phase 5 agent product work on top of this runtime        |
 
 The money and audit paths run against real Postgres with the ledger's in-memory reference implementation, which the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Real Postgres because every property worth testing here — append-only, the window seal, the unique request id — lives in the database, and a fake would test the fake.
 

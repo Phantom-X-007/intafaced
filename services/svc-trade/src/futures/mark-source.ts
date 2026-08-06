@@ -1,44 +1,68 @@
 /**
  * Futures mark feed (trade.futures residual).
  *
- * PURE PORT: supplies marks to liquidation tick / funding consumers.
- * Never invents a price. Missing / stale / invalid → null (skip liquidate).
+ * PURE PORT: supplies marks to the liquidation tick, the close path and public
+ * REST. Never invents a price. Missing / malformed → null.
  *
- * Quality ladder (matches bank loans honesty pattern):
- *   - index — real external index (nothing produces this yet in product)
- *   - mid   — mid of a two-sided book when both sides exist
- *   - last  — last trade print (weak; liquidation consumers may refuse)
+ * ── Source and gate are two jobs ─────────────────────────────────────────────
+ *
+ * A source's job is to say WHAT IT HAS and HOW IT GOT IT — a price, when it was
+ * observed, and whether it is a mid, a last print or a real index. Deciding
+ * whether that is good enough to move someone's money is `mark-policy.ts`'s
+ * job, and it answers differently for a valuation than for a liquidation.
+ *
+ * This file used to do both, with its own `maxAgeMs` / `liquidateOn` spelling.
+ * That was a second mark vocabulary next to `svc-bank/src/loans/prices.ts`, and
+ * `docs/adr/2026-08-05-futures-risk-and-mark-law.md` is explicit that futures
+ * uses the existing one. So the policy type here IS `MarkPolicy`, and the
+ * gates are `acceptableForMarking` / `acceptableForLiquidation`.
  *
  * A wrong mark becomes someone else's liquidation. Prefer null over guess.
  */
-import type { MarkSource } from './liquidation-tick.js';
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import type { MarkSource, QuotedMarkSource } from './liquidation-tick.js';
+import {
+  DEFAULT_FUTURES_MARK_POLICY,
+  acceptableForLiquidation,
+  type FuturesQuotedMark,
+  type MarkPolicy,
+  type MarkQuality,
+} from './mark-policy.js';
 
-export type FuturesMarkQuality = 'index' | 'mid' | 'last';
-
+/**
+ * Convenience input for feeding a mark in as decimal strings — an ergonomic
+ * setter for the in-memory book and for tests, not a second mark shape. It is
+ * converted to `FuturesQuotedMark` (scaled bigint + Date) on the way in, and
+ * nothing downstream sees this type.
+ */
 export interface FuturesMarkQuote {
   /** Decimal string price. */
   price: string;
-  quality: FuturesMarkQuality;
+  quality: MarkQuality;
   /** When the quote was observed (ms epoch). */
   asOfMs: number;
   marketId: string;
   symbol?: string;
 }
 
-export interface FuturesMarkPolicy {
-  /**
-   * Max age in ms before a quote is treated as missing.
-   * Default 60_000. Set 0 to disable staleness.
-   */
-  maxAgeMs?: number;
-  /**
-   * Qualities allowed for liquidation decisions.
-   * Default: index + mid only (refuse last).
-   */
-  liquidateOn?: readonly FuturesMarkQuality[];
+/** Parse a fed quote into the money-path shape. Non-positive / malformed → null. */
+export function toQuotedMark(input: FuturesMarkQuote): FuturesQuotedMark | null {
+  if (!isPositiveDecimal(input.price)) return null;
+  let price: Amount;
+  try {
+    price = parseAmount(input.price);
+  } catch {
+    return null;
+  }
+  if (price <= 0n) return null;
+  return {
+    marketId: input.marketId,
+    symbol: input.symbol,
+    price,
+    asOf: new Date(input.asOfMs),
+    quality: input.quality,
+  };
 }
-
-const DEFAULT_LIQ_QUALITIES: readonly FuturesMarkQuality[] = ['index', 'mid'];
 
 /**
  * Mid of best bid / best ask as decimal strings.
@@ -71,65 +95,86 @@ function formatScaled(v: bigint, scale: bigint): string {
   const neg = v < 0n;
   const a = neg ? -v : v;
   const whole = a / scale;
-  let frac = (a % scale).toString().padStart(18, '0').replace(/0+$/, '');
+  const frac = (a % scale).toString().padStart(18, '0').replace(/0+$/, '');
   const body = frac.length === 0 ? whole.toString() : `${whole}.${frac}`;
   return neg ? `-${body}` : body;
 }
 
-export function isFresh(quote: FuturesMarkQuote, atMs: number, maxAgeMs: number): boolean {
-  if (maxAgeMs <= 0) return true;
-  return atMs - quote.asOfMs <= maxAgeMs && atMs >= quote.asOfMs;
+/**
+ * The legacy string port, derived from a quoted source by running the
+ * LIQUIDATION gate. `MarkSource.markPrice` is what the liquidation tick and
+ * public REST have always consumed, and it has always meant "a price I am
+ * willing to close a position on" — so the strict gate is the honest one here.
+ * Callers that need the weaker valuation bar ask for `quote()` and gate it
+ * themselves with `acceptableForMarking`.
+ */
+function markPriceFromQuote(
+  quote: (input: { marketId: string; symbol?: string; at: Date }) => Promise<FuturesQuotedMark | null>,
+  policy: MarkPolicy,
+): MarkSource['markPrice'] {
+  return async (input) => {
+    const q = await quote(input);
+    if (!q) return null;
+    if (!acceptableForLiquidation(q, null, input.at, policy).ok) return null;
+    return formatAmount(q.price);
+  };
 }
 
 /**
  * In-memory mark book for tests and single-process dev.
- * Production will replace with an index feed adapter — same MarkSource port.
+ * Production will replace with an index feed adapter — same QuotedMarkSource port.
  */
-export function memoryMarkBook(opts?: { now?: () => number }): {
+export function memoryMarkBook(): {
   set(quote: FuturesMarkQuote): void;
   clear(marketId: string): void;
-  source(policy?: FuturesMarkPolicy): MarkSource;
-  /** Full quote including quality (for funding / diagnostics). */
-  quote(marketId: string, atMs?: number, policy?: FuturesMarkPolicy): FuturesMarkQuote | null;
+  source(policy?: MarkPolicy): QuotedMarkSource;
+  /** Raw labelled quote — no gate applied. Null when absent or the price is not a price. */
+  quote(marketId: string, symbol?: string): FuturesQuotedMark | null;
 } {
-  const byMarket = new Map<string, FuturesMarkQuote>();
-  const now = opts?.now ?? (() => Date.now());
+  // No clock here on purpose: `asOfMs` is when the feed OBSERVED the price, and
+  // stamping it at read time is how a stale mark passes a staleness check.
+  const byMarket = new Map<string, FuturesQuotedMark>();
 
-  function resolve(marketId: string, atMs: number, policy?: FuturesMarkPolicy): FuturesMarkQuote | null {
+  function raw(marketId: string, symbol?: string): FuturesQuotedMark | null {
     const q = byMarket.get(marketId);
     if (!q) return null;
-    const maxAge = policy?.maxAgeMs ?? 60_000;
-    if (!isFresh(q, atMs, maxAge)) return null;
-    const allowed = policy?.liquidateOn ?? DEFAULT_LIQ_QUALITIES;
-    if (!allowed.includes(q.quality)) return null;
-    if (!isPositiveDecimal(q.price)) return null;
-    return q;
+    return symbol != null && q.symbol == null ? { ...q, symbol } : q;
   }
 
   return {
     set(quote) {
-      byMarket.set(quote.marketId, quote);
+      const parsed = toQuotedMark(quote);
+      // A non-positive or malformed feed value is not a cheap market, it is a
+      // broken feed. Refusing it here keeps it out of the book entirely.
+      if (parsed) byMarket.set(quote.marketId, parsed);
+      else byMarket.delete(quote.marketId);
     },
     clear(marketId) {
       byMarket.delete(marketId);
     },
-    quote(marketId, atMs, policy) {
-      return resolve(marketId, atMs ?? now(), policy);
+    quote(marketId, symbol) {
+      return raw(marketId, symbol);
     },
     source(policy) {
+      const p = policy ?? DEFAULT_FUTURES_MARK_POLICY;
+      const quote = async (args: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null> =>
+        raw(args.marketId, args.symbol);
       return {
-        async markPrice({ marketId, at }) {
-          const q = resolve(marketId, at.getTime(), policy);
-          return q?.price ?? null;
-        },
+        quote,
+        markPrice: markPriceFromQuote(quote, p),
       };
     },
   };
 }
 
 /**
- * Build a MarkSource from an injectable book snapshot reader.
- * Mid when two-sided; optional last fallback only if policy allows `last`.
+ * Build a QuotedMarkSource from an injectable book snapshot reader.
+ *
+ * Mid when two-sided (quality `mid`); otherwise the last print, LABELLED `last`
+ * rather than withheld. Withholding it would leave the valuation path with
+ * nothing on a market that has a perfectly good price for a screen — and the
+ * liquidation gate refuses `last` anyway, which is where the danger was.
+ *
  * Empty book → null (never invent).
  */
 export function markSourceFromBook(input: {
@@ -139,25 +184,35 @@ export function markSourceFromBook(input: {
     bestAsk: string | null;
     last: string | null;
   } | null>;
-  policy?: FuturesMarkPolicy;
-}): MarkSource {
-  const policy = input.policy ?? {};
-  const allowed = policy.liquidateOn ?? DEFAULT_LIQ_QUALITIES;
+  policy?: MarkPolicy;
+  /**
+   * Observation clock. Omitted, the quote is stamped with the instant the
+   * CALLER asked for — which for a live book snapshot is the truth: there is no
+   * venue timestamp to carry, and the read happened now. Supply this only when
+   * the underlying feed knows better than the caller's clock.
+   */
+  now?: () => Date;
+}): QuotedMarkSource {
+  const policy = input.policy ?? DEFAULT_FUTURES_MARK_POLICY;
+
+  const quote = async (args: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null> => {
+    const book = await input.readBook(args.marketId);
+    if (!book) return null;
+    const asOfMs = (input.now ? input.now() : args.at).getTime();
+
+    const mid = midFromBook(book.bestBid, book.bestAsk);
+    if (mid != null) {
+      return toQuotedMark({ marketId: args.marketId, symbol: args.symbol, price: mid, quality: 'mid', asOfMs });
+    }
+    if (book.last != null) {
+      return toQuotedMark({ marketId: args.marketId, symbol: args.symbol, price: book.last, quality: 'last', asOfMs });
+    }
+    return null;
+  };
 
   return {
-    async markPrice({ marketId }) {
-      const book = await input.readBook(marketId);
-      if (!book) return null;
-
-      if (allowed.includes('mid')) {
-        const mid = midFromBook(book.bestBid, book.bestAsk);
-        if (mid != null) return mid;
-      }
-      if (allowed.includes('last') && book.last != null && isPositiveDecimal(book.last)) {
-        return book.last;
-      }
-      return null;
-    },
+    quote: (args) => quote(args),
+    markPrice: markPriceFromQuote(quote, policy),
   };
 }
 

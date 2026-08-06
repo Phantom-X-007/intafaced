@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { MESSAGE_KEYS, coverage, defineCatalog, en, isMessageKey, type Catalog, type PartialCatalog } from './catalog.js';
+import { CATALOGS, TRANSLATED_LOCALES, UNTRANSLATED_LOCALES, catalogFor, hasCatalog, localeCoverage } from './catalogs.js';
 import {
   DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
@@ -67,9 +68,11 @@ beforeEach(() => {
 describe('catalog — the key set is closed and complete', () => {
   it('carries a realistic starter set across every launch surface', () => {
     expect(MESSAGE_KEYS.length).toBeGreaterThanOrEqual(60);
-    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(120);
+    // Stage-2 product surfaces (support KB, agents refuse copy) expand the set;
+    // still capped so the catalog cannot silently balloon.
+    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(160);
 
-    for (const surface of ['common.', 'auth.', 'trade.', 'wallet.', 'p2p.', 'notify.', 'error.']) {
+    for (const surface of ['common.', 'auth.', 'trade.', 'wallet.', 'p2p.', 'notify.', 'error.', 'support.', 'agents.']) {
       expect(
         MESSAGE_KEYS.some((k) => k.startsWith(surface)),
         surface,
@@ -241,6 +244,46 @@ describe('missing key policy', () => {
     expect(t.hasOwn('wallet.deposit')).toBe(false);
   });
 
+  it('does not let a locale with no catalog pass itself off as translated', () => {
+    // THE REGRESSION THIS LOCKS. `catalog` used to default to English, so this
+    // translator resolved every key out of the English catalog as though it were
+    // Arabic's own: `hasOwn` said true, no report ever fired, and coverage for a
+    // language nobody has written a word of came back at 100%. The words on
+    // screen were right; the instrument we would have measured by was lying.
+    const { reports, onMissing } = collect();
+    const t = createTranslator('ar', undefined, { mode: 'dev', onMissing });
+
+    expect(t.hasCatalog).toBe(false);
+    expect(t.hasOwn('wallet.deposit')).toBe(false);
+    expect(reports[0]).toEqual({ kind: 'no-catalog', key: '', locale: 'ar' });
+
+    // English is still served — a declared-but-empty locale must never blank a
+    // screen or echo a key. Only the accounting changed.
+    expect(t.t('wallet.deposit')).toBe('Deposit');
+    expect(reports).toContainEqual({ kind: 'untranslated', key: 'wallet.deposit', locale: 'ar' });
+  });
+
+  it('does not mirror the layout of an RTL locale that is rendering English', () => {
+    // `dir` used to follow the REQUESTED locale. Arabic has no catalog, so the
+    // strings are English — and `dir: 'rtl'` around left-to-right words is a
+    // defect a user sees on the first screen, not a subtle one.
+    expect(isRtl('ar')).toBe(true);
+    expect(hasCatalog('ar')).toBe(false);
+
+    const t = createTranslator('ar', undefined, { mode: 'prod', onMissing: () => {} });
+    expect(t.dir).toBe('ltr');
+    expect(t.renderedLocale).toBe('en');
+    // The requested locale is still readable — we did not silently rewrite it.
+    expect(t.locale).toBe('ar');
+
+    // The day a catalog lands, both flip back with no code change here. The
+    // marker is ASCII on purpose — same as the `ar` fixture above, and this repo
+    // does not carry invented translations even in a test.
+    const withCatalog = createTranslator('ar', { 'wallet.deposit': 'AR-DEPOSIT' }, { mode: 'prod', onMissing: () => {} });
+    expect(withCatalog.dir).toBe('rtl');
+    expect(withCatalog.renderedLocale).toBe('ar');
+  });
+
   it('defaults its mode from NODE_ENV', () => {
     const original = process.env.NODE_ENV;
     try {
@@ -369,8 +412,11 @@ describe('formatNumber / formatPercent / dates', () => {
 // ── Locales ─────────────────────────────────────────────────────────────────
 
 describe('locale registry', () => {
-  it('ships a realistic launch set with unique codes', () => {
-    expect(SUPPORTED_LOCALES.length).toBeGreaterThanOrEqual(25);
+  it('declares 28 locales — a number, not "100+"', () => {
+    // §9 wants 100+ languages. This asserts what we HAVE, so the gap between the
+    // ambition and the state stays a visible number rather than a doc sentence
+    // somebody has to go and check.
+    expect(SUPPORTED_LOCALES.length).toBe(28);
     const codes = SUPPORTED_LOCALES.map((l) => l.code);
     expect(new Set(codes).size).toBe(codes.length);
     expect(DEFAULT_LOCALE).toBe('en');
@@ -390,7 +436,12 @@ describe('locale registry', () => {
         .map((l) => l.code)
         .sort(),
     ).toEqual(['ar', 'fa', 'he', 'ur']);
-    expect(createTranslator('he').dir).toBe('rtl');
+    // `isRtl`/`dir` answer for the LANGUAGE. A translator answers for the text
+    // it is actually holding, which is English until Hebrew has a catalog — so
+    // these two deliberately disagree today, and will agree the day a catalog
+    // lands. See `renderedLocale` in t.ts.
+    expect(createTranslator('he', { 'auth.logout': 'HE-SIGN-OUT' }).dir).toBe('rtl');
+    expect(createTranslator('he', undefined, { onMissing: () => {} }).dir).toBe('ltr');
     expect(createTranslator('en').dir).toBe('ltr');
   });
 
@@ -418,5 +469,50 @@ describe('locale registry', () => {
     expect(negotiateLocale(['de-AT'])).toBe('de');
     expect(parseAcceptLanguage('fr-CH, fr;q=0.9, en;q=0.8, *;q=0.5')).toEqual(['fr-CH', 'fr', 'en', '*']);
     expect(negotiateLocale(parseAcceptLanguage('he-IL,he;q=0.9,en;q=0.4'))).toBe('he');
+  });
+});
+
+// ── The catalog registry — declared vs written ──────────────────────────────
+
+describe('catalog registry — what we declare vs what we have written', () => {
+  it('has exactly one catalog, and does not round that up', () => {
+    // If this fails because a language was added, that is good news — update the
+    // number. If it fails because a language was added WITHOUT a human-written
+    // catalog, the number is the point: a row in SUPPORTED_LOCALES is intent,
+    // not coverage, and machine-translating a money product is not on the table.
+    expect(Object.keys(CATALOGS)).toEqual(['en']);
+    expect(TRANSLATED_LOCALES).toEqual(['en']);
+    expect(UNTRANSLATED_LOCALES.length).toBe(SUPPORTED_LOCALES.length - 1);
+    expect(TRANSLATED_LOCALES.length + UNTRANSLATED_LOCALES.length).toBe(SUPPORTED_LOCALES.length);
+  });
+
+  it('resolves a catalog through locale aliases, and returns nothing when there is nothing', () => {
+    expect(catalogFor('en')).toBe(en);
+    expect(hasCatalog('en')).toBe(true);
+    // Alias path: a browser sending `zh-CN` resolves to `zh-Hans`, which is
+    // declared and empty — so the answer is an honest "no", not a crash.
+    expect(hasCatalog('zh-CN')).toBe(false);
+    expect(catalogFor('zh-CN')).toBeUndefined();
+    // Not a locale we know at all.
+    expect(hasCatalog('kl')).toBe(false);
+  });
+
+  it('reports every declared locale in the coverage table, including the empty ones', () => {
+    const rows = localeCoverage();
+    expect(rows.length).toBe(SUPPORTED_LOCALES.length);
+
+    const english = rows.find((r) => r.code === 'en')!;
+    expect(english.hasCatalog).toBe(true);
+    expect(english.translated).toBe(MESSAGE_KEYS.length);
+    expect(english.missing).toEqual([]);
+
+    // The rows that make the table worth having: declared, present, and zero.
+    // A dashboard that omitted them would show "1 language, 100%".
+    for (const row of rows.filter((r) => r.code !== 'en')) {
+      expect(row.hasCatalog, row.code).toBe(false);
+      expect(row.translated, row.code).toBe(0);
+      expect(row.total, row.code).toBe(MESSAGE_KEYS.length);
+      expect(row.missing.length, row.code).toBe(MESSAGE_KEYS.length);
+    }
   });
 });

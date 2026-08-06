@@ -202,6 +202,7 @@ describe('svc-blueprint mount — a real session, on the real router', () => {
           height: 1350,
           svg: '<svg/>',
           raster: { status: 'unavailable', code: 'blueprint.card_renderer_unconfigured', reason: 'no renderer' },
+          shareMode: 'svg' as const,
         }),
         mentors: async () => [],
         export: async () => {

@@ -71,6 +71,9 @@ const callsWithApp = (source, name) => {
   });
 };
 
+// Read once, up here: assertions 1b and 4 both need it.
+const adminApi = read('services', 'svc-edge', 'src', 'admin-api.ts');
+
 // ── 1 · No route can be un-killable ─────────────────────────────────────────
 //
 // `/api/v1` is the public CCXT REST contract and forwards to svc-trade, but the
@@ -93,6 +96,96 @@ if (!routes) {
           'State the module explicitly; do not derive it from the prefix.',
       );
     }
+  }
+}
+
+// ── 1b · No module can be ARMED that the edge cannot ENFORCE ────────────────
+//
+// Assertion 1 proves every edge ROUTE names a module. It says nothing about the
+// other direction, and that is where the hole was: `admin-api.ts` accepted a
+// kill for every one of the 23 `MODULE_IDS`, while the edge can only refuse the
+// 13 that have a prefix in the route table.
+//
+// So an operator could halt `ws`, receive 200, and read `disabledModules:
+// ["ws"]` back from `/admin/status` while svc-ws kept serving — svc-ws publishes
+// 4014 and the browser connects to it directly. A halt that returns 200, lands
+// in the audit trail and refuses nothing is exactly the failure this file exists
+// to catch, and the gate printed "every route killable" throughout.
+//
+// The invariant: {modules the console can arm} ⊆ {modules the edge can enforce}.
+if (adminApi && (!/ENFORCEABLE_MODULES/.test(adminApi) || !/OUTSIDE_THE_DOOR/.test(adminApi))) {
+  failures.push(
+    'svc-edge/src/admin-api.ts does not restrict kill-switch toggles to modules the edge can enforce — ' +
+      'the toggle schema must reject any module with no prefix in the route table (ENFORCEABLE_MODULES / OUTSIDE_THE_DOOR ' +
+      'from routes.ts). Arming a switch that refuses nothing is worse than having none (§14.6).',
+  );
+}
+
+// ── 1c · Nothing is deployed OUTSIDE the door without being recorded ────────
+//
+// "Enforced at the door" only holds if the door is the only way in. The
+// kill-switch is an `onRequest` hook on svc-edge, so it can refuse exactly what
+// svc-edge serves; a service the browser reaches on its own published port is
+// not behind the hook and no amount of edge code can stop it.
+//
+// This is the check that makes the property survive the NEXT service. Publish a
+// host port, and the gate fails until that service either goes behind the edge
+// or is consciously recorded in `OUTSIDE_THE_DOOR` with a reason — at which
+// point the control plane refuses to pretend it can be halted.
+const compose = read('docker-compose.apps.yml');
+if (!compose) {
+  failures.push('docker-compose.apps.yml is missing — the gate cannot tell which services are reachable outside the edge');
+} else if (routes) {
+  // Parsed line-wise rather than with one big regex. A `[\s\S]*?` spanning a
+  // YAML block is exactly how a scan starts matching the NEXT service's `ports:`
+  // and reports the wrong container.
+  const published = [];
+  let current = null;
+  let inServices = false;
+  for (const line of compose.split('\n')) {
+    if (/^services:/.test(line)) {
+      inServices = true;
+      continue;
+    }
+    if (!inServices) continue;
+    // A non-indented line ends the `services:` block (`volumes:`, `networks:`…).
+    if (/^[A-Za-z]/.test(line)) {
+      inServices = false;
+      continue;
+    }
+    const svc = /^ {2}([A-Za-z0-9_.-]+):\s*$/.exec(line);
+    if (svc) {
+      current = svc[1];
+      continue;
+    }
+    if (current && /^ {4}ports:/.test(line)) published.push(current);
+  }
+
+  if (published.length === 0) {
+    failures.push(
+      'docker-compose.apps.yml — no published ports could be parsed, so the outside-the-door check would pass vacuously. ' +
+        'Fix the parser rather than trusting the green.',
+    );
+  }
+
+  // The `module:` values actually present in the route table.
+  const routed = new Set([...routes.matchAll(/\bmodule:\s*'([^']+)'/g)].map(([, m]) => m));
+  // `OUTSIDE_THE_DOOR` keys, read from the object literal rather than assumed.
+  const block = /OUTSIDE_THE_DOOR[^=]*=\s*\{([\s\S]*?)\n\};/.exec(routes);
+  const outside = new Set(block ? [...block[1].matchAll(/^ {2}([a-z][a-z0-9-]*):/gm)].map(([, m]) => m) : []);
+
+  for (const container of published) {
+    // `web`, `admin` and `vendor-shell` are browser pages, not platform modules.
+    if (!container.startsWith('svc-')) continue;
+    const module = container.slice('svc-'.length);
+    if (module === 'edge') continue; // the door itself
+    if (routed.has(module)) continue; // behind the door, therefore killable
+    if (outside.has(module)) continue; // consciously recorded as a known gap
+    failures.push(
+      `${container} publishes a host port but has no prefix in svc-edge/src/routes.ts. The kill-switch is an onRequest ` +
+        `hook on the edge, so it cannot refuse traffic that never crosses the edge — "${module}" is UNKILLABLE (§14.6). ` +
+        'Route it through the edge, or record it in OUTSIDE_THE_DOOR with a reason so the console refuses to pretend.',
+    );
   }
 }
 
@@ -134,7 +227,6 @@ if (!edgeIndex) {
 // ── 4 · The operator control plane is authorised ────────────────────────────
 //
 // An operator control any authenticated user can reach is not a control.
-const adminApi = read('services', 'svc-edge', 'src', 'admin-api.ts');
 if (!adminApi) {
   failures.push('services/svc-edge/src/admin-api.ts is missing — the control plane has no authorisation');
 } else {
@@ -196,6 +288,23 @@ if (!e2e) {
       failures.push(`control-plane.e2e.test.ts no longer asserts ${what} ("${needle}" not found)`);
     }
   }
+
+  /**
+   * …and it must actually RUN.
+   *
+   * Every assertion above is satisfied by a file whose suites are skipped: the
+   * strings are still there, the gate still greps them, and the behaviour is
+   * proved by nothing. `describe.skip`, `it.todo` or a `skipIf` on an env var
+   * that is unset in CI would all leave this gate green over a kill-switch no
+   * one has pulled since it was written — which is the state §14.6 started in.
+   */
+  const skipped = e2e.match(/\b(?:describe|it|test)\.(?:skip|todo|skipIf|runIf|concurrent\.skip)\b/g);
+  if (skipped) {
+    failures.push(
+      `control-plane.e2e.test.ts contains ${skipped.length} skipped/conditional suite(s) (${[...new Set(skipped)].join(', ')}) — ` +
+        'the kill-switch proof must run unconditionally. A gate that greps a test it never runs has proved nothing (§14.6).',
+    );
+  }
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
@@ -206,4 +315,19 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log('✓ kill-switch reachability — every route killable, enforced at the door, fails closed, reachable from apps/admin');
+/**
+ * The message says what was CHECKED, not what we would like to be true.
+ *
+ * The previous line read "every route killable, enforced at the door, fails
+ * closed, reachable from apps/admin" — while the script checked none of those
+ * end to end. It greps structure; the behaviour is proved by
+ * `control-plane.e2e.test.ts` under `pnpm test`, which assertion 7 now also
+ * requires to actually run. "Every route killable" was the outright false half:
+ * the console could arm ten modules the edge cannot enforce, and svc-ws was
+ * serving the browser on its own port the whole time.
+ */
+console.log('✓ kill-switch reachability (§14.6, structural)');
+console.log('    · every edge route names a module; only enforceable modules can be armed');
+console.log('    · guard is an onRequest hook wired into the running edge, with a fail-closed catch');
+console.log('    · nothing publishes a host port outside the door unrecorded');
+console.log('    · the behavioural proof exists and is not skipped — it runs under `pnpm test`');

@@ -11,10 +11,45 @@
  *   then seed with a NEW runId (hold keys are per-order and idempotent).
  * - Prior cancel indeterminate → skip reseed this tick (no free book risk).
  */
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
 import { cancelSeedMarket, seedMarket, type CancelSeedResult, type SeedMarketResult } from './seed-market.js';
+
+export type MmSeedLastRun = { runId: string; levels: number };
+
+/** Load durable last-run map. Corrupt/missing → empty (never invent runs). */
+export function loadMmSeedLastRun(path: string | undefined): Map<string, MmSeedLastRun> {
+  const out = new Map<string, MmSeedLastRun>();
+  if (path == null || path.trim() === '') return out;
+  try {
+    const raw = readFileSync(path, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, { runId?: string; levels?: number }>;
+    for (const [marketId, v] of Object.entries(parsed)) {
+      if (!marketId || typeof v?.runId !== 'string' || !v.runId.trim()) continue;
+      const levels = Number(v.levels);
+      if (!Number.isFinite(levels) || levels < 1) continue;
+      out.set(marketId, { runId: v.runId.trim(), levels: Math.floor(levels) });
+    }
+  } catch {
+    /* missing or corrupt — start empty */
+  }
+  return out;
+}
+
+export function saveMmSeedLastRun(path: string | undefined, map: Map<string, MmSeedLastRun>): void {
+  if (path == null || path.trim() === '') return;
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    const obj: Record<string, MmSeedLastRun> = {};
+    for (const [k, v] of map) obj[k] = v;
+    writeFileSync(path, `${JSON.stringify(obj, null, 2)}\n`, 'utf8');
+  } catch {
+    /* best-effort — in-memory still works this process */
+  }
+}
 
 export interface MmSeedTarget {
   marketId: string;
@@ -56,6 +91,11 @@ export interface MmSeedJobsDeps {
   onResult?: (marketId: string, result: SeedMarketResult | { skipped: string }) => void;
   /** Optional observer for prior-run cancel before reseed. */
   onCancelResult?: (marketId: string, result: CancelSeedResult) => void;
+  /**
+   * Durable last-run map path (TRADE_MM_SEED_STATE_PATH). Empty/undefined →
+   * memory only (pre-persist behavior).
+   */
+  statePath?: string;
 }
 
 export interface MmSeedJobsHandle {
@@ -74,7 +114,7 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
   }
 
   /** Prior seed run per market — cancelled before reseed when book empty. */
-  const lastRun = new Map<string, { runId: string; levels: number }>();
+  const lastRun = loadMmSeedLastRun(deps.statePath);
   let generation = 0;
   const runIdFor =
     deps.runIdFor ??
@@ -82,6 +122,7 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
       generation += 1;
       return `ops-seed:${marketId}:${generation}`;
     });
+  const persist = () => saveMmSeedLastRun(deps.statePath, lastRun);
 
   host.every('mm.seed', deps.config.intervalMs, async () => {
     for (const target of deps.config.targets) {
@@ -105,6 +146,7 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
 
       // Cancel prior seed: engine may already be empty (fills/cancels);
       // still release any leftover MM holds before a new runId draws again.
+      // Includes runs restored from TRADE_MM_SEED_STATE_PATH after restart.
       const prior = lastRun.get(target.marketId);
       if (prior) {
         const cancelResult = await cancelSeedMarket(
@@ -123,6 +165,7 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
           continue;
         }
         lastRun.delete(target.marketId);
+        persist();
       }
 
       const runId = runIdFor(target.marketId);
@@ -147,6 +190,7 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
       );
       if (trackable) {
         lastRun.set(target.marketId, { runId, levels: deps.config.levels });
+        persist();
       }
 
       deps.onResult?.(target.marketId, result);

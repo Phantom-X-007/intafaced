@@ -4,7 +4,7 @@ import { CardSandboxAdapter } from './card-sandbox.js';
 import { CryptoNativeAdapter } from './crypto-native.js';
 import { ChainNotConfiguredError, MemoryChain, UnconfiguredChain } from './chain-port.js';
 import { RailRegistry } from './registry.js';
-import { isUsable } from './rail-adapter.js';
+import { isLive, isSandbox, isUsable } from './rail-adapter.js';
 import {
   PublicCheckoutUnavailable,
   RAIL_POSTURE_ENFORCED_ENVS,
@@ -82,8 +82,30 @@ describe('every rail says whether it is real', () => {
     expect(cryptoOn(new MemoryChain()).mode).toBe('sandbox');
   });
 
-  it('crypto-native is a sandbox with NO chain too — an absent chain is not a live one', () => {
-    expect(cryptoOn(new UnconfiguredChain()).mode).toBe('sandbox');
+  /**
+   * THE ONE PRE-EXISTING ASSERTION THIS CHANGE REWRITES, and it is rewritten
+   * because it ENCODED THE DEFECT rather than a property.
+   *
+   * It read `expect(cryptoOn(new UnconfiguredChain()).mode).toBe('sandbox')`.
+   * That was a true description of `RailMode` while `RailMode` had two members
+   * and `crypto-native` collapsed the third into `sandbox` — which the ADR of
+   * 2026-08-04 names a defect, running in the unsafe direction: absence read as
+   * a working sandbox. Its done bar requires the distinction.
+   *
+   * The old test's TITLE was already the right law — "an absent chain is not a
+   * live one" — and that half is asserted below, unchanged in force. What has
+   * changed is that "not live" now has two answers instead of one, and an
+   * absent chain gives the accurate one.
+   */
+  it('crypto-native is ABSENT with no chain — distinct from sandbox, and still not live', () => {
+    const absent = cryptoOn(new UnconfiguredChain());
+    expect(absent.mode).toBe('absent');
+
+    // The property the rewrite must not weaken, asserted directly rather than
+    // inferred from the string: absent is not live, and neither is sandbox.
+    expect(isLive(absent)).toBe(false);
+    expect(isLive(cryptoOn(new MemoryChain()))).toBe(false);
+    expect(isSandbox(absent)).toBe(false);
   });
 
   it('reports an absent chain as UNHEALTHY, so routing and the console never offer it', () => {

@@ -8,9 +8,25 @@ import { PostgresNotifyStore } from './store.js';
 import { PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
+import { MemoryMuteStore } from './preferences/mute.js';
 import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-notify — event-driven fan-out (ops.notifications).
@@ -24,7 +40,8 @@ import { subscribeNotificationEvents } from './events.js';
  * `/ready` reports two things that are easy to get wrong and expensive to
  * discover late:
  *
- *   channels          which transports have credentials, and the env vars each
+ *   channels          which transports have credentials, which ones this
+ *                     deployment declared it DEPENDS ON, and the env vars each
  *                     missing one needs. A channel with none is not "off" — it
  *                     refuses every message with a code that lands on the
  *                     delivery record.
@@ -33,6 +50,13 @@ import { subscribeNotificationEvents } from './events.js';
  *                     lost — the durable consumer attaches on a later boot and
  *                     JetStream replays the stream from the start — but it is
  *                     stated rather than left to be noticed.
+ *
+ * WHAT AN OPERATOR WILL NEVER READ HERE
+ *
+ * A required channel that is not wired. `env.ts` refuses to load in that state,
+ * so this file is not reached — see NOTIFY_REQUIRED_CHANNELS. The unavailable
+ * warnings below are therefore only ever about channels the operator chose not
+ * to depend on.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -64,15 +88,17 @@ const store = new PostgresNotifyStore(sql);
 const targets = new PostgresTargetStore(sql);
 const deliveries = new PostgresDeliveryStore(sql);
 const channels = channelsFromEnv(env);
+const muteStore = new MemoryMuteStore();
 const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
   maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS,
   outOfAppEnabled: env.NOTIFY_OUT_OF_APP_ENABLED,
+  mutePrefsOf: (userId) => muteStore.get(userId),
 });
 
 const notify = new NotifyService(
   store,
   { fanoutEnabled: env.NOTIFY_FANOUT_ENABLED, verifyTtlMinutes: env.NOTIFY_VERIFY_TTL_MINUTES },
-  { targets, deliveries, channels, dispatcher },
+  { targets, deliveries, channels, dispatcher, muteStore },
 );
 
 export const appRouter = createNotifyRouter(notify);
@@ -91,7 +117,11 @@ app.get('/ready', async () => ({
   outOfAppEnabled: env.NOTIFY_OUT_OF_APP_ENABLED,
   channels: channels.status(),
   consumers: subscriptions.length,
+  // Each entry carries its `socket` — the recorded reason it cannot attach, or
+  // null. Null is the one worth paging on, so it gets its own count rather than
+  // making a monitor parse the array to find out.
   pendingConsumers: pending,
+  undeclaredPendingConsumers: pending.filter((c) => c.socket === null).length,
 }));
 
 await app.register(fastifyTRPCPlugin, {
@@ -117,12 +147,24 @@ app.log.info(
 );
 
 for (const consumer of pending) {
-  // WARN, not silence. "Margin-call notifications are not running because
-  // svc-bank has never published to that stream" is an operational fact
-  // somebody has to be able to read without attaching a debugger.
-  app.log.warn(
+  // A pending consumer is a DECLARED SOCKET or a DEFECT, and never both — see
+  // the `PendingConsumer` docstring in ./events.ts.
+  //
+  // This was one WARN per pending consumer. `bankMarginCalled` has been pending
+  // since svc-notify shipped, so that warning has fired on every boot this
+  // service has ever had. A warning that is always present is not a warning; it
+  // is a permanent feature of the log, and it trains whoever reads it to skim
+  // past warnings — including the next one, about something that just broke.
+  if (consumer.socket !== null) {
+    app.log.info(
+      { subject: consumer.subject, durable: consumer.durable, socket: consumer.socket },
+      'svc-notify consumer parked on a declared socket — its publisher does not exist yet, that is recorded in the event catalog with a reason, and the consumer attaches on the first boot after one appears',
+    );
+    continue;
+  }
+  app.log.error(
     { subject: consumer.subject, durable: consumer.durable, reason: consumer.reason },
-    'svc-notify consumer pending — its producer has not created the stream yet; nothing is lost, the consumer attaches on a later boot',
+    'svc-notify consumer cannot attach and NOTHING DECLARES WHY — notifications for this subject are dark. Wire its publisher, or record it in WIRING_SOCKETS with a reason (pnpm scan:events fails on an undeclared one, so this should never reach main)',
   );
 }
 

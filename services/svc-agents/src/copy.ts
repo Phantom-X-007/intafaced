@@ -43,6 +43,14 @@ export const COPY_KEYS = [
   'agents.error.capability_unavailable',
   'agents.error.engine_unavailable',
   'agents.error.window_sealed',
+  'agents.scanner.empty',
+  'agents.scanner.unavailable',
+  'agents.merchant.empty',
+  'agents.merchant.unavailable',
+  'agents.copy_intel.empty',
+  'agents.copy_intel.unavailable',
+  'agents.navigator.unavailable',
+  'agents.support.unavailable',
 ] as const;
 
 export type CopyKey = (typeof COPY_KEYS)[number];
@@ -80,6 +88,15 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.error.capability_unavailable': 'The Neural Engine cannot serve this kind of request right now.',
   'agents.error.engine_unavailable': 'The Neural Engine is unavailable. Nothing was run and nothing was charged.',
   'agents.error.window_sealed': 'This usage period is already settled.',
+
+  'agents.scanner.empty': 'No markets were provided to rank.',
+  'agents.scanner.unavailable': 'Market signals are unavailable right now — quotes are missing or too old to trust.',
+  'agents.merchant.empty': 'No approval-rate samples were provided to watch.',
+  'agents.merchant.unavailable': 'Approval-rate metrics are unavailable right now — samples are missing or too old to trust.',
+  'agents.copy_intel.empty': 'No leader performance samples were provided.',
+  'agents.copy_intel.unavailable': 'Leader stats are unavailable — samples are incomplete or the window is invalid.',
+  'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
+  'agents.support.unavailable': 'Support knowledge is unavailable right now — the desk will not invent an answer.',
 };
 
 const KEY_SET: ReadonlySet<string> = new Set(COPY_KEYS);

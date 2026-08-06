@@ -33,3 +33,14 @@
 
 # ── Jurisdiction and custody. Legal surface, not just code. ──────────────────
 /packages/config/src/jurisdiction.ts @Phantom-X-007 @ZenYoda3
+
+# ── Shehzad — Protocol Plane + INTACHAIN only (2026-08-04 reclaim) ───────────
+# Law: docs/GITHUB-OWNERSHIP-SHEHZAD.md · docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
+# · docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md
+# Pay/bank reclaimed for Nitro agents (Class M). Agents must not implement
+# protocol/chain paths while shehzad002 owns tracker rows.
+/services/svc-protocol/              @shehzad002 @Phantom-X-007 @ZenYoda3
+/services/svc-dex/                   @shehzad002 @Phantom-X-007 @ZenYoda3
+/docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md @shehzad002 @ZenYoda3
+/docs/GITHUB-OWNERSHIP-SHEHZAD.md    @shehzad002 @ZenYoda3
+/docs/THREE-WAY-DISTRIBUTION-2026-08-04.md @shehzad002 @ZenYoda3 @Phantom-X-007

@@ -15,20 +15,20 @@
 ## WHERE THE APP ACTUALLY IS — read this before you open an editor
 
 **We are building on top of the vendored exchange, and it lives in
-`vendor/coinexchange/`.** That tree IS the product. It is not a reference copy,
+`vendor/upstream-exchange/`.** That tree IS the product. It is not a reference copy,
 not a sample to crib from, and not something to port screens out of.
 
 | what                    | where                                                                         |
 | ----------------------- | ----------------------------------------------------------------------------- |
-| **the app you open**    | `vendor/coinexchange/05_Web_Front/` → http://localhost:8090                   |
-| the Java backend        | `vendor/coinexchange/00_framework/` (15 Maven modules)                        |
-| the admin console       | `vendor/coinexchange/04_Web_Admin/`                                           |
-| the wallet RPC          | `vendor/coinexchange/01_wallet_rpc/`                                          |
+| **the app you open**    | `vendor/upstream-exchange/05_Web_Front/` → http://localhost:8090              |
+| the Java backend        | `vendor/upstream-exchange/00_framework/` (15 Maven modules)                   |
+| the admin console       | `vendor/upstream-exchange/04_Web_Admin/`                                      |
+| the wallet RPC          | `vendor/upstream-exchange/01_wallet_rpc/`                                     |
 | our TypeScript platform | `services/`, `packages/` — reached from the app through `svc-edge` on `:4000` |
 
 Provenance, so nobody wastes time wondering: the tree is a fork of the
 open-source `CoinExchange_CryptoExchange_Java` project (Apache-2.0, attributed in
-`vendor/coinexchange/NOTICE`). Upstream identifiers were `com.bizzan.bitrade`.
+`vendor/upstream-exchange/NOTICE`). Upstream identifiers were `com.upstream.job-module`.
 **That name is scrubbed from everything a user or the wider team sees, and
 `brand-scan` enforces it** — but you will still meet it in Java package roots,
 the MySQL schema name and the Mongo database name, because renaming those is a
@@ -101,8 +101,8 @@ person blows away the other person's in-progress state for ~90 seconds.
 # Stream B gets its own worktree and its own container:
 pnpm wt feat/spine-work
 docker run -d --name intafaced-shell-b \
-  -v "C:/Users/User/plug-x-inta-worktrees/feat-spine-work/vendor/coinexchange/05_Web_Front:/app" \
-  -v "C:/Users/User/plug-x-inta-worktrees/feat-coinexchange-integration/vendor/coinexchange/05_Web_Front/node_modules:/app/node_modules" \
+  -v "C:/Users/User/plug-x-inta-worktrees/feat-spine-work/vendor/upstream-exchange/05_Web_Front:/app" \
+  -v "C:/Users/User/plug-x-inta-worktrees/feat-upstream-exchange-integration/vendor/upstream-exchange/05_Web_Front/node_modules:/app/node_modules" \
   -w /app -p 127.0.0.1:8091:8080 -e HOST=0.0.0.0 node:16 sh -c "npm run dev"
 ```
 
@@ -182,17 +182,17 @@ any new edge route, anything in `main.js`.
    Maven 3.8.6 / JDK 1.8.0_342), so the blocker is not the build. It is this:
 
    **MongoDB is the real hazard, not Hibernate.** Spring Data stamps a `_class`
-   discriminator into every document. The live `bitrade` database holds **1,420
+   discriminator into every document. The live `job-module` database holds **1,420
    documents across 60 collections, every one carrying
-   `_class: "com.<vendor>.bitrade.entity.KLine"`.** Rename the package and every
+   `_class: "com.<vendor>.job-module.entity.KLine"`.** Rename the package and every
    historical K-line becomes unmappable — including the ones feeding
    `symbol-thumb`, i.e. the chart. The rename must ship in lockstep with a
    `_class` migration, and the vendor tree has no migration framework to carry
    that to another environment.
 
    **The vendor names are also live datastore names.** The MySQL schema is
-   `bizzan` (8 JDBC URLs plus compose `MYSQL_DATABASE`) and the Mongo database is
-   `bitrade`. A blanket replace points every app at a schema that does not exist,
+   `upstream` (8 JDBC URLs plus compose `MYSQL_DATABASE`) and the Mongo database is
+   `job-module`. A blanket replace points every app at a schema that does not exist,
    and `ddl-auto=update` then cheerfully builds 64 empty tables next to the real
    ones. So this cannot be a single-pattern sweep — those strings must be
    excluded explicitly.

@@ -2,21 +2,43 @@ import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
+import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
+import { cardIssuerFor } from './cards/issuer.js';
+import { eventMarginCallSink } from './loans/margin-call-publisher.js';
 import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
 import { createBankRouter, type BankRouter } from './router.js';
 import { withSpan } from './tracing.js';
 import { verifyServiceHeaders } from '@intafaced/contracts';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-bank — multi-currency accounts over the ledger (§8.1).
  *
- * Boot order: env → db → ledger → services → server. There is no bus
- * connection: this service publishes no NATS subject in this PR, because
- * declaring one is a `packages/events` PR that AGENT_PROTOCOL §1 requires to
- * land first. The planned subjects are listed in the README.
+ * Boot order: env → db → ledger → bus → services → server.
+ *
+ * The bus connection is new, and it exists for one subject. `bankMarginCalled`
+ * had a complete svc-notify consumer and no publisher anywhere, so a margin call
+ * started a grace clock that gates liquidation and the borrower was never told —
+ * the outcome `loans/risk.ts` argues against at length. `ownedStreams: ['bank']`
+ * is what creates `INTAFACED_BANK`, which has never existed, and until it does
+ * the consumer on the other side cannot attach at all.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -35,6 +57,19 @@ await sql`SELECT 1 FROM bank.spaces LIMIT 1`.catch(() => {
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const history = createLedgerHistory(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
+/**
+ * `ownedStreams: ['bank']` — this process is responsible for creating
+ * `INTAFACED_BANK`. It carries no money: the only subject on it announces that a
+ * call was RAISED, and value continues to move through svc-ledger and nowhere
+ * else (§0.6). Publishing is not a value movement.
+ */
+const bus = await JetStreamEventBus.connect({
+  servers: env.NATS_URL,
+  producer: env.SERVICE_NAME,
+  streamPrefix: env.NATS_STREAM_PREFIX,
+  ownedStreams: ['bank'],
+});
+
 const bank = createBankServices(sql, ledger, history, {
   nativeAssetId: env.TOKEN_ASSET_ID,
   loans: {
@@ -44,8 +79,35 @@ const bank = createBankServices(sql, ledger, history, {
     // trade, a depth read, and eventually collateral-funded orders — is written
     // out in `loans/prices.ts` rather than assumed to exist.
     priceSource: tickerPriceSource({ baseUrl: env.TRADE_URL }),
+    // The half that was missing. Without this the risk sweep raises calls into
+    // a database column and svc-notify's finished consumer never sees one.
+    marginCalls: eventMarginCallSink(bus),
   },
+  /**
+   * THE OTHER HALF THAT WAS MISSING, and it was missing in the same shape.
+   *
+   * `cards` was never passed here at all, so `CardService` took `noCardIssuer`
+   * in every deployment and the card procedures the router mounts refused
+   * `bank.no_card_issuer` for a reason no operator could act on. The adapter,
+   * the simulator and 36 tests were on main and nothing outside a test file had
+   * ever constructed one — reachable in the suite, unreachable over HTTP.
+   *
+   * `cardIssuerFor` is a total mapping over a closed set, so `none` is still
+   * what a deployment gets by saying nothing. It just is no longer what a
+   * deployment gets by SAYING ANYTHING.
+   */
+  cards: { issuer: cardIssuerFor(env.BANK_CARD_ISSUER) },
 });
+
+/**
+ * What this process will tell anyone who asks what its card programme is.
+ *
+ * Read once at boot from the one adapter that exists, rather than re-derived
+ * from the env var anywhere else: `/ready`, the boot log and
+ * `bank.cards.programme` are then three renderings of a single fact, and they
+ * cannot drift into disagreeing about whether this deployment issues real cards.
+ */
+const cardProgramme = bank.cards.programme();
 
 export const appRouter = createBankRouter(bank);
 export type AppRouter = typeof appRouter;
@@ -65,6 +127,21 @@ app.get('/ready', async () => ({
   // Surfaced because "are we liquidating today" is the first question anyone
   // asks about this service, and it should not require reading an env file.
   loanRiskSweep: env.LOAN_RISK_SWEEP_ENABLED,
+  /**
+   * WHETHER THIS DEPLOYMENT'S CARDS ARE REAL, ON THE READINESS ENDPOINT.
+   *
+   * The other flags here are booleans about jobs. This one is a claim about
+   * whether a counterparty exists, and it is on `/ready` for the same reason the
+   * risk sweep is: an operator asking "what is this process doing to money"
+   * should not have to read an environment file to find out.
+   *
+   * `simulated` is never omitted and never inferred from `id`. There is no
+   * arrangement of these three fields that lets a simulated programme read as a
+   * live one — `none` says there is no programme, `card-sim` says it is a
+   * simulator in its id AND its display name AND this boolean, and a live rail
+   * cannot appear here at all because it is `socket.live-issuer`, a contract.
+   */
+  cardProgramme: { id: cardProgramme.id, simulated: cardProgramme.simulated, displayName: cardProgramme.displayName },
 }));
 
 /**
@@ -201,6 +278,11 @@ app.log.info(
     port: env.HTTP_PORT,
     scheduledTransfers: env.SCHEDULED_TRANSFERS_ENABLED,
     interestAccrual: env.INTEREST_ACCRUAL_ENABLED,
+    // In the boot line, not only on `/ready`: the first place anyone looks after
+    // a deploy is the log, and "this deployment is running a card SIMULATOR" is
+    // exactly the fact that must not be discovered later from a support ticket.
+    cardProgramme: cardProgramme.id,
+    cardProgrammeSimulated: cardProgramme.simulated,
   },
   'svc-bank ready',
 );
@@ -209,6 +291,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
+      await bus.close();
       await sql.end({ timeout: 5 });
       process.exit(0);
     })();

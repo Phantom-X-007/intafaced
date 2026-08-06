@@ -83,9 +83,10 @@ Two agents on two worktrees can run at the same time with zero coordination. Tha
 
 ---
 
-## 3 · Pull requests are the coordination layer
+## 3 · Pull requests are the product review layer
 
-We are not going to maintain a project board. PRs are where coordination happens.
+We are not going to maintain a project board. **Product** coordination (what changed, why, how you know) lives on PRs.  
+**Not** a chat log: do not open PRs whose only job is status, R07/peace, FREEZE tip-bump, claims meter, or “board unchanged.” Those stay files; see `AGENTS.md` thrift · `docs/ops/SWARM-MANDATE.md`.
 
 **Small and focused.** One service per PR (§15.1). If a PR needs the word "and" to describe it, it is two PRs. A 200-line PR gets a real review; a 2,000-line PR gets "LGTM" and a bug in production.
 
@@ -133,6 +134,8 @@ pnpm tracker 2        # everything in a phase
 
 **To ship something:** set `status: 'done'` and list the paths it created in `requires`.
 
+**Mountain events only (not every micro-PR):** touch `features.mjs` on claim, owner handoff / human lock, done/cut, or an optional wave note after real progress. Craft under an already-`wip` mountain does **not** require a registry edit. Session dual-build prevention is `docs/LIVE-LANES.md` + open PRs — full contract: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md).
+
 Two things keep this honest, because a tracker nobody trusts is worse than none:
 
 - **`blocked` is computed, never declared.** A feature is blocked when a dependency is not done. You cannot mark something ready by wishing.
@@ -168,13 +171,13 @@ Every PR runs, and all of it must be green to merge:
 | `Tests`              | every package's suite, against real Postgres/Redis/NATS                 |
 | `Definition of Done` | the §14 gate per service                                                |
 
-Run the same thing locally before pushing — it is faster than waiting for CI, and it is **required thrift** on this private repo (Actions is metered after free minutes):
+Run the same thing locally before pushing — it is faster than waiting for CI, and it is **required thrift** (Actions is metered on private Free plans after free minutes; public standard runners are free — visibility is a business decision, not thrift):
 
 ```bash
 pnpm verify    # build · typecheck · test · DoD gate
 ```
 
-**Actions thrift (both of you / all agents):** local green first; batch coherent pushes — do not use remote CI as a debugger (push storms still bill partial minutes when cancelled). Parallel PRs stay allowed. Docs-only changes skip full CI via `paths-ignore` in `.github/workflows/ci.yml`. Full law: [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · `AGENTS.md`. Does **not** add a review gate or cap how many PRs you open.
+**Actions thrift (both of you / all agents):** local workshop first; one push per unit — do not use remote CI as a debugger (push storms still bill partial minutes when cancelled). Parallel **product** PRs stay allowed; coordination-only PRs are banned. Docs-only changes skip full CI via path filters in `.github/workflows/ci.yml`. Full law: [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · `AGENTS.md`. Does **not** add a review gate or hard-cap how many product PRs you open.
 
 Because merging is not _blocked_ on CI (see §1), reading the checks before you approve is a real responsibility rather than a formality. A green tick you did not look at is the same as no CI at all.
 
@@ -236,3 +239,48 @@ Agents automate process so humans don’t re-learn it: see **Nitro operator mode
 - Plain map (Nitro): [`docs/START-HERE.md`](docs/START-HERE.md)
 - Paste prompt every chat: [`docs/NITRO-SESSION-PROMPT.md`](docs/NITRO-SESSION-PROMPT.md)
 - Paste for Denon: [`docs/MESSAGE-DENON-WORKFLOW.md`](docs/MESSAGE-DENON-WORKFLOW.md)
+
+## Board-Delta trailer (docs / AFK)
+
+When a change is **docs-only**, declare real work in the commit body (git trailer form):
+
+```
+Board-Delta: free product count changed
+```
+
+**Valid:** free product count changed · partner PR changed state · scan finding count changed · new Class N PR opened/merged · a spec gained substantive content.  
+**Not valid:** tip SHA, cycle number, "re-freeze ran".
+
+Enforced by `tooling/ci/value-gate.mjs` on the Docs format workflow (advisory → strict).  
+See `docs/BOARD-CLEAR-PROCESS-LOOPS.md` L0 and `docs/ops/SWARM-MANDATE.md`.
+
+## Serial-Work trailer (code series)
+
+The same gate runs on the CI `gates` job, and there it asks a different question.
+It looks at a **code** PR when two things are true at once:
+
+1. the subject is a near-duplicate of a recent one **once the per-PR detail in
+   brackets is stripped** — `feat: L3 free-TRK wave45 (…)` and `wave12 (…)` are
+   the same series key; and
+2. the change adds new named symbols and **none of them is referenced from a
+   non-test file outside the files it added symbols to**.
+
+Similar titles are fine on their own — real migrations and per-service rollouts
+produce them honestly, and those pass because they wire what they add. Similar
+titles plus nothing calling the result is the same work counted twice.
+
+The first two in a row **warn**. The **fourth consecutive** one is red. If the
+series is genuinely right, say so on the record:
+
+```
+Serial-Work: per-service rollout of the rail adapter, one service per PR by design
+```
+
+The reason is echoed into the CI log and is greppable forever:
+`git log --grep '^Serial-Work:'`. A bare `Serial-Work:` with no reason is not an
+escape. This is **not** a `Board-Delta:` — that trailer is the docs escape and is
+too common to mean anything here.
+
+**Never** satisfied by touching the tracker: `features.mjs` is for mountain
+events only (`docs/COORDINATION-TRUTH-LAYERS.md`), and this gate deliberately
+does not ask about it.

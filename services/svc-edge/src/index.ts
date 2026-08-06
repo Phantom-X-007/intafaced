@@ -2,11 +2,28 @@ import Fastify from 'fastify';
 import { assertScreeningConfigured } from '@intafaced/config';
 import { createAdminApi, httpLedgerOperator } from './admin-api.js';
 import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
+import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
+import { rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
 import { exchangePrincipal } from './principal-exchange.js';
 import { resolve, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-edge — the front door (§9).
@@ -21,7 +38,14 @@ import { withEdgeSpan } from './tracing.js';
  * caller. svc-identity issued a JWT that opened no door.
  */
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL }, disableRequestLogging: false });
+const app = Fastify({
+  logger: { level: env.LOG_LEVEL },
+  disableRequestLogging: false,
+  // Unset means "believe the socket, never the header". See EDGE_TRUST_PROXY in
+  // env.ts: this is what decides whether `req.ip` — and therefore the throttle's
+  // key — identifies a caller or identifies our own load balancer.
+  ...(env.EDGE_TRUST_PROXY === undefined ? {} : { trustProxy: env.EDGE_TRUST_PROXY }),
+});
 
 /**
  * §24 Lane A, asserted at boot rather than assumed.
@@ -37,9 +61,76 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, disableRequestLogging: f
  */
 const screening = assertScreeningConfigured();
 app.log[screening.configured ? 'info' : 'warn'](
-  { appEnv: env.APP_ENV, configured: screening.configured, blocked: screening.blockedRegions.length, source: screening.source },
+  {
+    appEnv: env.APP_ENV,
+    configured: screening.configured,
+    // `configured` alone no longer identifies the state. A reviewed-and-
+    // deliberately-empty list is `configured: true` with a count of zero, which
+    // reads in a field set exactly like a list that happens to be short. The
+    // message string spells it out; a structured field is what gets queried.
+    declaration: screening.declaration,
+    blocked: screening.blockedRegions.length,
+    source: screening.source,
+  },
   screening.summary,
 );
+
+/**
+ * Which browser origins may call this edge (see `cors.ts`).
+ *
+ * Read before anything is registered, because a malformed list throws here — a
+ * list that does not say what its author meant is a boot failure, in the same
+ * spirit as the screening list above. An ABSENT list is not: it is a closed door
+ * that this log line and `/ready` make visible, and `cors.ts` argues at length
+ * why the two cases differ.
+ *
+ * ERROR, not `warn`, when an enforced environment has nothing configured. That
+ * state means every front-end this deployment serves is being refused by the
+ * browser, and it presents to users as the platform being down — which is
+ * exactly the failure that went unnoticed for weeks before this file had a CORS
+ * layer at all.
+ */
+const cors = edgeOriginAllowlist();
+const corsEnforced = (CORS_ENFORCED_ENVS as readonly string[]).includes(env.APP_ENV);
+app.log[cors.configured ? 'info' : corsEnforced ? 'error' : 'warn'](
+  { appEnv: env.APP_ENV, configured: cors.configured, allowedOrigins: cors.origins.length, source: cors.source },
+  cors.summary,
+);
+
+/**
+ * FIRST — before every route and before the kill-switch guard.
+ *
+ * The ordering is the control, not a tidiness preference. Registered here, the
+ * preflight is answered without the kill-switch ever being consulted (so an
+ * unauthenticated `OPTIONS` cannot report which modules an operator has halted),
+ * and the allow-origin header is on the reply before any later hook or handler
+ * sends a 404, a 503 or a 502 — so the browser can read our refusals instead of
+ * reporting them all as the same opaque CORS error.
+ */
+registerCors(app, cors);
+
+/**
+ * THEN the transport controls, in this order and after CORS for the reasons
+ * `hardening.ts` sets out: a preflight is answered before the limiter can spend
+ * a user's budget on it, and the allow-origin header is already on the reply
+ * when a 429 is sent, so a browser can read the refusal instead of reporting it
+ * as an opaque CORS failure.
+ */
+await registerSecurityHeaders(app);
+
+const rateLimit: RateLimitConfig = {
+  enabled: env.EDGE_RATE_LIMIT_ENABLED,
+  max: env.EDGE_RATE_LIMIT_MAX,
+  windowMs: env.EDGE_RATE_LIMIT_WINDOW_MS,
+  trustProxy: env.EDGE_TRUST_PROXY !== undefined,
+};
+await registerRateLimit(app, rateLimit);
+
+// Same posture as the screening and CORS lines above: say what the control
+// actually resolved to, because "throttle installed" and "throttle keyed on
+// something meaningful" are different facts and only one of them is protection.
+const rateLimitState = rateLimitSummary(rateLimit);
+app.log[rateLimitState.level]({ appEnv: env.APP_ENV, ...rateLimit }, rateLimitState.summary);
 
 const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
 
@@ -51,7 +142,7 @@ const tokenConfig = {
 };
 
 /** §14.6 — the operator kill-switch, and the first one in the platform anything can reach. */
-const killSwitches = new KillSwitchState();
+const killSwitches = new KillSwitchState({ statePath: env.EDGE_KILL_STATE_PATH });
 
 const admin = createAdminApi(killSwitches, {
   tokens: tokenConfig,
@@ -73,7 +164,27 @@ app.get('/ready', async () => ({
   // Whether screening is armed, and how many regions it refuses — a count, not
   // the codes. An operator needs to see the control is on; an unauthenticated
   // caller does not need our exact configuration read back to them.
-  screening: { configured: screening.configured, blockedRegions: screening.blockedRegions.length },
+  //
+  // `declaration` is here because `configured` stopped being enough to identify
+  // the state. There are now two ways to be configured: a supplied list
+  // (`listed`), and a recorded "reviewed, and no region is screened out"
+  // (`reviewed-empty`), and the second is `configured: true` with
+  // `blockedRegions: 0`. A probe with only the boolean and the count would render
+  // that identically to a short list, and the one thing this whole control exists
+  // to prevent is two different compliance states looking like the same number.
+  // It is a state name, not configuration content — it says which question was
+  // answered, never which regions.
+  screening: {
+    configured: screening.configured,
+    declaration: screening.declaration,
+    blockedRegions: screening.blockedRegions.length,
+  },
+  // Same shape, same reason: whether a browser allowlist was SUPPLIED, and how
+  // many origins it holds — a count, never the origins themselves. "Zero because
+  // nobody configured one" and "zero because the list is short" are different
+  // facts, and a probe that renders both as `0` cannot tell an operator which
+  // one is why the front-end says the platform is unreachable.
+  cors: { configured: cors.configured, allowedOrigins: cors.origins.length },
   // Readiness is about the process, never about the switches: a killed module is
   // an operator's decision, and taking the edge out of the load balancer because
   // of it would remove the surface that serves cancels and reads.

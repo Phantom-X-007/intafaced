@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS "p2p"."p2p_disputes" (
   "trade_id"          uuid NOT NULL REFERENCES "p2p"."p2p_trades"("id"),
   "opened_by"         text NOT NULL,
   "reason"            text NOT NULL DEFAULT '',
+  -- APPEND-ONLY. A jsonb ARRAY of attributed envelopes — see the trigger below.
   "evidence"          jsonb NOT NULL DEFAULT '[]'::jsonb,
   "moderator_id"      text,
   "resolution"        "p2p"."dispute_resolution",
@@ -232,12 +233,30 @@ CREATE TABLE IF NOT EXISTS "p2p"."p2p_disputes" (
   "status"            "p2p"."dispute_status" NOT NULL DEFAULT 'open',
   "deadline_at"       timestamptz NOT NULL,
   "opened_at"         timestamptz NOT NULL DEFAULT now(),
-  "resolved_at"       timestamptz
+  "resolved_at"       timestamptz,
+  -- Written by the statement that SERVES this dispute to a moderator, and by no
+  -- other. It is the only fact in the schema that distinguishes "a queue exists"
+  -- from "a human reached this row".
+  "last_seen_by_moderator_at" timestamptz,
+  "moderator_views"   integer NOT NULL DEFAULT 0,
+  -- The SLA breached and the dispute was re-armed rather than disposed of.
+  "escalated_at"      timestamptz,
+  "escalations"       integer NOT NULL DEFAULT 0
 );
+
+-- The four columns above post-date the first cut of this table, and
+-- `CREATE TABLE IF NOT EXISTS` above is a no-op on a database that already has
+-- it. Re-runnability is a property of the FILE, not of one statement in it.
+ALTER TABLE "p2p"."p2p_disputes" ADD COLUMN IF NOT EXISTS "last_seen_by_moderator_at" timestamptz;
+ALTER TABLE "p2p"."p2p_disputes" ADD COLUMN IF NOT EXISTS "moderator_views" integer NOT NULL DEFAULT 0;
+ALTER TABLE "p2p"."p2p_disputes" ADD COLUMN IF NOT EXISTS "escalated_at" timestamptz;
+ALTER TABLE "p2p"."p2p_disputes" ADD COLUMN IF NOT EXISTS "escalations" integer NOT NULL DEFAULT 0;
 
 -- ONE DISPUTE PER TRADE, EVER. Two dispute rows means two moderators can reach
 -- two different decisions about one escrow, and both would look legitimate.
 CREATE UNIQUE INDEX IF NOT EXISTS "p2p_disputes_trade_idx" ON "p2p"."p2p_disputes" ("trade_id");
+-- THE MODERATOR QUEUE. `disputes.list` orders by exactly this: open first, most
+-- overdue first. Until that procedure existed the index was carried by nothing.
 CREATE INDEX IF NOT EXISTS "p2p_disputes_open_idx" ON "p2p"."p2p_disputes" ("status", "deadline_at");
 
 -- A resolved dispute names the moderator, the decision, and the time. §5: the
@@ -249,6 +268,106 @@ ALTER TABLE "p2p"."p2p_disputes" ADD CONSTRAINT "p2p_disputes_resolved_is_attrib
     ("status" = 'open' AND "resolution" IS NULL AND "resolved_at" IS NULL)
     OR ("status" = 'resolved' AND "resolution" IS NOT NULL AND "moderator_id" IS NOT NULL AND "resolved_at" IS NOT NULL)
   );
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- A DISPUTED ESCROW TERMINATES ONLY ON A HUMAN RULING.
+--
+-- SPEC-OTC: "No automated resolution of a disputed release — this is the one
+-- place in the platform where a human decision is the correct design, not a
+-- fallback." The service used to contradict that with a 7-day timer that
+-- refunded, attributed to `system:p2p-backstop`.
+--
+-- The service no longer has that path. This trigger is why it cannot come back
+-- by accident: from `disputed`, writing a resolution requires the trade's
+-- dispute row to already be `resolved` and attributed to a moderator id that is
+-- NOT a `system:` principal. A timer cannot satisfy that without impersonating
+-- a person, which is a thing a reviewer would see rather than a default nobody
+-- read.
+--
+-- It is deliberately narrow: it says nothing about `escrowed`/`fiat_sent`
+-- timeouts, which resolve on a clock and should — nobody is disagreeing there.
+-- ═════════════════════════════════════════════════════════════════════════════
+CREATE OR REPLACE FUNCTION "p2p"."p2p_trades_disputed_needs_ruling"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  d_status text;
+  d_moderator text;
+BEGIN
+  IF OLD."status" = 'disputed' AND OLD."resolution" IS NULL AND NEW."resolution" IS NOT NULL THEN
+    SELECT "status"::text, "moderator_id" INTO d_status, d_moderator
+      FROM "p2p"."p2p_disputes" WHERE "trade_id" = NEW."id";
+
+    IF d_status IS DISTINCT FROM 'resolved'
+       OR d_moderator IS NULL
+       OR d_moderator LIKE 'system:%' THEN
+      RAISE EXCEPTION
+        'p2p: a disputed escrow terminates only on a human ruling — trade % has no attributed moderator decision', NEW."id"
+        USING ERRCODE = 'check_violation';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS "p2p_trades_disputed_needs_ruling_trg" ON "p2p"."p2p_trades";
+CREATE TRIGGER "p2p_trades_disputed_needs_ruling_trg"
+  BEFORE UPDATE ON "p2p"."p2p_trades"
+  FOR EACH ROW EXECUTE FUNCTION "p2p"."p2p_trades_disputed_needs_ruling"();
+
+-- ── Evidence is append-only ──────────────────────────────────────────────────
+--
+-- Evidence is the record of a dispute. A record that can be edited after the
+-- fact is not a record, it is a draft — and the party who can edit it last wins
+-- every disagreement about what was submitted.
+--
+-- Shape first: a jsonb ARRAY, bounded in both count and bytes, so "append"
+-- means something and an operator regex or a runaway client cannot make one row
+-- the size of the table.
+ALTER TABLE "p2p"."p2p_disputes" DROP CONSTRAINT IF EXISTS "p2p_disputes_evidence_is_array_ck";
+ALTER TABLE "p2p"."p2p_disputes" ADD CONSTRAINT "p2p_disputes_evidence_is_array_ck"
+  CHECK (jsonb_typeof("evidence") = 'array' AND jsonb_array_length("evidence") <= 200);
+
+ALTER TABLE "p2p"."p2p_disputes" DROP CONSTRAINT IF EXISTS "p2p_disputes_evidence_bounded_ck";
+ALTER TABLE "p2p"."p2p_disputes" ADD CONSTRAINT "p2p_disputes_evidence_bounded_ck"
+  CHECK (pg_column_size("evidence") <= 262144);
+
+-- Then the rule itself. Not "the service only appends" — that is a sentence in
+-- a code review. This is the database refusing any update whose evidence is not
+-- the old evidence with entries added on the end: no edit, no reorder, no
+-- removal, from any client, including psql.
+CREATE OR REPLACE FUNCTION "p2p"."p2p_disputes_evidence_append_only"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  kept jsonb;
+BEGIN
+  IF NEW."evidence" IS NOT DISTINCT FROM OLD."evidence" THEN
+    RETURN NEW;
+  END IF;
+
+  IF jsonb_array_length(NEW."evidence") < jsonb_array_length(OLD."evidence") THEN
+    RAISE EXCEPTION 'p2p: dispute evidence is append-only — % entries cannot become %',
+      jsonb_array_length(OLD."evidence"), jsonb_array_length(NEW."evidence")
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- The prefix of the new array, of the old array's length, must BE the old
+  -- array. `COALESCE` because jsonb_agg over zero rows is NULL, and the very
+  -- first append is exactly that case.
+  SELECT COALESCE(jsonb_agg(e ORDER BY ord), '[]'::jsonb) INTO kept
+    FROM jsonb_array_elements(NEW."evidence") WITH ORDINALITY AS t(e, ord)
+   WHERE ord <= jsonb_array_length(OLD."evidence");
+
+  IF kept IS DISTINCT FROM OLD."evidence" THEN
+    RAISE EXCEPTION 'p2p: dispute evidence is append-only — entry % or earlier was altered', 1
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS "p2p_disputes_evidence_append_only_trg" ON "p2p"."p2p_disputes";
+CREATE TRIGGER "p2p_disputes_evidence_append_only_trg"
+  BEFORE UPDATE ON "p2p"."p2p_disputes"
+  FOR EACH ROW EXECUTE FUNCTION "p2p"."p2p_disputes_evidence_append_only"();
 
 -- ── p2p_reputation ───────────────────────────────────────────────────────────
 -- §6.2: completion rate, average release time, disputes lost — feeding the same

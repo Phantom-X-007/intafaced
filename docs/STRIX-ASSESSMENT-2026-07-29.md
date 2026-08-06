@@ -272,8 +272,8 @@ This assessment **confirms** those lines with mechanism-level evidence. It does 
 ## 12 · Decision stamp (fill when Nitro decides)
 
 - [ ] PARK until staging (recommended default)
-- [ ] Schedule pilot at: _______________
+- [ ] Schedule pilot at: ******\_\_\_******
 - [ ] Cut
-- [ ] Other: _______________
+- [ ] Other: ******\_\_\_******
 
-Date / who: _______________
+Date / who: ******\_\_\_******

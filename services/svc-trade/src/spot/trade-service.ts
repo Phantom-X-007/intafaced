@@ -1,6 +1,6 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
-import { TIMEFRAME_MS, type Timeframe } from '@intafaced/exchange-contract';
+import type { Timeframe } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
 import { requireScope, type Principal } from '@intafaced/auth';
 import {
@@ -15,6 +15,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { withMoneySpan } from '../tracing.js';
+import { queryCandlesFromFills } from './candles.js';
 import { ratesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
 import {
@@ -183,6 +184,8 @@ export interface ListMarketInput {
   schedule?: Market['schedule'];
   /** Falls back to the symbol; the column carries a NOT-NULL, length > 0 check. */
   displayName?: string;
+  /** Paper market — drills only; placeOrder never posts ledger holds. */
+  paper?: boolean;
 }
 
 export class TradeService {
@@ -228,7 +231,7 @@ export class TradeService {
       INSERT INTO trade.markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
         min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-        asset_class, schedule, display_name
+        asset_class, schedule, display_name, paper
       ) VALUES (
         ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, 'spot',
         ${formatAmount(input.tickSize)}::numeric, ${formatAmount(input.lotSize)}::numeric,
@@ -237,12 +240,12 @@ export class TradeService {
         ${formatAmount(input.minNotional)}::numeric,
         ${input.status ?? 'active'}, ${input.makerBps}, ${input.takerBps}, now(),
         ${input.assetClass ?? 'crypto'}, ${input.schedule ?? 'crypto-24x7'},
-        ${input.displayName ?? input.symbol}
+        ${input.displayName ?? input.symbol}, ${input.paper === true}
       )
       ON CONFLICT (symbol) DO UPDATE SET updated_at = now()
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
                 min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
     `;
     return toMarket(rows[0] as MarketRow);
   }
@@ -260,7 +263,7 @@ export class TradeService {
       UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
                 min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
     `;
     const row = rows[0];
     if (!row) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
@@ -271,7 +274,7 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
         FROM trade.markets ORDER BY symbol ASC
     `;
     return rows.map(toMarket);
@@ -443,6 +446,14 @@ export class TradeService {
     // ── 2 · RISK CHECKS ─────────────────────────────────────────────────────
     const market = await this.requireMarket(input);
     assertTradable(market);
+
+    // Stage-1 paper isolation (academy.paper-trading): a paper market must never
+    // post orderHold / tradeFill against real available balances. Live markets
+    // keep the funded path below unchanged.
+    if (market.paper) {
+      return this.placePaperOrderIsolated(principal, input, market);
+    }
+
     // Before any hold is taken. A closed venue cannot fill, so funding an order
     // into one locks the user's balance behind a book nobody is matching until
     // the session reopens.
@@ -591,6 +602,62 @@ export class TradeService {
 
     const settled = await this.findOrder(orderId);
     if (!settled) throw new TradeError(`order ${orderId} vanished during settlement`, 'trade.order_not_found');
+    return settled;
+  }
+
+  /**
+   * Paper market place — Stage-1 isolation.
+   *
+   * Records an intent/open order with zero hold and never calls the ledger.
+   * Simulated fills / workbook wiring are Stage-2. Live placeOrder path is
+   * unchanged for non-paper markets.
+   */
+  private async placePaperOrderIsolated(principal: Principal, input: PlaceOrderInput, market: Market): Promise<OrderRecord> {
+    requireScope(principal, 'trade:write');
+    const userId = principal.userId;
+    if (input.subAccountId != null) {
+      await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
+    }
+    assertMarketOpen(market, this.now());
+    const orderType: OrderType = requireSupportedType(input.type);
+    assertQty(market, input.qty);
+    if (orderType === 'limit') {
+      if (input.price == null) throw new TradeError('a limit order requires a price', 'trade.invalid_price');
+      assertPrice(market, input.price);
+      assertNotional(market, input.price, input.qty);
+    }
+    const tif: TimeInForce = input.tif ?? 'GTC';
+    // Schema requires hold columns; paper posts zero amount and never ledger-posts.
+    const holdAsset = input.side === 'buy' ? market.quoteAsset : market.baseAsset;
+    const orderId = input.clientOrderId ? orderIdFor(userId, market.id, input.clientOrderId) : crypto.randomUUID();
+    const existing = await this.findOrder(orderId);
+    if (existing) return existing;
+
+    const inserted = await this.sql<Array<{ id: string }>>`
+      INSERT INTO trade.orders (
+        id, user_id, sub_account_id, market_id, client_order_id, side, type,
+        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
+      ) VALUES (
+        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId ?? null},
+        ${input.side}, ${orderType},
+        ${input.price == null ? null : formatAmount(input.price)}::numeric,
+        ${formatAmount(input.qty)}::numeric, 'open', ${tif},
+        ${holdAsset}, ${formatAmount(0n)}::numeric, 0,
+        null,
+        false
+      )
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id
+    `;
+    if (inserted.length === 0) {
+      const raced = await this.findOrder(orderId);
+      if (raced) return raced;
+      throw new TradeError(`order ${orderId} vanished between insert and read`, 'trade.order_not_found');
+    }
+    // No ledger.post. No matching.submit. Paper residual for Stage-2 fills.
+    const settled = await this.findOrder(orderId);
+    if (!settled) throw new TradeError(`order ${orderId} vanished during paper place`, 'trade.order_not_found');
+    await this.publishOrderUpdated(settled);
     return settled;
   }
 
@@ -783,7 +850,11 @@ export class TradeService {
     }
 
     // ── House MM maker path (trade.mm-bot) ──────────────────────────────────
-    if (makerIsHouseMm && !maker) {
+    // Route by identity, not "order row missing". A prior partial fill inserts a
+    // stub trade.orders row; the next match must still use marketMakerMakerFill
+    // (MM pot holds), never user tradeFill against HOUSE_MM_USER_UUID.
+    const makerIsHouseMmRow = maker != null && maker.userId === HOUSE_MM_USER_UUID;
+    if (makerIsHouseMm || makerIsHouseMmRow) {
       const rates = ratesForFill(market, 0, taker.feeDiscountBps);
       const takerBuys = fill.takerSide === 'buy';
       const takerFee = mulBps(takerBuys ? qty : quoteAmount, rates.takerFeeBps);
@@ -794,16 +865,17 @@ export class TradeService {
       // fills.order_id FK → trade.orders. Seed path never wrote a row; insert a
       // bookkeeping stub. Hold value lives on MM ledger pots; row hold_amount
       // is the fill notional (orders_hold_positive_ck) for this match only.
+      // seeded=true so public tape / candles exclude house MM prints (SD-3).
       const makerHoldAsset = takerBuys ? market.baseAsset : market.quoteAsset;
       const makerHoldAmount = takerBuys ? qty : quoteAmount;
       await this.sql`
         INSERT INTO trade.orders (
           id, user_id, market_id, side, type, price, qty, status, tif,
-          hold_asset, hold_amount, fee_discount_bps
+          hold_asset, hold_amount, fee_discount_bps, seeded
         ) VALUES (
           ${fill.makerOrderId}, ${HOUSE_MM_USER_UUID}, ${market.id}, ${makerSide}, ${'limit'},
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${'open'}, ${'PO'},
-          ${makerHoldAsset}, ${formatAmount(makerHoldAmount)}::numeric, ${0}
+          ${makerHoldAsset}, ${formatAmount(makerHoldAmount)}::numeric, ${0}, ${true}
         )
         ON CONFLICT (id) DO NOTHING
       `;
@@ -818,7 +890,7 @@ export class TradeService {
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
           ${makerFeeAsset}, ${formatAmount(makerFee)}::numeric, ${rates.makerFeeBps}, ${fill.sequence}
         )
-        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+        ON CONFLICT (id) DO NOTHING
       `;
       await this.sql`
         INSERT INTO trade.fills (
@@ -830,7 +902,7 @@ export class TradeService {
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
           ${takerFeeAsset}, ${formatAmount(takerFee)}::numeric, ${rates.takerFeeBps}, ${fill.sequence}
         )
-        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+        ON CONFLICT (id) DO NOTHING
       `;
 
       await this.refreshFilledQty(taker.id);
@@ -915,6 +987,8 @@ export class TradeService {
       },
     ];
 
+    // Conflict on deterministic fill id (market+seq+role). Concurrent inline
+    // settle + NATS redelivery must not 500 on fills_pkey — that broke CX-8 L3.
     for (const leg of legs) {
       await this.sql`
         INSERT INTO trade.fills (
@@ -926,7 +1000,7 @@ export class TradeService {
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
           ${leg.feeAsset}, ${formatAmount(leg.feeAmount)}::numeric, ${leg.feeBps}, ${fill.sequence}
         )
-        ON CONFLICT (market_id, sequence, liquidity) DO NOTHING
+        ON CONFLICT (id) DO NOTHING
       `;
     }
 
@@ -1451,7 +1525,7 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
         FROM trade.markets WHERE id = ${marketId}
     `;
     const row = rows[0];
@@ -1462,7 +1536,7 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule
+                asset_class, schedule, paper
         FROM trade.markets WHERE symbol = ${symbol}
     `;
     const row = rows[0];
@@ -1530,77 +1604,12 @@ export class TradeService {
   /**
    * Candles for a market (CCXT `fetchOHLCV`), aggregated from real taker fills.
    *
-   * SOURCE OF TRUTH: `trade.fills` where `liquidity = 'taker'` — one row per
-   * match, the same rows `publicTape` publishes. Every price in every candle is
-   * a price something actually traded at. Nothing is modelled, interpolated, or
-   * carried forward from a previous bucket.
-   *
-   * Bucketing is done in SQL, on `ts`, floored to a multiple of the timeframe
-   * span from the unix epoch. Doing it in Postgres rather than in the service
-   * matters for correctness, not just speed: bucketing a `LIMIT`ed page in
-   * memory silently truncates the oldest bucket, and a half-summed candle
-   * reported as a whole one is a fabricated volume.
-   *
-   * `date_bin` is not used because it is Postgres 14+ and this must run on the
-   * declared floor; epoch arithmetic is equivalent and version-independent.
-   *
-   * Open/close are resolved by `sequence`, the engine's own total order, rather
-   * than by `ts`. Two fills inside the same millisecond are ordinary at engine
-   * speed and ordering them by timestamp makes open/close non-deterministic —
-   * the same query would return different candles on different runs.
-   *
-   * A bucket with no fills produces NO ROW. It is not zero-filled: a candle at
-   * price 0 with volume 0 is a print that never happened, and a client running
-   * an indicator across it gets a number we invented.
+   * SOURCE OF TRUTH: live SQL over `trade.fills` (see `queryCandlesFromFills`).
+   * Never invents empty buckets; SD-3 excludes seeded volume. Optional durable
+   * materialization is a separate job (`startCandleJobs`, default OFF).
    */
   async candles(marketId: string, timeframe: Timeframe, limit = 500, sinceMs?: number): Promise<Candle[]> {
-    const capped = Math.min(Math.max(Math.floor(limit), 1), 1000);
-    const spanMs = TIMEFRAME_MS[timeframe];
-    const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
-
-    type CandleRow = { bucket_ms: string; open: string; high: string; low: string; close: string; volume: string };
-
-    // `bucket_ms` is computed as bigint milliseconds and returned as a string
-    // by postgres.js — parsed with Number below, where it is a timestamp and
-    // not money, so a double carries it exactly for the next ~285,000 years.
-    const bucketExpr = this.sql`(floor(extract(epoch from ts) * 1000 / ${spanMs}::bigint)::bigint * ${spanMs}::bigint)`;
-
-    // SD-3: candles/volume exclude fills involving seeded orders.
-    const rows = await this.sql<CandleRow[]>`
-      SELECT bucket_ms::text                                              AS bucket_ms,
-             (array_agg(price ORDER BY sequence ASC))[1]                  AS open,
-             max(price)                                                   AS high,
-             min(price)                                                   AS low,
-             (array_agg(price ORDER BY sequence DESC))[1]                 AS close,
-             sum(qty)                                                     AS volume
-        FROM (
-          SELECT ${bucketExpr} AS bucket_ms, f.price, f.qty, f.sequence
-            FROM trade.fills f
-            INNER JOIN trade.orders o ON o.id = f.order_id
-            INNER JOIN trade.orders c ON c.id = f.counter_order_id
-           WHERE f.market_id = ${marketId}
-             AND f.liquidity = 'taker'
-             AND o.seeded = false
-             AND c.seeded = false
-             ${sinceDate ? this.sql`AND f.ts >= ${sinceDate}` : this.sql``}
-        ) AS binned
-       GROUP BY bucket_ms
-       -- Newest buckets are the ones a chart opens on, so LIMIT must keep the
-       -- most recent; the ascending order CCXT expects is restored below.
-       ORDER BY bucket_ms DESC
-       LIMIT ${capped}
-    `;
-
-    return rows
-      .map((row) => ({
-        openTimeMs: Number(row.bucket_ms),
-        open: parseAmount(row.open),
-        high: parseAmount(row.high),
-        low: parseAmount(row.low),
-        close: parseAmount(row.close),
-        volume: parseAmount(row.volume),
-      }))
-      .reverse(); // CCXT fetchOHLCV returns oldest → newest.
+    return queryCandlesFromFills(this.sql, { marketId, timeframe, limit, sinceMs });
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────

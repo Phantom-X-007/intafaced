@@ -14,8 +14,8 @@ import type { ChannelId, RefusalCode } from './channels/channel.js';
  *
  *   deliveries        one row per (notification, channel) — the attempt AND the
  *                     outcome, kept apart. `attempted_at` says we tried;
- *                     `delivered_at` says a transport took it. A message that was
- *                     never delivered can never read as delivered, because there
+ *                     `accepted_at` says a transport took it. A message that was
+ *                     never accepted can never read as accepted, because there
  *                     is no single column that would let it.
  *
  * Both stores come in a memory pair for tests and a Postgres pair for prod, the
@@ -26,7 +26,7 @@ export type DeliveryStatus =
   /** Claimed for an attempt. In flight, or the process died mid-attempt. */
   | 'pending'
   /** A transport accepted it. The only status that may read as "the user was told". */
-  | 'delivered'
+  | 'accepted'
   /** Declined before attempting anything. `refusalCode` says why. Terminal. */
   | 'refused'
   /** Attempted, did not work, will be tried again. */
@@ -43,8 +43,8 @@ export interface DeliveryRecord {
   attempts: number;
   /** When a send was last actually attempted. NULL on a pure refusal — nothing was tried. */
   attemptedAt: Date | null;
-  /** When a transport accepted it. NULL unless `status === 'delivered'`. */
-  deliveredAt: Date | null;
+  /** When a transport accepted it. NULL unless `status === 'accepted'`. */
+  acceptedAt: Date | null;
   refusalCode: RefusalCode | null;
   /** Free text from the transport, truncated. Never shown as user copy. */
   detail: string | null;
@@ -67,7 +67,7 @@ export interface ChannelTarget {
 
 export type ClaimResult =
   | { claimed: true; id: string; attempt: number }
-  | { claimed: false; reason: 'already_delivered' | 'terminal' | 'exhausted'; record: DeliveryRecord };
+  | { claimed: false; reason: 'already_accepted' | 'terminal' | 'exhausted'; record: DeliveryRecord };
 
 export interface SettleInput {
   id: string;
@@ -136,7 +136,7 @@ export class MemoryDeliveryStore implements DeliveryStore {
         status: 'pending',
         attempts: 1,
         attemptedAt: null,
-        deliveredAt: null,
+        acceptedAt: null,
         refusalCode: null,
         detail: null,
         reference: null,
@@ -148,7 +148,7 @@ export class MemoryDeliveryStore implements DeliveryStore {
       return { claimed: true, id: record.id, attempt: 1 };
     }
 
-    if (existing.status === 'delivered') return { claimed: false, reason: 'already_delivered', record: existing };
+    if (existing.status === 'accepted') return { claimed: false, reason: 'already_accepted', record: existing };
     if (existing.status === 'refused' || existing.status === 'abandoned') {
       return { claimed: false, reason: 'terminal', record: existing };
     }
@@ -174,7 +174,7 @@ export class MemoryDeliveryStore implements DeliveryStore {
     record.detail = input.detail ?? null;
     record.reference = input.reference ?? null;
     if (input.attempted) record.attemptedAt = now;
-    record.deliveredAt = input.status === 'delivered' ? now : null;
+    record.acceptedAt = input.status === 'accepted' ? now : null;
     record.updatedAt = now;
   }
 
@@ -256,7 +256,7 @@ type DeliveryPgRow = {
   status: DeliveryStatus;
   attempts: number;
   attempted_at: Date | null;
-  delivered_at: Date | null;
+  accepted_at: Date | null;
   refusal_code: RefusalCode | null;
   detail: string | null;
   reference: string | null;
@@ -272,7 +272,7 @@ function fromDeliveryPg(row: DeliveryPgRow): DeliveryRecord {
     status: row.status,
     attempts: Number(row.attempts),
     attemptedAt: row.attempted_at,
-    deliveredAt: row.delivered_at,
+    acceptedAt: row.accepted_at,
     refusalCode: row.refusal_code,
     detail: row.detail,
     reference: row.reference,
@@ -297,7 +297,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
             updated_at = now()
         WHERE notify.deliveries.status IN ('pending', 'failed')
           AND notify.deliveries.attempts < ${maxAttempts}
-      RETURNING id, notification_id, channel, status, attempts, attempted_at, delivered_at, refusal_code, detail, reference, created_at, updated_at
+      RETURNING id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at
     `;
 
     if (claimed.length > 0) {
@@ -315,19 +315,19 @@ export class PostgresDeliveryStore implements DeliveryStore {
          AND channel = ${channel}
          AND status IN ('pending', 'failed')
          AND attempts >= ${maxAttempts}
-      RETURNING id, notification_id, channel, status, attempts, attempted_at, delivered_at, refusal_code, detail, reference, created_at, updated_at
+      RETURNING id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at
     `;
     if (retired.length > 0) return { claimed: false, reason: 'exhausted', record: fromDeliveryPg(retired[0]!) };
 
     const current = await this.sql<DeliveryPgRow[]>`
-      SELECT id, notification_id, channel, status, attempts, attempted_at, delivered_at, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
+      SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
        WHERE notification_id = ${notificationId} AND channel = ${channel}
        LIMIT 1
     `;
     const record = fromDeliveryPg(current[0]!);
     return {
       claimed: false,
-      reason: record.status === 'delivered' ? 'already_delivered' : 'terminal',
+      reason: record.status === 'accepted' ? 'already_accepted' : 'terminal',
       record,
     };
   }
@@ -340,7 +340,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
              detail = ${input.detail ?? null},
              reference = ${input.reference ?? null},
              attempted_at = CASE WHEN ${input.attempted} THEN now() ELSE attempted_at END,
-             delivered_at = CASE WHEN ${input.status === 'delivered'} THEN now() ELSE NULL END,
+             accepted_at = CASE WHEN ${input.status === 'accepted'} THEN now() ELSE NULL END,
              updated_at = now()
        WHERE id = ${input.id}
     `;
@@ -348,7 +348,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
 
   async listForNotification(notificationId: string): Promise<DeliveryRecord[]> {
     const rows = await this.sql<DeliveryPgRow[]>`
-      SELECT id, notification_id, channel, status, attempts, attempted_at, delivered_at, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
+      SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
        WHERE notification_id = ${notificationId}
        ORDER BY channel ASC
     `;

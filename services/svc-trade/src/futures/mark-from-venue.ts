@@ -8,7 +8,7 @@
  *   · venue error / rate-limit / unreachable → null
  *
  * Quality is `mid` (two-sided book mid), not `index`. Liquidation consumers
- * already accept mid under the default FuturesMarkPolicy.
+ * already accept mid under the default MarkPolicy.
  *
  * Does not open WS streams here — a single REST snapshot is enough for a mark
  * tick. Streaming/gap-detection stays inside the fabric for adapters that need it.
@@ -16,8 +16,9 @@
 import { formatAmount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter } from '@intafaced/venue-contracts';
 import { BinanceSpotMarketData } from '@intafaced/venue-adapter';
-import type { MarkSource } from './liquidation-tick.js';
-import { markSourceFromBook, midFromBook, type FuturesMarkPolicy } from './mark-source.js';
+import type { MarkSource, QuotedMarkSource } from './liquidation-tick.js';
+import { markSourceFromBook, midFromBook } from './mark-source.js';
+import type { MarkPolicy } from './mark-policy.js';
 
 export type VenueSymbolResolver = (marketId: string) => string | null;
 
@@ -42,10 +43,10 @@ export function markSourceFromVenuePublicBook(input: {
   adapter: Pick<MarketDataAdapter, 'snapshotBook'>;
   /** marketId → unified venue symbol (e.g. BTC/USDT). Missing → null mark. */
   resolveSymbol: VenueSymbolResolver;
-  policy?: FuturesMarkPolicy;
+  policy?: MarkPolicy;
   /** Snapshot depth — top of book only needs a few levels. Default 5. */
   depthLimit?: number;
-}): MarkSource {
+}): QuotedMarkSource {
   const limit = input.depthLimit ?? 5;
   return markSourceFromBook({
     policy: input.policy,
@@ -68,14 +69,29 @@ export function markSourceFromVenuePublicBook(input: {
 /**
  * Prefer primary (venue fabric) when it has a mark; else secondary (matching depth).
  * Either may return null — still never invents.
+ *
+ * Preference runs at the QUOTE level too, so the winning source's quality and
+ * observation time survive the fallback. Collapsing to a bare price string here
+ * would hand the liquidation gate an unlabelled mark, and an unlabelled mark is
+ * one the gate has no grounds to refuse.
  */
 export function markSourcePrefer(primary: MarkSource, secondary: MarkSource): MarkSource {
+  const quote =
+    primary.quote || secondary.quote
+      ? async (args: { marketId: string; symbol?: string; at: Date }) => {
+          const first = primary.quote ? await primary.quote(args) : null;
+          if (first != null) return first;
+          return secondary.quote ? await secondary.quote(args) : null;
+        }
+      : undefined;
+
   return {
     async markPrice(args) {
       const first = await primary.markPrice(args);
       if (first != null) return first;
       return secondary.markPrice(args);
     },
+    ...(quote ? { quote } : {}),
   };
 }
 
@@ -123,10 +139,10 @@ export function createConfiguredVenueMarkSource(input: {
   venueId: string;
   /** Raw `marketId:SYMBOL,...` or pre-parsed map. */
   symbols: string | Map<string, string>;
-  policy?: FuturesMarkPolicy;
+  policy?: MarkPolicy;
   /** Injectable for tests (skip real HTTP). Requires a non-empty venueId. */
   adapter?: Pick<MarketDataAdapter, 'snapshotBook'> | null;
-}): { source: MarkSource; venueId: string; symbolCount: number } | null {
+}): { source: QuotedMarkSource; venueId: string; symbolCount: number } | null {
   const venueId = input.venueId.trim().toLowerCase();
   // Feature off — empty / off / none never invents a mark port.
   if (!venueId || venueId === 'off' || venueId === 'none' || venueId === 'false') return null;

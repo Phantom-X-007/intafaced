@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createP2pRouter } from './router.js';
 import type { P2pService } from './p2p-service.js';
+import type { InstrumentService } from './instrument-service.js';
 
 /**
  * THE MOUNT BOUNDARY, for svc-p2p (docs/decisions/mount-boundary.md).
@@ -75,6 +76,31 @@ function stubP2p(overrides: Partial<Record<string, unknown>> = {}) {
   } as unknown as P2pService;
 }
 
+/**
+ * The instrument half of the router.
+ *
+ * Every method throws, deliberately: this file is about whether a caller gets
+ * PAST the mount at all, and a stub that quietly returned `[]` would let a test
+ * pass while the router happily disclosed payment details to an anonymous
+ * caller. If anything here is ever reached by an unauthorised request, the test
+ * that reached it fails loudly rather than assertively passing.
+ */
+function stubInstruments(overrides: Partial<Record<string, unknown>> = {}) {
+  const refuse = async () => {
+    throw new Error('the mount let an unauthorised caller reach a payment instrument');
+  };
+  return {
+    listMethodSchemas: refuse,
+    listInstruments: refuse,
+    revealOwn: refuse,
+    revealForTrade: refuse,
+    accessLogFor: refuse,
+    ...overrides,
+  } as unknown as InstrumentService;
+}
+
+const routerFor = (p2p: P2pService, instruments: InstrumentService = stubInstruments()) => createP2pRouter(p2p, instruments);
+
 describe('svc-p2p mount — authorisation', () => {
   it('refuses an anonymous caller on a scoped procedure, and reads nothing', async () => {
     // Shaped like the ledger's: it does not assert on a message, it asserts the
@@ -87,7 +113,7 @@ describe('svc-p2p mount — authorisation', () => {
       },
     });
 
-    await expect(createP2pRouter(p2p).createCaller(anonymous()).offers.list({})).rejects.toMatchObject({
+    await expect(routerFor(p2p).createCaller(anonymous()).offers.list({})).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(read).toBe(false);
@@ -104,7 +130,7 @@ describe('svc-p2p mount — authorisation', () => {
     const ctx = forged(principal({ scopes: ['p2p:read', 'p2p:write', 'admin:treasury'], tier: 'full', mfa: true }));
     expect(ctx.principal).toBeNull();
 
-    await expect(createP2pRouter(stubP2p()).createCaller(ctx).offers.list({})).rejects.toMatchObject({
+    await expect(routerFor(stubP2p()).createCaller(ctx).offers.list({})).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -112,13 +138,158 @@ describe('svc-p2p mount — authorisation', () => {
   it('accepts a principal the edge signed', async () => {
     // Without this the UNAUTHORIZED assertions above would also pass on a
     // router that refuses everyone.
-    await expect(createP2pRouter(stubP2p()).createCaller(signed()).offers.list({})).resolves.toEqual([]);
+    await expect(routerFor(stubP2p()).createCaller(signed()).offers.list({})).resolves.toEqual([]);
+  });
+
+  /**
+   * The payment-instrument surface, at the mount.
+   *
+   * `instrument-service.test.ts` proves that a non-counterparty is refused.
+   * This proves the layer in front of it: a caller with no credentials at all
+   * never reaches the code that would make that decision. The stub throws on
+   * every method, so "the service was never asked" is asserted by the absence
+   * of that error rather than by a flag.
+   */
+  it('refuses an anonymous caller on every payment-instrument path', async () => {
+    const caller = routerFor(stubP2p()).createCaller(anonymous());
+
+    await expect(caller.instruments.list({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.instruments.methods.list({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.instruments.accessLog({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.instruments.reveal({ instrumentId: USER })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.trades.paymentInstrument({ tradeId: USER })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  /**
+   * A session may not register what a market's payment rails require.
+   *
+   * `admin:compliance` guards the registry because a wrong field list produces
+   * instruments that look complete and cannot be paid — the same class of
+   * content as a sanctions list, and equally not a user's to write.
+   */
+  it('refuses a normal session on the operator method registry', async () => {
+    const caller = routerFor(stubP2p()).createCaller(signed(principal({ scopes: ['p2p:read', 'p2p:write'] })));
+
+    await expect(
+      caller.instruments.methods.register({ methodId: 'anything', country: 'DE', label: 'x', fields: [{}] }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+/**
+ * THE MODERATOR SURFACE.
+ *
+ * Two separate promises, both asserted here because they fail in opposite
+ * directions: the queue must not be readable by a user session (it contains
+ * other people's disputes), and the evidence a PARTY gets back must be their
+ * own (it is filed by, and about, the person they are in dispute with).
+ */
+describe('svc-p2p mount — the moderator queue', () => {
+  const SELLER = USER;
+  const BUYER = '33333333-3333-4333-8333-333333333333';
+
+  const dispute = {
+    id: '44444444-4444-4444-8444-444444444444',
+    tradeId: '55555555-5555-4555-8555-555555555555',
+    openedBy: BUYER,
+    reason: 'nothing arrived',
+    evidence: [
+      { seq: 1, submittedBy: BUYER, submittedAt: new Date('2026-08-04T00:00:00.000Z'), item: { ref: 'BUYER-RECEIPT' } },
+      { seq: 2, submittedBy: SELLER, submittedAt: new Date('2026-08-04T01:00:00.000Z'), item: { ref: 'SELLER-STATEMENT' } },
+    ],
+    moderatorId: null,
+    resolution: null,
+    resolutionNotes: null,
+    status: 'open' as const,
+    deadlineAt: new Date('2026-08-01T00:00:00.000Z'),
+    openedAt: new Date('2026-07-25T00:00:00.000Z'),
+    resolvedAt: null,
+    lastSeenByModeratorAt: null,
+    moderatorViews: 0,
+    escalatedAt: null,
+    escalations: 0,
+  };
+
+  const trade = { id: dispute.tradeId, sellerId: SELLER, buyerId: BUYER };
+
+  function disputesStub(seen: { asModerator: number } = { asModerator: 0 }) {
+    return stubP2p({
+      listDisputes: async () => {
+        seen.asModerator++;
+        return { disputes: [dispute], nextCursor: null };
+      },
+      getTrade: async () => trade,
+      getDispute: async () => dispute,
+      getDisputeAsModerator: async () => {
+        seen.asModerator++;
+        return dispute;
+      },
+    });
+  }
+
+  it('refuses the queue to a user session, however much p2p it holds', async () => {
+    // `admin:compliance` is a scope no user session carries. That is the point
+    // of putting the queue behind it — and the reason the scope has to become
+    // holdable by a real moderator, which is an owner decision, not this
+    // router's.
+    const seen = { asModerator: 0 };
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+
+    await expect(createP2pRouter(disputesStub(seen)).createCaller(ctx).disputes.list({})).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(seen.asModerator).toBe(0);
+  });
+
+  it('serves a moderator the queue, with the evidence in it', async () => {
+    const ctx = signed(principal({ scopes: ['p2p:read', 'admin:compliance'] }));
+    const page = await createP2pRouter(disputesStub()).createCaller(ctx).disputes.list({});
+
+    expect(page.disputes).toHaveLength(1);
+    // Evidence rides the QUEUE, not only `.get`. A triage list that cannot show
+    // what is alleged costs a round trip per row, which is how a queue stops
+    // being used at all.
+    expect(page.disputes[0]!.evidence.map((e) => e.submittedBy)).toEqual([BUYER, SELLER]);
+    expect(page.disputes[0]!.overdue).toBe(true);
+  });
+
+  it('gives a PARTY only the evidence they filed themselves', async () => {
+    // Their counterparty's submissions are free-form text about them, filed by
+    // someone they are in dispute with, with no redaction and no erase path.
+    // Handing that back is a product decision with a legal shadow; it is not
+    // made here by accident.
+    const ctx = signed(principal({ scopes: ['p2p:read'] })); // SELLER
+    const got = await createP2pRouter(disputesStub()).createCaller(ctx).disputes.get({ tradeId: dispute.tradeId });
+
+    expect(got.evidence).toHaveLength(1);
+    expect(got.evidence[0]!.submittedBy).toBe(SELLER);
+  });
+
+  it('gives a MODERATOR the whole evidence set, and records that they were served it', async () => {
+    const seen = { asModerator: 0 };
+    const ctx = signed(principal({ scopes: ['p2p:read', 'admin:compliance'] }));
+    const got = await createP2pRouter(disputesStub(seen)).createCaller(ctx).disputes.get({ tradeId: dispute.tradeId });
+
+    expect(got.evidence).toHaveLength(2);
+    // The stamped read, not the plain one: "a human reached this dispute" is
+    // only a fact if reaching it writes something down.
+    expect(seen.asModerator).toBe(1);
+  });
+
+  it('tells a party what happens if nobody rules, at the moment they open the dispute', async () => {
+    const p2p = stubP2p({
+      openDispute: async () => dispute,
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    const opened = await createP2pRouter(p2p).createCaller(ctx).disputes.open({ tradeId: dispute.tradeId, reason: 'x' });
+
+    expect(opened.ifNobodyRules).toBe('escalated_and_held');
   });
 });
 
 describe('svc-p2p mount — the public surface', () => {
   it('serves health to an anonymous caller', async () => {
-    await expect(createP2pRouter(stubP2p()).createCaller(anonymous()).health()).resolves.toEqual({
+    await expect(routerFor(stubP2p()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,
       service: 'svc-p2p',
     });
@@ -126,6 +297,6 @@ describe('svc-p2p mount — the public surface', () => {
 
   it('serves health even when a forged principal was presented', async () => {
     // A rejected principal makes the caller anonymous, not rejected outright.
-    await expect(createP2pRouter(stubP2p()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
+    await expect(routerFor(stubP2p()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
   });
 });

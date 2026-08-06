@@ -1,40 +1,40 @@
 # LIVE LANES — multi-agent claims
 
-**Rule:** No code edits until your lane is on this board. First claimer wins.  
-**Active campaign:** **Board Clear** — law `docs/BOARD-CLEAR-CONSTITUTION-2026-08-01.md` · **GO:** `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`.  
-**Human hard mountains:** [`docs/SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md) — **`@shehzad002`** M1–M7.  
-**Ownership law:** `docs/NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`.  
-**Parallel:** agents on AGENT rows only; **never implement HUMAN-CLAIMED**.
+**Rule:** No code edits until your lane is on this board (or `docs/ops/claims/<id>.md`). First claimer wins.  
+**Law:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md)  
+**Truth layers:** [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)  
+**Re-derive tip every fire:** `git fetch && git log -1 --oneline origin/main` · `gh pr list`
 
-| Lane id / program        | Owner session               | Scope                                                          | Status            | Do not touch                      |
-| ------------------------ | --------------------------- | -------------------------------------------------------------- | ----------------- | --------------------------------- |
-| **board-clear-coord**    | Board Clear GO orchestrator | L0, scoreboard, NEXT, babysit, fan-out **agent** programs only | **RUNNING**       | residual-only; steal H-\*         |
-| **P-UI**                 | Nitro agents                | vendor shell `:8090` craft/hotkeys/honesty                     | **AGENT**         | apps/web product; human exclusive |
-| **P-WS**                 | Nitro agents                | svc-ws E2E (futures events may wait on human M3)               | **AGENT**         | invent futures events             |
-| **P-OR**                 | Board Clear GO · A-OR-1     | **#289** MERGED (`e29748f`) — H-OR-JAVA unblocked for shehzad  | **DONE**          | re-open orphan PR                 |
-| **P-TRADE-LIGHT**        | Nitro agents                | mm recovery/reseed/mid residual; spot OHLCV; venue mount       | **AGENT**         | futures risk / otc / copy / algo  |
-| **P-P5-LIGHT**           | Nitro agents                | academy / ops thin / agents usefulness                         | **AGENT**         | bank earn/cards/ramps money       |
-| **P-TRACK**              | coord / agents              | tracker + scoreboard honesty                                   | **AGENT**         | lie on Done                       |
-| **H-PAY / M1**           | **shehzad002**              | Pay OS — card + merchant + pay.* expansion                     | **HUMAN-CLAIMED** | agent A-PAY / card recipes        |
-| **H-PROT / M2**          | **shehzad002**              | Protocol OS — SA, AMM, lending, escrow, router, merchant       | **HUMAN-CLAIMED** | agent SA/AMM product              |
-| **H-TRADE-HARD / M3–M4** | **shehzad002**              | Futures risk + real OTC/copy/algo                              | **HUMAN-CLAIMED** | agent invent engines              |
-| **H-ID-SUB / M5**        | **shehzad002**              | Identity sub-account money graph                               | **HUMAN-CLAIMED** | agent invent money routing        |
-| **H-P5-MONEY / M6**      | **shehzad002**              | Bank earn/cards/ramps/sovereign-card                           | **HUMAN-CLAIMED** | agent bank money                  |
-| **H-OR-JAVA / M7**       | **shehzad002** (after #289) | Vendor Java dual-book residual                                 | **QUEUED**        | start before #289 closed          |
-| denon-spine              | Phantom-X-007               | feat/spine-*                                                   | hold              | Nitro force-push                  |
+| Lane id                | Owner session    | Scope                                                                                                                                                      | Status                          | PR / proof                              | Do not touch                                                                                                                                                             |
+| ---------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| shehzad-protocol-chain | shehzad002       | Protocol Plane + INTACHAIN only                                                                                                                            | **HUMAN**                       | blockchain task board                   | agents implement protocol/chain/dex self-custody                                                                                                                         |
+| shehzad-346-handoff    | nitro (asserted) | Pay residual after operator handoff                                                                                                                        | **HANDOFF ASSERTED 2026-08-04** | #346 comment + this row                 | dual-edit **his branch** still; residual from **tip**                                                                                                                    |
+| denon-open-integrity   | Phantom-X-007    | His open integrity/money PRs                                                                                                                               | **live**                        | `gh pr list` re-derive                  | dual-edit those file sets                                                                                                                                                |
+| nitro-ws-client        | Nitro (HUMAN)    | Shell depth/tape client per #727 — **landed #748**, absorbed into `nitro-frontend-all`                                                                     | **HUMAN**                       | #748                                    | any front-end path (see `nitro-frontend-all`)                                                                                                                            |
+| nitro-reclaim-pay      | free / claim     | Pay OS residual Class M (from tip)                                                                                                                         | **free**                        | tip + #226 crypto rail                  | dual-edit shehzad `feat/pay-os-m1-gateway`                                                                                                                               |
+| nitro-reclaim-bank-id  | free / claim     | Bank thin + identity money graph                                                                                                                           | free (reclaimed)                | tracker notes                           | invent balances                                                                                                                                                          |
+| nitro-frontend-all     | nitro-afk-agents | **The whole front end** — honesty / money-on-wire / wire / landing only for 24h AFK day; exact paths in claim                                              | **agent-afk-day**               | `docs/ops/claims/NITRO-FRONTEND-ALL.md` | NO palette re-pick · NO IA redesign · NO invent prices · dual-edit partner PRs still banned                                                                              |
+| ~~stream-a-ui~~        | —                | Vendor shell :8090 craft residual                                                                                                                          | **CLOSED**                      | —                                       | absorbed into `nitro-frontend-all`                                                                                                                                       |
+| afk-residual           | residual-own     | AFK shell wave                                                                                                                                             | **drained** freeProduct=0       | residual-register                       | re-open only new invent residual                                                                                                                                         |
+| launch-flags           | this session     | `LAUNCH_DROP` flag honesty — `packages/config` enforcement + `apps/admin` console                                                                          | **OPEN #436**                   | #436                                    | `services/svc-edge` · the console freeze path (#447 landed)                                                                                                              |
+| board-honesty-phantom  | this session     | Phantom svc-pay lock in `tooling/ci` (D-S-16) + `p2p.disputes` row honesty (D-S-08) — **that row only**                                                    | **live**                        | this PR                                 | any other `features.mjs` row — #346 holds `pay.gateway`, #877 holds the bank rows · `services/svc-pay/**` · implementing the `p2p:moderate` scope split (owner sign-off) |
+| ext-infra-adopt        | this session     | Safe EXT adopt (leverage law §4.2): `packages/telemetry` OTel provider · `@fastify/*` transport plugins · `fast-check` on `ledger-client` money invariants | **live**                        | 3 PRs off this lane                     | service domain logic · money recipes themselves · any front-end path (`nitro-frontend-all`) · Shehzad chain · Denon open PR files                                        |
 
-## Hard bans
+## Free agent work (re-derive every fire)
 
-- Main checkout edits; double-build without claim
-- Fake candles / balances / factory addresses / CI green
-- Tracker Done without constitution Done bar + proof
-- **Agent code on any HUMAN-CLAIMED M1–M7**
-- **Docs PRs that reopen free agent P-PAY/P-PROT** (reject — see #334 hold)
-- Human exclusive claim on P-UI / P-OR / coord
+1. ~~**A-WS-CLIENT**~~ — landed #748. Front-end: **agent-afk-day** (2026-08-05) — honesty / money-on-wire only; Nitro may reclaim HUMAN.
+2. **P1 stranded** — path-clean `origin/feat/*` land, **backend only** (no path in the front-end claim).
+3. **P2 babysit** — Denon open; never merge partners.
+4. **Reclaimed mountains** — pay (handoff asserted), bank, identity money, trade-light; never invent mids; never dual-edit #346 branch.
+5. **Denon hard board (mega + D-S-\* spec factory)** — babysit only: [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).
+6. **Shehzad chain** — never implement: [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md).
+
+**Not free:** Shehzad protocol/chain implement · dual-edit Denon open files · invent money/depth · Class X · FE craft outside AFK honesty scope · platform-pages dual-start without foundation/craft split.
 
 ## Last board update
 
-- **2026-08-01 v2 hard mountains:** shehzad M1–M7 big blocks (not micro tickets). GO coord + P-OR RUNNING. Agents never A-PAY/A-PROT.
-- **2026-08-01 #333:** initial human/agent split.
-- **2026-08-01 Board Clear GO:** campaign cooking; must obey SHEHZAD-HARD-OWNERSHIP on tip.
-- **2026-08-01 A-OR-1 MERGED:** #289 squash-merged (`e29748f`). P-OR DONE. M7 free for shehzad002.
+- **2026-08-04 three-way distribution:** Shehzad chain-only; M1/M3–M7 reclaimed for agents; Denon hard queue refreshed.
+- **2026-08-04 one-surface closure:** whole front end claimed HUMAN (`nitro-frontend-all`); `stream-a-ui` closed; doctrine §5.3 repointed off `apps/web`; the `web` service and its `3000:3000` door removed from compose; ONE SURFACE rule added to `docs/ops/SWARM-MANDATE.md`.
+- **2026-08-04 #346 handoff asserted (operator):** Nitro residual from tip; do not dual-edit his open pay branch; Shizu = Protocol/INTACHAIN only.
+
+- **2026-08-05 AFK day FE release:** `nitro-frontend-all` → **agent-afk-day** for 24h honesty craft (Nitro directive). Not a permanent unlock.

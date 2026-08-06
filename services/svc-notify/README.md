@@ -12,22 +12,38 @@ This service holds no balances and posts no ledger transactions.
 collapses them.** Every (notification, channel) pair gets a row in
 `notify.deliveries` carrying both:
 
-| Column         | Means                       |
-| -------------- | --------------------------- |
-| `attempted_at` | we handed it to a transport |
-| `delivered_at` | a transport accepted it     |
-| `refusal_code` | why we did not even try     |
+| Column         | Means                                    |
+| -------------- | ---------------------------------------- |
+| `attempted_at` | we handed it to a transport              |
+| `accepted_at`  | a transport accepted it **for delivery** |
+| `refusal_code` | why we did not even try                  |
 
 So these three situations stay distinguishable, forever, from the record:
 
-- **the user was told** — `attempted_at` and `delivered_at` both set
-- **we tried and it did not work** — `attempted_at` set, `delivered_at` null
+- **a transport took it** — `attempted_at` and `accepted_at` both set
+- **we tried and it did not work** — `attempted_at` set, `accepted_at` null
 - **we never had anywhere to send it** — both null, `refusal_code` says which
 
-A database CHECK enforces `delivered_at IS NOT NULL` exactly when
-`status = 'delivered'`, so no future bug can quietly make an undelivered margin
+A database CHECK enforces `accepted_at IS NOT NULL` exactly when
+`status = 'accepted'`, so no future bug can quietly make an undelivered margin
 call read as a delivered one. svc-bank keeps `notified_at` apart from `called_at`
 for the same reason; this is that discipline one layer out.
+
+### `accepted`, not `delivered` — and why the column was renamed
+
+The column used to be called `delivered_at`, and it was set the moment a gateway
+answered 2xx. **A gateway answering 2xx has taken custody of the message.** It
+has not said the mail server took it, that the handset was reachable, or that a
+human read it — and this service receives no delivery receipts, so it never
+learns any of those things.
+
+`accepted` is the strongest statement the code can support, so it is the word
+the status and the column use (migration `0002_notify_delivery_accepted`).
+
+This is not pedantry. svc-bank stamps a margin call `notified_at` and runs the
+liquidation grace clock off that stamp. A word that decides whether somebody's
+collateral is sold must mean exactly what it says, and nothing downstream should
+read `accepted` as "the borrower knows".
 
 ## Channels
 
@@ -46,28 +62,76 @@ message with `channel.not_configured`, the refusal lands on the delivery row, an
 missing. Nothing is dropped in silence and nothing reports a send that did not
 happen.
 
+**A channel the deployment DEPENDS ON is a different case, and it is fatal.**
+`NOTIFY_REQUIRED_CHANNELS` lists the out-of-app channels this deployment cannot
+do without; anything on it whose pair of variables is missing stops the boot,
+naming the variable. In `APP_ENV=staging|prod` the variable itself has no default
+and its absence stops the boot too — write `none` to record "in-app only, on
+purpose". Same posture as `EDGE_PRINCIPAL_SECRET`, for the same reason: an
+honest refusal on every message is still a silent outage if nobody reads the
+delivery table. Dev and test require nothing, so no gateway is needed to run the
+stack or the suite.
+
 **No provider is named anywhere in this service** (§0.7). The transport is a URL
 and a bearer token the owner sets; whoever answers that URL — a mail relay, a
 push service, an SMS aggregator, the owner's own forwarder — is configuration.
 That also makes changing provider an env change rather than a release.
 
-The gateway contract, for whatever the owner puts behind it:
+What the owner has to obtain, in plain language:
+[`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`](../../docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md).
+
+### The gateway contract
+
+Every channel sends the same request shape and differs only in the body:
 
 ```
 POST <gateway url>
 authorization: Bearer <token>
 idempotency-key: <notificationId>:<channel>
 content-type: application/json
-
-{ "channel", "notificationId", "to", "locale", "severity", "kind",
-  "title", "body", "href", "titleKey", "bodyKey" }
 ```
 
-`title` and `body` arrive already rendered, server-side, from `@intafaced/i18n`
-— so an out-of-app message can never carry copy a screen could not (§9) or copy
-the brand scan has not seen (§0.7). The keys ride along for a gateway with its
-own templates. Any 2xx is acceptance; `{"id": "..."}` is stored as the reference.
-408 / 425 / 429 / 5xx are retried, other 4xx are not.
+| Channel | Body                                                                                           |
+| ------- | ---------------------------------------------------------------------------------------------- |
+| `email` | `channel, notificationId, to, locale, severity, kind, subject, text, href, titleKey, bodyKey`  |
+| `push`  | `channel, notificationId, to, locale, severity, kind, title, body, titleKey, bodyKey, data{…}` |
+| `sms`   | `channel, notificationId, to, locale, severity, kind, text, titleKey, bodyKey`                 |
+
+`push.data` carries `{ href, kind, notificationId }` — the routing facts the app
+needs to open the right screen, kept out of the two fields a push service shows a
+user.
+
+Copy arrives **already rendered**, server-side, from `@intafaced/i18n` — so an
+out-of-app message can never carry copy a screen could not (§9) or copy the brand
+scan has not seen (§0.7). The keys ride along for a gateway with its own
+templates.
+
+**Addresses are validated per channel before anything is sent.** A mailbox with
+no domain, a phone number that is not E.164, a device token containing
+whitespace: all refused with `channel.target_unroutable`, and no request is made.
+A gateway handed a local-format number still sends it somewhere, and which
+country that somewhere is in is the carrier's guess, not ours.
+
+**SMS is composed and capped.** One `text` field, `title: body href`, cut to
+`NOTIFY_SMS_MAX_CHARS` (480 — three GSM segments) from the body outwards so the
+fact and the link survive. SMS is billed per segment; an unbounded body is an
+unbounded bill.
+
+**Responses.** Any 2xx is acceptance; `{"id": "..."}` is stored as the reference,
+and a 2xx with no body is accepted with a null reference. 408 / 425 / 429 / 5xx
+are retried. Other 4xx are not — including **401 / 403, deliberately**: a rejected
+credential rejects every message, so retrying turns one bad token into three
+times the traffic against somebody's auth endpoint and a plausible IP block.
+A redirect is **not followed** (`redirect: 'error'`), so the bearer token never
+reaches a host the owner did not configure.
+
+**Retries are bounded by `NOTIFY_MAX_DELIVERY_ATTEMPTS` and by nothing else.**
+The adapters contain no retry loop of their own — the bound lives in the
+`notify.deliveries` claim, which is in the database and therefore survives the
+process dying mid-attempt. `src/channels/gateway-wire.test.ts` counts the
+requests **at the server** to prove it, because an attempt counter we keep
+ourselves is exactly the number that would still look right if an adapter
+retried underneath it.
 
 ## Addresses
 
@@ -148,7 +212,7 @@ transport.
 A handler naks **only** when a channel wants another attempt (timeout, 503). A
 permanently broken address does not nak: doing so would burn the redelivery
 budget for the whole message and eventually park a notification that three other
-channels delivered perfectly. After `NOTIFY_MAX_DELIVERY_ATTEMPTS` the row is
+other channels handled perfectly. After `NOTIFY_MAX_DELIVERY_ATTEMPTS` the row is
 `abandoned` rather than left looking like it is still being retried.
 
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
@@ -183,19 +247,40 @@ This service holds no balances and posts no ledger transactions.
 | flag `notify.fanout`        | Module kill-switch in `packages/config`.                                     |
 
 The second is the one to reach for during an incident — it silences customers'
-phones without also blinding them.
+phones without also blinding them. It may **not** be combined with a non-empty
+`NOTIFY_REQUIRED_CHANNELS`: a deployment that requires a channel and switches all
+sending off is a contradiction, and it is the shape a bad rollback takes. The env
+schema refuses it.
+
+## Environment
+
+| Variable                                | Default | Notes                                                                  |
+| --------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_URL`   | —       | Unset ⇒ the channel refuses `channel.not_configured`.                  |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_TOKEN` | —       | ≥16 chars. A URL without a token refuses to boot: it is an open relay. |
+| `NOTIFY_REQUIRED_CHANNELS`              | —       | Subset of `email,push,sms`, or `none`. **Mandatory in staging/prod.**  |
+| `NOTIFY_GATEWAY_TIMEOUT_MS`             | `5000`  | Budget for one gateway call.                                           |
+| `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                 |
+| `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                    |
+| `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                  |
+
+An empty string is treated as absent, because that is what `docker compose`
+interpolates an unset variable to — otherwise an unwired gateway would fail
+`z.string().url()` and take the service down instead of leaving the channel
+honestly unconfigured.
 
 ## §13 sockets
 
-| Socket | State                                                                                                                                        |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Email  | Adapter shipped and tested. **Waiting on credentials the owner must obtain.** Unconfigured it refuses every message and records the refusal. |
-| Push   | Same. Device tokens register and confirm per user; no push credentials configured.                                                           |
-| SMS    | Same. Addresses are E.164; no SMS credentials configured.                                                                                    |
+| Socket | State                                                                                                                                            |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Email  | Adapter shipped and tested against a real HTTP server. **Waiting on credentials the owner must obtain.** Unconfigured, it refuses every message. |
+| Push   | Same. Device tokens register and confirm per user; no push credentials configured.                                                               |
+| SMS    | Same. Addresses are E.164, text is composed and capped; no SMS credentials configured.                                                           |
 
 None of these is a code gap. Each is a URL and a token away from working, and
 until then the in-app inbox carries every notification and the record says why
-nothing else did.
+nothing else did. The owner's list of what to obtain and where to put it:
+[`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`](../../docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md).
 
 ## Port
 

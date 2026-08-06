@@ -56,11 +56,125 @@ export class EventValidationError extends Error {
 }
 
 /**
+ * A field crossed the bus and the schema on this side does not know it.
+ *
+ * THE FAILURE THIS EXISTS FOR
+ *
+ * `z.object()` STRIPS unknown keys. It does not warn, it does not record, it
+ * returns an object with the key gone and `success: true`. So a consumer built
+ * against an older `packages/events` receives a payload, passes validation, and
+ * runs its handler on a payload with a field silently deleted.
+ *
+ * That is how `orderFilled` "dropped account ids": nothing was broken, nothing
+ * logged, `makerAccountId` was simply not there. The producer and the consumer
+ * never disagreed out loud, because zod resolved the disagreement in favour of
+ * the older side and said nothing. An engineer lost a day to it, and the field
+ * in question identifies whose money a fill settles against.
+ *
+ * `version` does NOT catch this. `makerAccountId` was added as `.optional()` at
+ * version 1 — an additive change, correctly not a version bump — so a version
+ * comparison would have agreed the two sides matched while one of them was
+ * deleting a field the other sent.
+ */
+export class EventSchemaDriftError extends Error {
+  constructor(
+    readonly subject: string,
+    readonly producer: string,
+    readonly dropped: readonly string[],
+  ) {
+    super(
+      `Schema drift on "${subject}" from producer "${producer}": this build's schema does not declare ` +
+        `${dropped.map((k) => `"${k}"`).join(', ')}, so validation would have DROPPED ` +
+        `${dropped.length === 1 ? 'it' : 'them'} silently. Refused instead. ` +
+        `Rebuild @intafaced/events and this service against the same catalog (a stale dist is the usual cause).`,
+    );
+    this.name = 'EventSchemaDriftError';
+  }
+}
+
+/** The envelope announces a payload version this build does not speak. */
+export class EventVersionMismatchError extends Error {
+  constructor(
+    readonly subject: string,
+    readonly producer: string,
+    readonly envelopeVersion: number,
+    readonly catalogVersion: number,
+  ) {
+    super(
+      `Version mismatch on "${subject}" from producer "${producer}": envelope is v${envelopeVersion}, ` +
+        `this build's catalog is v${catalogVersion}. The catalog holds exactly ONE schema per subject, ` +
+        `so there is no schema here that can read v${envelopeVersion} — parsing it would be a guess. Refused.`,
+    );
+    this.name = 'EventVersionMismatchError';
+  }
+}
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Every path present in `raw` and absent from `parsed` — i.e. every field the
+ * schema threw away.
+ *
+ * Recursive, because the expensive version of this bug is nested: an entry in
+ * `ledgerTxPosted.entries[]` losing its `accountId` is a money-adjacent id
+ * vanishing from a double-entry line, and a top-level-only check would call
+ * that payload clean.
+ *
+ * Only ever reports LOSS. A key that zod added (a default) is not drift, and a
+ * shape zod restructured is skipped rather than guessed at — this returns
+ * nothing unless it can compare like with like.
+ */
+export function droppedPaths(raw: unknown, parsed: unknown, prefix = ''): string[] {
+  const out: string[] = [];
+
+  if (isPlainObject(raw) && isPlainObject(parsed)) {
+    for (const key of Object.keys(raw)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      // `undefined` was never carried: JSON.stringify drops it on the wire, so
+      // an explicit `{ x: undefined }` is not a field the other side sent.
+      if (raw[key] === undefined) continue;
+      if (!(key in parsed)) out.push(path);
+      else out.push(...droppedPaths(raw[key], parsed[key], path));
+    }
+    return out;
+  }
+
+  if (Array.isArray(raw) && Array.isArray(parsed) && raw.length === parsed.length) {
+    for (let i = 0; i < raw.length; i++) out.push(...droppedPaths(raw[i], parsed[i], `${prefix}[${i}]`));
+  }
+
+  return out;
+}
+
+/**
  * Validate a payload against its catalog schema. Called on BOTH publish and
  * consume: a producer cannot emit garbage, and a consumer cannot be poisoned by
  * a producer running an older build.
+ *
+ * Refuses a payload carrying fields this build's schema does not declare,
+ * rather than returning it with those fields quietly removed. See
+ * `EventSchemaDriftError` — the silence is the bug, not the extra field.
+ *
+ * WHY REFUSE RATHER THAN REPORT AND CONTINUE
+ *
+ * In a general-purpose bus, tolerating unknown keys is right: producers you do
+ * not control ship ahead of you and forward compatibility is the whole point.
+ * This bus has no such producer. Every publisher and every consumer is in this
+ * monorepo, built by one `turbo run build` and deployed from one image, so a
+ * consumer meeting a key it does not know ALWAYS means a stale build or a
+ * half-finished deploy. There is no honest case where it means "someone
+ * upstream is newer than me and that is fine".
+ *
+ * Nothing is lost by refusing. On JetStream a refusal is a nak: the stream
+ * retains 90 days, the message is redelivered, and it lands the moment the
+ * stale side is rebuilt. Stripping, by contrast, acks the message — the field
+ * is gone from a payload that will never be delivered again.
+ *
+ * `producer` is threaded through only so the error can name which side is out
+ * of step. An error that says "somebody is stale" is a search; one that says
+ * "svc-matching is ahead of you on makerAccountId" is a fix.
  */
-export function validatePayload<K extends EventName>(name: K, payload: unknown): Payload<K> {
+export function validatePayload<K extends EventName>(name: K, payload: unknown, producer = 'unknown'): Payload<K> {
   const def = EVENT_CATALOG[name] as EventDef;
   const result = def.schema.safeParse(payload);
   if (!result.success) {
@@ -69,7 +183,25 @@ export function validatePayload<K extends EventName>(name: K, payload: unknown):
       result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`),
     );
   }
+
+  const dropped = droppedPaths(payload, result.data);
+  if (dropped.length > 0) throw new EventSchemaDriftError(def.subject, producer, dropped);
+
   return result.data as Payload<K>;
+}
+
+/**
+ * The consume-side gate: version, then schema, then drift.
+ *
+ * Both bus implementations route every delivery through this, so a consumer
+ * cannot opt out of the check by being written carelessly.
+ */
+export function acceptEnvelope<K extends EventName>(name: K, envelope: Envelope): Payload<K> {
+  const def = EVENT_CATALOG[name] as EventDef;
+  if (envelope.version !== def.version) {
+    throw new EventVersionMismatchError(def.subject, envelope.producer, envelope.version, def.version);
+  }
+  return validatePayload(name, envelope.payload, envelope.producer);
 }
 
 export function buildEnvelope<K extends EventName>(
@@ -79,7 +211,10 @@ export function buildEnvelope<K extends EventName>(
   opts: PublishOptions = {},
 ): Envelope<Payload<K>> {
   const def = EVENT_CATALOG[name] as EventDef;
-  const validated = validatePayload(name, payload);
+  // Producer side too. A publisher handing over a key its OWN catalog does not
+  // declare is the same silent deletion seen from the other end — usually a
+  // typo, or a wider internal object spread into a narrower event.
+  const validated = validatePayload(name, payload, producer);
   const env = createEnvelope<Payload<K>>({
     subject: def.subject,
     version: def.version,

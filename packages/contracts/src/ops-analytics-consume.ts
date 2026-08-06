@@ -1,0 +1,76 @@
+/**
+ * Analytics L3 — pure consumer gate for cube points (Slice C light).
+ *
+ * Admin/BI may only accept points that pass assertMetricPoint.
+ * Never invent series when the cube is empty.
+ */
+
+import { assertMetricPoint } from './ops-analytics.js';
+import type { CubePoint } from './ops-analytics-cube.js';
+
+export type ConsumeOk = {
+  readonly status: 'ok';
+  readonly points: readonly CubePoint[];
+};
+
+export type ConsumeRefuse = {
+  readonly status: 'refuse';
+  readonly reason: string;
+};
+
+export type ConsumeEmpty = {
+  readonly status: 'empty';
+};
+
+export type ConsumeResult = ConsumeOk | ConsumeRefuse | ConsumeEmpty;
+
+/**
+ * Accept a cube series for a surface. Empty → empty (not invent zeros).
+ * Any invalid money number → refuse whole batch (fail closed).
+ */
+export function consumeCubePoints(points: readonly CubePoint[]): ConsumeResult {
+  if (points.length === 0) return { status: 'empty' };
+  const out: CubePoint[] = [];
+  for (const p of points) {
+    const check = assertMetricPoint(p.metricId, p.value);
+    if (!check.ok) {
+      return { status: 'refuse', reason: `${p.metricId}: ${check.reason}` };
+    }
+    out.push(p);
+  }
+  return { status: 'ok', points: out };
+}
+
+/**
+ * L3: filter points to an allowlist of metric ids, then consume.
+ * Missing metrics after filter → empty (not invent zeros for absent series).
+ * Unknown metrics still refuse via assertMetricPoint inside consume.
+ */
+export function consumeCubePointsForMetrics(
+  points: readonly CubePoint[],
+  metricIds: ReadonlySet<string> | readonly string[],
+): ConsumeResult {
+  const set = metricIds instanceof Set ? metricIds : new Set(metricIds);
+  if (set.size === 0) return { status: 'empty' };
+  const filtered = points.filter((p) => set.has(p.metricId));
+  return consumeCubePoints(filtered);
+}
+
+/**
+ * L3 — operator board summary of a consume result (never invents points).
+ */
+export type ConsumeSummary = {
+  readonly status: ConsumeResult['status'];
+  readonly pointCount: number;
+  readonly reason: string | null;
+};
+
+export function summarizeConsumeResult(result: ConsumeResult): ConsumeSummary {
+  if (result.status === 'ok') {
+    return { status: 'ok', pointCount: result.points.length, reason: null };
+  }
+  if (result.status === 'empty') {
+    return { status: 'empty', pointCount: 0, reason: null };
+  }
+  return { status: 'refuse', pointCount: 0, reason: result.reason };
+}

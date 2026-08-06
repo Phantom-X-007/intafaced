@@ -5,8 +5,25 @@ import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
+import { InstrumentService } from './instrument-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
+import { P2pErasure } from './erasure.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-p2p — peer-to-peer trading with escrow (§6.2).
@@ -45,23 +62,33 @@ const bus = await JetStreamEventBus.connect({
 // service's tables (Doctrine §0.6). This client is the only path.
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
+// Where the buyer is told to send the fiat, and the record of who ever looked.
+// Constructed before P2pService because a P2pService without one would lock
+// escrow against a payment nobody could make.
+const instruments = new InstrumentService(sql, { retentionDays: env.P2P_INSTRUMENT_RETENTION_DAYS });
+
 const p2p = new P2pService(sql, ledger, bus, {
+  instruments,
   feeBps: env.P2P_FEE_BPS,
   tradingEnabled: env.P2P_TRADING_ENABLED,
-  disputeBackstopResolution: env.P2P_DISPUTE_BACKSTOP_RESOLUTION,
-  backstopModeratorId: env.P2P_BACKSTOP_MODERATOR_ID,
   deadlines: {
     escrowSeconds: env.P2P_ESCROW_DEADLINE_SECONDS,
     paymentSeconds: env.P2P_PAYMENT_DEADLINE_SECONDS,
     releaseSeconds: env.P2P_RELEASE_DEADLINE_SECONDS,
-    disputeSeconds: env.P2P_DISPUTE_BACKSTOP_SECONDS,
+    disputeSeconds: env.P2P_DISPUTE_SLA_SECONDS,
+    escalationRecheckSeconds: env.P2P_DISPUTE_ESCALATION_RECHECK_SECONDS,
   },
   // No reference price source yet: floating offers are refused rather than
   // priced from a stale number. svc-trade owns pricing (§5.2) and supplies this
   // when its mark-price surface lands.
 });
 
-export const appRouter = createP2pRouter(p2p);
+// §0.9. Stage 1: self-only, refuses while any escrow is live, and names what
+// it retained and why. Nothing else in the platform calls it yet — svc-p2p
+// subscribes to no events, so there is no account-deletion signal to hear.
+const erasure = new P2pErasure(sql);
+
+export const appRouter = createP2pRouter(p2p, instruments, erasure);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -87,6 +114,22 @@ app.get('/internal/escrow-integrity', async (req, reply) => {
   return result;
 });
 
+/**
+ * THE MODERATION BACKLOG, as an endpoint.
+ *
+ * Nothing disposes of a dispute on a timer any more, so this number is real: it
+ * grows when nobody is working the queue and it does not quietly drain into
+ * refunds. `neverSeen` is the sharp one — disputes no moderator has ever been
+ * served, which is what "the moderation path is unreachable" actually looks
+ * like from the outside.
+ */
+app.get('/internal/moderation-backlog', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
+  }
+  return p2p.moderationBacklog();
+});
+
 app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (req, reply) => {
   if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
     return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
@@ -107,8 +150,34 @@ async function sweep(): Promise<void> {
   try {
     const settled = await p2p.sweepSettlements();
     const swept = await p2p.sweepDeadlines();
-    if (settled.failed > 0 || swept.failed > 0) {
-      app.log.warn({ settled, swept }, 'p2p sweep left work behind — it will retry next tick');
+
+    // Data retention, on the same tick. It runs last on purpose: it only ever
+    // touches trades that are already terminal, so it can never take work away
+    // from the two sweeps that keep escrow moving.
+    const purged = await instruments.purgeExpiredSnapshots();
+    if (purged.purged > 0) {
+      app.log.info({ purged: purged.purged }, 'p2p purged payment details from closed trades past the retention window');
+    }
+
+    // EVERY FAILURE, WITH ITS REASON, ONE LINE EACH. The sweep used to return
+    // a count and discard the error object, so "2 failed" was the whole story
+    // an operator got — and the two failures could have been a transient
+    // ledger timeout or a guard refusing something that will never succeed on
+    // its own. Those need different people out of bed.
+    for (const f of settled.failures) {
+      app.log.error({ ...f, sweep: 'settlement' }, 'p2p settlement failed — a decision is committed and the value is late');
+    }
+    for (const f of swept.failures) {
+      app.log.error({ ...f, sweep: 'timeout' }, 'p2p timeout sweep could not act on a trade');
+    }
+    if (swept.escalated > 0) {
+      // NOT a retryable failure. These are disputes past their moderator SLA
+      // that nobody has ruled on, and the only thing that clears them is a
+      // person. Logged every tick on purpose: an alarm that stops sounding
+      // because the condition persisted is the alarm that let the old backstop
+      // refund seven days of escrow with nobody watching.
+      const backlog = await p2p.moderationBacklog();
+      app.log.warn({ escalated: swept.escalated, backlog }, 'p2p disputes past the moderator SLA — escrow held, awaiting a human ruling');
     }
   } catch (err) {
     // Never let a sweep failure kill the interval. The one thing worse than a

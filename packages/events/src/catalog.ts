@@ -402,9 +402,17 @@ export const fillSettled = defineEvent(
 /**
  * User-visible futures position (svc-trade). Private WS fans this to the owner.
  *
- * Publisher is `trade.futures`. Until that engine exists nothing emits this
- * event — the `/private/stream` positions channel still mounts and stays silent
- * rather than inventing rows (same honesty as REST GET /positions → []).
+ * Published by svc-trade's futures engine: `position-service` on every position
+ * transition and `tick-stores` on liquidation. `/private/stream` fans it to the
+ * owner, and `ws-private-orders-positions` is a live durable consumer.
+ *
+ * THIS DOCSTRING USED TO SAY THE OPPOSITE — "until that engine exists nothing
+ * emits this event". The engine does exist and two call sites had been emitting
+ * for some time. The gate below cannot catch that: `positionUpdated` is wired at
+ * both ends, so `event-wiring` passes and always would have. Only prose can be
+ * wrong in this direction, which is exactly why it was worth correcting — a
+ * catalog read as the map of what is wired is worth nothing if an entry
+ * volunteers that it is dark while it is running.
  */
 export const positionUpdated = defineEvent(
   'trade',
@@ -744,4 +752,359 @@ export const ALL_EVENTS: readonly EventDef[] = Object.values(EVENT_CATALOG);
 
 export function eventBySubject(s: string): EventDef | undefined {
   return ALL_EVENTS.find((e) => e.subject === s);
+}
+
+// ── Declared wiring sockets ──────────────────────────────────────────────────
+
+/**
+ * AN EVENT WITH NO PUBLISHER, OR NO SUBSCRIBER — SAID OUT LOUD.
+ *
+ * The bus could not tell anyone that a declared subject had no producer, no
+ * consumer, or a schema neither side agreed on. Three separate audits arrived
+ * at the same shape from three directions, and every one of them found it by
+ * accident:
+ *
+ *   · `bankMarginCalled` was a complete, correct event with a complete, correct
+ *     consumer and NOTHING THAT PUBLISHED IT. svc-notify logged a warning about
+ *     a consumer it could not attach on every boot since it shipped. CLOSED —
+ *     svc-bank owns INTAFACED_BANK and publishes the call.
+ *   · `xpEarned` was published by two services and read by none. The tracker
+ *     called `p2p.reputation` done on the strength of it "feeding the same XP
+ *     graph"; the graph was fed by a direct call and this stream was discarded.
+ *     CLOSED — svc-identity subscribes (`subscribeXpEvents`), and the tracker
+ *     row is now true rather than nearly true.
+ *   · `orderFilled` lost account ids to a stale build, because `z.object()`
+ *     strips unknown keys and says nothing.
+ *
+ * All three are kept here after the fact, because the SHAPE is what this list
+ * exists for and every one of them was found by accident rather than on purpose.
+ *
+ * `tooling/ci/event-wiring.mjs` now reads the code and this list together, and
+ * fails when they disagree. So the only two states an unwired event can be in
+ * are: RECORDED HERE, with a reason a human wrote and a CLASS — or RED.
+ *
+ * THE RULES, because a socket list rots into a suppression list otherwise:
+ *
+ *   1. A reason names WHAT is missing and WHY it is acceptable today. "TODO",
+ *      "later" and "not yet" are not reasons; the gate rejects a reason under
+ *      40 characters for exactly that.
+ *   2. Deleting the event is never how an entry leaves this list. An orphan is
+ *      a finding — sometimes a deliberate socket waiting for its publisher, as
+ *      `bankMarginCalled` is. Wiring it is how it leaves.
+ *   3. `satisfies` below is load-bearing: an entry naming an event that does
+ *      not exist is a compile error, so this list cannot outlive its catalog.
+ *
+ * Recorded here does NOT mean healthy — it means known, attributed, and
+ * reviewable in one place. Read it as the bus's list of things it cannot do yet.
+ */
+/**
+ * WHICH KIND OF UNWIRED THIS IS (ADR D-S-13, Accepted 2026-08-04).
+ *
+ * The eighteen entries below all carried a written reason, and the reasons were
+ * candid to the point of shouting. They were also counted identically, so one
+ * clean line covered both "the stream is a durable record ahead of its first
+ * reader" and "a borrower is never told their loan is being margin-called".
+ *
+ * A WRITTEN REASON PROVES SOMEBODY THOUGHT ABOUT IT. IT DOES NOT PROVE THE
+ * ANSWER WAS YES. The class is where the answer goes.
+ *
+ * The test is not "is there a consumer". It is: does anyone — user or operator —
+ * currently hold a belief that the missing wiring would have to deliver?
+ *
+ *   A  Record ahead of its reader. Nothing depends on the consumer existing and
+ *      nothing claims it does. A true socket, legitimate indefinitely; building
+ *      the consumer later is additive.
+ *
+ *   B  A promise with no delivery. Something a user or operator can already
+ *      observe is premised on the missing consumer. NOT a socket — a defect,
+ *      accurately described in the register of a design note. `event-wiring`
+ *      FAILS on one. It leaves by being wired, or by becoming C.
+ *
+ *   C  Owned and unbuilt, AND the gap is disclosed wherever a user could
+ *      otherwise be misled. The disclosure has to exist IN CODE — a reason
+ *      field claiming the gap is disclosed is not a disclosure.
+ *
+ * Descriptions state what the system is for; sockets state what is not built.
+ * NEITHER IS EDITED TO MATCH THE OTHER, and neither is softened to make an
+ * entry classify better. A reason that reads as a bug report is doing its job.
+ */
+export type SocketClass = 'A' | 'B' | 'C';
+
+export interface WiringSocket {
+  /** The catalog key. Checked against `EventName` by `satisfies`. */
+  readonly event: EventName;
+  /** Which end is missing. */
+  readonly missing: 'publisher' | 'subscriber';
+  /** A, B or C. Not optional — see `SocketClass`. The gate rejects an entry without one. */
+  readonly class: SocketClass;
+  /** Why that is acceptable today, and what would close it. */
+  readonly reason: string;
+}
+
+export const WIRING_SOCKETS = [
+  // ── no publisher ───────────────────────────────────────────────────────────
+  //
+  // Empty. `bankMarginCalled` was here, and was the reason this section existed:
+  // a complete event with a complete svc-notify consumer that parked on a stream
+  // no service had ever created. svc-bank now owns `INTAFACED_BANK` and publishes
+  // the call — see services/svc-bank/src/loans/margin-call-publisher.ts. The
+  // entry is deleted rather than reworded, because a socket kept after the gap
+  // closed is a written claim that something is missing when it is not.
+
+  // ── no subscriber ──────────────────────────────────────────────────────────
+  //
+  // `xpEarned` was here, and was Class B: PUBLISHED INTO THE VOID by svc-p2p and
+  // svc-trade, with the producers' idempotency keys already shaped to match
+  // `identity.xp_events.idempotency_key` — a handshake with a consumer that did
+  // not exist, while users earned XP that never counted. svc-identity now
+  // subscribes (services/svc-identity/src/events.ts, `subscribeXpEvents`). The
+  // entry is deleted rather than reworded: an entry leaves this list by being
+  // wired, and a socket must not outlive the gap it describes.
+  {
+    event: 'userCreated',
+    missing: 'subscriber',
+    /**
+     * CLASS A. Confirmed against the code, not just the reason: every module
+     * that needs a user resolves it through packages/contracts under the caller's
+     * own authority, so nothing is waiting on the announcement.
+     */
+    class: 'A',
+    reason:
+      "svc-identity announces that a sovereign account exists; no service reacts to the announcement today. Every module that needs a user resolves it through packages/contracts under the caller's own authority instead, so nothing is missing a fact it needs — the stream is a durable record ahead of its first reader.",
+  },
+  {
+    event: 'ledgerTxPosted',
+    missing: 'subscriber',
+    /**
+     * CLASS A. The reason states the test and passes it: "Nothing today derives
+     * state from it, and nothing claims to." The hash chain and 90-day retention
+     * mean a consumer built later replays from the start — additive, not owed.
+     */
+    class: 'A',
+    reason:
+      'THE money event, published by svc-ledger on every value movement, with no consumer in this repo. §10 asks for it to exist and be replayable, and it is: the stream retains 90 days and carries the hash chain, so an audit or read-model consumer can be built later and replay from the start. Nothing today derives state from it, and nothing claims to.',
+  },
+  {
+    event: 'ledgerReconciliationFailed',
+    missing: 'subscriber',
+    /**
+     * CLASS A. The freeze is performed in-process by svc-ledger; the event is the
+     * external announcement, not the mechanism. Nothing is protected by the
+     * consumer that does not exist.
+     */
+    class: 'A',
+    reason:
+      'svc-ledger publishes when snapshot and replay disagree, but the freeze it triggers is performed by svc-ledger itself in-process — the event is the external announcement, not the mechanism. It stays unconsumed until the alerting path (§4.2 "pages the operator") is built, and the freeze does not depend on that path existing.',
+  },
+  {
+    event: 'ledgerFreezeUpdated',
+    missing: 'subscriber',
+    /**
+     * CLASS A. Freeze state is a durable row every replica reads, "which is
+     * precisely why nothing has to subscribe to stay correct".
+     */
+    class: 'A',
+    reason:
+      'Freeze state is DURABLE, not a process signal: every replica reads the same row, which is precisely why nothing has to subscribe to stay correct. The event exists so an operator console can react without polling. apps/admin does not yet make a network call of any kind (see tracker ops.admin-console), so there is no consumer to attach.',
+  },
+  {
+    event: 'buybackExecuted',
+    missing: 'subscriber',
+    /**
+     * CLASS A. Settled through the ledger before publication, so no consumer is
+     * load-bearing.
+     */
+    class: 'A',
+    reason:
+      "svc-token publishes each structural buyback-and-burn run. The flywheel it describes is settled by svc-token through the ledger before the event is published, so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service's tables.",
+  },
+  {
+    event: 'crewMemberCreated',
+    missing: 'subscriber',
+    /**
+     * CLASS B, and the one an agent cannot close. RESTORED — it should never have
+     * left, and how it left is why this comment is longer than the entry.
+     *
+     * This entry was DELETED by e1b95844 on the strength of two new files,
+     * `svc-academy/src/crew-events.ts` and `svc-agents/src/crew-events.ts`, each
+     * exporting a `subscribeCrewMemberCreated` that calls `bus.subscribe`. The
+     * wiring gate scanned for the TEXT of a subscribe call, found two, and agreed
+     * the gap had closed. Class B count went to zero and the build went green.
+     *
+     * NEITHER SUBSCRIBER HAS EVER RUN. Nothing imports either file except its own
+     * unit test. `svc-academy/src/index.ts` states in its own header that the
+     * service has NO BUS CONNECTION AT ALL, so even mounting the import would not
+     * give the handler anything to attach to. `svc-agents/src/index.ts` does
+     * connect to NATS and never calls `subscribeCrewMemberCreated`. Both handlers
+     * write to a process-local `Map`. The described behaviour — a lobby route, a
+     * crew channel — is exactly as absent as before the commit that claimed to
+     * deliver it, and for a while the event was neither wired NOR recorded here:
+     * invisible to the check built to see it, which is strictly worse than the
+     * honest entry it replaced.
+     *
+     * `docs/TRACKER.md` never stopped saying this event "has no consumer yet". The
+     * docs and the runtime agreed the whole time; only the catalog and the gate
+     * disagreed.
+     *
+     * Not reclassifiable to C by an agent: C requires the gap disclosed in code at
+     * every surface a user could be misled by, and ADR D-S-13 puts these two
+     * consumers on the owner ("services with their own scope questions"). It stays
+     * B until the owner rules. Deliberately not softened — and note that softening
+     * is not the only way to lose a finding: this one was lost to code that looked
+     * like a fix.
+     */
+    class: 'B',
+    reason:
+      'The description above names two consumers — "svc-academy routes the lobby, svc-agents opens the crew channel" — and NEITHER RUNS. Each service now has a crew-events.ts exporting subscribeCrewMemberCreated, and nothing imports either one outside its own unit test: svc-academy builds no bus at all (its index.ts says so in as many words), and svc-agents builds one and never calls the subscriber. A defined handler is not a mounted handler. Recorded rather than reworded: the description is the specification those two services owe, and deleting this entry because a subscribe call exists on disk is how the requirement went missing once already.',
+  },
+  {
+    event: 'orderAccepted',
+    missing: 'subscriber',
+    /**
+     * CLASS A. "Genuinely nothing to do with it today": acceptance moves no money,
+     * releases no hold, and svc-trade already knows it submitted the order.
+     */
+    class: 'A',
+    reason:
+      "svc-matching announces admission to the book; svc-trade consumes only orderFilled and orderCancelled, because acceptance moves no money and releases no hold, and svc-trade already knows it submitted the order. svc-ws publishes book depth from the engine's own snapshots rather than by replaying acceptances. Genuinely nothing to do with it today.",
+  },
+  {
+    event: 'protocolAccountCreated',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR. Checked: the only Protocol Plane
+     * surface in the repo (apps/web protocol-plane.tsx) calls exactly two things,
+     * protocol.health and protocol.predictAddress, neither of which is derived
+     * from this stream; account linkage is read from protocol.smart_accounts
+     * through a scoped procedure. No user or operator holds a belief this would
+     * have to deliver.
+     */
+    class: 'A',
+    reason:
+      "Protocol Plane events are OBSERVATIONS of chain state (§17.4) — the account exists on chain whether or not anything here reads the announcement, and the platform holds no key to it either way. svc-identity links an account through packages/contracts under the user's own authority, not off this stream. Unconsumed by design, not by omission.",
+  },
+  {
+    event: 'protocolSessionKeyCreated',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR. Nothing may consume it, which is
+     * stronger than nothing does: a consumer caching session-key scope would be a
+     * second, weaker copy of an authority that lives on chain (§16.10). svc-agents
+     * has no session-key concept and no chain client at all.
+     */
+    class: 'A',
+    reason:
+      'Same shape as protocolAccountCreated: an observation of a grant that is already enforced by the smart account itself. Nothing here may act on it, because a consumer that cached session-key scope would be a second, weaker copy of an authority that lives on chain (§16.10).',
+  },
+  {
+    event: 'protocolSessionKeyCancelled',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR, and the closest call of the nine.
+     *
+     * The DESCRIPTION above reads "Consumers stop routing agent execution through
+     * it", in the present indicative, which is the shape that makes crewMemberCreated
+     * a Class B. The difference is who could believe it. There is no agent-routing
+     * surface: svc-agents has no session-key concept, no chain client, and does not
+     * own tool execution. And doctrine says the consumer should never exist — the
+     * revocation binds on chain the moment it is mined, and any future surface must
+     * re-read the chain rather than trust this stream. So it is not an owed spec
+     * waiting on a service; it is a sentence that outran its own doctrine.
+     *
+     * Left EXACTLY as written. Editing a description to make a socket classify
+     * better is the one move ADR D-S-13 rules out by name.
+     */
+    class: 'A',
+    reason:
+      'The revocation is effective on chain the moment it is mined; a consumer would only ever be catching up with a fact that is already binding. It stays unconsumed until there is an agent-routing surface that needs to stop sending — and that surface must re-read the chain anyway rather than trust this stream.',
+  },
+  {
+    event: 'agentActionCompleted',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR. There IS a user-facing agent
+     * action log (the Vue shell's Agents screen), and it is served by agents.log.mine
+     * → a direct read of agent_actions under the caller's own authorisation. The
+     * belief users hold is discharged by the table, not by this stream.
+     */
+    class: 'A',
+    reason:
+      "svc-agents publishes the public half of the Agentic Law (§8.2). The private half — the detail — is a query against agent_actions under the caller's own authorisation, which is where every surface in this repo reads it from today. The stream is the durable, replayable record for a compliance consumer that has not been built.",
+  },
+  {
+    event: 'agentActionRejected',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR. The guardrail refused the action
+     * before it ran and recorded the refusal in-process, so nothing downstream is
+     * waiting on the announcement to make the refusal true.
+     */
+    class: 'A',
+    reason:
+      'The guardrail refused the action before it ran, inside svc-agents, and recorded the refusal — so the event carries no obligation that would go unmet without a consumer. Named alongside agentActionCompleted for the same unbuilt compliance consumer.',
+  },
+  {
+    event: 'agentUsageSettled',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR. Spend totals shown to a user come
+     * from SUM over agents.usage_records, re-priced with the rates settlement uses,
+     * and the ledger post precedes this publish. A consumer accumulating these
+     * amounts would be a balance outside packages/ledger-client (§0.6) — so the
+     * absence is required, not merely tolerated.
+     */
+    class: 'A',
+    reason:
+      'The ledger post has already happened when this is published, and it carries the chargeKey precisely so reconciliation can be done against the ledger rather than by accumulating this stream. A consumer that added up these amounts would be a balance outside packages/ledger-client (§0.6), so the absence here is deliberate.',
+  },
+  {
+    event: 'p2pOfferCreated',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR. Every offer surface reads
+     * p2p.offers directly through offers.list/offers.get; there is no index,
+     * projection or cache anywhere. The shell states in user-facing copy that it
+     * has no live channel and the reader must refresh, so no user is promised a
+     * feed this stream would have to feed.
+     */
+    class: 'A',
+    reason:
+      "The offer book is served from svc-p2p's own tables through packages/contracts; a consumer would be a second copy of a list its owner already answers for. The subject exists so a future search or feed index can be built from the stream instead of reading svc-p2p's tables directly (§2).",
+  },
+  {
+    event: 'p2pDisputeResolved',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR, and this one needed checking
+     * rather than reading. A missing notification is exactly where a promise hides.
+     * It is not one: packages/i18n has no notify.p2p.dispute.resolved.* key, notify
+     * has no notification-type enum and no per-type preference screen anywhere, and
+     * svc-notify's README lists the nine subjects it consumes without claiming this
+     * one. The escrow movement is separately published as p2pEscrowReleased /
+     * p2pEscrowRefunded, which name both parties and ARE fanned out — so both sides
+     * are told what happened to their money.
+     */
+    class: 'A',
+    reason:
+      "Deliberately NOT fanned out: svc-notify's wiring notes that this payload carries a moderatorId (which may be the system principal `system:p2p-backstop`) and no party ids, so there is no user to notify without inventing one. The escrow movement itself is published separately as p2pEscrowReleased / p2pEscrowRefunded, which do name both sides and ARE consumed.",
+  },
+  {
+    event: 'p2pTradeExpired',
+    missing: 'subscriber',
+    /**
+     * CLASS A — classified here, not by the ADR. Same check, same answer: no i18n
+     * key, no declared notification type, no preference surface, and the outcome is
+     * also published on a subject that carries both parties and is consumed. The
+     * payload names a trade and an outcome, not a user, so a consumer could not
+     * address a notification from it without inventing a recipient.
+     */
+    class: 'A',
+    reason:
+      "Same reason as p2pDisputeResolved and recorded in svc-notify's wiring comment: the payload names a trade and an outcome, not a user, so nothing can address a notification from it. The outcome it reports is also published on a subject that does carry both parties, so no user-visible fact depends on a consumer here.",
+  },
+] satisfies readonly WiringSocket[];
+
+/** The recorded reason a given end of an event is unwired, or null if none. */
+export function wiringSocketReason(event: EventName, missing: 'publisher' | 'subscriber'): string | null {
+  return WIRING_SOCKETS.find((s) => s.event === event && s.missing === missing)?.reason ?? null;
 }

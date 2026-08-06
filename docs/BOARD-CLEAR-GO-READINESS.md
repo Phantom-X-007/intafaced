@@ -1,43 +1,39 @@
-# Board Clear — GO readiness (mega-hardened)
-
-**Audits:**
-
-- [`BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md`](BOARD-CLEAR-PREFLIGHT-AUDIT-2026-08-01.md)
-- [`BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md`](BOARD-CLEAR-MEGA-AUDIT-2026-08-01.md)
+# Board Clear — GO readiness (v3.3 parallel-hardened)
 
 ---
 
-## GREEN LIGHT: **YES (mega-hardened)**
+## GREEN LIGHT: **YES**
 
-| Layer                          | Status |
-| ------------------------------ | ------ |
-| Product decisions locked       | YES    |
-| Done bars                      | YES    |
-| Process loops L0–L9            | YES    |
-| Anti-slop engineering standard | YES    |
-| Subagent orchestrator protocol | YES    |
-| Decision log                   | YES    |
-| Preflight conflict fixes       | YES    |
-| Wave audit heartbeat           | YES    |
-| Evidence-before-claims         | YES    |
-| Compaction read order          | YES    |
+| Layer                                     | Status                                   |
+| ----------------------------------------- | ---------------------------------------- |
+| AFK + compaction self-resume              | YES                                      |
+| Dual finish gates (honest)                | YES                                      |
+| Deferred human blockers                   | YES                                      |
+| Anti vibe-code                            | YES                                      |
+| **Parallel multi-session collision wall** | YES — `BOARD-CLEAR-PARALLEL-SESSIONS.md` |
+| Tip + open-PR refresh every cycle         | YES                                      |
+| LIVE-LANES multi-chat claim               | YES                                      |
 
-**Peace of mind claim:** The **system** is ready to operate as a world-class autonomous engineering campaign without Nitro in the tech loop and without residual theater.
+### Guarantees
 
-**Not claimed:** product already Done; zero agent mistakes; session never dies.
+- Agent residual can ship AFK with quality gates
+- Compacts: agent re-reads NEXT (you do nothing)
+- Parallel traffic: collision ritual before code
+
+### Limits (not bugs)
+
+- M1–M7 not agent-coded under ownership law
+- Process death needs host restart
+- Foreign open PRs may force skip/reorder of EXACT NEXT
 
 ---
 
-## Your actions
+## Your action
 
-1. Confirm this mega PR is on `main`
-2. New coding chat
-3. Paste **entire** GO block from `docs/BOARD-CLEAR-AUTONOMOUS-RUN.md`
-4. Say **GO**
-5. If session dies → same paste again
+Say **continue** / **GO**. Agent runs v3.3.
 
 ---
 
 ## Verdict
 
-**Final mega green light: YES. Say GO after this pack is on main.**
+**Hardened enough to keep moving.** Methodology matches AFK + parallel repo reality.

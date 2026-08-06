@@ -10,11 +10,12 @@ This service is the join between those two halves. It is the only place in the s
 
 ## API contract
 
-| Route         | Purpose                                                                                           |
-| ------------- | ------------------------------------------------------------------------------------------------- |
-| `GET /health` | liveness                                                                                          |
-| `GET /ready`  | readiness + the route table, so an operator can see what will be forwarded without reading source |
-| `ALL /api/*`  | the proxy                                                                                         |
+| Route            | Purpose                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| `GET /health`    | liveness                                                                                          |
+| `GET /ready`     | readiness + the route table, so an operator can see what will be forwarded without reading source |
+| `ALL /api/*`     | the proxy                                                                                         |
+| `OPTIONS /api/*` | CORS preflight — answered here and **never forwarded upstream**                                   |
 
 ### The route table
 
@@ -46,6 +47,41 @@ An unlisted prefix returns **404, never a pass-through**. An edge that forwards 
 
 **The edge holds no database, no bus, and no `INTERNAL_SERVICE_SECRET`.** The internet-facing component should have the smallest blast radius in the fleet, and that is a property of what it is allowed to hold. Giving it the service secret would let a compromised edge call `ledger.post` directly rather than merely proxying to something that can.
 
+## Browser origins (CORS)
+
+Until this landed the edge sent **no CORS headers at all** — not a permissive set, none — and `apps/web/next.config.ts` declares no rewrite. So **no browser call from `apps/web` to the edge had ever succeeded.** `edge-client.ts` attaches `Authorization: Bearer …`, which is not a safelisted request header, so every tRPC call was preflighted into a bare `OPTIONS` that no upstream answers; and the unauthenticated reads that _were_ sent came back without `Access-Control-Allow-Origin`, so the browser threw the 200 away. That is the masthead's "PLATFORM UNREACHABLE", and an audit's conclusion follows from it: a fabricated landing page survived for weeks because the real data path from that app had never worked in a browser and there was nothing to compare a mock against.
+
+**The vendored shell on `:8090` was never affected and is unchanged.** nginx proxies its `/api` same-origin, so no `Origin` header is sent and none of this applies to it. There is a test asserting a request with no `Origin` is untouched.
+
+| Behaviour                          | Value                                                               |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| Allowed origins                    | `EDGE_ALLOWED_ORIGINS` — exact origins, comma-separated             |
+| `Access-Control-Allow-Origin`      | the caller's own origin, echoed. **Never `*`**                      |
+| `Access-Control-Allow-Credentials` | **never emitted** — our front-ends send no cookies                  |
+| `Access-Control-Allow-Methods`     | `GET, POST, OPTIONS`                                                |
+| `Access-Control-Allow-Headers`     | `authorization, content-type`                                       |
+| `Access-Control-Expose-Headers`    | unset                                                               |
+| `Vary`                             | `origin`, on every answer including the ones that allow nothing     |
+| Surface                            | `/api/*`, `/health`, `/ready`. **`/admin/*` is not a CORS surface** |
+
+**No wildcard, ever.** `*` in `EDGE_ALLOWED_ORIGINS` is a boot failure with an explanation, not a silently skipped entry.
+
+**No credentials, deliberately.** `apps/web` holds the access token in memory (`providers.tsx` — explicitly not `localStorage`, explicitly not a cookie) and sends it as an `Authorization` header. There is no `credentials: 'include'` anywhere in `apps/`. Announcing credentials support would describe a mechanism we do not use, and a credentialed response may never carry `*` — we emit neither, so the forbidden pair cannot arise. **When the §13 refresh-token-in-an-httpOnly-cookie socket lands, this decision must be re-taken deliberately**: a cookie is ambient, and every request here becomes credentialed the day it exists.
+
+> **The same cookie decision lands in `svc-ws` too, and harder.** `/private/stream` (port 4014) authenticates an explicit `?access_token=` / `Authorization` bearer and deliberately performs **no `Origin` check** — correctly, today, because a token the page must fetch from its own memory is not something an attacker's page can cause a browser to send. A cookie is: browsers attach cookies to WebSocket upgrades regardless of origin, and there is no preflight and no CORS on a socket to stop them. So the day an httpOnly session cookie exists, `svc-ws` needs an origin allowlist on the private upgrade or it is cross-site-hijackable, and nothing in this repo currently records that dependency. It is its own piece of work in its own service; it is noted here because this is where the decision that triggers it gets made.
+
+**`OPTIONS` is terminated at the edge and never proxied.** A preflight is unauthenticated by necessity — the browser sends it before it will send the `Authorization` header — so it is the one request that reaches us with no principal, and the only safe amount to forward is zero. Two properties follow: it cannot reach anything that mutates, and it cannot be used to probe which routes exist, because the answer is computed from `Origin` alone before the route table is consulted. A preflight to `/api/trade/…` and one to `/api/does-not-exist` are byte-identical. It also runs **before** the kill-switch guard, so an unauthenticated caller cannot read off which modules an operator has halted.
+
+**Refusals carry the headers too.** A 404, a kill-switch 503, a 502 from a dead upstream — all of them are readable by an allowed origin. A refusal the browser discards is reported in devtools as a CORS error, so without this the operator who halted a module would watch the UI say "unreachable" instead of "switched off by the operator".
+
+**`dev` is frictionless, `staging`/`prod` are explicit.** With nothing configured, `dev`/`test` fall back to `http://localhost:3100` / `http://127.0.0.1:3100` (`apps/admin`, both loopback spellings). `staging` and `prod` get no default. **The :3000 pair is gone**, taken with `apps/web` in its deletion commit as the note here required: left behind, those two entries would have handed a standing cross-origin grant to whatever a developer next starts on the most commonly squatted port on a workstation. Do not re-add either spelling for a dev convenience — set `EDGE_ALLOWED_ORIGINS`. The product shell on `:8090` needs no entry: nginx serves it same-origin and proxies `/api` by service name, so its browser never makes a cross-origin request. See the `DEV_ORIGINS` note in `src/cors.ts`.
+
+**An enforced environment with no configured origins serves a closed door — it does not refuse to boot**, and that is a deliberate departure from `assertScreeningConfigured` and `assertRailPosture`. Those refuse because their unconfigured state is silently _permissive_ and dishonest: an unscreened process clears every region and reports it as screened. An unconfigured origin list is the opposite on both counts — silently _restrictive_, and loud in the console of the person affected. Nobody is told anything untrue. And the edge is the front door for callers who need no CORS at all (the `:8090` shell, the CCXT REST contract, every server-to-server integration, `/health`), so refusing to boot would trade a browser-only outage for a total one. Instead it logs at ERROR and reports on `/ready`. A **misconfigured** list is the other case, and that _does_ refuse to boot.
+
+### Proving it
+
+`src/cors.test.ts` covers the policy against Fastify's own pipeline; `src/cors.browser.e2e.test.ts` drives **real Chromium** against a real socket, because nothing on the server enforces CORS — a browser does, and a suite that only asserts header strings is asserting that we wrote the right sentence, not that anything obeys it. Its load-bearing assertion is that a disallowed origin's POST is **never put on the wire**, checked against the edge's own record of what arrived; its sibling guard asserts that a blocked _read_ did arrive, so a `fetch` rejection cannot be a shut port masquerading as a CORS refusal. The browser suite skips loudly when no Chromium binary is present (`pnpm exec playwright install chromium`).
+
 ## Events
 
 **None.** This service publishes and consumes nothing. It owns no data.
@@ -66,10 +102,11 @@ An unlisted prefix returns **404, never a pass-through**. An edge that forwards 
 | `EDGE_PRINCIPAL_SECRET` | must match every mounted service's                                                                                                                              |
 | `DEFAULT_REGION`        | two-letter code; `XX` = unknown/restricted                                                                                                                      |
 | `UPSTREAM_TIMEOUT_MS`   | a hung service must not hold an edge connection open                                                                                                            |
+| `EDGE_ALLOWED_ORIGINS`  | browser origins, comma-separated and exact. **Required in `staging`/`prod`** — unset there is a closed door to every front-end. `*` is a boot failure.          |
 
 ## Not built yet
 
-- **Rate limiting.** There is none, anywhere in the platform. The edge is the right place for it and it is not here.
+- **Rate limiting.** There is none, anywhere in the platform. The edge is the right place for it and it is not here. Note that `OPTIONS` is now answered without touching an upstream, so a preflight flood costs this process only and reaches nothing behind it — but that is a consequence, not a control.
 - **Geo-IP region resolution.** `DEFAULT_REGION` is a single configured value; per-request resolution replaces one line in `index.ts`.
-- **Request size limits** and **CORS.** Neither is configured.
+- **Request size limits.** Not configured.
 - **Streaming responses.** The proxy buffers with `response.text()`, so this is not a path for websockets or large downloads.
