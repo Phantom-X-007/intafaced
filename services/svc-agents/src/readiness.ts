@@ -136,3 +136,109 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     },
   };
 }
+
+/** L3 — usable provider count (no invent). */
+export function usableProviderCount(readiness: AgentsReadiness): number {
+  return readiness.providers.filter((p) => p.usable).length;
+}
+
+/** L3 — registered provider count. */
+export function providerCount(readiness: AgentsReadiness): number {
+  return readiness.providers.length;
+}
+
+/** L3 — task route count. */
+export function readinessTaskCount(readiness: AgentsReadiness): number {
+  return readiness.tasks.length;
+}
+
+/** L3 — readiness board card. */
+export function agentsReadinessBoardCard(readiness: AgentsReadiness): {
+  readonly ready: boolean;
+  readonly mode: ProviderMode;
+  readonly providers: number;
+  readonly usable: number;
+  readonly tasks: number;
+  readonly usefulAvailable: boolean;
+  readonly metering: boolean;
+} {
+  return {
+    ready: readiness.ready,
+    mode: readiness.providerMode,
+    providers: providerCount(readiness),
+    usable: usableProviderCount(readiness),
+    tasks: readinessTaskCount(readiness),
+    usefulAvailable: readiness.usefulPath.available,
+    metering: readiness.meteringEnabled,
+  };
+}
+
+/** L3 — status line. */
+export function agentsReadinessStatusLine(readiness: AgentsReadiness): string {
+  const c = agentsReadinessBoardCard(readiness);
+  return `ready=${c.ready ? '1' : '0'} mode=${c.mode} providers=${c.providers} usable=${c.usable} tasks=${c.tasks} useful=${c.usefulAvailable ? '1' : '0'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseAgentsReadinessStatusLine(line: string): {
+  readonly ready: boolean;
+  readonly mode: ProviderMode;
+  readonly providers: number;
+  readonly usable: number;
+  readonly tasks: number;
+  readonly useful: boolean;
+} | null {
+  const m = line.trim().match(/^ready=([01]) mode=(mock|upstream) providers=(\d+) usable=(\d+) tasks=(\d+) useful=([01])$/);
+  if (!m) return null;
+  return {
+    ready: m[1] === '1',
+    mode: m[2] as ProviderMode,
+    providers: Number(m[3]),
+    usable: Number(m[4]),
+    tasks: Number(m[5]),
+    useful: m[6] === '1',
+  };
+}
+
+/** L3 — true when status matches. */
+export function agentsReadinessStatusLineMatches(readiness: AgentsReadiness): boolean {
+  const p = parseAgentsReadinessStatusLine(agentsReadinessStatusLine(readiness));
+  if (!p) return false;
+  const c = agentsReadinessBoardCard(readiness);
+  return (
+    p.ready === c.ready &&
+    p.mode === c.mode &&
+    p.providers === c.providers &&
+    p.usable === c.usable &&
+    p.tasks === c.tasks &&
+    p.useful === c.usefulAvailable
+  );
+}
+
+/** L3 — export header. */
+export function agentsReadinessExportHeader(): string {
+  return 'ready,mode,providers,usable,tasks,useful,metering';
+}
+
+/** L3 — export line. */
+export function agentsReadinessExportLine(readiness: AgentsReadiness): string {
+  const c = agentsReadinessBoardCard(readiness);
+  return `${c.ready ? '1' : '0'},${c.mode},${c.providers},${c.usable},${c.tasks},${c.usefulAvailable ? '1' : '0'},${c.metering ? '1' : '0'}`;
+}
+
+/** L3 — full export. */
+export function agentsReadinessExportText(readiness: AgentsReadiness): string {
+  return [agentsReadinessExportHeader(), agentsReadinessExportLine(readiness)].join('\n');
+}
+
+/** L3 — true when usable count is within [min,max]. Invalid → false. */
+export function usableProviderCountInRange(readiness: AgentsReadiness, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = usableProviderCount(readiness);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when mock residual honesty applies. */
+export function isMockEngineResidual(readiness: AgentsReadiness): boolean {
+  return readiness.providerMode === 'mock' && readiness.usefulPath.available;
+}
