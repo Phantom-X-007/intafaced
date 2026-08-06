@@ -477,6 +477,15 @@ services:
       DATABASE_URL: postgres://svc_bank:svc_bank@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
+      # `none` means this deployment has NO CARD PROGRAMME, and every card
+      # procedure refuses `bank.no_card_issuer` by name. The only other value is
+      # `card-sim`, which is a SIMULATOR — no card, no scheme, no issuing BIN, no
+      # network call, and `simulated: true` on every card and every response. The
+      # live rail is §13 `socket.live-issuer`: a sponsor bank and a contract,
+      # which no value of this variable can supply. Written out with its default
+      # rather than left unset, so the choice is visible in the file an operator
+      # actually reads instead of living only in a zod schema.
+      BANK_CARD_ISSUER: ${BANK_CARD_ISSUER:-none}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4009']
     healthcheck: *healthcheck

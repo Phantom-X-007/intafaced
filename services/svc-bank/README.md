@@ -89,6 +89,10 @@ tRPC, `packages/contracts`. All money crosses the wire as **decimal strings**.
 
 `authorize`, `capture` and `reverse` are **not** here. They are the issuer speaking, not the user — a user who can call `cardAuthorize` approves their own purchase — so they sit in `ops` behind `admin:treasury`. On a live rail they do not become user procedures either; they become a signed webhook owned by the issuer integration.
 
+**None of these do anything until a deployment names an issuer** — see [`BANK_CARD_ISSUER`](#turning-the-card-surface-on-and-what-that-does-not-mean) below. That is the setting, and until it landed there was no setting: `index.ts` passed no issuer, so every deployment ran `noCardIssuer` and refused with a code no operator could act on. The procedures were mounted, scoped and tested, and unreachable — which reads exactly like working, and is the state D-S-15 calls **UNFINISHED**.
+
+**`bank:card` is a real scope and nothing uses it, on purpose.** `packages/auth/src/scopes.ts` defines it, withholds it from every session, and bars it from API keys as "card spend authority — interactive-only step-up surface (§9, §18)". Nothing grants it, because the surface it names — a **user** initiating a card spend — deliberately does not exist here: spend is the issuer's side, and the issuer's side is `admin:treasury`. It becomes live with `socket.live-issuer`, alongside the signed webhook that replaces the three `ops` procedures. Recorded here rather than quietly repurposed for issuance, which is not spend.
+
 ### `analytics`
 
 | Procedure         | Scope       | Purpose                                                     |
@@ -287,7 +291,9 @@ pnpm --filter @intafaced/svc-bank test
 
 ## Tests
 
-**77 tests**, all against real Postgres with `MemoryLedger` as the ledger — the reference implementation the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). The suite skips itself cleanly when Postgres is unavailable.
+**234 across six files** (`bank-service` 91 · `loans` 85 · `cards` 36 · `cards.reachable` 11 · `margin-call-publisher` 6 · `router.mount` 5), all against real Postgres with `MemoryLedger` as the ledger — the reference implementation the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Each file takes its **own database** rather than its own schema (#429), so concurrent worktrees do not truncate each other. The suite skips itself cleanly when Postgres is unavailable.
+
+The 91 below are `bank-service.test.ts`'s.
 
 Failure branches covered: insufficient funds on a one-off transfer and on a standing order, a cross-asset transfer, a debit from a user-locked space, a deposit larger than the user holds, a deposit below the pool minimum, an early withdrawal from a fixed term, a double withdrawal, eight concurrent withdrawals, eight concurrent job runs, a re-run of a rejected occurrence, an accrual from an unfunded pool (and its recovery once funded), a second accrual on the same day, six concurrent accruals, a position opened after the accrual moment, a schedule past its end date, a cancelled schedule, a native-asset earn pool, and a claim left stranded by a crashed run.
 
@@ -322,6 +328,30 @@ A `cardSpend` recipe would have been `withdrawSettle` with a different string in
 - **NOT refunds, disputes, chargebacks, or incremental authorisations.** A refund is `recipes.deposit` over the same rail and is deliberately unbuilt: it brings a product question — whether cashback on the original capture is clawed back — that inventing an answer to would make the module look finished while paying for returned purchases.
 
 `simulated: true` is on the card row, on the port, and on every router output. A deployment with **no** issuer configured refuses every card procedure with `bank.no_card_issuer` rather than falling back to the simulator — the same posture as the loan price source, and for the same reason: the dangerous default is the plausible one.
+
+### Turning the card surface on, and what that does not mean
+
+One variable, two values, and `none` is the default.
+
+```bash
+BANK_CARD_ISSUER=none      # this deployment has NO card programme  (default)
+BANK_CARD_ISSUER=card-sim  # the SIMULATOR — see immediately above
+```
+
+`/ready` reports which one is in force, so nobody has to trust an env file:
+
+```jsonc
+// BANK_CARD_ISSUER=none
+"cardProgramme": { "id": "none", "simulated": true, "displayName": "No card programme" }
+// BANK_CARD_ISSUER=card-sim
+"cardProgramme": { "id": "card-sim", "simulated": true, "displayName": "Simulated card (no card programme)" }
+```
+
+`simulated` is `true` in **both**, and there is no value of this variable that makes it false. That is not an oversight — a live rail cannot be selected here at all, because it is `socket.live-issuer`: a card-scheme sponsor and an issuing BIN, which is a licence and a contract. The same fact appears in four places on purpose (`/ready`, the boot log line, `cards.programme`, and `simulated` on every card), so an operator, a user and an auditor each meet it without having to go looking.
+
+What `card-sim` **does** get you is the ledger half, end to end, over real postings: issue a card, authorise against a real balance, be declined by name when the money is not there, capture, get the remainder back, and be paid cashback out of a pot that was really funded. What it does not get you is a card.
+
+`cards.reachable.test.ts` is the suite that holds this: it enters through `createBankRouter(...).createCaller` over a context built by the real `createEdgeContext` from a **signed** principal — the composition root and the router, never a `CardService` — so if the wiring, the mounting or the scopes regress, it fails rather than the module quietly going unreachable again.
 
 **Cashback has a named source.** It is paid from `rewardsEngine(asset)`, funded by `ops.fundCashbackPot` sweeping `houseFees('bank', asset)` — fees the platform really charged. An empty pot refuses by name (`bank.cashback_pot_unfunded`) on a row, and the capture still stands: undoing a purchase the merchant already has, because a marketing promise could not be kept, would be the worse failure.
 
