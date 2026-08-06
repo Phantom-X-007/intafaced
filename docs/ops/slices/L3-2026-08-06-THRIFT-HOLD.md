@@ -35,7 +35,7 @@
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–67
+2. Open one Class N PR covering waves 46–67 (rebased onto #877)
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 
@@ -46,3 +46,6 @@
 
 ## Law
 Swarm starvation under hard thrift ≠ idle failure if L3 packs keep stacking locally.
+
+## Rebase
+- 2026-08-06: rebased 23 commits onto origin/main `8b992899` (#877). Local only; thrift still hard.
