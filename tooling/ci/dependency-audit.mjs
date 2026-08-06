@@ -49,20 +49,18 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * Advisories present when this gate was installed (2026-08-06, tip 7207d6ec).
  *
  * `note` is the reason it is still here — a path, or the work it is waiting on.
- * Two of these are on PRODUCTION paths and are called out as such; the rest
- * arrive through build or lint tooling that never serves a request.
+ *
+ * BOTH PRODUCTION-PATH ENTRIES ARE GONE as of this bump, and that is the
+ * ratchet's whole point rather than an aside. `drizzle-orm` (direct, 13
+ * dependents, every service that touches Postgres) and `fast-uri` (transitive
+ * under `fastify`, reached by every service) were the two that mattered. The
+ * scan refused this PR until their lines were deleted — a fix nobody records
+ * leaves a baseline describing a tree that no longer exists.
+ *
+ * What remains reaches no request path: it arrives through build or lint
+ * tooling.
  */
 const KNOWN = {
-  'GHSA-gpj5-g38j-94v9': {
-    severity: 'high',
-    module: 'drizzle-orm',
-    note: 'PRODUCTION, DIRECT. `packages/db` pins ^0.38.3 and 13 packages depend on it; the fix is >=0.45.2. A minor bump across every service that touches Postgres needs its own PR and a full suite, not a drive-by in the PR that installed the scanner.',
-  },
-  'GHSA-7p8r-x3mc-p8w7': {
-    severity: 'high',
-    module: 'fast-uri',
-    note: 'PRODUCTION, transitive under `fastify` (fast-json-stringify and @fastify/ajv-compiler). Reached by every service. Fixed by a fastify bump; verify the 5.x line carries it before overriding by hand.',
-  },
   'GHSA-f88m-g3jw-g9cj': {
     severity: 'high',
     module: 'sharp',
