@@ -73,6 +73,19 @@ export const DEFAULT_SMS_MAX_CHARS = 480;
  *
  * Returns `{ ok: false, invalid }` rather than throwing so `env.ts` can report
  * every environment problem in one run, which is how `loadEnv` behaves.
+ *
+ * THIS IS THE ONLY PARSE OF `NOTIFY_REQUIRED_CHANNELS` IN THE SERVICE, and
+ * `env.ts` is its only caller on the boot path.
+ *
+ * There were briefly two. A `required-channels.ts` took an extra `appEnv` and
+ * re-derived the staging/prod enforcement `env.ts` already performs, on an
+ * `APP_ENV` vocabulary this repo does not use (`'production'`; the enum in
+ * `@intafaced/config` is dev/test/staging/prod). Nothing imported it. Two
+ * implementations of a boot gate is one implementation and one lie: only one
+ * can be the thing that actually stops a process, and the other drifts
+ * unwatched until somebody wires it up believing it is the gate. If this parse
+ * ever needs to vary by environment, it varies here, by parameter — not beside
+ * this one as a rival.
  */
 export function parseRequiredChannels(
   raw: string | undefined,
@@ -85,6 +98,19 @@ export function parseRequiredChannels(
     .filter((p) => p.length > 0);
 
   if (parts.length === 1 && parts[0] === 'none') return { ok: true, channels: [] };
+
+  // Separators and nothing else: `","`, `" , "`. `blankAsAbsent` in `env.ts`
+  // already turns the empty string into "absent", so a value arriving here is
+  // one the operator typed — and an enforced environment reads "typed
+  // something" as "stated a posture". Punctuation is not a posture. Without
+  // this line `NOTIFY_REQUIRED_CHANNELS=","` satisfies the staging/prod
+  // requirement to declare while declaring nothing, and the deployment boots
+  // depending on no channel at all: the precise silent outage the variable
+  // exists to prevent. `none` is how you say none.
+  //
+  // A stray comma inside a real list (`email,,sms`) is still fine — that is a
+  // typo in a stated posture, not an absent one.
+  if (parts.length === 0) return { ok: false, invalid: [raw] };
 
   const invalid = parts.filter((p) => !(OUT_OF_APP_CHANNELS as readonly string[]).includes(p));
   if (invalid.length > 0) return { ok: false, invalid };
