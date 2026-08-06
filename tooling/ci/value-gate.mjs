@@ -2,20 +2,124 @@
 /**
  * value-gate — external stamp-mill detector (git-only, no gh, no network).
  *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY THIS FILE GREW A SECOND PATH (2026-08-06)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * The blocking condition used to be, in full:
+ *
+ *     const block = docsOnly && nearDup && !hasDelta;
+ *
+ * `docsOnly` was the FIRST term. So subject similarity was only ever evaluated
+ * on a PR whose every path ended in `.md`. Forty-five PRs titled
+ * `L3 free-TRK waveN` landed across #832–#876 in two days. Each one touched
+ * source, tests, and exactly one slice doc — so `docsOnly === false`, the `&&`
+ * short-circuited, and the similarity arm of this gate never ran on a single
+ * one of them.
+ *
+ * What went through, measured on tip: 967 new exported symbols with no
+ * non-test caller anywhere in the repo or on 87 remote branches; median
+ * function body one line; 7,173 source lines none of which is behind a caller;
+ * and after identifier normalisation 67% of the new function bodies are
+ * byte-identical to another new function — the same pagination clamp written
+ * out character-for-character in nine modules with no shared generic extracted.
+ *
+ * BE FAIR ABOUT WHAT THIS IS NOT. The tracker was not touched once across those
+ * PRs, and nothing user-facing claimed a capability it did not have. Nobody
+ * lied. This gate does not punish volume and does not judge taste. Its whole
+ * job is to stop NEAR-DUPLICATE WORK BEING COUNTED AS DISTINCT PROGRESS.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE RULE, AND WHY IT IS THIS RULE
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Similarity alone can never be the trigger. Real migrations, per-service
+ * rollouts and honest wave work all produce near-identical titles, and a gate
+ * that fires on titles would be switched off inside a day. So the code path
+ * pairs similarity with ONE further fact:
+ *
+ *     Does anything outside this change actually call what this change added?
+ *
+ *   stamp  :=  subject is in a near-duplicate SERIES
+ *          &&  the change adds ≥1 new named code symbol
+ *          &&  NONE of those symbols is referenced from a non-test file
+ *              outside the set of files this change added symbols to
+ *          &&  no `Serial-Work:` trailer
+ *
+ * WHY NOT the byte-identical-body signal instead. It is the louder symptom —
+ * and this gate MEASURES it and prints it, because "nine of your thirty-six new
+ * bodies are the same body" is the sentence that makes an agent stop. But it
+ * cannot be the trigger: a per-rail adapter, a per-service config shim and a
+ * migration that lands the same three lines in nine services are all supposed
+ * to look identical. Blocking on shape means tuning a triviality allowlist
+ * forever, which is a taste judgement wearing a gate's clothes. Reachability is
+ * a fact about the repo, not an opinion about the code.
+ *
+ * WHY NOT "was the tracker or a board moved". Because this repo's own law
+ * forbids it: COORDINATION-TRUTH-LAYERS says tracker touch is MOUNTAIN EVENTS
+ * ONLY — claim, handoff, done — and explicitly NOT every craft PR under an
+ * already-`wip` row. A gate demanding a tracker edit per PR would manufacture
+ * exactly the tracker dishonesty the tracker gate exists to prevent. The 45
+ * waves were RIGHT to leave it alone. Punishing them for that would be the gate
+ * being wrong on the one thing they got right.
+ *
+ * WHY WARN BEFORE BLOCK. Thrift was rewritten in August because a spend meter
+ * masquerading as a correctness gate made agents stop shipping. So the stamp
+ * verdict has two tiers and the threshold is stated, not implied:
+ *
+ *   seriesRun < STAMP_BLOCK_RUN  → WARN, loud, exit 0. First offence is visible.
+ *   seriesRun ≥ STAMP_BLOCK_RUN  → BLOCK (strict). Default 3, i.e. the FOURTH
+ *                                  consecutive near-identical unwired subject.
+ *
+ * THE ESCAPE, and it is auditable, not silent:
+ *
+ *   Serial-Work: <why this series is genuinely right>
+ *
+ * A commit-message trailer, echoed into the CI log by this gate, greppable
+ * forever with `git log --grep '^Serial-Work:'`. Deliberately NOT `Board-Delta:`
+ * — that trailer is the docs-path escape and is common enough to be invisible.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ZERO-WALK GUARD — the named recurring defect in this repo
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A gate that evaluates nothing and prints clean is worse than no gate. Four
+ * gates in this repo exist solely to close that class, and one instance was
+ * found inside the wallet gate whose own header cites the defect.
+ *
+ * This gate had it too, in production. `docs-format.yml` used a bare
+ * `actions/checkout@v4`, which is `fetch-depth: 1`. In that checkout
+ * `previousSubjects()` catches, returns `[]`, `decide()` compares against an
+ * empty array, `best` stays 0, `nearDup` is false, and the gate prints
+ * `value-gate: OK` having compared nothing to nothing. `changedFiles()` had the
+ * same shape: two `catch {}` blocks that both end in `return []`, and
+ * `isDocsOnly([])` is false, so an unreadable diff also printed clean.
+ *
+ * So: `walkEvidence()` now asserts the gate had something to look at, and a
+ * failed walk exits 1 REGARDLESS of advisory mode. Advisory softens a verdict;
+ * it must never soften "I could not form one". The workflows fetch depth 0.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
  * Fails when ANY of:
  *   (0) no-op merge: git merge-tree of origin/main + HEAD equals main's tree
  *       (branch already landed / empty squash / superseded — #737 class defect)
- *   OR ALL of:
+ *   (Z) zero-walk: no subject, no diff, no ancestors, or a broken symbol walk
+ *   OR ALL of (the DOCS path — unchanged, do not touch, it works):
  *   (a) every changed file is under docs/ or ends with .md
  *   (b) normalised commit subject ≥0.80 similar to any of previous 10 ancestors
  *   (c) no Board-Delta: trailer in the commit body
+ *   OR ALL of (the CODE path — new):
+ *   (d) series similarity ≥0.80 to a previous ancestor subject
+ *   (e) ≥1 new named code symbol, and none of them reached from outside
+ *   (f) no Serial-Work: trailer
+ *   (g) seriesRun ≥ 3 consecutive near-identical ancestors (below that: WARN)
  *
- * MUST wire in .github/workflows/docs-format.yml — not gates.mjs.
- * ci.yml paths-ignore docs/** so GATES never see coordinator PRs.
+ * Wired in .github/workflows/docs-format.yml (docs PRs) AND in the `gates` job
+ * of .github/workflows/ci.yml (code PRs) — NOT in gates.mjs. It needs git
+ * history and an `origin/main` that is actually current, which a laptop
+ * `pnpm verify` cannot promise; and ci.yml excludes docs/** while docs-format
+ * only fires on markdown, so neither workflow alone can see every PR.
  *
  * Advisory (one cycle): VALUE_GATE_ADVISORY=1 → print, always exit 0 on block.
  * Strict: VALUE_GATE_STRICT=1 or --strict → exit 1 on block.
- * Default without flags: advisory (soft land).
+ * Default without flags: advisory (soft land). Zero-walk ignores both.
  *
  * Self-test: node tooling/ci/value-gate.mjs --self-test
  *
@@ -28,8 +132,22 @@ import { pathToFileURL } from 'node:url';
 const STRICT = process.env.VALUE_GATE_STRICT === '1' || process.argv.includes('--strict') || process.env.VALUE_GATE_ADVISORY === '0';
 const BASE = process.env.VALUE_GATE_BASE || 'origin/main';
 
+/**
+ * How many consecutive near-identical unwired subjects before this stops being
+ * a warning. 3 means: waves 2 and 3 of a series WARN in the log, wave 4 is red.
+ * A number, in one place, so the threshold is a stated fact and not a mood.
+ */
+export const STAMP_BLOCK_RUN = Number(process.env.VALUE_GATE_BLOCK_RUN || 3);
+
+/** Files whose symbols this gate reasons about. */
+const CODE_FILE = /\.(ts|tsx|mjs|cjs|js|jsx)$/;
+/** Files that may DEFINE a symbol but never count as a CALLER of one. */
+const TEST_FILE = /(\.test\.|\.spec\.|\.d\.ts$|__tests__\/|\/tests?\/|\/fixtures?\/|\/__mocks__\/)/;
+/** Pathspecs for the reachability walk — a .vue shell component is a caller. */
+const REF_PATHSPECS = ['*.ts', '*.tsx', '*.mjs', '*.cjs', '*.js', '*.jsx', '*.vue'];
+
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1 << 28 }).trim();
 }
 
 export function normalizeSubject(s) {
@@ -42,6 +160,38 @@ export function normalizeSubject(s) {
     .replace(/[^a-z0-9\s]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * The SERIES key of a subject: the part that repeats, with the per-instance
+ * detail cut off.
+ *
+ * Plain Dice on the full subject does not see a series. Measured on the 45
+ * waves it scored 0.44–0.81 with a median of 0.61, because every title carries
+ * a different parenthetical — `(board CSV export line builders)`,
+ * `(status-line parse/match/consistency)` — and that tail is most of the
+ * string. Raising the threshold to catch 0.61 would have caught unrelated work
+ * too; the honest non-wave PRs immediately before them scored 0.31–0.53.
+ *
+ * Cutting the detail is what separates them. `feat: L3 free-TRK wave45 (…)` and
+ * `feat: L3 free-TRK wave12 (…)` both reduce to `feat ln free trk waven` —
+ * identical, because `normalizeSubject` already collapses the counter. The
+ * conventional-commit scope is kept: `feat(academy):` and `feat(pay):` must not
+ * become the same series.
+ *
+ * Falls back to the full normalised subject when the stem is too short to mean
+ * anything, so a bare `fix: typo` cannot collide with everything.
+ */
+export function seriesStem(subject) {
+  let s = String(subject || '').replace(/\(#[0-9]+\)\s*$/, '');
+  const sep = s.indexOf(': ');
+  const head = sep >= 0 ? s.slice(0, sep + 2) : '';
+  let tail = sep >= 0 ? s.slice(sep + 2) : s;
+  tail = tail.split(/\s[—–-]\s/)[0];
+  const paren = tail.indexOf('(');
+  if (paren > 0) tail = tail.slice(0, paren);
+  const stem = normalizeSubject(head + tail);
+  return stem.length >= 12 ? stem : normalizeSubject(subject);
 }
 
 /** Dice coefficient on bigrams — short titles, zero deps. */
@@ -64,6 +214,11 @@ export function similarity(a, b) {
   return (2 * inter) / (a.length - 1 + (b.length - 1));
 }
 
+/** Series similarity of two RAW subjects: the better of whole-title and stem. */
+export function seriesSimilarity(a, b) {
+  return Math.max(similarity(normalizeSubject(a), normalizeSubject(b)), similarity(seriesStem(a), seriesStem(b)));
+}
+
 export function isDocsOnly(files) {
   if (!files.length) return false;
   return files.every((f) => f.startsWith('docs/') || f.endsWith('.md') || f === 'NOTICE' || f === 'LICENSE');
@@ -72,6 +227,286 @@ export function isDocsOnly(files) {
 export function hasBoardDeltaTrailer(body) {
   return /^Board-Delta:\s*\S+/im.test(body || '');
 }
+
+/**
+ * The code-path escape. Explicit, auditable, and it has to say something:
+ * `Serial-Work:` with nothing after it is not a reason.
+ */
+export function serialWorkReason(body) {
+  const m = /^Serial-Work:[ \t]*(\S.*)$/im.exec(body || '');
+  if (!m) return null;
+  const reason = m[1].trim();
+  return reason.length >= 8 ? reason : null;
+}
+
+// ── new named symbols ───────────────────────────────────────────────────────
+
+const DECLARATIONS = [
+  /^\+\s*export\s+(?:async\s+)?function\s+\*?\s*([A-Za-z_$][\w$]*)/,
+  /^\+\s*export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/,
+  /^\+\s*export\s+(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/,
+];
+/** An indented `name(args…) {` — a class or object method. Not a call: those end in `;`. */
+const METHOD =
+  /^\+\s{2,}(?:public\s+|private\s+|protected\s+|static\s+|async\s+|readonly\s+|get\s+|set\s+)*([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\(/;
+const NOT_A_NAME = new Set([
+  'if',
+  'for',
+  'while',
+  'switch',
+  'catch',
+  'return',
+  'constructor',
+  'function',
+  'super',
+  'this',
+  'typeof',
+  'await',
+  'new',
+  'do',
+  'else',
+  'throw',
+  'yield',
+  'delete',
+  'void',
+]);
+
+/**
+ * New named symbols introduced by a unified=0 diff, as `{ name, file }`.
+ *
+ * Both `export function foo` and a method added to an exported class count — the
+ * 45 waves used both, and a gate that only saw `export function` would have
+ * missed every `MemoryResidencyDesk.safePageOpenApplicationIds` in the set.
+ * Symbols defined in test files are not collected: a helper that only tests use
+ * is not the thing this gate is asking about.
+ *
+ * Over-collection is the SAFE direction here. A spurious extra name can only
+ * make a change look MORE wired (one reached symbol is enough to pass); it can
+ * never invent a block on its own.
+ *
+ * @param {string} diffText output of `git diff --unified=0`
+ */
+export function newNamedSymbols(diffText) {
+  const found = [];
+  const seen = new Set();
+  let file = '';
+  for (const line of String(diffText || '').split('\n')) {
+    const header = /^\+\+\+ b\/(.+)$/.exec(line);
+    if (header) {
+      file = header[1] === 'dev/null' ? '' : header[1];
+      continue;
+    }
+    if (!file || !CODE_FILE.test(file) || TEST_FILE.test(file)) continue;
+    if (!line.startsWith('+') || line.startsWith('+++')) continue;
+
+    let name = null;
+    for (const re of DECLARATIONS) {
+      const m = re.exec(line);
+      if (m) {
+        name = m[1];
+        break;
+      }
+    }
+    if (!name && !/;\s*$/.test(line)) {
+      const m = METHOD.exec(line);
+      if (m && !NOT_A_NAME.has(m[1])) name = m[1];
+    }
+    if (!name) continue;
+    const key = `${file}::${name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push({ name, file });
+  }
+  return found;
+}
+
+/** `export * from './x'` / `export { a, b } from './x'` — a barrel hop, not a caller. */
+export function isPureReExport(lineContent) {
+  return /^\s*export\s+(?:\*|type\s+\*|\{[^}]*\})\s*(?:as\s+[A-Za-z_$][\w$]*\s*)?from\s/.test(lineContent || '');
+}
+
+/**
+ * Which of `symbols` are reached, given raw `git grep -n` output lines.
+ *
+ * A reference counts only when it comes from a file that is
+ *   · not a test file, and
+ *   · not one of the files this change added symbols to, and
+ *   · not a pure re-export line.
+ *
+ * The second clause is the one that matters and it is deliberate on both sides.
+ * Excluding the whole new-symbol SURFACE (not merely the defining file) closes
+ * the obvious dodge: nine new helpers that only call each other are still nine
+ * helpers nothing calls. Excluding only the new-symbol files — rather than
+ * every file the diff touched — is what keeps honest work green: a PR that adds
+ * a handler and wires it into an existing router still passes, because the
+ * router gained no new symbol of its own and therefore still counts as outside.
+ *
+ * @param {string[]} grepLines lines shaped `path:lineno:content`
+ * @param {{name:string,file:string}[]} symbols
+ */
+export function reachedSymbols(grepLines, symbols) {
+  const defFiles = new Set(symbols.map((s) => s.file));
+  const names = [...new Set(symbols.map((s) => s.name))];
+  const reached = new Set();
+  for (const raw of grepLines) {
+    if (!raw) continue;
+    const first = raw.indexOf(':');
+    if (first < 0) continue;
+    const rest = raw.slice(first + 1);
+    const second = rest.indexOf(':');
+    if (second < 0) continue;
+    const path = raw.slice(0, first);
+    const content = rest.slice(second + 1);
+    if (TEST_FILE.test(path) || defFiles.has(path)) continue;
+    if (isPureReExport(content)) continue;
+    for (const n of names) {
+      if (reached.has(n)) continue;
+      if (new RegExp(`(^|[^\\w$])${n}([^\\w$]|$)`).test(content)) reached.add(n);
+    }
+  }
+  return [...reached];
+}
+
+// ── duplicate bodies (EVIDENCE ONLY — never gates) ──────────────────────────
+
+const SHAPE_KEYWORDS = new Set([
+  'if',
+  'else',
+  'for',
+  'while',
+  'do',
+  'switch',
+  'case',
+  'break',
+  'continue',
+  'return',
+  'const',
+  'let',
+  'var',
+  'function',
+  'class',
+  'extends',
+  'implements',
+  'interface',
+  'type',
+  'new',
+  'delete',
+  'typeof',
+  'instanceof',
+  'in',
+  'of',
+  'this',
+  'super',
+  'try',
+  'catch',
+  'finally',
+  'throw',
+  'await',
+  'async',
+  'yield',
+  'export',
+  'import',
+  'from',
+  'as',
+  'void',
+  'null',
+  'undefined',
+  'true',
+  'false',
+  'readonly',
+  'public',
+  'private',
+  'protected',
+  'static',
+  'get',
+  'set',
+  'number',
+  'string',
+  'boolean',
+  'any',
+  'unknown',
+  'never',
+  'Math',
+  'Number',
+  'Object',
+  'Array',
+  'String',
+  'Boolean',
+  'Set',
+  'Map',
+  'JSON',
+  'Date',
+  'Promise',
+  'Infinity',
+  'NaN',
+]);
+
+/** Identifier-normalised shape of one line: names → x, numbers → N, strings → S. */
+export function normalizeBodyLine(line) {
+  return String(line)
+    .replace(/\/\/.*$/, '')
+    .replace(/\bthis\./g, '')
+    .replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, 'S')
+    .replace(/\b\d[\w.]*\b/g, 'N')
+    .replace(/[A-Za-z_$][\w$]*/g, (id) => (SHAPE_KEYWORDS.has(id) ? id : 'x'))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Clusters of added bodies that are byte-identical after identifier
+ * normalisation. EVIDENCE, printed in the warning — never part of the verdict.
+ * See the header for why shape cannot be the trigger.
+ *
+ * Blocks are split on blank added lines and on doc-comment openers, and the
+ * signature line is dropped before hashing: `safePageOpenApplicationIds` and
+ * `safePageCurriculumSlugs` differ only in their name and their one call, and
+ * the point is that the six lines underneath are the same six lines.
+ */
+export function duplicateBodyClusters(diffText, minBodyLines = 3) {
+  const byHash = new Map();
+  let file = '';
+  let block = [];
+  const flush = () => {
+    if (block.length >= minBodyLines + 1) {
+      const body = block
+        .slice(1)
+        .map(normalizeBodyLine)
+        .filter((l) => l && l !== '}' && l !== '{');
+      if (body.length >= minBodyLines) {
+        const key = body.join('\n');
+        if (!byHash.has(key)) byHash.set(key, []);
+        byHash.get(key).push(`${file}:${block[0].trim().slice(0, 60)}`);
+      }
+    }
+    block = [];
+  };
+  for (const line of String(diffText || '').split('\n')) {
+    const header = /^\+\+\+ b\/(.+)$/.exec(line);
+    if (header) {
+      flush();
+      file = header[1];
+      continue;
+    }
+    if (line.startsWith('@@')) {
+      flush();
+      continue;
+    }
+    if (!file || !CODE_FILE.test(file) || TEST_FILE.test(file)) continue;
+    if (!line.startsWith('+') || line.startsWith('+++')) continue;
+    const text = line.slice(1);
+    if (!text.trim() || /^\s*\/\*/.test(text)) {
+      flush();
+      continue;
+    }
+    if (/^\s*[*]/.test(text)) continue;
+    block.push(text);
+  }
+  flush();
+  return [...byHash.values()].filter((members) => members.length > 1);
+}
+
+// ── no-op branch (#737 class) ───────────────────────────────────────────────
 
 /**
  * True when merging `headRef` into `baseRef` produces base's own tree.
@@ -118,13 +553,65 @@ function gitMergeTree(args) {
   };
 }
 
+// ── zero-walk guard ─────────────────────────────────────────────────────────
+
+/**
+ * Every reason this run had NOTHING to evaluate. Empty array ⇒ the gate really
+ * did look at something. Non-empty ⇒ exit 1, in advisory mode too.
+ *
+ * This is not defensive padding. Under a `fetch-depth: 1` checkout — the
+ * `actions/checkout@v4` default, which is what docs-format.yml used — this gate
+ * printed `value-gate: OK` on every PR while comparing an empty subject list to
+ * an empty subject list. See the header.
+ */
+export function walkEvidence({ subject, files, prevSubjects, symbolWalkError }) {
+  const reasons = [];
+  if (!String(subject || '').trim()) {
+    reasons.push('no commit subject — `git log -1 --pretty=%s` returned nothing');
+  }
+  if (!files || files.length === 0) {
+    reasons.push('no changed files — the diff walk produced zero paths, so docsOnly and the symbol walk are both meaningless');
+  }
+  if (!prevSubjects || prevSubjects.length === 0) {
+    reasons.push('no previous subjects — similarity was compared against an empty list (shallow clone? needs fetch-depth: 0)');
+  }
+  if (symbolWalkError) {
+    reasons.push(`the reachability walk did not run: ${symbolWalkError}`);
+  }
+  return reasons;
+}
+
+// ── the decision ────────────────────────────────────────────────────────────
+
 /**
  * Pure decision — the thing CI enforces.
+ *
+ * @param {object} input
+ * @param {string[]} input.files
+ * @param {string} input.subject
+ * @param {string} input.body
+ * @param {string[]} input.prevSubjects most-recent-ancestor first
+ * @param {{name:string,file:string}[]} [input.newSymbols]
+ * @param {string[]} [input.reached] names of new symbols with an outside caller
+ * @param {number} [input.dupBodyClusters] evidence only
  */
-export function decide({ files, subject, body, prevSubjects, threshold = 0.8 }) {
+export function decide({
+  files,
+  subject,
+  body,
+  prevSubjects,
+  threshold = 0.8,
+  newSymbols = [],
+  reached = [],
+  dupBodyClusters = 0,
+  blockRun = STAMP_BLOCK_RUN,
+}) {
   const docsOnly = isDocsOnly(files);
   const norm = normalizeSubject(subject);
-  const prev = (prevSubjects || []).map(normalizeSubject);
+  const rawPrev = prevSubjects || [];
+  const prev = rawPrev.map(normalizeSubject);
+
+  // ── DOCS PATH — byte-for-byte the rule that has worked since #722. Untouched.
   let best = 0;
   let bestPrev = '';
   let bestRaw = '';
@@ -133,27 +620,82 @@ export function decide({ files, subject, body, prevSubjects, threshold = 0.8 }) 
     if (s > best) {
       best = s;
       bestPrev = prev[i];
-      bestRaw = (prevSubjects || [])[i] || prev[i];
+      bestRaw = rawPrev[i] || prev[i];
     }
   }
   const nearDup = best >= threshold;
   const hasDelta = hasBoardDeltaTrailer(body);
-  const block = docsOnly && nearDup && !hasDelta;
-  return { block, best, bestPrev, bestRaw, nearDup, docsOnly, hasDelta, norm };
+  const docsBlock = docsOnly && nearDup && !hasDelta;
+
+  // ── CODE PATH — series similarity, evaluated regardless of docsOnly.
+  let seriesBest = 0;
+  let seriesRaw = '';
+  for (let i = 0; i < rawPrev.length; i++) {
+    const s = seriesSimilarity(subject, rawPrev[i]);
+    if (s > seriesBest) {
+      seriesBest = s;
+      seriesRaw = rawPrev[i];
+    }
+  }
+  let seriesRun = 0;
+  for (let i = 0; i < rawPrev.length; i++) {
+    if (seriesSimilarity(subject, rawPrev[i]) >= threshold) seriesRun++;
+    else break;
+  }
+  const inSeries = seriesBest >= threshold;
+  const symbolCount = (newSymbols || []).length;
+  const reachedCount = (reached || []).length;
+  // symbolCount === 0 makes this arm inert — docs-only and pure-refactor PRs
+  // never reach it, which is why the docs rule above needs no guard against it.
+  const unwired = symbolCount > 0 && reachedCount === 0;
+  const serialWork = serialWorkReason(body);
+  const stamp = inSeries && unwired && !serialWork;
+  const codeBlock = stamp && seriesRun >= blockRun;
+  const codeWarn = stamp && !codeBlock;
+
+  return {
+    block: docsBlock || codeBlock,
+    docsBlock,
+    codeBlock,
+    codeWarn,
+    stamp,
+    best,
+    bestPrev,
+    bestRaw,
+    nearDup,
+    docsOnly,
+    hasDelta,
+    norm,
+    seriesBest,
+    seriesRaw,
+    seriesRun,
+    inSeries,
+    symbolCount,
+    reachedCount,
+    unwired,
+    serialWork,
+    dupBodyClusters,
+    blockRun,
+  };
 }
 
-function changedFiles(base) {
-  let range = `${base}...HEAD`;
+// ── git walks ───────────────────────────────────────────────────────────────
+
+function rangeFor(base) {
   try {
-    git(['rev-parse', '--verify', base]);
+    git(['rev-parse', '--verify', `${base}^{commit}`]);
+    return `${base}...HEAD`;
   } catch {
-    range = 'HEAD~1..HEAD';
+    return 'HEAD~1..HEAD';
   }
+}
+
+function changedFiles(range) {
   try {
     const out = git(['diff', '--name-only', range]);
     if (out) return out.split('\n').filter(Boolean);
   } catch {
-    /* empty */
+    /* fall through to the single-commit range */
   }
   try {
     const out = git(['diff', '--name-only', 'HEAD~1..HEAD']);
@@ -174,11 +716,55 @@ function previousSubjects(n = 10) {
   }
 }
 
+/**
+ * The reachability walk. Returns `{ symbols, reached, dupClusters, error }`.
+ * `error` non-null is a ZERO-WALK condition, not a pass.
+ */
+function symbolWalk(range) {
+  let diffText = '';
+  try {
+    diffText = execFileSync('git', ['diff', '--unified=0', '--no-color', range, '--', '*.ts', '*.tsx', '*.mjs', '*.cjs', '*.js', '*.jsx'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 1 << 28,
+    });
+  } catch (e) {
+    return {
+      symbols: [],
+      reached: [],
+      dupClusters: 0,
+      error: `git diff --unified=0 ${range} failed: ${String(e.message || e).slice(0, 200)}`,
+    };
+  }
+
+  const symbols = newNamedSymbols(diffText);
+  const dupClusters = duplicateBodyClusters(diffText).length;
+  if (symbols.length === 0) return { symbols, reached: [], dupClusters, error: null };
+
+  // One grep, all names. Capped so the argv stays sane; if ANY of the first
+  // 150 is reached the change is wired, so the cap cannot invent a block.
+  const names = [...new Set(symbols.map((s) => s.name))].slice(0, 150);
+  const args = ['grep', '--no-color', '-n', '-w', '-F', '-I'];
+  for (const n of names) args.push('-e', n);
+  args.push('--', ...REF_PATHSPECS);
+  const r = spawnSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 28 });
+  // git grep: 0 = matches, 1 = no matches, >1 = real failure.
+  if (r.status !== 0 && r.status !== 1) {
+    return { symbols, reached: [], dupClusters, error: `git grep exited ${r.status}: ${(r.stderr || '').trim().slice(0, 200)}` };
+  }
+  const lines = (r.stdout || '').split('\n').filter(Boolean);
+  return { symbols, reached: reachedSymbols(lines, symbols), dupClusters, error: null };
+}
+
+// ── self-test ───────────────────────────────────────────────────────────────
+
 function selfTest() {
   const fails = [];
+  const names = [];
   const assert = (cond, msg) => {
     if (!cond) fails.push(msg);
   };
+  const fixture = (name) => names.push(name);
 
   const stampA = 'docs(ops): R07 cycle 107 freeProduct=0 tip a8ca0e3f';
   const stampB = 'docs(ops): R07 cycle 108 freeProduct=0 tip 2adb5354';
@@ -198,6 +784,7 @@ function selfTest() {
   assert(blockCase.hasDelta === false, 'stamp: no Board-Delta');
   assert(blockCase.block === true, 'stamp: must BLOCK (exit 1 path)');
   assert(blockCase.best >= 0.8, `stamp: sim>=0.80 got ${blockCase.best}`);
+  fixture('near-dup docs-only no Board-Delta → BLOCK (exit 1 path)');
 
   const withDelta = decide({
     files: ['docs/ops/R07-PEACE.md'],
@@ -207,15 +794,26 @@ function selfTest() {
   });
   assert(withDelta.block === false, 'Board-Delta must clear the block');
   assert(withDelta.hasDelta === true, 'Board-Delta detected');
+  fixture('near-dup + Board-Delta → PASS');
 
+  // A code PR with a similar title that WIRED what it added. This is the
+  // fixture that has to stay green or the gate gets switched off: its stem is
+  // identical to its predecessor's, so it is `inSeries`, and it passes purely
+  // because something outside calls the new symbol.
   const realCode = decide({
     files: ['services/svc-pay/src/index.ts', 'services/svc-pay/src/index.test.ts'],
     subject: 'feat(pay): M1 pay.gateway Done bar — card sandbox',
     body: 'feat(pay): M1 pay.gateway Done bar — card sandbox\n',
     prevSubjects: ['feat(pay): M1 pay.gateway Done bar — card sandbox prior'],
+    newSymbols: [{ name: 'chargeCard', file: 'services/svc-pay/src/index.ts' }],
+    reached: ['chargeCard'],
   });
   assert(realCode.docsOnly === false, 'code: not docsOnly');
+  assert(realCode.inSeries === true, `code: stem puts it in a series (sim=${realCode.seriesBest.toFixed(3)})`);
+  assert(realCode.unwired === false, 'code: symbol is reached');
   assert(realCode.block === false, 'code: must PASS');
+  assert(realCode.codeWarn === false, 'code: must not even warn');
+  fixture('code change, near-identical title, symbol reached → PASS (legitimate serial work)');
 
   const realDocs = decide({
     files: ['docs/MONEY-BASELINE.md'],
@@ -226,11 +824,269 @@ function selfTest() {
   assert(realDocs.docsOnly === true, 'real docs: docsOnly');
   assert(realDocs.nearDup === false, `real docs: not nearDup (sim=${realDocs.best.toFixed(3)})`);
   assert(realDocs.block === false, 'real docs: must PASS');
+  fixture('unique docs title → PASS');
 
   assert(
     normalizeSubject('docs(ops): R07 cycle 99 tip abcdef1 (#711)') === normalizeSubject('docs(ops): R07 cycle 1 tip deadbeef (#1)'),
     'normalise: cycle/sha/pr collapse',
   );
+
+  // ── THE HOLE THIS CHANGE CLOSES ──────────────────────────────────────────
+  // Real subjects and real file lists from #832–#876. `docsOnly` is false
+  // because of the one slice doc, which is exactly why the old rule never ran.
+  const waveSubjects = [
+    'feat: L3 free-TRK wave44 (status lines + required-channels/xp board) (#875)',
+    'feat: L3 free-TRK wave43 (mute/digest/progress/xp/bulk board+export) (#874)',
+    'feat: L3 free-TRK wave42 (export parse/validate + round-trip checks) (#873)',
+    'feat: L3 free-TRK wave41 (board CSV export line builders) (#872)',
+    'feat: L3 free-TRK wave40 (safe clamped board pagination guards) (#871)',
+  ];
+  const waveFiles = [
+    'docs/ops/slices/L3-2026-08-06-free-trk-wave45.md',
+    'services/svc-academy/src/curriculum/catalog.ts',
+    'services/svc-academy/src/curriculum/catalog.test.ts',
+  ];
+  const waveSubject = 'feat: L3 free-TRK wave45 (status-line parse/match/consistency) (#876)';
+  const waveBody = `${waveSubject}\n\n## Board-Delta\nL3 Class N free-TRK wave45.\n`;
+  const waveSymbols = [
+    { name: 'parseCatalogStatusLine', file: 'services/svc-academy/src/curriculum/catalog.ts' },
+    { name: 'catalogStatusLineMatches', file: 'services/svc-academy/src/curriculum/catalog.ts' },
+  ];
+
+  const wave = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: waveSubjects,
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  assert(wave.docsOnly === false, 'wave: docsOnly is FALSE — this is why the old rule never fired');
+  assert(wave.nearDup === false, `wave: whole-title Dice misses it (${wave.best.toFixed(3)}) — the stem is what sees the series`);
+  assert(wave.inSeries === true, `wave: series similarity catches it (${wave.seriesBest.toFixed(3)})`);
+  assert(wave.seriesRun === 5, `wave: run length 5, got ${wave.seriesRun}`);
+  assert(wave.unwired === true, 'wave: no new symbol reached from outside');
+  assert(wave.codeBlock === true, 'wave: run 5 ≥ 3 → must BLOCK');
+  assert(wave.block === true, 'wave: block');
+  fixture('code near-dup series + zero reached symbols + run 5 → BLOCK (the #832–#876 shape)');
+
+  // First offence: same shape, run of 1. Loud, but green.
+  const firstOffence = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: [waveSubjects[0], 'fix(ci): the auth gate never read a version (#819)'],
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  assert(firstOffence.stamp === true, 'first offence: is a stamp');
+  assert(firstOffence.seriesRun === 1, `first offence: run 1, got ${firstOffence.seriesRun}`);
+  assert(firstOffence.codeWarn === true, 'first offence: must WARN');
+  assert(firstOffence.codeBlock === false, 'first offence: must NOT block');
+  assert(firstOffence.block === false, 'first offence: exit 0');
+  fixture('code near-dup series + zero reached symbols + run 1 → WARN, exit 0 (warn before block)');
+
+  // Threshold is a stated number, not a mood: run 2 warns, run 3 blocks.
+  const atThreshold = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: waveSubjects.slice(0, 3),
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  const belowThreshold = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: [...waveSubjects.slice(0, 2), 'fix(ci): unrelated (#819)'],
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  assert(atThreshold.seriesRun === 3 && atThreshold.codeBlock === true, `threshold: run 3 blocks (got run ${atThreshold.seriesRun})`);
+  assert(
+    belowThreshold.seriesRun === 2 && belowThreshold.codeWarn === true,
+    `threshold: run 2 warns (got run ${belowThreshold.seriesRun})`,
+  );
+  fixture(`stated threshold — run ${STAMP_BLOCK_RUN - 1} WARNs, run ${STAMP_BLOCK_RUN} BLOCKs`);
+
+  // The escape, and its floor. A bare `Serial-Work:` is not a reason.
+  const escaped = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: `${waveBody}\nSerial-Work: per-service rollout of the rail adapter, one service per PR by design\n`,
+    prevSubjects: waveSubjects,
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  const emptyEscape = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: `${waveBody}\nSerial-Work:\n`,
+    prevSubjects: waveSubjects,
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  assert(escaped.block === false, 'escape: Serial-Work with a reason clears the block');
+  assert(escaped.serialWork.startsWith('per-service rollout'), 'escape: reason captured for the audit log');
+  assert(emptyEscape.block === true, 'escape: an empty Serial-Work trailer is not an escape');
+  fixture('Serial-Work: <reason> → PASS · bare Serial-Work: → still BLOCK (auditable escape)');
+
+  // Same series, but this one wired something. The gate must stay off it.
+  const wiredWave = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: waveSubjects,
+    newSymbols: waveSymbols,
+    reached: ['parseCatalogStatusLine'],
+  });
+  assert(wiredWave.inSeries === true, 'wired wave: still in the series');
+  assert(wiredWave.unwired === false, 'wired wave: one reached symbol is enough');
+  assert(wiredWave.block === false && wiredWave.codeWarn === false, 'wired wave: must PASS silently');
+  fixture('same series, one symbol reached → PASS (similarity alone never blocks)');
+
+  // A PR that adds no new symbol at all — a refactor, a rename, a test-only
+  // change — can never be a code stamp, whatever its title looks like.
+  const noSymbols = decide({
+    files: ['services/svc-pay/src/index.ts'],
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: waveSubjects,
+    newSymbols: [],
+    reached: [],
+  });
+  assert(noSymbols.inSeries === true, 'no-symbol: in series');
+  assert(noSymbols.unwired === false && noSymbols.block === false, 'no-symbol: must PASS');
+  fixture('near-dup title but no new symbols (refactor/rename) → PASS');
+
+  // ── stem normalisation ───────────────────────────────────────────────────
+  assert(
+    seriesStem('feat: L3 free-TRK wave45 (status-line parse/match/consistency) (#876)') ===
+      seriesStem('feat: L3 free-TRK wave12 (bottom-N, seasons, residency) (#843)'),
+    'stem: waveN titles collapse to one series key',
+  );
+  assert(
+    seriesStem('feat(academy): L3 certs progress report') !== seriesStem('feat(pay): L3 certs progress report'),
+    'stem: conventional-commit scope is preserved',
+  );
+  assert(
+    similarity(
+      normalizeSubject('feat: L3 free-TRK wave45 (status-line parse/match/consistency)'),
+      normalizeSubject('feat: L3 free-TRK wave12 (bottom-N, seasons, residency)'),
+    ) < 0.8,
+    'stem: whole-title Dice on those two is BELOW threshold — the stem is load-bearing',
+  );
+  fixture('seriesStem — 45 wave titles collapse to one key, scopes stay distinct');
+
+  // ── symbol extraction ────────────────────────────────────────────────────
+  const diffFixture = [
+    'diff --git a/services/svc-academy/src/curriculum/catalog.ts b/services/svc-academy/src/curriculum/catalog.ts',
+    '--- a/services/svc-academy/src/curriculum/catalog.ts',
+    '+++ b/services/svc-academy/src/curriculum/catalog.ts',
+    '@@ -1023,0 +1024,8 @@',
+    '+/** L3 — safe page spine slugs with clamped bounds. */',
+    '+export function safePageCurriculumSlugs(offset: number, limit: number): readonly string[] {',
+    '+  if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];',
+    '+  const all = listCurriculumSlugs();',
+    '+  const o = Math.max(0, Math.min(all.length, Math.floor(offset)));',
+    '+  const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));',
+    '+  return all.slice(o, o + l);',
+    '+}',
+    'diff --git a/services/svc-academy/src/ambassadors/residency.ts b/services/svc-academy/src/ambassadors/residency.ts',
+    '--- a/services/svc-academy/src/ambassadors/residency.ts',
+    '+++ b/services/svc-academy/src/ambassadors/residency.ts',
+    '@@ -658,0 +659,8 @@',
+    '+  /** L3 — safe page of open ids with clamped bounds. */',
+    '+  safePageOpenApplicationIds(offset: number, limit: number): readonly string[] {',
+    '+    if (!Number.isFinite(offset) || !Number.isFinite(limit)) return [];',
+    '+    const all = this.openApplicationIds();',
+    '+    const o = Math.max(0, Math.min(all.length, Math.floor(offset)));',
+    '+    const l = Math.max(0, Math.min(all.length - o, Math.floor(limit)));',
+    '+    return all.slice(o, o + l);',
+    '+  }',
+    'diff --git a/services/svc-academy/src/http/routes.ts b/services/svc-academy/src/http/routes.ts',
+    '--- a/services/svc-academy/src/http/routes.ts',
+    '+++ b/services/svc-academy/src/http/routes.ts',
+    '@@ -40,0 +41,2 @@',
+    '+    this.reindex();',
+    '+    reindex();',
+    'diff --git a/services/svc-academy/src/curriculum/catalog.test.ts b/services/svc-academy/src/curriculum/catalog.test.ts',
+    '--- a/services/svc-academy/src/curriculum/catalog.test.ts',
+    '+++ b/services/svc-academy/src/curriculum/catalog.test.ts',
+    '@@ -1,0 +2,2 @@',
+    '+export function testOnlyHelper(): void {}',
+    '+  itHelper(): void {}',
+  ].join('\n');
+  const syms = newNamedSymbols(diffFixture);
+  const symNames = syms.map((s) => s.name);
+  assert(symNames.includes('safePageCurriculumSlugs'), 'symbols: exported function collected');
+  assert(symNames.includes('safePageOpenApplicationIds'), 'symbols: class method collected (the waves used both forms)');
+  assert(!symNames.includes('testOnlyHelper') && !symNames.includes('itHelper'), 'symbols: test-file definitions are not collected');
+  assert(!symNames.includes('reindex'), 'symbols: a bare call statement is not a declaration');
+  fixture('newNamedSymbols — exports + class methods in, test-file defs and call statements out');
+
+  // ── reachability ─────────────────────────────────────────────────────────
+  const grep = [
+    'services/svc-academy/src/curriculum/catalog.ts:1200:  return safePageCurriculumSlugs(0, 10);',
+    'services/svc-academy/src/curriculum/catalog.test.ts:9:  expect(safePageCurriculumSlugs(0, 1)).toEqual([]);',
+    "services/svc-academy/src/index.ts:4:export { safePageOpenApplicationIds } from './ambassadors/residency';",
+  ];
+  const reached0 = reachedSymbols(grep, syms);
+  assert(reached0.length === 0, `reach: defining file + test file + barrel re-export reach nothing, got ${JSON.stringify(reached0)}`);
+  const reached1 = reachedSymbols(
+    [...grep, 'services/svc-academy/src/http/routes.ts:88:  const page = safePageCurriculumSlugs(offset, limit);'],
+    syms,
+  );
+  assert(reached1.includes('safePageCurriculumSlugs'), 'reach: a real non-test caller outside the new-symbol files counts');
+  const crossRef = reachedSymbols(['services/svc-academy/src/ambassadors/residency.ts:700:  return safePageCurriculumSlugs(0, 1);'], syms);
+  assert(crossRef.length === 0, 'reach: one new-symbol file calling another is not reach — that dodge is closed');
+  fixture('reachedSymbols — defining file, test file, barrel re-export and new-symbol cross-calls all excluded');
+
+  // ── duplicate bodies (evidence only) ─────────────────────────────────────
+  const clusters = duplicateBodyClusters(diffFixture);
+  assert(
+    clusters.length === 1 && clusters[0].length === 2,
+    `dup bodies: the two real clamp bodies cluster, got ${JSON.stringify(clusters)}`,
+  );
+  const dupCarried = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: waveBody,
+    prevSubjects: waveSubjects,
+    newSymbols: waveSymbols,
+    reached: ['parseCatalogStatusLine'],
+    dupBodyClusters: 9,
+  });
+  assert(dupCarried.block === false, 'dup bodies: EVIDENCE ONLY — nine identical bodies must not block wired work');
+  fixture('duplicateBodyClusters — identifier-normalised twins detected, and proven not to gate');
+
+  // ── zero-walk ────────────────────────────────────────────────────────────
+  assert(
+    walkEvidence({ subject: 'feat: x', files: ['a.ts'], prevSubjects: ['b'], symbolWalkError: null }).length === 0,
+    'zero-walk: a real evaluation has no reasons',
+  );
+  assert(
+    walkEvidence({ subject: 'feat: x', files: ['a.ts'], prevSubjects: [], symbolWalkError: null }).length === 1,
+    'zero-walk: empty ancestor list must FAIL (the fetch-depth:1 defect)',
+  );
+  assert(
+    walkEvidence({ subject: 'feat: x', files: [], prevSubjects: ['b'], symbolWalkError: null }).length === 1,
+    'zero-walk: empty diff must FAIL',
+  );
+  assert(
+    walkEvidence({ subject: '', files: ['a.ts'], prevSubjects: ['b'], symbolWalkError: null }).length === 1,
+    'zero-walk: missing subject must FAIL',
+  );
+  assert(
+    walkEvidence({ subject: 'feat: x', files: ['a.ts'], prevSubjects: ['b'], symbolWalkError: 'git grep exited 128' }).length === 1,
+    'zero-walk: broken reachability walk must FAIL, not pass',
+  );
+  assert(
+    walkEvidence({ subject: '', files: [], prevSubjects: [], symbolWalkError: 'boom' }).length === 4,
+    'zero-walk: every reason is reported, not just the first',
+  );
+  fixture('walkEvidence — no subject / no diff / no ancestors / broken symbol walk each FAIL LOUDLY');
 
   // no-op tree: merge result equals main tree → BLOCK (already landed / empty)
   //
@@ -254,6 +1110,7 @@ function selfTest() {
     }) === true,
     'no-op: equal trees must BLOCK',
   );
+  fixture('no-op merge tree equals main → BLOCK');
 
   // real delta: merge-tree returns different tree → not no-op
   assert(
@@ -280,6 +1137,7 @@ function selfTest() {
     }) === false,
     'no-op: a push ON the base is not a no-op branch',
   );
+  fixture('push ON the base (HEAD === main) → PASS, not a no-op branch');
 
   // conflicts (merge-tree fails) → not a pure no-op (real work may still exist)
   assert(
@@ -295,33 +1153,53 @@ function selfTest() {
     for (const f of fails) console.error(`  · ${f}`);
     process.exit(1);
   }
-  console.log('value-gate --self-test OK (6 fixtures)');
-  console.log('  fixture near-dup docs-only no Board-Delta → BLOCK (exit 1 path)');
-  console.log('  fixture near-dup + Board-Delta → PASS');
-  console.log('  fixture code change → PASS');
-  console.log('  fixture unique docs title → PASS');
-  console.log('  fixture no-op merge tree equals main → BLOCK');
-  console.log('  fixture push ON the base (HEAD === main) → PASS, not a no-op branch');
+  console.log(`value-gate --self-test OK (${names.length} fixtures)`);
+  for (const n of names) console.log(`  fixture ${n}`);
   process.exit(0);
 }
 
+// ── live ────────────────────────────────────────────────────────────────────
+
 function mainLive() {
-  const files = changedFiles(BASE);
-  const subject = git(['log', '-1', '--pretty=%s']);
-  const body = git(['log', '-1', '--pretty=%B']);
+  const range = rangeFor(BASE);
+  const files = changedFiles(range);
+  let subject = '';
+  let body = '';
+  try {
+    subject = git(['log', '-1', '--pretty=%s']);
+    body = git(['log', '-1', '--pretty=%B']);
+  } catch {
+    /* zero-walk will report it */
+  }
   const prev = previousSubjects(10);
-  const result = decide({ files, subject, body, prevSubjects: prev });
+  const walk = symbolWalk(range);
+  const result = decide({
+    files,
+    subject,
+    body,
+    prevSubjects: prev,
+    newSymbols: walk.symbols,
+    reached: walk.reached,
+    dupBodyClusters: walk.dupClusters,
+  });
 
   const mode = STRICT ? 'strict' : 'advisory';
   const noOp = isNoOpOntoBase(BASE, 'HEAD');
   console.log(
-    `value-gate: noOp=${noOp} docsOnly=${result.docsOnly} nearDup=${result.nearDup} (best=${result.best.toFixed(3)}) hasBoardDelta=${result.hasDelta} mode=${mode}`,
+    `value-gate: noOp=${noOp} docsOnly=${result.docsOnly} nearDup=${result.nearDup} (best=${result.best.toFixed(3)}) ` +
+      `inSeries=${result.inSeries} (series=${result.seriesBest.toFixed(3)} run=${result.seriesRun}/${result.blockRun}) ` +
+      `newSymbols=${result.symbolCount} reached=${result.reachedCount} dupBodies=${result.dupBodyClusters} ` +
+      `hasBoardDelta=${result.hasDelta} serialWork=${Boolean(result.serialWork)} mode=${mode}`,
   );
   console.log(`  subject: ${subject}`);
   if (result.nearDup) console.log(`  similar to (norm): ${result.bestPrev.slice(0, 100)}`);
   if (result.nearDup && result.bestRaw) console.log(`  offending previous subject: ${result.bestRaw}`);
+  if (result.inSeries && result.seriesRaw) console.log(`  series sibling: ${result.seriesRaw}`);
+  if (result.serialWork) console.log(`  Serial-Work (audit): ${result.serialWork}`);
   console.log(`  files (${files.length}): ${files.slice(0, 8).join(', ')}${files.length > 8 ? '…' : ''}`);
 
+  // ── zero-walk FIRST, after the no-op verdict. A definite verdict beats a
+  // complaint about missing evidence; an EMPTY evaluation never prints clean.
   if (noOp) {
     const msg =
       `value-gate: ${STRICT ? 'FAIL' : 'WARN'} — branch adds nothing to ${BASE} (merge-tree equals main's tree).\n` +
@@ -334,7 +1212,20 @@ function mainLive() {
     process.exit(0);
   }
 
-  if (result.block) {
+  const blind = walkEvidence({ subject, files, prevSubjects: prev, symbolWalkError: walk.error });
+  if (blind.length) {
+    console.error(
+      `value-gate: FAIL — the gate evaluated NOTHING and will not report clean.\n` +
+        blind.map((r) => `  · ${r}`).join('\n') +
+        `\n  A gate that walks zero items and prints OK is the defect four gates in this repo exist to close.\n` +
+        `  Fix: give the checkout history — 'actions/checkout@v4' defaults to fetch-depth: 1, this gate needs 0\n` +
+        `  (base ref '${BASE}' and ≥11 ancestors). Locally: git fetch origin main.\n` +
+        `  This exits 1 in advisory mode too: advisory softens a verdict, never the absence of one.`,
+    );
+    process.exit(1);
+  }
+
+  if (result.docsBlock) {
     const msg =
       `value-gate: ${STRICT ? 'FAIL' : 'WARN'} — docs-only near-duplicate with no Board-Delta trailer.\n` +
       `  Offending previous subject: ${result.bestRaw || result.bestPrev}\n` +
@@ -345,6 +1236,32 @@ function mainLive() {
       `    Class N PR open/merge | substantive spec content. NOT tip SHA / cycle N / re-freeze.`;
     console.error(msg);
     if (STRICT) process.exit(1);
+    process.exit(0);
+  }
+
+  if (result.stamp) {
+    const verdict = result.codeBlock ? (STRICT ? 'FAIL' : 'WARN') : 'WARN';
+    const msg =
+      `value-gate: ${verdict} — near-duplicate subject #${result.seriesRun + 1} in a series, and nothing calls what it added.\n` +
+      `  Series sibling: ${result.seriesRaw}\n` +
+      `  Series similarity: ${result.seriesBest.toFixed(3)} (threshold 0.80) · consecutive run: ${result.seriesRun} (blocks at ${result.blockRun})\n` +
+      `  New named symbols: ${result.symbolCount} · reached from a non-test file outside them: ${result.reachedCount}\n` +
+      (result.dupBodyClusters
+        ? `  Byte-identical bodies after identifier normalisation: ${result.dupBodyClusters} cluster(s) in this diff alone.\n`
+        : '') +
+      `  Similar titles are fine. Similar titles that add nothing anything calls are the same work counted twice.\n` +
+      `  Fix, in order of preference:\n` +
+      `    (1) wire it — one non-test caller outside the files you added symbols to clears this;\n` +
+      `    (2) extract the shared shape instead of re-implementing it;\n` +
+      `    (3) if the series is genuinely right, say so on the record:\n` +
+      `          Serial-Work: <why this repeats — e.g. per-service rollout, one service per PR>\n` +
+      `        It is a commit trailer, it is echoed in this log, and it is greppable:\n` +
+      `          git log --grep '^Serial-Work:'\n` +
+      (result.codeBlock
+        ? `  BLOCKING: this is number ${result.seriesRun + 1} in a row. The first ${result.blockRun - 1} warned.`
+        : `  NOT blocking yet: run ${result.seriesRun} of ${result.blockRun}. The ${result.blockRun + 1}th consecutive one is red.`);
+    console.error(msg);
+    if (result.codeBlock && STRICT) process.exit(1);
     process.exit(0);
   }
 
