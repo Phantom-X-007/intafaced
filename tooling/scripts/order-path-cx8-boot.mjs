@@ -170,6 +170,16 @@ async function main() {
     MATCHING_URL: 'http://127.0.0.1:4005',
     IDENTITY_URL: 'http://127.0.0.1:4002',
     TRADE_SPOT_ENABLED: 'true',
+    // svc-trade refuses to boot until the account that funds realised futures
+    // profit is NAMED — its balance is the ceiling on a payout, and there is no
+    // safe default (docs/adr/2026-08-05-futures-risk-and-mark-law.md).
+    //
+    // This is the SMOKE RIG's value, not a product decision. The bound has to
+    // guard the account `futuresRealizeProfit` actually debits, and that recipe
+    // is an owner carve-out this branch does not touch — so exactly one value
+    // boots today, and `profitSourceFromConfig` refuses any other. A deployment
+    // still has to state it; that is the whole point of having no default.
+    TRADE_FUTURES_PROFIT_SOURCE: 'house:fees:trade:available',
   });
 
   await waitHealth('http://127.0.0.1:4004', 'trade');

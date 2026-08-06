@@ -67,6 +67,15 @@ export interface FuturesJobsHandle {
    * Available even when jobs are disabled so public REST can serve mark honestly.
    */
   markPrice: (marketId: string, at?: Date) => Promise<string | null>;
+  /**
+   * The assembled mark port itself.
+   *
+   * Exposed so the position open/close path prices from the SAME source
+   * liquidation does. A second mark path for the money-moving routes is how
+   * `entryPrice`/`exitPrice` ended up coming off the request in the first
+   * place — there was no port there to read from.
+   */
+  marks: MarkSource;
   stop(): void;
 }
 
@@ -97,6 +106,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       publishFundingRate,
       getPublishedRate,
       markPrice,
+      marks,
       stop: () => host.stopAll(),
     };
   }
@@ -139,6 +149,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     publishFundingRate,
     getPublishedRate,
     markPrice,
+    marks,
     stop: () => host.stopAll(),
   };
 }

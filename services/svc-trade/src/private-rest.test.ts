@@ -6,6 +6,7 @@ import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { balancesSchema, orderSchema, tradeSchema, tradingFeeSchema } from '@intafaced/exchange-contract';
 import { parseAmount, type Balance } from '@intafaced/ledger-client';
 import {
+  crossMarginRefusal,
   fakeFill,
   fakeOrder,
   mapCreateOrderBody,
@@ -15,6 +16,7 @@ import {
   presentCcxtTradingFee,
   presentTradingFees,
   registerPrivateRest,
+  suppliedPriceFields,
   toCcxtOrderStatus,
   type PrivateRestDeps,
 } from './private-rest.js';
@@ -334,7 +336,7 @@ describe('private REST — mount boundary + order write path', () => {
       openPosition: async () => {
         throw new Error('openPosition not stubbed');
       },
-      closePosition: async (_p, _id, _exit) => {
+      closePosition: async () => {
         throw new Error('closePosition not stubbed');
       },
       ...overrides,
@@ -1280,6 +1282,262 @@ describe('private REST — mount boundary + order write path', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([sample]);
     await app.close();
+  });
+
+  // ── A caller may not name a price (D-S-01) ──────────────────────────────────
+
+  /**
+   * `docs/adr/2026-08-05-futures-risk-and-mark-law.md`, refuse table row 1.
+   *
+   * Every test here asserts THE SERVICE WAS NEVER CALLED, not merely that the
+   * status was 400 — the refusal has to happen before the money path, or it is
+   * just a differently worded receipt for the same trade.
+   */
+  describe('caller-supplied prices are refused, not ignored', () => {
+    for (const field of ['entryPrice', 'price', 'markPrice'] as const) {
+      it(`POST /positions with ${field} → 400 trade.price_not_accepted, and openPosition is never called`, async () => {
+        let called = false;
+        const app = await build(
+          deps({
+            openPosition: async () => {
+              called = true;
+              throw new Error('should not reach the money path');
+            },
+          }),
+        );
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/v1/positions',
+          headers: signedHeaders(),
+          payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', [field]: '1' },
+        });
+        expect(res.statusCode).toBe(400);
+        expect(res.json().error).toBe('trade.price_not_accepted');
+        expect(res.json().message).toContain(field);
+        expect(called).toBe(false);
+        await app.close();
+      });
+    }
+
+    it('names the price field before complaining about anything else the caller got wrong', async () => {
+      const app = await build();
+      // No symbol, no side, no size — and a price. The price is the answer.
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { entryPrice: '50000' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('trade.price_not_accepted');
+      await app.close();
+    });
+
+    it('DELETE /positions/:id?exitPrice= → 400, and closePosition is never called', async () => {
+      let called = false;
+      const app = await build(
+        deps({
+          closePosition: async () => {
+            called = true;
+            throw new Error('should not reach the money path');
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/positions/${ORDER_ID}?exitPrice=999999`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('trade.price_not_accepted');
+      expect(res.json().message).toContain('exitPrice');
+      expect(called).toBe(false);
+      await app.close();
+    });
+
+    /**
+     * The refusal must not be silently-substitute. A caller who is told "no"
+     * can fix their bot; a caller who is told "200 OK" while the platform used
+     * a different number keeps sending the price and never finds out.
+     */
+    it('does not quietly re-price — the refusal explains what to send instead', async () => {
+      const app = await build();
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/positions/${ORDER_ID}?exitPrice=999999`,
+        headers: signedHeaders(),
+      });
+      expect(res.json().message).toContain('read from the mark source');
+      expect(res.json().message).toContain('Resend without it');
+      await app.close();
+    });
+
+    it('DELETE with no price closes at the mark — the happy path still works', async () => {
+      const seen: string[] = [];
+      const app = await build(
+        deps({
+          closePosition: async (_p, id) => {
+            seen.push(id);
+            return { id, symbol: 'BTC/USDT-PERP' } as never;
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/positions/${ORDER_ID}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(seen).toEqual([ORDER_ID]);
+      await app.close();
+    });
+
+    it('POST with no price opens at the mark, and no price reaches the service', async () => {
+      const seen: Record<string, unknown>[] = [];
+      const app = await build(
+        deps({
+          openPosition: async (_p, input) => {
+            seen.push(input as unknown as Record<string, unknown>);
+            return { id: 'pos-1', symbol: input.symbol } as never;
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(seen).toHaveLength(1);
+      for (const forbidden of ['entryPrice', 'exitPrice', 'price', 'markPrice']) {
+        expect(seen[0]).not.toHaveProperty(forbidden);
+      }
+      await app.close();
+    });
+
+    it('an unauthenticated caller is still refused first — the price check does not open a hole', async () => {
+      const app = await build();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', entryPrice: '1' },
+      });
+      expect(res.statusCode).toBe(401);
+      await app.close();
+    });
+  });
+
+  // ── Isolated margin only (DIRECTION §1, ADR done bar 8) ─────────────────────
+
+  describe('cross margin is refused, not coerced', () => {
+    it('POST /positions with marginMode cross → 400, and openPosition is never called', async () => {
+      let called = false;
+      const app = await build(
+        deps({
+          openPosition: async () => {
+            called = true;
+            throw new Error('should not open a cross-margin position');
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', marginMode: 'cross' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('trade.cross_margin_unsupported');
+      expect(called).toBe(false);
+      await app.close();
+    });
+
+    /**
+     * The dangerous shape: accepting `cross` and quietly writing `isolated`.
+     * The caller believes their whole balance backs the position. It does not.
+     */
+    it('does not silently downgrade cross to isolated', async () => {
+      const seen: unknown[] = [];
+      const app = await build(
+        deps({
+          openPosition: async (_p, input) => {
+            seen.push(input.marginMode);
+            return {} as never;
+          },
+        }),
+      );
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'cross' },
+      });
+      expect(seen).toEqual([]);
+      await app.close();
+    });
+
+    it('still accepts isolated, and omitting it', async () => {
+      const seen: unknown[] = [];
+      const app = await build(
+        deps({
+          openPosition: async (_p, input) => {
+            seen.push(input.marginMode);
+            return {} as never;
+          },
+        }),
+      );
+      for (const payload of [
+        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'isolated' },
+        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1' },
+      ]) {
+        const res = await app.inject({ method: 'POST', url: '/api/v1/positions', headers: signedHeaders(), payload });
+        expect(res.statusCode).toBe(200);
+      }
+      expect(seen).toEqual(['isolated', undefined]);
+      await app.close();
+    });
+
+    it('refuses an unrecognised margin mode rather than defaulting it', async () => {
+      const app = await build();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'portfolio' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('trade.bad_request');
+      await app.close();
+    });
+  });
+
+  describe('crossMarginRefusal', () => {
+    it('passes isolated and undefined, refuses cross and anything else', () => {
+      expect(crossMarginRefusal(undefined)).toBeNull();
+      expect(crossMarginRefusal('isolated')).toBeNull();
+      expect(crossMarginRefusal('cross')?.error).toBe('trade.cross_margin_unsupported');
+      expect(crossMarginRefusal('CROSS')?.error).toBe('trade.bad_request');
+      expect(crossMarginRefusal(null)?.error).toBe('trade.bad_request');
+    });
+
+    it('explains why coercion would be worse than refusal', () => {
+      expect(crossMarginRefusal('cross')!.message).toContain('misreport what is backing it');
+    });
+  });
+
+  describe('suppliedPriceFields', () => {
+    it('finds every forbidden field a request carries, and nothing else', () => {
+      expect(suppliedPriceFields({ symbol: 'BTC/USDT', size: '1' })).toEqual([]);
+      expect(suppliedPriceFields({ entryPrice: '1', exitPrice: '2' })).toEqual(['entryPrice', 'exitPrice']);
+      expect(suppliedPriceFields(null)).toEqual([]);
+      expect(suppliedPriceFields(undefined)).toEqual([]);
+    });
+
+    it('catches an EMPTY price too — sending the field at all is the mistake', () => {
+      expect(suppliedPriceFields({ exitPrice: '' })).toEqual(['exitPrice']);
+      expect(suppliedPriceFields({ entryPrice: null })).toEqual(['entryPrice']);
+    });
   });
 
   // ── setLeverage / setMarginMode ───────────────────────────────────────────

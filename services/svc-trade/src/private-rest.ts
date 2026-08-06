@@ -88,18 +88,93 @@ export interface PrivateRestDeps {
   userBalances(userId: string): Promise<readonly Balance[]>;
   /** Open futures positions for the principal (empty [] when none). */
   listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
+  /**
+   * Open a futures position. NO PRICE PARAMETER, on purpose — the entry price is
+   * read from the mark port inside the service. See `PRICE_FIELDS` below.
+   */
   openPosition(
     principal: Principal,
     input: {
       symbol: string;
       side: 'long' | 'short';
       size: string;
-      entryPrice: string;
       leverage: string;
-      marginMode?: 'cross' | 'isolated';
+      /**
+       * `'isolated'` is the only inhabitant, deliberately — see
+       * `crossMarginRefusal`. Cross margin is not a disabled flag here, it is
+       * a value the type system cannot express.
+       */
+      marginMode?: 'isolated';
     },
   ): Promise<Position>;
-  closePosition(principal: Principal, positionId: string, exitPrice: string): Promise<Position>;
+  /** Close at the current mark. No price parameter, for the same reason. */
+  closePosition(principal: Principal, positionId: string): Promise<Position>;
+}
+
+/**
+ * FIELDS A CALLER MAY NOT SET, BECAUSE THEY MOVE MONEY.
+ *
+ * `docs/adr/2026-08-05-futures-risk-and-mark-law.md`: a price that moves money
+ * is never supplied by the party it pays. These used to be read straight off the
+ * request — `entryPrice` from the POST body, `exitPrice` from the DELETE query —
+ * and `exitPrice` alone decided the realised PnL that `futuresRealizeProfit`
+ * then paid out of a house pot.
+ *
+ * Presence is REFUSED, not ignored. Silently substituting the real mark would
+ * give a caller different behaviour from the one they asked for and no way to
+ * notice: a bot closing at its own favourable number would keep sending it,
+ * keep getting 200s, and keep booking a PnL it never actually chose. The ADR's
+ * refuse table puts this in its first row for exactly that reason.
+ */
+const PRICE_FIELDS = ['entryPrice', 'exitPrice', 'price', 'markPrice'] as const;
+
+/** Which forbidden price fields a request carries. Empty when it carries none. */
+export function suppliedPriceFields(source: Record<string, unknown> | null | undefined): string[] {
+  if (source == null) return [];
+  return PRICE_FIELDS.filter((f) => source[f] !== undefined);
+}
+
+/** One refusal shape, so both routes say it identically. */
+export function priceNotAcceptedBody(fields: readonly string[]): { error: string; message: string } {
+  return {
+    error: 'trade.price_not_accepted',
+    message:
+      `${fields.join(', ')} may not be supplied by the caller — a price that moves money is read from the mark source, ` +
+      'not from the request. Resend without it and the current mark is used.',
+  };
+}
+
+/**
+ * CROSS MARGIN IS REFUSED, NOT COERCED.
+ *
+ * `DIRECTION` §1 is isolated margin only, and the futures ADR's done bar item 8
+ * is stronger than "off": *no cross-margin path exists, even disabled*. The
+ * route used to accept `marginMode: 'cross'` and persist it, and anything it
+ * did not recognise it quietly turned into isolated.
+ *
+ * Both halves are wrong, and the quiet one is worse. A trader who asked for
+ * cross margin and was given an isolated position has been told their loss is
+ * capped at this position's margin when they believe their whole balance is
+ * backing it — or the reverse. Cross margin is a different product with a
+ * different liquidation model; it needs its own spec, not a coerced enum.
+ *
+ * Returns the refusal body, or null when the value is acceptable.
+ */
+export function crossMarginRefusal(value: unknown): { error: string; message: string } | null {
+  if (value === undefined || value === 'isolated') return null;
+  if (value === 'cross') {
+    return {
+      error: 'trade.cross_margin_unsupported',
+      message:
+        'marginMode "cross" is not supported: this platform runs isolated margin only, and there is no cross-margin path ' +
+        'to enable. Omit marginMode or send "isolated" — a position opened as isolated when you asked for cross would ' +
+        'misreport what is backing it.',
+    };
+  }
+  return {
+    error: 'trade.bad_request',
+    message: `marginMode ${JSON.stringify(value)} is not a margin mode — send "isolated" or omit it.`,
+  };
 }
 
 /** Kinds that count as locked / not free under exchange-contract free/used/total. */
@@ -626,7 +701,12 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  /** Open a funded futures position (margin via ledger recipes). */
+  /**
+   * Open a funded futures position (margin via ledger recipes).
+   *
+   * The entry price is NOT a parameter. It is read from the mark source, and a
+   * body that carries one is refused before anything is locked.
+   */
   app.post('/api/v1/positions', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
@@ -635,22 +715,34 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     try {
       requireScope(principal, 'trade:write');
       const body = (req.body ?? {}) as Record<string, unknown>;
+
+      // Refused first, before any other validation: a caller who sent a price
+      // should hear about the price, not about a field they got right.
+      const supplied = suppliedPriceFields(body);
+      if (supplied.length > 0) {
+        return reply.code(400).send(priceNotAcceptedBody(supplied));
+      }
+
       const symbol = typeof body.symbol === 'string' ? body.symbol : '';
       const side = body.side === 'long' || body.side === 'short' ? body.side : null;
       const size = typeof body.size === 'string' ? body.size : typeof body.contracts === 'string' ? body.contracts : '';
-      const entryPrice = typeof body.entryPrice === 'string' ? body.entryPrice : '';
       const leverage = typeof body.leverage === 'string' ? body.leverage : '1';
-      const marginMode = body.marginMode === 'cross' || body.marginMode === 'isolated' ? body.marginMode : undefined;
-      if (!symbol || !side || !size || !entryPrice) {
+
+      const marginRefusal = crossMarginRefusal(body.marginMode);
+      if (marginRefusal) {
+        return reply.code(400).send(marginRefusal);
+      }
+      const marginMode = body.marginMode === 'isolated' ? ('isolated' as const) : undefined;
+
+      if (!symbol || !side || !size) {
         return reply.code(400).send({
-          ...badRequest('symbol, side, size|contracts, entryPrice required', 'trade.bad_request').body,
+          ...badRequest('symbol, side, size|contracts required', 'trade.bad_request').body,
         });
       }
       const pos = await deps.openPosition(principal, {
         symbol,
         side,
         size,
-        entryPrice,
         leverage,
         marginMode,
       });
@@ -666,24 +758,25 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   /**
-   * Close position at external exit price (query `exitPrice`).
-   * Realized PnL via planClose recipes — never invents a mark.
+   * Close a position at the CURRENT MARK.
+   *
+   * `?exitPrice=` used to be required here and was the whole realised PnL — the
+   * trader named the number the platform paid them. It is now refused.
    */
-  app.delete<{ Params: { id: string }; Querystring: { exitPrice?: string } }>('/api/v1/positions/:id', async (req, reply) => {
+  app.delete<{ Params: { id: string }; Querystring: Record<string, string | undefined> }>('/api/v1/positions/:id', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
     if (!requireTradeJurisdiction(req, reply, principal)) return;
 
     try {
       requireScope(principal, 'trade:write');
-      const exitPrice = req.query?.exitPrice;
-      if (exitPrice == null || String(exitPrice).trim() === '') {
-        return reply.code(400).send({
-          error: 'trade.exit_price_required',
-          message: 'exitPrice query required (external mark — never invent)',
-        });
+
+      const supplied = suppliedPriceFields(req.query as Record<string, unknown> | undefined);
+      if (supplied.length > 0) {
+        return reply.code(400).send(priceNotAcceptedBody(supplied));
       }
-      const pos = await deps.closePosition(principal, req.params.id, String(exitPrice).trim());
+
+      const pos = await deps.closePosition(principal, req.params.id);
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {
