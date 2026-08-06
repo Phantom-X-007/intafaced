@@ -645,8 +645,30 @@ export const FEATURES = [
   f('bank.cards', 'CardIssuerAdapter + card-sim, <2s auth decision', {
     module: 'bank',
     phase: '5',
+    status: 'done',
     dependsOn: ['bank.accounts'],
-    note: '**Reclaimed 2026-08-04** M6 — Nitro agents thin. Class X keys = Nitro human.',
+    requires: ['services/svc-bank/src/cards/card-service.ts', 'services/svc-bank/src/cards/issuer.ts'],
+    note:
+      '**SPLIT 2026-08-06** per docs/adr/2026-08-04-bank-vertical-law.md correction 3. This row is the LEDGER HALF, which is what the ' +
+      'title names (CardIssuerAdapter + card-sim). The LIVE RAIL half is **socket.live-issuer** and is not counted here. ' +
+      '**Reclaimed 2026-08-04** M6 — Nitro agents thin. Class M. ' +
+      'LEDGER HALF DONE on main via #770 (merged 2026-08-04), verified against the ADR six-point bar rather than taken on its word: ' +
+      'five procedures mounted on the user-facing `cards` sub-router (programme/list/issue/setStatus/authorizations) plus cardAuthorize/' +
+      'cardCapture/cardReverse mounted under `ops` behind admin:treasury — deliberately not user-callable, because a user who can authorise ' +
+      'their own purchase can approve one the ledger would have declined. Value moves only through packages/ledger-client recipes ' +
+      '(withdrawHold on authorise, withdrawSettle on capture, withdrawReverse on reverse/expiry, rewardPay for cashback, sweepFeesToRewards ' +
+      'to fund the pot) — no LedgerClient is ever handed to an adapter, by construction. Money is decimal strings on the wire (amountString) ' +
+      'and scaled bigint in memory; cashback rounds DOWN. Refusals are named and refuse rather than default: bank.no_card_issuer, ' +
+      'bank.card_not_found, bank.card_not_active, bank.card_limit_exceeded, bank.card_authorization_not_found/declined/closed, ' +
+      'bank.card_capture_exceeds_authorization, and a cashback refusal that leaves the capture standing. The DEFAULT issuer is ' +
+      '`noCardIssuer`, which refuses everything — a deployment that has not chosen an issuer does not silently fall back to the simulator. ' +
+      '`simulated: true` is on cardOutput and is never omitted or defaulted, so no screen can present a card-sim card as a real one. ' +
+      '39 tests in cards.test.ts + the #770 additions to bank-service.test.ts; 194 schema lines; migration 0003_bank_cards.sql. ' +
+      'RESIDUAL, stated not hidden (see the WHAT IS NOT HERE block in card-service.ts): no refunds (the cashback-clawback question is an ' +
+      'unanswered product decision, not a missing module), no disputes/chargebacks, no incremental or multi-capture flows, no fraud scoring / ' +
+      'velocity / 3DS / MCC policy — all of it belongs to a rail. The title\'s "<2s auth decision" is not a meaningful claim against an ' +
+      'in-process simulator; it is a live-rail latency budget and belongs to socket.live-issuer. Class X (pointing this at real money) ' +
+      'stays Nitro human and is a decision, not a missing rail.',
   }),
   f('bank.sovereign-card', 'Self-custody funded card, JIT conversion (§18)', {
     module: 'bank',
@@ -659,7 +681,16 @@ export const FEATURES = [
     module: 'bank',
     phase: '5',
     dependsOn: ['pay.rails'],
-    note: '**Reclaimed 2026-08-04** M6 — Nitro agents thin Class M.',
+    note:
+      '**SPLIT 2026-08-06** per docs/adr/2026-08-04-bank-vertical-law.md correction 3. Two halves that fail for different reasons, and ' +
+      'collapsing them made a buildable leg look like a licence problem. ' +
+      'CRYPTO LEG — this row. Buildable today, no counterparty missing: `crypto-native` is already a real rail in svc-pay ' +
+      '(services/svc-pay/src/rails/chain-port.ts + chain-watcher.ts, live-rail-e2e green under #226). What is missing is a ledger-client ' +
+      'recipe and a router surface, which is engineering time. NOT STARTED — verified 2026-08-06, `grep -ri ramp services/svc-bank/src` ' +
+      'returns nothing, so this row has zero lines and no status is claimed for it. ' +
+      'FIAT LEG — **socket.psp-partners**, not this row. A bank/PSP partner and money-transmission permission are a contract and a licence; ' +
+      "no engineering time produces either, which is the ADR's §13 test. Only the adapters would be code. " +
+      '**Reclaimed 2026-08-04** M6 — Nitro agents thin Class M.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
     module: 'agents',
@@ -983,7 +1014,19 @@ export const FEATURES = [
     status: 'socket',
     dependsOn: ['matching.engine'],
   }),
-  f('socket.live-issuer', 'Live card issuer rail', { module: 'bank', phase: '5', status: 'socket', dependsOn: ['bank.cards'] }),
+  f('socket.live-issuer', 'Live card issuer rail', {
+    module: 'bank',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['bank.cards'],
+    note:
+      '§13 — a card-scheme sponsor and an issuing BIN are a commercial relationship, not code: no amount of engineering time produces a ' +
+      'licence or a contract. The seam exists and is named — the `CardIssuerAdapter` port in services/svc-bank/src/cards/issuer.ts, whose ' +
+      'default `noCardIssuer` REFUSES with bank.no_card_issuer rather than falling back to the simulator, because a deployment somebody ' +
+      'believes is live must not approve authorisations against a counterparty that does not exist. The ledger half of bank.cards is DONE ' +
+      'behind this port (#770); what a live implementation adds is transport, credentials, signature verification and a latency budget — ' +
+      'not a different set of decisions. On a live rail authorise/capture become a signed issuer webhook, never user procedures.',
+  }),
   f('socket.psp-partners', 'PayPal / Stripe / live acquiring rails', {
     module: 'pay',
     phase: '5',
