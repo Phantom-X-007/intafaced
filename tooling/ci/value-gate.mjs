@@ -688,28 +688,38 @@ export function decide({
 
 // ── git walks ───────────────────────────────────────────────────────────────
 
-function rangeFor(base) {
+/**
+ * Resolve the diff ONCE — the range AND the file list together.
+ *
+ * These used to be two functions with two different fallback policies:
+ * `changedFiles` tried `base...HEAD` and then quietly retried `HEAD~1..HEAD`,
+ * while the symbol walk was handed only the first range and never learned about
+ * the retry. So a run where the primary range was empty reported a full file
+ * list from the fallback and ZERO new symbols from the primary — two views of
+ * one diff, and the code arm silently inert. One resolver, one answer.
+ *
+ * `range === null` means neither candidate produced anything, which is a
+ * zero-walk condition and not a pass.
+ */
+function resolveDiff(base) {
+  const candidates = [];
   try {
     git(['rev-parse', '--verify', `${base}^{commit}`]);
-    return `${base}...HEAD`;
+    candidates.push(`${base}...HEAD`);
   } catch {
-    return 'HEAD~1..HEAD';
+    /* base is not resolvable here — shallow clone, or a fork without the ref */
   }
-}
+  candidates.push('HEAD~1..HEAD');
 
-function changedFiles(range) {
-  try {
-    const out = git(['diff', '--name-only', range]);
-    if (out) return out.split('\n').filter(Boolean);
-  } catch {
-    /* fall through to the single-commit range */
+  for (const range of candidates) {
+    try {
+      const out = git(['diff', '--name-only', range]);
+      if (out) return { range, files: out.split('\n').filter(Boolean) };
+    } catch {
+      /* try the next candidate */
+    }
   }
-  try {
-    const out = git(['diff', '--name-only', 'HEAD~1..HEAD']);
-    return out ? out.split('\n').filter(Boolean) : [];
-  } catch {
-    return [];
-  }
+  return { range: null, files: [] };
 }
 
 /** Last n subjects before HEAD (ancestry — sequential stamps on a branch + mill on main). */
@@ -723,11 +733,21 @@ function previousSubjects(n = 10) {
   }
 }
 
+/** Squash a git error into one printable line — the zero-walk report is a list. */
+function oneLine(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
 /**
  * The reachability walk. Returns `{ symbols, reached, dupClusters, error }`.
  * `error` non-null is a ZERO-WALK condition, not a pass.
  */
 function symbolWalk(range) {
+  if (!range)
+    return { symbols: [], reached: [], dupClusters: 0, error: 'no usable diff range — neither the base nor HEAD~1 produced a diff' };
   let diffText = '';
   try {
     diffText = execFileSync('git', ['diff', '--unified=0', '--no-color', range, '--', '*.ts', '*.tsx', '*.mjs', '*.cjs', '*.js', '*.jsx'], {
@@ -740,7 +760,7 @@ function symbolWalk(range) {
       symbols: [],
       reached: [],
       dupClusters: 0,
-      error: `git diff --unified=0 ${range} failed: ${String(e.message || e).slice(0, 200)}`,
+      error: `git diff --unified=0 ${range} failed: ${oneLine(e.message || e)}`,
     };
   }
 
@@ -757,7 +777,7 @@ function symbolWalk(range) {
   const r = spawnSync('git', args, { encoding: 'utf8', maxBuffer: 1 << 28 });
   // git grep: 0 = matches, 1 = no matches, >1 = real failure.
   if (r.status !== 0 && r.status !== 1) {
-    return { symbols, reached: [], dupClusters, error: `git grep exited ${r.status}: ${(r.stderr || '').trim().slice(0, 200)}` };
+    return { symbols, reached: [], dupClusters, error: `git grep exited ${r.status}: ${oneLine(r.stderr)}` };
   }
   const lines = (r.stdout || '').split('\n').filter(Boolean);
   return { symbols, reached: reachedSymbols(lines, symbols), dupClusters, error: null };
@@ -1190,8 +1210,7 @@ function selfTest() {
 // ── live ────────────────────────────────────────────────────────────────────
 
 function mainLive() {
-  const range = rangeFor(BASE);
-  const files = changedFiles(range);
+  const { range, files } = resolveDiff(BASE);
   let subject = '';
   let body = '';
   try {
