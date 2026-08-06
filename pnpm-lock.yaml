@@ -863,8 +863,8 @@ importers:
         specifier: ^6.0.1
         version: 6.1.3
       solc:
-        specifier: 0.8.36
-        version: 0.8.36
+        specifier: 0.8.28
+        version: 0.8.28
       tsx:
         specifier: ^4.23.5
         version: 4.23.5
@@ -1217,8 +1217,8 @@ importers:
         specifier: ^6.0.1
         version: 6.1.3
       solc:
-        specifier: 0.8.36
-        version: 0.8.36
+        specifier: 0.8.28
+        version: 0.8.28
       tsx:
         specifier: ^4.23.5
         version: 4.23.5
@@ -3409,9 +3409,9 @@ packages:
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
-  solc@0.8.36:
-    resolution: {integrity: sha512-cnDhjWo8dC5FxnEwCrWxUsJS7RPsHf+pVUe9Tr/+b15sQ40WCVn4vX4R+tOvN5gRfEgiquvFzfF4VV0kSnknhw==}
-    engines: {node: '>=12.0.0'}
+  solc@0.8.28:
+    resolution: {integrity: sha512-AFCiJ+b4RosyyNhnfdVH4ZR1+TxiL91iluPjw0EJslIu4LXGM9NYqi2z5y8TqochC4tcH9QsHfwWhOIC9jPDKA==}
+    engines: {node: '>=10.0.0'}
     hasBin: true
 
   sonic-boom@4.2.1:
@@ -5256,7 +5256,7 @@ snapshots:
 
   siginfo@2.0.0: {}
 
-  solc@0.8.36:
+  solc@0.8.28:
     dependencies:
       command-exists: 1.2.9
       commander: 8.3.0
