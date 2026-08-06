@@ -807,6 +807,161 @@ export class TradeService {
    * `fillId` derives from (market, engine sequence), and the unique index on
    * (market, sequence, liquidity) makes a second row impossible.
    */
+  /**
+   * Write one leg of a fill, and decide what a collision MEANS before absorbing it.
+   *
+   * ── The gap this closes ──────────────────────────────────────────────────
+   *
+   * `trade.fills` carries TWO unique keys: `fills_pkey` on `id`, and
+   * `fills_market_sequence_role_idx` on `(market_id, sequence, liquidity)`. The
+   * insert arbitrated on `id` only. Postgres applies `ON CONFLICT` to the named
+   * arbiter and to nothing else, so a row that cleared the primary key and then
+   * collided on the sequence index raised a bare 23505 — surfacing to the
+   * caller as a 500 with a Postgres string in it, and to CI as an intermittent
+   * CX-8 failure that a re-run makes disappear.
+   *
+   * ── Why this is not just a wider ON CONFLICT ─────────────────────────────
+   *
+   * Widening to `ON CONFLICT DO NOTHING` would make the symptom vanish, and
+   * that is exactly why it is wrong. The two ways to reach this collision want
+   * OPPOSITE handling:
+   *
+   *   · REDELIVERY — the same match settled twice (JetStream redelivery, a
+   *     retried submission, an operator replaying a day). `fillLegIdFor` is
+   *     derived from `(market, sequence, role)`, so the same match always
+   *     computes the same id and the same row. Nothing to do: the row is
+   *     already correct and the ledger post below is idempotent on
+   *     `trade.fill:<fillId>`. Absorb it silently.
+   *
+   *   · SEQUENCE REUSE — a DIFFERENT match claimed a `(market, sequence)` that
+   *     is already spoken for. `OrderBook.sequence` is an in-memory counter
+   *     that starts at 0 and is rebuilt by journal replay, so a book restored
+   *     without its journal while `trade.fills` still holds the old rows hands
+   *     the same sequence to a new trade. That is not a duplicate — it is the
+   *     ledger's `trade.fill:<fillId>` key aliasing two different trades onto
+   *     one transaction, and the second one silently never settling.
+   *
+   * Swallowing the second case is worse than the 500 it replaces: a 500 is at
+   * least visible. So the row is read back and compared, and only a byte-equal
+   * match is treated as a redelivery.
+   *
+   * The comparison is on the money-bearing columns — price, qty, quote amount,
+   * fee — plus both order ids and the owner. `ts`/`created_at` are excluded:
+   * they differ between the original write and a replay by construction, and
+   * comparing them would turn every legitimate redelivery into an incident.
+   */
+  private async insertFillLeg(leg: {
+    id: string;
+    orderId: string;
+    counterOrderId: string;
+    marketId: string;
+    symbol: string;
+    userId: string;
+    side: 'buy' | 'sell';
+    role: 'maker' | 'taker';
+    price: bigint;
+    qty: bigint;
+    quoteAmount: bigint;
+    feeAsset: string;
+    feeAmount: bigint;
+    feeBps: number;
+    sequence: number;
+  }): Promise<void> {
+    let inserted: Array<{ id: string }>;
+    try {
+      inserted = await this.sql<Array<{ id: string }>>`
+        INSERT INTO trade.fills (
+          id, order_id, counter_order_id, market_id, user_id, side, liquidity,
+          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
+        ) VALUES (
+          ${leg.id}, ${leg.orderId}, ${leg.counterOrderId},
+          ${leg.marketId}, ${leg.userId}, ${leg.side}, ${leg.role},
+          ${formatAmount(leg.price)}::numeric, ${formatAmount(leg.qty)}::numeric, ${formatAmount(leg.quoteAmount)}::numeric,
+          ${leg.feeAsset}, ${formatAmount(leg.feeAmount)}::numeric, ${leg.feeBps}, ${leg.sequence}
+        )
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id
+      `;
+    } catch (err) {
+      /**
+       * `ON CONFLICT (id)` names ONE arbiter, and Postgres applies the DO
+       * NOTHING to that index alone. A row that clears `fills_pkey` and then
+       * collides on `fills_market_sequence_role_idx` therefore RAISES rather
+       * than returning zero rows — which is the whole bug: it left the caller
+       * with a 500 carrying a Postgres string.
+       *
+       * Catching only 23505 (unique_violation). Anything else — a foreign key
+       * to a deleted order, a CHECK on a negative amount — is a different
+       * failure and must not be quietly re-interpreted as an idempotency
+       * question.
+       */
+      if ((err as { code?: string })?.code !== '23505') throw err;
+      inserted = [];
+    }
+
+    // Inserted, or the id already held this exact row. Either way we are done —
+    // the id IS the business key, so an id collision cannot be a different fill.
+    if (inserted.length > 0) return;
+
+    /**
+     * Nothing inserted. Two sub-cases, and only one of them is benign.
+     *
+     * The id conflict path is the ordinary redelivery and needs no read: the id
+     * is derived from the same three columns the sequence index covers, so a
+     * row holding this id necessarily holds this `(market, sequence, role)`.
+     * Read it back anyway — cheaply, once, off the happy path — because the
+     * whole point of this method is to stop assuming which conflict fired.
+     */
+    const [existing] = await this.sql<Array<FillRow>>`
+      SELECT * FROM trade.fills
+      WHERE market_id = ${leg.marketId} AND sequence = ${leg.sequence} AND liquidity = ${leg.role}
+      LIMIT 1
+    `;
+
+    if (!existing) {
+      // The insert did nothing and no row is there. A concurrent transaction
+      // holds it uncommitted, or something outside this service deleted it.
+      // Either way this settle has not happened and must not report success.
+      throw new TradeError(
+        `fill ${leg.sequence} on ${leg.symbol} (${leg.role}) neither inserted nor found — a concurrent writer holds it uncommitted`,
+        'trade.fill_sequence_conflict',
+      );
+    }
+
+    const same =
+      existing.id === leg.id &&
+      existing.order_id === leg.orderId &&
+      existing.counter_order_id === leg.counterOrderId &&
+      existing.user_id === leg.userId &&
+      parseAmount(existing.price) === leg.price &&
+      parseAmount(existing.qty) === leg.qty &&
+      parseAmount(existing.quote_amount) === leg.quoteAmount &&
+      parseAmount(existing.fee_amount) === leg.feeAmount &&
+      existing.fee_asset === leg.feeAsset;
+
+    // The ordinary case: this match already settled. The ledger post that
+    // follows is keyed on `trade.fill:<fillId>` and returns the original
+    // transaction, so continuing is a no-op rather than a second movement.
+    if (same) return;
+
+    /**
+     * A DIFFERENT trade already owns this sequence.
+     *
+     * Refusing is the only safe answer. Writing under a new id would leave the
+     * ledger key `trade.fill:<market>:<sequence>` pointing at whichever trade
+     * settled first, and the second trade's money would never move while its
+     * fill row claimed it had. The order fails, the hold stays intact, and the
+     * name says what to investigate.
+     */
+    throw new TradeError(
+      `fill sequence ${leg.sequence} on ${leg.symbol} (${leg.role}) is already held by a DIFFERENT match ` +
+        `(stored fill ${existing.id} for order ${existing.order_id}; this match is ${leg.id} for order ${leg.orderId}). ` +
+        `The engine's sequence counter has been reused — a book was almost certainly restored without its journal. ` +
+        `Settling would alias two trades onto one ledger idempotency key.`,
+      'trade.fill_sequence_conflict',
+    );
+  }
+
   private async settleFill(market: Market, fill: EngineFill): Promise<void> {
     const qty = parseAmount(fill.qty);
     const price = parseAmount(fill.price);
@@ -880,30 +1035,43 @@ export class TradeService {
         ON CONFLICT (id) DO NOTHING
       `;
 
-      await this.sql`
-        INSERT INTO trade.fills (
-          id, order_id, counter_order_id, market_id, user_id, side, liquidity,
-          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
-        ) VALUES (
-          ${fillLegIdFor(market.id, fill.sequence, 'maker')}, ${fill.makerOrderId}, ${taker.id},
-          ${market.id}, ${HOUSE_MM_USER_UUID}, ${makerSide}, ${'maker'},
-          ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
-          ${makerFeeAsset}, ${formatAmount(makerFee)}::numeric, ${rates.makerFeeBps}, ${fill.sequence}
-        )
-        ON CONFLICT (id) DO NOTHING
-      `;
-      await this.sql`
-        INSERT INTO trade.fills (
-          id, order_id, counter_order_id, market_id, user_id, side, liquidity,
-          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
-        ) VALUES (
-          ${fillLegIdFor(market.id, fill.sequence, 'taker')}, ${taker.id}, ${fill.makerOrderId},
-          ${market.id}, ${taker.userId}, ${fill.takerSide}, ${'taker'},
-          ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
-          ${takerFeeAsset}, ${formatAmount(takerFee)}::numeric, ${rates.takerFeeBps}, ${fill.sequence}
-        )
-        ON CONFLICT (id) DO NOTHING
-      `;
+      // Same guard as the classic path below: a sequence already owned by a
+      // different match must refuse, not silently no-op. The MM pot is still
+      // real money.
+      await this.insertFillLeg({
+        id: fillLegIdFor(market.id, fill.sequence, 'maker'),
+        orderId: fill.makerOrderId,
+        counterOrderId: taker.id,
+        marketId: market.id,
+        symbol: market.symbol,
+        userId: HOUSE_MM_USER_UUID,
+        side: makerSide,
+        role: 'maker',
+        price,
+        qty,
+        quoteAmount,
+        feeAsset: makerFeeAsset,
+        feeAmount: makerFee,
+        feeBps: rates.makerFeeBps,
+        sequence: fill.sequence,
+      });
+      await this.insertFillLeg({
+        id: fillLegIdFor(market.id, fill.sequence, 'taker'),
+        orderId: taker.id,
+        counterOrderId: fill.makerOrderId,
+        marketId: market.id,
+        symbol: market.symbol,
+        userId: taker.userId,
+        side: fill.takerSide,
+        role: 'taker',
+        price,
+        qty,
+        quoteAmount,
+        feeAsset: takerFeeAsset,
+        feeAmount: takerFee,
+        feeBps: rates.takerFeeBps,
+        sequence: fill.sequence,
+      });
 
       await this.refreshFilledQty(taker.id);
 
@@ -990,18 +1158,23 @@ export class TradeService {
     // Conflict on deterministic fill id (market+seq+role). Concurrent inline
     // settle + NATS redelivery must not 500 on fills_pkey — that broke CX-8 L3.
     for (const leg of legs) {
-      await this.sql`
-        INSERT INTO trade.fills (
-          id, order_id, counter_order_id, market_id, user_id, side, liquidity,
-          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
-        ) VALUES (
-          ${fillLegIdFor(market.id, fill.sequence, leg.role)}, ${leg.order.id}, ${leg.counterOrderId},
-          ${market.id}, ${leg.order.userId}, ${leg.side}, ${leg.role},
-          ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${formatAmount(quoteAmount)}::numeric,
-          ${leg.feeAsset}, ${formatAmount(leg.feeAmount)}::numeric, ${leg.feeBps}, ${fill.sequence}
-        )
-        ON CONFLICT (id) DO NOTHING
-      `;
+      await this.insertFillLeg({
+        id: fillLegIdFor(market.id, fill.sequence, leg.role),
+        orderId: leg.order.id,
+        counterOrderId: leg.counterOrderId,
+        marketId: market.id,
+        symbol: market.symbol,
+        userId: leg.order.userId,
+        side: leg.side,
+        role: leg.role,
+        price,
+        qty,
+        quoteAmount,
+        feeAsset: leg.feeAsset,
+        feeAmount: leg.feeAmount,
+        feeBps: leg.feeBps,
+        sequence: fill.sequence,
+      });
     }
 
     // Recomputed from the fills rather than incremented, so it is idempotent by

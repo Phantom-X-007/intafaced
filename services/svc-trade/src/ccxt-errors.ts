@@ -134,6 +134,19 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   // ── Genuinely our fault, and not the caller's to fix ──────────────────────
   'trade.dust_fill': { ccxt: 'ExchangeError', status: 500 },
   'trade.hold_uncovered': { ccxt: 'ExchangeError', status: 500 },
+  /**
+   * A fill sequence is already owned by a DIFFERENT match, so settling would
+   * alias two trades onto one ledger idempotency key.
+   *
+   * `ExchangeError`/500 rather than `ExchangeNotAvailable`/503, and the
+   * difference is the instruction the status carries. A 503 tells every bot in
+   * the fleet to back off and try again, and retrying is exactly wrong here:
+   * the sequence stays taken until an operator repairs the book's journal, so a
+   * retry storm would hammer a venue that cannot answer and bury the one log
+   * line that explains why. The order did not happen, its hold is intact, and a
+   * human has to look.
+   */
+  'trade.fill_sequence_conflict': { ccxt: 'ExchangeError', status: 500 },
 };
 
 /**
