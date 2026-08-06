@@ -22,11 +22,12 @@
 | 55 | dc72f600 | useful-path + render-boards honesty |
 | 56 | 20449e51 | SMS compose honesty boards |
 | 57 | 938aa291 | dispatch report honesty boards |
-| 58 | (this) | host-rights status/export honesty |
+| 58 | 967e5dde | host-rights status/export honesty |
+| 59 | (this) | academy error catalog honesty |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–58
+2. Open one Class N PR covering waves 46–59
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 
