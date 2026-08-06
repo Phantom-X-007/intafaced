@@ -102,12 +102,64 @@
  * that nothing is broken, and an unclassified one is that claim made without
  * anyone having been asked to check it.
  *
+ * ── WIRED MEANS MOUNTED, NOT MERELY DEFINED ─────────────────────────────────
+ *
+ * The fourth instance of this gate's own defect class, and it went through the
+ * gate built to catch it.
+ *
+ * `crewMemberCreated` was a pinned Class B socket: the catalog said in as many
+ * words that "svc-academy routes the lobby, svc-agents opens the crew channel"
+ * and NEITHER EXISTS. Commit e1b95844 added a `crew-events.ts` to each service,
+ * each exporting a `subscribeCrewMemberCreated` that calls `bus.subscribe`, and
+ * DELETED the socket entry. The scan below saw two `.subscribe('crewMemberCreated')`
+ * calls and agreed: wired, no socket needed, Class B count zero, green.
+ *
+ * Neither subscriber was ever mounted. `svc-academy/src/index.ts` does not
+ * import the file — and says in its own header that the service has NO BUS
+ * CONNECTION AT ALL. `svc-agents/src/index.ts` connects to NATS and never calls
+ * `subscribeCrewMemberCreated`. Nothing but the two unit tests ever referenced
+ * either function. The event ended up neither wired nor recorded: invisible to
+ * the check, with the honest entry that preceded it deleted. Strictly worse than
+ * the socket it replaced, and exactly what ADR D-S-13 calls "a check that reports
+ * on something real, in a shape that gets read as evidence for something it never
+ * examined."
+ *
+ * A TEXTUAL SCAN CANNOT TELL A DEFINED HANDLER FROM A RUNNING ONE. Existence is
+ * not wiring. So a call only counts when the file it lives in is REACHABLE, and
+ * the service that reaches it actually has a bus:
+ *
+ *   · entrypoints are derived from each service's own `package.json` (`main`, or
+ *     the `node dist/….js` in `scripts.start`), mapped `dist/*.js` → `src/*.ts` —
+ *     not a hardcoded `index.ts`, so a service that moves its entry moves this
+ *     with it instead of quietly falling out of the graph;
+ *   · the import graph is walked transitively from those entrypoints. `import
+ *     type` is NOT a mount: a type-only edge is erased at compile time and
+ *     mounts no handler;
+ *   · a service "has a bus" when something in ITS reachable set constructs one.
+ *     Keyed on the `EventBus` name suffix rather than on `JetStreamEventBus`
+ *     exactly, for the same reason the relay rule keys on the type rather than
+ *     on a parameter spelled `bus`: the suffix survives a rename.
+ *
+ * Both halves are load-bearing and svc-academy fails both — its file is not
+ * imported, AND its service builds no bus, so mounting the import alone would
+ * still not make the handler run. svc-agents fails only the first, which is why
+ * the first alone is not enough to describe what is broken.
+ *
+ * A site that does not count is NOT silently dropped — silence is this gate's
+ * whole enemy. Every one prints under DEFINED BUT NEVER MOUNTED, with which of
+ * the two conditions it failed. It does not itself exit 1: the consequence is
+ * that the event stops being counted as wired, which pushes it back to needing a
+ * WIRING_SOCKETS entry — and THAT is what fails, in the place the ADR wants the
+ * argument to happen.
+ *
  * ── Fail closed on an empty walk ────────────────────────────────────────────
  *
  * This repo has a named recurring defect: checks that report on nothing and get
  * read as evidence. Four gates were landed to close it. So if the catalog parses
  * to zero events, or the source scan walks zero files, or the socket list parses
- * to zero entries while there is clearly text in it, this exits 1 rather than
+ * to zero entries while there is clearly text in it, or NO SERVICE ENTRYPOINT
+ * RESOLVES and the reachability walk therefore mounts nothing, this exits 1
+ * rather than
  * printing ✓ over a scan it never performed — the same fail-closed derivation
  * `custody-scan.mjs` uses when the module registry yields no Protocol Plane
  * service. A gate that reports green over a file it never opened is worse than
@@ -117,7 +169,7 @@
  * classified socket, and every Class B is one a human already pinned by name.
  */
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 
 /** Same shape `shell-brand-scan.mjs` freezes its rows with: exact, and short enough to read. */
@@ -489,7 +541,29 @@ const socketFor = (event, missing) => sockets.find((s) => s.event === event && s
  * NOTHING IS EVER ADDED HERE TO MAKE A BUILD GREEN. A new Class B is a defect
  * introduced today, and it fails.
  */
-const CLASS_B_AWAITING_A_DECISION = [];
+const CLASS_B_AWAITING_A_DECISION = [
+  {
+    event: 'crewMemberCreated',
+    missing: 'subscriber',
+    /**
+     * RESTORED, not added. This row existed, and e1b95844 emptied this list on the
+     * strength of two subscribers that have never run — see the entry in
+     * catalog.ts and the header note above. Pinning it now is putting a
+     * pre-existing finding back where it was, which is what the ratchet is for.
+     * It is NOT the forbidden move of pinning a defect introduced today: the
+     * defect is three months old, the tracker never stopped reporting it, and the
+     * only thing that changed was that the gate briefly stopped being able to see
+     * it.
+     */
+    decidedBy: 'the repo owner — ADR D-S-13 reserves these two consumers ("services with their own scope questions")',
+    clearedBy:
+      'svc-academy routing the lobby and svc-agents opening the crew channel FROM THEIR ENTRYPOINTS — which for svc-academy means the service ' +
+      'growing a bus connection it deliberately does not have today. A crew-events.ts that nothing imports does not clear this and has already ' +
+      'been mistaken for a fix once. Alternatively the owner rules the described consumers are not owed, the description is rewritten to match, ' +
+      'and this drops to a Class A socket',
+    reasonFingerprint: 'c020418427c6',
+  },
+];
 
 const bFound = sockets.filter((s) => s.class === 'B');
 
@@ -595,9 +669,202 @@ if (files.length === 0 || busAwareCount === 0) {
   process.exit(1);
 }
 
+// ── 2b · mounted, not merely defined ────────────────────────────────────────
+//
+// See the header. Everything below answers one question per wiring site: does
+// the running process ever reach this file, and does the service reaching it
+// have a bus for the handler to attach to?
+
+const byRel = new Map(files.map((f) => [f.rel, f]));
+
+/**
+ * Each service's entrypoint, from its OWN package.json rather than an assumed
+ * `src/index.ts`. `main: "./dist/index.js"` and `start: "node dist/index.js"`
+ * both resolve back to `src/index.ts`; a service that renames its entry renames
+ * this with it, instead of dropping out of the graph and taking every one of its
+ * subscribers with it — which would be this gate crying wolf at full volume.
+ */
+const NODE_START = /\bnode\s+(\S+\.js)\b/;
+function entrypointOf(serviceDir) {
+  const pkgPath = join(ROOT, serviceDir, 'package.json');
+  if (!existsSync(pkgPath)) return null;
+  let pkg;
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  } catch {
+    return null;
+  }
+  const start = typeof pkg.scripts?.start === 'string' ? (NODE_START.exec(pkg.scripts.start)?.[1] ?? null) : null;
+  const built = typeof pkg.main === 'string' ? pkg.main : start;
+  if (built === null) return null;
+  const rel = posix(built)
+    .replace(/^\.\//, '')
+    .replace(/^dist\//, 'src/')
+    .replace(/\.js$/, '.ts');
+  const candidate = posix(join(serviceDir, rel));
+  return byRel.has(candidate) ? candidate : null;
+}
+
+const entrypoints = [];
+const servicesDir = join(ROOT, 'services');
+if (existsSync(servicesDir)) {
+  for (const name of readdirSync(servicesDir)) {
+    if (SKIP_DIRS.has(name)) continue;
+    if (!statSync(join(servicesDir, name)).isDirectory()) continue;
+    const entry = entrypointOf(posix(join('services', name)));
+    if (entry !== null) entrypoints.push([name, entry]);
+  }
+}
+
+/**
+ * `import … from '…'` and `export … from '…'`, with `import type` captured so it
+ * can be REJECTED. A type-only import is erased by the compiler: it mounts
+ * nothing, and counting it would let a service "wire" a subscriber by importing
+ * its payload type.
+ *
+ * Regex literals, never assembled from a template — see the note further down
+ * about `\s` becoming the letter s and surviving a mutation test.
+ */
+const IMPORT_FROM = /\b(?:import|export)\s+(type\s+)?[^;'"]*?\bfrom\s*('[^']*'|"[^"]*")/g;
+/** `import './side-effect.js'` — no bindings, still a mount. */
+const IMPORT_BARE = /\bimport\s*('[^']*'|"[^"]*")/g;
+
+function* importSpecifiers(src) {
+  IMPORT_FROM.lastIndex = 0;
+  let m;
+  while ((m = IMPORT_FROM.exec(src))) {
+    if (m[1]) continue; // `import type` — erased at compile time, mounts nothing.
+    yield m[2].slice(1, -1);
+  }
+  IMPORT_BARE.lastIndex = 0;
+  while ((m = IMPORT_BARE.exec(src))) yield m[1].slice(1, -1);
+}
+
+/** A relative specifier, or a workspace package. Anything else is not ours to follow. */
+const WORKSPACE_PKG = /^@intafaced\/([a-z0-9-]+)$/;
+function resolveImport(fromRel, spec) {
+  if (spec.startsWith('.')) {
+    const base = posix(join(dirname(fromRel), spec));
+    const stem = base.replace(/\.js$/, '');
+    for (const candidate of [base, stem + '.ts', stem + '.tsx', stem + '.mts', stem + '/index.ts']) {
+      if (byRel.has(candidate)) return candidate;
+    }
+    return null;
+  }
+  const pkg = WORKSPACE_PKG.exec(spec);
+  if (pkg === null) return null;
+  const candidate = 'packages/' + pkg[1] + '/src/index.ts';
+  return byRel.has(candidate) ? candidate : null;
+}
+
+/**
+ * file → the set of services whose entrypoint transitively reaches it.
+ *
+ * A set rather than a boolean because a file under `packages/` can be reached by
+ * several services, and "does a bus exist" has to be asked of the ones that
+ * actually reach it — not of the repo in general.
+ */
+const reachedBy = new Map();
+for (const [service, entry] of entrypoints) {
+  const stack = [entry];
+  while (stack.length > 0) {
+    const rel = stack.pop();
+    let reachers = reachedBy.get(rel);
+    if (reachers === undefined) {
+      reachers = new Set();
+      reachedBy.set(rel, reachers);
+    }
+    if (reachers.has(service)) continue;
+    reachers.add(service);
+    const file = byRel.get(rel);
+    if (file === undefined) continue;
+    for (const spec of importSpecifiers(file.src)) {
+      const target = resolveImport(rel, spec);
+      if (target !== null) stack.push(target);
+    }
+  }
+}
+
+/**
+ * Which services construct a bus at all.
+ *
+ * Suffix-keyed (`…EventBus`) rather than pinned to `JetStreamEventBus`, for the
+ * same reason the relay rule keys on the `EventBus` TYPE rather than a parameter
+ * named `bus`: a name rule passes today and starts reporting live consumers as
+ * orphans the day somebody renames the class.
+ */
+const BUS_CONSTRUCTION = /\bnew\s+[A-Za-z_$][\w$]*EventBus\b|\b[A-Za-z_$][\w$]*EventBus\s*\.\s*connect\b/;
+const busServices = new Set();
+for (const [rel, reachers] of reachedBy) {
+  const file = byRel.get(rel);
+  if (file === undefined || file.test) continue;
+  if (!BUS_CONSTRUCTION.test(file.src)) continue;
+  for (const service of reachers) busServices.add(service);
+}
+
+/**
+ * FOURTH ZERO-WALK GUARD, and it fails the same way the other three would.
+ *
+ * If no entrypoint resolves — a renamed `services/`, a package.json shape this
+ * cannot read, a cwd that is not the repo root — then `reachedBy` is empty, every
+ * wiring site in the repo reads as unmounted, and every declared event becomes an
+ * orphan. That is not a quiet wrong answer; it is a loud one, and it would bury
+ * the real finding under thirty fabricated ones. Exit instead of reporting it.
+ */
+const mountedBusAware = [...reachedBy.keys()].filter((rel) => byRel.get(rel)?.busAware && !byRel.get(rel)?.test).length;
+if (entrypoints.length === 0 || mountedBusAware === 0) {
+  console.error(
+    `  ✖ event-wiring — resolved ${entrypoints.length} service entrypoint(s) and reached ${reachedBy.size} file(s), ${mountedBusAware} of them bus-aware`,
+  );
+  console.error(
+    '        Reachability decides which wiring counts, so a walk that mounts nothing reports every wired subject as an orphan.',
+  );
+  console.error("        Fail-closed: check services/*/package.json 'main' / 'scripts.start', and that this ran from the repo root.");
+  process.exit(1);
+}
+
+/**
+ * Why a wiring site does or does not count. Null when it counts.
+ *
+ * The two conditions are reported separately because they are different bugs
+ * with different fixes: "nothing imports this" is answered by mounting it,
+ * "the service has no bus" is answered by giving the service one — and
+ * `svc-academy` needs both, which is precisely what a single boolean would have
+ * hidden.
+ */
+function notMountedBecause(rel) {
+  const reachers = reachedBy.get(rel);
+  if (reachers === undefined || reachers.size === 0) {
+    return 'no service entrypoint imports it, transitively — the handler is defined and never installed';
+  }
+  const named = [...reachers].sort();
+  if (!named.some((s) => busServices.has(s))) {
+    return `reached only from ${named.join(', ')}, which construct${named.length === 1 ? 's' : ''} no bus anywhere in ${
+      named.length === 1 ? 'its' : 'their'
+    } own reachable set — there is nothing for the handler to attach to`;
+  }
+  return null;
+}
+
+/** Sites that read as wiring but never run. Printed in full; see the header. */
+const definedNotMounted = [];
+
 const publishers = new Map(EVENTS.map((e) => [e, []]));
 const subscribers = new Map(EVENTS.map((e) => [e, []]));
 const sideFor = (direction) => (direction === 'publish' ? publishers : subscribers);
+
+/**
+ * The one place a wiring site is admitted. Existence got it this far; this is
+ * where it has to prove it runs.
+ */
+function record(direction, event, file, site) {
+  const why = notMountedBecause(file.rel);
+  if (why !== null) {
+    definedNotMounted.push({ event, direction, site, why });
+    return;
+  }
+  sideFor(direction).get(event).push(site);
+}
 
 /** Captures the dotted receiver so `hub.publish` can be told from `this.bus.publish`. */
 const BUS_CALL = /([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\.\s*(publish|subscribe)\s*(?:<[^<>()]*>)?\(\s*/g;
@@ -676,10 +943,7 @@ for (const file of files) {
     if (literal) {
       // A literal that is not a catalog key is some other publish/subscribe
       // (a hub, a store). Not this gate's business.
-      if (isEvent(literal[2]))
-        sideFor(direction)
-          .get(literal[2])
-          .push(`${file.rel}:${lineOf(file.src, call.index)}`);
+      if (isEvent(literal[2])) record(direction, literal[2], file, `${file.rel}:${lineOf(file.src, call.index)}`);
       continue;
     }
 
@@ -772,9 +1036,7 @@ for (const file of files) {
     if (named === undefined) continue;
 
     relaysUsed.add(`${file.rel}::${call[1]}`);
-    sideFor(direction)
-      .get(named)
-      .push(`${file.rel}:${lineOf(file.src, call.index)} (via ${call[1]}())`);
+    record(direction, named, file, `${file.rel}:${lineOf(file.src, call.index)} (via ${call[1]}())`);
   }
 }
 
@@ -801,10 +1063,30 @@ for (const event of EVENTS) {
         other.length > 0
           ? `the other end is live at ${other.slice(0, 2).join(', ')}${other.length > 2 ? ` (+${other.length - 2})` : ''}`
           : 'neither end is wired — this subject is declared and completely unused';
+
+      /**
+       * The unmounted sites for THIS end, named in the failure itself.
+       *
+       * Without this the message reads "no subscriber anywhere" to somebody
+       * looking straight at a `bus.subscribe('…')` on their screen, and a gate
+       * that contradicts the file open in the editor is a gate that gets
+       * overruled. Say which call was found and which condition it failed.
+       */
+      const ghosts = definedNotMounted.filter(
+        (g) => g.event === event && (g.direction === 'publish' ? 'publisher' : 'subscriber') === missing,
+      );
+      const ghostNote =
+        ghosts.length === 0
+          ? ''
+          : ` NOTE — ${ghosts.length} ${missing} call(s) for this event EXIST but never run: ` +
+            ghosts.map((g) => `${g.site} (${g.why})`).join('; ') +
+            `. Defining a handler is not wiring it. Mount it from the service entrypoint, or record the gap.`;
+
       fail(
         catalogPath,
-        `"${event}" has no ${missing} anywhere in services/, apps/ or packages/ — ${otherEnd}. ` +
-          `Wire it, or add a WIRING_SOCKETS entry saying why an unwired ${missing} is acceptable. Do NOT delete the event: an orphan is a finding, and some are sockets waiting for a publisher`,
+        `"${event}" has no ${missing} that a running process reaches, anywhere in services/, apps/ or packages/ — ${otherEnd}.` +
+          ghostNote +
+          ` Wire it, or add a WIRING_SOCKETS entry saying why an unwired ${missing} is acceptable. Do NOT delete the event: an orphan is a finding, and some are sockets waiting for a publisher`,
       );
     }
 
@@ -867,6 +1149,25 @@ const classLine = `A ${byClass.A} · B ${byClass.B} · C ${byClass.C}`;
  * defect stops being invisible, and an exit code is not the only way a check
  * says something. Same text the unconditionally-failing version printed.
  */
+/**
+ * DEFINED BUT NEVER MOUNTED. Printed on every run, green or red.
+ *
+ * These are the calls that used to be counted as wiring by their mere presence.
+ * Not failing here is deliberate — the consequence lands on the event, which now
+ * needs a socket entry — but not PRINTING would repeat the original sin one level
+ * down: a file full of `bus.subscribe` that the gate has silently decided to
+ * ignore is exactly the kind of invisible fact this whole gate exists to forbid.
+ */
+function reportUnmounted(out) {
+  if (definedNotMounted.length === 0) return;
+  out(`\n  ${definedNotMounted.length} DEFINED BUT NEVER MOUNTED — a handler that exists and does not run:`);
+  for (const g of definedNotMounted) {
+    out(`        · ${g.event} (${g.direction}) at ${g.site}`);
+    out(`          ${g.why}`);
+  }
+  out('        Existence is not wiring. These do not count toward "wired end to end"; the event needs a socket entry until they run.');
+}
+
 function reportClassB(out) {
   if (bFound.length === 0) return;
   out(`\n  ${bFound.length} CLASS B — ${CLASSES.B}:`);
@@ -886,10 +1187,12 @@ function reportClassB(out) {
 
 if (failures.length === 0) {
   console.log(
-    `  ✓ event-wiring — ${EVENTS.length} declared event(s) read against ${files.length} source file(s): ` +
+    `  ✓ event-wiring — ${EVENTS.length} declared event(s) read against ${files.length} source file(s), ` +
+      `${reachedBy.size} of them mounted from ${entrypoints.length} service entrypoint(s): ` +
       `${wiredBoth} wired end to end, ${sockets.length} recorded socket(s), each with a written reason and a class (${classLine})`,
   );
   console.log(`        A = ${CLASSES.A}. C = ${CLASSES.C}.`);
+  reportUnmounted(console.log);
   reportClassB(console.log);
   // `gates.mjs` prints only the LAST non-empty line as this gate's summary, so
   // the debt has to be on it. A green tick over an unnamed defect is how a
@@ -906,6 +1209,7 @@ if (failures.length === 0) {
 } else {
   console.error(`  ✖ event-wiring — ${failures.length} problem(s); socket classes: ${classLine}`);
   for (const f of failures) console.error(`        · ${f.file}: ${f.reason}`);
+  reportUnmounted(console.error);
   reportClassB(console.error);
   console.error('\n  A subject nobody publishes, or nobody reads, is not a contract — and the bus cannot tell you on its own (§10).');
   process.exitCode = 1;

@@ -1,8 +1,22 @@
 /**
- * EVENT WIRING — crewMemberCreated → agents crew channel open (ADR D-S-13).
+ * crewMemberCreated → agents crew channel open. NOT WIRED — nothing calls this.
  *
- * Catalog: "svc-agents opens the crew channel". Stage-1 records the channel
- * open intent with durable subscribe; model routing residual stays separate.
+ * `index.ts` connects to NATS and builds a bus, and it has never called
+ * `subscribeCrewMemberCreated`. Nothing imports this file except its own unit
+ * test, so no crew channel is opened by this code; `MemoryCrewChannelOpener` is
+ * a process-local `Map`.
+ *
+ * This file was nevertheless counted as closing ADR D-S-13's `crewMemberCreated`
+ * Class B defect, because `event-wiring` matched the TEXT of `bus.subscribe(…)`,
+ * and the catalog's honest socket entry was deleted on that basis. The gate now
+ * decides wiring by reachability from the entrypoint, and this file is not
+ * reachable, so it counts for nothing and the socket entry is back.
+ *
+ * Unlike the svc-academy half, this one is a two-line mount away: `index.ts`
+ * already has the bus. It is left undone deliberately — ADR D-S-13 puts BOTH
+ * named consumers on the owner, and half a close is how the description gets
+ * quietly rewritten to match whichever half shipped. See
+ * `CLASS_B_AWAITING_A_DECISION` in tooling/ci/event-wiring.mjs.
  */
 
 import { MemorySeenStore, idempotent, type EventBus, type SeenStore, type Subscription } from '@intafaced/events';
