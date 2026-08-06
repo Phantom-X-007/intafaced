@@ -9,6 +9,21 @@ import { EvmChainSource } from './chain/evm/source.js';
 import { PostgresProjectionStore } from './projection/postgres-store.js';
 import { Indexer } from './indexer.js';
 import { createIndexerRouter, type ChainProbe, type IndexerRouter } from './router.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-indexer — chain → Postgres read models for `apps/web` (§17.5).

@@ -23,6 +23,7 @@
     "@intafaced/events": "workspace:*",
     "@intafaced/exchange-contract": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
+    "@intafaced/telemetry": "workspace:*",
     "@intafaced/venue-adapter": "workspace:*",
     "@intafaced/venue-contracts": "workspace:*",
     "@opentelemetry/api": "^1.9.0",

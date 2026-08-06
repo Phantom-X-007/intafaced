@@ -69,6 +69,7 @@ COPY packages/i18n/package.json              packages/i18n/
 COPY packages/ledger-client/package.json     packages/ledger-client/
 COPY packages/market-data/package.json       packages/market-data/
 COPY packages/safe-regex/package.json        packages/safe-regex/
+COPY packages/telemetry/package.json         packages/telemetry/
 COPY packages/ui/package.json                packages/ui/
 COPY packages/venue-adapter/package.json     packages/venue-adapter/
 COPY packages/venue-contracts/package.json   packages/venue-contracts/
