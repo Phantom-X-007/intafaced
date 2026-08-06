@@ -182,10 +182,18 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.dispute_already_resolved':
       case 'p2p.trade_exists':
       case 'p2p.erase_blocked':
+      // CONFLICT and not INTERNAL_SERVER_ERROR: nothing failed. The erase ran
+      // out of a database it could honestly report on, wrote nothing, and the
+      // caller can simply ask again — which is what a conflict is.
+      case 'p2p.erase_raced':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.offer_not_active':
       case 'p2p.offer_method_unsupported':
       case 'p2p.dispute_evidence_rejected':
+      // The caller can fix it — by being a person. Reachable only from a
+      // principal whose user id is not a canonical UUID, which is a wiring
+      // fault or a machine wearing a moderator's session.
+      case 'p2p.ruling_not_attributed':
         // `offer_method_unsupported` is no longer reachable from `trades.take`
         // — that refusal goes through `refuseTake` so it is indistinguishable
         // from "the seller holds no destination". The case stays mapped rather

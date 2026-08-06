@@ -31,6 +31,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'), 'utf8');
 const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
+const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -84,6 +85,7 @@ if (!available) {
     await tx.unsafe(migration);
     await tx.unsafe(instrumentsMigration);
     await tx.unsafe(fieldGuardMigration);
+    await tx.unsafe(disputeRulingMigration);
   });
 
   /**
@@ -1343,11 +1345,23 @@ if (!available) {
 
       // And a `system:` moderator does not satisfy it either — attributing an
       // automatic decision to a named robot was exactly the old shape.
-      await sql`
+      //
+      // Since drizzle/0003 this is refused ONE STEP EARLIER than it used to be:
+      // the attribution can no longer be RECORDED, so the escrow never gets as
+      // far as the trigger. That is strictly stronger, and the assertion moved
+      // with it rather than being relaxed to match — a denylist of `system:%`
+      // was what `System:p2p-backstop`, `automation:p2p` and `p2p-backstop` all
+      // walked through. `dispute-ruling-invariant.test.ts` holds every spelling
+      // at the SQL level, including the case where the CHECK is gone and only
+      // the trigger is left.
+      await expect(sql`
         UPDATE p2p.p2p_disputes
            SET status = 'resolved', moderator_id = 'system:p2p-backstop', resolution = 'refund', resolved_at = now()
          WHERE trade_id = ${trade.id}
-      `;
+      `).rejects.toThrow(/p2p_disputes_moderator_is_a_person_ck/);
+
+      // The escrow still has not moved, and the dispute is still open — nobody
+      // ruled, so there is nothing for the trade to terminate on.
       await expect(sql`
         UPDATE p2p.p2p_trades
            SET status = 'cancelled', resolution = 'refunded', resolution_reason = 'timeout.backstop',
@@ -1356,6 +1370,25 @@ if (!available) {
       `).rejects.toThrow(/only on a human ruling/);
 
       expect((await p2p.getTrade(trade.id)).resolution).toBeNull();
+    });
+
+    it('the SERVICE refuses a ruling that is not attributed to a person, before the database has to', async () => {
+      // The legible half of the same rule. `resolveDispute` asks
+      // `isNaturalPersonId` first so a caller gets a sentence rather than a
+      // constraint name — the arrangement `assertOwnerIdentifierSpace` and
+      // svc-ledger's §4.2 CHECK already use.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+
+      for (const notAPerson of ['system:p2p-backstop', 'System:p2p-backstop', 'automation:p2p', 'p2p-backstop', '']) {
+        await expect(p2p.resolveDispute({ tradeId: trade.id, moderatorId: notAPerson, resolution: 'refund' })).rejects.toMatchObject({
+          code: 'p2p.ruling_not_attributed',
+        });
+      }
+
+      expect((await p2p.getTrade(trade.id)).resolution).toBeNull();
+      expect((await p2p.getDispute(trade.id)).status).toBe('open');
+      expect(await escrowOf(MAKER)).toBe('100');
     });
 
     it('unwinds a trade that was reserved but never escrowed', async () => {

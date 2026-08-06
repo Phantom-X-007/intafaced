@@ -12,6 +12,7 @@ import {
   type Amount,
   type LedgerClient,
 } from '@intafaced/ledger-client';
+import { lockInstrumentOwners } from './instrument-lock.js';
 import { assertWithinBounds, partiesFor, quote, PricingError, type PriceType, type ReferencePriceSource } from './pricing.js';
 import {
   DEFAULT_DEADLINES,
@@ -99,7 +100,37 @@ export type P2pErrorCode =
   | 'p2p.escrow_missing'
   | 'p2p.trading_disabled'
   | 'p2p.dispute_evidence_rejected'
-  | 'p2p.erase_blocked';
+  | 'p2p.erase_blocked'
+  // An erase reached the end of its transaction unable to honestly make the
+  // report it was about to return, so it rolled back rather than commit a
+  // manifest that was wrong. See the re-assertion at the end of `eraseFor`.
+  | 'p2p.erase_raced'
+  // A ruling on a dispute was offered without a person's name on it.
+  | 'p2p.ruling_not_attributed';
+
+/**
+ * A lowercase canonical UUID — the natural-person identifier space, and the ONE
+ * kind of principal that may rule on a dispute.
+ *
+ * The same rule as `p2p.is_natural_person_id` in
+ * `drizzle/0003_p2p_dispute_ruling_invariant.sql`, and it lives in both places
+ * on purpose: this one gives a caller a sentence they can act on, and the SQL
+ * one is what makes it true against a migration, a psql session, or a writer
+ * that never came through this service. Same arrangement as
+ * `assertOwnerIdentifierSpace` and svc-ledger's §4.2 CHECK, which is where this
+ * identifier space is defined.
+ *
+ * An ALLOWLIST, replacing a `LIKE 'system:%'` denylist that `System:p2p-backstop`
+ * walked straight through — along with `automation:p2p` and `p2p-backstop`. A
+ * denylist has to name every way a machine might describe itself and is wrong
+ * as soon as someone invents another; the set of ways a PERSON is named here is
+ * closed and has one member. Lowercase specifically, for the reason svc-ledger
+ * 0005 STEP 1 gives: accepting both cases of one UUID is how a case bypass
+ * re-enters through the identifier instead of through the namespace.
+ */
+export const NATURAL_PERSON_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export const isNaturalPersonId = (id: string | null | undefined): boolean => typeof id === 'string' && NATURAL_PERSON_ID.test(id);
 
 export class P2pError extends Error {
   constructor(
@@ -673,6 +704,21 @@ export class P2pService {
       transaction(
         this.sql,
         async (tx) => {
+          // BEFORE ANY ROW LOCK, and before the offer is even read: this take
+          // will copy one of these two people's bank details onto the trade,
+          // and `eraseFor` is the other writer of that data. Whichever of them
+          // arrives second must SEE the first rather than read around it —
+          // without this, an erase committing between this transaction's
+          // instrument read and its snapshot INSERT left cleartext account
+          // details on a trade the person had just been told was clear.
+          //
+          // Both parties, because either can be the seller depending on the
+          // offer's side; sorted inside the helper, so two takes cannot
+          // deadlock on each other. `preview.makerId` rather than the locked
+          // row's: locks must come before row locks, and `maker_id` is written
+          // once and never updated. See `instrument-lock.ts`.
+          await lockInstrumentOwners(tx, preview.makerId, input.takerId);
+
           const rows = await tx<OfferRow[]>`SELECT * FROM p2p.offers WHERE id = ${input.offerId} FOR UPDATE`;
           const row = rows[0];
           if (!row) throw new P2pError(`Offer ${input.offerId} not found`, 'p2p.offer_not_found');
@@ -1248,6 +1294,22 @@ export class P2pService {
     resolution: 'release' | 'refund';
     notes?: string;
   }): Promise<TradeRecord> {
+    // Asked here first for a legible error, and asked again by the database —
+    // `p2p.is_natural_person_id`, drizzle/0003. Same rule, two places, the same
+    // arrangement `assertOwnerIdentifierSpace` and svc-ledger's §4.2 CHECK use:
+    // this one produces a sentence a caller can act on, and the one down there
+    // is what makes it TRUE against a psql session, a migration, or a future
+    // writer that never came through this method.
+    if (!isNaturalPersonId(input.moderatorId)) {
+      throw new P2pError(
+        `A dispute is ruled on by a person. "${input.moderatorId}" is not a natural-person id — that is a lowercase ` +
+          `canonical UUID, the same identifier space the two parties are named in. The backstop timer that used to ` +
+          `resolve disputes named itself "system:p2p-backstop"; nothing that is not a person may take its place ` +
+          `under a different spelling.`,
+        'p2p.ruling_not_attributed',
+      );
+    }
+
     return withMoneySpan(
       'p2p.resolveDispute',
       {
