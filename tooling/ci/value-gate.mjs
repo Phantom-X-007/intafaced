@@ -231,15 +231,36 @@ export function hasBoardDeltaTrailer(body) {
   return /^Board-Delta:\s*\S+/im.test(body || '');
 }
 
+/** `Key-Name: value` — the shape of a git trailer line. */
+const TRAILER_LINE = /^[A-Za-z][A-Za-z0-9-]*:[ \t]/;
+
 /**
  * The code-path escape. Explicit, auditable, and it has to say something:
  * `Serial-Work:` with nothing after it is not a reason.
+ *
+ * It must also be a TRAILER, not a sentence. The commit that added the merge-ref
+ * fix on this very branch wrapped mid-paragraph as
+ *
+ *     ...the body searched for Board-Delta: and
+ *     Serial-Work: was the merge commit's, which has none.
+ *
+ * and a plain `/^Serial-Work:/m` read that prose as a valid escape and printed
+ * it as the audit reason. An escape that can be triggered by describing the
+ * escape is not an escape. So the line must begin a block or follow another
+ * trailer — never continue prose.
  */
 export function serialWorkReason(body) {
-  const m = /^Serial-Work:[ \t]*(\S.*)$/im.exec(body || '');
-  if (!m) return null;
-  const reason = m[1].trim();
-  return reason.length >= 8 ? reason : null;
+  const lines = String(body || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^Serial-Work:[ \t]*(\S.*?)\s*$/.exec(lines[i]);
+    if (!m) continue;
+    const prev = i === 0 ? '' : lines[i - 1];
+    if (prev.trim() !== '' && !TRAILER_LINE.test(prev)) continue;
+    if (m[1].length >= 8) return m[1];
+  }
+  return null;
 }
 
 // ── new named symbols ───────────────────────────────────────────────────────
@@ -722,10 +743,55 @@ function resolveDiff(base) {
   return { range: null, files: [] };
 }
 
-/** Last n subjects before HEAD (ancestry — sequential stamps on a branch + mill on main). */
-function previousSubjects(n = 10) {
+/**
+ * `Merge <sha> into <sha>` — the subject of the synthetic commit GitHub builds
+ * at `refs/pull/N/merge`, which is what `actions/checkout` checks out on a
+ * `pull_request` event.
+ *
+ * THIS MATTERED. The first real CI run of this gate printed:
+ *
+ *   subject: Merge bd183ef5… into f143df7b…
+ *   nearDup=false (best=0.133)  inSeries=false (series=0.133)
+ *
+ * It was scoring a machine-generated merge title against real commit subjects.
+ * `normalizeSubject` strips 7–40 char hex, so EVERY pull request reduces to the
+ * same three words `merge into` — never similar to anything a human wrote, and
+ * identical to every other PR. Both arms of the gate were dead on the event
+ * they exist to run on, and the body it read for the trailers was empty, so
+ * `Board-Delta:` and `Serial-Work:` could never have been found either.
+ */
+export function isSyntheticMergeSubject(subject) {
+  return /^Merge\s+[0-9a-f]{7,40}\s+into\s+[0-9a-f]{7,40}$/i.test(String(subject || '').trim());
+}
+
+/**
+ * The commit whose SUBJECT and BODY this gate is judging. `HEAD`, except on a
+ * PR merge ref, where the PR's own head is the second parent.
+ */
+function resolveHeadRef() {
+  let subject = '';
   try {
-    const out = git(['log', 'HEAD', `-${n + 1}`, '--pretty=%s']);
+    subject = git(['log', '-1', '--pretty=%s', 'HEAD']);
+  } catch {
+    return 'HEAD';
+  }
+  if (!isSyntheticMergeSubject(subject)) return 'HEAD';
+  try {
+    // parent1 is the base, parent2 is the PR head. Two parents, or it is not
+    // the shape we think it is and we leave it alone.
+    const parents = git(['rev-list', '--parents', '-n', '1', 'HEAD']).trim().split(/\s+/).length - 1;
+    if (parents !== 2) return 'HEAD';
+    git(['rev-parse', '--verify', 'HEAD^2']);
+    return 'HEAD^2';
+  } catch {
+    return 'HEAD';
+  }
+}
+
+/** Last n subjects before `ref` (ancestry — sequential stamps on a branch + mill on main). */
+function previousSubjects(ref, n = 10) {
+  try {
+    const out = git(['log', ref, `-${n + 1}`, '--pretty=%s']);
     const lines = out ? out.split('\n').filter(Boolean) : [];
     return lines.slice(1);
   } catch {
@@ -959,6 +1025,22 @@ function selfTest() {
   assert(interleaved.codeBlock === true, 'interleave: an unrelated PR between stamps must not reset the counter');
   fixture('siblings counted across the 10-commit window — interleaving unrelated PRs does not launder a mill');
 
+  // The PR merge ref. Caught by reading the FIRST real CI run of this gate,
+  // which scored `Merge bd183ef5… into f143df7b…` against real subjects and
+  // reported inSeries=false at 0.133. Every PR reduces to `merge into` once the
+  // hex is normalised away, so both arms were dead on the event they run on —
+  // and the body read for the trailers was the merge commit's, which is empty.
+  const mergeSubject = 'Merge bd183ef569c106b1eb641a56c50e73f97db8d21e into f143df7bda17283637df985638d0bd9f9c92c2cf';
+  assert(isSyntheticMergeSubject(mergeSubject) === true, 'merge ref: the synthetic PR merge subject is recognised');
+  assert(isSyntheticMergeSubject('Merge branch main into feat/x') === false, 'merge ref: a human merge subject is NOT the synthetic shape');
+  assert(isSyntheticMergeSubject(waveSubject) === false, 'merge ref: an ordinary subject is not a merge ref');
+  assert(
+    normalizeSubject(mergeSubject) ===
+      normalizeSubject('Merge 1111111111111111111111111111111111111111 into 2222222222222222222222222222222222222222'),
+    'merge ref: every PR merge subject normalises to the same string — which is why reading it was fatal',
+  );
+  fixture('isSyntheticMergeSubject — the PR merge ref is detected so the gate judges the PR head, not "Merge <sha> into <sha>"');
+
   // The escape, and its floor. A bare `Serial-Work:` is not a reason.
   const escaped = decide({
     files: waveFiles,
@@ -980,6 +1062,30 @@ function selfTest() {
   assert(escaped.serialWork.startsWith('per-service rollout'), 'escape: reason captured for the audit log');
   assert(emptyEscape.block === true, 'escape: an empty Serial-Work trailer is not an escape');
   fixture('Serial-Work: <reason> → PASS · bare Serial-Work: → still BLOCK (auditable escape)');
+
+  // An escape that can be triggered by DESCRIBING the escape is not an escape.
+  // This exact body shipped on this branch and opened the gate by accident.
+  const prosePrev = 'this is a sentence about the body searched for Board-Delta: and';
+  const proseWrap = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: `${waveBody}\n${prosePrev}\nSerial-Work: was the merge commit's, which has none.\n`,
+    prevSubjects: waveSubjects,
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  assert(proseWrap.serialWork === null, 'escape: a wrapped prose line beginning "Serial-Work:" is NOT a trailer');
+  assert(proseWrap.block === true, 'escape: prose must not open the gate');
+  const afterTrailer = decide({
+    files: waveFiles,
+    subject: waveSubject,
+    body: `${waveBody}\nBoard-Delta: something real\nSerial-Work: per-service rollout, one service per PR by design\n`,
+    prevSubjects: waveSubjects,
+    newSymbols: waveSymbols,
+    reached: [],
+  });
+  assert(afterTrailer.block === false, 'escape: a trailer following another trailer is still a trailer');
+  fixture('Serial-Work must be a trailer, not a sentence — wrapped prose does not open the gate');
 
   // Same series, but this one wired something. The gate must stay off it.
   const wiredWave = decide({
@@ -1211,15 +1317,16 @@ function selfTest() {
 
 function mainLive() {
   const { range, files } = resolveDiff(BASE);
+  const headRef = resolveHeadRef();
   let subject = '';
   let body = '';
   try {
-    subject = git(['log', '-1', '--pretty=%s']);
-    body = git(['log', '-1', '--pretty=%B']);
+    subject = git(['log', '-1', '--pretty=%s', headRef]);
+    body = git(['log', '-1', '--pretty=%B', headRef]);
   } catch {
     /* zero-walk will report it */
   }
-  const prev = previousSubjects(10);
+  const prev = previousSubjects(headRef, 10);
   const walk = symbolWalk(range);
   const result = decide({
     files,
@@ -1239,7 +1346,8 @@ function mainLive() {
       `newSymbols=${result.symbolCount} reached=${result.reachedCount} dupBodies=${result.dupBodyClusters} ` +
       `hasBoardDelta=${result.hasDelta} serialWork=${Boolean(result.serialWork)} mode=${mode}`,
   );
-  console.log(`  subject: ${subject}`);
+  console.log(`  subject: ${subject}${headRef === 'HEAD' ? '' : `   [read from ${headRef} — HEAD is a PR merge ref]`}`);
+  console.log(`  range: ${range} · ancestors compared: ${prev.length}`);
   if (result.nearDup) console.log(`  similar to (norm): ${result.bestPrev.slice(0, 100)}`);
   if (result.nearDup && result.bestRaw) console.log(`  offending previous subject: ${result.bestRaw}`);
   if (result.inSeries && result.seriesRaw) console.log(`  series sibling: ${result.seriesRaw}`);
