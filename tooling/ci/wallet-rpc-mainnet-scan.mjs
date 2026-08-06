@@ -311,15 +311,50 @@
  * matters as much: a gate that cries wolf is switched off, and then the real
  * finding goes through it unnoticed.
  *
- * And the harness itself had the defect it exists to catch. The summary line
- * printed `RULE_PROBES.length` probes "passed" — a count read off the array, not
- * off work done, so an emptied array or a short-circuited loop would still have
- * printed a number that reads as a pass. It now prints `probesRun`, incremented
- * inside the loop AFTER an assertion has been made, and the two are reconciled
- * before the verdict: disagreement, or zero, is a hard failure. Probes may also
- * assert a VERDICT rather than merely that something fired, because a width rule
- * that always answered "malformed" would pass a fires/does-not-fire test while
- * asserting nothing about the arithmetic.
+ * And the harness itself had the defect it exists to catch, twice — and the
+ * second time it survived the first fix. The summary line printed
+ * `RULE_PROBES.length` probes "passed", a count read off the array rather than
+ * off work done. That became `probesRun`, incremented inside the loop AFTER an
+ * assertion has been made and reconciled against the array before the verdict,
+ * which was right as far as it went and did not go far enough: DELETING THE
+ * WHOLE HARNESS still exited 0, still printed a tick, and still printed
+ * "(24 must fire, -24 must not)" — a negative count, because that half of the
+ * sentence was never converted and `RULE_PROBES.filter(p => p.fires).length`
+ * outlives the loop it describes. The ratchet carried the same shape: deleting
+ * the occurrence comparison exited 0 with "60 recorded occurrence(s) … none
+ * gained a copy", over a tree that had in that very run gained a third copy of
+ * a frozen `MainNetParams`.
+ *
+ * A counter cannot fix that, because a counter survives the deletion of the
+ * thing it counts. So the summary is assembled from EARNED CLAIMS: each clause
+ * is minted by the check that establishes it and consumed by the summary, and
+ * the two are reconciled before anything prints — consuming an unminted claim
+ * is red, minting an unconsumed one is red, and the only legal way to remove a
+ * check is to remove its sentence in the same commit, after which the gate no
+ * longer claims it. Both deletions above, and eight more, are held by
+ * `wallet-rpc-mainnet-scan.mutation.mjs`.
+ *
+ * Probes may also assert a VERDICT rather than merely that something fired,
+ * because a width rule that always answered "malformed" would pass a
+ * fires/does-not-fire test while asserting nothing about the arithmetic.
+ *
+ * ── ONE COLON, AND WHY A PLACEHOLDER IS NOT ALWAYS A PLACEHOLDER ───────────
+ *
+ * Every rule over .properties reads its value through `resolvePropertyValue`,
+ * and has to, because "the environment decides this" and "this file decides
+ * this" are one character apart in Spring's spelling of it. `${VAR}` is
+ * undecided: unset, the service does not start, and M5-M7 are what keep it that
+ * way. `${VAR:default}` is decided right here — Spring splits on the first
+ * colon and falls back, so the line resolves with no environment at all and the
+ * service boots on the default.
+ *
+ * That is not an academic distinction. #815 replaced this tree's live mainnet
+ * Tether pin with `contract.address=${EUSDT_CONTRACT_ADDRESS}` and argued that
+ * "a placeholder cannot be repaired into a live pin by accident". Writing
+ * `${EUSDT_CONTRACT_ADDRESS:0xdac17…}` repairs it, and read CLEANER than the
+ * bare literal it replaced, because the caller skipped the line before any rule
+ * ran. A placeholder carrying a default is the default wearing an override, and
+ * it is scanned as one — recursively, since nesting is the next spelling along.
  *
  * Exit 0 = this tree cannot reach mainnet, and gained no new way to try.
  * Exit 1 = it can, or something that was watching it stopped watching.
@@ -369,6 +404,85 @@ function die(headline, lines) {
   process.exit(1);
 }
 
+// ── Earned claims: the summary may only say what this run did ──────────────
+//
+// The harness that prints the verdict had the defect it exists to catch, in two
+// places, and both were measured rather than argued (wallet-rpc-mainnet-scan
+// .mutation.mjs reproduces each):
+//
+//   · Delete the probe loop and the tick still printed "N rule probe(s)
+//     executed across M rule id(s) (24 must fire, -24 must not)". `probesRun`
+//     was honest; the rest of that sentence was read off `RULE_PROBES.length`,
+//     which is a property of the SOURCE TEXT, not of work. A negative count is
+//     what a claim looks like when nothing established it.
+//   · Delete the occurrence comparison and the tick still printed "60 recorded
+//     occurrence(s), all still exactly as recorded … none gained a copy" over a
+//     tree that had just gained one. That number was summed from `occurrences`
+//     across FROZEN — again the source text, never the count taken from disk.
+//
+// Both are the gate's own named recurring defect — "checks that report on
+// nothing and get read as evidence" — wearing the uniform, one level up: not a
+// rule that walked nothing, a SENTENCE that measured nothing.
+//
+// So every substantive clause of the summary is now a claim MINTED by the check
+// that establishes it and CONSUMED by the summary, reconciled before anything
+// prints:
+//
+//   · consuming a claim nothing minted is a hard failure — delete the work and
+//     the sentence becomes impossible to print;
+//   · minting a claim nothing consumes is a hard failure — delete the sentence
+//     and the orphaned work goes red;
+//   · so the only legal way to remove a check is to remove its sentence in the
+//     same commit, after which the gate no longer claims it. Work and claim are
+//     one object. That is the property a counter can never have, because a
+//     counter survives the deletion of the thing it counts.
+const earnedClaims = new Map();
+const consumedClaims = new Set();
+
+/** Mint a claim, inside the check that establishes it. */
+function establish(id, text) {
+  if (earnedClaims.has(id)) {
+    die('a summary claim was established twice', [
+      `claim id: ${id}`,
+      '',
+      'Two checks minting one id means one of them is unreadable from the summary and its result went nowhere.',
+    ]);
+  }
+  earnedClaims.set(id, text);
+}
+
+/** Read a claim back for the summary. A claim nothing established cannot be printed. */
+function claim(id) {
+  const text = earnedClaims.get(id);
+  if (text === undefined) {
+    die('the summary tried to make a claim no check established', [
+      `claim id: ${id}`,
+      '',
+      'The summary line is assembled from claims minted by the checks that establish them, so that a number in it',
+      'can only come from work performed. This id was never minted: the check that mints it did not run — deleted,',
+      'short-circuited, or moved below the summary.',
+      '',
+      'A gate must not print a sentence about work it did not do. If the check is genuinely gone, delete its clause',
+      'from the summary in the same commit and the gate will stop claiming it.',
+    ]);
+  }
+  consumedClaims.add(id);
+  return text;
+}
+
+/** Every minted claim must reach the summary — a result nobody prints is a check nobody reads. */
+function reconcileClaims() {
+  const orphaned = [...earnedClaims.keys()].filter((id) => !consumedClaims.has(id));
+  if (orphaned.length === 0) return;
+  die('a check established a claim the summary never made', [
+    ...orphaned.map((id) => `· ${id}  →  ${earnedClaims.get(id)}`),
+    '',
+    'The check ran and produced a verdict that reaches nobody. This is the other half of the claim contract, and it',
+    'is here so the two cannot drift apart: a clause deleted from the summary while its check stays is how a gate',
+    'quietly stops reporting the thing it still measures.',
+  ]);
+}
+
 const WALLET_RPC = findWalletRpc();
 
 // ── Walk guard, part 1: the tree itself ────────────────────────────────────
@@ -413,22 +527,43 @@ const JAVA_NETWORK_SELECTORS = [
 
 /** Hosts that cannot reach a public chain. Anything else in a URL literal can. */
 function isOffBoxHost(host) {
-  const h = host.toLowerCase();
+  // A host that is entirely an UNRESOLVED placeholder is decided by the
+  // environment, not by this file — M5-M7 are what keep that undecidable. One
+  // carrying a DEFAULT is decided here after all, so it is classified on the
+  // value it falls back to. See resolvePropertyValue for why the two differ.
+  const resolved = resolvePropertyValue(host);
+  if (resolved === null) return false;
+  const h = resolved.scan.toLowerCase();
   if (h === 'localhost' || h === '::1' || h === '0.0.0.0') return false;
   if (/^127\./.test(h)) return false;
   if (/^10\./.test(h)) return false;
   if (/^192\.168\./.test(h)) return false;
   if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(h)) return false;
-  // A host that is entirely an unresolved placeholder is decided by the
-  // environment, not by this file. M5-M7 are what keep that undecidable.
-  if (/^\$\{[^}]*\}$/.test(h)) return false;
   return true;
 }
 
 /** Host portion of a URL literal, without pulling in a URL parser for `${}` shapes. */
 function hostOf(url) {
-  const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^/@]*@)?([^/:?#]+)/i.exec(url);
-  return m ? m[1] : null;
+  const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^/@]*@)?(.*)$/i.exec(url);
+  if (m === null) return null;
+  const rest = m[1];
+  // A `${…}` in host position may legitimately contain a colon — that is where
+  // a Spring default lives. Splitting on `:` the way the authority grammar says
+  // to would hand `${HOST` to isOffBoxHost and throw away the default it has to
+  // classify, so a whole placeholder is taken whole.
+  if (rest.startsWith('${')) {
+    let depth = 0;
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '{') depth++;
+      else if (rest[i] === '}') {
+        depth--;
+        if (depth === 0) return rest.slice(0, i + 1);
+      }
+    }
+    return null;
+  }
+  const host = /^([^/:?#]+)/.exec(rest);
+  return host === null ? null : host[1];
 }
 
 /**
@@ -813,8 +948,79 @@ function classifyTopic(value) {
   );
 }
 
-/** A value the environment supplies, so this file does not decide it. */
-const isPlaceholder = (value) => /^\$\{[^}]*\}$/.test(value.trim());
+/**
+ * The body of a whole-string `${…}`, brace-balanced.
+ *
+ * `^\$\{[^}]*\}$` cannot be used for this: `[^}]*` stops at the FIRST `}`, so a
+ * nested default — `${A:${B:0xdac17…}}`, which Spring resolves exactly as
+ * readily as a flat one — fails to match it and is read as an ordinary literal.
+ *
+ * @returns the text between the outermost `${` and its matching `}`, or null
+ *          when the value is not a single placeholder.
+ */
+function placeholderBody(value) {
+  if (!value.startsWith('${') || !value.endsWith('}')) return null;
+  let depth = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === '{') depth++;
+    else if (value[i] === '}') {
+      depth--;
+      // Balanced before the end means this is a placeholder followed by more
+      // text — `${A}/v3` — which is not a whole-string placeholder.
+      if (depth === 0) return i === value.length - 1 ? value.slice(2, i) : null;
+    }
+  }
+  return null;
+}
+
+/** A default that resolves through more than this many hops is not a config value. */
+const PLACEHOLDER_HOPS = 8;
+
+/**
+ * What this file must actually scan for one value — or null when nothing here
+ * decides it.
+ *
+ * `${VAR}` is a value the ENVIRONMENT supplies. Unset, the service does not
+ * start; which chain it talks to is not written down in this tree. Skipping it
+ * is correct, and M5–M7 are what keep it undecidable.
+ *
+ * `${VAR:default}` is NOT that value, and the difference is the whole reason
+ * this function exists rather than a regex. Spring splits a placeholder on its
+ * FIRST colon and falls back to the right-hand side, so such a line resolves
+ * with no environment at all: the service boots, with the default, by default.
+ *
+ * That one colon reversed #815's flagship remediation. #815 replaced a live
+ * mainnet Tether pin with `contract.address=${EUSDT_CONTRACT_ADDRESS}` and
+ * argued that "a placeholder cannot be repaired into a live pin by accident".
+ * `contract.address=${EUSDT_CONTRACT_ADDRESS:0xdac17f958d2ee523a2206206994597c13d831ec7}`
+ * is that pin restored — and it is WORSE than the bare literal it replaced,
+ * because the literal is at least visible to M4-address while this was skipped
+ * by the caller before any rule ran, and unlike a bare placeholder it resolves,
+ * so the service boots pointing at mainnet Tether unless someone overrides it.
+ *
+ * A placeholder carrying a default is not a placeholder. It is the default,
+ * wearing an override. So the default is what gets scanned — recursively, since
+ * `${A:${B:0xdac17…}}` is the same pin two hops down.
+ *
+ * `secret-scan.mjs` reached this conclusion for compose already: `${VAR}` and
+ * `${VAR:?msg}` are clean there and `${VAR:-weak}` is a finding, on the
+ * identical argument that a default is a value that ships. This is that
+ * judgement in Spring's spelling of it.
+ *
+ * @returns {{ scan: string, defaulted: boolean } | null}
+ */
+function resolvePropertyValue(raw, hop = 0) {
+  const value = raw.trim();
+  const body = placeholderBody(value);
+  if (body === null) return { scan: value, defaulted: hop > 0 };
+  if (hop >= PLACEHOLDER_HOPS) return null;
+  const colon = body.indexOf(':');
+  if (colon === -1) return null;
+  const fallback = body.slice(colon + 1).trim();
+  // `${VAR:}` resolves to the empty string, which decides nothing.
+  if (fallback === '') return null;
+  return resolvePropertyValue(fallback, hop + 1);
+}
 
 /**
  * An `*address` key does not always hold an address. `prefer-ip-address=true`
@@ -1111,8 +1317,13 @@ function scanHexProperties(content) {
     const line = lines[i];
     if (/^\s*[#!]/.test(line) || !line.includes('=')) continue;
     const key = line.slice(0, line.indexOf('=')).trim();
-    const value = line.slice(line.indexOf('=') + 1).trim();
-    if (value === '' || isPlaceholder(value)) continue;
+    // Placeholders carrying a default are measured on the default: a mistyped
+    // constant is no less mistyped for being written as a fallback, and M11's
+    // whole subject is values that are the wrong width in a role.
+    const resolved = resolvePropertyValue(line.slice(line.indexOf('=') + 1));
+    if (resolved === null) continue;
+    const value = resolved.scan;
+    if (value === '') continue;
     const leaf = key.slice(key.lastIndexOf('.') + 1);
 
     // A go-ethereum keystore filename carries the account after the LAST `--`.
@@ -2206,12 +2417,22 @@ function scanPropertiesSource(content) {
     const line = lines[i];
     if (/^\s*[#!]/.test(line) || !line.includes('=')) continue;
     const key = line.slice(0, line.indexOf('=')).trim();
-    const value = line.slice(line.indexOf('=') + 1).trim();
-    if (value === '' || isPlaceholder(value)) continue;
+    const resolved = resolvePropertyValue(line.slice(line.indexOf('=') + 1));
+    if (resolved === null) continue;
+    const value = resolved.scan;
+    if (value === '') continue;
     // Last dot-segment only — see the header on why the full key cannot be used.
     const leaf = key.slice(key.lastIndexOf('.') + 1);
+    // The freeze key is the value that ACTS. A defaulted placeholder and the
+    // bare literal it falls back to are the same pin doing the same thing, so
+    // they key identically and neither can be used to launder the other past
+    // the ratchet.
     const text = `${leaf}=${value}`;
-    const add = (rule, detail) => out.push({ rule, text, line: i + 1, detail });
+    const via = resolved.defaulted
+      ? ' — supplied as the DEFAULT of a ${…} placeholder, which is what this service boots with when nothing overrides it, ' +
+        'so it is a pin in this tree and not a decision left to the environment'
+      : '';
+    const add = (rule, detail) => out.push({ rule, text, line: i + 1, detail: detail + via });
 
     if (CHAIN_ENDPOINT_KEYS.has(leaf.toLowerCase())) {
       const host = hostOf(value);
@@ -2452,6 +2673,12 @@ if (emptyWalks.length > 0) {
     'This is not a clean tree; it is a scan that opened nothing, and a scan that opened nothing must never',
     'print a tick. Fix the discovery above, or delete the rule that can no longer see its subject.',
   ]);
+} else {
+  establish(
+    'walk',
+    `${moduleDirs.length} module(s), ${javaFiles.length} Java + ${propsFiles.length} properties file(s) walked, ` +
+      'every denominator non-zero',
+  );
 }
 
 // ── Walk guard, part 3: proof-of-life for rules with nothing to find ───────
@@ -2503,6 +2730,16 @@ const RULE_PROBES = [
     fires: false,
     source: 'class P { String n = "wss://${NODE_HOST}"; }',
     note: 'a host the environment decides is not a hardcoded endpoint',
+  },
+  {
+    rule: 'M2',
+    kind: 'java',
+    fires: true,
+    source: 'class P { String n = "wss://${NODE_HOST:mainnet.example-provider.io}/ws"; }',
+    note:
+      'a host the environment MAY decide and otherwise does not — the default is what ships. Also asserts hostOf keeps ' +
+      'the placeholder whole: split on the authority colon it would hand isOffBoxHost the string "${NODE_HOST" and name ' +
+      'the wrong host in the finding',
   },
 
   // ── M3: the shapes arity alone does not catch ──────────────────────────
@@ -2593,6 +2830,44 @@ const RULE_PROBES = [
     fires: false,
     source: 'contract.address=${EUSDT_CONTRACT_ADDRESS}',
     note: 'an unresolved placeholder is a decision the environment makes, not a pin in this tree',
+  },
+
+  // ── The defaulted placeholder: #815's remediation, reversed by one colon ──
+  //
+  // These four are the only proof-of-life the rule has. The tree contains no
+  // defaulted placeholder today — every `${…}` in all thirteen .properties files
+  // is bare — so there is nothing to freeze and a green run cannot tell this
+  // resolution from its own deletion.
+  {
+    rule: 'M4-address',
+    kind: 'properties',
+    fires: true,
+    source: 'contract.address=${EUSDT_CONTRACT_ADDRESS:0xdac17f958d2ee523a2206206994597c13d831ec7}',
+    note:
+      'THE ONE THAT SLIPPED. #815 replaced the live mainnet Tether pin with a bare placeholder on the argument that ' +
+      '"a placeholder cannot be repaired into a live pin by accident" — one colon repairs it, the caller skipped the ' +
+      'line before any rule ran, and unlike the bare form this RESOLVES, so the service boots on mainnet Tether by default',
+  },
+  {
+    rule: 'M4-address',
+    kind: 'properties',
+    fires: true,
+    source: 'contract.address=${A:${B:0xdac17f958d2ee523a2206206994597c13d831ec7}}',
+    note: 'the same pin two hops down — a resolution that stops at the first hop is defeated by nesting, which Spring resolves just as readily',
+  },
+  {
+    rule: 'M4-endpoint',
+    kind: 'properties',
+    fires: true,
+    source: 'coin.rpc=${ETH_NODE_RPC_URL:https://mainnet.example-provider.io/v3/KEY}',
+    note: 'a defaulted endpoint is the same bypass one rule sideways — M4-endpoint reads the value through the identical resolution, so it cannot be fixed in one place only',
+  },
+  {
+    rule: 'M4-address',
+    kind: 'properties',
+    fires: false,
+    source: 'contract.address=${EUSDT_CONTRACT_ADDRESS:}',
+    note: '`${VAR:}` resolves to the empty string, which pins nothing — the fix must not be a rule that fires on the shape of a colon',
   },
 
   // ── M4-topic: the event filter, working and broken ─────────────────────
@@ -2742,6 +3017,14 @@ const RULE_PROBES = [
   {
     rule: 'M11',
     kind: 'hex-properties',
+    fires: true,
+    verdict: 'TRANSCRIPTION',
+    source: 'coin.ignore-from-address=${ETH_IGNORE_FROM_ADDRESS:0x672881426632b13d18f74664c039acc7b5610b7}',
+    note: 'a DEFAULTED placeholder does have a width to check, and it is the width the service boots with. M11 reads values through the same resolution M4 does, so the two cannot be fixed one at a time',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
     fires: false,
     source: 'eureka.instance.prefer-ip-address=true',
     note: 'the boolean in all 13 files is not a hex literal — M11 must stay as quiet on it as M4-address does',
@@ -2814,95 +3097,124 @@ const RULE_PROBES = [
 ];
 
 /**
- * Probes actually EXECUTED, incremented inside the loop after the assertion has
- * run. The summary line used to print `RULE_PROBES.length`, which is the number
- * of fixtures WRITTEN — a count derived from the array, not from work. Emptying
- * the array, `break`-ing out of the loop or returning early would all have kept
- * printing a number that read as a pass. This counter can only be raised by an
- * assertion having been made, and the reconciliation below makes the two agree
- * or fails.
+ * Runs every probe and RETURNS the sentence the summary is allowed to make about
+ * them. The return value is the point.
+ *
+ * The summary line used to print `RULE_PROBES.length` and, later, a mixture:
+ * `probesRun` (honest) alongside `RULE_PROBES.filter(p => p.fires).length` (not).
+ * Deleting the loop left a green run reporting "0 rule probe(s) executed across
+ * 0 rule id(s) (24 must fire, -24 must not)" — a negative count, which is what a
+ * claim looks like when nothing established it.
+ *
+ * Every number below is raised by work: `executed` by the loop body, `fired` and
+ * `silent` only after an assertion has been checked AND matched. Nothing here
+ * can be satisfied by the length of an array, and the sentence itself does not
+ * exist unless this function ran to the end — delete the function and the
+ * summary cannot be assembled; delete the call and `claim('probes')` fails.
  */
-let probesRun = 0;
-/** Distinct rule ids a probe actually exercised — printed, so a rule losing all its probes is visible. */
-const probedRules = new Set();
+function runRuleProbes() {
+  let executed = 0;
+  let fired = 0;
+  let silent = 0;
+  /** Distinct rule ids a probe actually exercised — printed, so a rule losing all its probes is visible. */
+  const rules = new Set();
+  const failures = [];
 
-const probeFailures = [];
-for (const probe of RULE_PROBES) {
-  const findings =
-    probe.kind === 'java'
-      ? scanJavaSource(probe.source)
-      : probe.kind === 'properties'
-        ? scanPropertiesSource(probe.source)
-        : probe.kind === 'hex-properties'
-          ? scanHexProperties(probe.source).map((h) => ({
-              ...m11Report(h.role, h.name, h.hex),
-              rule: nearCanonical(h.hex) === null ? 'M11' : 'M11-known',
-            }))
-          : scanHexJava(probe.source).map((h) => ({
-              ...m11Report(h.role, h.name, h.hex),
-              rule: nearCanonical(h.hex) === null ? 'M11' : 'M11-known',
-            }));
+  for (const probe of RULE_PROBES) {
+    const findings =
+      probe.kind === 'java'
+        ? scanJavaSource(probe.source)
+        : probe.kind === 'properties'
+          ? scanPropertiesSource(probe.source)
+          : probe.kind === 'hex-properties'
+            ? scanHexProperties(probe.source).map((h) => ({
+                ...m11Report(h.role, h.name, h.hex),
+                rule: nearCanonical(h.hex) === null ? 'M11' : 'M11-known',
+              }))
+            : scanHexJava(probe.source).map((h) => ({
+                ...m11Report(h.role, h.name, h.hex),
+                rule: nearCanonical(h.hex) === null ? 'M11' : 'M11-known',
+              }));
 
-  // M11 and M11-known are one rule with two report shapes: a near-miss is still
-  // a width finding. So a probe naming M11 accepts either id, while a probe
-  // naming M11-known requires the canonical to have been identified.
-  const matches = findings.filter((f) => (probe.rule === 'M11' ? f.rule === 'M11' || f.rule === 'M11-known' : f.rule === probe.rule));
-  const found = matches.length > 0;
+    // M11 and M11-known are one rule with two report shapes: a near-miss is still
+    // a width finding. So a probe naming M11 accepts either id, while a probe
+    // naming M11-known requires the canonical to have been identified.
+    const matches = findings.filter((f) => (probe.rule === 'M11' ? f.rule === 'M11' || f.rule === 'M11-known' : f.rule === probe.rule));
+    const found = matches.length > 0;
 
-  probesRun++;
-  probedRules.add(probe.rule);
+    executed++;
+    rules.add(probe.rule);
 
-  if (found !== probe.fires) {
-    probeFailures.push(
-      `[${probe.rule}] expected ${probe.fires ? 'a finding' : 'NO finding'}, got ${found ? 'a finding' : 'none'}` +
-        `\n      fixture: ${probe.source}` +
-        `\n      why it exists: ${probe.note}`,
-    );
-    continue;
+    if (found !== probe.fires) {
+      failures.push(
+        `[${probe.rule}] expected ${probe.fires ? 'a finding' : 'NO finding'}, got ${found ? 'a finding' : 'none'}` +
+          `\n      fixture: ${probe.source}` +
+          `\n      why it exists: ${probe.note}`,
+      );
+      continue;
+    }
+
+    // Only now, after the fires/does-not-fire assertion has been MADE and has
+    // held, does this probe count towards either half of the sentence.
+    if (found) fired++;
+    else silent++;
+
+    // Verdict assertions, where the probe states one. A width rule that fires but
+    // always answers the same thing passes a fires/does-not-fire test and asserts
+    // nothing about the arithmetic.
+    if (probe.verdict !== undefined && !matches.some((f) => f.verdict === probe.verdict)) {
+      failures.push(
+        `[${probe.rule}] expected verdict ${probe.verdict}, got ${matches.map((f) => f.verdict).join('/') || '(none)'}` +
+          `\n      fixture: ${probe.source}` +
+          `\n      why it exists: ${probe.note}`,
+      );
+    }
+    if (probe.near !== undefined && !matches.some((f) => (f.near ?? '').includes(probe.near))) {
+      failures.push(
+        `[${probe.rule}] expected the near-miss to name ${probe.near}, got ${matches.map((f) => f.near ?? '(none)').join('/')}` +
+          `\n      fixture: ${probe.source}` +
+          `\n      why it exists: ${probe.note}`,
+      );
+    }
   }
 
-  // Verdict assertions, where the probe states one. A width rule that fires but
-  // always answers the same thing passes a fires/does-not-fire test and asserts
-  // nothing about the arithmetic.
-  if (probe.verdict !== undefined && !matches.some((f) => f.verdict === probe.verdict)) {
-    probeFailures.push(
-      `[${probe.rule}] expected verdict ${probe.verdict}, got ${matches.map((f) => f.verdict).join('/') || '(none)'}` +
-        `\n      fixture: ${probe.source}` +
-        `\n      why it exists: ${probe.note}`,
-    );
+  if (failures.length > 0) {
+    die('a rule stopped doing what it says it does', [
+      ...failures.map((p) => `· ${p}\n`),
+      'These fixtures are the only proof-of-life some rules here have: they match nothing in the tree, so the',
+      'frozen baseline cannot tell a working rule from a deleted one. A failure means either the rule was',
+      'narrowed until it went blind, or it was widened until it fires on something correct. Both are how a',
+      'gate becomes decoration. Fix the rule — do not relax the fixture.',
+    ]);
   }
-  if (probe.near !== undefined && !matches.some((f) => (f.near ?? '').includes(probe.near))) {
-    probeFailures.push(
-      `[${probe.rule}] expected the near-miss to name ${probe.near}, got ${matches.map((f) => f.near ?? '(none)').join('/')}` +
-        `\n      fixture: ${probe.source}` +
-        `\n      why it exists: ${probe.note}`,
-    );
+
+  // Two reconciliations, both against work rather than against each other.
+  if (executed !== RULE_PROBES.length || executed === 0) {
+    die('the probe harness did not run every probe it claims', [
+      `RULE_PROBES.length = ${RULE_PROBES.length}, probes actually executed = ${executed}`,
+      '',
+      'The summary line reports probe coverage. It must be a count of assertions MADE, never a count of fixtures',
+      'written down — an earlier version printed the array length, which would have reported success over a loop',
+      'that had been emptied, short-circuited or removed.',
+    ]);
   }
+  if (fired + silent !== executed) {
+    die('a probe was executed without its assertion being counted', [
+      `executed = ${executed}, fired = ${fired}, silent = ${silent}`,
+      '',
+      'Every executed probe must land in exactly one of the two halves the summary reports. A probe that lands in',
+      'neither has been counted as coverage without an assertion having held, which is the whole defect this',
+      'harness exists to make impossible.',
+    ]);
+  }
+
+  return (
+    `${executed} rule probe(s) executed across ${rules.size} rule id(s) — ${fired} fired as required and ` +
+    `${silent} stayed silent as required`
+  );
 }
 
-// The counter reconciliation. `probesRun` is raised by work; RULE_PROBES.length
-// is a property of the source text. If they ever disagree the loop did not do
-// what the summary line claims, and the summary line is the only part of this
-// most people read.
-if (probesRun !== RULE_PROBES.length || probesRun === 0) {
-  die('the probe harness did not run every probe it claims', [
-    `RULE_PROBES.length = ${RULE_PROBES.length}, probes actually executed = ${probesRun}`,
-    '',
-    'The summary line reports probe coverage. It must be a count of assertions MADE, never a count of fixtures',
-    'written down — an earlier version printed the array length, which would have reported success over a loop',
-    'that had been emptied, short-circuited or removed.',
-  ]);
-}
-
-if (probeFailures.length > 0) {
-  die('a rule stopped doing what it says it does', [
-    ...probeFailures.map((p) => `· ${p}\n`),
-    'These fixtures are the only proof-of-life some rules here have: they match nothing in the tree, so the',
-    'frozen baseline cannot tell a working rule from a deleted one. A failure means either the rule was',
-    'narrowed until it went blind, or it was widened until it fires on something correct. Both are how a',
-    'gate becomes decoration. Fix the rule — do not relax the fixture.',
-  ]);
-}
+establish('probes', runRuleProbes());
 
 // ── M11: the standing report, and M11's own ratchet ────────────────────────
 //
@@ -3081,6 +3393,17 @@ if (hexVerdictDrift.length > 0) {
   }
 }
 
+if (hexProblems.length === 0) {
+  // Measured, matched and re-found — every number here comes off the literals
+  // this run actually classified, and the malformed set was reconciled entry by
+  // entry against HEX_BASELINE above rather than counted.
+  establish(
+    'm11',
+    `M11: ${hexObservations.length} fixed-width hex literal(s) measured by role, ${hexWellFormed} well-formed and ` +
+      `${hexDefects.length} malformed, each one matched to its HEX_BASELINE entry (frozen does not mean well-formed)`,
+  );
+}
+
 // ── The ratchet ─────────────────────────────────────────────────────────────
 
 const frozenKey = (e) => JSON.stringify([e.rule, e.module, e.file, e.text]);
@@ -3110,10 +3433,16 @@ const expectedCount = (entry) => entry.occurrences ?? 1;
 // integer or nobody can tell what the entry claims.
 const malformedCounts = FROZEN.filter((e) => !Number.isInteger(expectedCount(e)) || expectedCount(e) < 1);
 
+// The occurrence comparison. Both numbers below are taken from `seen`, which is
+// raised once per finding read off disk — never from `occurrences`, which is
+// source text and was what the summary used to sum before this was measured.
+const occurrenceComparisons = [...frozenIndex.values()].filter((v) => v.seen > 0);
+const observedOccurrences = occurrenceComparisons.reduce((n, v) => n + v.seen, 0);
+
 // Text still matches, but not as many times as recorded. Both directions are a
 // failure and they mean opposite things, so they are reported separately.
-const countDrift = [...frozenIndex.values()]
-  .filter((v) => v.seen > 0 && v.seen !== expectedCount(v.entry))
+const countDrift = occurrenceComparisons
+  .filter((v) => v.seen !== expectedCount(v.entry))
   .map((v) => ({ entry: v.entry, seen: v.seen, expected: expectedCount(v.entry) }));
 
 // ── Verdict ────────────────────────────────────────────────────────────────
@@ -3156,6 +3485,22 @@ if (stale.length > 0) {
   problems.push('');
 }
 
+// The frozen-text claim. `occurrenceComparisons.length` is how many entries were
+// RE-FOUND on disk this run, which is the number worth printing; `FROZEN.length`
+// is how many were written down, and the two agree only because `stale` is empty.
+if (duplicateEntries.length === 0 && unfrozen.length === 0 && stale.length === 0) {
+  const frozenByRule = FROZEN.reduce((acc, e) => ((acc[e.rule] = (acc[e.rule] ?? 0) + 1), acc), {});
+  const ruleSummary = Object.entries(frozenByRule)
+    .sort()
+    .map(([rule, n]) => `${rule}:${n}`)
+    .join(' ');
+  establish(
+    'frozen',
+    `${occurrenceComparisons.length} frozen mainnet constant(s) re-found by exact text (${ruleSummary}), and no ` +
+      'string outside the baseline matched any rule',
+  );
+}
+
 if (malformedCounts.length > 0) {
   problems.push('  ── frozen entries with a broken occurrence count ──');
   for (const e of malformedCounts) problems.push(`  [${e.rule}]  ${e.module}:${e.file}  occurrences=${JSON.stringify(e.occurrences)}`);
@@ -3179,6 +3524,16 @@ if (countDrift.length > 0) {
     );
     problems.push('');
   }
+} else {
+  // Minted HERE, by the comparison, and nowhere else. Deleting this block takes
+  // the sentence with it and the summary can no longer be assembled — which is
+  // the entire remedy: before this, deleting the comparison left a green run
+  // still printing "none gained a copy" over a tree that had just gained one.
+  establish(
+    'occurrences',
+    `${observedOccurrences} occurrence(s) counted on disk and compared one by one against the multiplicity ` +
+      'recorded for each — none gained or lost a copy',
+  );
 }
 
 if (barrierBreaks.length > 0) {
@@ -3192,6 +3547,12 @@ if (barrierBreaks.length > 0) {
   problems.push('  from being built, containerised, composed or run by anything in this repository, and lifting');
   problems.push('  that bar needs the security review the vendored-exchange ADR makes a precondition of adoption.');
   problems.push('');
+} else {
+  establish(
+    'barriers',
+    `barriers held: ${dockerfilesInspected} Dockerfile(s), ${composeInspected} compose file(s) and ` +
+      `${workflowsInspected} workflow(s) opened — none builds, composes or boots this tree`,
+  );
 }
 
 if (problems.length > 0) {
@@ -3203,22 +3564,16 @@ if (problems.length > 0) {
   );
 }
 
-const frozenByRule = FROZEN.reduce((acc, e) => ((acc[e.rule] = (acc[e.rule] ?? 0) + 1), acc), {});
-const ruleSummary = Object.entries(frozenByRule)
-  .sort()
-  .map(([rule, n]) => `${rule}:${n}`)
-  .join(' ');
+// ── The summary, assembled from claims ─────────────────────────────────────
+//
+// Not one number below is written here. Each clause is read back from the check
+// that minted it, and `reconcileClaims` runs between assembly and print, so a
+// claim with no check and a check with no claim are both red before a tick can
+// reach a terminal.
+const summary =
+  `✓ wallet-rpc-mainnet-scan clean — ${claim('walk')}. ${claim('frozen')}; ${claim('occurrences')}. ` +
+  `${claim('m11')}. ${claim('barriers')}. ${claim('probes')} — proof-of-life for the rules the tree gives ` +
+  'nothing to freeze.';
 
-const probesFiring = RULE_PROBES.filter((p) => p.fires).length;
-const frozenOccurrences = FROZEN.reduce((n, e) => n + expectedCount(e), 0);
-
-console.log(
-  `✓ wallet-rpc-mainnet-scan clean — ${moduleDirs.length} module(s), ${javaFiles.length} Java + ${propsFiles.length} properties file(s) ` +
-    `walked; ${FROZEN.length} frozen mainnet constant(s) in ${frozenOccurrences} recorded occurrence(s), all still exactly ` +
-    `as recorded (${ruleSummary}); no new one added, and none gained a copy. M11: ${hexObservations.length} fixed-width hex ` +
-    `literal(s) measured by role, ${hexWellFormed} well-formed and ${hexDefects.length} still malformed and recorded ` +
-    `(frozen does not mean well-formed). Barriers held: ${dockerfilesInspected} Dockerfile(s), ${composeInspected} compose file(s) and ` +
-    `${workflowsInspected} workflow(s) checked — none builds, composes or boots this tree. ` +
-    `${probesRun} rule probe(s) executed across ${probedRules.size} rule id(s) (${probesFiring} must fire, ${probesRun - probesFiring} must not) — ` +
-    `proof-of-life for the rules the tree gives nothing to freeze.`,
-);
+reconcileClaims();
+console.log(summary);
