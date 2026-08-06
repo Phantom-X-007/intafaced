@@ -137,10 +137,18 @@
  *       said a word. 40 hex digits is an account or a contract and nothing else
  *       — a 64-hex event topic does not match, and neither does a txid.
  *
- *   M9  No credential-bearing value reaching a log or print sink. Three services
+ *   M9  No credential-bearing value reaching a log or print sink. FOUR services
  *       here write a live spending credential to stdout on an ordinary success
  *       path, which makes the security boundary of the hot wallets the read
- *       permission on the log files. This catches the fourth.
+ *       permission on the log files. This catches the fifth.
+ *
+ *       Taint has two sources, because the fourth service needed a second one.
+ *       A value is credential-bearing if its NAME says so, or a @Value binding
+ *       says so — or if its declared TYPE has a public getter graph that reaches
+ *       a private key and it is handed WHOLE to a reflective serialiser. Name
+ *       taint cannot see `JSON.toJSON(current)`; nothing about `current` is
+ *       spelled like a secret, and `Payment` only reaches the key three getters
+ *       down, through a library.
  *
  *   M10 Every EVM deposit credit is classified by whether the method that builds
  *       it ever fetches the transaction receipt, and the classification is part
@@ -172,19 +180,32 @@
  *     COMMENTED OUT in the scheduled path and live in the replay path, which is
  *     why M10 is method-scoped: a file-scope rule reads those two modules as safe.
  *
- * One thing the review flagged is deliberately NOT a rule here.
- * `PaymentHandler` passes a `Payment` — which has a public `getCredentials()` —
- * to `JSON.toJSON` every thirty seconds, which would log the ETH private key on a
- * timer IF fastjson serialises getters and IF web3j's accessor chain is what its
- * published API says. The fastjson half is now CONFIRMED, from the shipped
- * bytecode of the pinned 1.2.31 jar rather than from documentation (see the F3
- * follow-up in the review). The web3j half is not: that artifact is nowhere on
- * this host, and the tree never calls the accessors itself. So §F3 remains an
- * INFERENCE, and M9 correctly does not reach it — `current` is a field, not a
- * credential-named local. That is the intended outcome. A gate must not promote
- * an inference to a finding by pattern-matching it; the day somebody reads
- * `org.web3j:core:3.3.1` is the day this becomes a finding, and it will be added
- * then, by a human, with a reason.
+ * One thing the review flagged used to be deliberately NOT a rule here, and now
+ * is. `PaymentHandler` passes a `Payment` — which has a public
+ * `getCredentials()` — to `JSON.toJSON` every thirty seconds, which logs the ETH
+ * private key on a timer IF fastjson serialises getters and IF web3j's accessor
+ * chain is what its published API says. Both halves have now been read out of
+ * shipped bytecode on this host, without a JVM:
+ *
+ *   · fastjson 1.2.31 (2026-08-05) — `JSON.toJSON` → `getObjectWriter` →
+ *     `JavaBeanSerializer.getFieldValuesMap` → `FieldInfo.get` →
+ *     `Method.invoke`, then `JSON.toJSON` again on every value it collected.
+ *     `ParserConfig.isPrimitive2` lists `java.math.BigInteger`, so the key is
+ *     kept verbatim rather than skipped.
+ *   · web3j crypto 3.3.1 (2026-08-06) — `Credentials.getEcKeyPair()` and
+ *     `ECKeyPair.getPrivateKey()` are both public, no-arg, over `private final`
+ *     fields that are not transient and carry no annotation.
+ *
+ * So §F3 is a FINDING, and M9 now reaches it — three entries, added by a human
+ * with a reason, which is exactly the bar the previous version of this comment
+ * set for changing its mind. The taint that reaches it is type-based and applies
+ * only where the object is passed WHOLE to a serialiser: a gate must still not
+ * promote an inference by pattern-matching it, and `payment.getTo()` in the same
+ * class stays silent.
+ *
+ * The jar is not checksum-verified — see the §F3 follow-up for its SHA-256 and
+ * for what would settle its provenance. What the jar says is corroborated by
+ * every web3j signature this tree compiles against resolving against it exactly.
  *
  * ── THE RATCHET, BY EXACT TEXT ─────────────────────────────────────────────
  *
@@ -579,6 +600,67 @@ const CREDENTIAL_PROPERTY_LEAF = /^(rpc|password|passwd|passphrase|secret|privat
 /** stdout, stderr and every logger spelling in this tree. */
 const LOG_SINK =
   /\b(?:System\s*\.\s*(?:out|err)\s*\.\s*print(?:ln|f)?|(?:logger|log|LOGGER|LOG)\s*\.\s*(?:info|warn|error|debug|trace))\s*\(/g;
+
+/**
+ * Types whose PUBLIC GETTER GRAPH reaches a secp256k1 private key. Not types that
+ * "look sensitive" — types read out of shipped bytecode and confirmed to expose
+ * the key through a chain a reflective serialiser will walk unaided:
+ *
+ *   Payment      → getCredentials() : Credentials     (eth-support entity, `:28`)
+ *   Credentials  → getEcKeyPair()   : ECKeyPair       (org.web3j:crypto:3.3.1)
+ *   ECKeyPair    → getPrivateKey()  : BigInteger      (org.web3j:crypto:3.3.1)
+ *
+ * All three getters are public, no-arg, and back onto a `private final` field
+ * that is NOT transient and carries no annotation of any kind. See the §F3
+ * follow-up of 2026-08-06 in the security review for the byte-level read.
+ *
+ * The name-based `CREDENTIAL_IDENT` above cannot see any of this: not one of
+ * those three identifiers contains "secret", "password" or "key" in a position
+ * that regex matches, and the variable at the call site is called `current`.
+ */
+const CREDENTIAL_BEARING_TYPE = /^(?:Payment|Credentials|ECKeyPair)$/;
+
+/**
+ * A declaration — field, local or parameter — of a credential-bearing type.
+ * Deliberately class-wide rather than method-scoped: the site this rule exists
+ * for reads a FIELD (`private Payment current;`) from inside a `@Scheduled`
+ * method that declares nothing and takes no arguments, which is exactly why the
+ * signature-sourced taint model above never reached it.
+ *
+ * `LinkedList<Payment> tasks` does not match, and should not: a collection is
+ * not passed whole to the serialiser anywhere here, and matching it would taint
+ * `tasks` in every method that reads its size.
+ */
+const CREDENTIAL_BEARING_DECL = /\b(Payment|Credentials|ECKeyPair)\s+([A-Za-z_$][\w$]*)\s*[;,=)]/g;
+
+/**
+ * fastjson entered through the calls this tree actually uses. This is the sink
+ * that matters and the reason the rule is worth having: a reflective serialiser
+ * does not print the object, it WALKS it, so what reaches the log is not the
+ * `toString()` of a `Payment` but every leaf its getter graph can reach.
+ *
+ * Confirmed from the shipped bytecode of the pinned `com.alibaba:fastjson:1.2.31`
+ * jar — `JSON.toJSON(Object, SerializeConfig)` calls
+ * `JavaBeanSerializer.getFieldValuesMap`, then calls `JSON.toJSON` again on every
+ * value it collected, and `ParserConfig.isPrimitive2` lists `java.math.BigInteger`
+ * so the key lands verbatim as a decimal integer rather than being skipped.
+ *
+ * Only a BARE IDENTIFIER argument counts. `JSON.toJSON(payment.getTo())` hands
+ * the serialiser a String and is not this defect; a rule that could not tell the
+ * two apart would report the projection lines in the same class and be tuned off.
+ */
+const REFLECTIVE_SERIALISER =
+  /\b(?:JSON|JSONObject|JSONArray)\s*\.\s*(?:toJSON|toJSONString|toJSONBytes)\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+
+/** Every identifier in this file declared with a credential-bearing type. */
+function credentialBearingNames(struct) {
+  const names = new Set();
+  CREDENTIAL_BEARING_DECL.lastIndex = 0;
+  for (const m of struct.matchAll(CREDENTIAL_BEARING_DECL)) {
+    if (CREDENTIAL_BEARING_TYPE.test(m[1])) names.add(m[2]);
+  }
+  return names;
+}
 
 /** Split a parameter list on top-level commas — annotations carry parens of their own. */
 function splitTopLevel(text) {
@@ -1269,6 +1351,53 @@ const FROZEN = [
       'rule narrow enough to drop this one also drops the hexRawValue line above, which is real.',
   },
 
+  // ── M9, added 2026-08-06: the §F3 inference, now read out of bytecode ─────
+  //
+  // These three were deliberately NOT frozen when M9 was written, and the header
+  // above said why: §F3 depended on an accessor chain in `org.web3j:core:3.3.1`,
+  // that artifact was nowhere on this host, and "a gate must not promote an
+  // inference to a finding by pattern-matching it." That condition is now met.
+  // `org.web3j:crypto:3.3.1` was read on this host without a JVM, the same way
+  // the fastjson chain was, and both getters are public, no-arg, non-transient
+  // and unannotated. So this is added the way the header said it would be: by a
+  // human, with a reason, after somebody actually read the jar.
+  {
+    rule: 'M9',
+    module: 'eth-support',
+    file: 'PaymentHandler.java',
+    text: 'checkJob: logger.info("转账{}已成功,检查次数:{}", JSON.toJSON(current),checkTimes)',
+    reason:
+      'THE ETH HOT-WALLET PRIVATE KEY, ON A THIRTY-SECOND TIMER. `current` is a `Payment`; `Payment.getCredentials()` ' +
+      'is public and its field is neither transient nor annotated; `Credentials.getEcKeyPair()` and ' +
+      '`ECKeyPair.getPrivateKey()` are public no-arg getters over `private final` non-transient fields. fastjson 1.2.31 ' +
+      'walks public getters reflectively and RECURSES on every value, and its own isPrimitive2 lists BigInteger, so the ' +
+      'secp256k1 key lands in the log as a decimal integer rather than being skipped. The cron is `0/30 * * * * *` and ' +
+      'maxCheckTimes is 100, so an unconfirmed withdrawal reprints it for up to fifty minutes. Owner queue: log the ' +
+      'txid and the business id only, and never hand an object holding Credentials to a serialiser. Review §F3.',
+  },
+  {
+    rule: 'M9',
+    module: 'eth-support',
+    file: 'PaymentHandler.java',
+    text: 'checkJob: logger.info("转账{}未成功,检查次数:{}", JSON.toJSON(current),checkTimes)',
+    reason:
+      'The failure branch of the line above, five lines down, and the WORSE of the two: this is the one that runs on ' +
+      'every unconfirmed check, so it is the repetition, not the success case, that fills the log. Same object, same ' +
+      'serialiser, same key. Review §F3.',
+  },
+  {
+    rule: 'M9',
+    module: 'eth-support',
+    file: 'PaymentHandler.java',
+    text: 'doJob: logger.info("开始执行付款任务:current---"+JSONObject.toJSONString(current))',
+    reason:
+      'The third serialiser call on the same field, and the one that is NOT a leak today — stated that way rather than ' +
+      'counted as a third finding. It sits inside `if (current == null && tasks.size() > 0)`, so `current` is null ' +
+      'every time this line runs and it prints the four characters "null". It is frozen because the guard is the only ' +
+      'thing making it harmless: this line was written to dump the in-flight payment and would do exactly that the ' +
+      'moment the condition is reordered or the log is moved below the assignment. Review §F3.',
+  },
+
   // ── M10: deposit credits, by whether the crediting method verifies success ─
   //
   // Frozen as SHAPE, not as text: the rule id encodes the verdict, so a path that
@@ -1520,6 +1649,7 @@ function scanJavaSource(source) {
   // rather than a credential. Findings are RECORDED from `code`, so the frozen
   // text is the line a human would read.
   const struct = blankStringContents(code);
+  const keyBearing = credentialBearingNames(struct);
 
   for (const method of methodSpans(code, struct)) {
     const body = struct.slice(method.start, method.end + 1);
@@ -1548,6 +1678,18 @@ function scanJavaSource(source) {
 
       for (const mut of stmt.matchAll(/\b([A-Za-z_$][\w$]*)\s*\.\s*(?:put|add|append|set[A-Za-z_$]*)\s*\(([^;]*)/g)) {
         if (mentionsCredential(mut[2], tainted)) tainted.add(mut[1]);
+      }
+
+      // A credential-bearing object handed WHOLE to a reflective serialiser.
+      // The taint is added here, in statement order and before the sink scan
+      // below, because the serialiser call and the log call are the same
+      // statement: `logger.info("…{}…", JSON.toJSON(current), checkTimes)`.
+      // Tainting the NAME rather than the whole statement is what keeps the
+      // projection lines in this same class silent — `payment.getTo()` never
+      // becomes a bare identifier inside a serialiser call.
+      REFLECTIVE_SERIALISER.lastIndex = 0;
+      for (const ser of stmt.matchAll(REFLECTIVE_SERIALISER)) {
+        if (keyBearing.has(ser[1])) tainted.add(ser[1]);
       }
 
       LOG_SINK.lastIndex = 0;
@@ -1997,6 +2139,20 @@ const RULE_PROBES = [
     source:
       'class P { Client f(@Value("${coin.rpc}") String uri) { Client c = new Client(uri); int h = c.getBlockCount(); logger.info("blockHeight={}", h); return c; } }',
     note: 'a block height read off a client built from the credential URL is not a credential — receiver-position taint would report it as one',
+  },
+  {
+    rule: 'M9',
+    kind: 'java',
+    fires: true,
+    source: 'class P { private Payment current; void f() { logger.info("paid {} times {}", JSON.toJSON(current), n); } }',
+    note: 'the §F3 shape — a FIELD of a key-bearing type handed whole to a reflective serialiser inside a scheduled method that declares nothing and takes no arguments, so signature-sourced taint cannot see it and only the declared TYPE can',
+  },
+  {
+    rule: 'M9',
+    kind: 'java',
+    fires: false,
+    source: 'class P { private Payment current; void f() { logger.info("paying to {} amount {}", current.getTo(), v); } }',
+    note: 'a scalar PROJECTION off the same field is not the defect — the serialiser walking the getter graph is, and a rule that could not tell them apart would report the address and gas lines in that same class and get tuned off',
   },
 
   // ── M10: the deposit credit, verified and not ──────────────────────────
