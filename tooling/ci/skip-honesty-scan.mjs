@@ -180,9 +180,12 @@ if (violations.length > 0) {
   console.error("    import { postgresAvailable } from '@intafaced/db';");
   console.error('    const available = await postgresAvailable(URL);\n');
   console.error("  Chain suites: `devChainReachable` from the service's scripts/dev-chain.ts.\n");
-  console.error('  Genuinely cannot fix it — the service is under the M1–M7 human lock? Add it');
-  console.error('  to PRIVATE_PROBE in tooling/ci/unreported-suites.mjs with an owner and a');
-  console.error('  reason. That does not make it fine; it makes it counted.\n');
+  console.error('  Genuinely cannot fix it — a CODEOWNERS line you are not on, an open PR that');
+  console.error('  edits the same file, or an infra decision that is not yours? Add it to');
+  console.error('  PRIVATE_PROBE in tooling/ci/unreported-suites.mjs with an owner and a reason.');
+  console.error('  Name a hold that exists and say what lifts it; a hold citing a rule nobody');
+  console.error('  can find is not a reason (docs/adr/2026-08-04-class-m-hold-language.md).');
+  console.error('  That does not make the skip fine; it makes it counted.\n');
   process.exit(1);
 }
 

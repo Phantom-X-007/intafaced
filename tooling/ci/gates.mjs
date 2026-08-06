@@ -203,8 +203,10 @@ export const GATES = [
       'a test file that decides whether to run using a connection it opened itself can skip on CI ' +
       'without honouring REQUIRE_POSTGRES. Six money and identity suites had each copied such a probe, ' +
       'so a database hiccup skipped them silently and the build went green. Four are fixed; the two in ' +
-      'svc-pay are under the M1–M7 human lock and sit in tooling/ci/unreported-suites.mjs, which the scan ' +
-      'prints on every run and fails on if an entry goes stale.',
+      'svc-pay sit in tooling/ci/unreported-suites.mjs, which the scan prints on every run and fails on if ' +
+      'an entry goes stale. Those two were recorded as "under the M1–M7 human lock" until 2026-08-06; there ' +
+      'is no /services/svc-pay/ line in .github/CODEOWNERS, so that hold never bound and is lifted. They ' +
+      'remain on the register because they still skip invisibly — see the entries for what actually holds each.',
   },
   {
     id: 'compose-secret-parity',
@@ -264,7 +266,7 @@ export const NOT_GATES = {
   'infra-verdict.mjs':
     'a reporter, not a gate: it prints which infrastructure-backed suites actually executed. It never fails a clean run — it exits 2 for "incomplete but permitted", which verify reports without failing. Run by verify.mjs after the test step.',
   'unreported-suites.mjs':
-    'data, not a scan — the register of suites that still skip invisibly and that this change was barred from fixing (M1–M7 human lock). It exports two lists and runs nothing. Both skip-honesty-scan.mjs and infra-verdict.mjs import it; the scan fails if an entry goes stale, so it cannot rot into blanket cover.',
+    'data, not a scan — the register of suites that still skip invisibly, each with the specific reason it was left and what lifts it. It exports two lists and runs nothing. Both skip-honesty-scan.mjs and infra-verdict.mjs import it; the scan fails if an entry goes stale, so it cannot rot into blanket cover.',
   'assert-test-db-env.mjs':
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
   'shell-i18n-scan.mjs':
