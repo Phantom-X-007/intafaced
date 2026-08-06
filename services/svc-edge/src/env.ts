@@ -97,6 +97,46 @@ const schema = baseEnvSchema
        * only. Multi-replica share still §13 residual — file is per process host.
        */
       EDGE_KILL_STATE_PATH: z.string().default('.data/edge-kill-state.json'),
+
+      /**
+       * Request throttle (see `hardening.ts`). On by default: the front door
+       * proxies to svc-identity, so "off" means unlimited password attempts.
+       */
+      EDGE_RATE_LIMIT_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
+       * Requests per window per key, per replica.
+       *
+       * 300/minute is chosen to be invisible to a person and to a terminal
+       * polling depth, while making a credential-stuffing run cost real time.
+       * It is not a capacity limit and must not be tuned as one — counters are
+       * in-process, so the fleet's true allowance is this times the replica
+       * count.
+       */
+      EDGE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(300),
+      EDGE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).max(3_600_000).default(60_000),
+
+      /**
+       * Who may set `X-Forwarded-For`, passed straight to Fastify's `trustProxy`.
+       *
+       * UNSET IS THE SAFE DEFAULT AND THE USELESS ONE, and both halves matter.
+       * Trusting the header unconditionally lets any caller forge their own
+       * identity and walk around the throttle one fake address at a time. Not
+       * trusting it behind a proxy collapses every caller onto the proxy's
+       * address, so the limit becomes one shared global budget — a control that
+       * converts one attacker into an outage for everybody.
+       *
+       * There is no default that is right for both topologies, so there is no
+       * clever default: state the proxy, or be told at boot what you actually
+       * got (`rateLimitSummary`).
+       *
+       * Accepts what Fastify accepts — `true`, a hop count, an IP, or a
+       * comma-separated CIDR list.
+       */
+      EDGE_TRUST_PROXY: z.string().optional(),
     }),
   );
 
