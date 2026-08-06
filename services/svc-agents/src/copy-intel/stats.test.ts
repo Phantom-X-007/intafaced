@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { buildLeaderStats, type LeaderPerformanceFixture } from './stats.js';
+import {
+  buildLeaderStats,
+  type LeaderPerformanceFixture,
+  isIntelOk,
+  isIntelEmpty,
+  intelLeaderCount,
+  intelSkippedCount,
+  intelBoardCard,
+  intelStatusLine,
+  parseIntelStatusLine,
+  intelStatusLineMatches,
+  intelExportHeader,
+  intelExportLine,
+  intelExportText,
+  leaderStatExportHeader,
+  leaderStatExportLines,
+  intelLeaderCountInRange,
+} from './stats.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -85,5 +102,29 @@ describe('copy-intel buildLeaderStats (Stage-1 fixtures)', () => {
   it('Stage-2 L3: allowlist miss → empty not invent', () => {
     const r = buildLeaderStats([row({ leaderId: 'L1' })], { now: NOW, leaderAllowlist: ['NOPE'] });
     expect(r).toEqual({ status: 'empty', userMessageKey: 'agents.copy_intel.empty' });
+  });
+});
+
+describe('L3 wave52 copy-intel stats status/export', () => {
+  it('empty ok and unavailable boards', () => {
+    const empty = buildLeaderStats([], { now: NOW });
+    expect(isIntelEmpty(empty)).toBe(true);
+    expect(intelLeaderCount(empty)).toBe(0);
+    expect(intelStatusLineMatches(empty)).toBe(true);
+    expect(intelExportText(empty).startsWith(intelExportHeader())).toBe(true);
+    expect(parseIntelStatusLine('nope')).toBeNull();
+
+    const ok = buildLeaderStats([row({ leaderId: 'L1' })], { now: NOW });
+    expect(isIntelOk(ok)).toBe(true);
+    expect(intelLeaderCount(ok)).toBe(1);
+    expect(intelBoardCard(ok).leaders).toBe(1);
+    expect(intelStatusLineMatches(ok)).toBe(true);
+    expect(leaderStatExportLines(ok)).toHaveLength(1);
+    expect(leaderStatExportLines(ok)[0]).toContain('L1,');
+    expect(leaderStatExportHeader()).toContain('leaderId');
+    expect(intelLeaderCountInRange(ok, 1, 1)).toBe(true);
+    expect(intelLeaderCountInRange(ok, 2, 1)).toBe(false);
+    expect(intelExportLine(ok)).toContain('ok,1,');
+    expect(intelSkippedCount(ok)).toBe(0);
   });
 });

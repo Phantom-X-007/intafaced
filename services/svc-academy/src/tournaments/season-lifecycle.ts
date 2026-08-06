@@ -772,3 +772,31 @@ export function seasonStatusLineDetailedConsistent(line: string): boolean {
   if (!p) return false;
   return p.total === p.scheduled + p.live + p.frozen + p.ended;
 }
+
+/** L3 — true when season total is within [min,max]. Invalid → false. */
+export function seasonCountInRange(seasons: readonly SeasonRecord[], min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = totalSeasonCount(seasons);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when live count is at least n. */
+export function liveSeasonCountAtLeast(seasons: readonly SeasonRecord[], n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return liveSeasonCount(seasons) >= n;
+}
+
+/** L3 — clamp season page size into [1, total] (empty → 1). */
+export function clampSeasonPageSize(seasons: readonly SeasonRecord[], pageSize: number): number {
+  if (!Number.isFinite(pageSize)) return 1;
+  const total = Math.max(1, totalSeasonCount(seasons));
+  return Math.max(1, Math.min(total, Math.floor(pageSize)));
+}
+
+/** L3 — true when open season ratio is at least threshold. Empty → false. */
+export function openSeasonRatioAtLeast(seasons: readonly SeasonRecord[], threshold: number): boolean {
+  if (!Number.isFinite(threshold)) return false;
+  const r = openSeasonRatio(seasons);
+  if (r === null) return false;
+  return Number(r) >= threshold;
+}

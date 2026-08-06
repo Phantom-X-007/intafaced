@@ -68,3 +68,83 @@ export async function runUsefulPath(
     providerId: result.providerId,
   };
 }
+
+/** L3 — probe message constant (for operator honesty boards). */
+export function usefulPathProbeMessage(): string {
+  return PROBE_MESSAGE;
+}
+
+/** L3 — true when a completion task exists. */
+export function hasUsefulPathTask(gateway: ModelGateway): boolean {
+  return firstCompletionTask(gateway) !== null;
+}
+
+/** L3 — board card from a useful-path result (no invent usage). */
+export function usefulPathResultBoardCard(result: UsefulPathResult): {
+  readonly task: string;
+  readonly model: string;
+  readonly providerId: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly textLen: number;
+} {
+  return {
+    task: result.task,
+    model: result.model,
+    providerId: result.providerId,
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+    textLen: result.text.length,
+  };
+}
+
+/** L3 — status line from result. */
+export function usefulPathResultStatusLine(result: UsefulPathResult): string {
+  const c = usefulPathResultBoardCard(result);
+  return `task=${c.task} model=${c.model} provider=${c.providerId} in=${c.inputTokens} out=${c.outputTokens}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseUsefulPathResultStatusLine(
+  line: string,
+): { readonly task: string; readonly model: string; readonly provider: string; readonly in: number; readonly out: number } | null {
+  const m = line.trim().match(/^task=(\S+) model=(\S+) provider=(\S+) in=(\d+) out=(\d+)$/);
+  if (!m) return null;
+  return { task: m[1]!, model: m[2]!, provider: m[3]!, in: Number(m[4]), out: Number(m[5]) };
+}
+
+/** L3 — true when status matches result. */
+export function usefulPathResultStatusLineMatches(result: UsefulPathResult): boolean {
+  const p = parseUsefulPathResultStatusLine(usefulPathResultStatusLine(result));
+  if (!p) return false;
+  const c = usefulPathResultBoardCard(result);
+  return p.task === c.task && p.model === c.model && p.provider === c.providerId && p.in === c.inputTokens && p.out === c.outputTokens;
+}
+
+/** L3 — export header. */
+export function usefulPathResultExportHeader(): string {
+  return 'task,model,providerId,inputTokens,outputTokens,textLen';
+}
+
+/** L3 — export line. */
+export function usefulPathResultExportLine(result: UsefulPathResult): string {
+  const c = usefulPathResultBoardCard(result);
+  return `${c.task},${c.model},${c.providerId},${c.inputTokens},${c.outputTokens},${c.textLen}`;
+}
+
+/** L3 — full export. */
+export function usefulPathResultExportText(result: UsefulPathResult): string {
+  return [usefulPathResultExportHeader(), usefulPathResultExportLine(result)].join('\n');
+}
+
+/** L3 — true when textLen is within [min,max]. Invalid → false. */
+export function usefulPathTextLenInRange(result: UsefulPathResult, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = result.text.length;
+  return n >= min && n <= max;
+}
+
+/** L3 — true when mock-shaped text (honest mock prefix). */
+export function isMockUsefulPathText(result: UsefulPathResult): boolean {
+  return result.text.startsWith('mock:');
+}

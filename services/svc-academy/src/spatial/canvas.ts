@@ -195,3 +195,94 @@ export function removeProp(scene: SceneV1, propId: string): SceneV1 {
     props: props.filter((p) => p.id !== propId),
   });
 }
+
+/** L3 — presence count (no invent). */
+export function presenceCount(scene: SceneV1): number {
+  return listPresence(scene).length;
+}
+
+/** L3 — true when scene has any presence. */
+export function hasPresence(scene: SceneV1): boolean {
+  return presenceCount(scene) > 0;
+}
+
+/** L3 — canvas board card. */
+export function canvasBoardCard(scene: SceneV1): {
+  readonly presence: number;
+  readonly props: number;
+  readonly hasStage: boolean;
+  readonly stageWidth: number;
+  readonly stageHeight: number;
+} {
+  const bounds = stageBounds(scene);
+  return {
+    presence: presenceCount(scene),
+    props: scene.props?.length ?? 0,
+    hasStage: scene.stage != null,
+    stageWidth: bounds.width,
+    stageHeight: bounds.height,
+  };
+}
+
+/** L3 — canvas status line. */
+export function canvasStatusLine(scene: SceneV1): string {
+  const c = canvasBoardCard(scene);
+  return `presence=${c.presence} props=${c.props} stage=${c.stageWidth}x${c.stageHeight}`;
+}
+
+/** L3 — true when no presence. */
+export function canvasStatusLineIsEmpty(scene: SceneV1): boolean {
+  return presenceCount(scene) === 0;
+}
+
+/** L3 — parse canvas status. Invalid → null. */
+export function parseCanvasStatusLine(
+  line: string,
+): { readonly presence: number; readonly props: number; readonly stageWidth: number; readonly stageHeight: number } | null {
+  const m = line.trim().match(/^presence=(\d+) props=(\d+) stage=(\d+)x(\d+)$/);
+  if (!m) return null;
+  return {
+    presence: Number(m[1]),
+    props: Number(m[2]),
+    stageWidth: Number(m[3]),
+    stageHeight: Number(m[4]),
+  };
+}
+
+/** L3 — true when status matches scene. */
+export function canvasStatusLineMatches(scene: SceneV1): boolean {
+  const p = parseCanvasStatusLine(canvasStatusLine(scene));
+  if (!p) return false;
+  const c = canvasBoardCard(scene);
+  return p.presence === c.presence && p.props === c.props && p.stageWidth === c.stageWidth && p.stageHeight === c.stageHeight;
+}
+
+/** L3 — export header. */
+export function canvasExportHeader(): string {
+  return 'presence,props,stageWidth,stageHeight';
+}
+
+/** L3 — export line. */
+export function canvasExportLine(scene: SceneV1): string {
+  const c = canvasBoardCard(scene);
+  return `${c.presence},${c.props},${c.stageWidth},${c.stageHeight}`;
+}
+
+/** L3 — full export text. */
+export function canvasExportText(scene: SceneV1): string {
+  return [canvasExportHeader(), canvasExportLine(scene)].join('\n');
+}
+
+/** L3 — true when presence is within [min,max]. Invalid → false. */
+export function presenceCountInRange(scene: SceneV1, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = presenceCount(scene);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when point is inside stage (inclusive). Invalid coords → false. */
+export function isPointOnStage(scene: SceneV1, x: number, y: number): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const { width, height } = stageBounds(scene);
+  return x >= 0 && y >= 0 && x <= width && y <= height;
+}

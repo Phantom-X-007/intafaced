@@ -161,7 +161,7 @@ const PINNED = {
   'services/svc-blueprint': [
     [
       2,
-      'src/blueprint-service.test.ts | TS2339 | Property \'message\' does not exist on type \'Error | { blueprint: { id: string; userId: string; engineVersion: string; profile: { decisionStyle: "analytical" | "intuitive" | "collaborative" | "decisive"; riskTemperament: "guarded" | ... 2 more ... | "bold"; ... 5 more ...; guardrails: { ...; }; }; cardAssetUrl: string | null; visibility: "private" | ... 1 more...\'.',
+      'src/blueprint-service.test.ts | TS2339 | Property \'message\' does not exist on type \'Error | { blueprint: { id: string; visibility: "private" | "crew" | "public"; userId: string; engineVersion: string; profile: { decisionStyle: "analytical" | "intuitive" | "collaborative" | "decisive"; ... 6 more ...; guardrails: { ...; }; }; cardAssetUrl: string | null; createdAt: string; }; placement: { ...; }; me...\'.',
     ],
   ],
 

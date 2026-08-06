@@ -1189,3 +1189,29 @@ export function catalogStatusLineConsistent(line: string): boolean {
   if (!p) return false;
   return p.spine === p.lessons + p.playbooks + p.workbooks;
 }
+
+/** L3 — true when spine size is within [min,max]. Invalid → false. */
+export function spineSizeInRange(min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = curriculumSpineSize();
+  return n >= min && n <= max;
+}
+
+/** L3 — true when lesson count is at least n. */
+export function lessonCountAtLeast(n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return lessonCount() >= n;
+}
+
+/** L3 — clamp curriculum page size into [1, spine] (empty → 1). */
+export function clampCurriculumPageSize(pageSize: number): number {
+  if (!Number.isFinite(pageSize)) return 1;
+  const total = Math.max(1, curriculumSpineSize());
+  return Math.max(1, Math.min(total, Math.floor(pageSize)));
+}
+
+/** L3 — true when empty path count is at most n. */
+export function emptyPathCountAtMost(n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return emptyPathCount() <= n;
+}

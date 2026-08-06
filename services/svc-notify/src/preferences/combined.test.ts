@@ -96,6 +96,10 @@ import {
   planStatusLineMatches,
   parsePlanStatusLineDetailed,
   planStatusLineConsistent,
+  planTotalInRange,
+  planSendCountAtLeast,
+  clampPlanPageSize,
+  planSkipCountAtMost,
 } from './combined.js';
 import { applyMuteToggle } from './mute.js';
 import { applyDigestCadence } from './digest.js';
@@ -423,5 +427,13 @@ describe('notify L3 combined mute + digest', () => {
     expect(planStatusLineMatches(plan)).toBe(true);
     expect(planStatusLineConsistent(planStatusLine(plan))).toBe(true);
     expect(parsePlanStatusLineDetailed(planStatusLineDetailed(plan))?.allSend).toBe(true);
+  });
+
+  it('L3 wave46 plan thresholds + clamps', () => {
+    expect(planTotalInRange([], 0, 0)).toBe(true);
+    const plan = planFanoutDelivery(DEFAULT_COMBINED_PREFS, ['inapp', 'email'], 'critical');
+    expect(planSendCountAtLeast(plan, 1)).toBe(true);
+    expect(clampPlanPageSize(plan, 99)).toBe(plan.length);
+    expect(planSkipCountAtMost(plan, 0)).toBe(true);
   });
 });

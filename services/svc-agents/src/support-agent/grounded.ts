@@ -43,3 +43,65 @@ export function supportGrounded(input: { plane: SupportDeskPlane; kbHitCount?: n
     allowedTasks: ['support.classify', 'support.reply'],
   };
 }
+
+/** L3 — true when support grounded ok. */
+export function isSupportGroundedOk(result: SupportGrounded): boolean {
+  return result.status === 'ok';
+}
+
+/** L3 — board card. */
+export function supportGroundedBoardCard(result: SupportGrounded): {
+  readonly ok: boolean;
+  readonly plane: SupportDeskPlane;
+  readonly reason: string | null;
+  readonly taskCount: number;
+} {
+  if (result.status === 'ok') {
+    return { ok: true, plane: result.plane, reason: null, taskCount: result.allowedTasks.length };
+  }
+  return { ok: false, plane: result.plane, reason: result.reason, taskCount: 0 };
+}
+
+/** L3 — status line. */
+export function supportGroundedStatusLine(result: SupportGrounded): string {
+  const c = supportGroundedBoardCard(result);
+  return `ok=${c.ok ? '1' : '0'} plane=${c.plane} tasks=${c.taskCount} reason=${c.reason ?? '-'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseSupportGroundedStatusLine(
+  line: string,
+): { readonly ok: boolean; readonly plane: SupportDeskPlane; readonly tasks: number; readonly reason: string | null } | null {
+  const m = line.trim().match(/^ok=([01]) plane=(live|dark) tasks=(\d+) reason=(\S+)$/);
+  if (!m) return null;
+  return {
+    ok: m[1] === '1',
+    plane: m[2] as SupportDeskPlane,
+    tasks: Number(m[3]),
+    reason: m[4] === '-' ? null : m[4]!,
+  };
+}
+
+/** L3 — true when status matches. */
+export function supportGroundedStatusLineMatches(result: SupportGrounded): boolean {
+  const p = parseSupportGroundedStatusLine(supportGroundedStatusLine(result));
+  if (!p) return false;
+  const c = supportGroundedBoardCard(result);
+  return p.ok === c.ok && p.plane === c.plane && p.tasks === c.taskCount && p.reason === c.reason;
+}
+
+/** L3 — export header. */
+export function supportGroundedExportHeader(): string {
+  return 'status,plane,tasks,reason';
+}
+
+/** L3 — export line. */
+export function supportGroundedExportLine(result: SupportGrounded): string {
+  const c = supportGroundedBoardCard(result);
+  return `${c.ok ? 'ok' : 'refuse'},${c.plane},${c.taskCount},${c.reason ?? ''}`;
+}
+
+/** L3 — full export. */
+export function supportGroundedExportText(result: SupportGrounded): string {
+  return [supportGroundedExportHeader(), supportGroundedExportLine(result)].join('\n');
+}

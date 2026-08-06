@@ -1,8 +1,37 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProviderError } from '../errors.js';
-import { MockModelProvider, mockUsage } from './mock.js';
+import {
+  MockModelProvider,
+  mockUsage,
+  mockUsageBoardCard,
+  mockUsageStatusLine,
+  parseMockUsageStatusLine,
+  mockUsageStatusLineMatches,
+  mockUsageStatusLineConsistent,
+  mockUsageExportHeader,
+  mockUsageExportLine,
+  mockUsageExportText,
+  mockInputTokensInRange,
+  mockUsageDeterministic,
+} from './mock.js';
 import { UpstreamModelProvider, readUsage } from './upstream.js';
-import { isUsable, supports, totalTokens, type CompletionRequest } from './provider.js';
+import {
+  isUsable,
+  supports,
+  totalTokens,
+  type CompletionRequest,
+  tokenUsageBoardCard,
+  tokenUsageStatusLine,
+  parseTokenUsageStatusLine,
+  tokenUsageStatusLineMatches,
+  tokenUsageStatusLineConsistent,
+  tokenUsageExportHeader,
+  tokenUsageExportLine,
+  tokenUsageExportText,
+  totalTokensInRange,
+  isProviderCapability,
+  PROVIDER_CAPABILITIES,
+} from './provider.js';
 
 /**
  * The adapter layer.
@@ -224,5 +253,38 @@ describe('readUsage — a call we cannot price is a call we must not bill', () =
   it('allows an output-free response only where one is expected', () => {
     // Embeddings generate nothing; completions always report both.
     expect(readUsage({ input_tokens: 7 }, 'p', { partial: true })).toEqual({ inputTokens: 7, outputTokens: 0 });
+  });
+});
+
+describe('L3 wave64 mock usage honesty', () => {
+  it('deterministic boards and consistency', () => {
+    const req = request();
+    const card = mockUsageBoardCard(req);
+    expect(card.totalTokens).toBe(card.inputTokens + card.outputTokens);
+    expect(mockUsageStatusLineMatches(req)).toBe(true);
+    expect(mockUsageStatusLineConsistent(mockUsageStatusLine(req))).toBe(true);
+    expect(parseMockUsageStatusLine('nope')).toBeNull();
+    expect(mockUsageExportText(req).startsWith(mockUsageExportHeader())).toBe(true);
+    expect(mockUsageExportLine(req)).toContain(',');
+    expect(mockUsageDeterministic(req, request())).toBe(true);
+    expect(mockInputTokensInRange(req, 0, 10_000)).toBe(true);
+    expect(mockInputTokensInRange(req, 10_000, 0)).toBe(false);
+  });
+});
+
+describe('L3 wave65 token usage honesty', () => {
+  it('boards and capability catalog', () => {
+    const usage = { inputTokens: 10, outputTokens: 5 };
+    expect(tokenUsageBoardCard(usage).total).toBe(15);
+    expect(tokenUsageStatusLineMatches(usage)).toBe(true);
+    expect(tokenUsageStatusLineConsistent(tokenUsageStatusLine(usage))).toBe(true);
+    expect(parseTokenUsageStatusLine('nope')).toBeNull();
+    expect(tokenUsageExportText(usage).startsWith(tokenUsageExportHeader())).toBe(true);
+    expect(tokenUsageExportLine(usage)).toBe('10,5,15');
+    expect(totalTokensInRange(usage, 15, 15)).toBe(true);
+    expect(totalTokensInRange(usage, 20, 10)).toBe(false);
+    expect(isProviderCapability('complete')).toBe(true);
+    expect(isProviderCapability('paint')).toBe(false);
+    expect(PROVIDER_CAPABILITIES).toHaveLength(3);
   });
 });

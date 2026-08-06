@@ -133,3 +133,68 @@ export function parseXpPolicyExportLine(line: string): { readonly certId: string
   if (!certId || !xpDelta) return null;
   return { certId, xpDelta };
 }
+
+/** L3 — data-line count excluding header. */
+export function countXpPolicyExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l !== xpPolicyExportHeader()).length;
+}
+
+/** L3 — true when export has header. */
+export function xpPolicyExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === xpPolicyExportHeader();
+}
+
+/** L3 — round-trip for xp policy export. */
+export function xpPolicyExportRoundTripOk(): boolean {
+  const text = xpPolicyExportText();
+  return text.split('\n').filter(Boolean).length === 1 + countXpPolicyExportDataLines(text);
+}
+
+/** L3 — xp policy status line. */
+export function xpPolicyStatusLine(): string {
+  const c = xpPolicyBoardCard();
+  return `count=${c.count} nonEmpty=${c.nonEmpty ? '1' : '0'}`;
+}
+
+/** L3 — true when count is 0. */
+export function xpPolicyStatusLineIsEmpty(): boolean {
+  return xpPolicyCount() === 0;
+}
+
+/** L3 — detailed xp policy status. */
+export function xpPolicyStatusLineDetailed(): string {
+  const c = xpPolicyBoardCard();
+  return `count=${c.count} nonEmpty=${c.nonEmpty ? '1' : '0'} ids=${c.idsJoined || '-'}`;
+}
+
+/** L3 — parse xp policy status. Invalid → null. */
+export function parseXpPolicyStatusLine(line: string): { readonly count: number; readonly nonEmpty: boolean } | null {
+  const m = line.trim().match(/^count=(\d+) nonEmpty=([01])$/);
+  if (!m) return null;
+  return { count: Number(m[1]), nonEmpty: m[2] === '1' };
+}
+
+/** L3 — true when status matches catalog. */
+export function xpPolicyStatusLineMatches(): boolean {
+  const p = parseXpPolicyStatusLine(xpPolicyStatusLine());
+  if (!p) return false;
+  return p.count === xpPolicyCount() && p.nonEmpty === hasAnyXpPolicy();
+}
+
+/** L3 — true when nonEmpty flag matches count>0. */
+export function xpPolicyStatusLineConsistent(line: string): boolean {
+  const p = parseXpPolicyStatusLine(line);
+  if (!p) return false;
+  return p.nonEmpty === p.count > 0;
+}
+
+/** L3 — true when policy count is within [min,max]. Invalid → false. */
+export function xpPolicyCountInRange(min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = xpPolicyCount();
+  return n >= min && n <= max;
+}

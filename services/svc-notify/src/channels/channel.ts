@@ -57,6 +57,99 @@ export function isChannelId(value: string): value is ChannelId {
   return (CHANNEL_IDS as readonly string[]).includes(value);
 }
 
+/** L3 — full channel catalog count (always 4). */
+export function channelCatalogSize(): number {
+  return CHANNEL_IDS.length;
+}
+
+/** L3 — out-of-app channel count (always 3). */
+export function outOfAppChannelCount(): number {
+  return OUT_OF_APP_CHANNELS.length;
+}
+
+/** L3 — true when id is out-of-app. */
+export function isOutOfAppChannel(value: string): value is OutOfAppChannel {
+  return (OUT_OF_APP_CHANNELS as readonly string[]).includes(value);
+}
+
+/** L3 — channel catalog board card. */
+export function channelCatalogBoardCard(): {
+  readonly total: number;
+  readonly outOfApp: number;
+  readonly inappAlways: boolean;
+  readonly ids: readonly ChannelId[];
+} {
+  return {
+    total: channelCatalogSize(),
+    outOfApp: outOfAppChannelCount(),
+    inappAlways: CHANNEL_IDS.includes('inapp'),
+    ids: CHANNEL_IDS,
+  };
+}
+
+/** L3 — catalog status line. */
+export function channelCatalogStatusLine(): string {
+  const c = channelCatalogBoardCard();
+  return `total=${c.total} outOfApp=${c.outOfApp} inapp=${c.inappAlways ? '1' : '0'}`;
+}
+
+/** L3 — parse catalog status. Invalid → null. */
+export function parseChannelCatalogStatusLine(
+  line: string,
+): { readonly total: number; readonly outOfApp: number; readonly inapp: boolean } | null {
+  const m = line.trim().match(/^total=(\d+) outOfApp=(\d+) inapp=([01])$/);
+  if (!m) return null;
+  return { total: Number(m[1]), outOfApp: Number(m[2]), inapp: m[3] === '1' };
+}
+
+/** L3 — true when status matches catalog. */
+export function channelCatalogStatusLineMatches(): boolean {
+  const p = parseChannelCatalogStatusLine(channelCatalogStatusLine());
+  if (!p) return false;
+  const c = channelCatalogBoardCard();
+  return p.total === c.total && p.outOfApp === c.outOfApp && p.inapp === c.inappAlways;
+}
+
+/** L3 — export header. */
+export function channelCatalogExportHeader(): string {
+  return 'id,outOfApp';
+}
+
+/** L3 — export lines. */
+export function channelCatalogExportLines(): readonly string[] {
+  return CHANNEL_IDS.map((id) => `${id},${isOutOfAppChannel(id) ? '1' : '0'}`);
+}
+
+/** L3 — full export. */
+export function channelCatalogExportText(): string {
+  return [channelCatalogExportHeader(), ...channelCatalogExportLines()].join('\n');
+}
+
+/** L3 — true when catalog size is within [min,max]. Invalid → false. */
+export function channelCatalogSizeInRange(min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = channelCatalogSize();
+  return n >= min && n <= max;
+}
+
+/** L3 — stable refusal code list for operator docs. */
+export function allRefusalCodes(): readonly RefusalCode[] {
+  return [
+    'channel.not_configured',
+    'channel.no_target',
+    'channel.target_unverified',
+    'channel.target_unroutable',
+    'channel.disabled',
+    'channel.muted',
+    'channel.attempts_exhausted',
+  ];
+}
+
+/** L3 — refusal code count. */
+export function refusalCodeCount(): number {
+  return allRefusalCodes().length;
+}
+
 /**
  * Why a channel declined without attempting anything.
  *

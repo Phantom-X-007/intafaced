@@ -49,3 +49,103 @@ export class AcademyError extends Error {
     this.name = 'AcademyError';
   }
 }
+
+/** L3 — full academy error code catalog (stable for operator boards). */
+export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
+  'academy.room_not_found',
+  'academy.session_not_found',
+  'academy.session_not_live',
+  'academy.not_host',
+  'academy.room_full',
+  'academy.stake_required',
+  'academy.invite_required',
+  'academy.stake_unavailable',
+  'academy.stream_unavailable',
+  'academy.host_rights_required',
+  'academy.host_rights_unavailable',
+  'academy.curriculum_not_found',
+  'academy.scene_invalid',
+  'academy.ambassador_not_found',
+  'academy.ambassador_already_active',
+  'academy.ambassador_already_frozen',
+  'academy.ambassador_invalid',
+  'academy.tournament_disabled',
+  'academy.season_not_found',
+  'academy.season_not_live',
+  'academy.season_invalid',
+  'academy.standing_invalid',
+] as const;
+
+/** L3 — catalog size. */
+export function academyErrorCodeCount(): number {
+  return ACADEMY_ERROR_CODES.length;
+}
+
+/** L3 — true when code is in the published catalog. */
+export function isAcademyErrorCode(value: string): value is AcademyErrorCode {
+  return (ACADEMY_ERROR_CODES as readonly string[]).includes(value);
+}
+
+/** L3 — unavailable codes (operator, not user refusal). */
+export function academyUnavailableErrorCodes(): readonly AcademyErrorCode[] {
+  return ACADEMY_ERROR_CODES.filter((c) => c.endsWith('_unavailable'));
+}
+
+/** L3 — board card. */
+export function academyErrorCatalogBoardCard(): {
+  readonly total: number;
+  readonly unavailable: number;
+  readonly hostRelated: number;
+} {
+  const hostRelated = ACADEMY_ERROR_CODES.filter((c) => c.includes('host')).length;
+  return {
+    total: academyErrorCodeCount(),
+    unavailable: academyUnavailableErrorCodes().length,
+    hostRelated,
+  };
+}
+
+/** L3 — status line. */
+export function academyErrorCatalogStatusLine(): string {
+  const c = academyErrorCatalogBoardCard();
+  return `total=${c.total} unavailable=${c.unavailable} hostRelated=${c.hostRelated}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseAcademyErrorCatalogStatusLine(
+  line: string,
+): { readonly total: number; readonly unavailable: number; readonly hostRelated: number } | null {
+  const m = line.trim().match(/^total=(\d+) unavailable=(\d+) hostRelated=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), unavailable: Number(m[2]), hostRelated: Number(m[3]) };
+}
+
+/** L3 — true when status matches catalog. */
+export function academyErrorCatalogStatusLineMatches(): boolean {
+  const p = parseAcademyErrorCatalogStatusLine(academyErrorCatalogStatusLine());
+  if (!p) return false;
+  const c = academyErrorCatalogBoardCard();
+  return p.total === c.total && p.unavailable === c.unavailable && p.hostRelated === c.hostRelated;
+}
+
+/** L3 — export header. */
+export function academyErrorCatalogExportHeader(): string {
+  return 'code';
+}
+
+/** L3 — export lines. */
+export function academyErrorCatalogExportLines(): readonly string[] {
+  return ACADEMY_ERROR_CODES.slice();
+}
+
+/** L3 — full export. */
+export function academyErrorCatalogExportText(): string {
+  return [academyErrorCatalogExportHeader(), ...academyErrorCatalogExportLines()].join('\n');
+}
+
+/** L3 — true when total is within [min,max]. Invalid → false. */
+export function academyErrorCodeCountInRange(min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = academyErrorCodeCount();
+  return n >= min && n <= max;
+}

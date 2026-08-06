@@ -63,3 +63,79 @@ export function xpPublishBoardCard(intent: XpEarnedIntent | null): {
   }
   return { mayPublish: true, certId: intent.certId, xpDelta: intent.xpDelta };
 }
+
+/** L3 — parse xp publish export line. Invalid → null. */
+export function parseXpPublishExportLine(
+  line: string,
+): { readonly userId: string; readonly certId: string; readonly xpDelta: string; readonly idempotencyKey: string } | null {
+  const t = line.trim();
+  if (!t || t === xpPublishExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 4) return null;
+  const userId = parts[0]!.trim();
+  const certId = parts[1]!.trim();
+  const xpDelta = parts[2]!.trim();
+  const idempotencyKey = parts[3]!.trim();
+  if (!userId || !certId || !xpDelta || !idempotencyKey) return null;
+  return { userId, certId, xpDelta, idempotencyKey };
+}
+
+/** L3 — data-line count excluding header. */
+export function countXpPublishExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l !== xpPublishExportHeader()).length;
+}
+
+/** L3 — true when export has header. */
+export function xpPublishExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === xpPublishExportHeader();
+}
+
+/** L3 — round-trip for xp publish export. */
+export function xpPublishExportRoundTripOk(shape: XpEarnedPublishShape): boolean {
+  const text = xpPublishExportText(shape);
+  return text.split('\n').filter(Boolean).length === 1 + countXpPublishExportDataLines(text);
+}
+
+/** L3 — publish readiness status line. */
+export function xpPublishStatusLine(intent: XpEarnedIntent | null): string {
+  const c = xpPublishBoardCard(intent);
+  return `mayPublish=${c.mayPublish ? '1' : '0'} certId=${c.certId ?? '-'} xpDelta=${c.xpDelta ?? '-'}`;
+}
+
+/** L3 — true when may not publish. */
+export function xpPublishStatusLineIsBlocked(intent: XpEarnedIntent | null): boolean {
+  return !mayPublishXp(intent);
+}
+
+/** L3 — parse publish status. Invalid → null. */
+export function parseXpPublishStatusLine(
+  line: string,
+): { readonly mayPublish: boolean; readonly certId: string | null; readonly xpDelta: string | null } | null {
+  const m = line.trim().match(/^mayPublish=([01]) certId=(\S+) xpDelta=(\S+)$/);
+  if (!m) return null;
+  return {
+    mayPublish: m[1] === '1',
+    certId: m[2] === '-' ? null : m[2]!,
+    xpDelta: m[3] === '-' ? null : m[3]!,
+  };
+}
+
+/** L3 — true when status matches board card. */
+export function xpPublishStatusLineMatches(intent: XpEarnedIntent | null): boolean {
+  const p = parseXpPublishStatusLine(xpPublishStatusLine(intent));
+  if (!p) return false;
+  const c = xpPublishBoardCard(intent);
+  return p.mayPublish === c.mayPublish && p.certId === c.certId && p.xpDelta === c.xpDelta;
+}
+
+/** L3 — true when mayPublish implies non-null certId and xpDelta. */
+export function xpPublishStatusLineConsistent(line: string): boolean {
+  const p = parseXpPublishStatusLine(line);
+  if (!p) return false;
+  if (!p.mayPublish) return p.certId === null && p.xpDelta === null;
+  return p.certId !== null && p.xpDelta !== null;
+}

@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { AcademyError } from '../errors.js';
-import { isUsable, NullStreamProvider, type StreamProvider } from './provider.js';
+import {
+  isUsable,
+  NullStreamProvider,
+  type StreamProvider,
+  streamProviderBoardCard,
+  streamProviderStatusLine,
+  parseStreamProviderStatusLine,
+  streamProviderStatusLineMatches,
+  streamProviderStatusLineConsistent,
+  streamProviderExportHeader,
+  streamProviderExportLine,
+  streamProviderExportText,
+  isNullStreamProvider,
+} from './provider.js';
 
 /**
  * THE SFU IS NOT IN THIS STACK, AND THIS SUITE IS WHY THAT IS SAFE.
@@ -59,5 +72,28 @@ describe('NullStreamProvider — refuses rather than fabricates', () => {
       closeRoom: async () => undefined,
     };
     expect(isUsable(fake)).toBe(true);
+  });
+});
+
+describe('L3 wave63 stream provider honesty', () => {
+  it('null provider boards refuse usable claim', () => {
+    const provider = new NullStreamProvider();
+    expect(isNullStreamProvider(provider)).toBe(true);
+    expect(streamProviderBoardCard(provider).usable).toBe(false);
+    expect(streamProviderStatusLineMatches(provider)).toBe(true);
+    expect(streamProviderStatusLineConsistent(streamProviderStatusLine(provider))).toBe(true);
+    expect(parseStreamProviderStatusLine('nope')).toBeNull();
+    expect(streamProviderExportText(provider).startsWith(streamProviderExportHeader())).toBe(true);
+    expect(streamProviderExportLine(provider)).toBe('null,0,1');
+
+    const fake: StreamProvider = {
+      id: 'webrtc-dev',
+      openRoom: async () => 'r1',
+      credential: async () => ({ url: 'wss://x', token: 't', expiresAt: new Date() }),
+      closeRoom: async () => {},
+    };
+    expect(streamProviderBoardCard(fake).usable).toBe(true);
+    expect(streamProviderStatusLineMatches(fake)).toBe(true);
+    expect(streamProviderExportLine(fake)).toBe('webrtc-dev,1,0');
   });
 });

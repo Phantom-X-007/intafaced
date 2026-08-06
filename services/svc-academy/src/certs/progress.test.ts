@@ -17,6 +17,19 @@ import {
   progressExportLine,
   progressExportHeader,
   progressExportText,
+  parseProgressExportLine,
+  countProgressExportDataLines,
+  progressExportHasHeader,
+  progressExportRoundTripOk,
+  progressStatusLine,
+  progressStatusLineIsEmpty,
+  progressStatusLineDetailed,
+  progressStatusLineTokenCount,
+  parseProgressStatusLine,
+  progressStatusLineMatches,
+  progressStatusLineConsistent,
+  completedCountInRange,
+  missingCountAtMost,
 } from './progress.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
@@ -191,5 +204,39 @@ describe('academy.certs Stage-1 progress spine', () => {
     expect(progressExportHeader()).toBe('userId,certId,ratio,complete,granted');
     expect(progressExportLine(report)).toContain('u1,c1,0.5000');
     expect(progressExportText(report)).toContain('userId,certId');
+  });
+});
+
+describe('L3 wave48 progress status/export', () => {
+  it('export round-trip and status', () => {
+    const cert = { id: 'c1', title: 'T', requiredItemSlugs: ['a', 'b'] };
+    const report = progressReport({
+      userId: 'u1',
+      cert,
+      completedSlugs: new Set(['a']),
+      existingGrant: null,
+    });
+    const text = progressExportText(report);
+    expect(progressExportHasHeader(text)).toBe(true);
+    expect(countProgressExportDataLines(text)).toBe(1);
+    expect(progressExportRoundTripOk(report)).toBe(true);
+    expect(parseProgressExportLine(progressExportLine(report))).toMatchObject({
+      userId: 'u1',
+      certId: 'c1',
+      complete: false,
+      granted: false,
+    });
+    expect(parseProgressExportLine('bad')).toBeNull();
+    expect(progressStatusLine(report)).toBe('completed=1 required=2 missing=1');
+    expect(progressStatusLineIsEmpty(report)).toBe(false);
+    expect(progressStatusLineMatches(report)).toBe(true);
+    expect(progressStatusLineConsistent(progressStatusLine(report))).toBe(true);
+    expect(parseProgressStatusLine('nope')).toBeNull();
+    expect(progressStatusLineDetailed(report)).toContain('grantable=0');
+    expect(progressStatusLineTokenCount(report)).toBe(5);
+    expect(completedCountInRange(report, 0, 2)).toBe(true);
+    expect(completedCountInRange(report, 2, 0)).toBe(false);
+    expect(missingCountAtMost(report, 1)).toBe(true);
+    expect(missingCountAtMost(report, Number.NaN)).toBe(false);
   });
 });

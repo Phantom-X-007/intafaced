@@ -223,3 +223,91 @@ export const DEFAULT_ROUTING_TABLE: RoutingTable = parseRoutingTable({
     },
   ],
 });
+
+/** L3 — route count (no invent). */
+export function routeCount(table: RoutingTable): number {
+  return table.routes.length;
+}
+
+/** L3 — complete capability route count. */
+export function completeRouteCount(table: RoutingTable): number {
+  return table.routes.filter((r) => (r.capability ?? 'complete') === 'complete').length;
+}
+
+/** L3 — unique provider ids in table. */
+export function routingProviderIds(table: RoutingTable): readonly string[] {
+  return [...new Set(table.routes.map((r) => r.providerId))].sort();
+}
+
+/** L3 — board card. */
+export function routingTableBoardCard(table: RoutingTable): {
+  readonly routes: number;
+  readonly complete: number;
+  readonly providers: number;
+  readonly hasFallback: boolean;
+  readonly tasks: readonly string[];
+} {
+  return {
+    routes: routeCount(table),
+    complete: completeRouteCount(table),
+    providers: routingProviderIds(table).length,
+    hasFallback: table.fallbackTask != null && table.fallbackTask.length > 0,
+    tasks: tasksOf(table),
+  };
+}
+
+/** L3 — status line. */
+export function routingTableStatusLine(table: RoutingTable): string {
+  const c = routingTableBoardCard(table);
+  return `routes=${c.routes} complete=${c.complete} providers=${c.providers} fallback=${c.hasFallback ? '1' : '0'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseRoutingTableStatusLine(
+  line: string,
+): { readonly routes: number; readonly complete: number; readonly providers: number; readonly fallback: boolean } | null {
+  const m = line.trim().match(/^routes=(\d+) complete=(\d+) providers=(\d+) fallback=([01])$/);
+  if (!m) return null;
+  return {
+    routes: Number(m[1]),
+    complete: Number(m[2]),
+    providers: Number(m[3]),
+    fallback: m[4] === '1',
+  };
+}
+
+/** L3 — true when status matches table. */
+export function routingTableStatusLineMatches(table: RoutingTable): boolean {
+  const p = parseRoutingTableStatusLine(routingTableStatusLine(table));
+  if (!p) return false;
+  const c = routingTableBoardCard(table);
+  return p.routes === c.routes && p.complete === c.complete && p.providers === c.providers && p.fallback === c.hasFallback;
+}
+
+/** L3 — export header. */
+export function routingTableExportHeader(): string {
+  return 'routes,complete,providers,fallback';
+}
+
+/** L3 — export line. */
+export function routingTableExportLine(table: RoutingTable): string {
+  const c = routingTableBoardCard(table);
+  return `${c.routes},${c.complete},${c.providers},${c.hasFallback ? '1' : '0'}`;
+}
+
+/** L3 — full export. */
+export function routingTableExportText(table: RoutingTable): string {
+  return [routingTableExportHeader(), routingTableExportLine(table)].join('\n');
+}
+
+/** L3 — true when route count is within [min,max]. Invalid → false. */
+export function routeCountInRange(table: RoutingTable, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = routeCount(table);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when task is listed. */
+export function routingHasTask(table: RoutingTable, task: string): boolean {
+  return table.routes.some((r) => r.task === task);
+}

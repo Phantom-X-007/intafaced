@@ -753,3 +753,29 @@ export function drillStatusLineConsistent(line: string): boolean {
   if (!p) return false;
   return p.completed <= p.total && p.percent >= 0 && p.percent <= 100;
 }
+
+/** L3 — true when remaining step count is within [min,max]. Invalid → false. */
+export function remainingStepCountInRange(run: DrillRun, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = remainingStepCount(run);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when completion percent is at least threshold. */
+export function drillPercentAtLeast(run: DrillRun, percent: number): boolean {
+  if (!Number.isFinite(percent)) return false;
+  return drillCompletionPercent(run) >= percent;
+}
+
+/** L3 — clamp remaining-steps page size into [1, remaining] (empty → 1). */
+export function clampRemainingStepsPageSize(run: DrillRun, pageSize: number): number {
+  if (!Number.isFinite(pageSize)) return 1;
+  const total = Math.max(1, remainingStepCount(run));
+  return Math.max(1, Math.min(total, Math.floor(pageSize)));
+}
+
+/** L3 — true when fill count is at most n. */
+export function fillCountAtMost(run: DrillRun, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return fillRefCount(run) <= n;
+}

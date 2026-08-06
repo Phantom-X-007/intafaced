@@ -86,6 +86,10 @@ import {
   drillStatusLineMatches,
   parseDrillStatusLineDetailed,
   drillStatusLineConsistent,
+  remainingStepCountInRange,
+  drillPercentAtLeast,
+  clampRemainingStepsPageSize,
+  fillCountAtMost,
 } from './workbook-loop.js';
 
 describe('paper Stage-2 workbook loop', () => {
@@ -510,5 +514,18 @@ describe('paper Stage-2 workbook loop', () => {
     expect(drillStatusLineMatches(started.run)).toBe(true);
     expect(drillStatusLineConsistent(drillStatusLine(started.run))).toBe(true);
     expect(parseDrillStatusLineDetailed(drillStatusLineDetailed(started.run))?.market).toBe('m-w45');
+  });
+
+  it('L3 wave46 drill thresholds + clamps', () => {
+    const started = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'm-w46', paper: true, symbol: 'BTC/USDT' },
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(remainingStepCountInRange(started.run, 1, 10)).toBe(true);
+    expect(drillPercentAtLeast(started.run, 0)).toBe(true);
+    expect(clampRemainingStepsPageSize(started.run, 99)).toBe(started.run.steps.length);
+    expect(fillCountAtMost(started.run, 0)).toBe(true);
   });
 });

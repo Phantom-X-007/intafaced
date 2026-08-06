@@ -212,3 +212,100 @@ export function importBatchRejectedCount(summary: ImportBatchSummary): number {
 
 /** Type helper: import record shape matches catalog item. */
 export type ImportedCurriculumItem = CurriculumItem;
+
+/** L3 — import batch board card (honest zeros). */
+export function importBatchBoardCard(summary: ImportBatchSummary): {
+  readonly total: number;
+  readonly accepted: number;
+  readonly rejected: number;
+  readonly ok: boolean;
+} {
+  return {
+    total: summary.total,
+    accepted: summary.accepted,
+    rejected: summary.rejected,
+    ok: summary.ok,
+  };
+}
+
+/** L3 — import status line total=A accepted=B rejected=C. */
+export function importBatchStatusLine(summary: ImportBatchSummary): string {
+  return `total=${summary.total} accepted=${summary.accepted} rejected=${summary.rejected}`;
+}
+
+/** L3 — true when total is 0. */
+export function importBatchStatusLineIsEmpty(summary: ImportBatchSummary): boolean {
+  return summary.total === 0;
+}
+
+/** L3 — detailed import status. */
+export function importBatchStatusLineDetailed(summary: ImportBatchSummary): string {
+  return `total=${summary.total} accepted=${summary.accepted} rejected=${summary.rejected} ok=${summary.ok ? '1' : '0'}`;
+}
+
+/** L3 — parse import status line. Invalid → null. */
+export function parseImportBatchStatusLine(
+  line: string,
+): { readonly total: number; readonly accepted: number; readonly rejected: number } | null {
+  const m = line.trim().match(/^total=(\d+) accepted=(\d+) rejected=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), accepted: Number(m[2]), rejected: Number(m[3]) };
+}
+
+/** L3 — true when status matches summary. */
+export function importBatchStatusLineMatches(summary: ImportBatchSummary): boolean {
+  const p = parseImportBatchStatusLine(importBatchStatusLine(summary));
+  if (!p) return false;
+  return p.total === summary.total && p.accepted === summary.accepted && p.rejected === summary.rejected;
+}
+
+/** L3 — true when accepted+rejected equals total. */
+export function importBatchStatusLineConsistent(line: string): boolean {
+  const p = parseImportBatchStatusLine(line);
+  if (!p) return false;
+  return p.total === p.accepted + p.rejected;
+}
+
+/** L3 — export header for import summary. */
+export function importBatchExportHeader(): string {
+  return 'total,accepted,rejected,ok';
+}
+
+/** L3 — export line for import summary. */
+export function importBatchExportLine(summary: ImportBatchSummary): string {
+  return `${summary.total},${summary.accepted},${summary.rejected},${summary.ok ? '1' : '0'}`;
+}
+
+/** L3 — full export text. */
+export function importBatchExportText(summary: ImportBatchSummary): string {
+  return [importBatchExportHeader(), importBatchExportLine(summary)].join('\n');
+}
+
+/** L3 — parse import export line. Invalid → null. */
+export function parseImportBatchExportLine(
+  line: string,
+): { readonly total: number; readonly accepted: number; readonly rejected: number; readonly ok: boolean } | null {
+  const t = line.trim();
+  if (!t || t === importBatchExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 4) return null;
+  const total = Number(parts[0]);
+  const accepted = Number(parts[1]);
+  const rejected = Number(parts[2]);
+  const okFlag = parts[3]!.trim();
+  if (![total, accepted, rejected].every((n) => Number.isFinite(n) && n >= 0)) return null;
+  if (okFlag !== '0' && okFlag !== '1') return null;
+  return { total: Math.floor(total), accepted: Math.floor(accepted), rejected: Math.floor(rejected), ok: okFlag === '1' };
+}
+
+/** L3 — true when accepted is within [min,max]. Invalid → false. */
+export function importAcceptedInRange(summary: ImportBatchSummary, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  return summary.accepted >= min && summary.accepted <= max;
+}
+
+/** L3 — true when rejected is at most n. */
+export function importRejectedAtMost(summary: ImportBatchSummary, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return summary.rejected <= n;
+}

@@ -844,3 +844,29 @@ export function analyticsStatusLineConsistent(line: string): boolean {
   if (!p) return false;
   return p.total === p.money + p.nonMoney;
 }
+
+/** L3 — true when catalog size is within [min,max]. Invalid → false. */
+export function catalogSizeInRange(min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = analyticsMetricCatalogSize();
+  return n >= min && n <= max;
+}
+
+/** L3 — true when money metric count is at least n. */
+export function moneyMetricCountAtLeast(n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return moneyMetricCount() >= n;
+}
+
+/** L3 — clamp metric page size into [1, catalog] (empty → 1). */
+export function clampMetricPageSize(pageSize: number): number {
+  if (!Number.isFinite(pageSize)) return 1;
+  const total = Math.max(1, analyticsMetricCatalogSize());
+  return Math.max(1, Math.min(total, Math.floor(pageSize)));
+}
+
+/** L3 — true when multi-source count is at most n. */
+export function multiSourceCountAtMost(n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return multiSourceMetricCount() <= n;
+}

@@ -21,6 +21,17 @@ import {
   digestExportHeader,
   digestExportText,
   parseDigestExportLine,
+  countDigestExportDataLines,
+  digestExportHasHeader,
+  digestExportRoundTripOk,
+  digestStatusLine,
+  digestStatusLineIsOff,
+  digestStatusLineDetailed,
+  digestStatusLineTokenCount,
+  parseDigestStatusLine,
+  digestStatusLineMatches,
+  digestStatusLineConsistent,
+  digestWindowInRange,
 } from './digest.js';
 
 describe('notify L3 digest cadence (non-critical only)', () => {
@@ -107,5 +118,34 @@ describe('notify L3 digest cadence (non-critical only)', () => {
     const hourly = applyDigestCadence(DEFAULT_DIGEST_PREFS, 'hourly');
     expect(digestBoardCard(hourly).hourly).toBe(true);
     expect(digestExportText(hourly)).toContain('hourly');
+  });
+});
+
+describe('L3 wave47 digest export/status', () => {
+  it('export round-trip', () => {
+    const hourly = applyDigestCadence(DEFAULT_DIGEST_PREFS, 'hourly');
+    const text = digestExportText(hourly);
+    expect(digestExportHasHeader(text)).toBe(true);
+    expect(countDigestExportDataLines(text)).toBe(1);
+    expect(digestExportRoundTripOk(hourly)).toBe(true);
+    expect(digestExportRoundTripOk(DEFAULT_DIGEST_PREFS)).toBe(true);
+  });
+
+  it('status line matches and consistent', () => {
+    const daily = applyDigestCadence(DEFAULT_DIGEST_PREFS, 'daily');
+    expect(digestStatusLine(daily)).toBe(`cadence=daily windowMs=${digestWindowMs('daily')}`);
+    expect(digestStatusLineIsOff(DEFAULT_DIGEST_PREFS)).toBe(true);
+    expect(digestStatusLineMatches(daily)).toBe(true);
+    expect(digestStatusLineConsistent(digestStatusLine(daily))).toBe(true);
+    expect(parseDigestStatusLine('nope')).toBeNull();
+    expect(digestStatusLineDetailed(daily)).toContain('holding=1');
+    expect(digestStatusLineTokenCount(daily)).toBe(4);
+  });
+
+  it('window range guards', () => {
+    const hourly = applyDigestCadence(DEFAULT_DIGEST_PREFS, 'hourly');
+    expect(digestWindowInRange(hourly, 0, 3_600_000)).toBe(true);
+    expect(digestWindowInRange(hourly, 10, 0)).toBe(false);
+    expect(digestWindowInRange(hourly, Number.NaN, 1)).toBe(false);
   });
 });

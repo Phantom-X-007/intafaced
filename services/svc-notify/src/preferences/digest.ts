@@ -189,3 +189,72 @@ export function parseDigestExportLine(line: string): { readonly cadence: DigestC
   if (!Number.isFinite(windowMs) || windowMs < 0) return null;
   return { cadence, windowMs: Math.floor(windowMs) };
 }
+
+/** L3 — data-line count in digest export (excludes header). */
+export function countDigestExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l !== digestExportHeader()).length;
+}
+
+/** L3 — true when text starts with digest export header. */
+export function digestExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === digestExportHeader();
+}
+
+/** L3 — round-trip: 1 header + 1 data line. */
+export function digestExportRoundTripOk(prefs: DigestPrefs): boolean {
+  const text = digestExportText(prefs);
+  return text.split('\n').filter(Boolean).length === 1 + countDigestExportDataLines(text);
+}
+
+/** L3 — digest status line cadence=X windowMs=N. */
+export function digestStatusLine(prefs: DigestPrefs): string {
+  return `cadence=${prefs.cadence} windowMs=${digestWindowMs(prefs.cadence)}`;
+}
+
+/** L3 — true when cadence is off. */
+export function digestStatusLineIsOff(prefs: DigestPrefs): boolean {
+  return prefs.cadence === 'off';
+}
+
+/** L3 — detailed digest status. */
+export function digestStatusLineDetailed(prefs: DigestPrefs): string {
+  const c = digestBoardCard(prefs);
+  return `cadence=${c.cadence} windowMs=${c.windowMs} holding=${c.holding ? '1' : '0'} off=${c.off ? '1' : '0'}`;
+}
+
+/** L3 — token count on detailed digest status. */
+export function digestStatusLineTokenCount(prefs: DigestPrefs): number {
+  return digestStatusLineDetailed(prefs).split(/\s+/).filter(Boolean).length;
+}
+
+/** L3 — parse digest status line. Invalid → null. */
+export function parseDigestStatusLine(line: string): { readonly cadence: DigestCadence; readonly windowMs: number } | null {
+  const m = line.trim().match(/^cadence=(off|hourly|daily) windowMs=(\d+)$/);
+  if (!m) return null;
+  return { cadence: m[1] as DigestCadence, windowMs: Number(m[2]) };
+}
+
+/** L3 — true when status line matches prefs. */
+export function digestStatusLineMatches(prefs: DigestPrefs): boolean {
+  const p = parseDigestStatusLine(digestStatusLine(prefs));
+  if (!p) return false;
+  return p.cadence === prefs.cadence && p.windowMs === digestWindowMs(prefs.cadence);
+}
+
+/** L3 — true when windowMs matches cadence law. */
+export function digestStatusLineConsistent(line: string): boolean {
+  const p = parseDigestStatusLine(line);
+  if (!p) return false;
+  return p.windowMs === digestWindowMs(p.cadence);
+}
+
+/** L3 — true when windowMs is within [min,max]. Invalid → false. */
+export function digestWindowInRange(prefs: DigestPrefs, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const w = digestWindowMs(prefs.cadence);
+  return w >= min && w <= max;
+}

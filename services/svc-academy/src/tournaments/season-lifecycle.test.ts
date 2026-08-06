@@ -100,6 +100,10 @@ import {
   seasonStatusLineMatches,
   parseSeasonStatusLineDetailed,
   seasonStatusLineDetailedConsistent,
+  seasonCountInRange,
+  liveSeasonCountAtLeast,
+  clampSeasonPageSize,
+  openSeasonRatioAtLeast,
 } from './season-lifecycle.js';
 
 const base = {
@@ -731,5 +735,24 @@ describe('L3 wave45 season status parse', () => {
     const rows = [mk('a', 'live'), mk('b', 'ended')];
     expect(seasonStatusLineMatches(rows)).toBe(true);
     expect(seasonStatusLineDetailedConsistent(seasonStatusLineDetailed(rows))).toBe(true);
+  });
+});
+
+describe('L3 wave46 season thresholds', () => {
+  const mk = (id: string, status: 'scheduled' | 'live' | 'frozen' | 'ended'): import('./ladder.js').SeasonRecord => ({
+    id,
+    slug: id,
+    title: id,
+    status,
+    rulesSummary: 'non-money',
+    startsAt: new Date('2026-01-01T00:00:00Z'),
+    endsAt: null,
+  });
+  it('range + atLeast + clamp + ratio', () => {
+    expect(seasonCountInRange([], 0, 0)).toBe(true);
+    const rows = [mk('a', 'live'), mk('b', 'ended')];
+    expect(liveSeasonCountAtLeast(rows, 1)).toBe(true);
+    expect(clampSeasonPageSize(rows, 99)).toBe(2);
+    expect(openSeasonRatioAtLeast(rows, 0.5)).toBe(true);
   });
 });

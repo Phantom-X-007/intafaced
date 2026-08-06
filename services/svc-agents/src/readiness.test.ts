@@ -3,7 +3,21 @@ import { ProviderError } from './errors.js';
 import { parseRoutingTable, type RoutingTable } from './gateway/routing.js';
 import { MockModelProvider } from './providers/mock.js';
 import type { ModelProvider, ProviderCapability, ProviderHealth } from './providers/provider.js';
-import { agentsReadiness } from './readiness.js';
+import {
+  agentsReadiness,
+  usableProviderCount,
+  providerCount,
+  readinessTaskCount,
+  agentsReadinessBoardCard,
+  agentsReadinessStatusLine,
+  parseAgentsReadinessStatusLine,
+  agentsReadinessStatusLineMatches,
+  agentsReadinessExportHeader,
+  agentsReadinessExportLine,
+  agentsReadinessExportText,
+  usableProviderCountInRange,
+  isMockEngineResidual,
+} from './readiness.js';
 
 /**
  * HONEST READINESS — what `/ready` may and may not claim.
@@ -144,5 +158,30 @@ describe('agentsReadiness — honest about mock vs useful', () => {
     });
     expect(status.usefulPath.task).toBe('support.classify');
     expect(status.usefulPath.task).not.toBe('index.embed');
+  });
+});
+
+describe('L3 wave54 agents readiness status/export', () => {
+  it('board card for mock useful path', () => {
+    const mock = new MockModelProvider({ id: 'primary' });
+    const r = agentsReadiness({
+      providerMode: 'mock',
+      providers: [mock],
+      table: TABLE,
+      meteringEnabled: false,
+    });
+    expect(providerCount(r)).toBe(1);
+    expect(usableProviderCount(r)).toBeGreaterThanOrEqual(0);
+    expect(readinessTaskCount(r)).toBe(TABLE.routes.length);
+    expect(agentsReadinessBoardCard(r).mode).toBe('mock');
+    expect(agentsReadinessStatusLineMatches(r)).toBe(true);
+    expect(parseAgentsReadinessStatusLine('nope')).toBeNull();
+    expect(agentsReadinessExportText(r).startsWith(agentsReadinessExportHeader())).toBe(true);
+    expect(agentsReadinessExportLine(r)).toContain('mock');
+    expect(usableProviderCountInRange(r, 0, 10)).toBe(true);
+    expect(usableProviderCountInRange(r, 10, 0)).toBe(false);
+    if (r.usefulPath.available) {
+      expect(isMockEngineResidual(r)).toBe(true);
+    }
   });
 });

@@ -2,7 +2,23 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { COPY_KEYS, EN, isCopyKey, render } from './copy.js';
+import {
+  COPY_KEYS,
+  EN,
+  isCopyKey,
+  render,
+  copyKeyCount,
+  refusedCopyKeys,
+  copyCatalogBoardCard,
+  copyCatalogStatusLine,
+  parseCopyCatalogStatusLine,
+  copyCatalogStatusLineMatches,
+  copyCatalogEnComplete,
+  copyCatalogExportHeader,
+  copyCatalogExportLines,
+  copyCatalogExportText,
+  copyKeyCountInRange,
+} from './copy.js';
 
 /**
  * DOCTRINE §0.7, ASSERTED FROM INSIDE THE PACKAGE.
@@ -133,5 +149,20 @@ describe('copy catalogue', () => {
     for (const key of refusals) {
       expect(EN[key].length, key).toBeGreaterThan(20);
     }
+  });
+});
+
+describe('L3 wave62 copy catalog honesty', () => {
+  it('catalog boards and EN coverage', () => {
+    expect(copyKeyCount()).toBe(COPY_KEYS.length);
+    expect(refusedCopyKeys().every((k) => k.startsWith('agents.refused.'))).toBe(true);
+    expect(copyCatalogBoardCard().total).toBe(COPY_KEYS.length);
+    expect(copyCatalogEnComplete()).toBe(true);
+    expect(copyCatalogStatusLineMatches()).toBe(true);
+    expect(parseCopyCatalogStatusLine('nope')).toBeNull();
+    expect(copyCatalogExportText().startsWith(copyCatalogExportHeader())).toBe(true);
+    expect(copyCatalogExportLines()).toHaveLength(COPY_KEYS.length);
+    expect(copyKeyCountInRange(1, 500)).toBe(true);
+    expect(copyKeyCountInRange(500, 1)).toBe(false);
   });
 });

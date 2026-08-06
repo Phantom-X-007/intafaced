@@ -76,3 +76,68 @@ export class NullStreamProvider implements StreamProvider {
     // would make ending a text-only session throw on the way out.
   }
 }
+
+/** L3 — stream provider board card (usable honesty). */
+export function streamProviderBoardCard(provider: StreamProvider): {
+  readonly id: string;
+  readonly usable: boolean;
+  readonly isNull: boolean;
+} {
+  return {
+    id: provider.id,
+    usable: isUsable(provider),
+    isNull: provider instanceof NullStreamProvider,
+  };
+}
+
+/** L3 — status line. */
+export function streamProviderStatusLine(provider: StreamProvider): string {
+  const c = streamProviderBoardCard(provider);
+  return `id=${c.id} usable=${c.usable ? '1' : '0'} null=${c.isNull ? '1' : '0'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseStreamProviderStatusLine(
+  line: string,
+): { readonly id: string; readonly usable: boolean; readonly isNull: boolean } | null {
+  const m = line.trim().match(/^id=(\S+) usable=([01]) null=([01])$/);
+  if (!m) return null;
+  return { id: m[1]!, usable: m[2] === '1', isNull: m[3] === '1' };
+}
+
+/** L3 — true when status matches provider. */
+export function streamProviderStatusLineMatches(provider: StreamProvider): boolean {
+  const p = parseStreamProviderStatusLine(streamProviderStatusLine(provider));
+  if (!p) return false;
+  const c = streamProviderBoardCard(provider);
+  return p.id === c.id && p.usable === c.usable && p.isNull === c.isNull;
+}
+
+/** L3 — true when null implies not usable. */
+export function streamProviderStatusLineConsistent(line: string): boolean {
+  const p = parseStreamProviderStatusLine(line);
+  if (!p) return false;
+  if (p.isNull) return p.usable === false;
+  return true;
+}
+
+/** L3 — export header. */
+export function streamProviderExportHeader(): string {
+  return 'id,usable,isNull';
+}
+
+/** L3 — export line. */
+export function streamProviderExportLine(provider: StreamProvider): string {
+  const c = streamProviderBoardCard(provider);
+  return `${c.id},${c.usable ? '1' : '0'},${c.isNull ? '1' : '0'}`;
+}
+
+/** L3 — full export. */
+export function streamProviderExportText(provider: StreamProvider): string {
+  return [streamProviderExportHeader(), streamProviderExportLine(provider)].join('\n');
+}
+
+/** L3 — true when provider is null socket (honest unconfigured). */
+export function isNullStreamProvider(provider: StreamProvider): boolean {
+  return provider instanceof NullStreamProvider;
+}

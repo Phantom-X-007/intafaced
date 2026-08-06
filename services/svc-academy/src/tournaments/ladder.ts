@@ -949,3 +949,31 @@ export function leaderboardStatusLineDetailedConsistent(line: string): boolean {
   if (p.count === 0) return p.min === null && p.max === null && p.first === null;
   return p.min !== null && p.max !== null && p.min <= p.max;
 }
+
+/** L3 — true when standings count is within [min,max]. Invalid → false. */
+export function standingCountInRange(rows: readonly StandingRecord[], min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = standingCount(rows);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when max score is at least threshold. Empty → false. */
+export function maxScoreAtLeast(rows: readonly StandingRecord[], threshold: number): boolean {
+  if (!Number.isFinite(threshold)) return false;
+  const m = maxScore(rows);
+  return m !== null && m >= threshold;
+}
+
+/** L3 — clamp standings page size into [1, count] (empty → 1). */
+export function clampStandingsPageSize(rows: readonly StandingRecord[], pageSize: number): number {
+  if (!Number.isFinite(pageSize)) return 1;
+  const total = Math.max(1, standingCount(rows));
+  return Math.max(1, Math.min(total, Math.floor(pageSize)));
+}
+
+/** L3 — true when score spread is at most threshold. Empty → false. */
+export function scoreSpreadAtMost(rows: readonly StandingRecord[], threshold: number): boolean {
+  if (!Number.isFinite(threshold)) return false;
+  const s = scoreSpread(rows);
+  return s !== null && s <= threshold;
+}

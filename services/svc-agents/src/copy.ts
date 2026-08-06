@@ -115,3 +115,74 @@ export function render(key: CopyKey, params: Readonly<Record<string, string | nu
     return value === undefined ? whole : String(value);
   });
 }
+
+/** L3 — copy key catalog size. */
+export function copyKeyCount(): number {
+  return COPY_KEYS.length;
+}
+
+/** L3 — refused.* copy keys. */
+export function refusedCopyKeys(): readonly CopyKey[] {
+  return COPY_KEYS.filter((k) => k.startsWith('agents.refused.'));
+}
+
+/** L3 — board card. */
+export function copyCatalogBoardCard(): {
+  readonly total: number;
+  readonly refused: number;
+  readonly enCoverage: number;
+} {
+  return {
+    total: copyKeyCount(),
+    refused: refusedCopyKeys().length,
+    enCoverage: Object.keys(EN).length,
+  };
+}
+
+/** L3 — status line. */
+export function copyCatalogStatusLine(): string {
+  const c = copyCatalogBoardCard();
+  return `total=${c.total} refused=${c.refused} en=${c.enCoverage}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseCopyCatalogStatusLine(line: string): { readonly total: number; readonly refused: number; readonly en: number } | null {
+  const m = line.trim().match(/^total=(\d+) refused=(\d+) en=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), refused: Number(m[2]), en: Number(m[3]) };
+}
+
+/** L3 — true when status matches catalog. */
+export function copyCatalogStatusLineMatches(): boolean {
+  const p = parseCopyCatalogStatusLine(copyCatalogStatusLine());
+  if (!p) return false;
+  const c = copyCatalogBoardCard();
+  return p.total === c.total && p.refused === c.refused && p.en === c.enCoverage;
+}
+
+/** L3 — true when EN covers every COPY_KEY (no invent gap). */
+export function copyCatalogEnComplete(): boolean {
+  return COPY_KEYS.every((k) => k in EN) && Object.keys(EN).length === COPY_KEYS.length;
+}
+
+/** L3 — export header. */
+export function copyCatalogExportHeader(): string {
+  return 'key';
+}
+
+/** L3 — export lines. */
+export function copyCatalogExportLines(): readonly string[] {
+  return COPY_KEYS.slice();
+}
+
+/** L3 — full export. */
+export function copyCatalogExportText(): string {
+  return [copyCatalogExportHeader(), ...copyCatalogExportLines()].join('\n');
+}
+
+/** L3 — true when total is within [min,max]. Invalid → false. */
+export function copyKeyCountInRange(min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = copyKeyCount();
+  return n >= min && n <= max;
+}

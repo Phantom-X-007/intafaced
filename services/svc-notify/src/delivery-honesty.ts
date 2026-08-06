@@ -725,3 +725,29 @@ export function fanoutStatusLineConsistent(line: string): boolean {
   if (!p) return false;
   return p.total === p.accepted + p.refused + p.failed;
 }
+
+/** L3 — true when attempt total is within [min,max]. Invalid → false. */
+export function fanoutTotalInRange(attempts: readonly ChannelDeliveryAttempt[], min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = attempts.length;
+  return n >= min && n <= max;
+}
+
+/** L3 — true when accepted count is at least n. */
+export function fanoutAcceptedAtLeast(attempts: readonly ChannelDeliveryAttempt[], n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return countFanoutAccepted(attempts) >= n;
+}
+
+/** L3 — clamp fanout page size into [1, total] (empty → 1). */
+export function clampFanoutPageSize(attempts: readonly ChannelDeliveryAttempt[], pageSize: number): number {
+  if (!Number.isFinite(pageSize)) return 1;
+  const total = Math.max(1, attempts.length);
+  return Math.max(1, Math.min(total, Math.floor(pageSize)));
+}
+
+/** L3 — true when failed count is at most n. */
+export function fanoutFailedAtMost(attempts: readonly ChannelDeliveryAttempt[], n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return countFanoutFailures(attempts) <= n;
+}

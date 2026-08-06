@@ -61,3 +61,107 @@ export function supportAgentGuardrail(overrides: { version?: number } = {}): Gua
 export function isSupportMoneyTool(tool: string): boolean {
   return (SUPPORT_MONEY_TOOLS as readonly string[]).includes(tool);
 }
+
+/** L3 — declared support tool names. */
+export function supportDeclaredTools(g = supportAgentGuardrail()): readonly string[] {
+  return g.tools.map((t) => t.name);
+}
+
+/** L3 — declared tool count. */
+export function supportDeclaredToolCount(g = supportAgentGuardrail()): number {
+  return g.tools.length;
+}
+
+/** L3 — money denylist size. */
+export function supportMoneyDenylistCount(): number {
+  return SUPPORT_MONEY_TOOLS.length;
+}
+
+/** L3 — count of tools requiring approval. */
+export function supportApprovalRequiredCount(g = supportAgentGuardrail()): number {
+  return g.tools.filter((t) => t.requiresApproval === true).length;
+}
+
+/** L3 — support guardrail board card. */
+export function supportGuardrailBoardCard(g = supportAgentGuardrail()): {
+  readonly agentId: string;
+  readonly version: number;
+  readonly declared: number;
+  readonly moneyDenied: number;
+  readonly approvalRequired: number;
+} {
+  return {
+    agentId: g.agentId,
+    version: g.version,
+    declared: supportDeclaredToolCount(g),
+    moneyDenied: supportMoneyDenylistCount(),
+    approvalRequired: supportApprovalRequiredCount(g),
+  };
+}
+
+/** L3 — status line. */
+export function supportGuardrailStatusLine(g = supportAgentGuardrail()): string {
+  const c = supportGuardrailBoardCard(g);
+  return `agent=${c.agentId} v=${c.version} declared=${c.declared} moneyDenied=${c.moneyDenied} approval=${c.approvalRequired}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseSupportGuardrailStatusLine(line: string): {
+  readonly agentId: string;
+  readonly version: number;
+  readonly declared: number;
+  readonly moneyDenied: number;
+  readonly approval: number;
+} | null {
+  const m = line.trim().match(/^agent=(\S+) v=(\d+) declared=(\d+) moneyDenied=(\d+) approval=(\d+)$/);
+  if (!m) return null;
+  return {
+    agentId: m[1]!,
+    version: Number(m[2]),
+    declared: Number(m[3]),
+    moneyDenied: Number(m[4]),
+    approval: Number(m[5]),
+  };
+}
+
+/** L3 — true when status matches. */
+export function supportGuardrailStatusLineMatches(g = supportAgentGuardrail()): boolean {
+  const p = parseSupportGuardrailStatusLine(supportGuardrailStatusLine(g));
+  if (!p) return false;
+  const c = supportGuardrailBoardCard(g);
+  return (
+    p.agentId === c.agentId &&
+    p.version === c.version &&
+    p.declared === c.declared &&
+    p.moneyDenied === c.moneyDenied &&
+    p.approval === c.approvalRequired
+  );
+}
+
+/** L3 — export header. */
+export function supportGuardrailExportHeader(): string {
+  return 'agentId,version,declared,moneyDenied,approvalRequired';
+}
+
+/** L3 — export line. */
+export function supportGuardrailExportLine(g = supportAgentGuardrail()): string {
+  const c = supportGuardrailBoardCard(g);
+  return `${c.agentId},${c.version},${c.declared},${c.moneyDenied},${c.approvalRequired}`;
+}
+
+/** L3 — full export. */
+export function supportGuardrailExportText(g = supportAgentGuardrail()): string {
+  return [supportGuardrailExportHeader(), supportGuardrailExportLine(g)].join('\n');
+}
+
+/** L3 — true when declared count is within [min,max]. Invalid → false. */
+export function supportDeclaredInRange(min: number, max: number, g = supportAgentGuardrail()): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = supportDeclaredToolCount(g);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when every money tool is on denylist. */
+export function supportMoneyDenylistComplete(tools: readonly string[] = SUPPORT_MONEY_TOOLS): boolean {
+  return tools.length > 0 && tools.every((t) => isSupportMoneyTool(t));
+}

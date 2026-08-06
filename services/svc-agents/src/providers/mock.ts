@@ -72,6 +72,78 @@ export function mockUsage(request: CompletionRequest): TokenUsage {
   return { inputTokens: mockInputTokens(request), outputTokens: mockOutputTokens(request) };
 }
 
+/** L3 — mock usage board card (deterministic counts only). */
+export function mockUsageBoardCard(request: CompletionRequest): {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+} {
+  const u = mockUsage(request);
+  return {
+    inputTokens: u.inputTokens,
+    outputTokens: u.outputTokens,
+    totalTokens: u.inputTokens + u.outputTokens,
+  };
+}
+
+/** L3 — status line. */
+export function mockUsageStatusLine(request: CompletionRequest): string {
+  const c = mockUsageBoardCard(request);
+  return `in=${c.inputTokens} out=${c.outputTokens} total=${c.totalTokens}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseMockUsageStatusLine(line: string): { readonly in: number; readonly out: number; readonly total: number } | null {
+  const m = line.trim().match(/^in=(\d+) out=(\d+) total=(\d+)$/);
+  if (!m) return null;
+  return { in: Number(m[1]), out: Number(m[2]), total: Number(m[3]) };
+}
+
+/** L3 — true when status matches usage. */
+export function mockUsageStatusLineMatches(request: CompletionRequest): boolean {
+  const p = parseMockUsageStatusLine(mockUsageStatusLine(request));
+  if (!p) return false;
+  const c = mockUsageBoardCard(request);
+  return p.in === c.inputTokens && p.out === c.outputTokens && p.total === c.totalTokens;
+}
+
+/** L3 — true when total = in + out. */
+export function mockUsageStatusLineConsistent(line: string): boolean {
+  const p = parseMockUsageStatusLine(line);
+  if (!p) return false;
+  return p.total === p.in + p.out;
+}
+
+/** L3 — export header. */
+export function mockUsageExportHeader(): string {
+  return 'inputTokens,outputTokens,totalTokens';
+}
+
+/** L3 — export line. */
+export function mockUsageExportLine(request: CompletionRequest): string {
+  const c = mockUsageBoardCard(request);
+  return `${c.inputTokens},${c.outputTokens},${c.totalTokens}`;
+}
+
+/** L3 — full export. */
+export function mockUsageExportText(request: CompletionRequest): string {
+  return [mockUsageExportHeader(), mockUsageExportLine(request)].join('\n');
+}
+
+/** L3 — true when input tokens are within [min,max]. Invalid → false. */
+export function mockInputTokensInRange(request: CompletionRequest, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = mockInputTokens(request);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when two requests produce identical usage (determinism). */
+export function mockUsageDeterministic(a: CompletionRequest, b: CompletionRequest): boolean {
+  const ua = mockUsage(a);
+  const ub = mockUsage(b);
+  return ua.inputTokens === ub.inputTokens && ua.outputTokens === ub.outputTokens;
+}
+
 function requestDigest(request: CompletionRequest): string {
   const canonical = JSON.stringify({
     model: request.model,

@@ -576,4 +576,21 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     expect(desk.residencyStatusLineMatchesStore()).toBe(true);
     expect(desk.residencyStatusLineDetailedConsistent(desk.residencyStatusLineDetailed())).toBe(true);
   });
+
+  it('L3 wave46 residency thresholds + clamps', () => {
+    const desk = new MemoryResidencyDesk();
+    expect(desk.openCountInRange(0, 0)).toBe(true);
+    expect(desk.openShareAtLeast(1)).toBe(false);
+    expect(desk.clampOpenQueuePageSize(5)).toBe(1);
+    desk.apply({
+      userId: 'u-w46',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    expect(desk.openCountInRange(1, 1)).toBe(true);
+    expect(desk.openShareAtLeast(100)).toBe(true);
+    expect(desk.clampOpenQueuePageSize(99)).toBe(1);
+    expect(desk.applicationDensityExceeds(0)).toBe(true);
+  });
 });

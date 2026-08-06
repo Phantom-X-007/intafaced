@@ -219,3 +219,73 @@ export function decimalAdd(a: string, b: string, dp = 18): string {
   const f = str.slice(str.length - dp).replace(/0+$/, '');
   return f.length ? `${w}.${f}` : w;
 }
+
+/** L3 — commission summary board card (dry-run only). */
+export function commissionSummaryBoardCard(summary: CommissionSummary): {
+  readonly rowCount: number;
+  readonly total: string;
+  readonly asset: string;
+  readonly beneficiaryCount: number;
+} {
+  return {
+    rowCount: summary.rowCount,
+    total: summary.totalCommission,
+    asset: summary.asset ?? '-',
+    beneficiaryCount: Object.keys(summary.byBeneficiary).length,
+  };
+}
+
+/** L3 — status line (decimal total as string, never number). */
+export function commissionSummaryStatusLine(summary: CommissionSummary): string {
+  const c = commissionSummaryBoardCard(summary);
+  return `rows=${c.rowCount} beneficiaries=${c.beneficiaryCount} total=${c.total} asset=${c.asset}`;
+}
+
+/** L3 — true when rowCount is 0. */
+export function commissionSummaryStatusLineIsEmpty(summary: CommissionSummary): boolean {
+  return summary.rowCount === 0;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseCommissionSummaryStatusLine(
+  line: string,
+): { readonly rows: number; readonly beneficiaries: number; readonly total: string; readonly asset: string } | null {
+  const m = line.trim().match(/^rows=(\d+) beneficiaries=(\d+) total=([0-9.]+) asset=(\S+)$/);
+  if (!m) return null;
+  return { rows: Number(m[1]), beneficiaries: Number(m[2]), total: m[3]!, asset: m[4]! };
+}
+
+/** L3 — true when status matches summary. */
+export function commissionSummaryStatusLineMatches(summary: CommissionSummary): boolean {
+  const p = parseCommissionSummaryStatusLine(commissionSummaryStatusLine(summary));
+  if (!p) return false;
+  const c = commissionSummaryBoardCard(summary);
+  return p.rows === c.rowCount && p.beneficiaries === c.beneficiaryCount && p.total === c.total && p.asset === c.asset;
+}
+
+/** L3 — export header. */
+export function commissionSummaryExportHeader(): string {
+  return 'rowCount,beneficiaryCount,totalCommission,asset';
+}
+
+/** L3 — export line. */
+export function commissionSummaryExportLine(summary: CommissionSummary): string {
+  const c = commissionSummaryBoardCard(summary);
+  return `${c.rowCount},${c.beneficiaryCount},${c.total},${c.asset}`;
+}
+
+/** L3 — full export. */
+export function commissionSummaryExportText(summary: CommissionSummary): string {
+  return [commissionSummaryExportHeader(), commissionSummaryExportLine(summary)].join('\n');
+}
+
+/** L3 — true when rowCount is within [min,max]. Invalid → false. */
+export function commissionRowCountInRange(summary: CommissionSummary, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  return summary.rowCount >= min && summary.rowCount <= max;
+}
+
+/** L3 — true when total is the honest zero string. */
+export function commissionSummaryIsZero(summary: CommissionSummary): boolean {
+  return summary.totalCommission === '0' || summary.totalCommission === '0.0';
+}

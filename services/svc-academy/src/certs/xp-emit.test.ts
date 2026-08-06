@@ -9,6 +9,15 @@ import {
   xpPublishExportHeader,
   xpPublishExportText,
   xpPublishBoardCard,
+  parseXpPublishExportLine,
+  countXpPublishExportDataLines,
+  xpPublishExportHasHeader,
+  xpPublishExportRoundTripOk,
+  xpPublishStatusLine,
+  xpPublishStatusLineIsBlocked,
+  parseXpPublishStatusLine,
+  xpPublishStatusLineMatches,
+  xpPublishStatusLineConsistent,
 } from './xp-emit.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
@@ -48,5 +57,33 @@ describe('certs L3 xp emit shape', () => {
     expect(publishShapeHasPositiveXp(shape)).toBe(true);
     expect(xpPublishExportLine(shape)).toContain('u1,foundations-v1,100');
     expect(xpPublishExportText(shape)).toContain('userId,certId');
+  });
+});
+
+describe('L3 wave48 xp-emit status/export', () => {
+  it('export round-trip and status', () => {
+    const store = new MemoryCertStore();
+    store.registerCert({ id: 'foundations-v1', title: 'F', requiredItemSlugs: ['a', 'b'] });
+    store.markComplete('u1', 'a', NOW);
+    store.markComplete('u1', 'b', NOW);
+    const intent = xpIntentFromGrant(store.grant('u1', 'foundations-v1', NOW));
+    expect(intent).not.toBeNull();
+    if (!intent) return;
+    const shape = toXpEarnedPublish(intent);
+    const text = xpPublishExportText(shape);
+    expect(xpPublishExportHasHeader(text)).toBe(true);
+    expect(countXpPublishExportDataLines(text)).toBe(1);
+    expect(xpPublishExportRoundTripOk(shape)).toBe(true);
+    expect(parseXpPublishExportLine(xpPublishExportLine(shape))).toMatchObject({
+      userId: 'u1',
+      certId: 'foundations-v1',
+      xpDelta: '100',
+    });
+    expect(parseXpPublishExportLine('bad')).toBeNull();
+    expect(xpPublishStatusLineMatches(intent)).toBe(true);
+    expect(xpPublishStatusLineIsBlocked(null)).toBe(true);
+    expect(xpPublishStatusLineConsistent(xpPublishStatusLine(intent))).toBe(true);
+    expect(xpPublishStatusLineConsistent(xpPublishStatusLine(null))).toBe(true);
+    expect(parseXpPublishStatusLine('nope')).toBeNull();
   });
 });

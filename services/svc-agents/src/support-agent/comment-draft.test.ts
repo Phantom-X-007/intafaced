@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { draftTicketComment } from './comment-draft.js';
+import {
+  draftTicketComment,
+  isCommentDraftOk,
+  commentDraftBoardCard,
+  commentDraftStatusLine,
+  parseCommentDraftStatusLine,
+  commentDraftStatusLineMatches,
+  commentDraftExportHeader,
+  commentDraftExportLine,
+  commentDraftExportText,
+} from './comment-draft.js';
 
 describe('support agent L3 comment draft', () => {
   it('accepts a clean draft', () => {
@@ -21,5 +31,22 @@ describe('support agent L3 comment draft', () => {
   it('refuses money-invent language', () => {
     const r = draftTicketComment({ ticketId: 't-1', body: 'I have refunded you already.' });
     expect(r).toMatchObject({ status: 'refuse', reason: 'money_invent_language' });
+  });
+});
+
+describe('L3 wave50 comment-draft status/export', () => {
+  it('ok and refuse status lines', () => {
+    const ok = draftTicketComment({ ticketId: 't-1', body: 'Please share the order id.' });
+    expect(isCommentDraftOk(ok)).toBe(true);
+    expect(commentDraftBoardCard(ok).bodyLen).toBeGreaterThan(0);
+    expect(commentDraftStatusLineMatches(ok)).toBe(true);
+    expect(commentDraftExportText(ok).startsWith(commentDraftExportHeader())).toBe(true);
+    expect(parseCommentDraftStatusLine('nope')).toBeNull();
+
+    const bad = draftTicketComment({ ticketId: '', body: 'x' });
+    expect(isCommentDraftOk(bad)).toBe(false);
+    expect(commentDraftStatusLine(bad)).toContain('reason=missing_ticket');
+    expect(commentDraftStatusLineMatches(bad)).toBe(true);
+    expect(commentDraftExportLine(bad)).toContain('refuse');
   });
 });

@@ -1,7 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BASE_PERKS, type RankPerks } from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
-import { BaseHostRights, createHostRightsSource, mayHost } from './host-rights.js';
+import {
+  BaseHostRights,
+  createHostRightsSource,
+  mayHost,
+  hostRightsBoardCard,
+  hostRightsStatusLine,
+  parseHostRightsStatusLine,
+  hostRightsStatusLineMatches,
+  hostRightsStatusLineConsistent,
+  hostRightsExportHeader,
+  hostRightsExportLine,
+  hostRightsExportText,
+  isBaseHostRefused,
+} from './host-rights.js';
 
 /**
  * WHO MAY OPEN A LOBBY (§4.1 `rank_thresholds.perks.lobbyHostRights`).
@@ -117,5 +130,23 @@ describe('createHostRightsSource — fails closed on every unreadable answer', (
     await expect(createHostRightsSource('http://svc-identity:4002', SECRET).perksOf('u-1')).rejects.toMatchObject({
       code: 'academy.host_rights_unavailable',
     });
+  });
+});
+
+describe('L3 wave58 host-rights status/export', () => {
+  it('refuse and allow boards stay consistent', () => {
+    expect(hostRightsBoardCard(BASE_PERKS).mayHost).toBe(false);
+    expect(isBaseHostRefused(BASE_PERKS)).toBe(true);
+    expect(hostRightsStatusLineMatches(BASE_PERKS)).toBe(true);
+    expect(hostRightsStatusLineConsistent(hostRightsStatusLine(BASE_PERKS))).toBe(true);
+    expect(parseHostRightsStatusLine('nope')).toBeNull();
+    expect(hostRightsExportText(BASE_PERKS).startsWith(hostRightsExportHeader())).toBe(true);
+    expect(hostRightsExportLine(BASE_PERKS)).toBe('0,0');
+
+    const allowed = perks({ lobbyHostRights: true });
+    expect(hostRightsBoardCard(allowed).mayHost).toBe(true);
+    expect(hostRightsStatusLine(allowed)).toBe('mayHost=1 lobbyHostRights=1');
+    expect(hostRightsStatusLineMatches(allowed)).toBe(true);
+    expect(hostRightsExportLine(allowed)).toBe('1,1');
   });
 });
