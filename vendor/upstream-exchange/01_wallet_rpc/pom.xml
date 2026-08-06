@@ -18,7 +18,16 @@
         <module>eth-support</module>
         <module>act</module>
         <module>ect</module>
-        <module>xrp</module>
+        <!--
+            <module>xrp</module> was declared here and there is no xrp/ directory
+            in this tree - the upstream drop never included it. Maven resolves
+            <modules> at POM-READ time, so the reactor failed before any goal ran
+            and even `-pl eth-support -am` could not get past it. Nothing in this
+            repository could build ANY module of this tree while that line stood,
+            which is why the EIP-155 withdrawal-signing fix sat specified and
+            unapplied. Removing it is what makes eth-support compilable and its
+            tests runnable. Do not restore it without the directory.
+        -->
         <module>bch</module>
         <module>ltc</module>
         <module>erc-eusdt</module>

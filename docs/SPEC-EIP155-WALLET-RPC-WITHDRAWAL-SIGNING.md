@@ -1,15 +1,27 @@
 # SPEC — EIP-155 chain id on the wallet RPC withdrawal signing path
 
-> **STATUS: SPECIFIED, NOT APPLIED. The defect described here is still live on `main`.**
-> Nothing in this document has been compiled, run or tested. There is no JDK, JRE or
-> Maven on the host this was written on, and no Java in this repository has ever been
-> built. This is a work order for someone with a toolchain, not a change log.
+> **STATUS: APPLIED on `fix/wallet-rpc-eip155`.** Both call sites now pass a
+> configured chain id, the chain id has no default, a ceiling guard refuses what the
+> library cannot express, and fourteen known-answer fixture tests pass against a real
+> JDK 8 + Maven build. §3 — the question this document said had to be answered before
+> any code was written — has been answered **from the jar**, and the answer changed
+> the design. See **§3.1**.
+>
+> The original status line read _"SPECIFIED, NOT APPLIED… there is no JDK, JRE or
+> Maven on the host."_ That constraint is gone. What has **not** changed is §7: this
+> tree is still barred from live value pending the §A4 review, and nothing in this
+> repository can build, containerise or boot any module of it — still enforced by
+> rules M5–M7, and still true after this change, because the toolchain used to verify
+> it lives outside the repository and no build step was added to CI.
 
 **Raised by:** `fix/wallet-rpc-criticals`, which fixed the other two `01_wallet_rpc`
 criticals and deliberately left this one alone.
+**Applied by:** `fix/wallet-rpc-eip155`.
 **Companion:** [`OWNER-ACTIONS-WALLET-RPC-SECRETS.md`](OWNER-ACTIONS-WALLET-RPC-SECRETS.md) §A4 ·
 [`A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md`](A1.4-WALLET-SECRETS-PERIMETER-2026-07-30.md)
-**Enforced by:** `tooling/ci/wallet-rpc-mainnet-scan.mjs` rule M3.
+**Enforced by:** `tooling/ci/wallet-rpc-mainnet-scan.mjs` — rule M3's frozen entry is now
+**deleted**, because the finding is gone; M8 gains one entry for the fixture recipient.
+Rule M3 itself is untouched and keeps its proof-of-life from `RULE_PROBES`.
 
 ---
 
@@ -59,7 +71,12 @@ three modules.
 
 ---
 
-## 2. Why this is not applied in the same branch as the other two
+## 2. Why this was not applied in the same branch as the other two
+
+> Historical. The reasoning below is why the fix waited; it is preserved because
+> it is also the standard the applied change had to meet. It did: a compiler, a
+> known-answer fixture from outside this codebase, and a mutation proof that the
+> fixture is not vacuous. §6 records each item against what was actually run.
 
 The other two criticals were a **deletion** and a **configuration value**.
 Neither can change the bytes of a signed transaction:
@@ -119,6 +136,118 @@ Record the actual signature in this document before proceeding. Do not take the
 paragraph above as established — it is knowledge of the library, not an
 observation of the jar, and this repository has no way to check it.
 
+## 3.1 ANSWERED — from the jar. The parameter is a `byte`; the conclusion drawn from that was wrong
+
+**`byte` is confirmed.** `javap` against the resolved `org.web3j:crypto:3.3.1`:
+
+```
+public class org.web3j.crypto.TransactionEncoder {
+  public static byte[] signMessage(org.web3j.crypto.RawTransaction, org.web3j.crypto.Credentials);
+  public static byte[] signMessage(org.web3j.crypto.RawTransaction, byte, org.web3j.crypto.Credentials);
+  public static org.web3j.crypto.Sign$SignatureData createEip155SignatureData(org.web3j.crypto.Sign$SignatureData, byte);
+  public static byte[] encode(org.web3j.crypto.RawTransaction);
+  public static byte[] encode(org.web3j.crypto.RawTransaction, byte);
+}
+```
+
+and the `v` arithmetic, disassembled — note the `i2b` truncating the **result**:
+
+```
+public static Sign$SignatureData createEip155SignatureData(Sign$SignatureData, byte);
+   0: aload_0
+   1: invokevirtual  // Sign$SignatureData.getV:()B
+   4: iload_1        // chainId
+   5: iconst_1
+   6: ishl           // chainId << 1
+   7: iadd
+   8: bipush 8
+  10: iadd           // getV() + (chainId << 1) + 8
+  11: i2b            // ← truncated to a byte, on the RESULT
+```
+
+Also observed, and **not** what §5 assumes: on this version `ChainId.NONE` is `-1`,
+not `0`.
+
+```
+public class org.web3j.tx.ChainId {
+  public static final byte NONE = -1;
+  public static final byte MAINNET = 1;
+  ...
+  public static final byte ETHEREUM_CLASSIC_MAINNET = 61;
+}
+```
+
+(web3j 3.3.1 ships named constants — 61, 62 — that are worth noticing, because a
+signed byte cannot hold `2*61+35 = 157`. They still work. That is the clue to the
+next paragraph.)
+
+### The conclusion the `byte` finding invites is wrong, and it is wrong in the unsafe direction
+
+The natural reading — signed byte, so `v = 2*chainId + 35|36` must stay ≤ 127, so
+chain ids above ~45 are unusable — **does not hold**, and believing it would have
+produced a guard that refuses chains this library signs perfectly well.
+
+The truncated byte is never read as a signed Java value. `TransactionEncoder`
+hands `SignatureData.getV()` straight to `RlpString.create(byte)`, which is:
+
+```
+public static org.web3j.rlp.RlpString create(byte);
+   4: iconst_1
+   5: newarray byte
+   9: iload_0
+  10: bastore        // the raw byte, into a 1-element array. No sign handling.
+```
+
+RLP is a byte encoding and a node reads those bytes **unsigned**. So `v = 128`
+truncates to the Java byte `-128`, is stored as `0x80`, and is read back by
+every node on earth as `128` — which is correct. Two's complement round-trips.
+
+The real ceiling is therefore where the true `v` stops fitting in eight bits **at
+all**:
+
+| chain id | v (recovery id 0) | v (recovery id 1) | web3j          |
+| -------- | ----------------- | ----------------- | -------------- |
+| 45       | 125               | 126               | correct        |
+| 46       | 127               | 128 → `0x80`      | **correct**    |
+| 56 (BSC) | 147               | 148 → `0x94`      | **correct**    |
+| 109      | 253               | 254 → `0xfe`      | correct        |
+| **110**  | 255               | **256 → `0x00`**  | **half wrong** |
+| 111+     | 257               | 258               | always wrong   |
+
+**Measured, not reasoned.** Chain ids 1–300 × four private keys (1200 signatures)
+were signed with this exact jar and compared byte-for-byte against
+[viem](https://viem.sh) 2.55.8:
+
+- **1–109: all 1200/1200 match, every key.**
+- **110: 3 of 4 keys match.** The fourth signs with recovery id 1 and web3j emits
+  `…80` `00` where the correct encoding is `…80` `820100`. `r` and `s` are
+  identical and correct; only `v` is destroyed. A node cannot recover the sender
+  from `v = 0`, so the withdrawal is **malformed**, not merely misrouted.
+- **111 and above: none match.**
+
+Which half you get at 110 is decided by the signature nonce, not by anything an
+operator controls, so it would fail on roughly every other withdrawal.
+
+### What this changes about the work order
+
+- **The ceiling is 109, not 45.** `PaymentHandler.MAX_EIP155_CHAIN_ID = 109L`.
+- **BSC (chain id 56) IS reachable** on web3j 3.3.1. The §3 claim that "add a
+  chain id cannot be implemented for most of the chains anyone would actually
+  want" is too pessimistic: mainnet 1, Ropsten 3, Rinkeby 4, Kovan 42, BSC 56 and
+  every id up to 109 are all expressible and correct.
+- **Polygon 137, Holesky 17000, Arbitrum 42161 and Sepolia 11155111 remain
+  unreachable**, and no cast fixes them. Reaching those needs the web3j upgrade,
+  which is still its own change on unreviewed custody code.
+- **The `byte` range check in §5 (`id > Byte.MAX_VALUE`) is wrong twice over**: it
+  would reject 109 (fine) and it derives its bound from the wrong quantity. The
+  bound is on `v`, not on the chain id.
+
+Reproduce:
+
+```bash
+JAVA_HOME=<jdk8> mvn -pl eth-support -am test   # from vendor/upstream-exchange/01_wallet_rpc
+```
+
 ---
 
 ## 4. The chain-id source
@@ -169,6 +298,17 @@ plus a commented `# ETH_CHAIN_ID=` entry in `.env.example` under the
 ---
 
 ## 5. The exact diff
+
+> **SUPERSEDED IN ONE RESPECT — read §3.1 first.** The shape below is what was
+> implemented (three-argument overload at both call sites, one private helper, no
+> default, refuse rather than truncate) and it is correct. The **bound** is not:
+> the helper below rejects anything above `Byte.MAX_VALUE`, which is the wrong
+> quantity. The limit is on `v`, not on the chain id, and it is **109**. The
+> implemented helper is `PaymentHandler.eip155ChainId`, is `static` and
+> package-private so the fixture tests can call it without a Spring context, and
+> is invoked from a `@PostConstruct` as well as from every signature — so a
+> missing or unusable chain id stops the service at boot rather than at the first
+> withdrawal.
 
 Assuming §3 confirms the `byte` parameter. **Both hunks are in the `eth-support`
 module, `src/main/java/…/wallet/service/PaymentHandler.java`** — the package
@@ -244,35 +384,77 @@ appearing anywhere. All are mutation-proved.
 ## 6. What must be true before this is trusted
 
 None of this is optional, and none of it can be done here.
+**Status of each item is recorded inline. Items 1–4 and 6 are DONE; item 5 is NOT.**
 
-1. **It compiles.** `mvn -pl eth-support -am compile` against a real JDK 8. The
-   reactor currently declares a module that is absent from disk, so `mvn` cannot
-   resolve the build at all — that has to be sorted first, and it is its own task.
+1. **It compiles.** ✅ `mvn -pl eth,erc-token,erc-eusdt,eth-support -am test`
+   against JDK 8 (Temurin 1.8.0_502) and Maven 3.9.9 — `BUILD SUCCESS`, all
+   three bootable ETH-family modules and the shared library.
+   The reactor blocker was real and is fixed: `01_wallet_rpc/pom.xml` declared
+   `<module>xrp</module>` for a directory that is not on disk. Maven resolves
+   `<modules>` at POM-read time, so the reactor failed before any goal ran and
+   even `-pl eth-support -am` could not get past it. **Nothing in this repository
+   could build any module of this tree while that line stood** — that one line is
+   why this spec sat unapplied. It is removed, with a comment saying so.
 2. **§3 is answered from the jar**, not from memory, and this document is updated
-   with the observed signature.
-3. **A known-answer signed-transaction fixture test exists and passes.** This is
-   the one that actually matters, and the reason a compiler alone is not enough:
+   with the observed signature. ✅ See **§3.1** — and note that the answer
+   contradicted the conclusion §3 drew from it. The parameter is a `byte`; the
+   usable ceiling is 109, not 45, because RLP reads the truncated byte unsigned.
+3. **A known-answer signed-transaction fixture test exists and passes.** ✅
+   `eth-support/src/test/java/…/service/PaymentHandlerEip155Test.java`, 14 tests,
+   `Tests run: 14, Failures: 0, Errors: 0, Skipped: 0`.
 
-   - take a fixed private key, nonce, gas price, gas limit, recipient and value;
-   - sign with the new code at a known chain id;
-   - assert the resulting hex **equals a vector produced independently** — from
-     ethers.js, from `eth_signTransaction` on a local devnet, or from the EIP-155
-     test vectors — not from a second run of the same code;
-   - assert `v` is `chainId * 2 + 35` or `chainId * 2 + 36`, which is the whole
-     observable point of EIP-155;
-   - assert the OLD two-argument output does **not** equal the new output, so the
-     test proves the change took effect rather than passing vacuously.
+   - fixed private key `0x4646…46`, nonce 9, gasPrice 20 gwei, gasLimit 21000,
+     recipient `0x3535…35`, value 1 ether — the inputs from EIP-155's own worked
+     example; ✅
+   - signed through the production path (`PaymentHandler.signToHex`) at chain ids
+     1, 56 and 109, on **both** the ether and the ERC-20 `transfer()` shapes; ✅
+   - asserted against vectors produced **independently by viem 2.55.8**, and the
+     chain-id-1 ether case is byte-identical to the signed transaction **published
+     in EIP-155 itself** — so the anchor is a specification constant, not a
+     recording of any implementation; ✅
+   - `v` asserted directly as `2*chainId + 35 | 36`; ✅
+   - the pre-EIP-155 output is pinned as a literal and asserted **not** equal, and
+     `r` is asserted to differ too, so a "fix" that only rewrote `v` while still
+     hashing the old payload fails. ✅
+
+   The old two-argument overload is **not called** to produce that comparison
+   — it is banned in this tree by gate rule M3, and a test is not an exemption
+   from a ban whose subject is this file. The expected value is a frozen literal.
+
+   **Mutation-proved** rather than assumed to be meaningful. Three mutations were
+   applied to the fix and the suite went red on each:
+
+   | mutation                                       | result         |
+   | ---------------------------------------------- | -------------- |
+   | restore the two-argument `signMessage`         | 7 of 14 fail   |
+   | raise `MAX_EIP155_CHAIN_ID` from 109 to 110    | 2 of 14 fail   |
+   | drop the null check, default the chain id to 1 | 1 of 14 errors |
 
 4. **A negative test**: with `coin.chain-id` unset, `transferEth` and
-   `transferToken` throw and no transaction is broadcast. Not "logs a warning".
-5. **A replay test, if a devnet is available**: the new signed transaction is
-   rejected when submitted to a node running a different chain id. That is the
-   property being bought; assert it directly rather than inferring it.
-6. **The gate stays green.** `pnpm gates` must pass, and the M3 frozen entry in
-   `tooling/ci/wallet-rpc-mainnet-scan.mjs` must be **deleted in the same commit**
-   — the baseline is a ratchet that can only shrink, and a fixed finding that is
-   still listed will fail as stale. Its `occurrences: 2` is what currently pins
-   both call sites.
+   `transferToken` throw and no transaction is broadcast. Not "logs a warning". ✅
+   Both paths sign through the same `signToHex`, which calls the guard before
+   `TransactionEncoder`, so the throw happens before any bytes exist and long
+   before `ethSendRawTransaction`. Unset, `0`, `-1` and everything above 109 are
+   all covered, including Polygon 137, Holesky 17000, Arbitrum 42161 and Sepolia
+   11155111 by name. **Stronger than specified:** `@PostConstruct
+requireEip155ChainId()` runs the same guard at bean construction, so the
+   service does not start at all — the failure is an outage, not a failed
+   withdrawal.
+   `ceilingPlusOneIsNotConservatism_theLibraryReallyTruncatesV` additionally
+   proves the ceiling is a measurement: it bypasses the guard, signs at 110 with
+   a key that lands on recovery id 1, and asserts web3j emits `v = 0`.
+5. **A replay test, if a devnet is available**: ❌ **NOT DONE.** There is no
+   devnet on this host and nothing in this repository may boot a module of this
+   tree (M5–M7). The property is inferred from the encoding — a chain id is in
+   the signed payload and in `v`, so a node on a different chain rejects it —
+   which is what EIP-155 says, not what was observed here. **This is the one item
+   on this list that remains unverified.**
+6. **The gate stays green.** ✅ `pnpm gates` passes, 14/14. The M3 frozen entry is
+   **deleted in this commit**, replaced by a comment recording what it said and
+   why it is gone. One M8 entry is **added** for the fixture recipient
+   `0x3535…35`: `src/test` is walked like any other source in this tree, and a
+   known-answer test whose inputs can be edited is not a known-answer test, so
+   freezing it is the point rather than a concession.
 
 ---
 
@@ -287,8 +469,17 @@ accident, and it is asserted on every CI run. So this defect is **latent**: it i
 a property of code that nothing here can execute. The order is:
 
 1. the security review the vendored-exchange ADR makes a precondition of adoption;
-2. a JDK and a working reactor build;
-3. this fix, with the fixture tests above;
-4. only then, any question of deployment.
+   — ✅ done, `docs/security/WALLET-RPC-SECURITY-REVIEW-2026-08-05.md`;
+2. a JDK and a working reactor build; — ✅ done (see §6.1);
+3. this fix, with the fixture tests above; — ✅ done;
+4. only then, any question of deployment. — **NOT DONE, and not requested.**
 
-Applying step 3 before step 2 is what this document exists to prevent.
+Applying step 3 before step 2 is what this document exists to prevent. It did not
+happen: step 2 came first, and the answer it produced (§3.1) changed step 3.
+
+**Step 4 is untouched and the bar is unmoved.** This fix makes a withdrawal from
+this tree chain-specific. It does not address F1, F2, F3, F5, F8, F9 or F12 of the
+security review — two services still print a live spending credential to stdout on
+an ordinary success path, and this branch deliberately did not go near key
+generation, key storage or `RpcSecurityConfig`. A chain-id fix is not an adoption
+signal. Rules M5–M7 still hold and are asserted on every CI run.
