@@ -1,5 +1,6 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
+import { lockInstrumentOwners } from './instrument-lock.js';
 import { P2pError } from './p2p-service.js';
 import { withSpan } from './tracing.js';
 
@@ -181,6 +182,27 @@ export class P2pErasure {
       transaction(
         this.sql,
         async (tx) => {
+          // THE LOCK, BEFORE THE REFUSAL READ — and the order is the whole
+          // point of it.
+          //
+          // This transaction is about to ask "is any trade of this person still
+          // open?", act on the answer, and report the answer to them. At READ
+          // COMMITTED that answer is true when it is read and says nothing
+          // about the moment it is acted on: a take starting after the UPDATEs
+          // below and before this COMMIT reads the pre-update instrument row
+          // under MVCC and freezes the account number onto a brand new trade.
+          // Erase then reports "instruments erased=1, frozen snapshots
+          // erased=0" — both true of what it saw, and together a lie. The
+          // snapshot survives `purgeExpiredSnapshots`, which only sweeps
+          // TERMINATED trades, so a trade that never terminates keeps it.
+          //
+          // Held from here to commit, the lock makes the refusal read still
+          // true when it is reported: `reserveTrade` takes the same key before
+          // its first row lock, so no take for this person can begin inside the
+          // window. Whichever arrives second sees the first. `instrument-lock.ts`
+          // has the reproduction and the ordering rules.
+          await lockInstrumentOwners(tx, userId);
+
           // THE REFUSAL, FIRST. Every state in which svc-ledger might still be
           // holding this person's value, or in which a decision is recorded and
           // the post has not happened.
@@ -319,6 +341,45 @@ export class P2pErasure {
                 'database trigger — it cannot be edited by this service or by anyone holding a session. ' +
                 'Erasing it on request would delete the evidence of a leak at the request of whoever caused it.',
             });
+          }
+
+          // ── THE REPORT IS RE-ASSERTED BEFORE IT IS MADE ──────────────────
+          //
+          // Rule 2 at the top of this file says the response must say what was
+          // kept and why. That is a claim about the state of the database at
+          // COMMIT, and everything above is a claim about the state at the
+          // moment each statement ran. The lock closes the gap for the one
+          // writer that could open it today; this closes it for the writer
+          // nobody has written yet.
+          //
+          // It re-reads the three facts the manifest asserts, at the end,
+          // inside the transaction — so a run that cannot honestly make them
+          // ROLLS BACK and says so, instead of committing a manifest that is
+          // wrong. `transaction` retries, and on the retry the lock is taken
+          // from the start, so a genuine race resolves rather than spinning.
+          const [stillLive, stillHeld] = await Promise.all([
+            tx<Array<{ n: string }>>`
+              SELECT count(*) AS n FROM p2p.p2p_trades
+               WHERE (seller_id = ${userId} OR buyer_id = ${userId})
+                 AND (resolution IS NULL OR settled_at IS NULL)
+            `,
+            tx<Array<{ n: string }>>`
+              SELECT
+                (SELECT count(*) FROM p2p.payment_instruments
+                  WHERE owner_id = ${userId} AND status = 'active')
+                + (SELECT count(*) FROM p2p.trade_payment_instruments
+                    WHERE owner_id = ${userId} AND (purged_at IS NULL OR details IS NOT NULL))
+                AS n
+            `,
+          ]);
+
+          if (Number(stillLive[0]!.n) > 0 || Number(stillHeld[0]!.n) > 0) {
+            throw new P2pError(
+              `Erasure was overtaken: ${stillLive[0]!.n} trade(s) became live and ${stillHeld[0]!.n} payment ` +
+                `destination(s) are still readable at the end of the transaction that was about to report them erased. ` +
+                `Nothing was written. Retry — the report this would have returned was not true.`,
+              'p2p.erase_raced',
+            );
           }
 
           return { userId, at: new Date(), erased, retained };
