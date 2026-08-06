@@ -161,6 +161,43 @@
  *       of the frozen key — so a path that LOSES its success check fails, not
  *       just a path added without one.
  *
+ *   M11 A hex literal in a fixed-width role must have that width. Roles are
+ *       inferred from position and only six are claimed — EVM address (40),
+ *       go-ethereum keystore account (40), event topic / tx hash / block hash
+ *       (64), SHA-256 or keccak digest constant (64), secp256k1 private key
+ *       (64), public key (128 or 130). The message states observed width,
+ *       required width and the signed delta, and a delta of exactly ±1 is
+ *       reported as TRANSCRIPTION rather than MALFORMED, because off-by-one is
+ *       this class's signature: all seven defects the 2026-08-06 audit found are
+ *       one digit short, none long, none substituted, none transposed.
+ *
+ *       M11-known is the half that does the real work. A literal within one
+ *       edit of a canonical constant is named against it — "the ERC-20 Transfer
+ *       topic0 with the 'a' at index 36 deleted" rather than "63 digits", which
+ *       is the difference between a finding somebody acts on and a number
+ *       somebody scrolls past. The canonicals are DERIVED with a local
+ *       keccak-256, self-tested against three published vectors at load,
+ *       because a rule that hunts mistyped constants must not itself quote one
+ *       from memory. Its derived Transfer topic0 is byte-identical to the
+ *       correct literal already in the tree at EtherscanApi.java:80.
+ *
+ *       M11 RUNS BEFORE THE FREEZE CHECK, AND FREEZING DOES NOT SUPPRESS IT.
+ *       This is the one sequencing decision in the rule and it is easy to get
+ *       backwards. All seven malformed constants are frozen by exact text under
+ *       M4-address, M4-keystore, M4-topic or M8 — but "frozen" and "well-formed"
+ *       are different claims and this ratchet only ever made the first. So M11
+ *       keeps its OWN baseline (HEX_BASELINE) and prints the malformed set on
+ *       EVERY run, green or red, with the count in the summary line: a standing
+ *       visible number rather than silence. Six entries, not seven — the one
+ *       that failed OPEN is corrected on this branch, and the baseline may only
+ *       shrink. Removing a constant's M11 entry while leaving it frozen still
+ *       goes red; that case is mutation-proved, not asserted.
+ *
+ *       Scope today is this tree, where the six known failures give M11
+ *       immediate proof-of-life — the same argument the M8 entry makes for
+ *       itself. §7.9's next step is lifting it repo-wide, where the failure mode
+ *       is worse because those modules can actually boot.
+ *
  * ── WHAT THE 2026-08-05 SECURITY REVIEW ADDED, AND WHY IT IS FROZEN ────────
  *
  * `docs/security/WALLET-RPC-SECURITY-REVIEW-2026-08-05.md` is the first read of
@@ -273,6 +310,16 @@
  * correctly-chain-id'd signMessage breaks a negative probe. That second half
  * matters as much: a gate that cries wolf is switched off, and then the real
  * finding goes through it unnoticed.
+ *
+ * And the harness itself had the defect it exists to catch. The summary line
+ * printed `RULE_PROBES.length` probes "passed" — a count read off the array, not
+ * off work done, so an emptied array or a short-circuited loop would still have
+ * printed a number that reads as a pass. It now prints `probesRun`, incremented
+ * inside the loop AFTER an assertion has been made, and the two are reconciled
+ * before the verdict: disagreement, or zero, is a hard failure. Probes may also
+ * assert a VERDICT rather than merely that something fired, because a width rule
+ * that always answered "malformed" would pass a fires/does-not-fire test while
+ * asserting nothing about the arithmetic.
  *
  * Exit 0 = this tree cannot reach mainnet, and gained no new way to try.
  * Exit 1 = it can, or something that was watching it stopped watching.
@@ -800,6 +847,373 @@ function classifyAddress(value) {
   return 'chain address literal';
 }
 
+// ── M11: a fixed-width hex literal must have its fixed width ────────────────
+//
+// Proposed by §7.9 of the security review and implemented here. The audit it
+// comes from measured every fixed-width hex constant in this tree and found
+// SEVEN of thirteen exactly one digit short. Six of the seven fail closed. One
+// — `coin.ignore-from-address` — failed OPEN and is corrected on this branch.
+//
+// THE DESIGN POINT THAT MUST NOT BE LOST: M11 runs BEFORE the freeze check
+// below, and being frozen does NOT suppress it. All seven were frozen when the
+// audit was written, and frozen is a different claim from well-formed — the
+// ratchet only ever made the first. A frozen wrong-width constant still reports
+// as malformed, every run, with a count in the summary line. A gate that reads a
+// value and says nothing about it is how the second mangled topic0 sat beside
+// the first for years without anyone noticing they were mangled differently.
+//
+// M11 therefore carries its OWN baseline (HEX_BASELINE) rather than routing
+// through FROZEN. The two ratchet different properties of the same strings and
+// collapsing them would re-create exactly the suppression this rule exists to
+// prevent.
+
+/**
+ * keccak-256, so the canonical constants below are DERIVED rather than recalled.
+ * A rule whose job is to catch a mistyped constant must not itself depend on one
+ * — quoting a topic0 from memory into a gate that hunts mistyped topic0s is the
+ * defect wearing the uniform. About sixty lines, run four times per invocation,
+ * comfortably inside this gate's share of the ~2 s budget.
+ *
+ * Self-tested against three published vectors at load (see KECCAK_VECTORS), and
+ * cross-checked in-tree: the Transfer topic0 it derives is byte-identical to the
+ * correct 64-digit literal sitting at eth-support/.../EtherscanApi.java:80 —
+ * which is the same literal §7.1 uses to prove the two mangled properties were
+ * typed rather than copied.
+ */
+const KECCAK_M64 = (1n << 64n) - 1n;
+const KECCAK_RC = [
+  0x0000000000000001n,
+  0x0000000000008082n,
+  0x800000000000808an,
+  0x8000000080008000n,
+  0x000000000000808bn,
+  0x0000000080000001n,
+  0x8000000080008081n,
+  0x8000000000008009n,
+  0x000000000000008an,
+  0x0000000000000088n,
+  0x0000000080008009n,
+  0x000000008000000an,
+  0x000000008000808bn,
+  0x800000000000008bn,
+  0x8000000000008089n,
+  0x8000000000008003n,
+  0x8000000000008002n,
+  0x8000000000000080n,
+  0x000000000000800an,
+  0x800000008000000an,
+  0x8000000080008081n,
+  0x8000000000008080n,
+  0x0000000080000001n,
+  0x8000000080008008n,
+];
+const keccakRotl = (v, n) => (n === 0n ? v : ((v << n) | (v >> (64n - n))) & KECCAK_M64);
+
+function keccakF(a) {
+  for (let round = 0; round < 24; round++) {
+    // θ
+    const c = new Array(5);
+    for (let x = 0; x < 5; x++) c[x] = a[x] ^ a[x + 5] ^ a[x + 10] ^ a[x + 15] ^ a[x + 20];
+    for (let x = 0; x < 5; x++) {
+      const d = c[(x + 4) % 5] ^ keccakRotl(c[(x + 1) % 5], 1n);
+      for (let y = 0; y < 5; y++) a[x + 5 * y] ^= d;
+    }
+    // ρ and π — offsets DERIVED from the spec's recurrence rather than tabulated,
+    // for the same reason the canonical constants are derived.
+    let x = 1;
+    let y = 0;
+    let cur = a[1];
+    for (let t = 0; t < 24; t++) {
+      const nx = y;
+      const ny = (2 * x + 3 * y) % 5;
+      const idx = nx + 5 * ny;
+      const tmp = a[idx];
+      a[idx] = keccakRotl(cur, BigInt((((t + 1) * (t + 2)) / 2) % 64));
+      cur = tmp;
+      x = nx;
+      y = ny;
+    }
+    // χ
+    for (let yy = 0; yy < 5; yy++) {
+      const r = [a[5 * yy], a[1 + 5 * yy], a[2 + 5 * yy], a[3 + 5 * yy], a[4 + 5 * yy]];
+      for (let xx = 0; xx < 5; xx++) a[xx + 5 * yy] = r[xx] ^ (~r[(xx + 1) % 5] & KECCAK_M64 & r[(xx + 2) % 5]);
+    }
+    // ι
+    a[0] ^= KECCAK_RC[round];
+  }
+  return a;
+}
+
+/** keccak-256 of a UTF-8 string, as 64 lowercase hex digits. Note the 0x01 pad — SHA-3 uses 0x06. */
+function keccak256(message) {
+  const bytes = new TextEncoder().encode(message);
+  const rate = 136;
+  const padded = new Uint8Array(bytes.length + (rate - (bytes.length % rate)));
+  padded.set(bytes);
+  padded[bytes.length] |= 0x01;
+  padded[padded.length - 1] |= 0x80;
+  const a = new Array(25).fill(0n);
+  for (let off = 0; off < padded.length; off += rate) {
+    for (let i = 0; i < rate / 8; i++) {
+      let lane = 0n;
+      for (let b = 7; b >= 0; b--) lane = (lane << 8n) | BigInt(padded[off + i * 8 + b]);
+      a[i] ^= lane;
+    }
+    keccakF(a);
+  }
+  let out = '';
+  for (let i = 0; i < 4; i++) for (let b = 0; b < 8; b++) out += ((a[i] >> BigInt(8 * b)) & 0xffn).toString(16).padStart(2, '0');
+  return out;
+}
+
+// Published vectors. If this implementation is wrong, every canonical below is
+// wrong with it and M11-known would name the wrong constant — so it fails loudly
+// at load rather than quietly misreporting.
+const KECCAK_VECTORS = [
+  ['', 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470'],
+  ['abc', '4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45'],
+  // The ERC-20 transfer() selector is the first four bytes of this digest.
+  ['transfer(address,uint256)', 'a9059cbb'],
+];
+for (const [input, expected] of KECCAK_VECTORS) {
+  const got = keccak256(input).slice(0, expected.length);
+  if (got !== expected) {
+    die('the keccak-256 implementation backing M11 is wrong', [
+      `keccak256(${JSON.stringify(input)}) = ${got}`,
+      `expected                              ${expected}`,
+      '',
+      'M11-known names the canonical constant a near-miss is one edit away from. If the digest is wrong it names the',
+      'wrong constant, confidently. That is worse than no rule, so this is a hard failure rather than a warning.',
+    ]);
+  }
+}
+
+/**
+ * The roles M11 claims, and the width each one requires. Only these — a rule
+ * that guesses at a role it cannot infer is a rule that cries wolf, and §7.6
+ * records that no private key, public key or selector constant exists in this
+ * tree today, so four of the six are here for what arrives next rather than for
+ * what is here now.
+ */
+const HEX_ROLES = {
+  address: { widths: [40], label: 'EVM address' },
+  keystore: { widths: [40], label: 'go-ethereum keystore account' },
+  hash: { widths: [64], label: 'event topic / transaction hash / block hash' },
+  digest: { widths: [64], label: 'SHA-256 / keccak-256 digest constant' },
+  privatekey: { widths: [64], label: 'secp256k1 private key' },
+  publickey: { widths: [128, 130], label: 'secp256k1 public key' },
+};
+
+/**
+ * Constants worth naming when something lands one edit away from them. Derived,
+ * not quoted. ERC-20 selectors are deliberately absent: they are 8 digits, no
+ * fixed-width role here is 8 or 9, so nothing could ever be one edit from one.
+ */
+const CANONICAL_HEX = [
+  {
+    name: 'the ERC-20 Transfer event topic0 · keccak256("Transfer(address,address,uint256)")',
+    hex: keccak256('Transfer(address,address,uint256)'),
+  },
+  {
+    name: 'the ERC-20 Approval event topic0 · keccak256("Approval(address,address,uint256)")',
+    hex: keccak256('Approval(address,address,uint256)'),
+  },
+  { name: 'the zero word (32 zero bytes)', hex: '0'.repeat(64) },
+  { name: 'the zero address', hex: '0'.repeat(40) },
+];
+
+/** Strip an optional `0x`, lowercase. Roles are about DIGITS, not about the prefix. */
+const hexDigits = (value) => value.trim().replace(/^0x/i, '').toLowerCase();
+
+/**
+ * Width verdict for one literal in one role.
+ *
+ * A delta of exactly ±1 is reported as TRANSCRIPTION rather than MALFORMED,
+ * because off-by-one is this defect class's signature — all seven the audit
+ * found are one digit short — and a class with a name gets recognised on sight.
+ */
+function classifyHexWidth(role, hex) {
+  const { widths, label } = HEX_ROLES[role];
+  const observed = hex.length;
+  if (widths.includes(observed)) {
+    return { ok: true, verdict: 'WELL-FORMED', observed, nearest: observed, delta: 0, label, widths };
+  }
+  const nearest = widths.reduce((a, b) => (Math.abs(b - observed) < Math.abs(a - observed) ? b : a));
+  const delta = observed - nearest;
+  return { ok: false, verdict: Math.abs(delta) === 1 ? 'TRANSCRIPTION' : 'MALFORMED', observed, nearest, delta, label, widths };
+}
+
+/** One deletion, insertion or substitution away from `canonical`? Returns the edit, or null. */
+function oneEditFrom(candidate, canonical) {
+  const a = candidate;
+  const b = canonical;
+  if (a === b) return null;
+  if (a.length === b.length) {
+    let at = -1;
+    for (let k = 0; k < a.length; k++) {
+      if (a[k] === b[k]) continue;
+      if (at !== -1) return null;
+      at = k;
+    }
+    return at === -1 ? null : { kind: 'substitution', index: at, detail: `'${b[at]}' became '${a[at]}'` };
+  }
+  if (a.length + 1 === b.length) {
+    const at = [];
+    for (let k = 0; k < b.length; k++) if (b.slice(0, k) + b.slice(k + 1) === a) at.push(k);
+    return at.length === 0
+      ? null
+      : { kind: 'deletion', index: at[0], detail: `the '${b[at[0]]}' at index ${at[0]} is missing`, ambiguity: at.length };
+  }
+  if (a.length === b.length + 1) {
+    const at = [];
+    for (let k = 0; k < a.length; k++) if (a.slice(0, k) + a.slice(k + 1) === b) at.push(k);
+    return at.length === 0
+      ? null
+      : { kind: 'insertion', index: at[0], detail: `an extra '${a[at[0]]}' at index ${at[0]}`, ambiguity: at.length };
+  }
+  return null;
+}
+
+/**
+ * M11-known. The width check is the case of this rule that needs no dictionary;
+ * this is the rule. It is what turns "63 digits" into "the Transfer topic0 with
+ * the 'a' at index 36 removed", which is the sentence that makes a finding
+ * actionable rather than merely alarming.
+ */
+function nearCanonical(hex) {
+  for (const canonical of CANONICAL_HEX) {
+    const edit = oneEditFrom(hex, canonical.hex);
+    if (edit === null) continue;
+    return { ...canonical, edit };
+  }
+  return null;
+}
+
+/** Identifier names that declare a role. */
+const HEX_NAME_ROLE = [
+  [/(?:^|_)(?:sha_?256|sha256|keccak|digest)/i, 'digest'],
+  [/priv(?:ate)?_?key/i, 'privatekey'],
+  [/pub(?:lic)?_?key/i, 'publickey'],
+  [/(?:txid|tx_?hash|block_?hash|hash|topic\d*)$/i, 'hash'],
+];
+
+const roleForName = (name) => HEX_NAME_ROLE.find(([re]) => re.test(name))?.[1] ?? null;
+
+/**
+ * Role-typed hex literals in one .properties file.
+ *
+ * @returns {{ role: string, name: string, hex: string, line: number }[]}
+ */
+function scanHexProperties(content) {
+  const out = [];
+  const lines = content.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*[#!]/.test(line) || !line.includes('=')) continue;
+    const key = line.slice(0, line.indexOf('=')).trim();
+    const value = line.slice(line.indexOf('=') + 1).trim();
+    if (value === '' || isPlaceholder(value)) continue;
+    const leaf = key.slice(key.lastIndexOf('.') + 1);
+
+    // A go-ethereum keystore filename carries the account after the LAST `--`.
+    // Matched with an open-ended digit run ON PURPOSE: KEYSTORE_FILENAME above
+    // accepts 38 to 40, which is precisely the tolerance M11 exists to remove.
+    const keystore = /^UTC--(.+)--([0-9a-fA-F]+)(\.json)?$/.exec(value);
+    if (keystore !== null) {
+      out.push({ role: 'keystore', name: leaf, hex: keystore[2].toLowerCase(), line: i + 1 });
+      continue;
+    }
+
+    if (!/^0x[0-9a-fA-F]*$/.test(value)) {
+      // Not a 0x literal. A named role can still apply (a bare digest, say).
+      const named = roleForName(leaf);
+      if (named !== null && /^[0-9a-fA-F]+$/.test(value)) out.push({ role: named, name: leaf, hex: value.toLowerCase(), line: i + 1 });
+      continue;
+    }
+
+    const byName = roleForName(leaf);
+    if (byName !== null) out.push({ role: byName, name: leaf, hex: hexDigits(value), line: i + 1 });
+    else if (/address$/i.test(leaf)) out.push({ role: 'address', name: leaf, hex: hexDigits(value), line: i + 1 });
+  }
+  return out;
+}
+
+/**
+ * Role-typed hex literals in one Java source. Comments are stripped first, so a
+ * constant quoted in a javadoc is documentation rather than a finding.
+ *
+ * @returns {{ role: string, name: string, hex: string, line: number }[]}
+ */
+function scanHexJava(source) {
+  const out = [];
+  const code = stripJavaComments(source);
+  /** Offsets already claimed by a named-role match, so the bare sweep cannot double-report them. */
+  const claimed = new Set();
+
+  // `[modifiers] String NAME = "hex"` and `[modifiers] String NAME = wrap("hex")`.
+  // The optional wrapper matters: a width assertion at the declaration site is
+  // exactly the remediation this rule asks for, and a rule that stopped seeing
+  // the constant the moment it was guarded would be self-defeating.
+  for (const m of code.matchAll(
+    /\b(?:static|final|private|public|protected|transient|volatile)[\s\w$<>[\],.]*?\b([A-Za-z_$][\w$]*)\s*=\s*(?:[\w.]+\s*\(\s*)?"(0x)?([0-9a-fA-F]{8,})"/g,
+  )) {
+    const role = roleForName(m[1]);
+    if (role === null) continue;
+    claimed.add(m.index + m[0].lastIndexOf('"' + (m[2] ?? '') + m[3]));
+    out.push({ role, name: m[1], hex: m[3].toLowerCase(), line: lineAt(code, m.index) });
+  }
+
+  // Local declarations and plain assignments: `String txid = "0x…";`
+  for (const m of code.matchAll(/\b([A-Za-z_$][\w$]*)\s*=\s*"(0x)?([0-9a-fA-F]{8,})"/g)) {
+    const literalAt = m.index + m[0].lastIndexOf('"' + (m[2] ?? '') + m[3]);
+    if (claimed.has(literalAt)) continue;
+    const role = roleForName(m[1]);
+    if (role === null) continue;
+    claimed.add(literalAt);
+    out.push({ role, name: m[1], hex: m[3].toLowerCase(), line: lineAt(code, m.index) });
+  }
+
+  // Bare `"0x…"` literals with no name to read a role off — an argument, say.
+  // Two windows, both chosen so the role is unambiguous from the length alone:
+  // 20-44 digits can only be an EVM address written short, long or right, and
+  // 56-72 can only be a 32-byte hash written the same three ways. A literal
+  // outside both windows is not claimed, because guessing is how a gate that
+  // cries wolf gets switched off.
+  for (const m of code.matchAll(/"0x([0-9a-fA-F]+)"/g)) {
+    const literalAt = m.index;
+    if (claimed.has(literalAt)) continue;
+    const n = m[1].length;
+    const role = n >= 20 && n <= 44 ? 'address' : n >= 56 && n <= 72 ? 'hash' : null;
+    if (role === null) continue;
+    out.push({ role, name: '(unnamed literal)', hex: m[1].toLowerCase(), line: lineAt(code, m.index) });
+  }
+
+  return out;
+}
+
+/**
+ * Everything M11 says about one literal: the width verdict, and the canonical
+ * constant it is one edit from, if any.
+ */
+function m11Report(role, name, hex) {
+  const width = classifyHexWidth(role, hex);
+  const near = nearCanonical(hex);
+  const required = width.widths.join(' or ');
+  const sign = width.delta > 0 ? `+${width.delta}` : `${width.delta}`;
+  let detail = width.ok
+    ? `${width.label}: ${width.observed} hex digits, as required`
+    : `${width.label}: ${width.observed} hex digits, requires ${required} (${sign})`;
+  if (!width.ok && width.verdict === 'TRANSCRIPTION') {
+    detail += ' — off by exactly one digit, the signature of a value that was retyped rather than copied';
+  }
+  if (near !== null) {
+    detail += `. Near ${near.name}: ${near.edit.detail}`;
+    if (near.edit.ambiguity > 1) detail += ` (one of ${near.edit.ambiguity} equivalent positions)`;
+    detail += `. Canonical: ${near.hex}`;
+  }
+  return { role, name, hex, ok: width.ok, verdict: width.verdict, observed: width.observed, detail, near: near?.name ?? null };
+}
+
 // ── The frozen baseline ─────────────────────────────────────────────────────
 
 /**
@@ -1161,11 +1575,22 @@ const FROZEN = [
     rule: 'M4-address',
     module: 'eth',
     file: 'application.properties',
-    text: 'ignore-from-address=0x672881426632b13d18f74664c039acc7b5610b7',
+    text: 'ignore-from-address=0x672881426632b13d18f474664c039acc7b5610b7',
     reason:
-      'The hot wallet the deposit watcher ignores incoming transfers from — 39 hex digits, so mangled like the others, ' +
-      'but it names the platform’s own Ethereum account. Owner queue: review with the keystore entry below, which ' +
-      'names the same account.',
+      'THE ONE MANGLED CONSTANT IN THIS TREE THAT FAILED OPEN, AND IT IS NOW CORRECTED — 40 digits, was 39. EthWatcher ' +
+      'credits a deposit UNLESS the transaction’s `from` equals this value; the account is the platform’s own ' +
+      'withdrawal wallet, so the clause exists to stop money the platform sends OUT being read back as money a customer ' +
+      'sent IN. At 39 digits it could never equal a node-returned `from`, so the exclusion never excluded and a ' +
+      'customer who withdrew to their own deposit address was credited the withdrawal straight back. The 40th digit is ' +
+      'restored, derived rather than guessed: eth:35, this line and erc-token:32 are the same account with three ' +
+      'different digits deleted (indices 16, 19, 10), and the 40-digit strings consistent with all three intersect at ' +
+      'exactly one — as does every PAIR of them independently. See §7.5 and the paragraph above this line in the ' +
+      'properties file. This is the UNMANGLING direction and it is monotone-safe: an exclusion that matched never can ' +
+      'now match sometimes, which produces strictly FEWER credits. Frozen at the CORRECTED text so it cannot drift ' +
+      'back, and so it cannot be re-pointed at a different account. Note the account has nonce 0 and no balance on ' +
+      'mainnet, so no live value is pinned by this line. UNVERIFIED — no CI compiles Java; this is a properties value ' +
+      'and the binding path (CoinConfig → Coin.ignoreFromAddress → Watcher.setCoin → EthWatcher) was read, not run. ' +
+      'The keystore entry below still names the same account at 39 digits and still fails closed.',
   },
   {
     rule: 'M4-address',
@@ -1837,6 +2262,39 @@ for (const file of propsFiles) {
   for (const f of scanPropertiesSource(readFileSync(file, 'utf8'))) record(f.rule, file, f.text, f.line, f.detail);
 }
 
+// ── M11 over .properties and Java ──────────────────────────────────────────
+//
+// Collected HERE, above the barriers, the walk guard, the probe harness and the
+// ratchet, because §7.9's one load-bearing sequencing note is that M11 must run
+// before the freeze check and must not be suppressed by it.
+
+/** @type {{ rule: string, module: string, file: string, name: string, text: string, where: string, ok: boolean, verdict: string, observed: number, detail: string }[]} */
+const hexObservations = [];
+
+const recordHex = (file, line, report) =>
+  hexObservations.push({
+    rule: report.near === null ? 'M11' : 'M11-known',
+    module: moduleOf(file) ?? '(tree root)',
+    file: basename(file),
+    name: report.name,
+    // Keyed like FROZEN: the identifier or property leaf, then the value.
+    text: `${report.name}=${report.hex}`,
+    where: `${relPath(file)}:${line}`,
+    ok: report.ok,
+    verdict: report.verdict,
+    observed: report.observed,
+    detail: report.detail,
+  });
+
+for (const file of propsFiles) {
+  for (const h of scanHexProperties(readFileSync(file, 'utf8'))) recordHex(file, h.line, m11Report(h.role, h.name, h.hex));
+}
+for (const file of javaFiles) {
+  for (const h of scanHexJava(readFileSync(file, 'utf8'))) recordHex(file, h.line, m11Report(h.role, h.name, h.hex));
+}
+
+const hexDefects = hexObservations.filter((h) => !h.ok);
+
 // ── M5 / M6 / M7: the three incidental barriers, as invariants ─────────────
 //
 // Each of these is an ABSENCE assertion, and each counts what it opened. An
@@ -1979,6 +2437,13 @@ if (dockerfilesInspected === 0) {
 if (composeInspected === 0) emptyWalks.push('opened 0 compose files — M6 asserted nothing (this is exactly how W3 became vacuous)');
 if (workflowsInspected === 0) emptyWalks.push('opened 0 workflow files — M7 asserted nothing');
 if (FROZEN.length === 0) emptyWalks.push('the frozen baseline is empty — it is the proof-of-life for every rule here');
+// M11's denominator. The tree has thirteen fixed-width hex constants across
+// fourteen sites (review §7.3); classifying none of them means the role
+// inference went blind, and a width rule that measured nothing must not print a
+// count of zero malformed and be read as "none malformed".
+if (hexObservations.length === 0) {
+  emptyWalks.push('classified 0 fixed-width hex literals — M11 measured nothing, so "0 malformed" would mean "0 looked at"');
+}
 
 if (emptyWalks.length > 0) {
   die('a check reported on nothing', [
@@ -2222,20 +2687,211 @@ const RULE_PROBES = [
     source: 'class P { void f() { Deposit d = new Deposit(); d.setTxid(t); } }',
     note: 'a non-EVM watcher credit — bitcoin-family modules confirm by depth, not by receipt, and firing on all eleven of them is how this rule would get switched off',
   },
+
+  // ── M11: fixed-width hex by role ────────────────────────────────────────
+  //
+  // M11 has six live defects in the tree, so the HEX_BASELINE gives it
+  // proof-of-life for the width check itself. What it does NOT give it is
+  // proof-of-life for the roles nothing in the tree occupies (private key,
+  // public key), for the WELL-FORMED verdict, for the TRANSCRIPTION/MALFORMED
+  // split, or for M11-known. Those are here.
+  //
+  // `kind: 'hex-properties'` / `'hex-java'` push through scanHexProperties /
+  // scanHexJava and m11Report — the real functions, not a copy — and assert on
+  // the VERDICT, not merely on whether something fired. A width rule that fired
+  // but always said WELL-FORMED would pass a fires/does-not-fire probe.
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
+    fires: true,
+    verdict: 'TRANSCRIPTION',
+    source: 'coin.ignore-from-address=0x672881426632b13d18f74664c039acc7b5610b7',
+    note: 'THE FAIL-OPEN ONE, as it shipped: 39 digits, so the deposit watcher’s exclusion of the platform’s own withdrawal wallet could never match and a customer who withdrew to their own deposit address was credited the withdrawal back. Corrected in the tree on this branch; kept here as the fixture, because the fix removes the only live example of the defect that mattered most',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
+    fires: true,
+    verdict: 'WELL-FORMED',
+    source: 'coin.ignore-from-address=0x672881426632b13d18f474664c039acc7b5610b7',
+    note: 'the corrected form must be classified WELL-FORMED — a rule that cannot tell the fix from the defect blocks its own remediation, and the verdict assertion is what proves the width check is doing arithmetic rather than always answering "bad"',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
+    fires: true,
+    verdict: 'MALFORMED',
+    source: 'coin.ignore-from-address=0x672881426632b13d18f4',
+    note: 'a delta of -20 is MALFORMED, not TRANSCRIPTION — the ±1 word means something only if a bigger gap does not get it',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
+    fires: true,
+    verdict: 'TRANSCRIPTION',
+    source: 'coin.withdraw-wallet=UTC--2019-08-13T06-24-07.378035684Z--672881426632b13d8f474664c039acc7b5610b7',
+    note: 'the keystore role, 39/40. KEYSTORE_FILENAME above ACCEPTS 38 to 40 digits, so M4-keystore recognises a mangled account as a well-formed filename; this is the rule that does not',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
+    fires: false,
+    source: 'coin.ignore-from-address=${ETH_IGNORE_FROM_ADDRESS}',
+    note: 'an unresolved placeholder has no width to check — the environment decides it, and firing here would punish the safest possible form of the line',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
+    fires: false,
+    source: 'eureka.instance.prefer-ip-address=true',
+    note: 'the boolean in all 13 files is not a hex literal — M11 must stay as quiet on it as M4-address does',
+  },
+  {
+    rule: 'M11-known',
+    kind: 'hex-properties',
+    fires: true,
+    verdict: 'TRANSCRIPTION',
+    near: 'Transfer',
+    source: 'contract.event-topic0=0xddf252ad1be2c89b69c2b068fc378daa952b7f163c4a11628f55a4df523b3ef',
+    note: 'the erc-token topic0. This is the whole point of M11-known: not "63 digits" but "the ERC-20 Transfer topic0 with a digit deleted", derived from keccak256 rather than quoted, which is the difference between a finding somebody acts on and a number somebody scrolls past',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-properties',
+    fires: true,
+    verdict: 'WELL-FORMED',
+    source: 'contract.event-topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+    note: 'the CORRECT Transfer topic0 is well-formed and is NOT a near-miss of itself — equality is not an edit, and a rule that reported the canonical value as being one edit from the canonical value would be noise on every correct constant',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: true,
+    verdict: 'TRANSCRIPTION',
+    source:
+      'class P { private static final String DISCLOSED_SECRET_SHA256 = "feafc645a12b90d5ddd2aac44494fb61ccb8ef49a2f5af0b022942ef2c7dd89"; }',
+    note: 'THE OTHER FAIL-OPEN ONE, and it is OUR code, not the vendor’s: 63 digits in the guard that refuses to boot on the disclosed ECT withdrawal secret. It can then never equal a computed digest, the check silently stops firing, and ect boots on the compromised key with a green build. Nothing asserted this width before this branch',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: true,
+    verdict: 'WELL-FORMED',
+    source:
+      'class P { private static final String DISCLOSED_SECRET_SHA256 = requireSha256Hex("feafc645a12b90d5ddd2aac44494fb61ccb8ef49a2f5af0b022942ef2c7dd89b"); }',
+    note: 'the constant as it now stands, WRAPPED in the width assertion added on this branch. The wrapper is the remediation M11 asks for, so the rule has to keep seeing through it — a rule that went blind the moment the value was guarded would reward removing the guard',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: true,
+    verdict: 'TRANSCRIPTION',
+    // Split across concatenation ON PURPOSE, and do not rejoin it — the same
+    // manoeuvre, for the same reason, as the M2 ActClientTest entry above.
+    // Written whole this is a line reading `String privateKey = "<63 hex>"`,
+    // which is precisely the shape secret-scan's source-credential-literal rule
+    // bans in OUR source, so the fixture for the private-key rule tripped the
+    // gate that bans committing a private key. The concatenated string is
+    // byte-identical, so the probe is unaffected. It is not a key: 63 digits
+    // cannot be one, which is the entire point of the fixture.
+    source: 'class P { String privateKey = "' + '0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1' + '"; }',
+    note: 'the private-key role, 63/64. §7.6 records that no private key exists in this tree today, so this role has nothing to freeze and this fixture is the only thing standing between it and being silently deleted',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: false,
+    source: 'class P { String note = "0xdeadbeef"; }',
+    note: 'eight digits is outside both unnamed windows and carries no role-bearing name — M11 claims a role or says nothing, because guessing at short literals is how a width gate starts crying wolf',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: false,
+    source: 'class P { /* "0xddf252ad1be2c89b69c2b068fc378daa952b7f163c4a11628f55a4df523b3ef" */ int x = 1; }',
+    note: 'a constant quoted in a COMMENT is documentation — including the paragraphs in this very gate and in the review that quote the mangled values verbatim. Firing on those would make the finding its own finding',
+  },
 ];
+
+/**
+ * Probes actually EXECUTED, incremented inside the loop after the assertion has
+ * run. The summary line used to print `RULE_PROBES.length`, which is the number
+ * of fixtures WRITTEN — a count derived from the array, not from work. Emptying
+ * the array, `break`-ing out of the loop or returning early would all have kept
+ * printing a number that read as a pass. This counter can only be raised by an
+ * assertion having been made, and the reconciliation below makes the two agree
+ * or fails.
+ */
+let probesRun = 0;
+/** Distinct rule ids a probe actually exercised — printed, so a rule losing all its probes is visible. */
+const probedRules = new Set();
 
 const probeFailures = [];
 for (const probe of RULE_PROBES) {
-  const found = (probe.kind === 'java' ? scanJavaSource(probe.source) : scanPropertiesSource(probe.source)).some(
-    (f) => f.rule === probe.rule,
-  );
+  const findings =
+    probe.kind === 'java'
+      ? scanJavaSource(probe.source)
+      : probe.kind === 'properties'
+        ? scanPropertiesSource(probe.source)
+        : probe.kind === 'hex-properties'
+          ? scanHexProperties(probe.source).map((h) => ({
+              ...m11Report(h.role, h.name, h.hex),
+              rule: nearCanonical(h.hex) === null ? 'M11' : 'M11-known',
+            }))
+          : scanHexJava(probe.source).map((h) => ({
+              ...m11Report(h.role, h.name, h.hex),
+              rule: nearCanonical(h.hex) === null ? 'M11' : 'M11-known',
+            }));
+
+  // M11 and M11-known are one rule with two report shapes: a near-miss is still
+  // a width finding. So a probe naming M11 accepts either id, while a probe
+  // naming M11-known requires the canonical to have been identified.
+  const matches = findings.filter((f) => (probe.rule === 'M11' ? f.rule === 'M11' || f.rule === 'M11-known' : f.rule === probe.rule));
+  const found = matches.length > 0;
+
+  probesRun++;
+  probedRules.add(probe.rule);
+
   if (found !== probe.fires) {
     probeFailures.push(
       `[${probe.rule}] expected ${probe.fires ? 'a finding' : 'NO finding'}, got ${found ? 'a finding' : 'none'}` +
         `\n      fixture: ${probe.source}` +
         `\n      why it exists: ${probe.note}`,
     );
+    continue;
   }
+
+  // Verdict assertions, where the probe states one. A width rule that fires but
+  // always answers the same thing passes a fires/does-not-fire test and asserts
+  // nothing about the arithmetic.
+  if (probe.verdict !== undefined && !matches.some((f) => f.verdict === probe.verdict)) {
+    probeFailures.push(
+      `[${probe.rule}] expected verdict ${probe.verdict}, got ${matches.map((f) => f.verdict).join('/') || '(none)'}` +
+        `\n      fixture: ${probe.source}` +
+        `\n      why it exists: ${probe.note}`,
+    );
+  }
+  if (probe.near !== undefined && !matches.some((f) => (f.near ?? '').includes(probe.near))) {
+    probeFailures.push(
+      `[${probe.rule}] expected the near-miss to name ${probe.near}, got ${matches.map((f) => f.near ?? '(none)').join('/')}` +
+        `\n      fixture: ${probe.source}` +
+        `\n      why it exists: ${probe.note}`,
+    );
+  }
+}
+
+// The counter reconciliation. `probesRun` is raised by work; RULE_PROBES.length
+// is a property of the source text. If they ever disagree the loop did not do
+// what the summary line claims, and the summary line is the only part of this
+// most people read.
+if (probesRun !== RULE_PROBES.length || probesRun === 0) {
+  die('the probe harness did not run every probe it claims', [
+    `RULE_PROBES.length = ${RULE_PROBES.length}, probes actually executed = ${probesRun}`,
+    '',
+    'The summary line reports probe coverage. It must be a count of assertions MADE, never a count of fixtures',
+    'written down — an earlier version printed the array length, which would have reported success over a loop',
+    'that had been emptied, short-circuited or removed.',
+  ]);
 }
 
 if (probeFailures.length > 0) {
@@ -2246,6 +2902,183 @@ if (probeFailures.length > 0) {
     'narrowed until it went blind, or it was widened until it fires on something correct. Both are how a',
     'gate becomes decoration. Fix the rule — do not relax the fixture.',
   ]);
+}
+
+// ── M11: the standing report, and M11's own ratchet ────────────────────────
+//
+// Deliberately ABOVE the FROZEN ratchet, and deliberately not routed through it.
+//
+// Every constant M11 reports below is already frozen by exact text under
+// M4-address, M4-keystore, M4-topic or M8. "Frozen" and "well-formed" are
+// different claims and the ratchet only ever made the first: it says this string
+// may not change, and says nothing at all about whether the string is a valid
+// value for the role it occupies. So the malformed set is printed on EVERY run,
+// green or red, with a count that reaches the summary line — a standing visible
+// number rather than silence.
+//
+// The ratchet M11 does add is its own: a malformed literal that is not in
+// HEX_BASELINE fails, and a HEX_BASELINE entry that is no longer found fails.
+// The second direction is the one that does the work here — correcting a
+// constant requires deleting its entry in the same commit, which is how the
+// baseline can only shrink.
+
+/**
+ * The fixed-width hex constants known to be malformed, one entry each.
+ *
+ * Seven when the audit was written (review §7.4). SIX now: H4,
+ * `eth`'s coin.ignore-from-address, is corrected on this branch and its entry is
+ * gone rather than updated, because the baseline is only allowed to shrink.
+ *
+ * @type {{ module: string, file: string, text: string, verdict: string, reason: string }[]}
+ */
+const HEX_BASELINE = [
+  {
+    module: 'erc-token',
+    file: 'application.properties',
+    text: 'event-topic0=ddf252ad1be2c89b69c2b068fc378daa952b7f163c4a11628f55a4df523b3ef',
+    verdict: 'TRANSCRIPTION',
+    reason:
+      'H1. 63/64 — the ERC-20 Transfer topic0 with one digit deleted. FAILS CLOSED: no log topic can equal it, so ' +
+      'checkEventLog never matches and this module credits no deposit at all. Correcting it ACTIVATES a filter that has ' +
+      'never fired, in a crediting path whose receipt check is commented out (M10) and which never compares a function ' +
+      'selector — a behaviour change needing a build and a deposit fixture, not a typo fix. Deleting the line is worse. ' +
+      'See the M4-topic entry for the full instruction.',
+  },
+  {
+    module: 'erc-eusdt',
+    file: 'application.properties',
+    text: 'event-topic0=ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a1128f55a4df523b3ef',
+    verdict: 'TRANSCRIPTION',
+    reason:
+      'H2. 63/64, the same canonical constant mangled at a DIFFERENT index from H1. That is the fact that started the ' +
+      'audit: a bad copy is wrong the same way twice, so two independent corruptions of one value means it was typed. ' +
+      'Same fail-closed reading and same instruction as H1.',
+  },
+  {
+    module: 'erc-token',
+    file: 'application.properties',
+    text: 'address=dac17f958d2ee5232206206994597c13d831ec7',
+    verdict: 'TRANSCRIPTION',
+    reason:
+      'H3. 39/40 — the live Ethereum mainnet Tether contract, one digit short. FAILS CLOSED, and it is the most ' +
+      'dangerous line in this table for exactly that reason: the one-character edit that makes it well-formed makes ' +
+      'this module a real mainnet USDT mover. Its erc-eusdt twin, which carried the same address correct, was replaced ' +
+      'with a placeholder rather than mangled (§F13). Do not "fix" this one — replace it the same way.',
+  },
+  {
+    module: 'eth',
+    file: 'application.properties',
+    text: 'withdraw-wallet=672881426632b13d8f474664c039acc7b5610b7',
+    verdict: 'TRANSCRIPTION',
+    reason:
+      'H5. 39/40 — the go-ethereum keystore account, the same platform hot wallet as the corrected ' +
+      'ignore-from-address, deleted at index 16 instead of 19. FAILS CLOSED: the filename does not exist on disk, ' +
+      'WalletUtils.loadCredentials throws, and no withdrawal happens. Left mangled deliberately: correcting it turns ' +
+      'the withdrawal path on, which needs a keystore fixture and a build. When it IS corrected it must be corrected ' +
+      'to 0x672881426632b13d18f474664c039acc7b5610b7 — the account ignore-from-address now names.',
+  },
+  {
+    module: 'erc-token',
+    file: 'application.properties',
+    text: 'withdraw-wallet=67288142662b13d18f474664c039acc7b5610b7',
+    verdict: 'TRANSCRIPTION',
+    reason:
+      'H6. 39/40, the same account again, deleted at index 10. The third sample — and the reason the account could be ' +
+      'reconstructed at all: three one-deletion samples of one string intersect at exactly one 40-digit candidate. ' +
+      'Same fail-closed reading and same instruction as H5.',
+  },
+  {
+    module: 'erc-eusdt',
+    file: 'application.properties',
+    text: 'withdraw-wallet=2b7d8aa02fccbd7bc69368fa30cabe22e3c2c2d',
+    verdict: 'TRANSCRIPTION',
+    reason:
+      'H7. 39/40, and the ONE OF THE SEVEN THAT CANNOT BE RECOVERED. It is a different account from the other three ' +
+      'and it appears exactly once, so there are 40 deletion positions × 16 digits of candidate and nothing in this ' +
+      'repository to choose between them. Fails closed, same as H5/H6. Recorded here so the count is honest: this one ' +
+      'is not waiting on a decision, it is waiting on information nobody here has.',
+  },
+];
+
+const hexKey = (e) => JSON.stringify([e.module, e.file, e.text]);
+
+const hexIndex = new Map();
+const hexDuplicates = [];
+for (const entry of HEX_BASELINE) {
+  if (hexIndex.has(hexKey(entry))) hexDuplicates.push(`${entry.module}:${entry.file} "${entry.text}"`);
+  hexIndex.set(hexKey(entry), { entry, seen: 0 });
+}
+
+const hexUnrecorded = [];
+for (const defect of hexDefects) {
+  const hit = hexIndex.get(hexKey(defect));
+  if (hit) hit.seen++;
+  else hexUnrecorded.push(defect);
+}
+const hexStale = [...hexIndex.values()].filter((v) => v.seen === 0).map((v) => v.entry);
+const hexVerdictDrift = [...hexIndex.values()]
+  .filter((v) => v.seen > 0)
+  .map((v) => ({ entry: v.entry, actual: hexDefects.find((d) => hexKey(d) === hexKey(v.entry))?.verdict }))
+  .filter((d) => d.actual !== d.entry.verdict);
+
+// The standing report. Printed on every run, before any verdict, whether or not
+// anything is wrong — because the failure this exists to prevent is silence
+// about a value that was read.
+const hexWellFormed = hexObservations.length - hexDefects.length;
+console.log(
+  `· M11 fixed-width hex: ${hexObservations.length} role-typed literal(s) measured, ${hexWellFormed} well-formed, ` +
+    `${hexDefects.length} malformed (${hexDefects.filter((d) => d.verdict === 'TRANSCRIPTION').length} TRANSCRIPTION) — ` +
+    'all known-malformed and frozen deliberately, see §F6 and §7.4',
+);
+for (const defect of hexDefects) {
+  console.log(`    ${defect.where}  [${defect.rule} ${defect.verdict}]  ${defect.detail}`);
+}
+
+/** @type {string[]} */
+const hexProblems = [];
+
+if (hexDuplicates.length > 0) {
+  hexProblems.push('  ── duplicate M11 baseline entries ──');
+  for (const d of hexDuplicates) hexProblems.push(`  · ${d}`);
+  hexProblems.push('');
+}
+
+if (hexUnrecorded.length > 0) {
+  hexProblems.push('  ── M11: a fixed-width hex constant is the wrong width, and is NOT in the M11 baseline ──');
+  for (const d of hexUnrecorded) {
+    hexProblems.push(`  ${d.where}  [${d.rule} ${d.verdict}]  ${d.module}:${d.file}`);
+    hexProblems.push(`    matched: ${d.text}`);
+    hexProblems.push(`    → ${d.detail}`);
+    hexProblems.push('');
+  }
+  hexProblems.push('  A hex literal in a fixed-width role must have that width. If this value is genuinely known and');
+  hexProblems.push('  deliberate, add it to HEX_BASELINE with a reason that says which way it fails — the six already');
+  hexProblems.push('  there fail CLOSED, and the one that failed OPEN was corrected rather than recorded.');
+  hexProblems.push('');
+  hexProblems.push('  Note that being in FROZEN does not answer this. FROZEN says the string may not change; it has');
+  hexProblems.push('  never said the string is a valid value for the role it sits in.');
+  hexProblems.push('');
+}
+
+if (hexStale.length > 0) {
+  hexProblems.push('  ── M11 baseline entries that matched nothing ──');
+  for (const e of hexStale) {
+    hexProblems.push(`  ${e.module}:${e.file}`);
+    hexProblems.push(`    expected: ${e.text}  [${e.verdict}]`);
+    hexProblems.push('');
+  }
+  hexProblems.push('  Either it was corrected — delete the entry in the same commit, which is the only direction this');
+  hexProblems.push('  baseline may move — or the role inference stopped seeing it, which is the dangerous reading.');
+  hexProblems.push('');
+}
+
+if (hexVerdictDrift.length > 0) {
+  hexProblems.push('  ── an M11 baseline entry changed verdict ──');
+  for (const d of hexVerdictDrift) {
+    hexProblems.push(`  ${d.entry.module}:${d.entry.file}  ${d.entry.text}`);
+    hexProblems.push(`    recorded: ${d.entry.verdict}    now: ${d.actual}`);
+    hexProblems.push('');
+  }
 }
 
 // ── The ratchet ─────────────────────────────────────────────────────────────
@@ -2285,7 +3118,9 @@ const countDrift = [...frozenIndex.values()]
 
 // ── Verdict ────────────────────────────────────────────────────────────────
 
-const problems = [];
+// M11 first, because it ran first and because being frozen must never be able
+// to answer it. A run can be red for both reasons at once and must say so.
+const problems = [...hexProblems];
 
 if (duplicateEntries.length > 0) {
   problems.push('  ── duplicate frozen entries ──');
@@ -2359,7 +3194,14 @@ if (barrierBreaks.length > 0) {
   problems.push('');
 }
 
-if (problems.length > 0) die('the wallet RPC tree gained a way to reach mainnet', problems);
+if (problems.length > 0) {
+  die(
+    hexProblems.length > 0 && problems.length === hexProblems.length
+      ? 'a fixed-width hex constant does not have its fixed width'
+      : 'the wallet RPC tree gained a way to reach mainnet',
+    problems,
+  );
+}
 
 const frozenByRule = FROZEN.reduce((acc, e) => ((acc[e.rule] = (acc[e.rule] ?? 0) + 1), acc), {});
 const ruleSummary = Object.entries(frozenByRule)
@@ -2373,8 +3215,10 @@ const frozenOccurrences = FROZEN.reduce((n, e) => n + expectedCount(e), 0);
 console.log(
   `✓ wallet-rpc-mainnet-scan clean — ${moduleDirs.length} module(s), ${javaFiles.length} Java + ${propsFiles.length} properties file(s) ` +
     `walked; ${FROZEN.length} frozen mainnet constant(s) in ${frozenOccurrences} recorded occurrence(s), all still exactly ` +
-    `as recorded (${ruleSummary}); no new one added, and none gained a copy. Barriers held: ${dockerfilesInspected} Dockerfile(s), ${composeInspected} compose file(s) and ` +
+    `as recorded (${ruleSummary}); no new one added, and none gained a copy. M11: ${hexObservations.length} fixed-width hex ` +
+    `literal(s) measured by role, ${hexWellFormed} well-formed and ${hexDefects.length} still malformed and recorded ` +
+    `(frozen does not mean well-formed). Barriers held: ${dockerfilesInspected} Dockerfile(s), ${composeInspected} compose file(s) and ` +
     `${workflowsInspected} workflow(s) checked — none builds, composes or boots this tree. ` +
-    `${RULE_PROBES.length} rule probe(s) passed (${probesFiring} must fire, ${RULE_PROBES.length - probesFiring} must not) — ` +
+    `${probesRun} rule probe(s) executed across ${probedRules.size} rule id(s) (${probesFiring} must fire, ${probesRun - probesFiring} must not) — ` +
     `proof-of-life for the rules the tree gives nothing to freeze.`,
 );

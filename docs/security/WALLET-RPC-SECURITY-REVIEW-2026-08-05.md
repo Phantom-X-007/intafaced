@@ -1104,19 +1104,21 @@ That is a provenance result as much as a correctness one. The Java constants loo
 
 ### 7.4 The seven malformed constants
 
-All seven are one hex digit short. All seven are already frozen by exact text in `tooling/ci/wallet-rpc-mainnet-scan.mjs`, so none can change silently — see [§7.9](#79-proposed-gate-rule--m11-fixed-width-hex-literals-must-have-their-fixed-width) for what freezing does and does not buy.
+> **Status, 2026-08-06 (PR `fix/wallet-rpc-fail-open-constants`): six, not seven.** H4 — the only one of the seven that failed OPEN — is corrected. The other six are unchanged, still frozen, and now also reported as malformed on every gate run by rule M11. See [§7.11](#711-what-landed-h4-corrected-and-m11-built).
+
+All seven are one hex digit short. All seven are already frozen by exact text in `tooling/ci/wallet-rpc-mainnet-scan.mjs`, so none can change silently — see [§7.9](#79-gate-rule--m11-fixed-width-hex-literals-must-have-their-fixed-width) for what freezing does and does not buy.
 
 Ranked by what happens today if somebody "fixes" it.
 
-| #   | Where                                     | Role                       | Digits    | What it should be                                            | Live? |
-| --- | ----------------------------------------- | -------------------------- | --------- | ------------------------------------------------------------ | ----- |
-| H1  | `erc-token/.../application.properties:51` | ERC-20 `Transfer` topic0   | **63**/64 | canonical topic0; missing the `a` at index 36                | LIVE  |
-| H2  | `erc-eusdt/.../application.properties:72` | ERC-20 `Transfer` topic0   | **63**/64 | canonical topic0; missing the `6` at index 47                | LIVE  |
-| H3  | `erc-token/.../application.properties:39` | ERC-20 contract address    | **39**/40 | mainnet Tether; missing the `a` at index 16                  | LIVE  |
-| H4  | `eth/.../application.properties:39`       | `coin.ignore-from-address` | **39**/40 | the platform hot wallet; missing the `4` at index 19         | LIVE  |
-| H5  | `eth/.../application.properties:35`       | keystore account           | **39**/40 | the same hot wallet; missing the `1` at index 16             | LIVE  |
-| H6  | `erc-token/.../application.properties:32` | keystore account           | **39**/40 | the same hot wallet again; missing the `3` at index 10       | LIVE  |
-| H7  | `erc-eusdt/.../application.properties:32` | keystore account           | **39**/40 | **unknown** — a different account, one sample, unrecoverable | LIVE  |
+| #      | Where                                     | Role                           | Digits    | What it should be                                                                            | Live? |
+| ------ | ----------------------------------------- | ------------------------------ | --------- | -------------------------------------------------------------------------------------------- | ----- |
+| H1     | `erc-token/.../application.properties:51` | ERC-20 `Transfer` topic0       | **63**/64 | canonical topic0; missing the `a` at index 36                                                | LIVE  |
+| H2     | `erc-eusdt/.../application.properties:72` | ERC-20 `Transfer` topic0       | **63**/64 | canonical topic0; missing the `6` at index 47                                                | LIVE  |
+| H3     | `erc-token/.../application.properties:39` | ERC-20 contract address        | **39**/40 | mainnet Tether; missing the `a` at index 16                                                  | LIVE  |
+| ~~H4~~ | ~~`eth/.../application.properties:39`~~   | ~~`coin.ignore-from-address`~~ | **FIXED** | **corrected to the 40-digit account — [§7.11](#711-what-landed-h4-corrected-and-m11-built)** | —     |
+| H5     | `eth/.../application.properties:35`       | keystore account               | **39**/40 | the same hot wallet; missing the `1` at index 16                                             | LIVE  |
+| H6     | `erc-token/.../application.properties:32` | keystore account               | **39**/40 | the same hot wallet again; missing the `3` at index 10                                       | LIVE  |
+| H7     | `erc-eusdt/.../application.properties:32` | keystore account               | **39**/40 | **unknown** — a different account, one sample, unrecoverable                                 | LIVE  |
 
 "LIVE" carries the meaning [§1.3](#13-live-vs-latent) gives it: reachable the first time somebody supplies the environment and starts the service.
 
@@ -1229,9 +1231,11 @@ Three gaps remain, and they are not gaps in the baseline, they are gaps in what 
 2. **The scope is one vendor tree.** The same defect class in `packages/`, `services/` or the other vendored trees is entirely unguarded — and those modules can actually boot.
 3. **The one fail-open constant in the tree is repo-authored and unprotected.** `DISCLOSED_SECRET_SHA256` ([§7.6](#76-what-the-audit-did-not-find)) is not an address, not a topic, and not in any baseline. Nothing asserts it is 64 characters long.
 
-### 7.9 Proposed gate rule — M11: fixed-width hex literals must have their fixed width
+### 7.9 Gate rule — M11: fixed-width hex literals must have their fixed width
 
-**Proposed, not implemented.** Sketched to the shape of the existing rules in `tooling/ci/wallet-rpc-mainnet-scan.mjs` so it can be built without redesign.
+> **Implemented 2026-08-06**, in `tooling/ci/wallet-rpc-mainnet-scan.mjs`, substantially as specified below. What shipped and what did not: [§7.11](#711-what-landed-h4-corrected-and-m11-built).
+
+~~**Proposed, not implemented.**~~ Sketched to the shape of the existing rules in `tooling/ci/wallet-rpc-mainnet-scan.mjs` so it can be built without redesign.
 
 **M11.** A hex literal occupying a role with a fixed width must have that width. Roles are inferred from position, and only these are claimed:
 
@@ -1267,6 +1271,40 @@ Nothing. [§6](#6-verdict) stands exactly as written. Not one of these seven mak
 Two things it does sharpen. First, [§6](#6-verdict)'s line that _"the only reason the ERC modules are not currently minting free credit is that somebody mangled a constant"_ is now measurable rather than rhetorical: **seven constants were mangled, six of them the same way, by the same hand, and in six of the seven cases the accident points the safe way.** H4 is the counter-example that keeps this from being a comfortable story — one of the seven mangled a value whose job was to _prevent_ a credit, and broke it open.
 
 Second, this is the class of defect that argues hardest against adopting the tree by inspection. Seven single-character errors in thirteen constants is a 54% defect rate in the one part of a codebase that can be checked mechanically, exhaustively, and without a compiler. The 228 Java files cannot be checked that way, and nothing about this result suggests the hand that typed them was steadier.
+
+### 7.11 What landed — H4 corrected, and M11 built
+
+_Addendum, 2026-08-06, PR `fix/wallet-rpc-fail-open-constants`._
+
+**H4 is corrected.** `coin.ignore-from-address` in `eth/src/main/resources/application.properties` now carries forty digits. The path was re-verified end to end before the edit rather than taken from [§7.4](#74-the-seven-malformed-constants): the property binds through `CoinConfig#getCoin` (`@ConfigurationProperties(prefix = "coin")`) to `Coin.ignoreFromAddress`, which **does** exist as a field — unlike `coin.password`, `coin.init-block-height` and `coin.step`, which [F12](#f12) and [§7.7](#77-non-hex-constants-heights-ports-gas-intervals) record as binding to nothing. `ApplicationEvent:54` calls `watcher.setCoin(coin)`, and `EthWatcher` reads it at `:50` (scheduled) and `:95` (replay). The comparison is `String.equalsIgnoreCase`, so case is handled and the `0x` prefix is required and present; there is no trim on either side.
+
+**The address was derived, not copied.** The three 39-digit samples were read out of the files and the set of 40-digit strings from which each is one deletion was intersected:
+
+| Sample                      | Digits | Distinct 40-digit supersequences |
+| --------------------------- | ------ | -------------------------------- |
+| `eth:35` keystore           | 39     | 601                              |
+| `eth:39` ignore-from        | 39     | 601                              |
+| `erc-token:32` keystore     | 39     | 601                              |
+| **intersection, all three** | —      | **1**                            |
+
+`T = 0x672881426632b13d18f474664c039acc7b5610b7`, with the deletions at indices 16, 19 and 10 respectively — reproducing [§7.5](#75-the-mangling-is-one-deleted-digit-and-it-is-reversible) exactly, from the files rather than from the paragraph. Each **pair** also intersects to one, so the reconstruction is corroborated three times independently rather than once.
+
+**One caveat, and it does not change the fix.** `T` has nonce 0, no code and a zero balance on Ethereum mainnet, checked against a public node. So the string the upstream mangled has no on-chain history and this repository still cannot say whether it was ever a real hot wallet. The correction stands regardless, for two reasons: restoring the width can only turn an exclusion that matched **never** into one that matches **sometimes**, so it produces strictly fewer credits and cannot produce more; and the invariant that matters is internal — `ignore-from-address` must name the same account as `coin.withdraw-wallet`, and both were mangled from `T`. H5 is deliberately left at 39 digits (it fails closed, and correcting it turns the withdrawal path on), with a note that when it is corrected it must be corrected to `T`.
+
+**The other fail-open constant, `DISCLOSED_SECRET_SHA256`, now has a structural width.** [§7.6](#76-what-the-audit-did-not-find) named it as the sharpest argument in this section and it is repo-authored, so there was no vendor-tree restriction. The literal is passed through `requireSha256Hex` in the **static initialiser**: mangle it and the class fails to load, so the module does not boot with a dead guard — it does not boot at all, which is the failure direction a guard of this kind is supposed to have. Lowercase is required as well as the length, because `String.equals` is case-sensitive and an uppercased digest would be exactly as permanently-false as a short one. `sha256Hex` asserts its own output width for the same reason, closing the symmetric hole where someone weakens the algorithm string instead of the constant.
+
+A JUnit test was **not** added, and the reason is worth recording: `ect/pom.xml` configures `maven-surefire-plugin` with `<skip>true</skip>`, so a test in that module would never run. Adding one would have been the "check that reports on nothing" defect this repository keeps naming. M11 is the check that actually runs in CI, and it reads this literal directly.
+
+**M11 shipped as specified, with two deviations, both stated.**
+
+- **M11-checksum is NOT implemented.** EIP-55 over mixed-case addresses was specified in [§7.9](#79-gate-rule--m11-fixed-width-hex-literals-must-have-their-fixed-width) and is not built. Its measured value today is a printed count of six-of-six unverifiable single-case addresses, and the keccak-256 it would need is already present, so it is cheap to add later — but it asserts nothing about this tree as it stands, and the branch's mandate was the two fail-open constants and the width rule.
+- **The canonical dictionary is derived, not quoted.** A local keccak-256 (self-tested at load against `keccak256("")`, `keccak256("abc")` and the `transfer(address,uint256)` selector) computes the Transfer and Approval topic0s. A rule whose job is catching a mistyped constant must not itself depend on one. Its derived `Transfer` topic0 is byte-identical to the correct literal already sitting in the tree at `eth-support/.../EtherscanApi.java:80`, and M11-known independently reproduces this section's "index 36" and "index 47" from the two mangled properties.
+
+**Sequencing, which was the load-bearing note.** M11 runs before the freeze check and keeps its own baseline (`HEX_BASELINE`, six entries). Removing a constant's M11 entry while leaving it frozen under `M4-address` still goes red — that case is mutation-proved, not asserted. The malformed set prints on every run, green or red, with the count in the summary line the gate runner shows.
+
+**And a correction to [F21](#f21), which this branch is the first thing here able to make.** With a JDK and Maven on the host, and with `<module>xrp</module>` removed, **the whole reactor compiles** — all fifteen modules, from `mvn clean compile`, in about ten seconds. That disposes of both of F21's proofs: the first is the `xrp` line itself, and the second — _"`ect` cannot compile"_, because it imports `BitcoinUtil` and declares no `bitcoin-rpc` dependency — is simply **false**. `ect` compiles. The reasoning that Maven does not propagate a system-scoped dependency to consumers is right in general and does not hold for this reactor as configured. F21's headline claim, that nothing here had ever been compiled by anyone, was true when written; it is not true now.
+
+**What CI covers, and what it does not.** No CI job in this repository compiles Java — that is rule M7 of the same gate, and it is deliberate. The Maven run above is a local proof on one machine, and the Java change on this branch ships marked **UNVERIFIED — no CI compiles Java** for that reason. What CI does cover is M11 reading the constant's width out of the source text on every push, which is why the width was made structural in two places rather than one.
 
 ---
 
@@ -1344,4 +1382,4 @@ The reason to record this at length rather than quietly amend a table is that th
 
 _Static analysis only. Nothing in this tree was compiled, executed, or dynamically tested, by this review or — per [F21](#f21) — by anything else. **No JDK, JRE or Maven has been on `PATH` in any session that wrote to this document**, and class files were read as bytes throughout, which needs no JVM. The claim that **no network** was available is false and is corrected in [§8](#8-correction--this-host-has-network-access); it is not known whether it was true on 2026-08-05, and no conclusion here depends on which._
 
-_Addenda, 2026-08-06: [F3 follow-up](#f3-2026-08-06) (F3 confirmed, provenance closed) · [§7](#7-fixed-width-hex-constant-audit-addendum-2026-08-06) (hex constant audit) · [§8](#8-correction--this-host-has-network-access) (network correction)._
+_Addenda, 2026-08-06: [F3 follow-up](#f3-2026-08-06) (F3 confirmed, provenance closed) · [§7](#7-fixed-width-hex-constant-audit-addendum-2026-08-06) (hex constant audit) · [§7.11](#711-what-landed-h4-corrected-and-m11-built) (H4 corrected, M11 built, [F21](#f21) disproved — the tree compiles) · [§8](#8-correction--this-host-has-network-access) (network correction)._
