@@ -15,6 +15,16 @@ import {
   xpPolicyExportHeader,
   xpPolicyExportText,
   parseXpPolicyExportLine,
+  countXpPolicyExportDataLines,
+  xpPolicyExportHasHeader,
+  xpPolicyExportRoundTripOk,
+  xpPolicyStatusLine,
+  xpPolicyStatusLineIsEmpty,
+  xpPolicyStatusLineDetailed,
+  parseXpPolicyStatusLine,
+  xpPolicyStatusLineMatches,
+  xpPolicyStatusLineConsistent,
+  xpPolicyCountInRange,
 } from './xp-policy.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
@@ -86,5 +96,21 @@ describe('academy.certs Stage-2 XP policy (no money)', () => {
     expect(parseXpPolicyExportLine('foundations-v1,100')).toEqual({ certId: 'foundations-v1', xpDelta: '100' });
     expect(parseXpPolicyExportLine('certId,xpDelta')).toBeNull();
     expect(xpPolicyExportText()).toContain('certId,xpDelta');
+  });
+});
+
+describe('L3 wave48 xp-policy status/export', () => {
+  it('export round-trip and status', () => {
+    const text = xpPolicyExportText();
+    expect(xpPolicyExportHasHeader(text)).toBe(true);
+    expect(countXpPolicyExportDataLines(text)).toBe(xpPolicyCount());
+    expect(xpPolicyExportRoundTripOk()).toBe(true);
+    expect(xpPolicyStatusLineMatches()).toBe(true);
+    expect(xpPolicyStatusLineIsEmpty()).toBe(false);
+    expect(xpPolicyStatusLineConsistent(xpPolicyStatusLine())).toBe(true);
+    expect(parseXpPolicyStatusLine('nope')).toBeNull();
+    expect(xpPolicyStatusLineDetailed()).toContain('count=');
+    expect(xpPolicyCountInRange(1, 100)).toBe(true);
+    expect(xpPolicyCountInRange(100, 1)).toBe(false);
   });
 });

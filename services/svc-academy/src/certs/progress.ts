@@ -349,3 +349,104 @@ export function progressExportHeader(): string {
 export function progressExportText(report: ProgressReport): string {
   return [progressExportHeader(), progressExportLine(report)].join('\n');
 }
+
+/** L3 — parse progress export line. Invalid → null. */
+export function parseProgressExportLine(
+  line: string,
+): {
+  readonly userId: string;
+  readonly certId: string;
+  readonly ratio: string;
+  readonly complete: boolean;
+  readonly granted: boolean;
+} | null {
+  const t = line.trim();
+  if (!t || t === progressExportHeader()) return null;
+  const parts = t.split(',');
+  if (parts.length !== 5) return null;
+  const userId = parts[0]!.trim();
+  const certId = parts[1]!.trim();
+  const ratio = parts[2]!.trim();
+  const complete = parts[3]!.trim();
+  const granted = parts[4]!.trim();
+  if (!userId || !certId || !ratio) return null;
+  if (complete !== '0' && complete !== '1') return null;
+  if (granted !== '0' && granted !== '1') return null;
+  return { userId, certId, ratio, complete: complete === '1', granted: granted === '1' };
+}
+
+/** L3 — data-line count excluding header. */
+export function countProgressExportDataLines(text: string): number {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l !== progressExportHeader()).length;
+}
+
+/** L3 — true when export has header. */
+export function progressExportHasHeader(text: string): boolean {
+  const first = text.split('\n')[0]?.trim() ?? '';
+  return first === progressExportHeader();
+}
+
+/** L3 — round-trip for progress export. */
+export function progressExportRoundTripOk(report: ProgressReport): boolean {
+  const text = progressExportText(report);
+  return text.split('\n').filter(Boolean).length === 1 + countProgressExportDataLines(text);
+}
+
+/** L3 — progress status line completed=N required=M. */
+export function progressStatusLine(report: ProgressReport): string {
+  return `completed=${report.completedCount} required=${report.requiredCount} missing=${missingItemCount(report)}`;
+}
+
+/** L3 — true when completed is 0. */
+export function progressStatusLineIsEmpty(report: ProgressReport): boolean {
+  return report.completedCount === 0;
+}
+
+/** L3 — detailed progress status. */
+export function progressStatusLineDetailed(report: ProgressReport): string {
+  const c = progressBoardCard(report);
+  return `completed=${c.completed} required=${c.required} missing=${c.missing} complete=${c.complete ? '1' : '0'} grantable=${c.grantable ? '1' : '0'}`;
+}
+
+/** L3 — token count detailed status. */
+export function progressStatusLineTokenCount(report: ProgressReport): number {
+  return progressStatusLineDetailed(report).split(/\s+/).filter(Boolean).length;
+}
+
+/** L3 — parse progress status. Invalid → null. */
+export function parseProgressStatusLine(
+  line: string,
+): { readonly completed: number; readonly required: number; readonly missing: number } | null {
+  const m = line.trim().match(/^completed=(\d+) required=(\d+) missing=(\d+)$/);
+  if (!m) return null;
+  return { completed: Number(m[1]), required: Number(m[2]), missing: Number(m[3]) };
+}
+
+/** L3 — true when status matches report. */
+export function progressStatusLineMatches(report: ProgressReport): boolean {
+  const p = parseProgressStatusLine(progressStatusLine(report));
+  if (!p) return false;
+  return p.completed === report.completedCount && p.required === report.requiredCount && p.missing === missingItemCount(report);
+}
+
+/** L3 — true when completed+missing equals required. */
+export function progressStatusLineConsistent(line: string): boolean {
+  const p = parseProgressStatusLine(line);
+  if (!p) return false;
+  return p.completed + p.missing === p.required;
+}
+
+/** L3 — true when completed is within [min,max]. Invalid → false. */
+export function completedCountInRange(report: ProgressReport, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  return report.completedCount >= min && report.completedCount <= max;
+}
+
+/** L3 — true when missing is at most n. */
+export function missingCountAtMost(report: ProgressReport, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return missingItemCount(report) <= n;
+}
