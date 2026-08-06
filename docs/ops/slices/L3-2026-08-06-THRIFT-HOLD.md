@@ -1,13 +1,13 @@
-# L3 thrift hard hold — free-TRK waves 46–100
+# L3 thrift hard hold — free-TRK waves 46–103
 
-**Updated:** 2026-08-06 (keep-alive cycle)
+**Updated:** 2026-08-06 (night-engine cycle)
 
 ## Status
 - Branch: `feat/l3-free-trk-wave46` (local only)
-- Tip base: `e1784244` (#896 actions bump) — rebased clean after #800/#883/#896
-- Stack: waves **46–100** Class N
-- thrift: **hard total only** (~286; CI=77 under cap)
-- Partners open: #897 audit · #898 solc · #346 pay conflict (babysit only)
-- Ship: thrift exit 0 → path-intersect clear → **one** fat Class N PR → green → squash-merge
+- Tip base: `e1784244` (#896)
+- Stack: waves **46–103** Class N
+- thrift: **hard total only** (~289; CI=78 under cap)
+- Partners: #897/#898 Dependabot red (babysit) · #899 Denon · #346 conflict
+- Ship: thrift exit 0 → one fat Class N PR → green → squash-merge
 
 No `THRIFT_ALLOW=1` unless emergency.
