@@ -143,3 +143,75 @@ export function isUsable(provider: ModelProvider, now: Date = new Date(), maxSta
 export function totalTokens(usage: TokenUsage): number {
   return usage.inputTokens + usage.outputTokens;
 }
+
+/** L3 — token usage board card. */
+export function tokenUsageBoardCard(usage: TokenUsage): {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly total: number;
+} {
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    total: totalTokens(usage),
+  };
+}
+
+/** L3 — status line. */
+export function tokenUsageStatusLine(usage: TokenUsage): string {
+  const c = tokenUsageBoardCard(usage);
+  return `in=${c.inputTokens} out=${c.outputTokens} total=${c.total}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseTokenUsageStatusLine(line: string): { readonly in: number; readonly out: number; readonly total: number } | null {
+  const m = line.trim().match(/^in=(\d+) out=(\d+) total=(\d+)$/);
+  if (!m) return null;
+  return { in: Number(m[1]), out: Number(m[2]), total: Number(m[3]) };
+}
+
+/** L3 — true when status matches usage. */
+export function tokenUsageStatusLineMatches(usage: TokenUsage): boolean {
+  const p = parseTokenUsageStatusLine(tokenUsageStatusLine(usage));
+  if (!p) return false;
+  const c = tokenUsageBoardCard(usage);
+  return p.in === c.inputTokens && p.out === c.outputTokens && p.total === c.total;
+}
+
+/** L3 — true when total = in + out. */
+export function tokenUsageStatusLineConsistent(line: string): boolean {
+  const p = parseTokenUsageStatusLine(line);
+  if (!p) return false;
+  return p.total === p.in + p.out;
+}
+
+/** L3 — export header. */
+export function tokenUsageExportHeader(): string {
+  return 'inputTokens,outputTokens,total';
+}
+
+/** L3 — export line. */
+export function tokenUsageExportLine(usage: TokenUsage): string {
+  const c = tokenUsageBoardCard(usage);
+  return `${c.inputTokens},${c.outputTokens},${c.total}`;
+}
+
+/** L3 — full export. */
+export function tokenUsageExportText(usage: TokenUsage): string {
+  return [tokenUsageExportHeader(), tokenUsageExportLine(usage)].join('\n');
+}
+
+/** L3 — true when total is within [min,max]. Invalid → false. */
+export function totalTokensInRange(usage: TokenUsage, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = totalTokens(usage);
+  return n >= min && n <= max;
+}
+
+/** L3 — capability catalog. */
+export const PROVIDER_CAPABILITIES: readonly ProviderCapability[] = ['complete', 'stream', 'embed'];
+
+/** L3 — true when capability is known. */
+export function isProviderCapability(value: string): value is ProviderCapability {
+  return (PROVIDER_CAPABILITIES as readonly string[]).includes(value);
+}

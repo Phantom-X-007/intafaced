@@ -15,7 +15,23 @@ import {
   mockUsageDeterministic,
 } from './mock.js';
 import { UpstreamModelProvider, readUsage } from './upstream.js';
-import { isUsable, supports, totalTokens, type CompletionRequest } from './provider.js';
+import {
+  isUsable,
+  supports,
+  totalTokens,
+  type CompletionRequest,
+  tokenUsageBoardCard,
+  tokenUsageStatusLine,
+  parseTokenUsageStatusLine,
+  tokenUsageStatusLineMatches,
+  tokenUsageStatusLineConsistent,
+  tokenUsageExportHeader,
+  tokenUsageExportLine,
+  tokenUsageExportText,
+  totalTokensInRange,
+  isProviderCapability,
+  PROVIDER_CAPABILITIES,
+} from './provider.js';
 
 /**
  * The adapter layer.
@@ -253,5 +269,22 @@ describe('L3 wave64 mock usage honesty', () => {
     expect(mockUsageDeterministic(req, request())).toBe(true);
     expect(mockInputTokensInRange(req, 0, 10_000)).toBe(true);
     expect(mockInputTokensInRange(req, 10_000, 0)).toBe(false);
+  });
+});
+
+describe('L3 wave65 token usage honesty', () => {
+  it('boards and capability catalog', () => {
+    const usage = { inputTokens: 10, outputTokens: 5 };
+    expect(tokenUsageBoardCard(usage).total).toBe(15);
+    expect(tokenUsageStatusLineMatches(usage)).toBe(true);
+    expect(tokenUsageStatusLineConsistent(tokenUsageStatusLine(usage))).toBe(true);
+    expect(parseTokenUsageStatusLine('nope')).toBeNull();
+    expect(tokenUsageExportText(usage).startsWith(tokenUsageExportHeader())).toBe(true);
+    expect(tokenUsageExportLine(usage)).toBe('10,5,15');
+    expect(totalTokensInRange(usage, 15, 15)).toBe(true);
+    expect(totalTokensInRange(usage, 20, 10)).toBe(false);
+    expect(isProviderCapability('complete')).toBe(true);
+    expect(isProviderCapability('paint')).toBe(false);
+    expect(PROVIDER_CAPABILITIES).toHaveLength(3);
   });
 });
