@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { markSourceFromBook, memoryMarkBook, midFromBook, isFresh } from './mark-source.js';
+import { markSourceFromBook, memoryMarkBook, midFromBook, toQuotedMark } from './mark-source.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
-import { parseAmount as amt, type PostRequest } from '@intafaced/ledger-client';
+import { DEFAULT_FUTURES_MARK_POLICY, type MarkPolicy } from './mark-policy.js';
+import { parseAmount as amt, formatAmount, type PostRequest } from '@intafaced/ledger-client';
+
+/** Policy helper — spelled in the `prices.ts` four-field shape, never in ms. */
+function policy(overrides: Partial<MarkPolicy> = {}): MarkPolicy {
+  return { ...DEFAULT_FUTURES_MARK_POLICY, ...overrides };
+}
 
 describe('midFromBook', () => {
   it('returns mid of two-sided book', () => {
@@ -19,58 +25,63 @@ describe('midFromBook', () => {
   });
 });
 
+describe('toQuotedMark', () => {
+  it('parses a decimal feed value into a scaled bigint quote', () => {
+    const q = toQuotedMark({ marketId: 'm1', price: '50000', quality: 'index', asOfMs: 1_000 });
+    expect(q).not.toBeNull();
+    expect(q!.price).toBe(amt('50000'));
+    expect(q!.asOf.getTime()).toBe(1_000);
+    expect(q!.quality).toBe('index');
+  });
+
+  it('refuses a zero or malformed feed value — a broken feed is not a cheap market', () => {
+    expect(toQuotedMark({ marketId: 'm1', price: '0', quality: 'mid', asOfMs: 1 })).toBeNull();
+    expect(toQuotedMark({ marketId: 'm1', price: '-5', quality: 'mid', asOfMs: 1 })).toBeNull();
+    expect(toQuotedMark({ marketId: 'm1', price: 'abc', quality: 'mid', asOfMs: 1 })).toBeNull();
+  });
+});
+
 describe('memoryMarkBook', () => {
   it('returns null when empty (never invents)', async () => {
-    const book = memoryMarkBook({ now: () => 1_000_000 });
+    const book = memoryMarkBook();
     const src = book.source();
     expect(await src.markPrice({ marketId: 'm1', at: new Date(1_000_000) })).toBeNull();
+    expect(await src.quote({ marketId: 'm1', at: new Date(1_000_000) })).toBeNull();
   });
 
   it('returns set mark when fresh and quality allowed', async () => {
-    const book = memoryMarkBook({ now: () => 1_000_000 });
-    book.set({
-      marketId: 'm1',
-      price: '50000',
-      quality: 'index',
-      asOfMs: 1_000_000,
-    });
-    const src = book.source({ maxAgeMs: 60_000 });
+    const book = memoryMarkBook();
+    book.set({ marketId: 'm1', price: '50000', quality: 'index', asOfMs: 1_000_000 });
+    const src = book.source(policy({ liquidationMaxAgeSeconds: 60 }));
     expect(await src.markPrice({ marketId: 'm1', at: new Date(1_030_000) })).toBe('50000');
   });
 
   it('stale mark → null', async () => {
     const book = memoryMarkBook();
-    book.set({
-      marketId: 'm1',
-      price: '50000',
-      quality: 'mid',
-      asOfMs: 0,
-    });
-    const src = book.source({ maxAgeMs: 1_000 });
+    book.set({ marketId: 'm1', price: '50000', quality: 'mid', asOfMs: 0 });
+    const src = book.source(policy({ liquidationMaxAgeSeconds: 1 }));
     expect(await src.markPrice({ marketId: 'm1', at: new Date(10_000) })).toBeNull();
   });
 
   it('refuses last quality for liquidation by default', async () => {
-    const book = memoryMarkBook({ now: () => 5_000 });
-    book.set({
-      marketId: 'm1',
-      price: '50000',
-      quality: 'last',
-      asOfMs: 5_000,
-    });
+    const book = memoryMarkBook();
+    book.set({ marketId: 'm1', price: '50000', quality: 'last', asOfMs: 5_000 });
     const src = book.source();
     expect(await src.markPrice({ marketId: 'm1', at: new Date(5_000) })).toBeNull();
   });
 
+  it('still HANDS BACK the last-quality quote — refusing to liquidate on it is the gate, not the feed', async () => {
+    const book = memoryMarkBook();
+    book.set({ marketId: 'm1', price: '50000', quality: 'last', asOfMs: 5_000 });
+    const quoted = await book.source().quote({ marketId: 'm1', at: new Date(5_000) });
+    expect(quoted?.quality).toBe('last');
+    expect(quoted?.price).toBe(amt('50000'));
+  });
+
   it('allows last when policy opts in', async () => {
-    const book = memoryMarkBook({ now: () => 5_000 });
-    book.set({
-      marketId: 'm1',
-      price: '50000',
-      quality: 'last',
-      asOfMs: 5_000,
-    });
-    const src = book.source({ liquidateOn: ['last', 'mid', 'index'] });
+    const book = memoryMarkBook();
+    book.set({ marketId: 'm1', price: '50000', quality: 'last', asOfMs: 5_000 });
+    const src = book.source(policy({ liquidationQualities: ['last', 'mid', 'index'] }));
     expect(await src.markPrice({ marketId: 'm1', at: new Date(5_000) })).toBe('50000');
   });
 });
@@ -83,6 +94,7 @@ describe('markSourceFromBook', () => {
       },
     });
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBe('100');
+    expect((await src.quote({ marketId: 'm1', at: new Date() }))?.quality).toBe('mid');
   });
 
   it('empty book → null', async () => {
@@ -94,121 +106,91 @@ describe('markSourceFromBook', () => {
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
   });
 
-  it('does not fall back to last unless policy allows', async () => {
+  it('labels the last print `last` and refuses it as a price unless policy allows', async () => {
     const src = markSourceFromBook({
       async readBook() {
         return { bestBid: null, bestAsk: null, last: '77' };
       },
     });
+    expect((await src.quote({ marketId: 'm1', at: new Date() }))?.quality).toBe('last');
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
 
     const srcLast = markSourceFromBook({
       async readBook() {
         return { bestBid: null, bestAsk: null, last: '77' };
       },
-      policy: { liquidateOn: ['last'] },
+      policy: policy({ liquidationQualities: ['last'] }),
     });
     expect(await srcLast.markPrice({ marketId: 'm1', at: new Date() })).toBe('77');
-  });
-});
-
-describe('isFresh', () => {
-  it('respects maxAgeMs', () => {
-    const q = { marketId: 'm', price: '1', quality: 'mid' as const, asOfMs: 1000 };
-    expect(isFresh(q, 1500, 1000)).toBe(true);
-    expect(isFresh(q, 2500, 1000)).toBe(false);
-    expect(isFresh(q, 9999, 0)).toBe(true);
   });
 });
 
 describe('integration: mark book → liquidation tick', () => {
   const USER = '11111111-1111-4111-8111-111111111111';
 
-  it('does not liquidate when mark book empty', async () => {
-    const book = memoryMarkBook({ now: () => 1_000_000 });
-    const posts: PostRequest[] = [];
-    const result = await runLiquidationTick({
-      marks: book.source(),
-      positions: {
-        async listOpen() {
-          return [
-            {
-              positionId: 'pos-1',
-              userId: USER,
-              side: 'long',
-              size: amt('1'),
-              entryPrice: amt('100'),
-              margin: amt('10'),
-              marginAsset: 'USDT',
-              marketId: 'm1',
-            },
-          ];
-        },
-      },
-      closer: {
-        async markLiquidated() {
-          throw new Error('no');
-        },
-      },
-      attempts: memoryLiquidationAttemptStore(),
-      ledger: {
-        async post(req) {
-          posts.push(req);
-          return { id: 'x', idempotencyKey: req.idempotencyKey } as never;
-        },
-      },
-      now: () => new Date(1_000_000),
-    });
-    expect(result.liquidated).toBe(0);
-    expect(result.items[0]!.outcome).toBe('skipped_no_mark');
-    expect(posts).toHaveLength(0);
-  });
-
-  it('liquidates when index mark is underwater', async () => {
-    const book = memoryMarkBook({ now: () => 1_000_000 });
-    book.set({
+  function position() {
+    return {
+      positionId: 'pos-1',
+      userId: USER,
+      side: 'long' as const,
+      size: amt('1'),
+      entryPrice: amt('100'),
+      margin: amt('10'),
+      marginAsset: 'USDT',
       marketId: 'm1',
-      price: '80',
-      quality: 'index',
-      asOfMs: 1_000_000,
-    });
-    const posts: PostRequest[] = [];
-    const closed: string[] = [];
-    const result = await runLiquidationTick({
-      marks: book.source(),
+    };
+  }
+
+  function tickDeps(marks: Parameters<typeof runLiquidationTick>[0]['marks'], posts: PostRequest[], closed: string[]) {
+    return {
+      marks,
       positions: {
         async listOpen() {
-          return [
-            {
-              positionId: 'pos-1',
-              userId: USER,
-              side: 'long',
-              size: amt('1'),
-              entryPrice: amt('100'),
-              margin: amt('10'),
-              marginAsset: 'USDT',
-              marketId: 'm1',
-            },
-          ];
+          return [position()];
         },
       },
       closer: {
-        async markLiquidated(id) {
+        async markLiquidated(id: string) {
           closed.push(id);
         },
       },
       attempts: memoryLiquidationAttemptStore(),
       ledger: {
-        async post(req) {
+        async post(req: PostRequest) {
           posts.push(req);
           return { id: 'x', idempotencyKey: req.idempotencyKey } as never;
         },
       },
       now: () => new Date(1_000_000),
       liquidationIdFor: () => 'liq-1',
-    });
+    };
+  }
+
+  it('does not liquidate when mark book empty', async () => {
+    const posts: PostRequest[] = [];
+    const closed: string[] = [];
+    const result = await runLiquidationTick(tickDeps(memoryMarkBook().source(), posts, closed));
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_no_mark');
+    expect(posts).toHaveLength(0);
+    expect(closed).toEqual([]);
+  });
+
+  it('liquidates when index mark is underwater', async () => {
+    const book = memoryMarkBook();
+    book.set({ marketId: 'm1', price: '80', quality: 'index', asOfMs: 1_000_000 });
+    const posts: PostRequest[] = [];
+    const closed: string[] = [];
+    const result = await runLiquidationTick(tickDeps(book.source(), posts, closed));
     expect(result.liquidated).toBe(1);
     expect(closed).toEqual(['pos-1']);
     expect(posts.length).toBeGreaterThan(0);
+  });
+
+  it('formats the gated quote back to the same decimal string the planner used', async () => {
+    const book = memoryMarkBook();
+    book.set({ marketId: 'm1', price: '80.5', quality: 'mid', asOfMs: 1_000_000 });
+    const quoted = await book.source().quote({ marketId: 'm1', at: new Date(1_000_000) });
+    expect(formatAmount(quoted!.price)).toBe('80.5');
   });
 });

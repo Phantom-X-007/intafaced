@@ -9,12 +9,27 @@
  *
  * Out of scope: mark oracle product, matching engine, partial ladder, funding.
  */
-import type { LedgerClient, PostRequest } from '@intafaced/ledger-client';
+import { formatAmount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
 import { planLiquidation, summarizeLiquidation, type LiquidationPosition, type LiquidationDecision } from './liquidation-planner.js';
+import { DEFAULT_FUTURES_MARK_POLICY, acceptableForLiquidation, type FuturesQuotedMark, type MarkPolicy } from './mark-policy.js';
 
 /** External mark for one market. Null → skip that position (never invent). */
 export interface MarkSource {
   markPrice(input: { marketId: string; symbol?: string; at: Date }): Promise<string | null>;
+  /**
+   * The same mark, LABELLED — price, observation time, and how it was derived.
+   *
+   * Optional so every existing adapter still satisfies `MarkSource`. A source
+   * that provides it gets the `mark-policy.ts` gates applied here, with a
+   * stated reason instead of a bare null; a source that does not is limited to
+   * whatever gating it does internally.
+   */
+  quote?(input: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null>;
+}
+
+/** A MarkSource that can say what kind of price it is handing you. */
+export interface QuotedMarkSource extends MarkSource {
+  quote(input: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null>;
 }
 
 export interface LiquidationPositionRow extends LiquidationPosition {
@@ -50,11 +65,19 @@ export interface LiquidationTickDeps {
   now?: () => Date;
   /** Build stable attempt id. Default: liq:{positionId}:{isoMinute} */
   liquidationIdFor?: (row: LiquidationPositionRow, at: Date) => string;
+  /** Gates a labelled mark must clear before it may close a position. */
+  markPolicy?: MarkPolicy;
+  /**
+   * Last mark this position was accepted against, for the deviation breaker.
+   * Absent → the breaker is skipped for that position, exactly as `prices.ts`
+   * skips it on a loan's first mark.
+   */
+  previousMarkFor?: (row: LiquidationPositionRow) => Promise<bigint | null> | bigint | null;
 }
 
 export interface LiquidationTickItemResult {
   positionId: string;
-  outcome: 'skipped_no_mark' | 'skipped_healthy' | 'skipped_already' | 'liquidated' | 'invalid';
+  outcome: 'skipped_no_mark' | 'skipped_mark_unusable' | 'skipped_healthy' | 'skipped_already' | 'liquidated' | 'invalid';
   reason: string;
   summary?: string;
 }
@@ -83,7 +106,45 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
       continue;
     }
 
-    const mark = await deps.marks.markPrice({ marketId: row.marketId, symbol: row.symbol, at });
+    /**
+     * THE GATE, BEFORE ANYTHING IS SEIZED.
+     *
+     * A labelled source is asked for its quote and judged by
+     * `acceptableForLiquidation` — quality, the tighter liquidation staleness
+     * limit, and the deviation breaker. `last` never passes under the default
+     * policy, so a market with no two-sided quote cannot be liquidated at all:
+     * the position sits and an operator looks at it.
+     *
+     * A source with no `quote` still goes through `markPrice`, which is the
+     * behaviour that existed before and is no weaker than it was.
+     *
+     * Either way, ABSENT IS NOT ZERO. There is no branch below that turns a
+     * missing mark into a price — on a perp, valuing a missing mark at zero
+     * does not misprice one position, it liquidates every one of them.
+     */
+    let mark: string | null = null;
+    if (deps.marks.quote) {
+      const quoted = await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at });
+      if (!quoted) {
+        items.push({ positionId: row.positionId, outcome: 'skipped_no_mark', reason: 'no_mark' });
+        continue;
+      }
+      const previous = (await deps.previousMarkFor?.(row)) ?? null;
+      const check = acceptableForLiquidation(quoted, previous, at, deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY);
+      if (!check.ok) {
+        items.push({
+          positionId: row.positionId,
+          outcome: 'skipped_mark_unusable',
+          reason: check.code ?? 'trade.mark_unusable',
+          summary: check.reason,
+        });
+        continue;
+      }
+      mark = formatAmount(quoted.price);
+    } else {
+      mark = await deps.marks.markPrice({ marketId: row.marketId, symbol: row.symbol, at });
+    }
+
     if (mark == null || mark === '') {
       items.push({ positionId: row.positionId, outcome: 'skipped_no_mark', reason: 'no_mark' });
       continue;

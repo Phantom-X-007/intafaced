@@ -78,6 +78,25 @@ const schema = serviceEnvSchema
       TRADE_FUTURES_FUNDING_MARKET_IDS: z.string().default(''),
 
       /**
+       * THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM, and therefore the
+       * ceiling on what a winning position can be paid.
+       *
+       * `ownerType:ownerId:kind[:purpose]`, e.g. `house:fees:trade:available`.
+       *
+       * NO DEFAULT, and that is the decision. `futuresRealizeProfit` used to
+       * draw on a fee pot with no ceiling — a house account is not an insurance
+       * fund and a fee balance is not a risk budget. Which account funds profit,
+       * and how it is capitalised, is a fee and revenue recipe and an owner
+       * decision (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`,
+       * `DIRECTION` §8 item 6). A default here would BE that decision, made
+       * silently by whoever wrote this line.
+       *
+       * Unset, the service refuses to boot rather than picking a pot. See
+       * `futures/profit-source.ts`.
+       */
+      TRADE_FUTURES_PROFIT_SOURCE: z.string().default(''),
+
+      /**
        * Market-maker seed job (trade.mm-bot residual).
        * Default OFF — ops must enable + fund pot + set markets + mids.
        * Never invents mid or market list.

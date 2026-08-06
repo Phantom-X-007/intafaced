@@ -14,6 +14,7 @@ import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
+import { profitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
@@ -66,8 +67,6 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   subAccounts,
 });
 
-const positions = new PositionService(sql, ledger, bus);
-
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
 export const appRouter = createTradeRouter(trade);
@@ -108,6 +107,29 @@ const futuresJobs = startFuturesJobs({
     fundingMarketIds: parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS),
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
+});
+
+/**
+ * WHERE REALISED FUTURES PROFIT COMES FROM.
+ *
+ * Not defaulted. `profitSourceFromConfig` throws when `TRADE_FUTURES_PROFIT_SOURCE`
+ * is unset or names an account the profit recipe does not draw from, and that
+ * throw happens HERE — at boot, before a position can be opened — rather than
+ * on the first profitable close. Which account and how it is capitalised is an
+ * owner decision (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`).
+ */
+const profitSource = profitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
+app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
+
+/**
+ * Positions price from `futuresJobs.marks` — the same venue-fabric-then-depth
+ * port liquidation reads. Constructed after the jobs for that reason: there is
+ * no second price path, and no request body anywhere near one.
+ */
+const positions = new PositionService(sql, ledger, {
+  marks: futuresJobs.marks,
+  profitSource,
+  bus,
 });
 
 // Spot candle materialization — default OFF. REST OHLCV still live from fills.
@@ -233,11 +255,10 @@ registerPrivateRest(app, {
       symbol: input.symbol,
       side: input.side,
       size: parseAmount(input.size),
-      entryPrice: parseAmount(input.entryPrice),
       leverage: parseAmount(input.leverage),
       marginMode: input.marginMode,
     }),
-  closePosition: (principal, positionId, exitPrice) => positions.close(principal.userId, positionId, exitPrice),
+  closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
 });
 
 await app.register(fastifyTRPCPlugin, {
