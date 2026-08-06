@@ -253,3 +253,34 @@ Board-Delta: free product count changed
 
 Enforced by `tooling/ci/value-gate.mjs` on the Docs format workflow (advisory → strict).  
 See `docs/BOARD-CLEAR-PROCESS-LOOPS.md` L0 and `docs/ops/SWARM-MANDATE.md`.
+
+## Serial-Work trailer (code series)
+
+The same gate runs on the CI `gates` job, and there it asks a different question.
+It looks at a **code** PR when two things are true at once:
+
+1. the subject is a near-duplicate of a recent one **once the per-PR detail in
+   brackets is stripped** — `feat: L3 free-TRK wave45 (…)` and `wave12 (…)` are
+   the same series key; and
+2. the change adds new named symbols and **none of them is referenced from a
+   non-test file outside the files it added symbols to**.
+
+Similar titles are fine on their own — real migrations and per-service rollouts
+produce them honestly, and those pass because they wire what they add. Similar
+titles plus nothing calling the result is the same work counted twice.
+
+The first two in a row **warn**. The **fourth consecutive** one is red. If the
+series is genuinely right, say so on the record:
+
+```
+Serial-Work: per-service rollout of the rail adapter, one service per PR by design
+```
+
+The reason is echoed into the CI log and is greppable forever:
+`git log --grep '^Serial-Work:'`. A bare `Serial-Work:` with no reason is not an
+escape. This is **not** a `Board-Delta:` — that trailer is the docs escape and is
+too common to mean anything here.
+
+**Never** satisfied by touching the tracker: `features.mjs` is for mountain
+events only (`docs/COORDINATION-TRUTH-LAYERS.md`), and this gate deliberately
+does not ask about it.

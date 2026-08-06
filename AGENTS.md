@@ -183,6 +183,17 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 7. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
 8. **Re-run all jobs** only for flake or known infra fix.
 
+**Code stamp-mill (value-gate, CI `gates` job — 2026-08-06, from #832–#876).**
+The gate now evaluates near-duplicate subjects on **code** PRs too, not only
+docs-only ones. It is red only when the subject is the Nth in a near-identical
+**series** _and_ **nothing outside the files you touched calls any symbol you
+added** — similarity alone never blocks, so honest migrations and per-service
+rollouts stay green because they wire what they add. Runs 1–2 **WARN**; the
+**fourth consecutive** one blocks. Escape, if the series is genuinely right:
+a `Serial-Work: <why>` commit trailer (auditable —
+`git log --grep '^Serial-Work:'`). It does **not** ask you to touch the tracker:
+`features.mjs` is mountain events only.
+
 ### Coordination PRs — forbidden
 
 **Do not open a PR whose only job is status, keepalive, peace, cycle stamp, FREEZE tip-bump, claims-only meter, or “board unchanged.”**  

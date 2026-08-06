@@ -36,6 +36,8 @@ while true:
 
 **Value gate (L0 metric):** docs-only near-duplicate commits without a `Board-Delta:` trailer are stamp-mill (S-CORE §3). Detector: `tooling/ci/value-gate.mjs` on Docs format CI. A tip SHA / cycle number is not a delta.
 
+**Value gate, code half (L0 metric — added 2026-08-06 after #832–#876):** a near-duplicate **series** subject whose new symbols **nothing outside them calls** is the same stamp-mill in source form. Same detector, wired on the CI `gates` job. Volume is not the metric and neither is taste — reachability is. Warns twice, blocks on the fourth in a row, escapes on an auditable `Serial-Work:` trailer.
+
 **Session end rule:** If context will compact or turn ends, last write is `BOARD-CLEAR-NEXT.md` with the exact next command/ship. Ending without NEXT = **failure**.
 
 ---

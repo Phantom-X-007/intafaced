@@ -85,6 +85,7 @@ We only stop paying for **waste** (remote CI used as a debugger, push storms, do
 | `ci.yml`             | **`pull_request` + `workflow_dispatch` only** — no `push: main` full matrix | Merge used to re-run ~11–12 min billable job-sum on every land |
 | `docs-format.yml`    | **PR only** + exclude FREEZE/claims/R00–R02/DASHBOARD                       | Post-merge doubles + claim-file spam                           |
 | value-gate           | STRICT on Docs format                                                       | Stops freeProduct=0 tip-bump mill (content, not run-count)     |
+| value-gate (code)    | STRICT step in the `ci.yml` `gates` job; both checkouts `fetch-depth: 0`    | Stops the source-side mill (#832–#876). Content, not run-count |
 | pre-push + `pnpm pr` | thrift meter + WARN only (never exit-1 on counts)                           | Visible habit signal; never a delivery gate                    |
 | Caps                 | soft/warn refs only (120 / 220 / docs 120 / ci 160)                         | Loud meter — no hard stop                                      |
 
