@@ -572,10 +572,13 @@ if (!available) {
       expect((await p2p.getOffer(offer.id)).remainingAmt).toBe(amt('500'));
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
 
-      // THE LOG ROW SURVIVED THE ROLLBACK. It is written on the service's own
-      // connection, not the reserve transaction — a log row written inside the
-      // transaction the throw aborts would vanish with it, which is precisely
-      // what "unlogged" meant.
+      // THE LOG ROW SURVIVED THE ROLLBACK. Not written on the reserve
+      // transaction — a log row written inside the transaction the throw aborts
+      // would vanish with it, which is precisely what "unlogged" meant. Nor
+      // written while that transaction is still open and holding a pool
+      // connection, which was #805's own defect: it is queued by `refuseTake`
+      // and written by `duringTake` once the transaction has let go. See
+      // `take-refusal-deadlock.test.ts`.
       const log = await instruments.accessLogFor(SELLER);
       expect(log).toHaveLength(1);
       expect(log[0]).toMatchObject({

@@ -42,6 +42,7 @@ import {
   type XpPolicy,
 } from './reputation.js';
 import { methodIdKey } from './instruments.js';
+import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
 /**
@@ -120,21 +121,38 @@ export class P2pError extends Error {
  * interface this file cannot call.
  */
 export interface TradeInstrumentAttacher {
+  /**
+   * THE FLUSH BOUNDARY, and the only source of a `DenialSink`.
+   *
+   * `reserveTrade`'s transaction runs inside this. A refusal raised in there
+   * cannot write its own access-log row: writing on `tx` loses the row to the
+   * abort the refusal itself causes, and writing on the service's pool asks for
+   * a second connection while this transaction holds the first — which, ten
+   * concurrent refusals deep on a pool of ten, is a permanent deadlock nothing
+   * times out of. So a refusal queues its row on the sink, and this wrapper
+   * writes it after the transaction has settled and released its connection.
+   */
+  duringTake<T>(run: (sink: DenialSink) => Promise<T>): Promise<T>;
+
   attachToTrade(
     tx: Sql,
-    input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string },
+    input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string; sink: DenialSink },
   ): Promise<{ instrumentId: string; fingerprint: string }>;
 
   /**
-   * THE ONE REFUSAL. Logs the attempt against the seller, then throws.
+   * THE ONE REFUSAL. Queues the attempt against the seller, then throws.
    *
-   * On the interface rather than built here because it writes an access-log
+   * On the interface rather than built here because it produces an access-log
    * row, and this file must not own a second way to describe a payment
    * instrument. Both reasons a take can fail on the method — the OFFER not
    * accepting it, and the SELLER not holding a destination for it — go through
    * it, so a caller cannot tell them apart.
+   *
+   * The `sink` is required by the type system rather than by a comment: a
+   * refusal that cannot be raised without one cannot be raised outside the
+   * `duringTake` scope that ends by writing it down.
    */
-  refuseTake(input: { takerId: string; sellerId: string; tradeId?: string }): Promise<never>;
+  refuseTake(input: { takerId: string; sellerId: string; tradeId?: string; sink: DenialSink }): Promise<never>;
 }
 
 export interface P2pServiceOptions {
@@ -634,105 +652,125 @@ export class P2pService {
     const referencePrice =
       preview.priceType === 'float' ? ((await this.referencePrices?.price(preview.asset, preview.fiatCurrency)) ?? null) : null;
 
-    return transaction(
-      this.sql,
-      async (tx) => {
-        const rows = await tx<OfferRow[]>`SELECT * FROM p2p.offers WHERE id = ${input.offerId} FOR UPDATE`;
-        const row = rows[0];
-        if (!row) throw new P2pError(`Offer ${input.offerId} not found`, 'p2p.offer_not_found');
+    /**
+     * `duringTake` wraps the transaction, not the other way round.
+     *
+     * A refused take has to be written to the access log and the row has to
+     * survive the abort the refusal causes, so it cannot go on `tx`. It also
+     * cannot go on the service's own pool from in here: this transaction is
+     * holding a connection, and a second request against the same pool is a
+     * queue entry that only clears when this transaction ends — which it cannot
+     * do, because it is waiting on that request. Ten of those, on the default
+     * pool of ten, and svc-p2p never serves another request; the ten offers
+     * stay row-locked too. Neither `statement_timeout` nor the transaction
+     * retry can reach it, because no statement is running.
+     *
+     * So the refusal is queued in memory and written by `duringTake`'s
+     * `finally`, once `transaction` has rolled back and given the connection
+     * back. Same row, same reason, one connection at a time.
+     */
+    return this.instruments.duringTake((sink) =>
+      transaction(
+        this.sql,
+        async (tx) => {
+          const rows = await tx<OfferRow[]>`SELECT * FROM p2p.offers WHERE id = ${input.offerId} FOR UPDATE`;
+          const row = rows[0];
+          if (!row) throw new P2pError(`Offer ${input.offerId} not found`, 'p2p.offer_not_found');
 
-        const offer = toOffer(row);
-        if (offer.status !== 'active') {
-          throw new P2pError(`Offer ${offer.id} is ${offer.status} and cannot be taken`, 'p2p.offer_not_active');
-        }
-        if (offer.makerId === input.takerId) {
-          // Self-trading manufactures a completion record, and a flawless P2P
-          // record raises limits platform-wide (§6.2 → §4.1).
-          throw new P2pError('A maker cannot take their own offer', 'p2p.self_trade');
-        }
-        // Computed here rather than after pricing, because the refusal below
-        // has to name the seller in the access log.
-        const { sellerId, buyerId } = partiesFor(offer.side, offer.makerId, input.takerId);
+          const offer = toOffer(row);
+          if (offer.status !== 'active') {
+            throw new P2pError(`Offer ${offer.id} is ${offer.status} and cannot be taken`, 'p2p.offer_not_active');
+          }
+          if (offer.makerId === input.takerId) {
+            // Self-trading manufactures a completion record, and a flawless P2P
+            // record raises limits platform-wide (§6.2 → §4.1).
+            throw new P2pError('A maker cannot take their own offer', 'p2p.self_trade');
+          }
+          // Computed here rather than after pricing, because the refusal below
+          // has to name the seller in the access log.
+          const { sellerId, buyerId } = partiesFor(offer.side, offer.makerId, input.takerId);
 
-        if (!methodAllowed(offer.methods, input.method)) {
-          // NOT a distinct error any more. "The offer does not accept that
-          // method" and "the seller holds no destination for that method" are
-          // the same sentence to the caller, deliberately: any difference
-          // between them is a bit of information about someone else's bank
-          // accounts, handed out for free. See `TAKE_REFUSED_MESSAGE`.
-          await this.instruments.refuseTake({ takerId: input.takerId, sellerId, tradeId: input.tradeId });
-        }
+          if (!methodAllowed(offer.methods, input.method)) {
+            // NOT a distinct error any more. "The offer does not accept that
+            // method" and "the seller holds no destination for that method" are
+            // the same sentence to the caller, deliberately: any difference
+            // between them is a bit of information about someone else's bank
+            // accounts, handed out for free. See `TAKE_REFUSED_MESSAGE`.
+            await this.instruments.refuseTake({ takerId: input.takerId, sellerId, tradeId: input.tradeId, sink });
+          }
 
-        // BEFORE ANY LOCK. Both bounds and the remaining liquidity, under the
-        // row lock, so two concurrent takers cannot both pass the same check.
-        assertWithinBounds(input.amount, { minAmt: offer.minAmt, maxAmt: offer.maxAmt, remainingAmt: offer.remainingAmt });
+          // BEFORE ANY LOCK. Both bounds and the remaining liquidity, under the
+          // row lock, so two concurrent takers cannot both pass the same check.
+          assertWithinBounds(input.amount, { minAmt: offer.minAmt, maxAmt: offer.maxAmt, remainingAmt: offer.remainingAmt });
 
-        const priced = quote({
-          amount: input.amount,
-          priceType: offer.priceType,
-          price: offer.price,
-          referencePrice,
-          fiatCurrency: offer.fiatCurrency,
-        });
+          const priced = quote({
+            amount: input.amount,
+            priceType: offer.priceType,
+            price: offer.price,
+            referencePrice,
+            fiatCurrency: offer.fiatCurrency,
+          });
 
-        const now = await txNow(tx);
-        const deadlineAt = deadlineFor('created', now, this.deadlines);
-        const deadlines = withDeadline({}, 'created', deadlineAt);
-        const feeBps = input.feeBps ?? this.feeBps;
+          const now = await txNow(tx);
+          const deadlineAt = deadlineFor('created', now, this.deadlines);
+          const deadlines = withDeadline({}, 'created', deadlineAt);
+          const feeBps = input.feeBps ?? this.feeBps;
 
-        await tx`
-          UPDATE p2p.offers
-             SET remaining_amt = remaining_amt - ${formatAmount(input.amount)}::numeric,
-                 updated_at = now()
-           WHERE id = ${offer.id}
-        `;
+          await tx`
+            UPDATE p2p.offers
+               SET remaining_amt = remaining_amt - ${formatAmount(input.amount)}::numeric,
+                   updated_at = now()
+             WHERE id = ${offer.id}
+          `;
 
-        const inserted = await tx<TradeRow[]>`
-          INSERT INTO p2p.p2p_trades (
-            id, offer_id, taker_id, maker_id, seller_id, buyer_id, asset, fiat_currency,
-            amount, price, fiat_amount, method, fee_bps, status, deadlines, deadline_at, created_at
-          )
-          VALUES (
-            ${input.tradeId}, ${offer.id}, ${input.takerId}, ${offer.makerId}, ${sellerId}, ${buyerId},
-            ${offer.asset}, ${offer.fiatCurrency},
-            ${formatAmount(priced.amount)}::numeric, ${formatAmount(priced.price)}::numeric,
-            ${formatAmount(priced.fiatAmount)}::numeric, ${input.method}, ${feeBps},
-            'created', ${tx.json(deadlines as never)}, ${deadlineAt}, ${now}
-          )
-          ON CONFLICT (id) DO NOTHING
-          RETURNING *
-        `;
+          const inserted = await tx<TradeRow[]>`
+            INSERT INTO p2p.p2p_trades (
+              id, offer_id, taker_id, maker_id, seller_id, buyer_id, asset, fiat_currency,
+              amount, price, fiat_amount, method, fee_bps, status, deadlines, deadline_at, created_at
+            )
+            VALUES (
+              ${input.tradeId}, ${offer.id}, ${input.takerId}, ${offer.makerId}, ${sellerId}, ${buyerId},
+              ${offer.asset}, ${offer.fiatCurrency},
+              ${formatAmount(priced.amount)}::numeric, ${formatAmount(priced.price)}::numeric,
+              ${formatAmount(priced.fiatAmount)}::numeric, ${input.method}, ${feeBps},
+              'created', ${tx.json(deadlines as never)}, ${deadlineAt}, ${now}
+            )
+            ON CONFLICT (id) DO NOTHING
+            RETURNING *
+          `;
 
-        if (!inserted[0]) {
-          // A retry of the same take. The inventory was already reserved by the
-          // original, so it must not be reserved again — abort the transaction
-          // rather than let the decrement above stand.
-          throw new P2pError(`Trade ${input.tradeId} already exists`, 'p2p.trade_exists');
-        }
+          if (!inserted[0]) {
+            // A retry of the same take. The inventory was already reserved by the
+            // original, so it must not be reserved again — abort the transaction
+            // rather than let the decrement above stand.
+            throw new P2pError(`Trade ${input.tradeId} already exists`, 'p2p.trade_exists');
+          }
 
-        // WHERE THE BUYER WILL SEND THE MONEY, frozen onto the trade in the same
-        // transaction that created it. Two things follow from it being here:
-        //
-        //   · a trade with no destination is not a state that can be committed,
-        //     so the buyer is never shown a payment step with nothing in it;
-        //   · a seller with no destination is refused BEFORE any lock, with the
-        //     rest of phase A. The alternative is escrowing their asset against
-        //     a payment nobody can make and letting them find out fifteen
-        //     minutes later, via a timeout, that it was knowable up front.
-        //
-        // The snapshot is taken now and never re-read, which is also what stops
-        // a seller swapping the destination once the buyer has started paying.
-        await this.instruments.attachToTrade(tx, {
-          tradeId: input.tradeId,
-          sellerId,
-          takerId: input.takerId,
-          methodId: input.method,
-          fiatCurrency: offer.fiatCurrency,
-        });
+          // WHERE THE BUYER WILL SEND THE MONEY, frozen onto the trade in the same
+          // transaction that created it. Two things follow from it being here:
+          //
+          //   · a trade with no destination is not a state that can be committed,
+          //     so the buyer is never shown a payment step with nothing in it;
+          //   · a seller with no destination is refused BEFORE any lock, with the
+          //     rest of phase A. The alternative is escrowing their asset against
+          //     a payment nobody can make and letting them find out fifteen
+          //     minutes later, via a timeout, that it was knowable up front.
+          //
+          // The snapshot is taken now and never re-read, which is also what stops
+          // a seller swapping the destination once the buyer has started paying.
+          await this.instruments.attachToTrade(tx, {
+            tradeId: input.tradeId,
+            sellerId,
+            takerId: input.takerId,
+            methodId: input.method,
+            fiatCurrency: offer.fiatCurrency,
+            sink,
+          });
 
-        return toTrade(inserted[0]);
-      },
-      { isolation: 'read committed', maxAttempts: 5 },
+          return toTrade(inserted[0]);
+        },
+        { isolation: 'read committed', maxAttempts: 5 },
+      ),
     );
   }
 
