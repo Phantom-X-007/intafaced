@@ -61,6 +61,7 @@
     "scan:i18n-bypass": "node tooling/ci/i18n-bypass-scan.mjs",
     "scan:shell-i18n": "node tooling/ci/shell-i18n-scan.mjs",
     "order-path-smoke": "node tooling/scripts/order-path-smoke.mjs",
+    "perf:book": "node tooling/perf/book-bench.mjs",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:check": "node tooling/ci/migration-check.mjs",
