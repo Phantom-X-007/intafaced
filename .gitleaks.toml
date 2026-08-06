@@ -32,4 +32,15 @@ regexes = [
   '''titleKey:\s*'notify\.''',
   # Hardhat/anvil well-known account #1 private key (local sandbox only)
   '''0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d''',
+  # Published Keccak-256 vectors — Keccak('') and Keccak('abc'). These are
+  # REFERENCE values, not credentials: `wallet-rpc-mainnet-scan.mjs` hashes them
+  # at load and refuses to run if its own implementation disagrees, so that
+  # M11-known cannot name the wrong canonical constant. They are the two most
+  # widely published digests in the ecosystem and are secret from nobody.
+  #
+  # Listed individually rather than exempting 64-hex generally. A blanket rule
+  # would also hide every real SHA-256 and private key in the repo, which is
+  # most of what this file exists to catch.
+  '''c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470''',
+  '''4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45''',
 ]
