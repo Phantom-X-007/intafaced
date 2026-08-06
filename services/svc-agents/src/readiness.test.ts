@@ -163,7 +163,7 @@ describe('agentsReadiness — honest about mock vs useful', () => {
 
 describe('L3 wave54 agents readiness status/export', () => {
   it('board card for mock useful path', () => {
-    const mock = new MockModelProvider('primary');
+    const mock = new MockModelProvider({ id: 'primary' });
     const r = agentsReadiness({
       providerMode: 'mock',
       providers: [mock],
