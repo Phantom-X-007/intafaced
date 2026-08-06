@@ -230,6 +230,18 @@ export const GATES = [
       '15 credential-shaped-but-correct fixtures must NOT fire.',
   },
   {
+    id: 'money-property-mutation',
+    script: 'tooling/ci/money-property.mutation.mjs',
+    doctrine: '§4.2',
+    why:
+      'the mutation proof for the money property suite, by the same argument as secret-scan-mutation one layer ' +
+      'down. Property tests are unusually good at looking rigorous while asserting little: `floor <= half-up <= ceil` ' +
+      'reads like a claim about rounding and is satisfied by an implementation that ignores its rounding argument. ' +
+      'Measured, not assumed — the first version of money.property.test.ts caught 3 of these 6 mutants, and a ' +
+      'mulBps that ignores the caller, a parseAmount that truncates over-precision, and a proRata that pays the ' +
+      'SMALLEST remainders all survived eighteen green properties. 6 planted defects, all must die.',
+  },
+  {
     id: 'i18n-bypass',
     script: 'tooling/ci/i18n-bypass-scan.mjs',
     doctrine: '§9, §14.4',
