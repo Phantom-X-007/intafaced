@@ -89,6 +89,20 @@ describe('an enforced environment must state what it depends on', () => {
     expect(result.data.NOTIFY_EMAIL_GATEWAY_URL).toBeUndefined();
   });
 
+  it('does not accept separators as a statement either — `,` is typed, so blankAsAbsent lets it through', () => {
+    // The gap `blankAsAbsent` cannot see. `""` is absent; `","` is something the
+    // operator typed, and "typed something" was being read as "stated a
+    // posture". It names no channel, so prod booted depending on none — the
+    // silent outage the variable exists to prevent. `none` is how you say none.
+    const result = parse({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: ',' });
+    expect(result.success).toBe(false);
+    expect(messages(result)).toMatch(/unknown channel\(s\)/);
+  });
+
+  it('still accepts a stray comma inside a real list — a typo in a stated posture is not an absent one', () => {
+    expect(parse({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms,', ...CREDS }).success).toBe(true);
+  });
+
   it('rejects a channel name that does not exist rather than silently requiring nothing', () => {
     const result = parse({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'email,telegraph' });
     expect(result.success).toBe(false);
