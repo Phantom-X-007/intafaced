@@ -195,7 +195,17 @@ export type TradeErrorCode =
   /** Missing or foreign sub-account (existence not leaked) */
   | 'trade.sub_account_denied'
   /** Caller owns the id but it is soft-revoked */
-  | 'trade.sub_account_revoked';
+  | 'trade.sub_account_revoked'
+  /**
+   * Two DIFFERENT matches claimed one `(market, sequence, role)`.
+   *
+   * Not a redelivery — that case is absorbed silently and correctly. This is
+   * the engine's business key being REUSED, which means `fillIdFor(market,
+   * seq)` no longer identifies one match and the ledger's `trade.fill:<id>`
+   * key would fold two trades onto one transaction. Loud on purpose; see
+   * `settleFill`.
+   */
+  | 'trade.fill_sequence_conflict';
 
 export class TradeError extends Error {
   constructor(
