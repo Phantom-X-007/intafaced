@@ -78,6 +78,11 @@ export const merchants = pay.table(
     /** Where and how often the merchant wants paying out. */
     settlementPrefs: jsonb('settlement_prefs').notNull().default({}),
     status: merchantStatusEnum('status').notNull().default('pending'),
+    /**
+     * Merchant-supplied KYB reference (case id / dossier handle). NOT a verified
+     * partner decision — `kyb_status` is the state machine; digital KYB is `pay.psp`.
+     */
+    kybRef: text('kyb_ref'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

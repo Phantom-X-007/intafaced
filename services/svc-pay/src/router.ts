@@ -291,6 +291,81 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           }),
         ),
 
+      /** Current merchant for the principal — null when not yet onboarded. */
+      me: scopedProcedure('pay:read', { module: 'pay' })
+        .output(
+          z
+            .object({
+              id: z.string().uuid(),
+              userId: z.string().uuid(),
+              mode: z.enum(['gateway', 'psp', 'payfac']),
+              status: z.enum(['pending', 'active', 'suspended', 'closed']),
+              kybStatus: z.enum(['none', 'pending', 'approved', 'rejected']),
+              kybRef: z.string().nullable(),
+              feeBps: z.number(),
+            })
+            .nullable(),
+        )
+        .query(({ ctx }) =>
+          wrap(async () => {
+            const userId = ctx.principal?.userId;
+            if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+            const merchant = await pay.getMerchantByUserId(userId);
+            if (!merchant) return null;
+            return {
+              id: merchant.id,
+              userId: merchant.userId,
+              mode: merchant.mode,
+              status: merchant.status,
+              kybStatus: merchant.kybStatus,
+              kybRef: merchant.kybRef,
+              feeBps: merchant.pricing.feeBps ?? 0,
+            };
+          }),
+        ),
+
+      /**
+       * KYB stub submit — dossier reference only. Does not invent a partner decision.
+       * Digital KYB vendors are `pay.psp`.
+       */
+      submitKyb: scopedProcedure('pay:write', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().uuid(), kybRef: z.string().min(1).max(128) }))
+        .output(
+          z.object({
+            id: z.string().uuid(),
+            kybStatus: z.enum(['none', 'pending', 'approved', 'rejected']),
+            kybRef: z.string().nullable(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            const merchant = await pay.submitKyb(input);
+            return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
+          }),
+        ),
+
+      /**
+       * KYB stub decide — allowed only when valueMovement is allow-sandbox.
+       * Under live-only → `pay.kyb_operator_required` (honest refuse).
+       */
+      decideKybStub: scopedProcedure('pay:write', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().uuid(), decision: z.enum(['approved', 'rejected']) }))
+        .output(
+          z.object({
+            id: z.string().uuid(),
+            kybStatus: z.enum(['none', 'pending', 'approved', 'rejected']),
+            kybRef: z.string().nullable(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            const merchant = await pay.decideKybStub(input);
+            return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
+          }),
+        ),
+
       profile: scopedProcedure('pay:write', { module: 'pay' })
         .input(
           z.object({
@@ -489,6 +564,23 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             const payment = await pay.getPayment(input.paymentId);
             await assertMerchantOwner(pay, ctx.principal.userId, payment.merchantId);
             return toPaymentOut(payment);
+          }),
+        ),
+
+      /** Durable status list for the merchant — projection of `payments.status`. */
+      list: scopedProcedure('pay:read', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            status: z.enum(['created', 'authorized', 'captured', 'settled', 'refunded', 'disputed', 'failed']).optional(),
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
+        .output(z.array(paymentView))
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            await assertMerchantOwner(pay, ctx.principal.userId, input.merchantId);
+            return (await pay.listPayments(input)).map(toPaymentOut);
           }),
         ),
 
@@ -898,7 +990,10 @@ function toTrpcError(err: unknown): unknown {
         return 'UNAUTHORIZED' as const;
       case 'pay.merchant_inactive':
       case 'pay.rail_not_creditable':
+      case 'pay.kyb_operator_required':
         return 'FORBIDDEN' as const;
+      case 'pay.kyb_invalid':
+        return 'CONFLICT' as const;
       default:
         return 'BAD_REQUEST' as const;
     }

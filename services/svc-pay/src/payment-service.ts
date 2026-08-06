@@ -68,6 +68,9 @@ export type PayErrorCode =
   | 'pay.merchant_not_found'
   | 'pay.merchant_inactive'
   | 'pay.merchant_pricing_invalid'
+  /** KYB transition refused (wrong status, or stub decide blocked under live-only). */
+  | 'pay.kyb_invalid'
+  | 'pay.kyb_operator_required'
   | 'pay.payment_not_found'
   | 'pay.profile_not_found'
   | 'pay.link_not_found'
@@ -141,6 +144,8 @@ export interface MerchantRecord {
   mode: 'gateway' | 'psp' | 'payfac';
   tier: number;
   kybStatus: 'none' | 'pending' | 'approved' | 'rejected';
+  /** Merchant-supplied dossier handle. Null until submitKyb. */
+  kybRef: string | null;
   status: 'pending' | 'active' | 'suspended' | 'closed';
   pricing: MerchantPricing;
   settlementPrefs: Record<string, unknown>;
@@ -350,6 +355,7 @@ interface MerchantRow {
   mode: MerchantRecord['mode'];
   tier: number;
   kyb_status: MerchantRecord['kybStatus'];
+  kyb_ref: string | null;
   status: MerchantRecord['status'];
   pricing: Record<string, unknown>;
   settlement_prefs: Record<string, unknown>;
@@ -439,7 +445,7 @@ export class PayService {
     `;
 
     const rows = await this.sql<MerchantRow[]>`
-      SELECT id, user_id, mode, tier, kyb_status, status, pricing, settlement_prefs
+      SELECT id, user_id, mode, tier, kyb_status, kyb_ref, status, pricing, settlement_prefs
         FROM pay.merchants WHERE user_id = ${input.userId}
     `;
     const row = rows[0];
@@ -449,12 +455,99 @@ export class PayService {
 
   async getMerchant(merchantId: string): Promise<MerchantRecord> {
     const rows = await this.sql<MerchantRow[]>`
-      SELECT id, user_id, mode, tier, kyb_status, status, pricing, settlement_prefs
+      SELECT id, user_id, mode, tier, kyb_status, kyb_ref, status, pricing, settlement_prefs
         FROM pay.merchants WHERE id = ${merchantId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Merchant ${merchantId} not found`, 'pay.merchant_not_found');
     return toMerchant(row);
+  }
+
+  async getMerchantByUserId(userId: string): Promise<MerchantRecord | null> {
+    const rows = await this.sql<MerchantRow[]>`
+      SELECT id, user_id, mode, tier, kyb_status, kyb_ref, status, pricing, settlement_prefs
+        FROM pay.merchants WHERE user_id = ${userId}
+    `;
+    const row = rows[0];
+    return row ? toMerchant(row) : null;
+  }
+
+  /**
+   * KYB stub — merchant submits a dossier reference. Moves `none|rejected → pending`.
+   * Does NOT invent a partner decision. Digital KYB / KYB vendors are `pay.psp`.
+   */
+  async submitKyb(input: { merchantId: string; kybRef: string }): Promise<MerchantRecord> {
+    const ref = input.kybRef.trim();
+    if (!ref || ref.length > 128) {
+      throw new PayError('kybRef must be 1–128 characters', 'pay.kyb_invalid');
+    }
+    const merchant = await this.getMerchant(input.merchantId);
+    if (merchant.kybStatus === 'pending' || merchant.kybStatus === 'approved') {
+      throw new PayError(`Merchant KYB is already ${merchant.kybStatus}`, 'pay.kyb_invalid', {
+        kybStatus: merchant.kybStatus,
+      });
+    }
+    await this.sql`
+      UPDATE pay.merchants
+         SET kyb_status = 'pending', kyb_ref = ${ref}, updated_at = now()
+       WHERE id = ${input.merchantId}
+    `;
+    return this.getMerchant(input.merchantId);
+  }
+
+  /**
+   * KYB stub decide — sandbox/dev path only under `allow-sandbox` valueMovement.
+   * Under live-only this refuses: a real operator / `pay.psp` path is required.
+   * Never invents an external KYB vendor response.
+   */
+  async decideKybStub(input: { merchantId: string; decision: 'approved' | 'rejected' }): Promise<MerchantRecord> {
+    if (this.valueMovement === 'live-only') {
+      throw new PayError(
+        'KYB decide stub is disabled under live-only; use the digital KYB path (pay.psp) or an operator tool',
+        'pay.kyb_operator_required',
+      );
+    }
+    const merchant = await this.getMerchant(input.merchantId);
+    if (merchant.kybStatus !== 'pending') {
+      throw new PayError(`Merchant KYB must be pending to decide (is ${merchant.kybStatus})`, 'pay.kyb_invalid', {
+        kybStatus: merchant.kybStatus,
+      });
+    }
+    await this.sql`
+      UPDATE pay.merchants
+         SET kyb_status = ${input.decision}, updated_at = now()
+       WHERE id = ${input.merchantId}
+    `;
+    return this.getMerchant(input.merchantId);
+  }
+
+  /**
+   * Merchant payment list — durable status projection for the acquiring surface.
+   * Status is whatever `payments.status` currently projects from `payment_events`.
+   */
+  async listPayments(input: { merchantId: string; status?: PaymentStatus; limit?: number }): Promise<PaymentView[]> {
+    await this.getMerchant(input.merchantId);
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const rows = input.status
+      ? await this.sql<PaymentRow[]>`
+          SELECT id, merchant_id, profile_id, amount::text, currency, method, rail_adapter, rail_ref, status, created_at
+            FROM pay.payments
+           WHERE merchant_id = ${input.merchantId} AND status = ${input.status}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<PaymentRow[]>`
+          SELECT id, merchant_id, profile_id, amount::text, currency, method, rail_adapter, rail_ref, status, created_at
+            FROM pay.payments
+           WHERE merchant_id = ${input.merchantId}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    const out: PaymentView[] = [];
+    for (const row of rows) {
+      out.push(await this.view(this.sql, row));
+    }
+    return out;
   }
 
   async createProfile(input: {
@@ -2127,6 +2220,7 @@ function toMerchant(row: MerchantRow): MerchantRecord {
     mode: row.mode,
     tier: Number(row.tier),
     kybStatus: row.kyb_status,
+    kybRef: row.kyb_ref ?? null,
     status: row.status,
     pricing: { feeBps: typeof feeBps === 'number' ? feeBps : undefined },
     settlementPrefs: row.settlement_prefs ?? {},

@@ -362,7 +362,30 @@ export const FEATURES = [
     status: 'wip',
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M1 — Nitro agents after #346 handoff. Crypto rail on main (#226). Card sandbox residual Class M. Not go-live.',
+    note:
+      'Updated 2026-08-06 after #346 (M1, shehzad002) landed. WHAT IS REAL, and it is most of the row: the tRPC router is mounted ' +
+      '(`index.ts` registers it on `/trpc`, the edge routes `/api/pay` there), and `checkout.open`/`checkout.status`, ' +
+      '`merchant.create|me|submitKyb|decideKybStub|profile|createLink|listLinks|deactivateLink` and ' +
+      '`payment.create|authorize|capture|refund|get|list|history` all serve from it. #346 added `merchant.me`, the KYB transitions ' +
+      '(`submitKyb`/`decideKybStub`, the latter honest-refusing under live-only with `pay.kyb_operator_required`), durable ' +
+      '`payment.list`, `getMerchantByUserId`, `scripts/card-sandbox-e2e.mjs` and migration `0005_pay_merchant_kyb`. ' +
+      '#800 supplied the merchant-state writer the surface had been missing, so `merchants.status` is now written and historied ' +
+      '(`merchant_status_events`, append-only by trigger, migration `0006`). 514 svc-pay tests green. ' +
+      'WHY IT IS STILL `wip` AND NOT `done`, two reasons, both checked in code rather than inferred: ' +
+      '(1) CARD ACQUIRING IS ABSENT, NOT SANDBOX. `PAY_REGISTER_CARD_SANDBOX` defaults to off in staging/prod, `PAY_CHECKOUT_RAILS` ' +
+      'defaults to `crypto-native:crypto` so the public hosted checkout never sees a card, and `PAY_ALLOW_SANDBOX_RAILS=false` makes ' +
+      'staging/prod refuse to BOOT while any registered rail declares itself sandbox. So in every posture that ships, this gateway is ' +
+      'crypto-only; the card half exists in dev/test alone and its replacement is `socket.psp-partners`, which ADR ' +
+      '`docs/adr/2026-08-04-pay-rails-and-psp-socket.md` (Accepted) rules is a sponsor bank and an acquiring BIN — a commercial ' +
+      'relationship no code closes. The tracker permits a rail that is *sandbox* under `done`; it does not cover one that is absent, ' +
+      'and #800 widened `RailMode` with `absent` precisely so the two stop reporting the same thing. ' +
+      '(2) `kybStatus` HAS NO CONSUMER. `submitKyb`/`decideKybStub` move it and the read surfaces echo it, but nothing else reads it — ' +
+      '`payment.create`, `checkout.open`, `settlement.run` and the withdrawal path all gate on `merchants.status`, never on KYB. ' +
+      'A merchant sitting at `kybStatus: rejected` transacts exactly like an approved one, so merchant onboarding is not KYB-gated at all ' +
+      'yet. Digital KYB is `pay.psp`; wiring the existing flag into the money gates is this row. ' +
+      'Neither residual is a defect in #346 — its code is reachable, tested and unpropped on its own terms. They are what stands between ' +
+      'this row and `done`, and naming them is cheaper than a `done` the board would have to walk back. ' +
+      '**Reclaimed 2026-08-04** from Shehzad M1 — Nitro agents after the #346 handoff. Class M. Not go-live.',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
@@ -1064,6 +1087,20 @@ export const FEATURES = [
     phase: '5',
     status: 'socket',
     dependsOn: ['pay.rails'],
+    note:
+      '§13 — a sponsor bank and an acquiring BIN are a commercial relationship; no code closes this. Written 2026-08-06 under ADR ' +
+      'docs/adr/2026-08-04-pay-rails-and-psp-socket.md (D-S-10, Accepted), which named this row as the least-documented socket on the ' +
+      'board: four keys and no reason, with the blocker recorded only inside a runtime error string. §13 requires the reason in writing, ' +
+      'so here it is rather than one throw site away. THE ADR ALSO SETTLED WHAT DOES NOT CLOSE IT: an orchestrator is not an acquirer. ' +
+      'Hyperswitch is refused — Doctrine line 755 bars a third-party connectivity library in the money path, its connectors are not ' +
+      'extractable from `hyperswitch_domain_models`, and adopting it would buy a hundred and twenty ways to reach acquirers we still have ' +
+      'no relationship with. §24 Lane B already put principal membership / own acquiring licences on this socket, and a library cannot be ' +
+      'on that path. Reopening the Hyperswitch question is an owner call, not an agent one. WHAT EXISTS WITHOUT IT: the seam is named and ' +
+      'refuses by name — `RailOperationUnsupportedError` in services/svc-pay/src/rails/rail-adapter.ts points card operations (partial ' +
+      'capture, void, 3DS/SCA, disputes) at this socket instead of answering plausibly, and `RailMode` carries `absent` distinctly from ' +
+      '`sandbox` so a missing acquirer cannot read as a working one. card-sandbox is dev/test only: PAY_REGISTER_CARD_SANDBOX defaults off ' +
+      'in staging/prod, PAY_CHECKOUT_RAILS is crypto-native alone, and PAY_ALLOW_SANDBOX_RAILS=false makes those environments refuse to ' +
+      'boot with a sandbox rail registered. Pointing any rail at real money is Class X.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {
