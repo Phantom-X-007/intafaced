@@ -93,6 +93,47 @@ export const DEFAULT_INSTRUMENT_RETENTION_DAYS = 90;
 /** Who was looking. Recorded on every access-log row, allowed or refused. */
 export type ViewerRole = 'owner' | 'counterparty' | 'moderator' | 'other';
 
+/**
+ * WHERE A REFUSAL WAITS FOR A FREE CONNECTION.
+ *
+ * A refused take has to be written down (#805) and it has to survive the abort
+ * that the refusal itself causes — so the row cannot be written on the caller's
+ * transaction, which is the one being rolled back. The first fix wrote it on
+ * `this.sql` instead. That is right about durability and wrong about
+ * connections: `refuseTake` runs INSIDE `reserveTrade`'s transaction, that
+ * transaction is holding a pool connection, and asking the same pool for a
+ * second one is a request that only completes when somebody lets go.
+ *
+ * Nobody lets go. `DATABASE_POOL_MAX` defaults to 10, so ten concurrent refused
+ * takes against ten DIFFERENT offers hold all ten connections and each queues
+ * for an eleventh. The transactions then sit `idle in transaction` — no
+ * statement is running, so `statement_timeout` cannot fire, and postgres.js's
+ * own queue has no timeout at all. The service does not recover, and the ten
+ * offer rows stay locked, so those offers die with it. Cost to the attacker:
+ * ten `trades.take` calls naming a method the offers do not list. `methodAllowed`
+ * is checked before the bounds check, so no funds, no valid amount, and no
+ * instrument are required.
+ *
+ * So the row is neither written inside the transaction nor written while it is
+ * open. It is COLLECTED here — a plain in-memory push, no connection — and
+ * flushed by `duringTake` once the transaction has ended and handed its
+ * connection back. Durable across the abort, and never contending for the pool
+ * with the transaction it is describing.
+ */
+export interface DenialSink {
+  readonly pending: PendingDenial[];
+}
+
+/** One access-log row, held until a connection is free to write it. */
+export interface PendingDenial {
+  instrumentId?: string;
+  ownerId?: string;
+  viewerId: string;
+  viewerRole: ViewerRole;
+  tradeId?: string | null;
+  reason: string;
+}
+
 /** What a list endpoint may return: everything EXCEPT the field values. */
 export interface InstrumentHeader {
   id: string;
@@ -519,9 +560,43 @@ export class InstrumentService {
    * works and an offer that cannot be taken by anyone, decided by a capital
    * letter nobody was ever told mattered.
    */
+  /**
+   * RUN A TAKE, AND WRITE DOWN ANY REFUSAL IT PRODUCED — AFTERWARDS.
+   *
+   * The flush point, and the only way to get a `DenialSink`. `refuseTake` needs
+   * one and the compiler will not let you call it without one, so a refusal
+   * cannot be raised outside a scope that ends by flushing it. That is the
+   * property worth having: #805's guarantee ("a refused take is logged") is not
+   * re-established by remembering to log at each throw site, it is
+   * re-established by there being nowhere to throw from that is not wrapped.
+   *
+   * The `finally` runs after `run` has settled. When `run` is a
+   * `transaction(…)`, settling means postgres.js has already issued the
+   * ROLLBACK and returned the connection to the pool — so the INSERT below asks
+   * for a connection the caller is no longer holding. That ordering is the
+   * whole fix; see `DenialSink`.
+   *
+   * The row lands after the abort rather than before it, which moves the
+   * crash window rather than closing it: a process that dies between the
+   * rollback and the INSERT loses the row. It is the same best-effort contract
+   * `logDenied` already documents, the window is microseconds of local work
+   * with no I/O ordering in it, and the alternative on offer was a service that
+   * stops answering after ten requests.
+   */
+  async duringTake<T>(run: (sink: DenialSink) => Promise<T>): Promise<T> {
+    const sink: DenialSink = { pending: [] };
+    try {
+      return await run(sink);
+    } finally {
+      // Sequential, not `Promise.all`: N denials must not become N simultaneous
+      // demands on the pool — that is a smaller copy of the bug being fixed.
+      for (const denial of sink.pending) await this.logDenied(denial);
+    }
+  }
+
   async attachToTrade(
     tx: Sql,
-    input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string },
+    input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string; sink: DenialSink },
   ): Promise<{ instrumentId: string; fingerprint: string }> {
     const methodId = methodIdKey(input.methodId);
     const rows = await tx<InstrumentRow[]>`
@@ -539,11 +614,15 @@ export class InstrumentService {
       // bank accounts — and it wrote nothing down. Now it says the same
       // sentence every other method-refused take says, and it is logged.
       //
-      // `refuseTake` writes on `this.sql`, NOT on `tx`: the throw aborts the
-      // caller's reserve transaction, and a log row written inside it would
-      // roll back with everything else. Rolling back cleanly is exactly what
-      // made the probe free.
-      await this.refuseTake({ takerId: input.takerId, sellerId: input.sellerId, tradeId: input.tradeId });
+      // `refuseTake` writes on NEITHER `tx` NOR `this.sql`. Not `tx`, because
+      // the throw aborts the caller's reserve transaction and a log row written
+      // inside it would roll back with everything else — rolling back cleanly
+      // is exactly what made the probe free. Not `this.sql` either, because
+      // that asks the pool for a second connection while this transaction is
+      // still holding the first; ten of those and the service is gone. The row
+      // goes on the sink and `duringTake` writes it once the transaction has
+      // let go. See `DenialSink`.
+      await this.refuseTake({ takerId: input.takerId, sellerId: input.sellerId, tradeId: input.tradeId, sink: input.sink });
       // `refuseTake` is typed `Promise<never>`; this is unreachable and exists
       // only so the narrowing below is a fact rather than an assertion.
       throw takeRefused();
@@ -577,13 +656,16 @@ export class InstrumentService {
    * view, an export, a future admin screen — can reconstruct the distinction
    * this method exists to erase.
    *
-   * It logs on `this.sql` rather than any caller's transaction. `attachToTrade`
-   * throws from inside `reserveTrade`'s transaction, and a log row written
-   * there would roll back with the trade row. "Rolls back cleanly, costs
-   * nothing, leaves no trace" was the whole shape of the oracle.
+   * It does NOT write. Both call sites are inside `reserveTrade`'s transaction,
+   * which is holding a pool connection; a write from here — on `tx` or on
+   * `this.sql` — is either rolled back with the abort or deadlocked against the
+   * connection this very call stack owns. It queues the row on the sink and
+   * `duringTake` writes it the moment the transaction has ended. The sink
+   * parameter is required so that a refusal cannot be raised anywhere the flush
+   * does not reach. See `DenialSink`.
    */
-  async refuseTake(input: { takerId: string; sellerId: string; tradeId?: string }): Promise<never> {
-    await this.logDenied({
+  async refuseTake(input: { takerId: string; sellerId: string; tradeId?: string; sink: DenialSink }): Promise<never> {
+    input.sink.pending.push({
       ownerId: input.sellerId,
       viewerId: input.takerId,
       viewerRole: 'other',
@@ -785,14 +867,7 @@ export class InstrumentService {
    * goes on the span — nothing reaches the caller, and the control's own
    * failure is still something an operator can alert on.
    */
-  private async logDenied(input: {
-    instrumentId?: string;
-    ownerId?: string;
-    viewerId: string;
-    viewerRole: ViewerRole;
-    tradeId?: string | null;
-    reason: string;
-  }): Promise<void> {
+  private async logDenied(input: PendingDenial): Promise<void> {
     try {
       await this.sql`
         INSERT INTO p2p.instrument_access_log (instrument_id, owner_id, viewer_id, viewer_role, trade_id, outcome, deny_reason)
