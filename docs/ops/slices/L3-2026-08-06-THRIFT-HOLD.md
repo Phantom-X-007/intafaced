@@ -1,25 +1,18 @@
-# L3 thrift hard hold — free-TRK waves 46–73
+# L3 thrift hard hold — free-TRK waves 46–76
 
-**Updated:** 2026-08-06 (session continue)
+**Updated:** 2026-08-06 (keep-alive cycle)
 
 ## Status
 - Branch: `feat/l3-free-trk-wave46` (local only)
-- Tip base: `origin/main` after #887
-- Stack: waves 46–73 Class N + thrift-hold docs
-- Push/PR: **blocked** by thrift-preflight hard (total ~296, ci ~81)
-- ETA cool: ~5h total under 220; CI near floor
+- Tip base: `origin/main` after #887 (`e5b0dbc6`)
+- Stack: waves 46–76 Class N + thrift-hold docs
+- Push/PR: **blocked** thrift hard on **total only** (~290; CI=79 under cap)
+- Ship: thrift exit 0 → rebase → one fat Class N PR → green merge
 
-## Surfaces covered (Class N pure)
-academy · agents · notify · identity rank · contracts support/ops-analytics residual
+## Surfaces
+academy · agents (fleet/navigator/merchant/crew) · notify · identity rank · contracts support
 
 ## Path-intersect
-Recheck vs #889 #888 #883 #800 #346 before push.
-
-## Ship gate
-1. thrift-preflight exit 0
-2. rebase if tip moved
-3. path-intersect empty
-4. ONE fat Class N PR (waves 46–73)
-5. green CI → squash-merge
+Recheck #889 #888 #883 #800 #346 before push.
 
 No `THRIFT_ALLOW=1` unless emergency.
