@@ -919,6 +919,45 @@ export const WIRING_SOCKETS = [
       "svc-token publishes each structural buyback-and-burn run. The flywheel it describes is settled by svc-token through the ledger before the event is published, so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service's tables.",
   },
   {
+    event: 'crewMemberCreated',
+    missing: 'subscriber',
+    /**
+     * CLASS B, and the one an agent cannot close. RESTORED — it should never have
+     * left, and how it left is why this comment is longer than the entry.
+     *
+     * This entry was DELETED by e1b95844 on the strength of two new files,
+     * `svc-academy/src/crew-events.ts` and `svc-agents/src/crew-events.ts`, each
+     * exporting a `subscribeCrewMemberCreated` that calls `bus.subscribe`. The
+     * wiring gate scanned for the TEXT of a subscribe call, found two, and agreed
+     * the gap had closed. Class B count went to zero and the build went green.
+     *
+     * NEITHER SUBSCRIBER HAS EVER RUN. Nothing imports either file except its own
+     * unit test. `svc-academy/src/index.ts` states in its own header that the
+     * service has NO BUS CONNECTION AT ALL, so even mounting the import would not
+     * give the handler anything to attach to. `svc-agents/src/index.ts` does
+     * connect to NATS and never calls `subscribeCrewMemberCreated`. Both handlers
+     * write to a process-local `Map`. The described behaviour — a lobby route, a
+     * crew channel — is exactly as absent as before the commit that claimed to
+     * deliver it, and for a while the event was neither wired NOR recorded here:
+     * invisible to the check built to see it, which is strictly worse than the
+     * honest entry it replaced.
+     *
+     * `docs/TRACKER.md` never stopped saying this event "has no consumer yet". The
+     * docs and the runtime agreed the whole time; only the catalog and the gate
+     * disagreed.
+     *
+     * Not reclassifiable to C by an agent: C requires the gap disclosed in code at
+     * every surface a user could be misled by, and ADR D-S-13 puts these two
+     * consumers on the owner ("services with their own scope questions"). It stays
+     * B until the owner rules. Deliberately not softened — and note that softening
+     * is not the only way to lose a finding: this one was lost to code that looked
+     * like a fix.
+     */
+    class: 'B',
+    reason:
+      'The description above names two consumers — "svc-academy routes the lobby, svc-agents opens the crew channel" — and NEITHER RUNS. Each service now has a crew-events.ts exporting subscribeCrewMemberCreated, and nothing imports either one outside its own unit test: svc-academy builds no bus at all (its index.ts says so in as many words), and svc-agents builds one and never calls the subscriber. A defined handler is not a mounted handler. Recorded rather than reworded: the description is the specification those two services owe, and deleting this entry because a subscribe call exists on disk is how the requirement went missing once already.',
+  },
+  {
     event: 'orderAccepted',
     missing: 'subscriber',
     /**

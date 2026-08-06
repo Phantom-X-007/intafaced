@@ -430,16 +430,25 @@ describe('declared wiring sockets', () => {
   });
 
   /**
-   * Class B is a DEFECT, not a socket. crewMemberCreated was closed by academy+agents consumers; list must stay empty:
-   * two consumers ADR D-S-13 puts on the owner rather than on an agent.
+   * Class B is a DEFECT, not a socket. `crewMemberCreated` is the one that
+   * remains: two consumers ADR D-S-13 puts on the owner rather than on an agent.
+   *
+   * THIS ASSERTION PREVIOUSLY READ `toEqual([])`, and it was wrong in the way
+   * that matters. It was changed to empty alongside e1b95844, which added a
+   * `crew-events.ts` to svc-academy and svc-agents and deleted the socket entry —
+   * except NEITHER SUBSCRIBER IS MOUNTED. Nothing imports either file outside its
+   * own unit test, and svc-academy has no bus connection at all. So this test
+   * spent two days asserting, in the same file as the catalog it guards, that a
+   * defect had been fixed by code that has never run. A test written to match a
+   * wrong answer is worse than no test: it is a second voice agreeing.
    *
    * Pinned by name and in order, matching `CLASS_B_AWAITING_A_DECISION` in
    * `tooling/ci/event-wiring.mjs` — so quietly downgrading it to A to make the
    * gate green fails here as well as there. Two readers, one rule.
    */
-  it('has zero Class B wiring defects after crew consumers closed', () => {
-    const b = WIRING_SOCKETS.filter((s) => s.class === 'B').map((s) => s.event);
-    expect(b).toEqual([]);
+  it('records exactly the Class B wiring defects that are pinned for a named decision', () => {
+    const b = WIRING_SOCKETS.filter((s) => s.class === 'B').map((s) => `${s.event}::${s.missing}`);
+    expect(b).toEqual(['crewMemberCreated::subscriber']);
   });
 });
 
