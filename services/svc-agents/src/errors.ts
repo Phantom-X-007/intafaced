@@ -54,3 +54,112 @@ export class ProviderError extends Error {
     this.name = 'ProviderError';
   }
 }
+
+/** L3 — full agent error code catalog. */
+export const AGENT_ERROR_CODES: readonly AgentErrorCode[] = [
+  'agents.route_not_found',
+  'agents.capability_unavailable',
+  'agents.provider_unavailable',
+  'agents.provider_failed',
+  'agents.session_not_found',
+  'agents.session_closed',
+  'agents.agent_not_found',
+  'agents.window_sealed',
+  'agents.window_not_found',
+  'agents.invalid_usage',
+  'agents.refused',
+] as const;
+
+/** L3 — catalog size. */
+export function agentErrorCodeCount(): number {
+  return AGENT_ERROR_CODES.length;
+}
+
+/** L3 — true when code is published. */
+export function isAgentErrorCode(value: string): value is AgentErrorCode {
+  return (AGENT_ERROR_CODES as readonly string[]).includes(value);
+}
+
+/** L3 — provider-class codes (engine path). */
+export function agentProviderErrorCodes(): readonly AgentErrorCode[] {
+  return AGENT_ERROR_CODES.filter((c) => c.includes('provider') || c.includes('capability') || c.includes('route'));
+}
+
+/** L3 — board card. */
+export function agentErrorCatalogBoardCard(): {
+  readonly total: number;
+  readonly providerClass: number;
+  readonly sessionClass: number;
+} {
+  return {
+    total: agentErrorCodeCount(),
+    providerClass: agentProviderErrorCodes().length,
+    sessionClass: AGENT_ERROR_CODES.filter((c) => c.includes('session') || c.includes('window')).length,
+  };
+}
+
+/** L3 — status line. */
+export function agentErrorCatalogStatusLine(): string {
+  const c = agentErrorCatalogBoardCard();
+  return `total=${c.total} providerClass=${c.providerClass} sessionClass=${c.sessionClass}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseAgentErrorCatalogStatusLine(
+  line: string,
+): { readonly total: number; readonly providerClass: number; readonly sessionClass: number } | null {
+  const m = line.trim().match(/^total=(\d+) providerClass=(\d+) sessionClass=(\d+)$/);
+  if (!m) return null;
+  return { total: Number(m[1]), providerClass: Number(m[2]), sessionClass: Number(m[3]) };
+}
+
+/** L3 — true when status matches. */
+export function agentErrorCatalogStatusLineMatches(): boolean {
+  const p = parseAgentErrorCatalogStatusLine(agentErrorCatalogStatusLine());
+  if (!p) return false;
+  const c = agentErrorCatalogBoardCard();
+  return p.total === c.total && p.providerClass === c.providerClass && p.sessionClass === c.sessionClass;
+}
+
+/** L3 — export header. */
+export function agentErrorCatalogExportHeader(): string {
+  return 'code';
+}
+
+/** L3 — export lines. */
+export function agentErrorCatalogExportLines(): readonly string[] {
+  return AGENT_ERROR_CODES.slice();
+}
+
+/** L3 — full export. */
+export function agentErrorCatalogExportText(): string {
+  return [agentErrorCatalogExportHeader(), ...agentErrorCatalogExportLines()].join('\n');
+}
+
+/** L3 — true when total is within [min,max]. Invalid → false. */
+export function agentErrorCodeCountInRange(min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = agentErrorCodeCount();
+  return n >= min && n <= max;
+}
+
+/** L3 — provider error board (retryable honesty). */
+export function providerErrorBoardCard(err: ProviderError): {
+  readonly providerId: string;
+  readonly retryable: boolean;
+  readonly hasStatus: boolean;
+  readonly status: number | null;
+} {
+  return {
+    providerId: err.providerId,
+    retryable: err.retryable,
+    hasStatus: err.status !== undefined,
+    status: err.status ?? null,
+  };
+}
+
+/** L3 — provider error status line. */
+export function providerErrorStatusLine(err: ProviderError): string {
+  const c = providerErrorBoardCard(err);
+  return `provider=${c.providerId} retryable=${c.retryable ? '1' : '0'} status=${c.status ?? '-'}`;
+}
