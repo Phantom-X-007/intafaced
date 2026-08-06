@@ -30,11 +30,12 @@
 | 63 | 64394a3a | stream provider usable/null honesty |
 | 64 | 8751d6d0 | mock usage honesty boards |
 | 65 | 4303aea6 | token usage + capability catalog honesty |
-| 66 | (this) | routing table honesty boards |
+| 66 | 10c5b89f | routing table honesty boards |
+| 67 | (this) | subscription pending socket honesty |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–66
+2. Open one Class N PR covering waves 46–67
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 
