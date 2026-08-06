@@ -4,6 +4,7 @@ import { createAdminApi, httpLedgerOperator } from './admin-api.js';
 import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
 import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
+import { rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
 import { exchangePrincipal } from './principal-exchange.js';
 import { resolve, UPSTREAMS } from './routes.js';
@@ -22,7 +23,14 @@ import { withEdgeSpan } from './tracing.js';
  * caller. svc-identity issued a JWT that opened no door.
  */
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL }, disableRequestLogging: false });
+const app = Fastify({
+  logger: { level: env.LOG_LEVEL },
+  disableRequestLogging: false,
+  // Unset means "believe the socket, never the header". See EDGE_TRUST_PROXY in
+  // env.ts: this is what decides whether `req.ip` — and therefore the throttle's
+  // key — identifies a caller or identifies our own load balancer.
+  ...(env.EDGE_TRUST_PROXY === undefined ? {} : { trustProxy: env.EDGE_TRUST_PROXY }),
+});
 
 /**
  * §24 Lane A, asserted at boot rather than assumed.
@@ -85,6 +93,29 @@ app.log[cors.configured ? 'info' : corsEnforced ? 'error' : 'warn'](
  * reporting them all as the same opaque CORS error.
  */
 registerCors(app, cors);
+
+/**
+ * THEN the transport controls, in this order and after CORS for the reasons
+ * `hardening.ts` sets out: a preflight is answered before the limiter can spend
+ * a user's budget on it, and the allow-origin header is already on the reply
+ * when a 429 is sent, so a browser can read the refusal instead of reporting it
+ * as an opaque CORS failure.
+ */
+await registerSecurityHeaders(app);
+
+const rateLimit: RateLimitConfig = {
+  enabled: env.EDGE_RATE_LIMIT_ENABLED,
+  max: env.EDGE_RATE_LIMIT_MAX,
+  windowMs: env.EDGE_RATE_LIMIT_WINDOW_MS,
+  trustProxy: env.EDGE_TRUST_PROXY !== undefined,
+};
+await registerRateLimit(app, rateLimit);
+
+// Same posture as the screening and CORS lines above: say what the control
+// actually resolved to, because "throttle installed" and "throttle keyed on
+// something meaningful" are different facts and only one of them is protection.
+const rateLimitState = rateLimitSummary(rateLimit);
+app.log[rateLimitState.level]({ appEnv: env.APP_ENV, ...rateLimit }, rateLimitState.summary);
 
 const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
 

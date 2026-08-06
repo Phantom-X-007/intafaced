@@ -1,0 +1,185 @@
+import Fastify, { type FastifyInstance } from 'fastify';
+import { afterEach, describe, expect, it } from 'vitest';
+import { registerCors, type OriginAllowlist } from './cors.js';
+import { rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
+
+/**
+ * THE THROTTLE, AND THE TWO WAYS IT COULD BE WORSE THAN NOTHING.
+ *
+ * A rate-limit test that only proves "the 301st request gets a 429" certifies
+ * the half that was never in doubt. The failures worth catching are the ones
+ * that still look like the control working:
+ *
+ *   · a 429 the BROWSER CANNOT READ, because the allow-origin header was not on
+ *     the reply. The user is told the platform is down rather than told to slow
+ *     down, which is the same symptom `cors.ts` was written to end.
+ *   · a throttled `/health` or `/ready`, which takes a busy-but-working edge out
+ *     of the load balancer — the limiter causing the outage it was installed to
+ *     prevent.
+ *   · a preflight that spends the caller's budget, letting an `OPTIONS` storm
+ *     lock out the legitimate requests behind it.
+ *
+ * `app.inject()` is Fastify's real pipeline, so hook ordering here is the
+ * ordering `index.ts` gets.
+ */
+
+const ORIGIN = 'https://app.example.com';
+
+const allowlist: OriginAllowlist = {
+  origins: [ORIGIN],
+  configured: true,
+  source: 'test',
+  summary: 'test',
+};
+
+/** The same two registrations `index.ts` performs, in the same order. */
+async function buildApp(config: Partial<RateLimitConfig> = {}): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false });
+  registerCors(app, allowlist);
+  await registerSecurityHeaders(app);
+  await registerRateLimit(app, {
+    enabled: true,
+    max: 2,
+    windowMs: 60_000,
+    trustProxy: false,
+    ...config,
+  });
+  app.get('/health', async () => ({ ok: true }));
+  app.get('/ready', async () => ({ ready: true }));
+  app.all('/api/*', async () => ({ proxied: true }));
+  await app.ready();
+  return app;
+}
+
+let app: FastifyInstance | undefined;
+afterEach(async () => {
+  await app?.close();
+  app = undefined;
+});
+
+describe('rate limit', () => {
+  it('refuses past the limit with the edge refusal vocabulary', async () => {
+    app = await buildApp();
+
+    const first = await app.inject({ method: 'GET', url: '/api/trade/thing' });
+    const second = await app.inject({ method: 'GET', url: '/api/trade/thing' });
+    const third = await app.inject({ method: 'GET', url: '/api/trade/thing' });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    // 429 and not 500. The builder's return is thrown as the error and Fastify
+    // reads the status off it, so a missing `statusCode` produces a body that
+    // says "rate limited" over a status that says the edge fell over.
+    expect(third.statusCode).toBe(429);
+    expect(third.json()).toMatchObject({ code: 'edge.rate_limited' });
+    expect(third.json().retryAfterSeconds).toBeGreaterThan(0);
+    expect(third.headers['retry-after']).toBeDefined();
+  });
+
+  it('puts the allow-origin header on the 429, so a browser can read the refusal', async () => {
+    app = await buildApp();
+
+    let last = await app.inject({ method: 'GET', url: '/api/trade/thing', headers: { origin: ORIGIN } });
+    for (let i = 0; i < 3; i++) {
+      last = await app.inject({ method: 'GET', url: '/api/trade/thing', headers: { origin: ORIGIN } });
+    }
+
+    expect(last.statusCode).toBe(429);
+    // Without this the browser reports a generic CORS error and the user is
+    // told the platform is broken instead of being told to slow down.
+    expect(last.headers['access-control-allow-origin']).toBe(ORIGIN);
+  });
+
+  it('never throttles the load balancer probes', async () => {
+    app = await buildApp({ max: 1 });
+
+    // Well past the limit on both probe paths.
+    for (let i = 0; i < 5; i++) {
+      const health = await app.inject({ method: 'GET', url: '/health' });
+      const ready = await app.inject({ method: 'GET', url: '/ready' });
+      expect(health.statusCode).toBe(200);
+      expect(ready.statusCode).toBe(200);
+    }
+  });
+
+  it('does not spend the caller budget on preflights', async () => {
+    app = await buildApp({ max: 2 });
+
+    // Preflights are answered inside the CORS hook and never reach the limiter.
+    for (let i = 0; i < 10; i++) {
+      const preflight = await app.inject({
+        method: 'OPTIONS',
+        url: '/api/trade/thing',
+        headers: { origin: ORIGIN },
+      });
+      expect(preflight.statusCode).toBe(204);
+    }
+
+    // The budget is untouched, so a real request still succeeds.
+    const real = await app.inject({ method: 'GET', url: '/api/trade/thing', headers: { origin: ORIGIN } });
+    expect(real.statusCode).toBe(200);
+  });
+
+  it('registers no limiter at all when disabled', async () => {
+    app = await buildApp({ enabled: false, max: 1 });
+
+    for (let i = 0; i < 5; i++) {
+      const res = await app.inject({ method: 'GET', url: '/api/trade/thing' });
+      expect(res.statusCode).toBe(200);
+    }
+  });
+});
+
+describe('security headers', () => {
+  it('sends the API-relevant set', async () => {
+    app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/health' });
+
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+  });
+
+  it('emits no CSP and no HSTS — neither is this component to promise', async () => {
+    app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/health' });
+
+    // A policy on a response no browser renders protects nothing.
+    expect(res.headers['content-security-policy']).toBeUndefined();
+    // The edge terminates no TLS; max-age belongs at the terminator.
+    expect(res.headers['strict-transport-security']).toBeUndefined();
+  });
+
+  it('leaves the cross-origin grant to cors.ts alone', async () => {
+    app = await buildApp();
+    const res = await app.inject({ method: 'GET', url: '/api/trade/thing', headers: { origin: ORIGIN } });
+
+    // helmet's `crossOriginResourcePolicy: same-origin` would contradict the
+    // allowlist that cors.ts deliberately issues.
+    expect(res.headers['cross-origin-resource-policy']).toBeUndefined();
+    expect(res.headers['access-control-allow-origin']).toBe(ORIGIN);
+  });
+});
+
+describe('rateLimitSummary', () => {
+  const base: RateLimitConfig = { enabled: true, max: 300, windowMs: 60_000, trustProxy: true };
+
+  it('warns loudly when the throttle is off', () => {
+    const { level, summary } = rateLimitSummary({ ...base, enabled: false });
+    expect(level).toBe('warn');
+    expect(summary).toContain('DISABLED');
+  });
+
+  it('warns that an untrusted proxy collapses every caller into one bucket', () => {
+    const { level, summary } = rateLimitSummary({ ...base, trustProxy: false });
+    expect(level).toBe('warn');
+    // The inverted failure: the control becomes a platform-wide throttle.
+    expect(summary).toContain('ONE bucket');
+    expect(summary).toContain('EDGE_TRUST_PROXY');
+  });
+
+  it('is quiet only when the key actually identifies a caller', () => {
+    const { level } = rateLimitSummary(base);
+    expect(level).toBe('info');
+  });
+});
