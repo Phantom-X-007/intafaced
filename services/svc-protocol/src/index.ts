@@ -13,6 +13,21 @@ import { ProtocolChain } from './chain/client.js';
 import { SessionRelay } from './session/relay.js';
 import { ChainObserver } from './events.js';
 import { createProtocolRouter, type ProtocolRouter } from './router.js';
+import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+
+// §9 — register the TracerProvider before the first span is created.
+// `@opentelemetry/api` alone is a no-op: without this call every span in
+// ./tracing.ts is built, tagged and then discarded before it reaches the
+// collector. Tracers grabbed at module scope resolve lazily through the proxy
+// provider, so registering here still captures them.
+registerProcessHooks(
+  startTelemetry({
+    serviceName: env.SERVICE_NAME,
+    endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    enabled: env.OTEL_ENABLED,
+    environment: env.APP_ENV,
+  }),
+);
 
 /**
  * svc-protocol — the Protocol Plane's smart account layer (§17.4, §17.5).
