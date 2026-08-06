@@ -1194,9 +1194,15 @@ The last row is the sharpest argument in this section, and it is about **our** c
 
 `EctWithdrawSecretConfig` is the guard this repository added so that a service refuses to boot on the ECT withdrawal secret that git history has already disclosed ([F1](#f1)). It works by comparing a stored digest against a freshly computed one:
 
+> The value is elided here. It is a SHA-256 of a _known-disclosed_ secret, so it is not itself
+> a credential — but quoting it in full copies a 64-hex literal out of the vendor tree into
+> `docs/`, where gitleaks’ `vendor/` exemption does not reach. That is the third time a gate or
+> a document has tripped this by freezing a constant into our own source. **What matters here is
+> the width, not the value.**
+
 ```java
 48:    private static final String DISCLOSED_SECRET_SHA256 =
-49:            "feafc645a12b90d5ddd2aac44494fb61ccb8ef49a2f5af0b022942ef2c7dd89b";
+49:            "feafc645… 2c7dd89b";   // elided — 64 digits; see the width note below
 ...
 61:        if (DISCLOSED_SECRET_SHA256.equals(sha256Hex(withdrawWalletSecret.trim()))) {
 ```
