@@ -27,11 +27,12 @@
 | 60 | c11a72ac | seat decision + access kind honesty |
 | 61 | 10d45c05 | agents error catalog honesty |
 | 62 | 4597227f | agents copy catalog honesty |
-| 63 | (this) | stream provider usable/null honesty |
+| 63 | 64394a3a | stream provider usable/null honesty |
+| 64 | (this) | mock usage honesty boards |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–63
+2. Open one Class N PR covering waves 46–64
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 
