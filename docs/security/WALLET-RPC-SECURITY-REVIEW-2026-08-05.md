@@ -7,9 +7,9 @@
 
 This is the read that [`docs/UPSTREAM-ADOPTION-QUEUE-2026-08-02.md:1488`](../UPSTREAM-ADOPTION-QUEUE-2026-08-02.md) deferred when it said _"It is not a security review and must not be cited as one. 215 files were not read line by line."_ It is the precondition of adoption that the [vendored-exchange ADR](../adr/2026-07-28-vendored-exchange-integration.md) requires, and that [`OWNER-ACTIONS-WALLET-RPC-SECRETS.md` §A4](../OWNER-ACTIONS-WALLET-RPC-SECRETS.md) records as not having happened.
 
-**Verdict up front:** this tree must not be pointed at real value in its current state, and the reason is not the three findings that were already known. It is that **three of its thirteen bootable services print a live spending credential to stdout on an ordinary success path**, and one of the three prints an Ethereum private key. Those are not configuration mistakes; they are code. See [Verdict](#verdict).
+**Verdict up front:** this tree must not be pointed at real value in its current state, and the reason is not the three findings that were already known. It is that **three of its thirteen bootable services print a live spending credential to stdout on an ordinary success path**, and one of the three prints an Ethereum private key. Those are not configuration mistakes; they are code. See [Verdict](#6-verdict).
 
-> **Amended 2026-08-06.** As first published this sentence read _"**two** … and a third **almost certainly** prints an Ethereum private key"_, because [F3](#f3) rested on an accessor chain in a library this host could not open. That library has now been read on this host, without a JVM, and the chain is exactly what the review inferred. The hedge is gone and the count moved from two to three. The evidence — and the one thing about it that is still **not** verified — is in the [F3 follow-up of 2026-08-06](#f3-2026-08-06).
+> **Amended 2026-08-06.** As first published this sentence read _"**two** … and a third **almost certainly** prints an Ethereum private key"_, because [F3](#f3) rested on an accessor chain in a library this host could not open. That library has now been read on this host, without a JVM, and the chain is exactly what the review inferred. The hedge is gone and the count moved from two to three. The evidence is in the [F3 follow-up of 2026-08-06](#f3-2026-08-06) — whose one remaining caveat, the jar's provenance, was **closed against Maven Central later the same day** ([§8.3](#83-what-leaned-on-it)).
 
 ---
 
@@ -25,16 +25,18 @@ The six bitcoinj-family modules (`bch`, `bsv`, `ltc`, `btm`, `eos`, `xmr`) are n
 
 **There is no JDK, JRE, or Maven on this host.** Nothing here was compiled, run, unit-tested, fuzzed, or dynamically observed. Every finding in this document is a static-analysis finding and is marked as such. Specifically, this review could not:
 
-| Not done                         | Consequence for this review                                                                                                                                                                                                                                                                                                |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Compile any module               | Cannot confirm the tree even builds. It almost certainly does not — see [F21](#f21).                                                                                                                                                                                                                                       |
-| Run `mvn dependency:tree`        | The transitive dependency set, and therefore the CVE surface and the gadget classes available to a deserialisation attack, is **unknown**. Only directly declared versions are reported here.                                                                                                                              |
-| Resolve any Maven coordinate     | Cannot confirm that `cash.bitcoinj:bitcoinj-core:0.14.5.2`, `org.web3j:core:3.3.1` or any other declared dependency resolves to a public artifact, nor what its checksum is.                                                                                                                                               |
-| Open `org.web3j:core:3.3.1`      | ~~The `Credentials` / `ECKeyPair` accessor chain that [F3](#f3) depends on was reasoned about from the library's published API, not read.~~ **Superseded 2026-08-06** — `org.web3j:crypto:3.3.1`, which is where those two classes actually live, was found on this host and read. See the [F3 follow-up](#f3-2026-08-06). |
-| Execute a fastjson serialisation | [F4](#f4) depends on fastjson's `JavaBeanSerializer` walking public getters. That is fastjson's documented behaviour, not an observation.                                                                                                                                                                                  |
-| Reach the network                | Cannot check any jar checksum against Maven Central, cannot verify the `47.74.42.87` node in [F19](#f19) is or is not ours, cannot check balances at any address named here.                                                                                                                                               |
-| Read the deployed environment    | Every `${VAR}` placeholder's actual value is unknown. Whether one `WALLET_RPC_AUTH_TOKEN` is shared across all thirteen services — which decides the blast radius of [F5](#f5) — cannot be answered from the tree.                                                                                                         |
-| Read downstream consumers        | Whether re-emitted deposit events double-credit ([F17](#f17)) depends on a Kafka consumer outside this tree that was not reviewed.                                                                                                                                                                                         |
+> **Correction, 2026-08-06 — the "Reach the network" row below is false**, and three other rows leaned on it. This host has working DNS and TCP/443, and Maven Central answers queries and serves artifact bytes. Everything justified by "there is no network" is re-examined in [§8](#8-correction--this-host-has-network-access). The compilation clause above is **unchanged and still true**: no JDK and no Maven has been on `PATH` in any session that wrote to this document, and nothing here has been compiled or executed. _"Could not reach the artifact"_ is wrong; _"did not compile anything"_ was and remains right.
+
+| Not done                         | Consequence for this review                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compile any module               | Cannot confirm the tree even builds. It almost certainly does not — see [F21](#f21).                                                                                                                                                                                                                                                                                            |
+| Run `mvn dependency:tree`        | The transitive dependency set, and therefore the CVE surface and the gadget classes available to a deserialisation attack, is **unknown**. Only directly declared versions are reported here.                                                                                                                                                                                   |
+| Resolve any Maven coordinate     | ~~Cannot confirm that `cash.bitcoinj:bitcoinj-core:0.14.5.2`, `org.web3j:core:3.3.1` or any other declared dependency resolves to a public artifact, nor what its checksum is.~~ **Superseded 2026-08-06** — four coordinates were queried against Maven Central, and three of the answers change what this document can say. [§8.3](#83-what-leaned-on-it).                    |
+| Open `org.web3j:core:3.3.1`      | ~~The `Credentials` / `ECKeyPair` accessor chain that [F3](#f3) depends on was reasoned about from the library's published API, not read.~~ **Superseded 2026-08-06** — `org.web3j:crypto:3.3.1`, which is where those two classes actually live, was found on this host and read; its checksum was then matched against Maven Central. See the [F3 follow-up](#f3-2026-08-06). |
+| Execute a fastjson serialisation | [F4](#f4) depends on fastjson's `JavaBeanSerializer` walking public getters. That is fastjson's documented behaviour, not an observation. (Since resolved by a bytecode read — see the [F3](#f3) follow-up.)                                                                                                                                                                    |
+| ~~Reach the network~~            | **FALSE. See [§8](#8-correction--this-host-has-network-access).** DNS and TCP/443 complete to Adoptium, GitHub and Maven Central. Jar checksums _can_ be checked against Central — one now has been — and balances _can_ be checked at any address named here. That the original review did not do these things is a different statement from their having been impossible.     |
+| Read the deployed environment    | Every `${VAR}` placeholder's actual value is unknown. Whether one `WALLET_RPC_AUTH_TOKEN` is shared across all thirteen services — which decides the blast radius of [F5](#f5) — cannot be answered from the tree.                                                                                                                                                              |
+| Read downstream consumers        | Whether re-emitted deposit events double-credit ([F17](#f17)) depends on a Kafka consumer outside this tree that was not reviewed.                                                                                                                                                                                                                                              |
 
 Where a finding rests on an inference rather than a read, the inference is named at the finding.
 
@@ -189,7 +191,7 @@ That is read out of the class files, not out of documentation. `TypeUtils.comput
 
 And nothing in `Payment` opts out: the class carries only Lombok `@Builder`, `getCredentials()` at `:28` is public, the backing field is not `transient`, and there is no `@JSONField(serialize = false)`, no `@JSONType` and no `SerializeFilter` anywhere in the tree.
 
-**Not confirmed — the web3j half.** `org.web3j:core:3.3.1` is **not** in that local repository (it holds fastjson, Spring, Lombok, Mongo and the rest, but no `org/web3j` directory at all), it is not one of the three committed jars, and there is no network. There is also no in-repo compile-time evidence to fall back on: `getEcKeyPair`, `getPrivateKey` and `ECKeyPair` **appear nowhere in the 228 Java files**, so the tree never demonstrates the accessor shape it would compile against. Whether `Credentials` exposes a public getter chain ending at the secp256k1 private key is exactly as unverified as this review left it.
+**Not confirmed — the web3j half.** `org.web3j:core:3.3.1` is **not** in that local repository (it holds fastjson, Spring, Lombok, Mongo and the rest, but no `org/web3j` directory at all), and it is not one of the three committed jars. ~~and there is no network.~~ **Correction, 2026-08-06: there is a network, and the artifact is published.** See [§8.3](#83-what-leaned-on-it) — `core-3.3.1.jar` was confirmed fetchable from Maven Central from this host. The obstacle recorded below is gone; the work is simply not done. There is also no in-repo compile-time evidence to fall back on: `getEcKeyPair`, `getPrivateKey` and `ECKeyPair` **appear nowhere in the 228 Java files**, so the tree never demonstrates the accessor shape it would compile against. Whether `Credentials` exposes a public getter chain ending at the secp256k1 private key is exactly as unverified as this review left it.
 
 **Verdict: still an inference.** The conditional has not moved, only narrowed — from "two libraries behave as documented" to "one class in one library exposes one public getter". The consequence remains asymmetric and unattractive: if it does, the ETH hot-wallet private key is written to the log as a decimal integer every thirty seconds for up to fifty minutes per unconfirmed withdrawal; if it does not, the line is harmless. Nothing available in this repository decides it, and it is not recorded as a finding.
 
@@ -315,6 +317,20 @@ It also arrived in a way this review should record rather than assume away: **th
 A jar fabricated to mislead this review would have had to reconstruct that entire compile surface consistently. The class-file version is 52 (Java 8), matching a 2018 build of a library whose poms target 1.8. And one incidental corroboration of [F4](#f4) falls out of the same read for free: the three-argument overload is `signMessage(RawTransaction, **byte**, Credentials)` — the chain id is a `byte` — and the tree calls the two-argument form at both signing sites, which is the pre-EIP-155 shape [F4](#f4) describes.
 
 **What would close the gap, in one command, for whoever next has a network:** fetch `https://repo1.maven.org/maven2/org/web3j/crypto/3.3.1/crypto-3.3.1.jar.sha1` and compare it to `8e07f435838a1d840765656d8df6b8e8e2c5f4e4`. If it matches, the last conditional in this finding is gone. If it does not match, **the jar on this host is not the published artifact and this finding must be reopened** — in which case the interesting question stops being F3 and starts being how it got here.
+
+> ##### Gap closed, 2026-08-06 — it matches. **F3 has no remaining conditional.**
+>
+> That command was run, the same day, by the [hex-constant audit](#7-fixed-width-hex-constant-audit-addendum-2026-08-06) — which existed because the "no network" premise was wrong, and which therefore had the one thing this paragraph was waiting for. Three values, all identical:
+>
+> | Source                                                | SHA-1                                      |
+> | ----------------------------------------------------- | ------------------------------------------ |
+> | `repo1.maven.org/…/crypto-3.3.1.jar.sha1` (published) | `8e07f435838a1d840765656d8df6b8e8e2c5f4e4` |
+> | recorded above, from the jar on this host             | `8e07f435838a1d840765656d8df6b8e8e2c5f4e4` |
+> | recomputed from the jar's bytes with `sha1sum`        | `8e07f435838a1d840765656d8df6b8e8e2c5f4e4` |
+>
+> SHA-256 `e8ad15e18928853dfdb7ef59f0755d68c7c965396e951e4162003d909d8ec486` likewise matches what the follow-up recorded. **The jar read above is the published Maven Central artifact.** The provenance caveat is discharged, the compile-surface argument that stood in for it is no longer load-bearing, and [F3](#f3) is now a finding with no inference anywhere in it: `eth-support` writes the ETH hot-wallet private key to the log.
+>
+> Nothing was compiled to establish this, and nothing was executed — an HTTPS GET of a checksum file and a local digest of bytes already on disk. The correct reading of the sequence is in [§8](#8-correction--this-host-has-network-access): a false entry in [§1.2](#12-what-could-not-be-done-and-why) was the only thing standing between this document's highest-priority finding and its full confirmation, and it stood there for a day.
 
 ##### What changed in the gate
 
@@ -457,12 +473,14 @@ _"Contract execution result check, commented out for now, need to confirm later 
 **The compensating control, and why it is currently inert.** The token watcher has a second guard at `:87-90`, an Etherscan `getLogs` round-trip that checks a Transfer event was actually emitted, and the code comment says it exists _"防止低版本的token假充值"_ — to prevent fake deposits. It runs only when `contract.getEventTopic0()` is non-empty. Both modules set it:
 
 ```
-erc-eusdt/src/main/resources/application.properties:51
+erc-eusdt/src/main/resources/application.properties:72     ← :51 when this review was written
 contract.event-topic0=0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a1128f55a4df523b3ef
 
 erc-token/src/main/resources/application.properties:51
 contract.event-topic0=0xddf252ad1be2c89b69c2b068fc378daa952b7f163c4a11628f55a4df523b3ef
 ```
+
+_(The `erc-eusdt` line moved from 51 to 72 when `contract.address` was replaced by a placeholder and its reasoning written into the file. The two modules no longer share a line number. Verified against the tree on 2026-08-06 — see [§7.4](#74-the-seven-malformed-constants).)_
 
 The real ERC-20 `Transfer` topic0 is `0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef` — 64 hex digits. **Both of these are 63 digits**, each missing a different character, in exactly the digit-drop mangling style the upstream applied to the addresses. Neither will ever match. `checkEventLog` returns false, `continue` fires, and **no deposit is ever credited on either module**.
 
@@ -680,11 +698,13 @@ So the question "is the lock guaranteed on the error path" has an answer that is
 
 ### F13 — The live mainnet Tether contract, pinned and unmangled · **LIVE** · _known critical, confirmed_
 
-**Where:** `erc-eusdt/src/main/resources/application.properties:39`
+**Where:** `erc-eusdt/src/main/resources/application.properties:39` **— as this review found it. No longer present; see the note below.**
 
 ```
 contract.address=0xdac17f958d2ee523a2206206994597c13d831ec7
 ```
+
+> **Status correction, 2026-08-06.** This literal is **gone from the tree.** The property is now `contract.address=${EUSDT_CONTRACT_ADDRESS}` at `erc-eusdt/.../application.properties:60`, an unresolved placeholder, with the reasoning written into the file above it — replaced rather than mangled, precisely so that no one can "repair" it back into a live pin. The corresponding `M4-address` entry was **removed** from the frozen baseline, which is the only direction that baseline may move. F13 as written describes the state at the date of this review and is retained for the record; the finding is **remediated for `erc-eusdt`**. Its `erc-token` twin below is unchanged, still 39 digits, and still frozen. Current state of every contract address in the tree: [§7.4](#74-the-seven-malformed-constants).
 
 Forty valid hex digits, correct, unmangled: the live Ethereum mainnet Tether (USDT) contract. Its twin at `erc-token/src/main/resources/application.properties:39` is `0xdac17f958d2ee5232206206994597c13d831ec7` — thirty-nine digits, mangled in the upstream's style, and inert as written. Both confirmed by digit count and by comparison with the known contract address.
 
@@ -706,7 +726,9 @@ Forty valid hex digits, correct, unmangled: the live Ethereum mainnet Tether (US
 | `ect`       | properties:7                   | `spring.data.mongodb.uri=mongodb://127.0.0.1:27017/wallet`                                          | the **only** module still hardcoding the Mongo URI                                               |
 | all         | properties (init-block-height) | thirteen mainnet start heights                                                                      | already frozen by the mainnet gate                                                               |
 
-All of these except the `erc-eusdt` `.json` keystore and the `ect` Mongo URI are already pinned in the 38-entry frozen baseline of `tooling/ci/wallet-rpc-mainnet-scan.mjs`. **The two mangled `contract.event-topic0` values from [F6](#f6) are not in that baseline and should be**, because they are the only thing currently preventing fake deposit credits and a one-character edit removes them.
+All of these except the `erc-eusdt` `.json` keystore and the `ect` Mongo URI are already pinned in the 38-entry frozen baseline of `tooling/ci/wallet-rpc-mainnet-scan.mjs`. ~~**The two mangled `contract.event-topic0` values from [F6](#f6) are not in that baseline and should be**, because they are the only thing currently preventing fake deposit credits and a one-character edit removes them.~~
+
+> **Stale as of 2026-08-06 — fixed, and recorded here rather than deleted so the sequence stays legible.** Both `contract.event-topic0` values, and the `erc-eusdt` `.json` keystore, are now frozen: rule `M4-topic` carries the two topic0 entries with a paragraph instructing the reader not to correct them and not to delete them outside a change that can be built and tested, and `M4-keystore` carries all three keystore filenames. The baseline is no longer 38 entries — it is **54, across 58 recorded occurrences** (`M1:6 M2:2 M3:1 M4-address:8 M4-endpoint:5 M4-height:12 M4-keystore:3 M4-topic:2 M8:1 M9:8 M10-credit-unverified:4 M10-credit-verified:2`), as printed by `pnpm gates` on 2026-08-06. The recommendation in the struck sentence was taken. What is still missing is a rule about **width** rather than about text — freezing a string stops it changing but never says it is malformed. That gap, and the rule that closes it, are [§7.9](#79-proposed-gate-rule--m11-fixed-width-hex-literals-must-have-their-fixed-width).
 
 **Remediation direction:** owner action — this is the highest-priority M4 entry in the existing baseline and nothing changes it.
 
@@ -818,7 +840,7 @@ Two concurrent calls therefore close each other's connections and can read a res
 
 ### F19 — Committed node credentials in `main()` harnesses · **LATENT** · _known_
 
-- `act/src/test/java/ActClientTest.java:10` — `new ActClient("http://act:123456@47.74.42.87:8900/rpc")` — a node credential and a public IP, over plain HTTP. This is item **A3** of `OWNER-ACTIONS-WALLET-RPC-SECRETS.md`, deliberately left in the tree as evidence, and frozen by the mainnet gate. Whether that node is ours is still an open owner question and cannot be answered without network access.
+- `act/src/test/java/ActClientTest.java:10` — `new ActClient("http://act:123456@47.74.42.87:8900/rpc")` — a node credential and a public IP, over plain HTTP. This is item **A3** of `OWNER-ACTIONS-WALLET-RPC-SECRETS.md`, deliberately left in the tree as evidence, and frozen by the mainnet gate. Whether that node is ours is still an open owner question ~~and cannot be answered without network access~~ — **and network access is not what was missing** ([§8](#8-correction--this-host-has-network-access)). It is an ownership question, answerable from procurement records, not by probing somebody else's host. Nothing in this review probed it and nothing should.
 - `usdt/src/main/java/…/config/JsonrpcClient.java:163` — `new JsonrpcClient("http://bitcoin:bitcoin@127.0.0.1:8888/")` — **this one is in `src/main`, not `src/test`**, so it compiles into the production artifact. Loopback and a trivial credential, so the value is worthless, but it is a `main()` in a shipped class that constructs a node client, and it is not covered by the `${USDT_NODE_RPC_URL}` externalisation.
 - `eth-support/.../service/EtherscanApi.java:65-71` — a `main()` with a commented-out `sendRawTransaction` of a real signed transaction, plus a live txid and the real Transfer topic0.
 - `ect/.../component/EctApi.java:158-176` — a comment block documenting the **removed** `main()` that held a second hardcoded wallet secret. Item **A2**; the code is gone, the value remains disclosed by history.
@@ -874,7 +896,9 @@ Neither is a vulnerability. Both are stated as findings because together they es
 
 ### Can any of them be verified?
 
-**No. Not one of the three can be checksum-verified against anything, and that is the honest answer for all three — not only for the `-SNAPSHOT`.** There is no network on this host, so no coordinate can be checked against Maven Central; there is no JDK, so `jarsigner -verify` cannot run and no class body can be decompiled or byte-compared; and none of the three ships a detached signature or a checksum file. All three archives _did_ open — a jar is a zip — so what follows is what each one says about itself.
+**No. Not one of the three can be checksum-verified against anything, and that is the honest answer for all three — not only for the `-SNAPSHOT`.** ~~There is no network on this host, so no coordinate can be checked against Maven Central;~~ there is no JDK, so `jarsigner -verify` cannot run and no class body can be decompiled or byte-compared; and none of the three ships a detached signature or a checksum file. All three archives _did_ open — a jar is a zip — so what follows is what each one says about itself.
+
+> **Correction, 2026-08-06 — the network clause was false, and the corrected answer is worse, not better.** Maven Central _was_ queried for this addendum. `com.spark.bc:bitcoin-rpc` — the most trust-critical binary in this tree — **is not published on Maven Central at all**, so the conclusion is no longer "we had no way to check" but "we checked, and there is nothing to check it against." `org.litecoinj` is likewise absent. Full result in [§8.3](#83-what-leaned-on-it). The verdict of this section stands; only its reason changes.
 
 #### `bitcoin-rpc-1.2.0.jar` — the most trust-critical binary in the tree
 
@@ -993,7 +1017,7 @@ Java source/target is `1.8` in every module that sets it. `bitcoin/pom.xml` is t
 
 Stated plainly, because a review's boundary is part of its result.
 
-1. **Anything dynamic.** No compilation, no execution, no tests, no fuzzing, no runtime observation. No JDK, JRE or Maven on this host. Every finding is static.
+1. **Anything dynamic.** No compilation, no execution, no tests, no fuzzing, no runtime observation. No JDK, JRE or Maven on `PATH` in any session that has written to this document. Every finding is static. (This clause is correct as written. The separate claim that there is **no network** was not — see [§8](#8-correction--this-host-has-network-access).)
 2. **The transitive dependency graph.** Never enumerated. All CVE discussion is limited to directly declared versions, and no claim of reachability is made for any advisory.
 3. **The class bodies of the committed `.jar`s.** All three distinct archives in the tree were opened and their manifests, embedded coordinates and package inventories read — see [§3](#3-jar-inventory). None was checksum-verified against a published artifact, and **no committed class body was compared to upstream**. A modification inside an existing method is invisible to everything this review could do.
 
@@ -1037,8 +1061,287 @@ Underneath that sit two structural properties that no fix to individual lines wi
 
 **Resolved 2026-08-06 — and it resolved the wrong way.** Both libraries have now been read, neither needed a JDK, and the answer is that **the ETH hot-wallet key is in the logs.** Every link is read rather than assumed: fastjson walks the getters and recurses, `Credentials.getEcKeyPair()` and `ECKeyPair.getPrivateKey()` are public no-arg getters over non-transient unannotated fields, and `BigInteger` is on fastjson's keep-verbatim list so the key is not dropped on the way out. See the [F3 follow-up](#f3-2026-08-06).
 
-That does not change this verdict; it removes the last reason to hope the verdict was too harsh. The one open item left on F3 is not the behaviour but the **provenance of the jar** — it carries no checksum sidecar, and settling that is one `curl` of a `.sha1` from Maven Central, spelled out at the end of the follow-up. Whoever does it should also do the same bytecode read on `bitcoin-rpc-1.2.0.jar`, which is the most privileged binary in the tree and is still unread inside.
+That does not change this verdict; it removes the last reason to hope the verdict was too harsh. ~~The one open item left on F3 is not the behaviour but the **provenance of the jar**~~ — **that item is closed. The `.sha1` was fetched from Maven Central the same day and it matches ([gap-closed note](#f3-2026-08-06), [§8.3](#83-what-leaned-on-it)); F3 now carries no conditional of any kind.** What remains open is the same bytecode read on `bitcoin-rpc-1.2.0.jar`, which is the most privileged binary in the tree, is still unread inside, and — per [§8.3](#83-what-leaned-on-it) — **is not published on Maven Central at all**, so no checksum comparison exists to close it the same way.
 
 ---
 
-_Static analysis only. Nothing in this tree was compiled, executed, or dynamically tested, by this review or — per [F21](#f21) — by anything else. **No JDK, JRE, Maven or network access was available to the review as written on 2026-08-05**; by the 2026-08-06 follow-up that was no longer true of the host, though the follow-up used none of them — see its provenance note. Class files were read as bytes throughout, which needs no JVM._
+## 7. Fixed-width hex constant audit (addendum, 2026-08-06)
+
+### 7.1 Why this section exists
+
+[F6](#f6) records that `contract.event-topic0` is wrong in both erc modules. The part worth stopping on is that **each is missing a different digit**: `erc-token` drops the `a` at index 36, `erc-eusdt` drops the `6` at index 47. A bad copy is wrong the same way twice. Two independent corruptions of one canonical constant means the value was **typed**, not copied.
+
+And the tree contains the proof. The correct, unmangled, 64-digit ERC-20 `Transfer` topic0 is sitting in this same repository at `eth-support/.../EtherscanApi.java:80`, inside a `main()` harness, in the argument list of a `checkEventLog` call — the very method the two mangled properties feed. Whoever wrote those properties files had the right answer in the same file as the method that consumes their wrong one, and did not copy it.
+
+That makes every other fixed-width hex constant in this tree suspect until it has been measured. This section measures all of them. It is an inventory. **Nothing was fixed**, for the reason [F6](#f6) and the `M4-topic` baseline entries already give at length: several of these are load-bearing in a direction that makes correcting them a behaviour change needing a JDK build and a deposit fixture.
+
+### 7.2 Method
+
+Every file under the tree was scanned — 228 `.java`, 13 `.properties`, 20 `.xml`, 15 `.classpath`, 15 `.project`, 47 `.prefs`, 16 `.gitignore` — for `0x`-prefixed hex literals and for bare hex runs of eight digits or more. Each hit was tested three ways:
+
+1. **Width** against the width its role requires — address 40, topic/hash/digest 64, private key 64, public key 128 or 130.
+2. **EIP-55 checksum**, where the literal is a 40-digit address written in mixed case.
+3. **Equality with the canonical value**, where the constant is a well-known one, plus a single-edit-distance test against those canonicals so a near-miss is named rather than merely counted.
+
+keccak-256 was implemented locally for this addendum rather than quoting canonical values from memory, and validated against the published `keccak256("")` before use. The `Transfer` topic0, the `Approval` topic0 and the `transfer(address,uint256)` selector quoted below were all derived, not recalled.
+
+Static, like the rest of this review. Nothing was compiled or run.
+
+### 7.3 The population, and the shape of the result
+
+**Thirteen distinct fixed-width hex constants exist in the tree, across fourteen sites.** Seven are in `.properties`. Six are in `.java`.
+
+| Where         | Constants | Malformed | Well-formed |
+| ------------- | --------- | --------- | ----------- |
+| `.properties` | 7         | **7**     | 0           |
+| `.java`       | 6         | 0         | 6           |
+| IDE metadata  | 0         | —         | —           |
+| **Total**     | **13**    | **7**     | **6**       |
+
+**Every malformed constant is in a properties file. Every hex constant in the Java is correct. All seven defects are exactly one digit short — none is long, none is a substitution, none is a transposition.**
+
+That is a provenance result as much as a correctness one. The Java constants look like the residue of a system that worked: the txid, contract address and topic0 in `EtherscanApi.main()` are a coherent Etherscan query somebody actually ran, and they are internally consistent. The properties were retyped for publication, by hand, one digit at a time, and the hand slipped seven times.
+
+### 7.4 The seven malformed constants
+
+All seven are one hex digit short. All seven are already frozen by exact text in `tooling/ci/wallet-rpc-mainnet-scan.mjs`, so none can change silently — see [§7.9](#79-proposed-gate-rule--m11-fixed-width-hex-literals-must-have-their-fixed-width) for what freezing does and does not buy.
+
+Ranked by what happens today if somebody "fixes" it.
+
+| #   | Where                                     | Role                       | Digits    | What it should be                                            | Live? |
+| --- | ----------------------------------------- | -------------------------- | --------- | ------------------------------------------------------------ | ----- |
+| H1  | `erc-token/.../application.properties:51` | ERC-20 `Transfer` topic0   | **63**/64 | canonical topic0; missing the `a` at index 36                | LIVE  |
+| H2  | `erc-eusdt/.../application.properties:72` | ERC-20 `Transfer` topic0   | **63**/64 | canonical topic0; missing the `6` at index 47                | LIVE  |
+| H3  | `erc-token/.../application.properties:39` | ERC-20 contract address    | **39**/40 | mainnet Tether; missing the `a` at index 16                  | LIVE  |
+| H4  | `eth/.../application.properties:39`       | `coin.ignore-from-address` | **39**/40 | the platform hot wallet; missing the `4` at index 19         | LIVE  |
+| H5  | `eth/.../application.properties:35`       | keystore account           | **39**/40 | the same hot wallet; missing the `1` at index 16             | LIVE  |
+| H6  | `erc-token/.../application.properties:32` | keystore account           | **39**/40 | the same hot wallet again; missing the `3` at index 10       | LIVE  |
+| H7  | `erc-eusdt/.../application.properties:32` | keystore account           | **39**/40 | **unknown** — a different account, one sample, unrecoverable | LIVE  |
+
+"LIVE" carries the meaning [§1.3](#13-live-vs-latent) gives it: reachable the first time somebody supplies the environment and starts the service.
+
+#### What each one does today — and which way it fails
+
+**H1, H2 — the topic0s. They fail CLOSED, and that is the whole problem with them.**
+
+`contract.event-topic0` binds to `Contract.eventTopic0` (`rpc-common/.../entity/Contract.java`), which `TokenWatcher` reads before calling `EtherscanApi.checkEventLog`. A topic0 is a 32-byte keccak hash. A 63-digit value cannot equal any log topic that has ever been emitted, so `checkEventLog` returns false, `continue` fires, and **neither erc module credits any deposit at all.** Today that means no fake deposits — and no real ones. Correcting either constant activates a Transfer-log check that has never executed once, in the crediting path of a watcher whose receipt-status check is commented out ([F6](#f6)) and which never compares a function selector ([F7](#f7)). The correct value is the right end state and reaching it is a behaviour change, not a typo fix. Setting the property empty is strictly worse than leaving it wrong: `StringUtils.isNotEmpty` then skips the check entirely.
+
+**H3 — the mangled Tether address. It fails CLOSED, and it is the single most dangerous line in this table.** `erc-token` cannot address a contract at 39 digits, so it watches nothing and transfers nothing. The one-character edit that makes it well-formed makes it **the live Ethereum mainnet Tether contract**, and turns the module into a real USDT mover. Its `erc-eusdt` twin, which carried this same address unmangled and correct, has since been replaced by a placeholder for exactly this reason ([F13](#f13)) — replaced rather than mangled, because a mangled literal's only defence is that nobody tidies it up.
+
+**H4 — `coin.ignore-from-address`. This is the one that fails OPEN, and it is not [F6](#f6).**
+
+```java
+// eth/.../component/EthWatcher.java
+48:  if (StringUtils.isNotEmpty(transaction.getTo())
+49:          && accountService.isAddressExist(transaction.getTo())
+50:          && !transaction.getFrom().equalsIgnoreCase(getCoin().getIgnoreFromAddress())) {
+```
+
+The property binds to `Coin.ignoreFromAddress`, and the account it names is the platform's **own withdrawal wallet** — the same account `coin.withdraw-wallet` loads a keystore for, and the same account `EthService.transferFromWithdrawWallet` (`:106-107`) signs every ETH withdrawal from. The clause exists to stop money the platform sends _out_ from being read back as money a customer sent _in_.
+
+Because the configured value is 39 digits, it can never equal a `from` address returned by a node, which always has 40. **The exclusion never matches, so line 50 is always true and the filter never excludes anything.**
+
+The routine way that costs money: a customer withdraws to an address that is also a watched deposit address — their own deposit address on this same platform, which people do constantly. `from` is the hot wallet, `to` is watched, `isAddressExist` returns true, and the withdrawal is **credited straight back to them as a fresh deposit.** No attacker required. The same happens to any operational top-up sent from the hot wallet to a deposit address.
+
+H1, H2, H3, H5, H6 and H7 all break something that was _preventing_ an action. **H4 breaks something that was preventing a credit**, which is why it is listed separately from the fail-closed six. It is also the only one of the seven where correcting the constant is unambiguously safe: restoring the 40th digit can cause strictly fewer credits, never more, and it needs no fixture to prove that.
+
+**H5, H6 — keystore filenames.** `coin.withdraw-wallet` names a go-ethereum keystore file to load from `coin.keystore-path`. A 39-digit account means the filename does not exist on disk, `WalletUtils.loadCredentials` throws, and the withdrawal path fails at startup or first use with a filesystem path in the error message ([F15](#f15)). Fails closed: no withdrawals, rather than withdrawals from the wrong account.
+
+**H7 — the `erc-eusdt` keystore account.** Same failure mode as H5/H6, and the only one of the seven whose correct value **cannot be recovered from this repository.** See below.
+
+### 7.5 The mangling is one deleted digit, and it is reversible
+
+H4, H5 and H6 name the same Ethereum account, mangled at three different indices. Deleting one digit is lossy — a 39-digit string has 40 possible 40-digit sources — but three independent samples of one string intersect at exactly one candidate:
+
+```
+T  = 0x672881426632b13d18f474664c039acc7b5610b7      (40 digits)
+
+eth/…:35        keystore  = T minus index 16  (the '1')
+eth/…:39        ignore-from = T minus index 19  (the '4')
+erc-token/…:32  keystore  = T minus index 10  (the '3')
+```
+
+Each of the three is exactly `T` with one character removed, and no other 40-digit string satisfies all three. **The upstream's redaction is not a redaction.** The platform's own Ethereum hot-wallet account — the one [F3](#f3) is about, the one `eth` and `erc-token` both draw withdrawals from — is recoverable from this repository by anyone who notices that three lines name one address three different ways.
+
+This discloses no key. An EVM address is public by construction and its balance is public whether or not a properties file names it. What it discloses is **which** account, to anyone reading the repo, without them needing to already know — and it establishes that the same one-digit-deletion technique was applied to the other four, which is the part that generalises.
+
+Six of the seven are therefore recoverable: H1, H2 and H3 because the canonical value is known, and H4, H5, H6 by the intersection above. **H7 is the exception.** It appears once, so it has 40 deletion positions × 16 possible digits = 640 candidates and nothing to choose between them. It is a different account from `T`, and this repository cannot say which.
+
+### 7.6 What the audit did not find
+
+The negative results carry as much weight as the positive ones, because three of them are the confirming half of findings this review states from the other side.
+
+- **No function selector constant exists anywhere in the tree.** `a9059cbb`, `095ea7b3`, `23b872dd`, `70a08231`, `18160ddd`, `dd62ed3e` — none appears in any of the 228 Java files or 13 properties files. This is the positive confirmation of [F7](#f7): the token watcher does not fail to compare the selector correctly, it has **no selector constant to compare against at all**. Fixing F7 means introducing a constant, not correcting one.
+- **No chain id exists anywhere**, in Java or in configuration. The configuration-side confirmation of [F4](#f4).
+- **No private key and no public key.** No 64-hex secp256k1 private key, no 128- or 130-digit public key. The only 64-hex value resembling a secret is a SHA-256 digest that is a digest on purpose (below).
+- **Not one address in the tree is written in mixed case.** There are six EVM address literals — five in properties (`erc-token:32`, `erc-token:39`, `erc-eusdt:32`, `eth:35`, `eth:39`) and one in Java (`EtherscanApi.java:80`) — and all six are entirely lowercase. **EIP-55 is therefore unavailable as a check on every single address in this tree**: six of six are valid but unverifiable. This matters more than it reads: EIP-55 exists precisely to catch a mistyped address, and writing addresses in a single case discards it everywhere. It would not have caught these seven — a 39-digit string is not a checksummable address, and length is what catches a deletion — but the two checks are complementary, not redundant: length catches insertions and deletions, EIP-55 catches substitutions and transpositions, and this tree currently has neither.
+- **No hex constants in IDE metadata.** The 47 `.prefs`, 15 `.classpath` and 15 `.project` files are clean.
+
+#### The six well-formed hex constants, and the one whose correctness is load-bearing
+
+| Where                                                          | Value                                             | Role                                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `eth-support/.../EtherscanApi.java:80`                         | `0xddf252ad…523b3ef` (64)                         | **the canonical `Transfer` topic0** — correct, and the proof H1/H2 were typed |
+| `eth-support/.../EtherscanApi.java:80`                         | `0x0b42c73446e4090a7c1db8ac00ad46a38ccbc2ac` (40) | a mainnet contract address; frozen under `M8`                                 |
+| `eth-support/.../EtherscanApi.java:79`                         | `0x4d95cdb7…58129c97` (64)                        | a mainnet txid, in the same `main()` harness                                  |
+| `eth-support/.../EthService.java:251`                          | `0x0000…0000` (64)                                | the zero block hash, in `isTransactionSuccess`                                |
+| `btm/.../Watcher.java:104`, `btm/.../WalletController.java:93` | `ffff…ffff` (64)                                  | the Bytom native BTM asset id — correct, and it gates a deposit credit        |
+| `ect/.../EctWithdrawSecretConfig.java:48`                      | `feafc645…2c7dd89b` (64)                          | **repo-authored SHA-256 — and the only fail-OPEN constant here**              |
+
+The last row is the sharpest argument in this section, and it is about **our** code, not the vendor's.
+
+`EctWithdrawSecretConfig` is the guard this repository added so that a service refuses to boot on the ECT withdrawal secret that git history has already disclosed ([F1](#f1)). It works by comparing a stored digest against a freshly computed one:
+
+```java
+48:    private static final String DISCLOSED_SECRET_SHA256 =
+49:            "feafc645a12b90d5ddd2aac44494fb61ccb8ef49a2f5af0b022942ef2c7dd89b";
+...
+61:        if (DISCLOSED_SECRET_SHA256.equals(sha256Hex(withdrawWalletSecret.trim()))) {
+```
+
+It is 64 digits today and it is correct. **Drop one digit from it and it can never equal any SHA-256 hex string.** The comparison silently becomes permanently false, the "you have pasted the disclosed secret back in" check stops firing, and the service boots happily on the compromised key that signs every ECT withdrawal — with no error, no log line, and a green test suite, because nothing asserts the digest's width.
+
+Every one of the seven vendor defects fails closed or, in H4's case, breaks an exclusion. This one would fail open, straight into the exact scenario the class was written to prevent. It is the reason the gate rule below is worth building rather than filing.
+
+### 7.7 Non-hex constants: heights, ports, gas, intervals
+
+Same transcription risk, different alphabet.
+
+**Three pinned mainnet start heights are bound to nothing.** `coin.init-block-height` (`usdt:34` = 592417, `ect:13` = 39610, `eth:33` = 8336120) and `coin.step` (`usdt:33`, `eth:34`) are bound by `@ConfigurationProperties(prefix = "coin")` to the `Coin` entity — which has **no `initBlockHeight` field and no `step` field**. `CoinConfig` leaves `ignoreUnknownFields` at its default of `true`, so these are silently discarded: the identical mechanism [F12](#f12) documents for `coin.password`. The watcher's start height comes from `WatcherSetting` (prefix `watcher`), whose `initBlockHeight` defaults to the string `"latest"`.
+
+`eth` also sets `watcher.init-block-height=8347300`, which does bind, so `eth` is unaffected. **`usdt` and `ect` set no `watcher.*` properties at all**, so both begin scanning at the chain tip rather than at the height their own file names. Fail direction: every deposit between the pinned height and first boot is never seen. The module **loses** deposits; it does not invent them. Fails closed. Worth recording because the summary in [F13](#f13) counts "thirteen mainnet start heights" as live constants and two of them are read by nothing. The frozen baseline is still right to freeze them — an inert constant is one binding fix from being live — but they should be understood as inert.
+
+**Heights are otherwise all plausible.** Every `watcher.init-block-height` sits where its chain actually was in August–September 2019, consistent with the `2019-08-13` and `2019-09-11` timestamps in the keystore filenames in the same files: BTC 592417, ETH 8347300 and 8551979, BCH 600000, BSV 600350, LTC 1703228, XMR 1926300, BTM 334504, EOS 79953165, ECT 39610. No factor-of-ten slip, no transposition landing in the wrong era.
+
+**`bitcoin` pins no start height at all**, and no `watcher.*` of any kind, so it inherits `"latest"` plus the 5000 ms / step 5 / confirmation 3 defaults. `BitcoinWatcher` is still started — `rpc-common`'s `ApplicationEvent` autowires `Watcher` with `required = false` and the shared package is component-scanned — so this is a gap rather than a defect: starting at the tip is the safe default, and starting at block 1 (which `Watcher.currentBlockHeight = 0L` would have meant) is the outcome the `"latest"` branch avoids.
+
+**`contract.gas-limit=50000`** in both erc modules is below what an ERC-20 `transfer()` costs when it writes a recipient's balance slot from zero to non-zero — around 60,000 gas for USDT, against roughly 41,000–46,000 for a recipient who already holds a balance. Fail direction: the withdrawal reverts out of gas, the gas is spent, no tokens move, and because `PaymentHandler` does check receipt status on the **withdrawal** path (unlike the deposit path), the failure is at least visible. Latent — the module cannot boot. Flagged as implausible, not as a transcription error.
+
+**`eth`'s `coin.gas-limit=40000`** against a 21,000-gas plain ether transfer is ample. **Intervals** are unremarkable: 20,000 ms everywhere except `eth` at 5,000 and `xmr` at 300,000. `eos` is the only module whose `confirmation=200` / `step=100` pair looks tuned rather than copied, and it is consistent with EOS block times. **Ports collide twice**, as [F16](#f16) records: 7001 (`act`, `bitcoin`) and 7004 (`erc-token`, `erc-eusdt`) — eleven distinct ports for thirteen services.
+
+### 7.8 What the existing gates already do, and the three things they do not
+
+All seven malformed constants are frozen today, by exact text, under `M4-address`, `M4-keystore`, `M4-topic` and `M8`. That is real coverage and it was not there when this review was written. Freezing means none of the seven can be corrected, deleted or re-pointed without a human reading the paragraph attached to it — which, for H1 and H2 especially, is the correct control.
+
+Three gaps remain, and they are not gaps in the baseline, they are gaps in what the **rules** assert:
+
+1. **No rule anywhere checks a width.** The baseline pins text; text-pinning stops change, it never says a value is malformed. `KEYSTORE_FILENAME` is `/^UTC--[0-9T:.\-]+Z?--[0-9a-fA-F]{38,40}(\.json)?$/` — it **actively tolerates 38 to 40 digits**, so a keystore account is recognised as well-formed at three different lengths. `classifyAddress` describes a short address as "EVM-shaped but short — a mangled/redacted address literal", which is a message, not a verdict. Only `classifyTopic` genuinely checks a width, and only for topics.
+2. **The scope is one vendor tree.** The same defect class in `packages/`, `services/` or the other vendored trees is entirely unguarded — and those modules can actually boot.
+3. **The one fail-open constant in the tree is repo-authored and unprotected.** `DISCLOSED_SECRET_SHA256` ([§7.6](#76-what-the-audit-did-not-find)) is not an address, not a topic, and not in any baseline. Nothing asserts it is 64 characters long.
+
+### 7.9 Proposed gate rule — M11: fixed-width hex literals must have their fixed width
+
+**Proposed, not implemented.** Sketched to the shape of the existing rules in `tooling/ci/wallet-rpc-mainnet-scan.mjs` so it can be built without redesign.
+
+**M11.** A hex literal occupying a role with a fixed width must have that width. Roles are inferred from position, and only these are claimed:
+
+| Role                             | Detected by                                                                               | Required digits |
+| -------------------------------- | ----------------------------------------------------------------------------------------- | --------------- |
+| EVM address                      | `0x` literal under a properties key ending `address`; bare `0x` literal in an address arg | 40              |
+| go-ethereum keystore account     | the digit run after the second `--` in a `UTC--…--…` filename                             | 40              |
+| event topic, tx hash, block hash | `0x` literal under a key matching `topic\d+$`; Java literal named `txid`/`hash`/`topic`   | 64              |
+| SHA-256 / keccak digest constant | Java `static final String` whose name matches `SHA256`/`KECCAK`/`DIGEST`                  | 64              |
+| secp256k1 private key            | any identifier matching `privateKey`/`privkey`                                            | 64              |
+| secp256k1 public key             | any identifier matching `publicKey`/`pubkey`                                              | 128 or 130      |
+
+A literal in one of these roles at the wrong width fails, and the message states observed width, required width and the signed delta. **A delta of exactly ±1 is reported as `TRANSCRIPTION` rather than `MALFORMED`** — off-by-one is this class's signature and deserves its own word.
+
+Two supporting clauses, both of which do more work than the bare length check:
+
+**M11-known.** A literal within one deletion, insertion or substitution of a canonical constant the gate knows — the ERC-20 `Transfer` and `Approval` topic0s, the standard ERC-20 selectors, the zero address, the zero word — fails and **names the canonical value it is near, and the index of the edit**. This is what turns "63 digits" into "the `Transfer` topic0 with the `a` at index 36 removed", which is the sentence that makes a finding actionable rather than merely alarming. Near-miss detection is the real rule; the width check is the case of it that needs no dictionary. It is also what would have caught H3 as _Tether_ rather than as _some short address_.
+
+**M11-checksum.** A 40-digit address in mixed case must satisfy EIP-55. An address in a single case is accepted, and the line reads `checksum unavailable — single-case literal`, so the count of unverifiable addresses is printed on every run instead of being a thing nobody measured. That count is currently **six of six**, and [§7.6](#76-what-the-audit-did-not-find) is the first document to say so.
+
+**Interaction with the baseline — the part most likely to be got wrong.** M11 must run **before** the freeze check, and being frozen must **not** suppress it. Freezing the seven is right; it is also a different claim from well-formedness, and the gate currently only makes the first. M11 should print all seven every run as _known malformed, frozen deliberately, see §F6 and §7.4_ — a standing visible count rather than silence. A gate that reads a value and says nothing about it is how the second mangled topic0 sat beside the first without anyone noticing they were mangled differently.
+
+**Scope and sequence.** Land it inside the wallet tree, where the baseline already exists and the seven known failures give it immediate proof-of-life — the same argument the `M8` entry makes for itself. Then lift M11 to a repo-wide gate: the class is not vendor-specific, `packages/ledger-client` and the `svc-*` services will acquire EVM constants, and there the failure mode is worse because those modules boot.
+
+**Cost.** A regex sweep over roughly 330 files plus a keccak-256 implementation of about sixty lines. Comfortably inside the ~2 s budget the other fourteen doctrine gates share.
+
+**What it would have caught:** all seven, on the commit that introduced them — and, going forward, a single dropped digit in `DISCLOSED_SECRET_SHA256`, which is the one that fails open.
+
+### 7.10 What this changes in the verdict
+
+Nothing. [§6](#6-verdict) stands exactly as written. Not one of these seven makes the tree safer or more dangerous than a service that prints its own hot-wallet key on the happy path.
+
+Two things it does sharpen. First, [§6](#6-verdict)'s line that _"the only reason the ERC modules are not currently minting free credit is that somebody mangled a constant"_ is now measurable rather than rhetorical: **seven constants were mangled, six of them the same way, by the same hand, and in six of the seven cases the accident points the safe way.** H4 is the counter-example that keeps this from being a comfortable story — one of the seven mangled a value whose job was to _prevent_ a credit, and broke it open.
+
+Second, this is the class of defect that argues hardest against adopting the tree by inspection. Seven single-character errors in thirteen constants is a 54% defect rate in the one part of a codebase that can be checked mechanically, exhaustively, and without a compiler. The 228 Java files cannot be checked that way, and nothing about this result suggests the hand that typed them was steadier.
+
+---
+
+## 8. Correction — this host has network access
+
+### 8.1 The claim, and that it is false
+
+This review states in five places that there is no network on this host, and uses it as the reason several questions could not be answered. **That is false.** Directly re-tested for this addendum:
+
+| Check                                              | Result                      |
+| -------------------------------------------------- | --------------------------- |
+| DNS `api.adoptium.net`                             | resolves — `104.18.20.66`   |
+| DNS `github.com`                                   | resolves — `20.205.243.166` |
+| DNS `repo1.maven.org`                              | resolves — `104.18.19.12`   |
+| TCP/443 to all three                               | connects                    |
+| Maven Central search API                           | answers queries             |
+| `repo1.maven.org` artifact bytes and `.sha1` files | served over HTTPS           |
+
+**On whether it was false on 2026-08-05, this addendum takes no position.** It was not tested then, and it cannot be tested retroactively. The [F3 follow-up](#f3-2026-08-06) reads the evidence as "true when written, since gone stale"; this section reads it as a standing property of the host that the document asserts and that is not the case. Nothing anywhere in the document turns on which is right, and neither reading is worth more words than this paragraph. What matters is that the sentence is in the document **now**, in the present tense, in the section a reader consults to learn what is still open — and that it is not true.
+
+A JDK and Maven were obtained subsequently on that basis. **Neither was on `PATH` in the session that wrote this addendum**, and nothing here was compiled or executed — see [§8.4](#84-what-does-not-change). The one artifact fetched during this addendum was a 40-byte `.sha1` text file.
+
+### 8.2 Where the claim appears
+
+Corrected in place, each pointing here: [§1.2](#12-what-could-not-be-done-and-why) (the "Reach the network" row, plus the two rows that depended on it), the [F3](#f3) follow-up, [§3](#3-jar-inventory) ("Can any of them be verified?"), [F19](#f19), [§5](#5-what-this-review-does-not-cover) item 1, and the closing italic line.
+
+Struck rather than deleted, throughout. A security review that quietly rewrites its own premises is harder to trust than one that shows where it was wrong.
+
+### 8.3 What leaned on it
+
+**1 — [F3](#f3), and this is the big one.** [§6](#6-verdict) names F3 _"the one thing that should be treated as more urgent than the rest of this document"_. As originally written, the F3 follow-up said confirmation _"still needs `org.web3j:core:3.3.1` on disk"_ — and the reason it was not on disk was given as: there is no network.
+
+**That is the whole case for why a false entry in a "what we could not do" table is not a clerical matter.** The document's own top-priority finding sat unconfirmed behind an obstacle that did not exist. The moment somebody used the network, F3 resolved — and it resolved the bad way. The sequence, all on 2026-08-06:
+
+| Step                                                                              | Result                                                |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| The jar is fetched over the network the review said it did not have               | `crypto-3.3.1.jar`, 44,008 bytes                      |
+| It is read as bytes, no JVM — the review's own fastjson technique                 | the accessor chain is exactly as inferred             |
+| [F3](#f3) is promoted from inference to finding ([follow-up](#f3-2026-08-06))     | **`eth-support` logs the ETH hot-wallet private key** |
+| Its one residual caveat — the jar's provenance — is left open, awaiting a network | one `curl` of a `.sha1`                               |
+| That `curl` is run for this addendum                                              | **matches. F3 has no remaining conditional.**         |
+
+Published `crypto-3.3.1.jar.sha1` is `8e07f435838a1d840765656d8df6b8e8e2c5f4e4`; the jar on this host hashes to the same value, and its SHA-256 matches what the follow-up recorded. Details in the [gap-closed note](#f3-2026-08-06).
+
+Two corrections fall out of this that the original table got wrong on their own terms, independent of the network:
+
+- **The coordinate was misnamed.** `Credentials` and `ECKeyPair` are in `org.web3j:`**`crypto`**, not `org.web3j:`**`core`**. `core-3.3.1.jar` contains neither class. Anyone who obtained `core` — as this addendum first did, quoting its SHA-1 `1738c99a…` — would have found nothing and could plausibly have concluded the opposite of the truth.
+- **`org.web3j:core:3.3.1` is nonetheless published and fetchable** (HTTP 206 to a range request), so the row asserting it could not be resolved was wrong twice over: wrong that it was unreachable, and wrong about which artifact was wanted.
+
+**2 — [§3](#3-jar-inventory), jar verification. Partly answered, and the rest of the answer is worse than "unverifiable".** Three further coordinates were queried:
+
+| Coordinate                    | On Maven Central                     | Consequence                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `com.spark.bc:bitcoin-rpc`    | **No — zero artifacts, any version** | The tree's most trust-critical binary, which builds, signs and broadcasts raw Bitcoin transactions for `bitcoin` and `usdt`, has **no published counterpart to check against.** Not "we lacked the means" — we looked, and there is nothing there. Its only stated origin remains the `maven.xinhuokj.com` deploy target inside its own pom. |
+| `org.litecoinj`               | **No**                               | Consistent with [§3](#3-jar-inventory)'s finding that it was built on one person's Windows machine in 2019. The GAV identifies nothing public.                                                                                                                                                                                               |
+| `cash.bitcoinj:bitcoinj-core` | **Yes** — 0.14.5, 0.14.5.1, 0.14.5.2 | Answers [§4](#4-dependency-versions-and-cve-surface): the coordinate the four Bitcoin-family key-minting modules resolve **does** exist publicly. Who publishes it, and whether its `ECKey` RNG is sound, remain open — [§5](#5-what-this-review-does-not-cover) item 8 stands untouched.                                                    |
+
+**3 — [F19](#f19), the `47.74.42.87` node.** "Cannot be answered without network access" was the wrong diagnosis. Whether that node is ours is an **ownership** question, answerable from procurement records. It was not probed for this addendum and should not be: probing a third-party host is not a decision this review gets to make.
+
+**4 — [§5](#5-what-this-review-does-not-cover) item 7, balances.** Checkable now, at every address named in this document — including the hot-wallet account reconstructed in [§7.5](#75-the-mangling-is-one-deleted-digit-and-it-is-reversible). Not done, and no longer impossible.
+
+### 8.4 What does not change
+
+**Every static finding, F1 through F21, stands unaltered.** They were read out of source that has not moved, and a working socket neither adds nor removes a line of it. Nothing in this correction touches the [verdict](#6-verdict).
+
+**The transitive dependency graph is still unenumerated**, and network access does not help: that needs a resolved build, not a socket.
+
+**And nothing has been compiled.** [§5](#5-what-this-review-does-not-cover) item 1 and [F21](#f21) are correct as written and are not weakened here. The distinction this correction turns on is narrow and worth stating plainly: _"we could not reach the artifact"_ was false; _"we did not compile anything"_ was true then and is true now.
+
+The reason to record this at length rather than quietly amend a table is that the false claim **was doing real work, and the record now shows exactly how much.** It converted four open items into impossible ones. It retired the document's own stated top priority on a premise nobody tested. And when the premise was finally ignored, [F3](#f3) went from _"almost certainly"_ to confirmed inside a day, and from confirmed to unconditional inside a few hours more — on evidence that had been one HTTPS GET away the whole time, while the review said it was out of reach.
+
+**A review's list of what it could not do is load-bearing, and it needs checking as carefully as its findings.** An overstated obstacle is not a modest error in a security document. It is an instruction to everyone downstream to stop looking.
+
+---
+
+_Static analysis only. Nothing in this tree was compiled, executed, or dynamically tested, by this review or — per [F21](#f21) — by anything else. **No JDK, JRE or Maven has been on `PATH` in any session that wrote to this document**, and class files were read as bytes throughout, which needs no JVM. The claim that **no network** was available is false and is corrected in [§8](#8-correction--this-host-has-network-access); it is not known whether it was true on 2026-08-05, and no conclusion here depends on which._
+
+_Addenda, 2026-08-06: [F3 follow-up](#f3-2026-08-06) (F3 confirmed, provenance closed) · [§7](#7-fixed-width-hex-constant-audit-addendum-2026-08-06) (hex constant audit) · [§8](#8-correction--this-host-has-network-access) (network correction)._
