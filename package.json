@@ -51,6 +51,7 @@
     "scan:wallet-rpc-mainnet": "node tooling/ci/wallet-rpc-mainnet-scan.mjs",
     "scan:secrets:mutate": "node tooling/ci/secret-scan.mutation.mjs --verbose",
     "scan:money-property:mutate": "node tooling/ci/money-property.mutation.mjs",
+    "scan:wallet-rpc-mainnet:mutate": "node tooling/ci/wallet-rpc-mainnet-scan.mutation.mjs",
     "scan:compose-secrets": "node tooling/ci/compose-secret-parity.mjs",
     "scan:vendor-shell": "node tooling/ci/vendor-shell-scan.mjs",
     "scan:vendor-java-money": "node tooling/ci/vendor-java-money-scan.mjs",

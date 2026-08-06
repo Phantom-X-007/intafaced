@@ -127,7 +127,23 @@ export const GATES = [
       'appears, so the baseline can only shrink — text alone left the gate blind to an unused mainnet import becoming ' +
       'a live selector, and to a deleted broadcast being pasted back. Rules that match nothing in the tree (the ' +
       'wss:// scheme, ChainId.NONE, RawTransactionManager, an EVM address under a non-address key) have no baseline ' +
-      'to prove them alive, so 16 fixtures run through the real matchers on every invocation instead.',
+      'to prove them alive, so 47 fixtures run through the real matchers on every invocation instead. Two of those ' +
+      'rules exist because a value that LOOKS undecided is not: `${VAR}` is the environment’s decision and is ' +
+      'skipped, `${VAR:0xdac17…}` resolves without an environment and is the pin it defaults to.',
+  },
+  {
+    id: 'wallet-rpc-mainnet-mutation',
+    script: 'tooling/ci/wallet-rpc-mainnet-scan.mutation.mjs',
+    doctrine: '§16 / §14',
+    why:
+      'the mutation proof for the gate above, and it mutates the CHECKER rather than the subject — RULE_PROBES ' +
+      'already answers "does the rule still fire" on every invocation. This answers the question that harness could ' +
+      'not ask about itself. Deleting the probe loop used to exit 0 while still printing "0 rule probe(s) executed … ' +
+      '(24 must fire, -24 must not)", and deleting the occurrence comparison used to exit 0 still printing "none ' +
+      'gained a copy" over a tree that had just gained one: both numbers were read off source text, so removing the ' +
+      'work left the claim standing. Every summary clause is now minted by the check that establishes it and ' +
+      'reconciled before printing; 10 deletions must each be detected, and a mutant whose anchor has moved fails ' +
+      'rather than skips.',
   },
   {
     id: 'vendor-shell',
