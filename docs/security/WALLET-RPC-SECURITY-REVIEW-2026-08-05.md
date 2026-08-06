@@ -7,7 +7,9 @@
 
 This is the read that [`docs/UPSTREAM-ADOPTION-QUEUE-2026-08-02.md:1488`](../UPSTREAM-ADOPTION-QUEUE-2026-08-02.md) deferred when it said _"It is not a security review and must not be cited as one. 215 files were not read line by line."_ It is the precondition of adoption that the [vendored-exchange ADR](../adr/2026-07-28-vendored-exchange-integration.md) requires, and that [`OWNER-ACTIONS-WALLET-RPC-SECRETS.md` §A4](../OWNER-ACTIONS-WALLET-RPC-SECRETS.md) records as not having happened.
 
-**Verdict up front:** this tree must not be pointed at real value in its current state, and the reason is not the three findings that were already known. It is that **two of its thirteen bootable services print a live spending credential to stdout on an ordinary success path**, and a third almost certainly prints an Ethereum private key. Those are not configuration mistakes; they are code. See [Verdict](#verdict).
+**Verdict up front:** this tree must not be pointed at real value in its current state, and the reason is not the three findings that were already known. It is that **three of its thirteen bootable services print a live spending credential to stdout on an ordinary success path**, and one of the three prints an Ethereum private key. Those are not configuration mistakes; they are code. See [Verdict](#verdict).
+
+> **Amended 2026-08-06.** As first published this sentence read _"**two** … and a third **almost certainly** prints an Ethereum private key"_, because [F3](#f3) rested on an accessor chain in a library this host could not open. That library has now been read on this host, without a JVM, and the chain is exactly what the review inferred. The hedge is gone and the count moved from two to three. The evidence — and the one thing about it that is still **not** verified — is in the [F3 follow-up of 2026-08-06](#f3-2026-08-06).
 
 ---
 
@@ -23,16 +25,16 @@ The six bitcoinj-family modules (`bch`, `bsv`, `ltc`, `btm`, `eos`, `xmr`) are n
 
 **There is no JDK, JRE, or Maven on this host.** Nothing here was compiled, run, unit-tested, fuzzed, or dynamically observed. Every finding in this document is a static-analysis finding and is marked as such. Specifically, this review could not:
 
-| Not done                         | Consequence for this review                                                                                                                                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Compile any module               | Cannot confirm the tree even builds. It almost certainly does not — see [F21](#f21).                                                                                                                               |
-| Run `mvn dependency:tree`        | The transitive dependency set, and therefore the CVE surface and the gadget classes available to a deserialisation attack, is **unknown**. Only directly declared versions are reported here.                      |
-| Resolve any Maven coordinate     | Cannot confirm that `cash.bitcoinj:bitcoinj-core:0.14.5.2`, `org.web3j:core:3.3.1` or any other declared dependency resolves to a public artifact, nor what its checksum is.                                       |
-| Open `org.web3j:core:3.3.1`      | The `Credentials` / `ECKeyPair` accessor chain that [F4](#f4) depends on was reasoned about from the library's published API, not read. Flagged inline.                                                            |
-| Execute a fastjson serialisation | [F4](#f4) depends on fastjson's `JavaBeanSerializer` walking public getters. That is fastjson's documented behaviour, not an observation.                                                                          |
-| Reach the network                | Cannot check any jar checksum against Maven Central, cannot verify the `47.74.42.87` node in [F19](#f19) is or is not ours, cannot check balances at any address named here.                                       |
-| Read the deployed environment    | Every `${VAR}` placeholder's actual value is unknown. Whether one `WALLET_RPC_AUTH_TOKEN` is shared across all thirteen services — which decides the blast radius of [F5](#f5) — cannot be answered from the tree. |
-| Read downstream consumers        | Whether re-emitted deposit events double-credit ([F17](#f17)) depends on a Kafka consumer outside this tree that was not reviewed.                                                                                 |
+| Not done                         | Consequence for this review                                                                                                                                                                                                                                                                                                |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compile any module               | Cannot confirm the tree even builds. It almost certainly does not — see [F21](#f21).                                                                                                                                                                                                                                       |
+| Run `mvn dependency:tree`        | The transitive dependency set, and therefore the CVE surface and the gadget classes available to a deserialisation attack, is **unknown**. Only directly declared versions are reported here.                                                                                                                              |
+| Resolve any Maven coordinate     | Cannot confirm that `cash.bitcoinj:bitcoinj-core:0.14.5.2`, `org.web3j:core:3.3.1` or any other declared dependency resolves to a public artifact, nor what its checksum is.                                                                                                                                               |
+| Open `org.web3j:core:3.3.1`      | ~~The `Credentials` / `ECKeyPair` accessor chain that [F3](#f3) depends on was reasoned about from the library's published API, not read.~~ **Superseded 2026-08-06** — `org.web3j:crypto:3.3.1`, which is where those two classes actually live, was found on this host and read. See the [F3 follow-up](#f3-2026-08-06). |
+| Execute a fastjson serialisation | [F4](#f4) depends on fastjson's `JavaBeanSerializer` walking public getters. That is fastjson's documented behaviour, not an observation.                                                                                                                                                                                  |
+| Reach the network                | Cannot check any jar checksum against Maven Central, cannot verify the `47.74.42.87` node in [F19](#f19) is or is not ours, cannot check balances at any address named here.                                                                                                                                               |
+| Read the deployed environment    | Every `${VAR}` placeholder's actual value is unknown. Whether one `WALLET_RPC_AUTH_TOKEN` is shared across all thirteen services — which decides the blast radius of [F5](#f5) — cannot be answered from the tree.                                                                                                         |
+| Read downstream consumers        | Whether re-emitted deposit events double-credit ([F17](#f17)) depends on a Kafka consumer outside this tree that was not reviewed.                                                                                                                                                                                         |
 
 Where a finding rests on an inference rather than a read, the inference is named at the finding.
 
@@ -51,6 +53,8 @@ That reading is useless for a custody decision, so this review uses a narrower a
 
 Findings are ranked by **what an attacker gains**, not by CVSS. A finding that hands over a spending key outranks a finding with a higher nominal score that yields an error message.
 
+**On the numbers, after the 2026-08-06 amendment.** `F1`…`F21` are stable anchors — four other documents and one CI gate cite them by number — so they were **not** renumbered when [F3](#f3) was confirmed and moved to the top of the ranking. The table below is therefore in anchor order, not rank order, in exactly one place: **F3 now outranks F1 and F2.** The reason is stated at [F3](#f3-rank) and is worth one line here, because it is the only ranking argument in this document that does not follow from blast radius alone — **a leaked node credential can be rotated and a leaked withdrawal secret can be rotated, but a leaked private key cannot.** It _is_ the account. The only remedy is to sweep the funds to a new key, and until that is done every past reader of the log can spend.
+
 ---
 
 ## 2. Findings
@@ -59,9 +63,9 @@ Findings are ranked by **what an attacker gains**, not by CVSS. A finding that h
 
 | #           | Finding                                                                     | Live?                        | An attacker gains                                                   |
 | ----------- | --------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| [F3](#f3)   | **ETH hot-wallet private key written to the log every 30 s** _(rank 1)_     | LIVE                         | The ETH and ERC-20 hot wallet, from log-read access, unrotatably    |
 | [F1](#f1)   | ECT withdrawal signing secret printed to stdout on every withdrawal         | LIVE                         | The entire ECT hot wallet, from log-read access                     |
 | [F2](#f2)   | Node RPC credentials logged at INFO on startup (3 modules)                  | LIVE                         | Full spend authority over the BTC / Omni-USDT / ACT nodes           |
-| [F3](#f3)   | ETH hot-wallet private key reachable by the payment-status logger           | LIVE                         | The ETH and ERC-20 hot wallet, from log-read access                 |
 | [F4](#f4)   | Chain-id-less signing + unconditional second broadcast to mainnet Etherscan | LIVE                         | Withdrawals land on mainnet regardless of which node signed them    |
 | [F5](#f5)   | Every value-moving endpoint is an HTTP GET behind one shared static token   | LIVE                         | The whole float, in one request, to any address                     |
 | [F6](#f6)   | Deposits credited without checking transaction success                      | LIVE (eth) / LATENT (erc-\*) | Credit for transfers that never happened                            |
@@ -137,9 +141,11 @@ Same class of latent risk in `act/.../component/JsonrpcClient.java:21`, where Lo
 
 <a id="f3"></a>
 
-### F3 — The ETH hot-wallet private key is reachable by the payment-status logger · **LIVE** · _inference, see caveat_
+### F3 — The ETH hot-wallet private key is written to the log every thirty seconds · **LIVE** · _confirmed 2026-08-06 · rank 1_
 
-**Where:** `vendor/upstream-exchange/01_wallet_rpc/eth-support/src/main/java/…/service/PaymentHandler.java:207` and `:212`
+> **Status.** Published as an inference on 2026-08-05. Half-confirmed the same day (fastjson). **Fully confirmed 2026-08-06**, when the web3j half was read on this host without a JVM. The original inference text is kept below unedited so the two follow-ups can be checked against what they claim to have resolved. Read [the 2026-08-06 follow-up](#f3-2026-08-06) for the evidence and for the one residual caveat, which is about the jar's provenance and not about the accessor chain.
+
+**Where:** `eth-support` · `PaymentHandler.java:238` and `:243` (`:207` and `:212` when this review was written; the file gained a comment header when the [F4](#f4) Etherscan relay was deleted — the code is unchanged)
 
 ```java
 198:    @Scheduled(cron = "0/30 * * * * *")
@@ -188,6 +194,135 @@ And nothing in `Payment` opts out: the class carries only Lombok `@Builder`, `ge
 **Verdict: still an inference.** The conditional has not moved, only narrowed — from "two libraries behave as documented" to "one class in one library exposes one public getter". The consequence remains asymmetric and unattractive: if it does, the ETH hot-wallet private key is written to the log as a decimal integer every thirty seconds for up to fifty minutes per unconfirmed withdrawal; if it does not, the line is harmless. Nothing available in this repository decides it, and it is not recorded as a finding.
 
 Confirming it still needs `org.web3j:core:3.3.1` on disk. It does **not** need a working build — the same bytecode read used above would answer it in minutes, so the follow-up is "obtain the jar", not "make this tree compile".
+
+<a id="f3-2026-08-06"></a>
+
+#### F3 follow-up, 2026-08-06 — answered. It logs the private key.
+
+**The jar was found, and the accessor chain is exactly what the review inferred.** The remaining conditional is closed. §F3 is a finding.
+
+The one thing that is **not** established is the jar's provenance, and that is set out in full below rather than buried, because it is the only part of this finding that anybody should still argue with.
+
+##### Where the jar was, and what it is
+
+Not in `~/.m2` — the previous follow-up was right that `org/web3j` is absent there, and it still is. The search that found it covered the whole of `C:` (the only fixed drive), not just the Maven cache:
+
+```
+<scratch>/dl/web3j-crypto-3.3.1.jar     44,008 bytes
+  SHA-256  e8ad15e18928853dfdb7ef59f0755d68c7c965396e951e4162003d909d8ec486
+  SHA-1    8e07f435838a1d840765656d8df6b8e8e2c5f4e4
+<scratch>/dl/web3j-core-3.3.1.jar      239,749 bytes
+  SHA-256  515008bf4edfe58c66124f11bfb0cb519fe50156cdaa8130cd243c477dba0cf9
+  SHA-1    1738c99a0c39c118a838b4ac14f945e858a9cfae
+```
+
+**Note the artifact name.** The review, this file's §4 table, and both previous follow-ups all say the blocker was `org.web3j:**core**:3.3.1`. That is the coordinate the [reactor pom pins](#4-dependency-versions-and-cve-surface), but it is **not** where these two classes live. `Credentials` and `ECKeyPair` are in `org.web3j:**crypto**`, which arrives transitively. Anyone who went looking for `Credentials.class` inside a `core` jar would have found nothing and concluded the wrong thing — `core-3.3.1.jar` does not contain either class. It does contain six classes whose descriptors name `org/web3j/crypto/Credentials`, which is how the transitive edge is visible without resolving a pom.
+
+##### What the class files say
+
+Decoded the same way the fastjson chain was — a jar is a zip, and a `.class` file's constant pool, access flags and member tables parse without a JVM. Nothing was compiled or executed.
+
+```
+org/web3j/crypto/Credentials          major=52 (Java 8)   public final
+  FIELDS
+    private final  ecKeyPair  : Lorg/web3j/crypto/ECKeyPair;      ← not transient, no annotation
+    private final  address    : Ljava/lang/String;
+  METHODS
+    public  getEcKeyPair()Lorg/web3j/crypto/ECKeyPair;            ← public, no-arg, non-static
+    public  getAddress()Ljava/lang/String;
+
+org/web3j/crypto/ECKeyPair            major=52 (Java 8)   public final
+  FIELDS
+    private final  privateKey : Ljava/math/BigInteger;            ← not transient, no annotation
+    private final  publicKey  : Ljava/math/BigInteger;
+  METHODS
+    public  getPrivateKey()Ljava/math/BigInteger;                 ← public, no-arg, non-static
+    public  getPublicKey()Ljava/math/BigInteger;
+```
+
+Both getters are `public`, no-arg, non-static, and return a value. Both back onto a `private final` field that is **not** `transient` — the access flags are `0x0012` (`PRIVATE|FINAL`); `ACC_TRANSIENT` is `0x0080` and is absent. Neither class carries a single annotation: the only class-level attribute on either is `SourceFile`, the field attribute lists are empty, and no method carries `RuntimeVisibleAnnotations`. There is nothing anywhere in either class for a serialiser to opt out on.
+
+##### The chain, end to end, every link now read rather than assumed
+
+```
+PaymentHandler.checkJob()                        @Scheduled(cron = "0/30 * * * * *")
+  JSON.toJSON(current)                           current : Payment  (a FIELD, see below)
+    → JSON.toJSON(Object, SerializeConfig)
+        → ParserConfig.isPrimitive2(Payment)     false → keep going
+        → SerializeConfig.getObjectWriter        → JavaBeanSerializer
+        → JavaBeanSerializer.getFieldValuesMap   → FieldInfo.get → Method.invoke
+             ↳ Payment.getCredentials()          public · field not transient · no @JSONField
+        → JSON.toJSON(value)  on every value     ← RECURSES
+             ↳ Credentials.getEcKeyPair()        public · field not transient · no annotation
+        → JSON.toJSON(value)  again
+             ↳ ECKeyPair.getPrivateKey()         public · field not transient · no annotation
+             ↳ returns java.math.BigInteger
+        → ParserConfig.isPrimitive2(BigInteger)  TRUE → returned VERBATIM, not skipped
+  logger.info("…{}…", <that JSONObject>, checkTimes)
+        → SLF4J formats with String.valueOf → JSONObject.toString() → JSON text
+```
+
+The last link was the one worth checking rather than assuming, and it was checked: `ParserConfig.isPrimitive2` was decoded and its `ldc` sequence lists `java/math/BigInteger` alongside `Boolean`, `Character`, `Byte`, `Short`, `Integer`, `Long`, `Float`, `Double`, `BigDecimal`, `String` and the four date types. So the key is **kept as a value**, not dropped and not stringified into something lossy. And the fallback branch does not save it either — when `getObjectWriter` returns something that is not a `JavaBeanSerializer`, `JSON.toJSON` falls through to `toJSONString` then `parse`, which renders the same number.
+
+**So the ETH hot-wallet private key is written to the log as a decimal integer, every thirty seconds, for as long as a withdrawal is unconfirmed.** `maxCheckTimes` is 100, so up to fifty minutes and up to a hundred copies per withdrawal. This is `eth-support`, which is compiled into `eth`, `erc-token` and `erc-eusdt` — including the module holding the [live mainnet Tether contract](#f13).
+
+##### A third call site on the same field, which is not a leak today
+
+`PaymentHandler.java:274`, in `doJob`:
+
+```java
+logger.info("开始执行付款任务:current---"+JSONObject.toJSONString(current));
+```
+
+Same field, same serialiser. It is **not** a leak, and the honest reason is unglamorous: it sits inside `if (current == null && tasks.size() > 0)`, so `current` is null every time the line runs and it prints the four characters `null`. It is recorded here, and frozen in the gate, because the guard is the only thing making it harmless — the line was plainly written to dump the in-flight payment, and it would do exactly that if the condition were reordered or the statement moved below `current = payment;` eleven lines down.
+
+<a id="f3-rank"></a>
+
+##### Where this now ranks: above [F1](#f1) and [F2](#f2)
+
+Three services print a spending credential on a success path. This one is the worst of the three, for three reasons, in increasing order of importance:
+
+1. **Volume.** [F2](#f2) prints once per boot and [F1](#f1) once per withdrawal. This prints up to a hundred times per withdrawal, which makes it far and away the most likely of the three to survive into a truncated log excerpt, a sampled aggregator, a support paste or a screenshot.
+2. **Directness.** [F2](#f2)'s node credential is only spend authority to somebody who can also reach the node's RPC port. A private key needs nothing but the key — any public RPC endpoint in the world will broadcast the resulting transaction.
+3. **Irreversibility, which is the one that decides it.** A node RPC credential can be rotated in `bitcoin.conf`. The [F1](#f1) withdrawal secret can be rotated, and `OWNER-ACTIONS-WALLET-RPC-SECRETS.md` §A1 already tells the owner to rotate it. **A private key cannot be rotated — it is the account.** The only remedy is to sweep every asset to a new key, and until that sweep is done and confirmed, everyone who has ever read that log can spend. Rotation converts F1 and F2 into historical incidents; nothing converts this one except moving the money.
+
+##### The residual caveat: the jar's provenance, stated plainly
+
+**This jar cannot be checksum-verified, and this review does not claim it has been.** The distinction from the fastjson read matters and is not glossed:
+
+|                           | fastjson 1.2.31                                 | web3j crypto 3.3.1                       |
+| ------------------------- | ----------------------------------------------- | ---------------------------------------- |
+| Location                  | `~/.m2/repository/com/alibaba/fastjson/1.2.31/` | a scratch download directory             |
+| Maven layout              | yes, with `_remote.repositories`                | no                                       |
+| `.sha1` sidecar           | yes, **and it matches**                         | none                                     |
+| `.pom` beside it          | yes                                             | none                                     |
+| Embedded `META-INF/maven` | —                                               | none (web3j 3.x shipped a bare manifest) |
+| Jar signature             | none                                            | none                                     |
+
+It also arrived in a way this review should record rather than assume away: **that directory was created on 2026-08-06 and also contains a JDK 8 archive and a Maven archive.** Something on this host had network access, which contradicts the premise stated in [§1.2](#12-what-could-not-be-done-and-why) and repeated in this document's footer. That premise was true when the review was written and is now stale. Nothing in this follow-up used that network, downloaded anything, or ran the JDK — the class files were parsed as bytes, which is the same method and the same evidentiary standard as the fastjson read.
+
+**What makes the read trustworthy anyway, and it is not the filename.** Every `org.web3j.crypto` API this tree compiles against resolves against this jar with an exactly matching signature:
+
+| Called at                           | Signature required                                                                              | Present in the jar |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------ |
+| `EthService.java:61`                | `WalletUtils.generateNewWalletFile(String, File, boolean) → String`                             | ✓                  |
+| `EthService.java:62, 113, 178, 199` | `WalletUtils.loadCredentials(String, String) → Credentials`                                     | ✓                  |
+| `PaymentHandler.java:145, 181, 190` | `Credentials.getAddress() → String`                                                             | ✓                  |
+| `PaymentHandler.java:158, 193`      | `TransactionEncoder.signMessage(RawTransaction, Credentials) → byte[]`                          | ✓                  |
+| `PaymentHandler.java:154`           | `RawTransaction.createEtherTransaction(BigInteger, BigInteger, BigInteger, String, BigInteger)` | ✓                  |
+| `PaymentHandler.java:192`           | `RawTransaction.createTransaction(BigInteger, BigInteger, BigInteger, String, String)`          | ✓                  |
+
+A jar fabricated to mislead this review would have had to reconstruct that entire compile surface consistently. The class-file version is 52 (Java 8), matching a 2018 build of a library whose poms target 1.8. And one incidental corroboration of [F4](#f4) falls out of the same read for free: the three-argument overload is `signMessage(RawTransaction, **byte**, Credentials)` — the chain id is a `byte` — and the tree calls the two-argument form at both signing sites, which is the pre-EIP-155 shape [F4](#f4) describes.
+
+**What would close the gap, in one command, for whoever next has a network:** fetch `https://repo1.maven.org/maven2/org/web3j/crypto/3.3.1/crypto-3.3.1.jar.sha1` and compare it to `8e07f435838a1d840765656d8df6b8e8e2c5f4e4`. If it matches, the last conditional in this finding is gone. If it does not match, **the jar on this host is not the published artifact and this finding must be reopened** — in which case the interesting question stops being F3 and starts being how it got here.
+
+##### What changed in the gate
+
+`tooling/ci/wallet-rpc-mainnet-scan.mjs` rule **M9** previously and deliberately did not reach these lines, and its header said why: _"a gate must not promote an inference to a finding by pattern-matching it; the day somebody reads `org.web3j:core:3.3.1` is the day this becomes a finding, and it will be added then, by a human, with a reason."_ That condition is now met, so M9 was extended and the three call sites frozen (M9 goes from 8 entries to 11).
+
+The extension is a second taint **source**, not a broader sink. M9 sourced taint from identifier names and `@Value` bindings, and neither can see this: nothing about `current` is spelled like a secret, and the key is three getters and one third-party library away. So a value is now also credential-bearing if its **declared type** has a public getter graph that reaches a private key — `Payment`, `Credentials`, `ECKeyPair` — **and it is passed whole to a reflective serialiser**. Both halves are required, which is what keeps `payment.getTo()` and the `address=` / `gasPrice=` lines in the same class silent; two new rule probes pin that boundary in both directions.
+
+**Remediation direction, unchanged and now unconditional:** never pass an object holding `Credentials` to a serialiser. Log the txid and the business id. A `@JSONField(serialize = false)` on `Payment.credentials` would also work, and is worse, because it leaves the next object that holds a `Credentials` unprotected.
 
 **Same file, definitely true, no inference needed:** `PaymentHandler.java:162` — `logger.info("hexRawValue={}", hexValue)` — logs the complete signed raw transaction on the token withdrawal path. Because that signature carries no chain id ([F4](#f4)), anyone with log-read access holds a transaction that is **valid and replayable on every EVM chain simultaneously**.
 
@@ -849,7 +984,7 @@ Java source/target is `1.8` in every module that sets it. `bitcoin/pom.xml` is t
 - **fastjson 1.2.31** is the one that matters, and it matters because of [F8](#f8). It predates the 1.2.48 `checkAutoType` rewrite and sits inside the autotype-bypass series that began with CVE-2017-18349. The tree never enables autotype explicitly, and all parsing is `parseObject(String)` — the least-exposed form. Whether a usable gadget is on the runtime classpath is **unknown**, because that needs `mvn dependency:tree`.
 - **Spring Boot 1.5.10.RELEASE** (Jan 2018) is long past end of life and pulls Spring Framework 4.3.x, a line with published advisories including CVE-2018-1270, CVE-2018-1271, CVE-2018-1272 and CVE-2018-15756. **This review does not assert any of these is reachable here** — reachability depends on which starters resolve, which is exactly what could not be determined. The honest statement is: the platform is eight years unmaintained and its transitive set was never enumerated.
 - **`spring-boot-devtools`** appearing in `dependencyManagement` is worth a second look by whoever resolves the tree: devtools ships a remote-restart endpoint that is a remote code execution primitive when enabled. It is version-managed here, not necessarily depended on; no module's direct dependency on it was found, but the transitive set is unknown.
-- **web3j 3.3.1** (2018) is the library whose `Credentials` accessors [F3](#f3) depends on and which could not be opened.
+- **web3j 3.3.1** (2018) is the library whose `Credentials` accessors [F3](#f3) depends on. It has now been opened — note that the two classes live in `org.web3j:crypto`, which arrives transitively, not in the `core` artifact this table pins. See the [F3 follow-up of 2026-08-06](#f3-2026-08-06).
 - **`cash.bitcoinj:bitcoinj-core:0.14.5.2`** is a third-party fork of bitcoinj under a groupId that is not `org.bitcoinj`. Whether that coordinate resolves to a public artifact, who publishes it, and what its checksum is are all **unverified** — it is a Maven-resolved dependency in the four modules that generate or handle Bitcoin-family keys, and it deserves the same scrutiny as the committed jars.
 
 ---
@@ -860,7 +995,10 @@ Stated plainly, because a review's boundary is part of its result.
 
 1. **Anything dynamic.** No compilation, no execution, no tests, no fuzzing, no runtime observation. No JDK, JRE or Maven on this host. Every finding is static.
 2. **The transitive dependency graph.** Never enumerated. All CVE discussion is limited to directly declared versions, and no claim of reachability is made for any advisory.
-3. **The class bodies of any `.jar`.** All three distinct archives were opened and their manifests, embedded coordinates and package inventories read — see [§3](#3-jar-inventory). None was checksum-verified against a published artifact, and **no compiled class body was decompiled or compared to upstream**, because that needs a JDK. A modification inside an existing method is invisible to everything this review could do.
+3. **The class bodies of the committed `.jar`s.** All three distinct archives in the tree were opened and their manifests, embedded coordinates and package inventories read — see [§3](#3-jar-inventory). None was checksum-verified against a published artifact, and **no committed class body was compared to upstream**. A modification inside an existing method is invisible to everything this review could do.
+
+   **Amended 2026-08-06.** "That needs a JDK" was wrong, and correcting it is the most transferable thing in this document. A `.class` file's constant pool, access flags, member tables and `Code` attribute parse out of the bytes with no JVM involved, which is how the fastjson chain and then the [web3j accessor chain](#f3-2026-08-06) were both read. This does **not** retroactively cover the three committed jars — nobody has done that read on them — but it removes the stated reason for not doing it. `bitcoin-rpc-1.2.0.jar` is the one that would pay for itself: it would settle the unresolved `logger.info("client={}",client)` question in [F2](#f2), which is currently frozen on the pessimistic reading precisely because "its superclass lives in a committed jar that cannot be decompiled without a JDK."
+
 4. **Any deployed environment.** Every `${VAR}` value is unknown, including whether `WALLET_RPC_AUTH_TOKEN` is shared across services — which decides the blast radius of [F5](#f5).
 5. **Filesystem and container posture.** Permissions on `/data/*/​*.wallet` and `/data/eth/data/keystore`, backup policy, log retention, and who can read stdout — the last of which is what turns [F1](#f1), [F2](#f2) and [F3](#f3) from findings into losses.
 6. **Downstream consumers.** The Kafka `deposit` and `withdraw-notify` consumers were not reviewed, so the money impact of [F17](#f17) is stated as a dependency, not a conclusion.
@@ -879,9 +1017,9 @@ The three findings this review was commissioned to confirm are all real, and all
 
 The reason for the verdict is that **three separate services write a live spending credential to a log sink on an ordinary success path**:
 
+- `eth-support` writes the ETH hot-wallet **private key** to the log every thirty seconds, up to a hundred times per withdrawal ([F3](#f3)) — **confirmed 2026-08-06, and the worst of the three, because a private key is the one credential here that cannot be rotated**
 - `ect` prints the withdrawal signing secret on every withdrawal ([F1](#f1))
 - `bitcoin`, `usdt` and `act` print node RPC credentials at startup ([F2](#f2))
-- `eth-support` passes an object holding the ETH private key to a JSON serialiser every thirty seconds ([F3](#f3))
 
 Those are not settings. They are code, on the happy path, and they mean that in this tree **the security boundary of the hot wallets is the read permission on the log files**. Anyone who can read logs — an operator, an aggregator, a backup, a support engineer, a compromised sidecar — can drain them. Rotating the secrets identified in `OWNER-ACTIONS-WALLET-RPC-SECRETS.md` does not help: the code prints the _replacement_ just as freely as the original.
 
@@ -895,8 +1033,12 @@ Underneath that sit two structural properties that no fix to individual lines wi
 
 **What this verdict is not.** It is not a claim that the tree is unfixable, and it is not a finding count. Several of these are three-line changes. The claim is narrower and firmer: **the current state is not a starting point that a custody decision can rest on**, because the same reading that found the known criticals also found that a service prints its own hot-wallet key — and that finding was in a file that four previous documents about this tree had cited without opening.
 
-The one thing that should be treated as more urgent than the rest of this document: **[F3](#f3) rests on an inference about two libraries this host could not open.** Confirming or refuting it takes minutes on a machine with a JDK, and it is the difference between "the ETH hot-wallet key is in the logs" and "it is not." Nothing else here changes as much on one check.
+~~The one thing that should be treated as more urgent than the rest of this document: **[F3](#f3) rests on an inference about two libraries this host could not open.** Confirming or refuting it takes minutes on a machine with a JDK, and it is the difference between "the ETH hot-wallet key is in the logs" and "it is not." Nothing else here changes as much on one check.~~
+
+**Resolved 2026-08-06 — and it resolved the wrong way.** Both libraries have now been read, neither needed a JDK, and the answer is that **the ETH hot-wallet key is in the logs.** Every link is read rather than assumed: fastjson walks the getters and recurses, `Credentials.getEcKeyPair()` and `ECKeyPair.getPrivateKey()` are public no-arg getters over non-transient unannotated fields, and `BigInteger` is on fastjson's keep-verbatim list so the key is not dropped on the way out. See the [F3 follow-up](#f3-2026-08-06).
+
+That does not change this verdict; it removes the last reason to hope the verdict was too harsh. The one open item left on F3 is not the behaviour but the **provenance of the jar** — it carries no checksum sidecar, and settling that is one `curl` of a `.sha1` from Maven Central, spelled out at the end of the follow-up. Whoever does it should also do the same bytecode read on `bitcoin-rpc-1.2.0.jar`, which is the most privileged binary in the tree and is still unread inside.
 
 ---
 
-_Static analysis only. No JDK, JRE, Maven or network access was available. Nothing in this tree was compiled, executed, or dynamically tested, by this review or — per [F21](#f21) — by anything else._
+_Static analysis only. Nothing in this tree was compiled, executed, or dynamically tested, by this review or — per [F21](#f21) — by anything else. **No JDK, JRE, Maven or network access was available to the review as written on 2026-08-05**; by the 2026-08-06 follow-up that was no longer true of the host, though the follow-up used none of them — see its provenance note. Class files were read as bytes throughout, which needs no JVM._
