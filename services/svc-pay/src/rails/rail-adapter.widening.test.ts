@@ -37,6 +37,24 @@ import {
 } from './posture.js';
 
 /**
+ * The rejection, typed.
+ *
+ * `.catch((e) => e as X)` widens the result to `X | <resolved type>`, so every
+ * property access after it is a type error — and worse, a call that WRONGLY
+ * RESOLVES reads as `undefined` on the next line instead of failing where the
+ * mistake is. This fails at the call that did not throw.
+ */
+async function rejection<E>(promise: Promise<unknown>, kind: abstract new (...args: never[]) => E): Promise<E> {
+  try {
+    await promise;
+  } catch (err) {
+    if (err instanceof kind) return err;
+    throw err;
+  }
+  throw new Error(`expected ${kind.name}, but the call resolved`);
+}
+
+/**
  * THE WIDENED PORT, AND THE THIRD RAIL MODE.
  *
  * `docs/adr/2026-08-04-pay-rails-and-psp-socket.md` (Accepted) named two
@@ -171,7 +189,7 @@ describe('no silent no-op — a missing capability is an exception, not a plausi
   });
 
   it('names the rail, the operation and what the reader must do next', async () => {
-    const err = await capturePartial(cardSandbox(), captureRequest()).catch((e: unknown) => e as RailOperationUnsupportedError);
+    const err = await rejection(capturePartial(cardSandbox(), captureRequest()), RailOperationUnsupportedError);
 
     expect(err.code).toBe('pay.rail_operation_unsupported');
     expect(err.railId).toBe('card-sandbox');
@@ -198,7 +216,7 @@ describe('no silent no-op — a missing capability is an exception, not a plausi
       capabilities: ['authorize', 'capture', 'capture.partial'] as readonly RailCapability[],
     });
 
-    const err = await capturePartial(liar, captureRequest()).catch((e: unknown) => e as RailOperationUnsupportedError);
+    const err = await rejection(capturePartial(liar, captureRequest()), RailOperationUnsupportedError);
     expect(err).toBeInstanceOf(RailOperationUnsupportedError);
     expect(err.message).toMatch(/declare .* AND implement|Declaring without implementing/i);
   });
