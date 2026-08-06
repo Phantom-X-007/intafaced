@@ -10,14 +10,14 @@ import {
   passwordAlgoCatalogExportText,
   isDeclaredPasswordAlgorithm,
   isProdRequiredPasswordAlgorithm,
-  PASSWORD_ALGORITHMS,
-  PASSWORD_PROD_REQUIRED_ALGO,
+  HASH_ALGO_CATALOG,
+  HASH_ALGO_PROD_REQUIRED,
 } from './password-algo-honesty.js';
 
 describe('L3 wave86 password algo catalog honesty', () => {
   it('catalog boards', () => {
-    expect(PASSWORD_ALGORITHMS).toEqual(['argon2id', 'scrypt']);
-    expect(PASSWORD_PROD_REQUIRED_ALGO).toBe('argon2id');
+    expect(HASH_ALGO_CATALOG).toEqual(['argon2id', 'scrypt']);
+    expect(HASH_ALGO_PROD_REQUIRED).toBe('argon2id');
     expect(passwordAlgoCatalogBoardCard()).toEqual({
       algorithms: 2,
       prodRequired: 'argon2id',

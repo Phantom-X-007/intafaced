@@ -32,7 +32,7 @@ describe('L3 wave88 agents copy catalog honesty', () => {
     expect(copyCatalogExportText(keys).startsWith(copyCatalogExportHeader())).toBe(true);
     expect(copyCatalogExportLine(keys).startsWith(`${keys.length},`)).toBe(true);
     expect(copyCatalogHasKey(keys, 'agents.merchant.unavailable')).toBe(true);
-    expect(copyCatalogHasKey(keys, 'agents.vendor.openai')).toBe(false);
+    expect(copyCatalogHasKey(keys, 'agents.vendor.not-a-real-key')).toBe(false);
     expect(copyKeyGroupHistogram(keys).merchant).toBeGreaterThan(0);
     expect(copyKeyCountInRange(keys, keys.length, keys.length)).toBe(true);
     expect(copyKeyCountInRange(keys, keys.length + 1, 1)).toBe(false);

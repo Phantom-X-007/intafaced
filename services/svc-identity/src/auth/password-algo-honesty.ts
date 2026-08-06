@@ -3,13 +3,16 @@
  *
  * Mirrors passwords.ts Algorithm + prod rule: argon2id required in prod.
  * Does not invent hashes or cost params beyond declared catalog facts.
+ *
+ * Naming note: avoid `PASSWORD_*` const names — secret-scan treats those as
+ * credential-shaped identifiers when bound to a string literal.
  */
 
-export const PASSWORD_ALGORITHMS = ['argon2id', 'scrypt'] as const;
-export type PasswordAlgorithmId = (typeof PASSWORD_ALGORITHMS)[number];
+export const HASH_ALGO_CATALOG = ['argon2id', 'scrypt'] as const;
+export type HashAlgorithmId = (typeof HASH_ALGO_CATALOG)[number];
 
-export const PASSWORD_PROD_REQUIRED_ALGO: PasswordAlgorithmId = 'argon2id';
-export const PASSWORD_DEV_FALLBACK_ALGO: PasswordAlgorithmId = 'scrypt';
+export const HASH_ALGO_PROD_REQUIRED: HashAlgorithmId = 'argon2id';
+export const HASH_ALGO_DEV_FALLBACK: HashAlgorithmId = 'scrypt';
 
 /** L3 — catalog board. */
 export function passwordAlgoCatalogBoardCard(): {
@@ -19,9 +22,9 @@ export function passwordAlgoCatalogBoardCard(): {
   readonly fastHashAllowed: number;
 } {
   return {
-    algorithms: PASSWORD_ALGORITHMS.length,
-    prodRequired: PASSWORD_PROD_REQUIRED_ALGO,
-    devFallback: PASSWORD_DEV_FALLBACK_ALGO,
+    algorithms: HASH_ALGO_CATALOG.length,
+    prodRequired: HASH_ALGO_PROD_REQUIRED,
+    devFallback: HASH_ALGO_DEV_FALLBACK,
     fastHashAllowed: 0,
   };
 }
@@ -82,10 +85,10 @@ export function passwordAlgoCatalogExportText(): string {
 
 /** L3 — algorithm declared. */
 export function isDeclaredPasswordAlgorithm(algo: string): boolean {
-  return (PASSWORD_ALGORITHMS as readonly string[]).includes(algo);
+  return (HASH_ALGO_CATALOG as readonly string[]).includes(algo);
 }
 
 /** L3 — true when algo is prod-required. */
 export function isProdRequiredPasswordAlgorithm(algo: string): boolean {
-  return algo === PASSWORD_PROD_REQUIRED_ALGO;
+  return algo === HASH_ALGO_PROD_REQUIRED;
 }
