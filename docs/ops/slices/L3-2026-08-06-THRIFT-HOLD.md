@@ -25,11 +25,12 @@
 | 58 | 967e5dde | host-rights status/export honesty |
 | 59 | 6d534076 | academy error catalog honesty |
 | 60 | c11a72ac | seat decision + access kind honesty |
-| 61 | (this) | agents error catalog honesty |
+| 61 | 10d45c05 | agents error catalog honesty |
+| 62 | (this) | agents copy catalog honesty |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–61
+2. Open one Class N PR covering waves 46–62
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 
