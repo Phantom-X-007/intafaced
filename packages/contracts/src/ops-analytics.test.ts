@@ -18,7 +18,6 @@ import {
   metricById,
   isMetricCatalogEmpty,
   hasMoneyMetrics,
-  countMetricsUsingSource,
   metricCountBySource,
   multiSourceMetricCount,
   singleSourceMetricCount,
