@@ -29,11 +29,12 @@
 | 62 | 4597227f | agents copy catalog honesty |
 | 63 | 64394a3a | stream provider usable/null honesty |
 | 64 | 8751d6d0 | mock usage honesty boards |
-| 65 | (this) | token usage + capability catalog honesty |
+| 65 | 4303aea6 | token usage + capability catalog honesty |
+| 66 | (this) | routing table honesty boards |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–65
+2. Open one Class N PR covering waves 46–66
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 
