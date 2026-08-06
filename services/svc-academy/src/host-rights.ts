@@ -96,3 +96,63 @@ export function createHostRightsSource(baseUrl: string, internalSecret: string):
 export function mayHost(perks: RankPerks): boolean {
   return perks.lobbyHostRights === true;
 }
+
+/** L3 — host-rights board card from perks (pure). */
+export function hostRightsBoardCard(perks: RankPerks): {
+  readonly mayHost: boolean;
+  readonly lobbyHostRights: boolean;
+} {
+  return {
+    mayHost: mayHost(perks),
+    lobbyHostRights: perks.lobbyHostRights === true,
+  };
+}
+
+/** L3 — status line. */
+export function hostRightsStatusLine(perks: RankPerks): string {
+  const c = hostRightsBoardCard(perks);
+  return `mayHost=${c.mayHost ? '1' : '0'} lobbyHostRights=${c.lobbyHostRights ? '1' : '0'}`;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseHostRightsStatusLine(line: string): { readonly mayHost: boolean; readonly lobbyHostRights: boolean } | null {
+  const m = line.trim().match(/^mayHost=([01]) lobbyHostRights=([01])$/);
+  if (!m) return null;
+  return { mayHost: m[1] === '1', lobbyHostRights: m[2] === '1' };
+}
+
+/** L3 — true when status matches perks. */
+export function hostRightsStatusLineMatches(perks: RankPerks): boolean {
+  const p = parseHostRightsStatusLine(hostRightsStatusLine(perks));
+  if (!p) return false;
+  const c = hostRightsBoardCard(perks);
+  return p.mayHost === c.mayHost && p.lobbyHostRights === c.lobbyHostRights;
+}
+
+/** L3 — true when mayHost equals lobbyHostRights flag. */
+export function hostRightsStatusLineConsistent(line: string): boolean {
+  const p = parseHostRightsStatusLine(line);
+  if (!p) return false;
+  return p.mayHost === p.lobbyHostRights;
+}
+
+/** L3 — export header. */
+export function hostRightsExportHeader(): string {
+  return 'mayHost,lobbyHostRights';
+}
+
+/** L3 — export line. */
+export function hostRightsExportLine(perks: RankPerks): string {
+  const c = hostRightsBoardCard(perks);
+  return `${c.mayHost ? '1' : '0'},${c.lobbyHostRights ? '1' : '0'}`;
+}
+
+/** L3 — full export. */
+export function hostRightsExportText(perks: RankPerks): string {
+  return [hostRightsExportHeader(), hostRightsExportLine(perks)].join('\n');
+}
+
+/** L3 — true when base perks refuse host (fail-closed default). */
+export function isBaseHostRefused(perks: RankPerks): boolean {
+  return mayHost(perks) === false;
+}
