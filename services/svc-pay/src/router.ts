@@ -4,6 +4,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { PayError, type PayService } from './payment-service.js';
 import type { UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import type { RailRegistry } from './rails/registry.js';
+import { RAIL_CAPABILITIES, RAIL_MODES } from './rails/rail-adapter.js';
 import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.js';
 
 /**
@@ -231,8 +232,22 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         z.array(
           z.object({
             id: z.string(),
-            capabilities: z.array(z.enum(['authorize', 'capture', 'refund', 'payout', 'webhook'])),
-            mode: z.enum(['live', 'sandbox']),
+            /**
+             * DERIVED FROM THE PORT, not restated here.
+             *
+             * These two were hand-written literal unions — a second copy of a
+             * vocabulary that already has an authority in `rails/rail-adapter.ts`.
+             * The copy is what goes stale. Widening `RailCapability` for card
+             * operations, or `RailMode` to carry `absent`, left this schema
+             * narrower than the thing it describes, and a zod OUTPUT schema that
+             * is narrower than its payload does not report a drift: it throws at
+             * serialisation time, on an operator dashboard, in production.
+             *
+             * Reading the constants makes the compiler the thing that notices,
+             * which it did — this line failed to build the moment the port grew.
+             */
+            capabilities: z.array(z.enum(RAIL_CAPABILITIES)),
+            mode: z.enum(RAIL_MODES),
             usable: z.boolean(),
             healthy: z.boolean(),
             latencyMs: z.number(),

@@ -76,6 +76,14 @@ export class CryptoNativeAdapter implements RailAdapter {
    *
    * Reading it off the port rather than off configuration is the whole point. A
    * `PAY_CRYPTO_RAIL_IS_LIVE=true` would be a claim; this is a fact.
+   *
+   * THREE VALUES NOW, AND THEY ARE THE PORT'S OWN THREE. This used to read
+   * `chain.posture === 'live' ? 'live' : 'sandbox'` — a three-into-two collapse
+   * that reported an ABSENT chain as a working sandbox, which is the unsafe
+   * direction: a sandbox succeeds and an absent chain refuses, and the rail was
+   * announcing the wrong one of those. `RailMode` carries `absent` since the
+   * 2026-08-04 ADR, so the mapping below is the identity and there is nothing
+   * left to collapse. See `RailMode` for what the collapse actually cost at boot.
    */
   readonly mode: RailMode;
 
@@ -102,7 +110,10 @@ export class CryptoNativeAdapter implements RailAdapter {
 
   constructor(private readonly options: CryptoNativeOptions) {
     this.chain = options.chain;
-    this.mode = options.chain.posture === 'live' ? 'live' : 'sandbox';
+    // The identity. `ChainPosture` and `RailMode` are the same three words, and
+    // the compiler now enforces that they stay the same three: widening either
+    // without the other stops this line assigning.
+    this.mode = options.chain.posture;
     this.minConfirmations = options.minConfirmations ?? 6;
     this.now = options.now ?? (() => new Date());
     this.toleranceSeconds = options.toleranceSeconds ?? 300;
