@@ -6,6 +6,37 @@ import { beforeEach, afterAll, describe, expect, it } from 'vitest';
 import { MerchantStateError, MerchantStateService } from './merchant-state-service.js';
 
 /**
+ * Index access, under `noUncheckedIndexedAccess`.
+ *
+ * `history[0]` is `T | undefined` to the compiler, and a bare `!` would turn a
+ * missing row into "Cannot read properties of undefined" fifty lines from the
+ * assertion that cared. This says which row was expected and why the test failed.
+ */
+function at<T>(rows: readonly T[], index: number, what: string): T {
+  const row = rows[index];
+  if (row === undefined) throw new Error(`expected ${what}[${index}], but only ${rows.length} row(s) came back`);
+  return row;
+}
+
+/**
+ * The rejection, typed.
+ *
+ * `.catch((e) => e as X)` widens the result to `X | <resolved type>`, so every
+ * property access after it is a type error — and worse, a call that WRONGLY
+ * RESOLVES reads as `undefined` on the next line instead of failing where the
+ * mistake is. This fails at the call that did not throw.
+ */
+async function rejection<E>(promise: Promise<unknown>, kind: abstract new (...args: never[]) => E): Promise<E> {
+  try {
+    await promise;
+  } catch (err) {
+    if (err instanceof kind) return err;
+    throw err;
+  }
+  throw new Error(`expected ${kind.name}, but the call resolved`);
+}
+
+/**
  * MERCHANT STATE HAS A WRITER AND A HISTORY.
  *
  * `docs/adr/2026-08-04-pay-rails-and-psp-socket.md` (Accepted): *"Merchant state
@@ -68,11 +99,12 @@ if (!available) {
       VALUES (${`u-${Math.random().toString(36).slice(2)}`}, ${status}::pay.merchant_status)
       RETURNING id
     `;
+    if (!row) throw new Error('inserting a merchant returned no row');
     return row.id;
   }
 
   const statusOf = async (merchantId: string) =>
-    (await sql<Array<{ status: string }>>`SELECT status FROM pay.merchants WHERE id = ${merchantId}`)[0].status;
+    at(await sql<Array<{ status: string }>>`SELECT status FROM pay.merchants WHERE id = ${merchantId}`, 0, 'merchant').status;
 
   // ══ THE ADR'S SENTENCE, AS AN ASSERTION ═══════════════════════════════════
 
@@ -88,7 +120,7 @@ if (!available) {
         actorScope: 'admin:write',
       });
 
-      const [event] = await state.history(id);
+      const event = at(await state.history(id), 0, 'history');
 
       expect(event.toStatus).toBe('suspended');
       expect(event.fromStatus).toBe('active');
@@ -134,9 +166,9 @@ if (!available) {
       expect(history.map((e) => e.toStatus)).toEqual(['active', 'suspended']);
       // Both rows survive. A suspension that was wrong is corrected by a new
       // row, not by editing the old one — the way a ledger reverses a posting.
-      expect(history[0].fromStatus).toBe('suspended');
-      expect(history[0].actorId).toBe(OTHER_OPERATOR);
-      expect(history[1].reason).toBe('suspected fraud ring');
+      expect(at(history, 0, 'history').fromStatus).toBe('suspended');
+      expect(at(history, 0, 'history').actorId).toBe(OTHER_OPERATOR);
+      expect(at(history, 1, 'history').reason).toBe('suspected fraud ring');
     });
   });
 
@@ -150,7 +182,7 @@ if (!available) {
       // A history that can be edited is worse than none: it looks like evidence
       // and is not.
       await expect(sql`UPDATE pay.merchant_status_events SET reason = 'a nicer reason'`).rejects.toThrow(/append-only/);
-      expect((await state.history(id))[0].reason).toBe('the real reason');
+      expect(at(await state.history(id), 0, 'history').reason).toBe('the real reason');
     });
 
     it('REFUSES a DELETE', async () => {
@@ -167,10 +199,10 @@ if (!available) {
       await state.setStatus({ merchantId: id, to: 'suspended', reason: 'kyb lapsed', actorId: OPERATOR, actorScope: 'admin:write' });
 
       const history = await state.history(id);
-      expect(BigInt(history[0].seq) > BigInt(history[1].seq)).toBe(true);
+      expect(BigInt(at(history, 0, 'history').seq) > BigInt(at(history, 1, 'history').seq)).toBe(true);
       // A string, never a number: it is a `bigserial` ordering key, and a
       // `number` would put a 2^53 ceiling on an append-only log for no benefit.
-      expect(typeof history[0].seq).toBe('string');
+      expect(typeof at(history, 0, 'history').seq).toBe('string');
     });
   });
 
@@ -179,9 +211,10 @@ if (!available) {
   describe('the writer refuses what would make the history useless', () => {
     it('refuses a blank reason, in the service, with a sentence', async () => {
       const id = await merchant('active');
-      const err = await state
-        .setStatus({ merchantId: id, to: 'suspended', reason: '   ', actorId: OPERATOR, actorScope: 'admin:write' })
-        .catch((e: unknown) => e as MerchantStateError);
+      const err = await rejection(
+        state.setStatus({ merchantId: id, to: 'suspended', reason: '   ', actorId: OPERATOR, actorScope: 'admin:write' }),
+        MerchantStateError,
+      );
 
       expect(err).toBeInstanceOf(MerchantStateError);
       expect(err.code).toBe('pay.merchant_status_reason_required');
@@ -199,15 +232,16 @@ if (!available) {
     });
 
     it('refuses an unknown merchant rather than writing an orphan row', async () => {
-      const err = await state
-        .setStatus({
+      const err = await rejection(
+        state.setStatus({
           merchantId: '00000000-0000-4000-8000-000000000000',
           to: 'suspended',
           reason: 'anything',
           actorId: OPERATOR,
           actorScope: 'admin:write',
-        })
-        .catch((e: unknown) => e as MerchantStateError);
+        }),
+        MerchantStateError,
+      );
 
       expect(err.code).toBe('pay.merchant_not_found');
     });
@@ -253,7 +287,7 @@ if (!available) {
       expect(await statusOf(id)).toBe('active');
       // And the strange transition is attributable and dated, which is the whole
       // thing this change buys.
-      expect((await state.history(id))[0].fromStatus).toBe('closed');
+      expect(at(await state.history(id), 0, 'history').fromStatus).toBe('closed');
     });
 
     it('has no automatic suspension anywhere — nothing calls this on a rule', async () => {
@@ -284,9 +318,9 @@ if (!available) {
       expect(history).toHaveLength(2);
 
       // The chain is intact: the newer row's `from` is the older row's `to`.
-      expect(history[0].fromStatus).toBe(history[1].toStatus);
-      expect(history[1].fromStatus).toBe('active');
-      expect(await statusOf(id)).toBe(history[0].toStatus);
+      expect(at(history, 0, 'history').fromStatus).toBe(at(history, 1, 'history').toStatus);
+      expect(at(history, 1, 'history').fromStatus).toBe('active');
+      expect(await statusOf(id)).toBe(at(history, 0, 'history').toStatus);
     });
   });
 }
