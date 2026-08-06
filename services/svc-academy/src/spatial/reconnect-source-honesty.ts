@@ -50,11 +50,7 @@ export function reconnectCatalogStatusLineMatches(): boolean {
   const p = parseReconnectCatalogStatusLine(reconnectCatalogStatusLine());
   if (!p) return false;
   const c = reconnectCatalogBoardCard();
-  return (
-    p.okSources === c.okSources &&
-    p.refuseReasons === c.refuseReasons &&
-    p.invent === c.inventsScene
-  );
+  return p.okSources === c.okSources && p.refuseReasons === c.refuseReasons && p.invent === c.inventsScene;
 }
 
 /** L3 — never invent scene. */
@@ -88,9 +84,7 @@ export function parseReconnectResultStatusLine(line: string): {
   readonly source: string;
   readonly reason: string;
 } | null {
-  const m = line
-    .trim()
-    .match(/^status=(ok|refuse) source=([a-z0-9_-]+) reason=([a-z0-9_-]+)$/);
+  const m = line.trim().match(/^status=(ok|refuse) source=([a-z0-9_-]+) reason=([a-z0-9_-]+)$/);
   if (!m) return null;
   return {
     status: m[1]!,

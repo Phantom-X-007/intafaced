@@ -11,9 +11,7 @@ export type DeliveryDecisionInput =
   | { readonly action: 'inapp_only' };
 
 /** L3 — action histogram. */
-export function deliveryActionHistogram(
-  decisions: readonly DeliveryDecisionInput[],
-): Readonly<Record<string, number>> {
+export function deliveryActionHistogram(decisions: readonly DeliveryDecisionInput[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {
     send_now: 0,
     hold_digest: 0,
@@ -56,11 +54,7 @@ export function parseDeliveryDecisionStatusLine(line: string): {
   readonly skipMuted: number;
   readonly inappOnly: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^decisions=(\d+) send_now=(\d+) hold_digest=(\d+) skip_muted=(\d+) inapp_only=(\d+)$/,
-    );
+  const m = line.trim().match(/^decisions=(\d+) send_now=(\d+) hold_digest=(\d+) skip_muted=(\d+) inapp_only=(\d+)$/);
   if (!m) return null;
   return {
     decisions: Number(m[1]),
@@ -72,9 +66,7 @@ export function parseDeliveryDecisionStatusLine(line: string): {
 }
 
 /** L3 — true when status matches. */
-export function deliveryDecisionStatusLineMatches(
-  decisions: readonly DeliveryDecisionInput[],
-): boolean {
+export function deliveryDecisionStatusLineMatches(decisions: readonly DeliveryDecisionInput[]): boolean {
   const p = parseDeliveryDecisionStatusLine(deliveryDecisionStatusLine(decisions));
   if (!p) return false;
   const c = deliveryDecisionBoardCard(decisions);
@@ -116,11 +108,7 @@ export function deliveryHasNoMutedSkips(decisions: readonly DeliveryDecisionInpu
 }
 
 /** L3 — count in range. */
-export function deliveryDecisionCountInRange(
-  decisions: readonly DeliveryDecisionInput[],
-  min: number,
-  max: number,
-): boolean {
+export function deliveryDecisionCountInRange(decisions: readonly DeliveryDecisionInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = decisions.length;
   return n >= min && n <= max;

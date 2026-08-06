@@ -21,12 +21,8 @@ describe('L3 wave119 analytics metric catalog honesty', () => {
     expect(card.metrics).toBe(ANALYTICS_METRICS_V0.length);
     expect(card.money + card.nonMoney).toBe(card.metrics);
     expect(analyticsMetricCatalogStatusLineMatches()).toBe(true);
-    expect(analyticsMetricCatalogStatusLineConsistent(analyticsMetricCatalogStatusLine())).toBe(
-      true,
-    );
-    expect(analyticsMetricCatalogExportText().startsWith(analyticsMetricCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(analyticsMetricCatalogStatusLineConsistent(analyticsMetricCatalogStatusLine())).toBe(true);
+    expect(analyticsMetricCatalogExportText().startsWith(analyticsMetricCatalogExportHeader())).toBe(true);
     expect(isDeclaredAnalyticsMetric('ledger.postings.count')).toBe(true);
     expect(isDeclaredAnalyticsMetric('invent.series')).toBe(false);
     expect(moneyMetricsRefuseNumber()).toBe(true);

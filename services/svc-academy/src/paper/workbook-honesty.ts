@@ -44,11 +44,7 @@ export function parseDrillRunStatusLine(line: string): {
   readonly remaining: number;
   readonly refuse: string;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^status=(active|complete|refused) steps=(\d+) completed=(\d+) remaining=(\d+) refuse=([a-z0-9_-]+)$/,
-    );
+  const m = line.trim().match(/^status=(active|complete|refused) steps=(\d+) completed=(\d+) remaining=(\d+) refuse=([a-z0-9_-]+)$/);
   if (!m) return null;
   return {
     status: m[1]!,
@@ -65,11 +61,7 @@ export function drillRunStatusLineMatches(run: DrillRunBoardInput): boolean {
   if (!p) return false;
   const c = drillRunBoardCard(run);
   return (
-    p.status === c.status &&
-    p.steps === c.steps &&
-    p.completed === c.completed &&
-    p.remaining === c.remaining &&
-    p.refuse === c.refuse
+    p.status === c.status && p.steps === c.steps && p.completed === c.completed && p.remaining === c.remaining && p.refuse === c.refuse
   );
 }
 

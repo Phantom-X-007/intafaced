@@ -43,9 +43,7 @@ export function parseSeasonStatusCatalogStatusLine(line: string): {
   readonly writeScheduled: number;
   readonly writeEnded: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^statuses=(\d+) write_scheduled=([01]) write_ended=([01])$/);
+  const m = line.trim().match(/^statuses=(\d+) write_scheduled=([01]) write_ended=([01])$/);
   if (!m) return null;
   return {
     statuses: Number(m[1]),
@@ -59,11 +57,7 @@ export function seasonStatusCatalogStatusLineMatches(): boolean {
   const p = parseSeasonStatusCatalogStatusLine(seasonStatusCatalogStatusLine());
   if (!p) return false;
   const c = seasonStatusCatalogBoardCard();
-  return (
-    p.statuses === c.statuses &&
-    p.writeScheduled === c.mayWriteScoreWhenScheduled &&
-    p.writeEnded === c.mayWriteScoreWhenEnded
-  );
+  return p.statuses === c.statuses && p.writeScheduled === c.mayWriteScoreWhenScheduled && p.writeEnded === c.mayWriteScoreWhenEnded;
 }
 
 /** L3 — no write when scheduled/ended (mirror assertMayWriteScore intent). */
@@ -108,11 +102,7 @@ export function parseStandingsStatusLine(line: string): {
   readonly mayWrite: number;
   readonly topRank: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^status=(scheduled|live|frozen|ended) standings=(\d+) may_write=([01]) top_rank=(\d+)$/,
-    );
+  const m = line.trim().match(/^status=(scheduled|live|frozen|ended) standings=(\d+) may_write=([01]) top_rank=(\d+)$/);
   if (!m) return null;
   return {
     status: m[1]!,
@@ -127,12 +117,7 @@ export function standingsStatusLineMatches(season: SeasonBoardInput): boolean {
   const p = parseStandingsStatusLine(standingsStatusLine(season));
   if (!p) return false;
   const c = standingsBoardCard(season);
-  return (
-    p.status === c.status &&
-    p.standings === c.standings &&
-    p.mayWrite === c.mayWrite &&
-    p.topRank === c.topRank
-  );
+  return p.status === c.status && p.standings === c.standings && p.mayWrite === c.mayWrite && p.topRank === c.topRank;
 }
 
 /** L3 — may_write only for live/frozen. */

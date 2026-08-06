@@ -21,14 +21,10 @@ describe('L3 wave125 residency error catalog honesty', () => {
       hasNotFound: 1,
       hasAlreadyOpen: 1,
     });
-    expect(residencyErrorCatalogStatusLine()).toBe(
-      'codes=4 invalid=1 not_found=1 already_open=1',
-    );
+    expect(residencyErrorCatalogStatusLine()).toBe('codes=4 invalid=1 not_found=1 already_open=1');
     expect(residencyErrorCatalogStatusLineMatches()).toBe(true);
     expect(residencyErrorCatalogStatusLineConsistent(residencyErrorCatalogStatusLine())).toBe(true);
-    expect(residencyErrorCatalogExportText().startsWith(residencyErrorCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(residencyErrorCatalogExportText().startsWith(residencyErrorCatalogExportHeader())).toBe(true);
     expect(residencyErrorCatalogExportLines()).toEqual([...RESIDENCY_ERROR_CODES]);
     expect(isDeclaredResidencyErrorCode('academy.residency_not_pending')).toBe(true);
     expect(isDeclaredResidencyErrorCode('academy.residency_paid')).toBe(false);

@@ -29,9 +29,7 @@ describe('L3 wave116 import source honesty', () => {
     });
     expect(importSourceCatalogStatusLineMatches()).toBe(true);
     expect(importSourceCatalogStatusLineConsistent(importSourceCatalogStatusLine())).toBe(true);
-    expect(importSourceCatalogExportText().startsWith(importSourceCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(importSourceCatalogExportText().startsWith(importSourceCatalogExportHeader())).toBe(true);
     expect(isDeclaredImportSource('platform-native-expansion')).toBe(true);
     expect(isDeclaredImportSource('deriv-desk-import')).toBe(false);
 
@@ -41,9 +39,7 @@ describe('L3 wave116 import source honesty', () => {
       hasPath: 1,
     });
     expect(importIssueCodeCatalogStatusLineMatches()).toBe(true);
-    expect(importIssueCodeCatalogStatusLineConsistent(importIssueCodeCatalogStatusLine())).toBe(
-      true,
-    );
+    expect(importIssueCodeCatalogStatusLineConsistent(importIssueCodeCatalogStatusLine())).toBe(true);
     expect(isDeclaredImportIssueCode('brand')).toBe(true);
     expect(isDeclaredImportIssueCode('vendor')).toBe(false);
     expect(parseImportSourceCatalogStatusLine('nope')).toBeNull();

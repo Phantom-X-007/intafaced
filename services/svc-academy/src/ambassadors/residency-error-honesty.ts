@@ -40,9 +40,7 @@ export function parseResidencyErrorCatalogStatusLine(line: string): {
   readonly notFound: number;
   readonly alreadyOpen: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^codes=(\d+) invalid=([01]) not_found=([01]) already_open=([01])$/);
+  const m = line.trim().match(/^codes=(\d+) invalid=([01]) not_found=([01]) already_open=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),
@@ -57,12 +55,7 @@ export function residencyErrorCatalogStatusLineMatches(): boolean {
   const p = parseResidencyErrorCatalogStatusLine(residencyErrorCatalogStatusLine());
   if (!p) return false;
   const c = residencyErrorCatalogBoardCard();
-  return (
-    p.codes === c.codes &&
-    p.invalid === c.hasInvalid &&
-    p.notFound === c.hasNotFound &&
-    p.alreadyOpen === c.hasAlreadyOpen
-  );
+  return p.codes === c.codes && p.invalid === c.hasInvalid && p.notFound === c.hasNotFound && p.alreadyOpen === c.hasAlreadyOpen;
 }
 
 /** L3 — four codes. */

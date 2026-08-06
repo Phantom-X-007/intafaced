@@ -42,9 +42,7 @@ describe('L3 wave73 channel config honesty', () => {
       requiredUnconfigured: 1,
       inAppPresent: true,
     });
-    expect(channelConfigStatusLine(mixed)).toBe(
-      'channels=4 configured=2 unconfigured=2 required_unconfigured=1 in_app=1',
-    );
+    expect(channelConfigStatusLine(mixed)).toBe('channels=4 configured=2 unconfigured=2 required_unconfigured=1 in_app=1');
     expect(channelConfigStatusLineMatches(mixed)).toBe(true);
     expect(channelConfigStatusLineConsistent(channelConfigStatusLine(mixed))).toBe(true);
     expect(channelConfigExportText(mixed).startsWith(channelConfigExportHeader())).toBe(true);

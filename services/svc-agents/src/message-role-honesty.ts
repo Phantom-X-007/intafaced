@@ -55,12 +55,7 @@ export function messageRoleCatalogStatusLineMatches(): boolean {
   const p = parseMessageRoleCatalogStatusLine(messageRoleCatalogStatusLine());
   if (!p) return false;
   const c = messageRoleCatalogBoardCard();
-  return (
-    p.roles === c.roles &&
-    p.user === c.hasUser &&
-    p.assistant === c.hasAssistant &&
-    p.system === c.hasSystem
-  );
+  return p.roles === c.roles && p.user === c.hasUser && p.assistant === c.hasAssistant && p.system === c.hasSystem;
 }
 
 /** L3 — no system role on this interface. */
@@ -112,18 +107,11 @@ export function parseChatMessageListStatusLine(line: string): {
 }
 
 /** L3 — true when list status matches. */
-export function chatMessageListStatusLineMatches(
-  messages: readonly ChatMessageBoardInput[],
-): boolean {
+export function chatMessageListStatusLineMatches(messages: readonly ChatMessageBoardInput[]): boolean {
   const p = parseChatMessageListStatusLine(chatMessageListStatusLine(messages));
   if (!p) return false;
   const c = chatMessageListBoardCard(messages);
-  return (
-    p.messages === c.messages &&
-    p.user === c.user &&
-    p.assistant === c.assistant &&
-    p.chars === c.totalChars
-  );
+  return p.messages === c.messages && p.user === c.user && p.assistant === c.assistant && p.chars === c.totalChars;
 }
 
 /** L3 — user+assistant equals messages. */

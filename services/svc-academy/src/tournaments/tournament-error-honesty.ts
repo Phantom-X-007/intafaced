@@ -41,11 +41,7 @@ export function parseTournamentErrorCatalogStatusLine(line: string): {
   readonly standingInvalid: number;
   readonly prize: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^codes=(\d+) season_invalid=([01]) standing_invalid=([01]) prize=([01])$/,
-    );
+  const m = line.trim().match(/^codes=(\d+) season_invalid=([01]) standing_invalid=([01]) prize=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),

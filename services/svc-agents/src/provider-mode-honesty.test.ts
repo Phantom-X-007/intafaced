@@ -24,9 +24,7 @@ describe('L3 wave144 provider mode honesty', () => {
     expect(providerModeCatalogStatusLine()).toBe('modes=2 mock=1 upstream=1');
     expect(providerModeCatalogStatusLineMatches()).toBe(true);
     expect(providerModeCatalogStatusLineConsistent(providerModeCatalogStatusLine())).toBe(true);
-    expect(providerModeCatalogExportText().startsWith(providerModeCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(providerModeCatalogExportText().startsWith(providerModeCatalogExportHeader())).toBe(true);
     expect(providerModeCatalogExportLines()).toEqual([...PROVIDER_MODES]);
     expect(isDeclaredProviderMode('mock')).toBe(true);
     expect(isDeclaredProviderMode('live')).toBe(false);

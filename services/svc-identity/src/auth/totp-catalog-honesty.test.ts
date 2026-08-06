@@ -30,9 +30,7 @@ describe('L3 wave81 totp catalog honesty', () => {
       isDefault: 1,
       algorithmsCatalog: 3,
     });
-    expect(totpPolicyStatusLine(d)).toBe(
-      'step=30 digits=6 algorithm=sha1 default=1 alg_catalog=3',
-    );
+    expect(totpPolicyStatusLine(d)).toBe('step=30 digits=6 algorithm=sha1 default=1 alg_catalog=3');
     expect(totpPolicyStatusLineMatches(d)).toBe(true);
     expect(totpPolicyStatusLineConsistent(totpPolicyStatusLine(d))).toBe(true);
     expect(totpPolicyExportText(d).startsWith(totpPolicyExportHeader())).toBe(true);

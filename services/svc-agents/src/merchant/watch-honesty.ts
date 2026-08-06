@@ -77,9 +77,7 @@ export function parseWatchResultStatusLine(line: string): {
 } | null {
   const m = line
     .trim()
-    .match(
-      /^status=(ok|empty|unavailable) alerts=(\d+) considered=(\d+) stale=(\d+) incomplete=(\d+) reason=([a-z0-9_-]+)$/,
-    );
+    .match(/^status=(ok|empty|unavailable) alerts=(\d+) considered=(\d+) stale=(\d+) incomplete=(\d+) reason=([a-z0-9_-]+)$/);
   if (!m) return null;
   return {
     status: m[1]!,

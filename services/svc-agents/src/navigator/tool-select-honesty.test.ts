@@ -33,9 +33,7 @@ describe('L3 wave76 tool_select honesty', () => {
       writeMode: 1,
       reason: '-',
     });
-    expect(toolSelectStatusLine(ok)).toBe(
-      'status=ok selected=2 refused=3 money_write=1 not_declared=1 write_mode=1 reason=-',
-    );
+    expect(toolSelectStatusLine(ok)).toBe('status=ok selected=2 refused=3 money_write=1 not_declared=1 write_mode=1 reason=-');
     expect(toolSelectStatusLineMatches(ok)).toBe(true);
     expect(toolSelectStatusLineConsistent(toolSelectStatusLine(ok))).toBe(true);
     expect(toolSelectExportText(ok).startsWith(toolSelectExportHeader())).toBe(true);

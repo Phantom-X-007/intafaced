@@ -5,10 +5,7 @@
  * licensed-import-pending stays residual — never invent DERIV titles.
  */
 
-export const CURRICULUM_CONTENT_SOURCES = [
-  'platform-native-expansion',
-  'licensed-import-pending',
-] as const;
+export const CURRICULUM_CONTENT_SOURCES = ['platform-native-expansion', 'licensed-import-pending'] as const;
 export type CurriculumContentSourceId = (typeof CURRICULUM_CONTENT_SOURCES)[number];
 
 export const IMPORT_ISSUE_CODES = ['missing', 'invalid', 'brand', 'path'] as const;
@@ -39,9 +36,7 @@ export function parseImportSourceCatalogStatusLine(line: string): {
   readonly platformNative: number;
   readonly licensedPending: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^sources=(\d+) platform_native=([01]) licensed_pending=([01])$/);
+  const m = line.trim().match(/^sources=(\d+) platform_native=([01]) licensed_pending=([01])$/);
   if (!m) return null;
   return {
     sources: Number(m[1]),
@@ -55,11 +50,7 @@ export function importSourceCatalogStatusLineMatches(): boolean {
   const p = parseImportSourceCatalogStatusLine(importSourceCatalogStatusLine());
   if (!p) return false;
   const c = importSourceCatalogBoardCard();
-  return (
-    p.sources === c.sources &&
-    p.platformNative === c.hasPlatformNative &&
-    p.licensedPending === c.hasLicensedPending
-  );
+  return p.sources === c.sources && p.platformNative === c.hasPlatformNative && p.licensedPending === c.hasLicensedPending;
 }
 
 /** L3 — licensed stays pending (not silently shipped). */

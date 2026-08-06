@@ -49,11 +49,7 @@ export function parseInstrumentEnumCatalogStatusLine(line: string): {
   readonly statuses: number;
   readonly schedules: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^asset_classes=(\d+) units=(\d+) kinds=(\d+) statuses=(\d+) schedules=(\d+)$/,
-    );
+  const m = line.trim().match(/^asset_classes=(\d+) units=(\d+) kinds=(\d+) statuses=(\d+) schedules=(\d+)$/);
   if (!m) return null;
   return {
     assetClasses: Number(m[1]),
@@ -79,18 +75,14 @@ export function instrumentEnumCatalogStatusLineMatches(): boolean {
 }
 
 /** L3 — status histogram for a fixture catalogue. */
-export function instrumentStatusHistogram(
-  items: readonly InstrumentBoardInput[],
-): Readonly<Record<string, number>> {
+export function instrumentStatusHistogram(items: readonly InstrumentBoardInput[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const i of items) out[i.status] = (out[i.status] ?? 0) + 1;
   return out;
 }
 
 /** L3 — class histogram. */
-export function instrumentClassHistogram(
-  items: readonly InstrumentBoardInput[],
-): Readonly<Record<string, number>> {
+export function instrumentClassHistogram(items: readonly InstrumentBoardInput[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const i of items) out[i.assetClass] = (out[i.assetClass] ?? 0) + 1;
   return out;
@@ -132,11 +124,7 @@ export function parseInstrumentCatalogueStatusLine(line: string): {
   readonly commodity: number;
   readonly forex: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^instruments=(\d+) active=(\d+) halted=(\d+) crypto=(\d+) commodity=(\d+) forex=(\d+)$/,
-    );
+  const m = line.trim().match(/^instruments=(\d+) active=(\d+) halted=(\d+) crypto=(\d+) commodity=(\d+) forex=(\d+)$/);
   if (!m) return null;
   return {
     instruments: Number(m[1]),
@@ -149,9 +137,7 @@ export function parseInstrumentCatalogueStatusLine(line: string): {
 }
 
 /** L3 — true when status matches. */
-export function instrumentCatalogueStatusLineMatches(
-  items: readonly InstrumentBoardInput[],
-): boolean {
+export function instrumentCatalogueStatusLineMatches(items: readonly InstrumentBoardInput[]): boolean {
   const p = parseInstrumentCatalogueStatusLine(instrumentCatalogueStatusLine(items));
   if (!p) return false;
   const c = instrumentCatalogueBoardCard(items);
@@ -189,11 +175,7 @@ export function instrumentCatalogueExportText(items: readonly InstrumentBoardInp
 }
 
 /** L3 — count in range. */
-export function instrumentCountInRange(
-  items: readonly InstrumentBoardInput[],
-  min: number,
-  max: number,
-): boolean {
+export function instrumentCountInRange(items: readonly InstrumentBoardInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = items.length;
   return n >= min && n <= max;

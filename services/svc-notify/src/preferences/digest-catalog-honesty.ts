@@ -50,11 +50,7 @@ export function digestCatalogStatusLineMatches(): boolean {
   const p = parseDigestCatalogStatusLine(digestCatalogStatusLine());
   if (!p) return false;
   const c = digestCatalogBoardCard();
-  return (
-    p.cadences === c.cadences &&
-    p.criticalDigest === c.criticalMayDigest &&
-    p.defaultCadence === c.defaultCadence
-  );
+  return p.cadences === c.cadences && p.criticalDigest === c.criticalMayDigest && p.defaultCadence === c.defaultCadence;
 }
 
 /** L3 — critical never digests; default off. */

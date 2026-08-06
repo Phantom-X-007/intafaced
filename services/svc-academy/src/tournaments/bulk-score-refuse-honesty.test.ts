@@ -45,9 +45,7 @@ describe('L3 wave126 bulk-score refuse honesty', () => {
       status: 'refuse',
       reason: 'season_not_live',
     };
-    expect(bulkScoreResultStatusLine(refuse)).toBe(
-      'status=refuse accepted=0 reason=season_not_live',
-    );
+    expect(bulkScoreResultStatusLine(refuse)).toBe('status=refuse accepted=0 reason=season_not_live');
     expect(bulkScoreResultStatusLineMatches(refuse)).toBe(true);
     expect(bulkScoreResultStatusLineConsistent(bulkScoreResultStatusLine(refuse))).toBe(true);
     expect(parseBulkScoreResultStatusLine('nope')).toBeNull();

@@ -29,9 +29,7 @@ describe('L3 wave107 ambassador status honesty', () => {
       hasPayPath: 0,
     });
     expect(ambassadorStatusCatalogStatusLineMatches()).toBe(true);
-    expect(ambassadorStatusCatalogStatusLineConsistent(ambassadorStatusCatalogStatusLine())).toBe(
-      true,
-    );
+    expect(ambassadorStatusCatalogStatusLineConsistent(ambassadorStatusCatalogStatusLine())).toBe(true);
     expect(ambassadorBadgeIsActive('active')).toBe(true);
     expect(ambassadorBadgeIsActive('frozen')).toBe(false);
     expect(isDeclaredAmbassadorStatus('active')).toBe(true);

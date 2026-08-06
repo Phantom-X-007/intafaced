@@ -26,9 +26,7 @@ export function referralDepthCatalogStatusLine(): string {
 }
 
 /** L3 — parse catalog. */
-export function parseReferralDepthCatalogStatusLine(
-  line: string,
-): { readonly defaultMax: number; readonly min: number } | null {
+export function parseReferralDepthCatalogStatusLine(line: string): { readonly defaultMax: number; readonly min: number } | null {
   const m = line.trim().match(/^default_max=(\d+) min=(\d+)$/);
   if (!m) return null;
   return { defaultMax: Number(m[1]), min: Number(m[2]) };
@@ -87,12 +85,7 @@ export function referralDepthStatusLineMatches(input: ReferralDepthBoardInput): 
   const p = parseReferralDepthStatusLine(referralDepthStatusLine(input));
   if (!p) return false;
   const c = referralDepthBoardCard(input);
-  return (
-    p.depth === c.depth &&
-    p.max === c.maxDepth &&
-    p.within === c.withinCap &&
-    p.over === c.overCap
-  );
+  return p.depth === c.depth && p.max === c.maxDepth && p.within === c.withinCap && p.over === c.overCap;
 }
 
 /** L3 — within XOR over. */

@@ -49,11 +49,7 @@ export function parseBlueprintCatalogStatusLine(line: string): {
   readonly visibility: number;
   readonly card: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^decision=(\d+) risk=(\d+) energy=(\d+) learning=(\d+) crew=(\d+) visibility=(\d+) card=(\d+)$/,
-    );
+  const m = line.trim().match(/^decision=(\d+) risk=(\d+) energy=(\d+) learning=(\d+) crew=(\d+) visibility=(\d+) card=(\d+)$/);
   if (!m) return null;
   return {
     decision: Number(m[1]),
@@ -86,15 +82,7 @@ export function blueprintCatalogStatusLineMatches(): boolean {
 export function blueprintCatalogStatusLineConsistent(line: string): boolean {
   const p = parseBlueprintCatalogStatusLine(line);
   if (!p) return false;
-  return (
-    p.decision === 4 &&
-    p.risk === 4 &&
-    p.energy === 4 &&
-    p.learning === 4 &&
-    p.crew === 4 &&
-    p.visibility === 3 &&
-    p.card === 2
-  );
+  return p.decision === 4 && p.risk === 4 && p.energy === 4 && p.learning === 4 && p.crew === 4 && p.visibility === 3 && p.card === 2;
 }
 
 /** L3 — export header. */

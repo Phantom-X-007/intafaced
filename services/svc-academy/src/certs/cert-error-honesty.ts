@@ -40,9 +40,7 @@ export function parseCertErrorCatalogStatusLine(line: string): {
   readonly alreadyGranted: number;
   readonly xp: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^codes=(\d+) incomplete=([01]) already_granted=([01]) xp=([01])$/);
+  const m = line.trim().match(/^codes=(\d+) incomplete=([01]) already_granted=([01]) xp=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),
@@ -57,12 +55,7 @@ export function certErrorCatalogStatusLineMatches(): boolean {
   const p = parseCertErrorCatalogStatusLine(certErrorCatalogStatusLine());
   if (!p) return false;
   const c = certErrorCatalogBoardCard();
-  return (
-    p.codes === c.codes &&
-    p.incomplete === c.hasIncomplete &&
-    p.alreadyGranted === c.hasAlreadyGranted &&
-    p.xp === c.hasXpCode
-  );
+  return p.codes === c.codes && p.incomplete === c.hasIncomplete && p.alreadyGranted === c.hasAlreadyGranted && p.xp === c.hasXpCode;
 }
 
 /** L3 — Stage-1 has no XP error code here. */

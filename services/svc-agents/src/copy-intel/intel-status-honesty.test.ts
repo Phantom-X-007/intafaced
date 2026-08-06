@@ -23,9 +23,7 @@ describe('L3 wave139 copy-intel status catalog honesty', () => {
       unavailableReasons: 3,
       inventsPnl: 0,
     });
-    expect(intelStatusCatalogStatusLine()).toBe(
-      'statuses=3 unavailable_reasons=3 invent_pnl=0',
-    );
+    expect(intelStatusCatalogStatusLine()).toBe('statuses=3 unavailable_reasons=3 invent_pnl=0');
     expect(intelStatusCatalogStatusLineMatches()).toBe(true);
     expect(intelStatusCatalogStatusLineConsistent(intelStatusCatalogStatusLine())).toBe(true);
     expect(intelStatusCatalogExportText().startsWith(intelStatusCatalogExportHeader())).toBe(true);

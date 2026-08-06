@@ -34,9 +34,7 @@ export function parseInstrumentKindCatalogStatusLine(line: string): {
   readonly futures: number;
   readonly options: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^kinds=(\d+) spot=([01]) futures=([01]) options=([01])$/);
+  const m = line.trim().match(/^kinds=(\d+) spot=([01]) futures=([01]) options=([01])$/);
   if (!m) return null;
   return {
     kinds: Number(m[1]),
@@ -51,12 +49,7 @@ export function instrumentKindCatalogStatusLineMatches(): boolean {
   const p = parseInstrumentKindCatalogStatusLine(instrumentKindCatalogStatusLine());
   if (!p) return false;
   const c = instrumentKindCatalogBoardCard();
-  return (
-    p.kinds === c.kinds &&
-    p.spot === c.hasSpot &&
-    p.futures === c.hasFutures &&
-    p.options === c.hasOptions
-  );
+  return p.kinds === c.kinds && p.spot === c.hasSpot && p.futures === c.hasFutures && p.options === c.hasOptions;
 }
 
 /** L3 — three kinds. */

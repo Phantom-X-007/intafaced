@@ -57,9 +57,7 @@ export function parseCopyCatalogStatusLine(line: string): {
   readonly error: number;
   readonly groups: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^keys=(\d+) agents_prefix=(\d+) refused=(\d+) error=(\d+) groups=(\d+)$/);
+  const m = line.trim().match(/^keys=(\d+) agents_prefix=(\d+) refused=(\d+) error=(\d+) groups=(\d+)$/);
   if (!m) return null;
   return {
     keys: Number(m[1]),
@@ -75,22 +73,14 @@ export function copyCatalogStatusLineMatches(keys: CopyKeyBoardInput): boolean {
   const p = parseCopyCatalogStatusLine(copyCatalogStatusLine(keys));
   if (!p) return false;
   const c = copyCatalogBoardCard(keys);
-  return (
-    p.keys === c.keys &&
-    p.agentsPrefix === c.agentsPrefix &&
-    p.refused === c.refused &&
-    p.error === c.error &&
-    p.groups === c.groups
-  );
+  return p.keys === c.keys && p.agentsPrefix === c.agentsPrefix && p.refused === c.refused && p.error === c.error && p.groups === c.groups;
 }
 
 /** L3 — agents_prefix ≤ keys; refused/error ≤ keys. */
 export function copyCatalogStatusLineConsistent(line: string): boolean {
   const p = parseCopyCatalogStatusLine(line);
   if (!p) return false;
-  return (
-    p.agentsPrefix <= p.keys && p.refused <= p.keys && p.error <= p.keys && p.groups <= p.keys
-  );
+  return p.agentsPrefix <= p.keys && p.refused <= p.keys && p.error <= p.keys && p.groups <= p.keys;
 }
 
 /** L3 — export header. */

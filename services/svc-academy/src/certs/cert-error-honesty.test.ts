@@ -21,9 +21,7 @@ describe('L3 wave131 cert error catalog honesty', () => {
       hasAlreadyGranted: 1,
       hasXpCode: 0,
     });
-    expect(certErrorCatalogStatusLine()).toBe(
-      'codes=4 incomplete=1 already_granted=1 xp=0',
-    );
+    expect(certErrorCatalogStatusLine()).toBe('codes=4 incomplete=1 already_granted=1 xp=0');
     expect(certErrorCatalogStatusLineMatches()).toBe(true);
     expect(certErrorCatalogStatusLineConsistent(certErrorCatalogStatusLine())).toBe(true);
     expect(certErrorCatalogExportText().startsWith(certErrorCatalogExportHeader())).toBe(true);

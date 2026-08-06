@@ -24,10 +24,7 @@ export type TokenEstimateBoardInput = {
 };
 
 /** L3 — board from estimate inputs. */
-export function tokenEstimateBoardCard(input: {
-  system?: string;
-  messages: readonly { content: string }[];
-}): TokenEstimateBoardInput {
+export function tokenEstimateBoardCard(input: { system?: string; messages: readonly { content: string }[] }): TokenEstimateBoardInput {
   const systemLen = input.system?.length ?? 0;
   let totalChars = systemLen;
   for (const m of input.messages) totalChars += m.content.length;
@@ -40,10 +37,7 @@ export function tokenEstimateBoardCard(input: {
 }
 
 /** L3 — status line. */
-export function tokenEstimateStatusLine(input: {
-  system?: string;
-  messages: readonly { content: string }[];
-}): string {
+export function tokenEstimateStatusLine(input: { system?: string; messages: readonly { content: string }[] }): string {
   const c = tokenEstimateBoardCard(input);
   return `system_len=${c.systemLen} messages=${c.messageCount} chars=${c.totalChars} tokens=${c.estimatedTokens}`;
 }
@@ -55,9 +49,7 @@ export function parseTokenEstimateStatusLine(line: string): {
   readonly chars: number;
   readonly tokens: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^system_len=(\d+) messages=(\d+) chars=(\d+) tokens=(\d+)$/);
+  const m = line.trim().match(/^system_len=(\d+) messages=(\d+) chars=(\d+) tokens=(\d+)$/);
   if (!m) return null;
   return {
     systemLen: Number(m[1]),
@@ -68,19 +60,11 @@ export function parseTokenEstimateStatusLine(line: string): {
 }
 
 /** L3 — true when status matches. */
-export function tokenEstimateStatusLineMatches(input: {
-  system?: string;
-  messages: readonly { content: string }[];
-}): boolean {
+export function tokenEstimateStatusLineMatches(input: { system?: string; messages: readonly { content: string }[] }): boolean {
   const p = parseTokenEstimateStatusLine(tokenEstimateStatusLine(input));
   if (!p) return false;
   const c = tokenEstimateBoardCard(input);
-  return (
-    p.systemLen === c.systemLen &&
-    p.messages === c.messageCount &&
-    p.chars === c.totalChars &&
-    p.tokens === c.estimatedTokens
-  );
+  return p.systemLen === c.systemLen && p.messages === c.messageCount && p.chars === c.totalChars && p.tokens === c.estimatedTokens;
 }
 
 /** L3 — empty chars → zero tokens; tokens ≈ ceil(chars/3). */
@@ -97,19 +81,13 @@ export function tokenEstimateExportHeader(): string {
 }
 
 /** L3 — export line. */
-export function tokenEstimateExportLine(input: {
-  system?: string;
-  messages: readonly { content: string }[];
-}): string {
+export function tokenEstimateExportLine(input: { system?: string; messages: readonly { content: string }[] }): string {
   const c = tokenEstimateBoardCard(input);
   return `${c.systemLen},${c.messageCount},${c.totalChars},${c.estimatedTokens}`;
 }
 
 /** L3 — full export. */
-export function tokenEstimateExportText(input: {
-  system?: string;
-  messages: readonly { content: string }[];
-}): string {
+export function tokenEstimateExportText(input: { system?: string; messages: readonly { content: string }[] }): string {
   return [tokenEstimateExportHeader(), tokenEstimateExportLine(input)].join('\n');
 }
 

@@ -21,14 +21,10 @@ describe('L3 wave128 programme error catalog honesty', () => {
       hasAlreadyActive: 1,
       hasPayCode: 0,
     });
-    expect(programmeErrorCatalogStatusLine()).toBe(
-      'codes=4 not_found=1 already_active=1 pay=0',
-    );
+    expect(programmeErrorCatalogStatusLine()).toBe('codes=4 not_found=1 already_active=1 pay=0');
     expect(programmeErrorCatalogStatusLineMatches()).toBe(true);
     expect(programmeErrorCatalogStatusLineConsistent(programmeErrorCatalogStatusLine())).toBe(true);
-    expect(programmeErrorCatalogExportText().startsWith(programmeErrorCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(programmeErrorCatalogExportText().startsWith(programmeErrorCatalogExportHeader())).toBe(true);
     expect(programmeErrorCatalogExportLines()).toEqual([...AMBASSADOR_PROGRAMME_ERROR_CODES]);
     expect(isDeclaredProgrammeErrorCode('academy.ambassador_already_frozen')).toBe(true);
     expect(isDeclaredProgrammeErrorCode('academy.ambassador_payout')).toBe(false);

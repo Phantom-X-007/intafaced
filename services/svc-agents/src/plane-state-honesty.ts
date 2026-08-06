@@ -61,9 +61,7 @@ export function darkPlaneRefusesInvent(plane: PlaneStateId): boolean {
 }
 
 /** L3 — multi-plane board. */
-export function multiPlaneBoardCard(
-  planes: Readonly<Record<string, PlaneStateId>>,
-): {
+export function multiPlaneBoardCard(planes: Readonly<Record<string, PlaneStateId>>): {
   readonly named: number;
   readonly live: number;
   readonly dark: number;
@@ -95,9 +93,7 @@ export function parseMultiPlaneStatusLine(line: string): {
 }
 
 /** L3 — true when multi matches. */
-export function multiPlaneStatusLineMatches(
-  planes: Readonly<Record<string, PlaneStateId>>,
-): boolean {
+export function multiPlaneStatusLineMatches(planes: Readonly<Record<string, PlaneStateId>>): boolean {
   const p = parseMultiPlaneStatusLine(multiPlaneStatusLine(planes));
   if (!p) return false;
   const c = multiPlaneBoardCard(planes);

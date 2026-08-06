@@ -50,12 +50,7 @@ export function identityTierCatalogStatusLineMatches(): boolean {
   const p = parseIdentityTierCatalogStatusLine(identityTierCatalogStatusLine());
   if (!p) return false;
   const c = identityTierCatalogBoardCard();
-  return (
-    p.kyc === c.kycTiers &&
-    p.card === c.cardTiers &&
-    p.kycNone === c.kycNone &&
-    p.cardNone === c.cardNone
-  );
+  return p.kyc === c.kycTiers && p.card === c.cardTiers && p.kycNone === c.kycNone && p.cardNone === c.cardNone;
 }
 
 /** L3 — both catalogs include none baseline. */

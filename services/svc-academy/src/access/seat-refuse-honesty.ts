@@ -4,16 +4,10 @@
  * Codes: stake_required | invite_required | room_full.
  */
 
-export const SEAT_REFUSE_CODES = [
-  'academy.stake_required',
-  'academy.invite_required',
-  'academy.room_full',
-] as const;
+export const SEAT_REFUSE_CODES = ['academy.stake_required', 'academy.invite_required', 'academy.room_full'] as const;
 export type SeatRefuseCodeId = (typeof SEAT_REFUSE_CODES)[number];
 
-export type SeatDecisionBoardInput =
-  | { readonly allowed: true }
-  | { readonly allowed: false; readonly code: SeatRefuseCodeId };
+export type SeatDecisionBoardInput = { readonly allowed: true } | { readonly allowed: false; readonly code: SeatRefuseCodeId };
 
 /** L3 — catalog board. */
 export function seatRefuseCatalogBoardCard(): {
@@ -58,12 +52,7 @@ export function seatRefuseCatalogStatusLineMatches(): boolean {
   const p = parseSeatRefuseCatalogStatusLine(seatRefuseCatalogStatusLine());
   if (!p) return false;
   const c = seatRefuseCatalogBoardCard();
-  return (
-    p.codes === c.codes &&
-    p.stake === c.hasStake &&
-    p.invite === c.hasInvite &&
-    p.full === c.hasFull
-  );
+  return p.codes === c.codes && p.stake === c.hasStake && p.invite === c.hasInvite && p.full === c.hasFull;
 }
 
 /** L3 — three refuse codes. */

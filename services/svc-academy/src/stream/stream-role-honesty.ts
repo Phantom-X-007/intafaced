@@ -96,9 +96,7 @@ export function parseStreamProviderStatusLine(line: string): {
 }
 
 /** L3 — true when provider status matches. */
-export function streamProviderStatusLineMatches(
-  input: StreamProviderUsabilityBoardInput,
-): boolean {
+export function streamProviderStatusLineMatches(input: StreamProviderUsabilityBoardInput): boolean {
   const p = parseStreamProviderStatusLine(streamProviderStatusLine(input));
   if (!p) return false;
   const c = streamProviderBoardCard(input);

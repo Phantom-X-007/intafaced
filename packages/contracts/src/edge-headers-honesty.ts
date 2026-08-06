@@ -7,10 +7,7 @@
 export const EDGE_PRINCIPAL_HEADER_NAME = 'x-intafaced-principal';
 export const EDGE_SIGNATURE_HEADER_NAME = 'x-intafaced-principal-sig';
 
-export const EDGE_HEADER_CATALOG = [
-  EDGE_PRINCIPAL_HEADER_NAME,
-  EDGE_SIGNATURE_HEADER_NAME,
-] as const;
+export const EDGE_HEADER_CATALOG = [EDGE_PRINCIPAL_HEADER_NAME, EDGE_SIGNATURE_HEADER_NAME] as const;
 
 /** L3 — catalog size. */
 export function edgeHeaderCatalogSize(): number {
@@ -19,8 +16,9 @@ export function edgeHeaderCatalogSize(): number {
 
 /** L3 — true when name is declared. */
 export function isDeclaredEdgeHeader(name: string): boolean {
-  return (EDGE_HEADER_CATALOG as readonly string[]).includes(name.toLowerCase())
-    || (EDGE_HEADER_CATALOG as readonly string[]).includes(name);
+  return (
+    (EDGE_HEADER_CATALOG as readonly string[]).includes(name.toLowerCase()) || (EDGE_HEADER_CATALOG as readonly string[]).includes(name)
+  );
 }
 
 /** L3 — board card. */
@@ -62,11 +60,7 @@ export function edgeHeaderCatalogStatusLineMatches(): boolean {
   const p = parseEdgeHeaderCatalogStatusLine(edgeHeaderCatalogStatusLine());
   if (!p) return false;
   const c = edgeHeaderCatalogBoardCard();
-  return (
-    p.headers === c.headers &&
-    p.principal === c.hasPrincipal &&
-    p.signature === c.hasSignature
-  );
+  return p.headers === c.headers && p.principal === c.hasPrincipal && p.signature === c.hasSignature;
 }
 
 /** L3 — both principal and signature required for trust. */

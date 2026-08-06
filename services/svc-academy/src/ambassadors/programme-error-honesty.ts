@@ -22,9 +22,7 @@ export function programmeErrorCatalogBoardCard(): {
   return {
     codes: AMBASSADOR_PROGRAMME_ERROR_CODES.length,
     hasNotFound: AMBASSADOR_PROGRAMME_ERROR_CODES.includes('academy.ambassador_not_found') ? 1 : 0,
-    hasAlreadyActive: AMBASSADOR_PROGRAMME_ERROR_CODES.includes('academy.ambassador_already_active')
-      ? 1
-      : 0,
+    hasAlreadyActive: AMBASSADOR_PROGRAMME_ERROR_CODES.includes('academy.ambassador_already_active') ? 1 : 0,
     hasPayCode: 0,
   };
 }
@@ -42,9 +40,7 @@ export function parseProgrammeErrorCatalogStatusLine(line: string): {
   readonly alreadyActive: number;
   readonly pay: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^codes=(\d+) not_found=([01]) already_active=([01]) pay=([01])$/);
+  const m = line.trim().match(/^codes=(\d+) not_found=([01]) already_active=([01]) pay=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),
@@ -59,12 +55,7 @@ export function programmeErrorCatalogStatusLineMatches(): boolean {
   const p = parseProgrammeErrorCatalogStatusLine(programmeErrorCatalogStatusLine());
   if (!p) return false;
   const c = programmeErrorCatalogBoardCard();
-  return (
-    p.codes === c.codes &&
-    p.notFound === c.hasNotFound &&
-    p.alreadyActive === c.hasAlreadyActive &&
-    p.pay === c.hasPayCode
-  );
+  return p.codes === c.codes && p.notFound === c.hasNotFound && p.alreadyActive === c.hasAlreadyActive && p.pay === c.hasPayCode;
 }
 
 /** L3 — Stage-1 has no pay error code. */

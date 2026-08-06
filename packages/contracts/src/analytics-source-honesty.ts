@@ -37,9 +37,7 @@ export function parseAnalyticsSourceCatalogStatusLine(line: string): {
   readonly identity: number;
   readonly pay: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^sources=(\d+) ledger=([01]) trade=([01]) identity=([01]) pay=([01])$/);
+  const m = line.trim().match(/^sources=(\d+) ledger=([01]) trade=([01]) identity=([01]) pay=([01])$/);
   if (!m) return null;
   return {
     sources: Number(m[1]),
@@ -56,11 +54,7 @@ export function analyticsSourceCatalogStatusLineMatches(): boolean {
   if (!p) return false;
   const c = analyticsSourceCatalogBoardCard();
   return (
-    p.sources === c.sources &&
-    p.ledger === c.hasLedger &&
-    p.trade === c.hasTrade &&
-    p.identity === c.hasIdentity &&
-    p.pay === c.hasPay
+    p.sources === c.sources && p.ledger === c.hasLedger && p.trade === c.hasTrade && p.identity === c.hasIdentity && p.pay === c.hasPay
   );
 }
 

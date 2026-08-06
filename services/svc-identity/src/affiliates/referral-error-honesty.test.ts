@@ -24,9 +24,7 @@ describe('L3 wave132 referral error catalog honesty', () => {
     expect(referralErrorCatalogStatusLine()).toBe('codes=6 cycle=1 depth=1 self=1');
     expect(referralErrorCatalogStatusLineMatches()).toBe(true);
     expect(referralErrorCatalogStatusLineConsistent(referralErrorCatalogStatusLine())).toBe(true);
-    expect(referralErrorCatalogExportText().startsWith(referralErrorCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(referralErrorCatalogExportText().startsWith(referralErrorCatalogExportHeader())).toBe(true);
     expect(referralErrorCatalogExportLines()).toEqual([...REFERRAL_ERROR_CODES]);
     expect(isDeclaredReferralErrorCode('referral.unknown_referrer')).toBe(true);
     expect(isDeclaredReferralErrorCode('referral.payout')).toBe(false);

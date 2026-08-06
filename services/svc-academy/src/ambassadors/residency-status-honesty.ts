@@ -51,11 +51,7 @@ export function residencyStatusCatalogStatusLineMatches(): boolean {
   const p = parseResidencyStatusCatalogStatusLine(residencyStatusCatalogStatusLine());
   if (!p) return false;
   const c = residencyStatusCatalogBoardCard();
-  return (
-    p.statuses === c.statuses &&
-    p.accepted === c.terminalAccepted &&
-    p.rejected === c.terminalRejected
-  );
+  return p.statuses === c.statuses && p.accepted === c.terminalAccepted && p.rejected === c.terminalRejected;
 }
 
 /** L3 — four statuses. */
@@ -102,11 +98,7 @@ export function parseResidencyListStatusLine(line: string): {
   readonly withdrawn: number;
   readonly cohorts: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^applications=(\d+) applied=(\d+) accepted=(\d+) rejected=(\d+) withdrawn=(\d+) cohorts=(\d+)$/,
-    );
+  const m = line.trim().match(/^applications=(\d+) applied=(\d+) accepted=(\d+) rejected=(\d+) withdrawn=(\d+) cohorts=(\d+)$/);
   if (!m) return null;
   return {
     applications: Number(m[1]),
@@ -137,10 +129,7 @@ export function residencyListStatusLineMatches(apps: readonly ResidencyBoardInpu
 export function residencyListStatusLineConsistent(line: string): boolean {
   const p = parseResidencyListStatusLine(line);
   if (!p) return false;
-  return (
-    p.applications === p.applied + p.accepted + p.rejected + p.withdrawn &&
-    p.cohorts <= p.applications
-  );
+  return p.applications === p.applied + p.accepted + p.rejected + p.withdrawn && p.cohorts <= p.applications;
 }
 
 /** L3 — export header. */

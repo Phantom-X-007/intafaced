@@ -21,16 +21,10 @@ describe('L3 wave122 tournament error catalog honesty', () => {
       hasStandingInvalid: 1,
       hasPrizeCode: 0,
     });
-    expect(tournamentErrorCatalogStatusLine()).toBe(
-      'codes=5 season_invalid=1 standing_invalid=1 prize=0',
-    );
+    expect(tournamentErrorCatalogStatusLine()).toBe('codes=5 season_invalid=1 standing_invalid=1 prize=0');
     expect(tournamentErrorCatalogStatusLineMatches()).toBe(true);
-    expect(tournamentErrorCatalogStatusLineConsistent(tournamentErrorCatalogStatusLine())).toBe(
-      true,
-    );
-    expect(tournamentErrorCatalogExportText().startsWith(tournamentErrorCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(tournamentErrorCatalogStatusLineConsistent(tournamentErrorCatalogStatusLine())).toBe(true);
+    expect(tournamentErrorCatalogExportText().startsWith(tournamentErrorCatalogExportHeader())).toBe(true);
     expect(tournamentErrorCatalogExportLines()).toEqual([...TOURNAMENT_ERROR_CODES]);
     expect(isDeclaredTournamentErrorCode('academy.season_not_live')).toBe(true);
     expect(isDeclaredTournamentErrorCode('academy.prize_unpaid')).toBe(false);

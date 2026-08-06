@@ -38,9 +38,7 @@ describe('L3 wave68 merchant watch honesty', () => {
     };
     expect(watchAlertCount(ok)).toBe(1);
     expect(watchResultBoardCard(ok).status).toBe('ok');
-    expect(watchResultStatusLine(ok)).toBe(
-      'status=ok alerts=1 considered=3 stale=1 incomplete=0 reason=-',
-    );
+    expect(watchResultStatusLine(ok)).toBe('status=ok alerts=1 considered=3 stale=1 incomplete=0 reason=-');
     expect(watchResultStatusLineMatches(ok)).toBe(true);
     expect(watchResultStatusLineConsistent(watchResultStatusLine(ok))).toBe(true);
     expect(watchResultExportText(ok).startsWith(watchResultExportHeader())).toBe(true);
@@ -66,9 +64,7 @@ describe('L3 wave68 merchant watch honesty', () => {
     expect(MERCHANT_MONEY_WRITE_TOOL_IDS).toContain('ledger.post');
     expect(moneyWriteRefuseBoardCard().tools).toBe(MERCHANT_MONEY_WRITE_TOOL_IDS.length);
     expect(moneyWriteRefuseStatusLineMatches()).toBe(true);
-    expect(parseMoneyWriteRefuseStatusLine(moneyWriteRefuseStatusLine())?.tools).toBe(
-      MERCHANT_MONEY_WRITE_TOOL_IDS.length,
-    );
+    expect(parseMoneyWriteRefuseStatusLine(moneyWriteRefuseStatusLine())?.tools).toBe(MERCHANT_MONEY_WRITE_TOOL_IDS.length);
     expect(parseMoneyWriteRefuseStatusLine('nope')).toBeNull();
   });
 });

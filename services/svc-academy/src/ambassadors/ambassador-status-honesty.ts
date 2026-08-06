@@ -55,12 +55,7 @@ export function ambassadorStatusCatalogStatusLineMatches(): boolean {
   const p = parseAmbassadorStatusCatalogStatusLine(ambassadorStatusCatalogStatusLine());
   if (!p) return false;
   const c = ambassadorStatusCatalogBoardCard();
-  return (
-    p.statuses === c.statuses &&
-    p.active === c.hasActive &&
-    p.frozen === c.hasFrozen &&
-    p.pay === c.hasPayPath
-  );
+  return p.statuses === c.statuses && p.active === c.hasActive && p.frozen === c.hasFrozen && p.pay === c.hasPayPath;
 }
 
 /** L3 — Stage-1 has no pay path. */

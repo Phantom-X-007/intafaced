@@ -29,9 +29,7 @@ describe('L3 wave104 provider catalog honesty', () => {
       hasEmbed: 1,
     });
     expect(providerCapabilityCatalogStatusLineMatches()).toBe(true);
-    expect(
-      providerCapabilityCatalogStatusLineConsistent(providerCapabilityCatalogStatusLine()),
-    ).toBe(true);
+    expect(providerCapabilityCatalogStatusLineConsistent(providerCapabilityCatalogStatusLine())).toBe(true);
     expect(isDeclaredProviderCapability('complete')).toBe(true);
     expect(isDeclaredProviderCapability('imagine')).toBe(false);
     expect(parseProviderCapabilityCatalogStatusLine('nope')).toBeNull();
@@ -60,9 +58,7 @@ describe('L3 wave104 provider catalog honesty', () => {
       usable: 1,
       withComplete: 1,
     });
-    expect(providerListStatusLine(list)).toBe(
-      'providers=2 healthy=1 usable=1 with_complete=1',
-    );
+    expect(providerListStatusLine(list)).toBe('providers=2 healthy=1 usable=1 with_complete=1');
     expect(providerListStatusLineMatches(list)).toBe(true);
     expect(providerListStatusLineConsistent(providerListStatusLine(list))).toBe(true);
     expect(providerListExportText(list).startsWith(providerListExportHeader())).toBe(true);

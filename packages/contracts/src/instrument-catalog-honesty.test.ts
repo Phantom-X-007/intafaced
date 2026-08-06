@@ -46,9 +46,7 @@ describe('L3 wave79 instrument catalog honesty', () => {
     const empty: readonly InstrumentBoardInput[] = [];
     expect(instrumentCatalogueBoardCard(empty).instruments).toBe(0);
     expect(instrumentCatalogueStatusLineMatches(empty)).toBe(true);
-    expect(instrumentCatalogueStatusLineConsistent(instrumentCatalogueStatusLine(empty))).toBe(
-      true,
-    );
+    expect(instrumentCatalogueStatusLineConsistent(instrumentCatalogueStatusLine(empty))).toBe(true);
 
     const mixed: readonly InstrumentBoardInput[] = [
       { assetClass: 'crypto', kind: 'spot', status: 'active', unit: 'unit' },
@@ -65,16 +63,10 @@ describe('L3 wave79 instrument catalog honesty', () => {
       commodity: 1,
       forex: 1,
     });
-    expect(instrumentCatalogueStatusLine(mixed)).toBe(
-      'instruments=3 active=2 halted=1 crypto=1 commodity=1 forex=1',
-    );
+    expect(instrumentCatalogueStatusLine(mixed)).toBe('instruments=3 active=2 halted=1 crypto=1 commodity=1 forex=1');
     expect(instrumentCatalogueStatusLineMatches(mixed)).toBe(true);
-    expect(instrumentCatalogueStatusLineConsistent(instrumentCatalogueStatusLine(mixed))).toBe(
-      true,
-    );
-    expect(instrumentCatalogueExportText(mixed).startsWith(instrumentCatalogueExportHeader())).toBe(
-      true,
-    );
+    expect(instrumentCatalogueStatusLineConsistent(instrumentCatalogueStatusLine(mixed))).toBe(true);
+    expect(instrumentCatalogueExportText(mixed).startsWith(instrumentCatalogueExportHeader())).toBe(true);
     expect(instrumentCatalogueExportLine(mixed)).toBe('3,2,1,1,1,1');
     expect(instrumentCountInRange(mixed, 3, 3)).toBe(true);
     expect(instrumentCountInRange(mixed, 4, 1)).toBe(false);

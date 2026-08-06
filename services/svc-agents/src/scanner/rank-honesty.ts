@@ -68,11 +68,7 @@ export function parseScannerRankStatusLine(line: string): {
   readonly stale: number;
   readonly reason: string;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^status=(ok|empty|unavailable) signals=(\d+) incomplete=(\d+) stale=(\d+) reason=([a-z0-9_-]+)$/,
-    );
+  const m = line.trim().match(/^status=(ok|empty|unavailable) signals=(\d+) incomplete=(\d+) stale=(\d+) reason=([a-z0-9_-]+)$/);
   if (!m) return null;
   return {
     status: m[1]!,
@@ -127,11 +123,7 @@ export function scannerRankIsEmpty(result: ScannerRankResultInput): boolean {
 }
 
 /** L3 — signal count in range. */
-export function scannerSignalCountInRange(
-  result: ScannerRankResultInput,
-  min: number,
-  max: number,
-): boolean {
+export function scannerSignalCountInRange(result: ScannerRankResultInput, min: number, max: number): boolean {
   if (min > max) return false;
   const n = scannerRankBoardCard(result).signals;
   return n >= min && n <= max;

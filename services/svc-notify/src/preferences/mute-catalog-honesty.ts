@@ -50,11 +50,7 @@ export function muteCatalogStatusLineMatches(): boolean {
   const p = parseMuteCatalogStatusLine(muteCatalogStatusLine());
   if (!p) return false;
   const c = muteCatalogBoardCard();
-  return (
-    p.severities === c.severities &&
-    p.muteable === c.muteableChannels &&
-    p.criticalMuteable === c.criticalMuteable
-  );
+  return p.severities === c.severities && p.muteable === c.muteableChannels && p.criticalMuteable === c.criticalMuteable;
 }
 
 /** L3 — critical never muteable. */
@@ -83,9 +79,7 @@ export function mutePrefsStatusLine(prefs: MuteBoardInput): string {
 }
 
 /** L3 — parse prefs. */
-export function parseMutePrefsStatusLine(
-  line: string,
-): { readonly muted: number; readonly unmuted: number } | null {
+export function parseMutePrefsStatusLine(line: string): { readonly muted: number; readonly unmuted: number } | null {
   const m = line.trim().match(/^muted=(\d+) unmuted=(\d+)$/);
   if (!m) return null;
   return { muted: Number(m[1]), unmuted: Number(m[2]) };

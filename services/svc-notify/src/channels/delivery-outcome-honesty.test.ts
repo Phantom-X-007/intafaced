@@ -28,9 +28,7 @@ describe('L3 wave115 delivery outcome honesty', () => {
       hasFailed: 1,
     });
     expect(deliveryOutcomeCatalogStatusLineMatches()).toBe(true);
-    expect(deliveryOutcomeCatalogStatusLineConsistent(deliveryOutcomeCatalogStatusLine())).toBe(
-      true,
-    );
+    expect(deliveryOutcomeCatalogStatusLineConsistent(deliveryOutcomeCatalogStatusLine())).toBe(true);
     expect(isDeclaredDeliveryOutcome('accepted')).toBe(true);
     expect(isDeclaredDeliveryOutcome('delivered')).toBe(false);
     expect(parseDeliveryOutcomeCatalogStatusLine('nope')).toBeNull();
@@ -47,16 +45,10 @@ describe('L3 wave115 delivery outcome honesty', () => {
       refused: 1,
       failed: 1,
     });
-    expect(deliveryOutcomeListStatusLine(rows)).toBe(
-      'total=4 accepted=2 refused=1 failed=1',
-    );
+    expect(deliveryOutcomeListStatusLine(rows)).toBe('total=4 accepted=2 refused=1 failed=1');
     expect(deliveryOutcomeListStatusLineMatches(rows)).toBe(true);
-    expect(deliveryOutcomeListStatusLineConsistent(deliveryOutcomeListStatusLine(rows))).toBe(
-      true,
-    );
-    expect(deliveryOutcomeListExportText(rows).startsWith(deliveryOutcomeListExportHeader())).toBe(
-      true,
-    );
+    expect(deliveryOutcomeListStatusLineConsistent(deliveryOutcomeListStatusLine(rows))).toBe(true);
+    expect(deliveryOutcomeListExportText(rows).startsWith(deliveryOutcomeListExportHeader())).toBe(true);
     expect(deliveryOutcomeListExportLine(rows)).toBe('4,2,1,1');
     expect(parseDeliveryOutcomeListStatusLine('nope')).toBeNull();
   });

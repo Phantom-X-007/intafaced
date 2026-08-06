@@ -32,9 +32,7 @@ export function parseIntelStatusCatalogStatusLine(line: string): {
   readonly unavailableReasons: number;
   readonly inventPnl: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^statuses=(\d+) unavailable_reasons=(\d+) invent_pnl=([01])$/);
+  const m = line.trim().match(/^statuses=(\d+) unavailable_reasons=(\d+) invent_pnl=([01])$/);
   if (!m) return null;
   return {
     statuses: Number(m[1]),
@@ -48,11 +46,7 @@ export function intelStatusCatalogStatusLineMatches(): boolean {
   const p = parseIntelStatusCatalogStatusLine(intelStatusCatalogStatusLine());
   if (!p) return false;
   const c = intelStatusCatalogBoardCard();
-  return (
-    p.statuses === c.statuses &&
-    p.unavailableReasons === c.unavailableReasons &&
-    p.inventPnl === c.inventsPnl
-  );
+  return p.statuses === c.statuses && p.unavailableReasons === c.unavailableReasons && p.inventPnl === c.inventsPnl;
 }
 
 /** L3 — never invent PnL. */
@@ -69,10 +63,7 @@ export function intelStatusCatalogExportHeader(): string {
 
 /** L3 — export lines. */
 export function intelStatusCatalogExportLines(): readonly string[] {
-  return [
-    ...INTEL_RESULT_STATUSES,
-    ...INTEL_UNAVAILABLE_REASONS.map((r) => `unavailable:${r}`),
-  ];
+  return [...INTEL_RESULT_STATUSES, ...INTEL_UNAVAILABLE_REASONS.map((r) => `unavailable:${r}`)];
 }
 
 /** L3 — full export. */

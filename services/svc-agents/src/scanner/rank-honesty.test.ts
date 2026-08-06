@@ -31,9 +31,7 @@ describe('L3 wave101 scanner rank honesty', () => {
       skippedStale: 0,
       reason: '-',
     });
-    expect(scannerRankStatusLine(ok)).toBe(
-      'status=ok signals=2 incomplete=1 stale=0 reason=-',
-    );
+    expect(scannerRankStatusLine(ok)).toBe('status=ok signals=2 incomplete=1 stale=0 reason=-');
     expect(scannerRankStatusLineMatches(ok)).toBe(true);
     expect(scannerRankStatusLineConsistent(scannerRankStatusLine(ok))).toBe(true);
     expect(scannerRankExportText(ok).startsWith(scannerRankExportHeader())).toBe(true);

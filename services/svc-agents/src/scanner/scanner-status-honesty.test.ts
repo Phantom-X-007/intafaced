@@ -23,14 +23,10 @@ describe('L3 wave127 scanner status catalog honesty', () => {
       unavailableReasons: 3,
       inventsMarkets: 0,
     });
-    expect(scannerStatusCatalogStatusLine()).toBe(
-      'statuses=3 unavailable_reasons=3 invent=0',
-    );
+    expect(scannerStatusCatalogStatusLine()).toBe('statuses=3 unavailable_reasons=3 invent=0');
     expect(scannerStatusCatalogStatusLineMatches()).toBe(true);
     expect(scannerStatusCatalogStatusLineConsistent(scannerStatusCatalogStatusLine())).toBe(true);
-    expect(scannerStatusCatalogExportText().startsWith(scannerStatusCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(scannerStatusCatalogExportText().startsWith(scannerStatusCatalogExportHeader())).toBe(true);
     expect(scannerStatusCatalogExportLines()).toContain('unavailable:stale');
     expect(isDeclaredScannerStatus('empty')).toBe(true);
     expect(isDeclaredScannerStatus('green')).toBe(false);

@@ -72,9 +72,7 @@ export function parseToolSelectStatusLine(line: string): {
 } | null {
   const m = line
     .trim()
-    .match(
-      /^status=(ok|refuse) selected=(\d+) refused=(\d+) money_write=(\d+) not_declared=(\d+) write_mode=(\d+) reason=([a-z0-9_-]+)$/,
-    );
+    .match(/^status=(ok|refuse) selected=(\d+) refused=(\d+) money_write=(\d+) not_declared=(\d+) write_mode=(\d+) reason=([a-z0-9_-]+)$/);
   if (!m) return null;
   return {
     status: m[1]!,
@@ -133,11 +131,7 @@ export function toolSelectHasNoMoneyWriteRefuse(result: ToolSelectResultInput): 
 }
 
 /** L3 — selected count in range. */
-export function toolSelectSelectedInRange(
-  result: ToolSelectResultInput,
-  min: number,
-  max: number,
-): boolean {
+export function toolSelectSelectedInRange(result: ToolSelectResultInput, min: number, max: number): boolean {
   if (min > max) return false;
   const n = toolSelectBoardCard(result).selected;
   return n >= min && n <= max;

@@ -111,11 +111,7 @@ export function crewChannelListEmpty(channels: readonly CrewChannelInput[]): boo
 }
 
 /** L3 — channel count in inclusive range. */
-export function crewChannelCountInRange(
-  channels: readonly CrewChannelInput[],
-  min: number,
-  max: number,
-): boolean {
+export function crewChannelCountInRange(channels: readonly CrewChannelInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = channels.length;
   return n >= min && n <= max;

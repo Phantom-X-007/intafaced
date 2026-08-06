@@ -68,12 +68,7 @@ export function analyticsLagCatalogStatusLineMatches(): boolean {
   const p = parseAnalyticsLagCatalogStatusLine(analyticsLagCatalogStatusLine());
   if (!p) return false;
   const c = analyticsLagCatalogBoardCard();
-  return (
-    p.sources === c.sources &&
-    p.freshness === c.freshnessValues &&
-    p.liveMax === c.liveMaxLag &&
-    p.warn === c.warnLag
-  );
+  return p.sources === c.sources && p.freshness === c.freshnessValues && p.liveMax === c.liveMaxLag && p.warn === c.warnLag;
 }
 
 /** L3 — warn < live max; three sources. */
@@ -109,9 +104,7 @@ export function parseLagObservationStatusLine(line: string): {
   readonly freshness: string;
   readonly isLive: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^lag=([0-9.]+|null) freshness=(live|delayed|stale|unknown) live=([01])$/);
+  const m = line.trim().match(/^lag=([0-9.]+|null) freshness=(live|delayed|stale|unknown) live=([01])$/);
   if (!m) return null;
   return { lag: m[1]!, freshness: m[2]!, isLive: Number(m[3]) };
 }

@@ -7,9 +7,7 @@
 import { SUPPORT_MONEY_TOOLS } from './guardrail.js';
 
 /** L3 — denylist board. */
-export function supportMoneyDenyBoardCard(
-  tools: readonly string[] = SUPPORT_MONEY_TOOLS,
-): {
+export function supportMoneyDenyBoardCard(tools: readonly string[] = SUPPORT_MONEY_TOOLS): {
   readonly tools: number;
   readonly hasLedgerPost: number;
   readonly hasPayRefund: number;
@@ -24,9 +22,7 @@ export function supportMoneyDenyBoardCard(
 }
 
 /** L3 — status line. */
-export function supportMoneyDenyStatusLine(
-  tools: readonly string[] = SUPPORT_MONEY_TOOLS,
-): string {
+export function supportMoneyDenyStatusLine(tools: readonly string[] = SUPPORT_MONEY_TOOLS): string {
   const c = supportMoneyDenyBoardCard(tools);
   return `tools=${c.tools} ledger_post=${c.hasLedgerPost} pay_refund=${c.hasPayRefund} trade_order=${c.hasTradeOrder}`;
 }
@@ -38,9 +34,7 @@ export function parseSupportMoneyDenyStatusLine(line: string): {
   readonly payRefund: number;
   readonly tradeOrder: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^tools=(\d+) ledger_post=([01]) pay_refund=([01]) trade_order=([01])$/);
+  const m = line.trim().match(/^tools=(\d+) ledger_post=([01]) pay_refund=([01]) trade_order=([01])$/);
   if (!m) return null;
   return {
     tools: Number(m[1]),
@@ -51,18 +45,11 @@ export function parseSupportMoneyDenyStatusLine(line: string): {
 }
 
 /** L3 — true when status matches. */
-export function supportMoneyDenyStatusLineMatches(
-  tools: readonly string[] = SUPPORT_MONEY_TOOLS,
-): boolean {
+export function supportMoneyDenyStatusLineMatches(tools: readonly string[] = SUPPORT_MONEY_TOOLS): boolean {
   const p = parseSupportMoneyDenyStatusLine(supportMoneyDenyStatusLine(tools));
   if (!p) return false;
   const c = supportMoneyDenyBoardCard(tools);
-  return (
-    p.tools === c.tools &&
-    p.ledgerPost === c.hasLedgerPost &&
-    p.payRefund === c.hasPayRefund &&
-    p.tradeOrder === c.hasTradeOrder
-  );
+  return p.tools === c.tools && p.ledgerPost === c.hasLedgerPost && p.payRefund === c.hasPayRefund && p.tradeOrder === c.hasTradeOrder;
 }
 
 /** L3 — money tools refused. */
@@ -78,24 +65,17 @@ export function supportMoneyDenyExportHeader(): string {
 }
 
 /** L3 — export line. */
-export function supportMoneyDenyExportLine(
-  tools: readonly string[] = SUPPORT_MONEY_TOOLS,
-): string {
+export function supportMoneyDenyExportLine(tools: readonly string[] = SUPPORT_MONEY_TOOLS): string {
   const c = supportMoneyDenyBoardCard(tools);
   return `${c.tools},${c.hasLedgerPost},${c.hasPayRefund},${c.hasTradeOrder}`;
 }
 
 /** L3 — full export. */
-export function supportMoneyDenyExportText(
-  tools: readonly string[] = SUPPORT_MONEY_TOOLS,
-): string {
+export function supportMoneyDenyExportText(tools: readonly string[] = SUPPORT_MONEY_TOOLS): string {
   return [supportMoneyDenyExportHeader(), supportMoneyDenyExportLine(tools)].join('\n');
 }
 
 /** L3 — tool denied. */
-export function isSupportMoneyDenied(
-  tool: string,
-  tools: readonly string[] = SUPPORT_MONEY_TOOLS,
-): boolean {
+export function isSupportMoneyDenied(tool: string, tools: readonly string[] = SUPPORT_MONEY_TOOLS): boolean {
   return tools.includes(tool);
 }

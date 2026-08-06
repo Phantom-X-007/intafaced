@@ -32,9 +32,7 @@ export function parseScannerStatusCatalogStatusLine(line: string): {
   readonly unavailableReasons: number;
   readonly invent: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^statuses=(\d+) unavailable_reasons=(\d+) invent=([01])$/);
+  const m = line.trim().match(/^statuses=(\d+) unavailable_reasons=(\d+) invent=([01])$/);
   if (!m) return null;
   return {
     statuses: Number(m[1]),
@@ -48,11 +46,7 @@ export function scannerStatusCatalogStatusLineMatches(): boolean {
   const p = parseScannerStatusCatalogStatusLine(scannerStatusCatalogStatusLine());
   if (!p) return false;
   const c = scannerStatusCatalogBoardCard();
-  return (
-    p.statuses === c.statuses &&
-    p.unavailableReasons === c.unavailableReasons &&
-    p.invent === c.inventsMarkets
-  );
+  return p.statuses === c.statuses && p.unavailableReasons === c.unavailableReasons && p.invent === c.inventsMarkets;
 }
 
 /** L3 — never invent markets. */

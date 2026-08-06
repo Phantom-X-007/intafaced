@@ -57,9 +57,7 @@ describe('L3 wave77 readiness honesty', () => {
       metering: 1,
       residualPresent: 1,
     });
-    expect(readinessStatusLine(mockUseful)).toBe(
-      'mode=mock providers=2 usable=1 healthy=1 tasks=1 useful=1 metering=1 residual=1',
-    );
+    expect(readinessStatusLine(mockUseful)).toBe('mode=mock providers=2 usable=1 healthy=1 tasks=1 useful=1 metering=1 residual=1');
     expect(readinessStatusLineMatches(mockUseful)).toBe(true);
     expect(readinessExportText(mockUseful).startsWith(readinessExportHeader())).toBe(true);
     expect(readinessExportLine(mockUseful)).toBe('mock,2,1,1,1,1,1,1');

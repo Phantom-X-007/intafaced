@@ -40,9 +40,7 @@ describe('L3 wave71 academy crew placement honesty', () => {
       matchRuns: 2,
       totalCrewSize: 8,
     });
-    expect(placementStatusLine(mixed)).toBe(
-      'placements=3 crews=2 users=3 match_runs=2 crew_size_sum=8',
-    );
+    expect(placementStatusLine(mixed)).toBe('placements=3 crews=2 users=3 match_runs=2 crew_size_sum=8');
     expect(placementStatusLineMatches(mixed)).toBe(true);
     expect(placementStatusLineConsistent(placementStatusLine(mixed))).toBe(true);
     expect(placementExportText(mixed).startsWith(placementExportHeader())).toBe(true);

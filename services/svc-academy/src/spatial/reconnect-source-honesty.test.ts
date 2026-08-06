@@ -46,9 +46,7 @@ describe('L3 wave141 reconnect source honesty', () => {
     expect(reconnectResultExportLine(ok)).toBe('ok,server,-');
 
     const refuse: ReconnectBoardInput = { status: 'refuse', reason: 'server_invalid' };
-    expect(reconnectResultStatusLine(refuse)).toBe(
-      'status=refuse source=- reason=server_invalid',
-    );
+    expect(reconnectResultStatusLine(refuse)).toBe('status=refuse source=- reason=server_invalid');
     expect(reconnectResultStatusLineMatches(refuse)).toBe(true);
     expect(reconnectResultStatusLineConsistent(reconnectResultStatusLine(refuse))).toBe(true);
     expect(parseReconnectResultStatusLine('nope')).toBeNull();

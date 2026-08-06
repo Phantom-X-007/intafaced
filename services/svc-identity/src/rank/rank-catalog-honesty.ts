@@ -31,9 +31,7 @@ export function otcAccessTierCount(tiers: readonly RankTierBoardInput[]): number
 }
 
 /** L3 — card tier histogram. */
-export function cardTierHistogram(
-  tiers: readonly RankTierBoardInput[],
-): Readonly<Record<string, number>> {
+export function cardTierHistogram(tiers: readonly RankTierBoardInput[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const t of tiers) {
     out[t.cardTier] = (out[t.cardTier] ?? 0) + 1;
@@ -86,12 +84,7 @@ export function rankCatalogStatusLineMatches(tiers: readonly RankTierBoardInput[
   const p = parseRankCatalogStatusLine(rankCatalogStatusLine(tiers));
   if (!p) return false;
   const c = rankCatalogBoardCard(tiers);
-  return (
-    p.tiers === c.tiers &&
-    p.hostRights === c.hostRights &&
-    p.otc === c.otc &&
-    p.maxRank === c.maxRank
-  );
+  return p.tiers === c.tiers && p.hostRights === c.hostRights && p.otc === c.otc && p.maxRank === c.maxRank;
 }
 
 /** L3 — true when host/otc cannot exceed tiers. */
@@ -128,11 +121,7 @@ export function rankHasTitle(tiers: readonly RankTierBoardInput[], title: string
 }
 
 /** L3 — tier count in range. */
-export function rankTierCountInRange(
-  tiers: readonly RankTierBoardInput[],
-  min: number,
-  max: number,
-): boolean {
+export function rankTierCountInRange(tiers: readonly RankTierBoardInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = tiers.length;
   return n >= min && n <= max;

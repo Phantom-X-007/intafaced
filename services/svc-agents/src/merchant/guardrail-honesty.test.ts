@@ -23,9 +23,7 @@ describe('L3 wave118 merchant guardrail honesty', () => {
     expect(isMerchantMoneyDenied('pay.metrics.read')).toBe(false);
     expect(merchantMoneyDenyBoardCard().hasLedgerPost).toBe(1);
     expect(merchantMoneyDenyStatusLineMatches()).toBe(true);
-    expect(parseMerchantMoneyDenyStatusLine(merchantMoneyDenyStatusLine())?.tools).toBe(
-      MERCHANT_MONEY_WRITE_TOOLS.length,
-    );
+    expect(parseMerchantMoneyDenyStatusLine(merchantMoneyDenyStatusLine())?.tools).toBe(MERCHANT_MONEY_WRITE_TOOLS.length);
 
     const card = merchantGuardrailBoardCard();
     expect(card.agentId).toBe('merchant');

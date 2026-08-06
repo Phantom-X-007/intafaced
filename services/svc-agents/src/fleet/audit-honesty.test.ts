@@ -43,9 +43,7 @@ describe('L3 wave74 audit log honesty', () => {
       failed: 1,
       toolCalls: 2,
     });
-    expect(auditLogStatusLine(mixed)).toBe(
-      'entries=4 executed=2 refused=1 failed=1 tool_calls=2',
-    );
+    expect(auditLogStatusLine(mixed)).toBe('entries=4 executed=2 refused=1 failed=1 tool_calls=2');
     expect(auditLogStatusLineMatches(mixed)).toBe(true);
     expect(auditLogStatusLineConsistent(auditLogStatusLine(mixed))).toBe(true);
     expect(auditLogExportText(mixed).startsWith(auditLogExportHeader())).toBe(true);

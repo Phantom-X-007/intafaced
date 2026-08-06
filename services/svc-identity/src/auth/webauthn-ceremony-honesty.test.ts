@@ -26,9 +26,7 @@ describe('L3 wave91 webauthn ceremony honesty', () => {
       get: 1,
     });
     expect(webauthnCeremonyCatalogStatusLineMatches()).toBe(true);
-    expect(webauthnCeremonyCatalogStatusLineConsistent(webauthnCeremonyCatalogStatusLine())).toBe(
-      true,
-    );
+    expect(webauthnCeremonyCatalogStatusLineConsistent(webauthnCeremonyCatalogStatusLine())).toBe(true);
     expect(parseWebauthnCeremonyCatalogStatusLine('nope')).toBeNull();
 
     const ready = {

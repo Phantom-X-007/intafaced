@@ -34,9 +34,7 @@ export function parseInstrumentUnitCatalogStatusLine(line: string): {
   readonly troyOunce: number;
   readonly barrel: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^units=(\d+) unit=([01]) troy_ounce=([01]) barrel=([01])$/);
+  const m = line.trim().match(/^units=(\d+) unit=([01]) troy_ounce=([01]) barrel=([01])$/);
   if (!m) return null;
   return {
     units: Number(m[1]),
@@ -51,12 +49,7 @@ export function instrumentUnitCatalogStatusLineMatches(): boolean {
   const p = parseInstrumentUnitCatalogStatusLine(instrumentUnitCatalogStatusLine());
   if (!p) return false;
   const c = instrumentUnitCatalogBoardCard();
-  return (
-    p.units === c.units &&
-    p.unit === c.hasUnit &&
-    p.troyOunce === c.hasTroyOunce &&
-    p.barrel === c.hasBarrel
-  );
+  return p.units === c.units && p.unit === c.hasUnit && p.troyOunce === c.hasTroyOunce && p.barrel === c.hasBarrel;
 }
 
 /** L3 — four units. */

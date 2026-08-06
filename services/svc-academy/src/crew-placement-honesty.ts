@@ -62,9 +62,7 @@ export function parsePlacementStatusLine(line: string): {
   readonly matchRuns: number;
   readonly crewSizeSum: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^placements=(\d+) crews=(\d+) users=(\d+) match_runs=(\d+) crew_size_sum=(\d+)$/);
+  const m = line.trim().match(/^placements=(\d+) crews=(\d+) users=(\d+) match_runs=(\d+) crew_size_sum=(\d+)$/);
   if (!m) return null;
   return {
     placements: Number(m[1]),
@@ -118,11 +116,7 @@ export function placementListEmpty(placements: readonly CrewPlacementInput[]): b
 }
 
 /** L3 — count in range. */
-export function placementCountInRange(
-  placements: readonly CrewPlacementInput[],
-  min: number,
-  max: number,
-): boolean {
+export function placementCountInRange(placements: readonly CrewPlacementInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = placements.length;
   return n >= min && n <= max;

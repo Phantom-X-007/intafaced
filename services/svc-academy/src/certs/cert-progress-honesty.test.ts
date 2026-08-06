@@ -21,9 +21,7 @@ describe('L3 wave133 cert progress honesty', () => {
       granted: 0,
     };
     expect(certProgressBoardCard(incomplete).complete).toBe(0);
-    expect(certProgressStatusLine(incomplete)).toBe(
-      'enrolled=1 completed=1 required=3 granted=0 complete=0',
-    );
+    expect(certProgressStatusLine(incomplete)).toBe('enrolled=1 completed=1 required=3 granted=0 complete=0');
     expect(certProgressStatusLineMatches(incomplete)).toBe(true);
     expect(certProgressStatusLineConsistent(certProgressStatusLine(incomplete))).toBe(true);
     expect(certIncompleteBlocksGrant(incomplete)).toBe(true);

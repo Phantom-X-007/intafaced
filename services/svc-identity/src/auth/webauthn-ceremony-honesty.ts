@@ -104,12 +104,7 @@ export function webauthnCeremonyStatusLineMatches(input: CeremonyBoardInput): bo
   if (!p) return false;
   const c = webauthnCeremonyBoardCard(input);
   const short = c.type === 'webauthn.create' ? 'create' : 'get';
-  return (
-    p.type === short &&
-    p.challenge === c.challenge &&
-    p.origin === c.origin &&
-    p.ready === c.ready
-  );
+  return p.type === short && p.challenge === c.challenge && p.origin === c.origin && p.ready === c.ready;
 }
 
 /** L3 — ready iff challenge and origin. */

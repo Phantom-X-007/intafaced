@@ -8,9 +8,7 @@
 import { MERCHANT_MONEY_WRITE_TOOLS, merchantAgentGuardrail } from './guardrail.js';
 
 /** L3 — money refuse catalog board. */
-export function merchantMoneyDenyBoardCard(
-  tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS,
-): {
+export function merchantMoneyDenyBoardCard(tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS): {
   readonly tools: number;
   readonly hasLedgerPost: number;
   readonly hasPayRouteChange: number;
@@ -23,9 +21,7 @@ export function merchantMoneyDenyBoardCard(
 }
 
 /** L3 — money deny status line. */
-export function merchantMoneyDenyStatusLine(
-  tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS,
-): string {
+export function merchantMoneyDenyStatusLine(tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS): string {
   const c = merchantMoneyDenyBoardCard(tools);
   return `tools=${c.tools} ledger_post=${c.hasLedgerPost} pay_route_change=${c.hasPayRouteChange}`;
 }
@@ -36,9 +32,7 @@ export function parseMerchantMoneyDenyStatusLine(line: string): {
   readonly ledgerPost: number;
   readonly payRouteChange: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^tools=(\d+) ledger_post=([01]) pay_route_change=([01])$/);
+  const m = line.trim().match(/^tools=(\d+) ledger_post=([01]) pay_route_change=([01])$/);
   if (!m) return null;
   return {
     tools: Number(m[1]),
@@ -48,17 +42,11 @@ export function parseMerchantMoneyDenyStatusLine(line: string): {
 }
 
 /** L3 — true when money deny matches. */
-export function merchantMoneyDenyStatusLineMatches(
-  tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS,
-): boolean {
+export function merchantMoneyDenyStatusLineMatches(tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS): boolean {
   const p = parseMerchantMoneyDenyStatusLine(merchantMoneyDenyStatusLine(tools));
   if (!p) return false;
   const c = merchantMoneyDenyBoardCard(tools);
-  return (
-    p.tools === c.tools &&
-    p.ledgerPost === c.hasLedgerPost &&
-    p.payRouteChange === c.hasPayRouteChange
-  );
+  return p.tools === c.tools && p.ledgerPost === c.hasLedgerPost && p.payRouteChange === c.hasPayRouteChange;
 }
 
 /** L3 — guardrail grant board (declared tools only). */
@@ -93,9 +81,7 @@ export function parseMerchantGuardrailStatusLine(line: string): {
   readonly write: number;
   readonly tasks: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^agent=([a-z0-9_-]+) tools=(\d+) read=(\d+) write=(\d+) tasks=(\d+)$/);
+  const m = line.trim().match(/^agent=([a-z0-9_-]+) tools=(\d+) read=(\d+) write=(\d+) tasks=(\d+)$/);
   if (!m) return null;
   return {
     agent: m[1]!,
@@ -111,13 +97,7 @@ export function merchantGuardrailStatusLineMatches(): boolean {
   const p = parseMerchantGuardrailStatusLine(merchantGuardrailStatusLine());
   if (!p) return false;
   const c = merchantGuardrailBoardCard();
-  return (
-    p.agent === c.agentId &&
-    p.tools === c.tools &&
-    p.read === c.readTools &&
-    p.write === c.writeTools &&
-    p.tasks === c.tasks
-  );
+  return p.agent === c.agentId && p.tools === c.tools && p.read === c.readTools && p.write === c.writeTools && p.tasks === c.tasks;
 }
 
 /** L3 — Stage-1 is read-only grants (write=0). */
@@ -144,9 +124,6 @@ export function merchantGuardrailExportText(): string {
 }
 
 /** L3 — tool money-denied. */
-export function isMerchantMoneyDenied(
-  tool: string,
-  tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS,
-): boolean {
+export function isMerchantMoneyDenied(tool: string, tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS): boolean {
   return tools.includes(tool);
 }

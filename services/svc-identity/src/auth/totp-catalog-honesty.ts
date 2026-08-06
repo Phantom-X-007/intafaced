@@ -60,9 +60,7 @@ export function parseTotpPolicyStatusLine(line: string): {
   readonly isDefault: number;
   readonly algCatalog: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^step=(\d+) digits=(\d+) algorithm=(sha1|sha256|sha512) default=([01]) alg_catalog=(\d+)$/);
+  const m = line.trim().match(/^step=(\d+) digits=(\d+) algorithm=(sha1|sha256|sha512) default=([01]) alg_catalog=(\d+)$/);
   if (!m) return null;
   return {
     step: Number(m[1]),

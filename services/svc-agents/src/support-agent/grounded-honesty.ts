@@ -52,11 +52,7 @@ export function parseSupportGroundedStatusLine(line: string): {
   readonly tasks: number;
   readonly reason: string;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^status=(ok|refuse) plane=(live|dark) tasks=(\d+) reason=([a-z0-9_-]+)$/,
-    );
+  const m = line.trim().match(/^status=(ok|refuse) plane=(live|dark) tasks=(\d+) reason=([a-z0-9_-]+)$/);
   if (!m) return null;
   return {
     status: m[1]!,
@@ -71,12 +67,7 @@ export function supportGroundedStatusLineMatches(result: SupportGroundedInput): 
   const p = parseSupportGroundedStatusLine(supportGroundedStatusLine(result));
   if (!p) return false;
   const c = supportGroundedBoardCard(result);
-  return (
-    p.status === c.status &&
-    p.plane === c.plane &&
-    p.tasks === c.tasks &&
-    p.reason === c.reason
-  );
+  return p.status === c.status && p.plane === c.plane && p.tasks === c.tasks && p.reason === c.reason;
 }
 
 /** L3 — dark implies refuse and zero tasks. */

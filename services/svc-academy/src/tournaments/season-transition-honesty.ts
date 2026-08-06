@@ -60,9 +60,7 @@ export function parseSeasonTransitionCatalogStatusLine(line: string): {
   readonly terminalEdges: number;
   readonly scheduledEdges: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^statuses=(\d+) edges=(\d+) terminal_edges=(\d+) scheduled_edges=(\d+)$/);
+  const m = line.trim().match(/^statuses=(\d+) edges=(\d+) terminal_edges=(\d+) scheduled_edges=(\d+)$/);
   if (!m) return null;
   return {
     statuses: Number(m[1]),
@@ -77,12 +75,7 @@ export function seasonTransitionCatalogStatusLineMatches(): boolean {
   const p = parseSeasonTransitionCatalogStatusLine(seasonTransitionCatalogStatusLine());
   if (!p) return false;
   const c = seasonTransitionCatalogBoardCard();
-  return (
-    p.statuses === c.statuses &&
-    p.edges === c.edges &&
-    p.terminalEdges === c.terminalEdges &&
-    p.scheduledEdges === c.scheduledEdges
-  );
+  return p.statuses === c.statuses && p.edges === c.edges && p.terminalEdges === c.terminalEdges && p.scheduledEdges === c.scheduledEdges;
 }
 
 /** L3 — ended has zero edges. */

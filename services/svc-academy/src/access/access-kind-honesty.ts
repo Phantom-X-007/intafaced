@@ -50,12 +50,7 @@ export function roomAccessKindCatalogStatusLineMatches(): boolean {
   const p = parseRoomAccessKindCatalogStatusLine(roomAccessKindCatalogStatusLine());
   if (!p) return false;
   const c = roomAccessKindCatalogBoardCard();
-  return (
-    p.kinds === c.kinds &&
-    p.free === c.hasFree &&
-    p.staked === c.hasStaked &&
-    p.invite === c.hasInvite
-  );
+  return p.kinds === c.kinds && p.free === c.hasFree && p.staked === c.hasStaked && p.invite === c.hasInvite;
 }
 
 /** L3 — three kinds. */

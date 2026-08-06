@@ -28,9 +28,7 @@ describe('L3 wave123 navigator money denylist honesty', () => {
     expect(navigatorMoneyDenyStatusLineMatches()).toBe(true);
     expect(navigatorMoneyDenyStatusLineConsistent(navigatorMoneyDenyStatusLine())).toBe(true);
     expect(navigatorMoneyDenyExportText().startsWith(navigatorMoneyDenyExportHeader())).toBe(true);
-    expect(navigatorMoneyDenyExportLine()).toBe(
-      `${NAVIGATOR_MONEY_WRITE_TOOLS.length},1,1,1`,
-    );
+    expect(navigatorMoneyDenyExportLine()).toBe(`${NAVIGATOR_MONEY_WRITE_TOOLS.length},1,1,1`);
     expect(parseNavigatorMoneyDenyStatusLine('nope')).toBeNull();
   });
 });

@@ -35,12 +35,8 @@ describe('L3 wave95 season transition honesty', () => {
       scheduledEdges: 2,
     });
     expect(seasonTransitionCatalogStatusLineMatches()).toBe(true);
-    expect(seasonTransitionCatalogStatusLineConsistent(seasonTransitionCatalogStatusLine())).toBe(
-      true,
-    );
-    expect(seasonTransitionCatalogExportText().startsWith(seasonTransitionCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(seasonTransitionCatalogStatusLineConsistent(seasonTransitionCatalogStatusLine())).toBe(true);
+    expect(seasonTransitionCatalogExportText().startsWith(seasonTransitionCatalogExportHeader())).toBe(true);
     expect(seasonTransitionCatalogExportLine()).toBe('4,6,0,2');
     expect(parseSeasonTransitionCatalogStatusLine('nope')).toBeNull();
   });

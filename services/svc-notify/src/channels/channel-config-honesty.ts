@@ -62,11 +62,7 @@ export function parseChannelConfigStatusLine(line: string): {
   readonly requiredUnconfigured: number;
   readonly inApp: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^channels=(\d+) configured=(\d+) unconfigured=(\d+) required_unconfigured=(\d+) in_app=([01])$/,
-    );
+  const m = line.trim().match(/^channels=(\d+) configured=(\d+) unconfigured=(\d+) required_unconfigured=(\d+) in_app=([01])$/);
   if (!m) return null;
   return {
     channels: Number(m[1]),
@@ -95,10 +91,7 @@ export function channelConfigStatusLineMatches(channels: readonly ChannelConfigB
 export function channelConfigStatusLineConsistent(line: string): boolean {
   const p = parseChannelConfigStatusLine(line);
   if (!p) return false;
-  return (
-    p.channels === p.configured + p.unconfigured &&
-    p.requiredUnconfigured <= p.unconfigured
-  );
+  return p.channels === p.configured + p.unconfigured && p.requiredUnconfigured <= p.unconfigured;
 }
 
 /** L3 — export header. */
@@ -123,11 +116,7 @@ export function channelConfigRequiredReady(channels: readonly ChannelConfigBoard
 }
 
 /** L3 — count in range. */
-export function channelConfigCountInRange(
-  channels: readonly ChannelConfigBoardInput[],
-  min: number,
-  max: number,
-): boolean {
+export function channelConfigCountInRange(channels: readonly ChannelConfigBoardInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = channels.length;
   return n >= min && n <= max;

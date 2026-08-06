@@ -7,9 +7,7 @@
 export const SCENE_PARSE_REFUSE_REASONS = ['invalid', 'oversized'] as const;
 export type SceneParseRefuseReasonId = (typeof SCENE_PARSE_REFUSE_REASONS)[number];
 
-export type SceneParseBoardInput =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly reason: SceneParseRefuseReasonId };
+export type SceneParseBoardInput = { readonly ok: true } | { readonly ok: false; readonly reason: SceneParseRefuseReasonId };
 
 /** L3 — catalog board. */
 export function sceneParseCatalogBoardCard(): {
@@ -50,9 +48,7 @@ export function sceneParseCatalogStatusLineMatches(): boolean {
   const p = parseSceneParseCatalogStatusLine(sceneParseCatalogStatusLine());
   if (!p) return false;
   const c = sceneParseCatalogBoardCard();
-  return (
-    p.reasons === c.reasons && p.invalid === c.hasInvalid && p.oversized === c.hasOversized
-  );
+  return p.reasons === c.reasons && p.invalid === c.hasInvalid && p.oversized === c.hasOversized;
 }
 
 /** L3 — result board. */

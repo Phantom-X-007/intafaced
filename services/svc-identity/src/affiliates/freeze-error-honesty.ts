@@ -4,12 +4,7 @@
  * Mirrors freeze-store.ts FreezeErrorCode.
  */
 
-export const FREEZE_ERROR_CODES = [
-  'freeze.invalid',
-  'freeze.already',
-  'freeze.not_frozen',
-  'freeze.not_found',
-] as const;
+export const FREEZE_ERROR_CODES = ['freeze.invalid', 'freeze.already', 'freeze.not_frozen', 'freeze.not_found'] as const;
 export type FreezeErrorCodeId = (typeof FREEZE_ERROR_CODES)[number];
 
 /** L3 — catalog board. */

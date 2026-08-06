@@ -22,16 +22,10 @@ describe('L3 wave117 analytics source catalog honesty', () => {
       hasIdentity: 1,
       hasPay: 0,
     });
-    expect(analyticsSourceCatalogStatusLine()).toBe(
-      'sources=3 ledger=1 trade=1 identity=1 pay=0',
-    );
+    expect(analyticsSourceCatalogStatusLine()).toBe('sources=3 ledger=1 trade=1 identity=1 pay=0');
     expect(analyticsSourceCatalogStatusLineMatches()).toBe(true);
-    expect(analyticsSourceCatalogStatusLineConsistent(analyticsSourceCatalogStatusLine())).toBe(
-      true,
-    );
-    expect(analyticsSourceCatalogExportText().startsWith(analyticsSourceCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(analyticsSourceCatalogStatusLineConsistent(analyticsSourceCatalogStatusLine())).toBe(true);
+    expect(analyticsSourceCatalogExportText().startsWith(analyticsSourceCatalogExportHeader())).toBe(true);
     expect(analyticsSourceCatalogExportLines()).toEqual(['ledger', 'trade', 'identity']);
     expect(isDeclaredAnalyticsSourceDb('ledger')).toBe(true);
     expect(isDeclaredAnalyticsSourceDb('pay')).toBe(false);

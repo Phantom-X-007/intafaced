@@ -42,9 +42,7 @@ export function parseProviderCapabilityCatalogStatusLine(line: string): {
   readonly stream: number;
   readonly embed: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^capabilities=(\d+) complete=([01]) stream=([01]) embed=([01])$/);
+  const m = line.trim().match(/^capabilities=(\d+) complete=([01]) stream=([01]) embed=([01])$/);
   if (!m) return null;
   return {
     capabilities: Number(m[1]),
@@ -59,12 +57,7 @@ export function providerCapabilityCatalogStatusLineMatches(): boolean {
   const p = parseProviderCapabilityCatalogStatusLine(providerCapabilityCatalogStatusLine());
   if (!p) return false;
   const c = providerCapabilityCatalogBoardCard();
-  return (
-    p.capabilities === c.capabilities &&
-    p.complete === c.hasComplete &&
-    p.stream === c.hasStream &&
-    p.embed === c.hasEmbed
-  );
+  return p.capabilities === c.capabilities && p.complete === c.hasComplete && p.stream === c.hasStream && p.embed === c.hasEmbed;
 }
 
 /** L3 — all three capabilities present. */
@@ -102,9 +95,7 @@ export function parseProviderListStatusLine(line: string): {
   readonly usable: number;
   readonly withComplete: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^providers=(\d+) healthy=(\d+) usable=(\d+) with_complete=(\d+)$/);
+  const m = line.trim().match(/^providers=(\d+) healthy=(\d+) usable=(\d+) with_complete=(\d+)$/);
   if (!m) return null;
   return {
     providers: Number(m[1]),
@@ -115,29 +106,18 @@ export function parseProviderListStatusLine(line: string): {
 }
 
 /** L3 — true when list status matches. */
-export function providerListStatusLineMatches(
-  providers: readonly ProviderHealthBoardInput[],
-): boolean {
+export function providerListStatusLineMatches(providers: readonly ProviderHealthBoardInput[]): boolean {
   const p = parseProviderListStatusLine(providerListStatusLine(providers));
   if (!p) return false;
   const c = providerListBoardCard(providers);
-  return (
-    p.providers === c.providers &&
-    p.healthy === c.healthy &&
-    p.usable === c.usable &&
-    p.withComplete === c.withComplete
-  );
+  return p.providers === c.providers && p.healthy === c.healthy && p.usable === c.usable && p.withComplete === c.withComplete;
 }
 
 /** L3 — healthy/usable/withComplete ≤ providers. */
 export function providerListStatusLineConsistent(line: string): boolean {
   const p = parseProviderListStatusLine(line);
   if (!p) return false;
-  return (
-    p.healthy <= p.providers &&
-    p.usable <= p.providers &&
-    p.withComplete <= p.providers
-  );
+  return p.healthy <= p.providers && p.usable <= p.providers && p.withComplete <= p.providers;
 }
 
 /** L3 — export header. */
@@ -162,11 +142,7 @@ export function isDeclaredProviderCapability(cap: string): boolean {
 }
 
 /** L3 — count in range. */
-export function providerCountInRange(
-  providers: readonly ProviderHealthBoardInput[],
-  min: number,
-  max: number,
-): boolean {
+export function providerCountInRange(providers: readonly ProviderHealthBoardInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = providers.length;
   return n >= min && n <= max;

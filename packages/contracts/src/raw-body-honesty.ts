@@ -45,11 +45,7 @@ export function rawBodyCatalogStatusLineMatches(): boolean {
   const p = parseRawBodyCatalogStatusLine(rawBodyCatalogStatusLine());
   if (!p) return false;
   const c = rawBodyCatalogBoardCard();
-  return (
-    p.contentTypes === c.contentTypes &&
-    p.json === c.hasJson &&
-    p.multipart === c.hasMultipart
-  );
+  return p.contentTypes === c.contentTypes && p.json === c.hasJson && p.multipart === c.hasMultipart;
 }
 
 /** L3 — json retained by default; multipart not default. */

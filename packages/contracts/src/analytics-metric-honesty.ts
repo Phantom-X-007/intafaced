@@ -4,12 +4,7 @@
  * Mirrors ops-analytics.ts ANALYTICS_METRICS_V0 structural counts.
  */
 
-import {
-  ANALYTICS_METRICS_V0,
-  analyticsMetricCatalogSize,
-  listMoneyMetricIds,
-  listNonMoneyMetricIds,
-} from './ops-analytics.js';
+import { ANALYTICS_METRICS_V0, analyticsMetricCatalogSize, listMoneyMetricIds, listNonMoneyMetricIds } from './ops-analytics.js';
 
 export const ANALYTICS_METRIC_KINDS = ['count', 'amount', 'ratio'] as const;
 
@@ -41,9 +36,7 @@ export function parseAnalyticsMetricCatalogStatusLine(line: string): {
   readonly nonMoney: number;
   readonly kinds: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^metrics=(\d+) money=(\d+) non_money=(\d+) kinds=(\d+)$/);
+  const m = line.trim().match(/^metrics=(\d+) money=(\d+) non_money=(\d+) kinds=(\d+)$/);
   if (!m) return null;
   return {
     metrics: Number(m[1]),
@@ -58,12 +51,7 @@ export function analyticsMetricCatalogStatusLineMatches(): boolean {
   const p = parseAnalyticsMetricCatalogStatusLine(analyticsMetricCatalogStatusLine());
   if (!p) return false;
   const c = analyticsMetricCatalogBoardCard();
-  return (
-    p.metrics === c.metrics &&
-    p.money === c.money &&
-    p.nonMoney === c.nonMoney &&
-    p.kinds === c.kinds
-  );
+  return p.metrics === c.metrics && p.money === c.money && p.nonMoney === c.nonMoney && p.kinds === c.kinds;
 }
 
 /** L3 — money+nonMoney equals metrics. */

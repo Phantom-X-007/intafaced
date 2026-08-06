@@ -24,14 +24,10 @@ describe('L3 wave86 password algo catalog honesty', () => {
       devFallback: 'scrypt',
       fastHashAllowed: 0,
     });
-    expect(passwordAlgoCatalogStatusLine()).toBe(
-      'algorithms=2 prod=argon2id dev_fallback=scrypt fast_hash=0',
-    );
+    expect(passwordAlgoCatalogStatusLine()).toBe('algorithms=2 prod=argon2id dev_fallback=scrypt fast_hash=0');
     expect(passwordAlgoCatalogStatusLineMatches()).toBe(true);
     expect(passwordAlgoCatalogStatusLineConsistent(passwordAlgoCatalogStatusLine())).toBe(true);
-    expect(passwordAlgoCatalogExportText().startsWith(passwordAlgoCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(passwordAlgoCatalogExportText().startsWith(passwordAlgoCatalogExportHeader())).toBe(true);
     expect(passwordAlgoCatalogExportLine()).toBe('2,argon2id,scrypt,0');
     expect(isDeclaredPasswordAlgorithm('scrypt')).toBe(true);
     expect(isDeclaredPasswordAlgorithm('bcrypt')).toBe(false);

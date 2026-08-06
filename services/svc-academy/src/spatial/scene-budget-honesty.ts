@@ -29,9 +29,7 @@ export function sceneBudgetCatalogStatusLine(): string {
 }
 
 /** L3 — parse catalog. */
-export function parseSceneBudgetCatalogStatusLine(
-  line: string,
-): { readonly maxBytes: number; readonly version: number } | null {
+export function parseSceneBudgetCatalogStatusLine(line: string): { readonly maxBytes: number; readonly version: number } | null {
   const m = line.trim().match(/^max_bytes=(\d+) version=(\d+)$/);
   if (!m) return null;
   return { maxBytes: Number(m[1]), version: Number(m[2]) };
@@ -76,9 +74,7 @@ export function parseSceneBudgetStatusLine(line: string): {
   readonly props: number;
   readonly within: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^bytes=(\d+) version=(\d+) avatars=(\d+) props=(\d+) within=([01])$/);
+  const m = line.trim().match(/^bytes=(\d+) version=(\d+) avatars=(\d+) props=(\d+) within=([01])$/);
   if (!m) return null;
   return {
     bytes: Number(m[1]),
@@ -94,13 +90,7 @@ export function sceneBudgetStatusLineMatches(input: SceneBudgetBoardInput): bool
   const p = parseSceneBudgetStatusLine(sceneBudgetStatusLine(input));
   if (!p) return false;
   const c = sceneBudgetBoardCard(input);
-  return (
-    p.bytes === c.bytes &&
-    p.version === c.version &&
-    p.avatars === c.avatars &&
-    p.props === c.props &&
-    p.within === c.withinBudget
-  );
+  return p.bytes === c.bytes && p.version === c.version && p.avatars === c.avatars && p.props === c.props && p.within === c.withinBudget;
 }
 
 /** L3 — within flag matches budget. */

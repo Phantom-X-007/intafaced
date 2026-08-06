@@ -47,11 +47,7 @@ export function parseCommentDraftStatusLine(line: string): {
   readonly reason: string;
   readonly moneyRefuse: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^status=(ok|refuse) body_len=(\d+) reason=([a-z0-9_-]+) money_refuse=([01])$/,
-    );
+  const m = line.trim().match(/^status=(ok|refuse) body_len=(\d+) reason=([a-z0-9_-]+) money_refuse=([01])$/);
   if (!m) return null;
   return {
     status: m[1]!,
@@ -66,12 +62,7 @@ export function commentDraftStatusLineMatches(result: CommentDraftResultInput): 
   const p = parseCommentDraftStatusLine(commentDraftStatusLine(result));
   if (!p) return false;
   const c = commentDraftBoardCard(result);
-  return (
-    p.status === c.status &&
-    p.bodyLen === c.bodyLen &&
-    p.reason === c.reason &&
-    p.moneyRefuse === c.moneyRefuse
-  );
+  return p.status === c.status && p.bodyLen === c.bodyLen && p.reason === c.reason && p.moneyRefuse === c.moneyRefuse;
 }
 
 /** L3 — refuse has body_len 0; money_refuse only with money reason. */
@@ -79,10 +70,7 @@ export function commentDraftStatusLineConsistent(line: string): boolean {
   const p = parseCommentDraftStatusLine(line);
   if (!p) return false;
   if (p.status === 'ok') return p.reason === '-' && p.moneyRefuse === 0;
-  return (
-    p.bodyLen === 0 &&
-    p.moneyRefuse === (p.reason === 'money_invent_language' ? 1 : 0)
-  );
+  return p.bodyLen === 0 && p.moneyRefuse === (p.reason === 'money_invent_language' ? 1 : 0);
 }
 
 /** L3 — export header. */
@@ -107,11 +95,7 @@ export function commentDraftIsMoneyRefuse(result: CommentDraftResultInput): bool
 }
 
 /** L3 — body length in range (ok only). */
-export function commentDraftBodyLenInRange(
-  result: CommentDraftResultInput,
-  min: number,
-  max: number,
-): boolean {
+export function commentDraftBodyLenInRange(result: CommentDraftResultInput, min: number, max: number): boolean {
   if (min > max) return false;
   const n = commentDraftBoardCard(result).bodyLen;
   return n >= min && n <= max;

@@ -39,9 +39,7 @@ export function parsePasswordAlgoCatalogStatusLine(line: string): {
   readonly devFallback: string;
   readonly fastHash: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^algorithms=(\d+) prod=(argon2id|scrypt) dev_fallback=(argon2id|scrypt) fast_hash=([01])$/);
+  const m = line.trim().match(/^algorithms=(\d+) prod=(argon2id|scrypt) dev_fallback=(argon2id|scrypt) fast_hash=([01])$/);
   if (!m) return null;
   return {
     algorithms: Number(m[1]),
@@ -56,12 +54,7 @@ export function passwordAlgoCatalogStatusLineMatches(): boolean {
   const p = parsePasswordAlgoCatalogStatusLine(passwordAlgoCatalogStatusLine());
   if (!p) return false;
   const c = passwordAlgoCatalogBoardCard();
-  return (
-    p.algorithms === c.algorithms &&
-    p.prod === c.prodRequired &&
-    p.devFallback === c.devFallback &&
-    p.fastHash === c.fastHashAllowed
-  );
+  return p.algorithms === c.algorithms && p.prod === c.prodRequired && p.devFallback === c.devFallback && p.fastHash === c.fastHashAllowed;
 }
 
 /** L3 — no fast hash; prod is argon2id. */

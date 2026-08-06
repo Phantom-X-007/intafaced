@@ -42,11 +42,7 @@ export function parseCanvasErrorCatalogStatusLine(line: string): {
   readonly avatarMissing: number;
   readonly propExists: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^codes=(\d+) out_of_bounds=([01]) avatar_missing=([01]) prop_exists=([01])$/,
-    );
+  const m = line.trim().match(/^codes=(\d+) out_of_bounds=([01]) avatar_missing=([01]) prop_exists=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),
@@ -62,10 +58,7 @@ export function canvasErrorCatalogStatusLineMatches(): boolean {
   if (!p) return false;
   const c = canvasErrorCatalogBoardCard();
   return (
-    p.codes === c.codes &&
-    p.outOfBounds === c.hasOutOfBounds &&
-    p.avatarMissing === c.hasAvatarMissing &&
-    p.propExists === c.hasPropExists
+    p.codes === c.codes && p.outOfBounds === c.hasOutOfBounds && p.avatarMissing === c.hasAvatarMissing && p.propExists === c.hasPropExists
   );
 }
 

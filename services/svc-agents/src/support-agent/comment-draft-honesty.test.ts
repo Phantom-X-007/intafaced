@@ -39,9 +39,7 @@ describe('L3 wave100 support comment draft honesty', () => {
       reason: 'money_invent_language',
       moneyRefuse: 1,
     });
-    expect(commentDraftStatusLine(money)).toBe(
-      'status=refuse body_len=0 reason=money_invent_language money_refuse=1',
-    );
+    expect(commentDraftStatusLine(money)).toBe('status=refuse body_len=0 reason=money_invent_language money_refuse=1');
     expect(commentDraftStatusLineMatches(money)).toBe(true);
     expect(commentDraftStatusLineConsistent(commentDraftStatusLine(money))).toBe(true);
     expect(commentDraftIsMoneyRefuse(money)).toBe(true);

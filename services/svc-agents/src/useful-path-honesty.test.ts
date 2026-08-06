@@ -42,13 +42,9 @@ describe('L3 wave103 useful-path honesty', () => {
       hasProvider: 1,
       hasModel: 1,
     });
-    expect(usefulPathResultStatusLine(result)).toBe(
-      'task=navigator.plan text_len=12 provider=1 model=1',
-    );
+    expect(usefulPathResultStatusLine(result)).toBe('task=navigator.plan text_len=12 provider=1 model=1');
     expect(usefulPathResultStatusLineMatches(result)).toBe(true);
-    expect(usefulPathResultExportText(result).startsWith(usefulPathResultExportHeader())).toBe(
-      true,
-    );
+    expect(usefulPathResultExportText(result).startsWith(usefulPathResultExportHeader())).toBe(true);
     expect(usefulPathResultExportLine(result)).toBe('navigator.plan,12,1,1');
     expect(parseUsefulPathResultStatusLine('nope')).toBeNull();
   });

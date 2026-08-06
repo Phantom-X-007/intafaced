@@ -30,9 +30,7 @@ export function curriculumEnumCatalogStatusLine(): string {
 }
 
 /** L3 — parse enum. */
-export function parseCurriculumEnumCatalogStatusLine(
-  line: string,
-): { readonly paths: number; readonly kinds: number } | null {
+export function parseCurriculumEnumCatalogStatusLine(line: string): { readonly paths: number; readonly kinds: number } | null {
   const m = line.trim().match(/^paths=(\d+) kinds=(\d+)$/);
   if (!m) return null;
   return { paths: Number(m[1]), kinds: Number(m[2]) };
@@ -47,18 +45,14 @@ export function curriculumEnumCatalogStatusLineMatches(): boolean {
 }
 
 /** L3 — kind histogram. */
-export function curriculumKindHistogram(
-  items: readonly CurriculumItemBoardInput[],
-): Readonly<Record<string, number>> {
+export function curriculumKindHistogram(items: readonly CurriculumItemBoardInput[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const i of items) out[i.kind] = (out[i.kind] ?? 0) + 1;
   return out;
 }
 
 /** L3 — path histogram. */
-export function curriculumPathHistogram(
-  items: readonly CurriculumItemBoardInput[],
-): Readonly<Record<string, number>> {
+export function curriculumPathHistogram(items: readonly CurriculumItemBoardInput[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const i of items) out[i.path] = (out[i.path] ?? 0) + 1;
   return out;
@@ -97,11 +91,7 @@ export function parseCurriculumCatalogueStatusLine(line: string): {
   readonly lessons: number;
   readonly pathsUsed: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^items=(\d+) playbooks=(\d+) workbooks=(\d+) lessons=(\d+) paths_used=(\d+)$/,
-    );
+  const m = line.trim().match(/^items=(\d+) playbooks=(\d+) workbooks=(\d+) lessons=(\d+) paths_used=(\d+)$/);
   if (!m) return null;
   return {
     items: Number(m[1]),
@@ -113,9 +103,7 @@ export function parseCurriculumCatalogueStatusLine(line: string): {
 }
 
 /** L3 — true when status matches. */
-export function curriculumCatalogueStatusLineMatches(
-  items: readonly CurriculumItemBoardInput[],
-): boolean {
+export function curriculumCatalogueStatusLineMatches(items: readonly CurriculumItemBoardInput[]): boolean {
   const p = parseCurriculumCatalogueStatusLine(curriculumCatalogueStatusLine(items));
   if (!p) return false;
   const c = curriculumCatalogueBoardCard(items);
@@ -132,9 +120,7 @@ export function curriculumCatalogueStatusLineMatches(
 export function curriculumCatalogueStatusLineConsistent(line: string): boolean {
   const p = parseCurriculumCatalogueStatusLine(line);
   if (!p) return false;
-  return (
-    p.items === p.playbooks + p.workbooks + p.lessons && p.pathsUsed <= p.items
-  );
+  return p.items === p.playbooks + p.workbooks + p.lessons && p.pathsUsed <= p.items;
 }
 
 /** L3 — export header. */
@@ -159,11 +145,7 @@ export function isDeclaredCurriculumPath(path: string): boolean {
 }
 
 /** L3 — count in range. */
-export function curriculumItemCountInRange(
-  items: readonly CurriculumItemBoardInput[],
-  min: number,
-  max: number,
-): boolean {
+export function curriculumItemCountInRange(items: readonly CurriculumItemBoardInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = items.length;
   return n >= min && n <= max;

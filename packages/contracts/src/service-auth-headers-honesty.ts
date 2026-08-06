@@ -44,11 +44,7 @@ export function parseServiceAuthCatalogStatusLine(line: string): {
   readonly bindModes: number;
   readonly defaultBind: string;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^headers=(\d+) max_skew_s=(\d+) bind_modes=(\d+) default_bind=(accept-both|require)$/,
-    );
+  const m = line.trim().match(/^headers=(\d+) max_skew_s=(\d+) bind_modes=(\d+) default_bind=(accept-both|require)$/);
   if (!m) return null;
   return {
     headers: Number(m[1]),
@@ -63,12 +59,7 @@ export function serviceAuthCatalogStatusLineMatches(): boolean {
   const p = parseServiceAuthCatalogStatusLine(serviceAuthCatalogStatusLine());
   if (!p) return false;
   const c = serviceAuthCatalogBoardCard();
-  return (
-    p.headers === c.headers &&
-    p.maxSkewSeconds === c.maxSkewSeconds &&
-    p.bindModes === c.bindModes &&
-    p.defaultBind === c.defaultBind
-  );
+  return p.headers === c.headers && p.maxSkewSeconds === c.maxSkewSeconds && p.bindModes === c.bindModes && p.defaultBind === c.defaultBind;
 }
 
 /** L3 — skew positive; four headers. */

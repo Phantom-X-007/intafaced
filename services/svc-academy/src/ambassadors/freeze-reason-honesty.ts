@@ -86,11 +86,7 @@ export function freezeReasonExportText(input: FreezeReasonBoardInput): string {
 }
 
 /** L3 — length in range. */
-export function freezeReasonLengthInRange(
-  input: FreezeReasonBoardInput,
-  min: number,
-  max: number,
-): boolean {
+export function freezeReasonLengthInRange(input: FreezeReasonBoardInput, min: number, max: number): boolean {
   if (min > max) return false;
   const n = freezeReasonLength(input);
   return n >= min && n <= max;

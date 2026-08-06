@@ -7,9 +7,7 @@
 import { NAVIGATOR_MONEY_WRITE_TOOLS } from './guardrail.js';
 
 /** L3 — denylist board. */
-export function navigatorMoneyDenyBoardCard(
-  tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS,
-): {
+export function navigatorMoneyDenyBoardCard(tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): {
   readonly tools: number;
   readonly hasLedgerPost: number;
   readonly hasTradeOrder: number;
@@ -24,9 +22,7 @@ export function navigatorMoneyDenyBoardCard(
 }
 
 /** L3 — status line. */
-export function navigatorMoneyDenyStatusLine(
-  tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS,
-): string {
+export function navigatorMoneyDenyStatusLine(tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): string {
   const c = navigatorMoneyDenyBoardCard(tools);
   return `tools=${c.tools} ledger_post=${c.hasLedgerPost} trade_order=${c.hasTradeOrder} bank_transfer=${c.hasBankTransfer}`;
 }
@@ -38,11 +34,7 @@ export function parseNavigatorMoneyDenyStatusLine(line: string): {
   readonly tradeOrder: number;
   readonly bankTransfer: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^tools=(\d+) ledger_post=([01]) trade_order=([01]) bank_transfer=([01])$/,
-    );
+  const m = line.trim().match(/^tools=(\d+) ledger_post=([01]) trade_order=([01]) bank_transfer=([01])$/);
   if (!m) return null;
   return {
     tools: Number(m[1]),
@@ -53,17 +45,12 @@ export function parseNavigatorMoneyDenyStatusLine(line: string): {
 }
 
 /** L3 — true when status matches. */
-export function navigatorMoneyDenyStatusLineMatches(
-  tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS,
-): boolean {
+export function navigatorMoneyDenyStatusLineMatches(tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): boolean {
   const p = parseNavigatorMoneyDenyStatusLine(navigatorMoneyDenyStatusLine(tools));
   if (!p) return false;
   const c = navigatorMoneyDenyBoardCard(tools);
   return (
-    p.tools === c.tools &&
-    p.ledgerPost === c.hasLedgerPost &&
-    p.tradeOrder === c.hasTradeOrder &&
-    p.bankTransfer === c.hasBankTransfer
+    p.tools === c.tools && p.ledgerPost === c.hasLedgerPost && p.tradeOrder === c.hasTradeOrder && p.bankTransfer === c.hasBankTransfer
   );
 }
 
@@ -80,24 +67,17 @@ export function navigatorMoneyDenyExportHeader(): string {
 }
 
 /** L3 — export line. */
-export function navigatorMoneyDenyExportLine(
-  tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS,
-): string {
+export function navigatorMoneyDenyExportLine(tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): string {
   const c = navigatorMoneyDenyBoardCard(tools);
   return `${c.tools},${c.hasLedgerPost},${c.hasTradeOrder},${c.hasBankTransfer}`;
 }
 
 /** L3 — full export. */
-export function navigatorMoneyDenyExportText(
-  tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS,
-): string {
+export function navigatorMoneyDenyExportText(tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): string {
   return [navigatorMoneyDenyExportHeader(), navigatorMoneyDenyExportLine(tools)].join('\n');
 }
 
 /** L3 — tool denied. */
-export function isNavigatorMoneyDenied(
-  tool: string,
-  tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS,
-): boolean {
+export function isNavigatorMoneyDenied(tool: string, tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): boolean {
   return tools.includes(tool);
 }

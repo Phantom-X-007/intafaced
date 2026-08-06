@@ -19,8 +19,7 @@ export type QueueEntryBoardInput = {
 };
 
 export type QueueResultBoardInput =
-  | { readonly status: 'ok'; readonly entries: readonly QueueEntryBoardInput[] }
-  | { readonly status: 'empty' };
+  { readonly status: 'ok'; readonly entries: readonly QueueEntryBoardInput[] } | { readonly status: 'empty' };
 
 /** L3 — category weight catalog board. */
 export function queueWeightCatalogBoardCard(): {
@@ -62,11 +61,7 @@ export function queueWeightCatalogStatusLineMatches(): boolean {
   const p = parseQueueWeightCatalogStatusLine(queueWeightCatalogStatusLine());
   if (!p) return false;
   const c = queueWeightCatalogBoardCard();
-  return (
-    p.categories === c.categories &&
-    p.maxWeight === c.maxWeight &&
-    p.minWeight === c.minWeight
-  );
+  return p.categories === c.categories && p.maxWeight === c.maxWeight && p.minWeight === c.minWeight;
 }
 
 /** L3 — queue result board. */
@@ -121,12 +116,7 @@ export function operatorQueueStatusLineMatches(result: QueueResultBoardInput): b
   const p = parseOperatorQueueStatusLine(operatorQueueStatusLine(result));
   if (!p) return false;
   const c = operatorQueueBoardCard(result);
-  return (
-    p.status === c.status &&
-    p.entries === c.entries &&
-    p.open === c.open &&
-    p.pending === c.pending
-  );
+  return p.status === c.status && p.entries === c.entries && p.open === c.open && p.pending === c.pending;
 }
 
 /** L3 — open+pending ≤ entries; empty has zero. */
@@ -154,11 +144,7 @@ export function operatorQueueExportText(result: QueueResultBoardInput): string {
 }
 
 /** L3 — entry count in range. */
-export function queueEntryCountInRange(
-  result: QueueResultBoardInput,
-  min: number,
-  max: number,
-): boolean {
+export function queueEntryCountInRange(result: QueueResultBoardInput, min: number, max: number): boolean {
   if (min > max) return false;
   const n = operatorQueueBoardCard(result).entries;
   return n >= min && n <= max;

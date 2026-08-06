@@ -57,12 +57,7 @@ export function referralErrorCatalogStatusLineMatches(): boolean {
   const p = parseReferralErrorCatalogStatusLine(referralErrorCatalogStatusLine());
   if (!p) return false;
   const c = referralErrorCatalogBoardCard();
-  return (
-    p.codes === c.codes &&
-    p.cycle === c.hasCycle &&
-    p.depth === c.hasDepth &&
-    p.self === c.hasSelf
-  );
+  return p.codes === c.codes && p.cycle === c.hasCycle && p.depth === c.hasDepth && p.self === c.hasSelf;
 }
 
 /** L3 — six codes including cycle/depth/self. */

@@ -4,11 +4,7 @@
  * Mirrors commission.ts CommissionErrorCode.
  */
 
-export const COMMISSION_ERROR_CODES = [
-  'commission.invalid',
-  'commission.rate',
-  'commission.fee',
-] as const;
+export const COMMISSION_ERROR_CODES = ['commission.invalid', 'commission.rate', 'commission.fee'] as const;
 export type CommissionErrorCodeId = (typeof COMMISSION_ERROR_CODES)[number];
 
 /** L3 — catalog board. */

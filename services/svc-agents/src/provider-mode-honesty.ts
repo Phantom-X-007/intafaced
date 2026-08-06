@@ -57,11 +57,7 @@ export function providerModeCatalogStatusLineConsistent(line: string): boolean {
 }
 
 /** L3 — mock mode honesty residual always present when useful (board law). */
-export function mockModeRequiresResidualBoard(
-  mode: ProviderModeId,
-  useful: boolean,
-  residualPresent: boolean,
-): boolean {
+export function mockModeRequiresResidualBoard(mode: ProviderModeId, useful: boolean, residualPresent: boolean): boolean {
   if (mode !== 'mock') return true;
   if (!useful) return true;
   return residualPresent;

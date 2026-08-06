@@ -27,9 +27,7 @@ describe('L3 wave92 blueprint catalog honesty', () => {
       visibilities: 3,
       cardSizes: 2,
     });
-    expect(blueprintCatalogStatusLine()).toBe(
-      'decision=4 risk=4 energy=4 learning=4 crew=4 visibility=3 card=2',
-    );
+    expect(blueprintCatalogStatusLine()).toBe('decision=4 risk=4 energy=4 learning=4 crew=4 visibility=3 card=2');
     expect(blueprintCatalogStatusLineMatches()).toBe(true);
     expect(blueprintCatalogStatusLineConsistent(blueprintCatalogStatusLine())).toBe(true);
     expect(blueprintCatalogExportText().startsWith(blueprintCatalogExportHeader())).toBe(true);

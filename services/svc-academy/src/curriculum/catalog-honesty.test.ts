@@ -49,16 +49,10 @@ describe('L3 wave87 curriculum catalog honesty', () => {
       lessons: 1,
       pathsUsed: 3,
     });
-    expect(curriculumCatalogueStatusLine(mixed)).toBe(
-      'items=4 playbooks=2 workbooks=1 lessons=1 paths_used=3',
-    );
+    expect(curriculumCatalogueStatusLine(mixed)).toBe('items=4 playbooks=2 workbooks=1 lessons=1 paths_used=3');
     expect(curriculumCatalogueStatusLineMatches(mixed)).toBe(true);
-    expect(curriculumCatalogueStatusLineConsistent(curriculumCatalogueStatusLine(mixed))).toBe(
-      true,
-    );
-    expect(curriculumCatalogueExportText(mixed).startsWith(curriculumCatalogueExportHeader())).toBe(
-      true,
-    );
+    expect(curriculumCatalogueStatusLineConsistent(curriculumCatalogueStatusLine(mixed))).toBe(true);
+    expect(curriculumCatalogueExportText(mixed).startsWith(curriculumCatalogueExportHeader())).toBe(true);
     expect(curriculumCatalogueExportLine(mixed)).toBe('4,2,1,1,3');
     expect(isDeclaredCurriculumPath('sovereign')).toBe(true);
     expect(isDeclaredCurriculumPath('ghost')).toBe(false);

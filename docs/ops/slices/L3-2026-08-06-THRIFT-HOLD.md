@@ -3,6 +3,7 @@
 **Updated:** 2026-08-06 (continuation cycle)
 
 ## Status
+
 - Branch: `feat/l3-free-trk-wave46` (local only)
 - Tip base: `21ae30b0` (#898)
 - Stack: waves **46–151** Class N

@@ -35,11 +35,7 @@ export function parseRefusalCodeCatalogStatusLine(line: string): {
   readonly muted: number;
   readonly attemptsExhausted: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^codes=(\d+) not_configured=([01]) muted=([01]) attempts_exhausted=([01])$/,
-    );
+  const m = line.trim().match(/^codes=(\d+) not_configured=([01]) muted=([01]) attempts_exhausted=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),

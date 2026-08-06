@@ -74,9 +74,7 @@ export function dispatchReportStatusLineIsEmpty(report: DispatchReportInput): bo
 }
 
 /** L3 — parse status. Invalid → null. */
-export function parseDispatchReportStatusLine(
-  line: string,
-): {
+export function parseDispatchReportStatusLine(line: string): {
   readonly total: number;
   readonly accepted: number;
   readonly refused: number;

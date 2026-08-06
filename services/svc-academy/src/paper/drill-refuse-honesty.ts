@@ -4,17 +4,11 @@
  * Reasons mirror workbook-loop.ts refuseReason.
  */
 
-export const DRILL_REFUSE_REASONS = [
-  'not_paper',
-  'no_market',
-  'unknown_step',
-  'bad_fill',
-] as const;
+export const DRILL_REFUSE_REASONS = ['not_paper', 'no_market', 'unknown_step', 'bad_fill'] as const;
 export type DrillRefuseReasonId = (typeof DRILL_REFUSE_REASONS)[number];
 
 export type DrillResultBoardInput =
-  | { readonly status: 'active' | 'complete' }
-  | { readonly status: 'refused'; readonly reason: DrillRefuseReasonId };
+  { readonly status: 'active' | 'complete' } | { readonly status: 'refused'; readonly reason: DrillRefuseReasonId };
 
 /** L3 — refuse catalog board. */
 export function drillRefuseCatalogBoardCard(): {
@@ -55,9 +49,7 @@ export function drillRefuseCatalogStatusLineMatches(): boolean {
   const p = parseDrillRefuseCatalogStatusLine(drillRefuseCatalogStatusLine());
   if (!p) return false;
   const c = drillRefuseCatalogBoardCard();
-  return (
-    p.reasons === c.reasons && p.notPaper === c.hasNotPaper && p.badFill === c.hasBadFill
-  );
+  return p.reasons === c.reasons && p.notPaper === c.hasNotPaper && p.badFill === c.hasBadFill;
 }
 
 /** L3 — result board. */
@@ -84,9 +76,7 @@ export function parseDrillResultStatusLine(line: string): {
   readonly reason: string;
   readonly refused: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^status=(active|complete|refused) reason=([a-z0-9_-]+) refused=([01])$/);
+  const m = line.trim().match(/^status=(active|complete|refused) reason=([a-z0-9_-]+) refused=([01])$/);
   if (!m) return null;
   return {
     status: m[1]!,

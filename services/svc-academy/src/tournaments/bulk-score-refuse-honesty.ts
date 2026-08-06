@@ -4,17 +4,11 @@
  * Reasons mirror bulk-score.ts BulkScoreRefuse.
  */
 
-export const BULK_SCORE_REFUSE_REASONS = [
-  'season_not_live',
-  'empty',
-  'invalid_row',
-  'duplicate_user',
-] as const;
+export const BULK_SCORE_REFUSE_REASONS = ['season_not_live', 'empty', 'invalid_row', 'duplicate_user'] as const;
 export type BulkScoreRefuseReasonId = (typeof BULK_SCORE_REFUSE_REASONS)[number];
 
 export type BulkScoreResultBoardInput =
-  | { readonly status: 'ok'; readonly accepted: number }
-  | { readonly status: 'refuse'; readonly reason: BulkScoreRefuseReasonId };
+  { readonly status: 'ok'; readonly accepted: number } | { readonly status: 'refuse'; readonly reason: BulkScoreRefuseReasonId };
 
 /** L3 — reason catalog board. */
 export function bulkScoreRefuseCatalogBoardCard(): {
@@ -55,11 +49,7 @@ export function bulkScoreRefuseCatalogStatusLineMatches(): boolean {
   const p = parseBulkScoreRefuseCatalogStatusLine(bulkScoreRefuseCatalogStatusLine());
   if (!p) return false;
   const c = bulkScoreRefuseCatalogBoardCard();
-  return (
-    p.reasons === c.reasons &&
-    p.empty === c.hasEmpty &&
-    p.seasonNotLive === c.hasSeasonNotLive
-  );
+  return p.reasons === c.reasons && p.empty === c.hasEmpty && p.seasonNotLive === c.hasSeasonNotLive;
 }
 
 /** L3 — result board. */
@@ -86,9 +76,7 @@ export function parseBulkScoreResultStatusLine(line: string): {
   readonly accepted: number;
   readonly reason: string;
 } | null {
-  const m = line
-    .trim()
-    .match(/^status=(ok|refuse) accepted=(\d+) reason=([a-z0-9_-]+)$/);
+  const m = line.trim().match(/^status=(ok|refuse) accepted=(\d+) reason=([a-z0-9_-]+)$/);
   if (!m) return null;
   return {
     status: m[1]!,

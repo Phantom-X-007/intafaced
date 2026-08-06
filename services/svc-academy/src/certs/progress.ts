@@ -351,9 +351,7 @@ export function progressExportText(report: ProgressReport): string {
 }
 
 /** L3 — parse progress export line. Invalid → null. */
-export function parseProgressExportLine(
-  line: string,
-): {
+export function parseProgressExportLine(line: string): {
   readonly userId: string;
   readonly certId: string;
   readonly ratio: string;

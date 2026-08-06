@@ -28,9 +28,7 @@ describe('L3 wave78 paper workbook honesty', () => {
       remaining: 3,
       refuse: '-',
     });
-    expect(drillRunStatusLine(active)).toBe(
-      'status=active steps=4 completed=1 remaining=3 refuse=-',
-    );
+    expect(drillRunStatusLine(active)).toBe('status=active steps=4 completed=1 remaining=3 refuse=-');
     expect(drillRunStatusLineMatches(active)).toBe(true);
     expect(drillRunStatusLineConsistent(drillRunStatusLine(active))).toBe(true);
     expect(drillIsFullyComplete(active)).toBe(false);
@@ -54,9 +52,7 @@ describe('L3 wave78 paper workbook honesty', () => {
     };
     expect(drillRunBoardCard(refused).completed).toBe(0);
     expect(drillRunBoardCard(refused).remaining).toBe(2);
-    expect(drillRunStatusLine(refused)).toBe(
-      'status=refused steps=2 completed=0 remaining=2 refuse=not_paper',
-    );
+    expect(drillRunStatusLine(refused)).toBe('status=refused steps=2 completed=0 remaining=2 refuse=not_paper');
     expect(drillRunStatusLineMatches(refused)).toBe(true);
     expect(drillRunStatusLineConsistent(drillRunStatusLine(refused))).toBe(true);
     expect(drillIsRefused(refused)).toBe(true);

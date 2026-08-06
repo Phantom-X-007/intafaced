@@ -76,9 +76,7 @@ export function parseReadinessStatusLine(line: string): {
 } | null {
   const m = line
     .trim()
-    .match(
-      /^mode=(mock|upstream) providers=(\d+) usable=(\d+) healthy=(\d+) tasks=(\d+) useful=([01]) metering=([01]) residual=([01])$/,
-    );
+    .match(/^mode=(mock|upstream) providers=(\d+) usable=(\d+) healthy=(\d+) tasks=(\d+) useful=([01]) metering=([01]) residual=([01])$/);
   if (!m) return null;
   return {
     mode: m[1]!,
@@ -140,11 +138,7 @@ export function mockUsefulImpliesResidual(readiness: AgentsReadinessInput): bool
 }
 
 /** L3 — provider count in range. */
-export function providerCountInRange(
-  readiness: AgentsReadinessInput,
-  min: number,
-  max: number,
-): boolean {
+export function providerCountInRange(readiness: AgentsReadinessInput, min: number, max: number): boolean {
   if (min > max) return false;
   const n = readiness.providers.length;
   return n >= min && n <= max;

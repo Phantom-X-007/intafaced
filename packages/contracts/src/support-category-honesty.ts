@@ -31,9 +31,7 @@ export function parseSupportCategoryCatalogStatusLine(line: string): {
   readonly depositWithdraw: number;
   readonly other: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^categories=(\d+) deposit_withdraw=([01]) other=([01])$/);
+  const m = line.trim().match(/^categories=(\d+) deposit_withdraw=([01]) other=([01])$/);
   if (!m) return null;
   return {
     categories: Number(m[1]),
@@ -47,11 +45,7 @@ export function supportCategoryCatalogStatusLineMatches(): boolean {
   const p = parseSupportCategoryCatalogStatusLine(supportCategoryCatalogStatusLine());
   if (!p) return false;
   const c = supportCategoryCatalogBoardCard();
-  return (
-    p.categories === c.categories &&
-    p.depositWithdraw === c.hasDepositWithdraw &&
-    p.other === c.hasOther
-  );
+  return p.categories === c.categories && p.depositWithdraw === c.hasDepositWithdraw && p.other === c.hasOther;
 }
 
 /** L3 — four categories. */

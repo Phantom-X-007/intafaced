@@ -33,9 +33,7 @@ export function isDeclaredRefusalCode(code: string): boolean {
 }
 
 /** L3 — histogram of refusal events. */
-export function refusalEventHistogram(
-  events: readonly RefusalEventInput[],
-): Readonly<Record<string, number>> {
+export function refusalEventHistogram(events: readonly RefusalEventInput[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const e of events) out[e.code] = (out[e.code] ?? 0) + 1;
   return out;
@@ -85,12 +83,7 @@ export function refusalCatalogStatusLineMatches(events: readonly RefusalEventInp
   const p = parseRefusalCatalogStatusLine(refusalCatalogStatusLine(events));
   if (!p) return false;
   const c = refusalCatalogBoardCard(events);
-  return (
-    p.catalog === c.catalog &&
-    p.events === c.events &&
-    p.unique === c.uniqueCodes &&
-    p.undeclared === c.undeclared
-  );
+  return p.catalog === c.catalog && p.events === c.events && p.unique === c.uniqueCodes && p.undeclared === c.undeclared;
 }
 
 /** L3 — true when unique ≤ events and undeclared is 0 for typed boards. */
@@ -140,11 +133,7 @@ export function refusalCatalogHasSpendLimit(): boolean {
 }
 
 /** L3 — event count in range. */
-export function refusalEventCountInRange(
-  events: readonly RefusalEventInput[],
-  min: number,
-  max: number,
-): boolean {
+export function refusalEventCountInRange(events: readonly RefusalEventInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = events.length;
   return n >= min && n <= max;

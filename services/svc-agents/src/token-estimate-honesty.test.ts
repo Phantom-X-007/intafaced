@@ -30,9 +30,7 @@ describe('L3 wave109 token estimate honesty', () => {
       totalChars: 9,
       estimatedTokens: 3,
     });
-    expect(tokenEstimateStatusLine(input)).toBe(
-      'system_len=3 messages=1 chars=9 tokens=3',
-    );
+    expect(tokenEstimateStatusLine(input)).toBe('system_len=3 messages=1 chars=9 tokens=3');
     expect(tokenEstimateStatusLineMatches(input)).toBe(true);
     expect(tokenEstimateStatusLineConsistent(tokenEstimateStatusLine(input))).toBe(true);
     expect(tokenEstimateExportText(input).startsWith(tokenEstimateExportHeader())).toBe(true);

@@ -45,9 +45,7 @@ describe('L3 wave70 support ticket honesty', () => {
     });
     expect(supportCategoryHistogram(mixed).trading).toBe(1);
     expect(supportAssigneeSplit(mixed)).toEqual({ assigned: 2, unassigned: 2 });
-    expect(supportTicketStatusLine(mixed)).toBe(
-      'tickets=4 open=1 pending=1 resolved=1 closed=1 assigned=2 unassigned=2',
-    );
+    expect(supportTicketStatusLine(mixed)).toBe('tickets=4 open=1 pending=1 resolved=1 closed=1 assigned=2 unassigned=2');
     expect(supportTicketStatusLineMatches(mixed)).toBe(true);
     expect(supportTicketStatusLineConsistent(supportTicketStatusLine(mixed))).toBe(true);
     expect(supportTicketExportText(mixed).startsWith(supportTicketExportHeader())).toBe(true);

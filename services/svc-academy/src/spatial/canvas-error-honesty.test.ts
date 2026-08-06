@@ -21,9 +21,7 @@ describe('L3 wave137 canvas error catalog honesty', () => {
       hasAvatarMissing: 1,
       hasPropExists: 1,
     });
-    expect(canvasErrorCatalogStatusLine()).toBe(
-      'codes=6 out_of_bounds=1 avatar_missing=1 prop_exists=1',
-    );
+    expect(canvasErrorCatalogStatusLine()).toBe('codes=6 out_of_bounds=1 avatar_missing=1 prop_exists=1');
     expect(canvasErrorCatalogStatusLineMatches()).toBe(true);
     expect(canvasErrorCatalogStatusLineConsistent(canvasErrorCatalogStatusLine())).toBe(true);
     expect(canvasErrorCatalogExportText().startsWith(canvasErrorCatalogExportHeader())).toBe(true);

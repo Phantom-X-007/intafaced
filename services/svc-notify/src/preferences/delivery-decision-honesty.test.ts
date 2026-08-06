@@ -42,14 +42,10 @@ describe('L3 wave80 delivery decision honesty', () => {
       skipMuted: 1,
       inappOnly: 1,
     });
-    expect(deliveryDecisionStatusLine(mixed)).toBe(
-      'decisions=5 send_now=2 hold_digest=1 skip_muted=1 inapp_only=1',
-    );
+    expect(deliveryDecisionStatusLine(mixed)).toBe('decisions=5 send_now=2 hold_digest=1 skip_muted=1 inapp_only=1');
     expect(deliveryDecisionStatusLineMatches(mixed)).toBe(true);
     expect(deliveryDecisionStatusLineConsistent(deliveryDecisionStatusLine(mixed))).toBe(true);
-    expect(deliveryDecisionExportText(mixed).startsWith(deliveryDecisionExportHeader())).toBe(
-      true,
-    );
+    expect(deliveryDecisionExportText(mixed).startsWith(deliveryDecisionExportHeader())).toBe(true);
     expect(deliveryDecisionExportLine(mixed)).toBe('5,2,1,1,1');
     expect(deliveryHasNoMutedSkips(mixed)).toBe(false);
     expect(deliveryDecisionCountInRange(mixed, 5, 5)).toBe(true);

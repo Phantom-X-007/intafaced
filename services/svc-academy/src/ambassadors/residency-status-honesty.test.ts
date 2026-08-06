@@ -27,9 +27,7 @@ describe('L3 wave105 residency status honesty', () => {
       terminalRejected: 1,
     });
     expect(residencyStatusCatalogStatusLineMatches()).toBe(true);
-    expect(residencyStatusCatalogStatusLineConsistent(residencyStatusCatalogStatusLine())).toBe(
-      true,
-    );
+    expect(residencyStatusCatalogStatusLineConsistent(residencyStatusCatalogStatusLine())).toBe(true);
     expect(isDeclaredResidencyStatus('applied')).toBe(true);
     expect(isDeclaredResidencyStatus('ghost')).toBe(false);
     expect(parseResidencyStatusCatalogStatusLine('nope')).toBeNull();
@@ -52,9 +50,7 @@ describe('L3 wave105 residency status honesty', () => {
       withdrawn: 1,
       cohorts: 2,
     });
-    expect(residencyListStatusLine(mixed)).toBe(
-      'applications=4 applied=1 accepted=1 rejected=1 withdrawn=1 cohorts=2',
-    );
+    expect(residencyListStatusLine(mixed)).toBe('applications=4 applied=1 accepted=1 rejected=1 withdrawn=1 cohorts=2');
     expect(residencyListStatusLineMatches(mixed)).toBe(true);
     expect(residencyListStatusLineConsistent(residencyListStatusLine(mixed))).toBe(true);
     expect(residencyListExportText(mixed).startsWith(residencyListExportHeader())).toBe(true);

@@ -4,14 +4,7 @@
  * Shapes mirror audit.ts ActionKind / ActionStatus. Never invents cost.
  */
 
-export const AUDIT_ACTION_KINDS = [
-  'session_open',
-  'session_close',
-  'completion',
-  'embedding',
-  'tool_call',
-  'usage_settlement',
-] as const;
+export const AUDIT_ACTION_KINDS = ['session_open', 'session_close', 'completion', 'embedding', 'tool_call', 'usage_settlement'] as const;
 export type AuditActionKindId = (typeof AUDIT_ACTION_KINDS)[number];
 
 export const AUDIT_ACTION_STATUSES = ['executed', 'refused', 'failed'] as const;
@@ -24,18 +17,14 @@ export type AuditBoardEntry = {
 };
 
 /** L3 — status histogram. */
-export function auditStatusHistogram(
-  entries: readonly AuditBoardEntry[],
-): Readonly<Record<AuditActionStatusId, number>> {
+export function auditStatusHistogram(entries: readonly AuditBoardEntry[]): Readonly<Record<AuditActionStatusId, number>> {
   const out: Record<AuditActionStatusId, number> = { executed: 0, refused: 0, failed: 0 };
   for (const e of entries) out[e.status] += 1;
   return out;
 }
 
 /** L3 — kind histogram. */
-export function auditKindHistogram(
-  entries: readonly AuditBoardEntry[],
-): Readonly<Record<string, number>> {
+export function auditKindHistogram(entries: readonly AuditBoardEntry[]): Readonly<Record<string, number>> {
   const out: Record<string, number> = {};
   for (const e of entries) out[e.kind] = (out[e.kind] ?? 0) + 1;
   return out;
@@ -73,9 +62,7 @@ export function parseAuditLogStatusLine(line: string): {
   readonly failed: number;
   readonly toolCalls: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^entries=(\d+) executed=(\d+) refused=(\d+) failed=(\d+) tool_calls=(\d+)$/);
+  const m = line.trim().match(/^entries=(\d+) executed=(\d+) refused=(\d+) failed=(\d+) tool_calls=(\d+)$/);
   if (!m) return null;
   return {
     entries: Number(m[1]),
@@ -92,11 +79,7 @@ export function auditLogStatusLineMatches(entries: readonly AuditBoardEntry[]): 
   if (!p) return false;
   const c = auditLogBoardCard(entries);
   return (
-    p.entries === c.entries &&
-    p.executed === c.executed &&
-    p.refused === c.refused &&
-    p.failed === c.failed &&
-    p.toolCalls === c.toolCalls
+    p.entries === c.entries && p.executed === c.executed && p.refused === c.refused && p.failed === c.failed && p.toolCalls === c.toolCalls
   );
 }
 
@@ -138,9 +121,7 @@ export function auditCatalogStatusLine(): string {
 }
 
 /** L3 — parse catalog. */
-export function parseAuditCatalogStatusLine(
-  line: string,
-): { readonly kinds: number; readonly statuses: number } | null {
+export function parseAuditCatalogStatusLine(line: string): { readonly kinds: number; readonly statuses: number } | null {
   const m = line.trim().match(/^kinds=(\d+) statuses=(\d+)$/);
   if (!m) return null;
   return { kinds: Number(m[1]), statuses: Number(m[2]) };
@@ -155,11 +136,7 @@ export function auditCatalogStatusLineMatches(): boolean {
 }
 
 /** L3 — count in range. */
-export function auditEntryCountInRange(
-  entries: readonly AuditBoardEntry[],
-  min: number,
-  max: number,
-): boolean {
+export function auditEntryCountInRange(entries: readonly AuditBoardEntry[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = entries.length;
   return n >= min && n <= max;

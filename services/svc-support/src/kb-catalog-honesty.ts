@@ -56,11 +56,7 @@ export function kbCatalogStatusLineMatches(articles: readonly KbArticleBoardInpu
   const p = parseKbCatalogStatusLine(kbCatalogStatusLine(articles));
   if (!p) return false;
   const c = kbCatalogBoardCard(articles);
-  return (
-    p.articles === c.articles &&
-    p.supportKbPrefix === c.supportKbPrefix &&
-    p.uniqueIds === c.uniqueIds
-  );
+  return p.articles === c.articles && p.supportKbPrefix === c.supportKbPrefix && p.uniqueIds === c.uniqueIds;
 }
 
 /** L3 — unique ≤ articles; prefix ≤ articles. */
@@ -92,11 +88,7 @@ export function kbCatalogHasId(articles: readonly KbArticleBoardInput[], id: str
 }
 
 /** L3 — count in range. */
-export function kbArticleCountInRange(
-  articles: readonly KbArticleBoardInput[],
-  min: number,
-  max: number,
-): boolean {
+export function kbArticleCountInRange(articles: readonly KbArticleBoardInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = articles.length;
   return n >= min && n <= max;

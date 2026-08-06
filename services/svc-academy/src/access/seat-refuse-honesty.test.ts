@@ -38,18 +38,14 @@ describe('L3 wave149 seat refuse honesty', () => {
     expect(seatDecisionSimpleBoardCard(ok)).toEqual({ allowed: 1, code: '-' });
     expect(seatDecisionSimpleStatusLineMatches(ok)).toBe(true);
     expect(seatDecisionSimpleStatusLineConsistent(seatDecisionSimpleStatusLine(ok))).toBe(true);
-    expect(seatDecisionSimpleExportText(ok).startsWith(seatDecisionSimpleExportHeader())).toBe(
-      true,
-    );
+    expect(seatDecisionSimpleExportText(ok).startsWith(seatDecisionSimpleExportHeader())).toBe(true);
     expect(seatDecisionSimpleExportLine(ok)).toBe('1,-');
 
     const refuse: SeatDecisionBoardInput = {
       allowed: false,
       code: 'academy.stake_required',
     };
-    expect(seatDecisionSimpleStatusLine(refuse)).toBe(
-      'allowed=0 code=academy.stake_required',
-    );
+    expect(seatDecisionSimpleStatusLine(refuse)).toBe('allowed=0 code=academy.stake_required');
     expect(seatDecisionSimpleStatusLineMatches(refuse)).toBe(true);
     expect(parseSeatDecisionSimpleStatusLine('nope')).toBeNull();
   });

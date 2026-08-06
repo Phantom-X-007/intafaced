@@ -29,9 +29,7 @@ describe('L3 wave90 identity tier catalog honesty', () => {
     expect(identityTierCatalogStatusLine()).toBe('kyc=4 card=4 kyc_none=1 card_none=1');
     expect(identityTierCatalogStatusLineMatches()).toBe(true);
     expect(identityTierCatalogStatusLineConsistent(identityTierCatalogStatusLine())).toBe(true);
-    expect(identityTierCatalogExportText().startsWith(identityTierCatalogExportHeader())).toBe(
-      true,
-    );
+    expect(identityTierCatalogExportText().startsWith(identityTierCatalogExportHeader())).toBe(true);
     expect(identityTierCatalogExportLine()).toBe('4,4,1,1');
     expect(isDeclaredKycTier('institutional')).toBe(true);
     expect(isDeclaredKycTier('vip')).toBe(false);

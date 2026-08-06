@@ -47,9 +47,7 @@ export function parseGroundedStatusLine(line: string): {
   readonly tasks: number;
   readonly dark: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^status=(ok|refuse) plane=(live|dark) tasks=(\d+) dark=([01])$/);
+  const m = line.trim().match(/^status=(ok|refuse) plane=(live|dark) tasks=(\d+) dark=([01])$/);
   if (!m) return null;
   return {
     status: m[1]!,
@@ -64,12 +62,7 @@ export function groundedStatusLineMatches(result: GroundedResultInput): boolean 
   const p = parseGroundedStatusLine(groundedStatusLine(result));
   if (!p) return false;
   const c = groundedBoardCard(result);
-  return (
-    p.status === c.status &&
-    p.plane === c.plane &&
-    p.tasks === c.tasks &&
-    p.dark === c.dark
-  );
+  return p.status === c.status && p.plane === c.plane && p.tasks === c.tasks && p.dark === c.dark;
 }
 
 /** L3 — dark implies refuse and zero tasks. */
@@ -111,11 +104,7 @@ export function darkGroundedResult(): GroundedResultInput {
 }
 
 /** L3 — task count in range. */
-export function groundedTaskCountInRange(
-  result: GroundedResultInput,
-  min: number,
-  max: number,
-): boolean {
+export function groundedTaskCountInRange(result: GroundedResultInput, min: number, max: number): boolean {
   if (min > max) return false;
   const n = groundedBoardCard(result).tasks;
   return n >= min && n <= max;

@@ -25,9 +25,7 @@ describe('L3 wave85 service-auth headers honesty', () => {
       bindModes: 2,
       defaultBind: 'accept-both',
     });
-    expect(serviceAuthCatalogStatusLine()).toBe(
-      'headers=4 max_skew_s=300 bind_modes=2 default_bind=accept-both',
-    );
+    expect(serviceAuthCatalogStatusLine()).toBe('headers=4 max_skew_s=300 bind_modes=2 default_bind=accept-both');
     expect(serviceAuthCatalogStatusLineMatches()).toBe(true);
     expect(serviceAuthCatalogStatusLineConsistent(serviceAuthCatalogStatusLine())).toBe(true);
     expect(serviceAuthCatalogExportText().startsWith(serviceAuthCatalogExportHeader())).toBe(true);

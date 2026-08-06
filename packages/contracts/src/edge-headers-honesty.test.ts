@@ -32,10 +32,7 @@ describe('L3 wave82 edge headers honesty', () => {
     expect(edgeHeaderCatalogStatusLineConsistent(edgeHeaderCatalogStatusLine())).toBe(true);
     expect(edgeHeaderCatalogExportText().startsWith(edgeHeaderCatalogExportHeader())).toBe(true);
     expect(edgeHeaderCatalogExportLine()).toBe('2,1,1');
-    expect(edgeHeaderNames()).toEqual([
-      'x-intafaced-principal',
-      'x-intafaced-principal-sig',
-    ]);
+    expect(edgeHeaderNames()).toEqual(['x-intafaced-principal', 'x-intafaced-principal-sig']);
     expect(parseEdgeHeaderCatalogStatusLine('nope')).toBeNull();
   });
 });

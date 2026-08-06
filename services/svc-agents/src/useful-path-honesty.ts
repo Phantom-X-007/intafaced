@@ -42,9 +42,7 @@ export function parseUsefulPathCatalogStatusLine(line: string): {
   readonly session: number;
   readonly ledger: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^probe=([a-z0-9._]+) capability=([a-z0-9_]+) session=([01]) ledger=([01])$/);
+  const m = line.trim().match(/^probe=([a-z0-9._]+) capability=([a-z0-9_]+) session=([01]) ledger=([01])$/);
   if (!m) return null;
   return {
     probe: m[1]!,
@@ -59,12 +57,7 @@ export function usefulPathCatalogStatusLineMatches(): boolean {
   const p = parseUsefulPathCatalogStatusLine(usefulPathCatalogStatusLine());
   if (!p) return false;
   const c = usefulPathCatalogBoardCard();
-  return (
-    p.probe === c.probeKey &&
-    p.capability === c.capability &&
-    p.session === c.hasSession &&
-    p.ledger === c.hasLedger
-  );
+  return p.probe === c.probeKey && p.capability === c.capability && p.session === c.hasSession && p.ledger === c.hasLedger;
 }
 
 /** L3 — thin path has no session/ledger. */
@@ -102,9 +95,7 @@ export function parseUsefulPathResultStatusLine(line: string): {
   readonly provider: number;
   readonly model: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^task=([a-z0-9._-]+) text_len=(\d+) provider=([01]) model=([01])$/);
+  const m = line.trim().match(/^task=([a-z0-9._-]+) text_len=(\d+) provider=([01]) model=([01])$/);
   if (!m) return null;
   return {
     task: m[1]!,
@@ -119,12 +110,7 @@ export function usefulPathResultStatusLineMatches(result: UsefulPathResultInput)
   const p = parseUsefulPathResultStatusLine(usefulPathResultStatusLine(result));
   if (!p) return false;
   const c = usefulPathResultBoardCard(result);
-  return (
-    p.task === c.task &&
-    p.textLen === c.textLen &&
-    p.provider === c.hasProvider &&
-    p.model === c.hasModel
-  );
+  return p.task === c.task && p.textLen === c.textLen && p.provider === c.hasProvider && p.model === c.hasModel;
 }
 
 /** L3 — export header. */

@@ -4,15 +4,9 @@
  * Mirrors mute.ts MuteUpdateErrorCode + digest.ts DigestErrorCode.
  */
 
-export const MUTE_UPDATE_ERROR_CODES = [
-  'preference.critical_cannot_mute',
-  'preference.invalid_channel',
-] as const;
+export const MUTE_UPDATE_ERROR_CODES = ['preference.critical_cannot_mute', 'preference.invalid_channel'] as const;
 
-export const DIGEST_ERROR_CODES = [
-  'preference.invalid_cadence',
-  'preference.critical_no_digest',
-] as const;
+export const DIGEST_ERROR_CODES = ['preference.invalid_cadence', 'preference.critical_no_digest'] as const;
 
 /** L3 — mute error catalog board. */
 export function muteErrorCatalogBoardCard(): {
@@ -22,9 +16,7 @@ export function muteErrorCatalogBoardCard(): {
 } {
   return {
     codes: MUTE_UPDATE_ERROR_CODES.length,
-    hasCriticalCannotMute: MUTE_UPDATE_ERROR_CODES.includes('preference.critical_cannot_mute')
-      ? 1
-      : 0,
+    hasCriticalCannotMute: MUTE_UPDATE_ERROR_CODES.includes('preference.critical_cannot_mute') ? 1 : 0,
     hasInvalidChannel: MUTE_UPDATE_ERROR_CODES.includes('preference.invalid_channel') ? 1 : 0,
   };
 }
@@ -41,9 +33,7 @@ export function parseMuteErrorCatalogStatusLine(line: string): {
   readonly criticalCannotMute: number;
   readonly invalidChannel: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^codes=(\d+) critical_cannot_mute=([01]) invalid_channel=([01])$/);
+  const m = line.trim().match(/^codes=(\d+) critical_cannot_mute=([01]) invalid_channel=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),
@@ -57,11 +47,7 @@ export function muteErrorCatalogStatusLineMatches(): boolean {
   const p = parseMuteErrorCatalogStatusLine(muteErrorCatalogStatusLine());
   if (!p) return false;
   const c = muteErrorCatalogBoardCard();
-  return (
-    p.codes === c.codes &&
-    p.criticalCannotMute === c.hasCriticalCannotMute &&
-    p.invalidChannel === c.hasInvalidChannel
-  );
+  return p.codes === c.codes && p.criticalCannotMute === c.hasCriticalCannotMute && p.invalidChannel === c.hasInvalidChannel;
 }
 
 /** L3 — critical cannot mute is load-bearing. */
@@ -96,9 +82,7 @@ export function parseDigestErrorCatalogStatusLine(line: string): {
   readonly invalidCadence: number;
   readonly criticalNoDigest: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^codes=(\d+) invalid_cadence=([01]) critical_no_digest=([01])$/);
+  const m = line.trim().match(/^codes=(\d+) invalid_cadence=([01]) critical_no_digest=([01])$/);
   if (!m) return null;
   return {
     codes: Number(m[1]),
@@ -112,11 +96,7 @@ export function digestErrorCatalogStatusLineMatches(): boolean {
   const p = parseDigestErrorCatalogStatusLine(digestErrorCatalogStatusLine());
   if (!p) return false;
   const c = digestErrorCatalogBoardCard();
-  return (
-    p.codes === c.codes &&
-    p.invalidCadence === c.hasInvalidCadence &&
-    p.criticalNoDigest === c.hasCriticalNoDigest
-  );
+  return p.codes === c.codes && p.invalidCadence === c.hasInvalidCadence && p.criticalNoDigest === c.hasCriticalNoDigest;
 }
 
 /** L3 — critical never digests. */

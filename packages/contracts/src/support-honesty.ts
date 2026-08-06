@@ -18,9 +18,7 @@ export type SupportTicketBoardInput = {
 };
 
 /** L3 — status histogram. */
-export function supportStatusHistogram(
-  tickets: readonly SupportTicketBoardInput[],
-): Readonly<Record<SupportTicketStatusId, number>> {
+export function supportStatusHistogram(tickets: readonly SupportTicketBoardInput[]): Readonly<Record<SupportTicketStatusId, number>> {
   const out: Record<SupportTicketStatusId, number> = {
     open: 0,
     pending: 0,
@@ -34,9 +32,7 @@ export function supportStatusHistogram(
 }
 
 /** L3 — category histogram. */
-export function supportCategoryHistogram(
-  tickets: readonly SupportTicketBoardInput[],
-): Readonly<Record<SupportTicketCategoryId, number>> {
+export function supportCategoryHistogram(tickets: readonly SupportTicketBoardInput[]): Readonly<Record<SupportTicketCategoryId, number>> {
   const out: Record<SupportTicketCategoryId, number> = {
     account: 0,
     trading: 0,
@@ -102,11 +98,7 @@ export function parseSupportTicketStatusLine(line: string): {
   readonly assigned: number;
   readonly unassigned: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^tickets=(\d+) open=(\d+) pending=(\d+) resolved=(\d+) closed=(\d+) assigned=(\d+) unassigned=(\d+)$/,
-    );
+  const m = line.trim().match(/^tickets=(\d+) open=(\d+) pending=(\d+) resolved=(\d+) closed=(\d+) assigned=(\d+) unassigned=(\d+)$/);
   if (!m) return null;
   return {
     tickets: Number(m[1]),
@@ -139,10 +131,7 @@ export function supportTicketStatusLineMatches(tickets: readonly SupportTicketBo
 export function supportTicketStatusLineConsistent(line: string): boolean {
   const p = parseSupportTicketStatusLine(line);
   if (!p) return false;
-  return (
-    p.tickets === p.open + p.pending + p.resolved + p.closed &&
-    p.tickets === p.assigned + p.unassigned
-  );
+  return p.tickets === p.open + p.pending + p.resolved + p.closed && p.tickets === p.assigned + p.unassigned;
 }
 
 /** L3 — export header. */
@@ -167,11 +156,7 @@ export function supportHasNoOpen(tickets: readonly SupportTicketBoardInput[]): b
 }
 
 /** L3 — ticket count in inclusive range. */
-export function supportTicketCountInRange(
-  tickets: readonly SupportTicketBoardInput[],
-  min: number,
-  max: number,
-): boolean {
+export function supportTicketCountInRange(tickets: readonly SupportTicketBoardInput[], min: number, max: number): boolean {
   if (min > max) return false;
   const n = tickets.length;
   return n >= min && n <= max;
@@ -195,9 +180,7 @@ export function supportCatalogStatusLine(): string {
 }
 
 /** L3 — parse catalog status. */
-export function parseSupportCatalogStatusLine(
-  line: string,
-): { readonly statuses: number; readonly categories: number } | null {
+export function parseSupportCatalogStatusLine(line: string): { readonly statuses: number; readonly categories: number } | null {
   const m = line.trim().match(/^statuses=(\d+) categories=(\d+)$/);
   if (!m) return null;
   return { statuses: Number(m[1]), categories: Number(m[2]) };

@@ -34,9 +34,7 @@ export function parseAssetClassCatalogStatusLine(line: string): {
   readonly commodity: number;
   readonly forex: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^classes=(\d+) crypto=([01]) commodity=([01]) forex=([01])$/);
+  const m = line.trim().match(/^classes=(\d+) crypto=([01]) commodity=([01]) forex=([01])$/);
   if (!m) return null;
   return {
     classes: Number(m[1]),
@@ -51,12 +49,7 @@ export function assetClassCatalogStatusLineMatches(): boolean {
   const p = parseAssetClassCatalogStatusLine(assetClassCatalogStatusLine());
   if (!p) return false;
   const c = assetClassCatalogBoardCard();
-  return (
-    p.classes === c.classes &&
-    p.crypto === c.hasCrypto &&
-    p.commodity === c.hasCommodity &&
-    p.forex === c.hasForex
-  );
+  return p.classes === c.classes && p.crypto === c.hasCrypto && p.commodity === c.hasCommodity && p.forex === c.hasForex;
 }
 
 /** L3 — three classes. */

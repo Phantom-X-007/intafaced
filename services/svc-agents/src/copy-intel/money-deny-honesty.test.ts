@@ -29,9 +29,7 @@ describe('L3 wave106 copy-intel money denylist honesty', () => {
     expect(copyIntelMoneyDenyStatusLineMatches()).toBe(true);
     expect(copyIntelMoneyDenyStatusLineConsistent(copyIntelMoneyDenyStatusLine())).toBe(true);
     expect(copyIntelMoneyDenyExportText().startsWith(copyIntelMoneyDenyExportHeader())).toBe(true);
-    expect(copyIntelMoneyDenyExportLine()).toBe(
-      `${COPY_INTEL_MONEY_WRITE_TOOLS.length},1,1,1`,
-    );
+    expect(copyIntelMoneyDenyExportLine()).toBe(`${COPY_INTEL_MONEY_WRITE_TOOLS.length},1,1,1`);
     expect(parseCopyIntelMoneyDenyStatusLine('nope')).toBeNull();
   });
 });

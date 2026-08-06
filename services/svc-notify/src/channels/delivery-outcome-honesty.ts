@@ -40,9 +40,7 @@ export function parseDeliveryOutcomeCatalogStatusLine(line: string): {
   readonly refused: number;
   readonly failed: number;
 } | null {
-  const m = line
-    .trim()
-    .match(/^outcomes=(\d+) accepted=([01]) refused=([01]) failed=([01])$/);
+  const m = line.trim().match(/^outcomes=(\d+) accepted=([01]) refused=([01]) failed=([01])$/);
   if (!m) return null;
   return {
     outcomes: Number(m[1]),
@@ -57,12 +55,7 @@ export function deliveryOutcomeCatalogStatusLineMatches(): boolean {
   const p = parseDeliveryOutcomeCatalogStatusLine(deliveryOutcomeCatalogStatusLine());
   if (!p) return false;
   const c = deliveryOutcomeCatalogBoardCard();
-  return (
-    p.outcomes === c.outcomes &&
-    p.accepted === c.hasAccepted &&
-    p.refused === c.hasRefused &&
-    p.failed === c.hasFailed
-  );
+  return p.outcomes === c.outcomes && p.accepted === c.hasAccepted && p.refused === c.hasRefused && p.failed === c.hasFailed;
 }
 
 /** L3 — three distinct outcomes. */
@@ -73,9 +66,7 @@ export function deliveryOutcomeCatalogStatusLineConsistent(line: string): boolea
 }
 
 /** L3 — histogram board. */
-export function deliveryOutcomeListBoardCard(
-  rows: readonly DeliveryOutcomeBoardInput[],
-): {
+export function deliveryOutcomeListBoardCard(rows: readonly DeliveryOutcomeBoardInput[]): {
   readonly total: number;
   readonly accepted: number;
   readonly refused: number;
@@ -93,9 +84,7 @@ export function deliveryOutcomeListBoardCard(
 }
 
 /** L3 — list status line. */
-export function deliveryOutcomeListStatusLine(
-  rows: readonly DeliveryOutcomeBoardInput[],
-): string {
+export function deliveryOutcomeListStatusLine(rows: readonly DeliveryOutcomeBoardInput[]): string {
   const c = deliveryOutcomeListBoardCard(rows);
   return `total=${c.total} accepted=${c.accepted} refused=${c.refused} failed=${c.failed}`;
 }
@@ -118,18 +107,11 @@ export function parseDeliveryOutcomeListStatusLine(line: string): {
 }
 
 /** L3 — true when list status matches. */
-export function deliveryOutcomeListStatusLineMatches(
-  rows: readonly DeliveryOutcomeBoardInput[],
-): boolean {
+export function deliveryOutcomeListStatusLineMatches(rows: readonly DeliveryOutcomeBoardInput[]): boolean {
   const p = parseDeliveryOutcomeListStatusLine(deliveryOutcomeListStatusLine(rows));
   if (!p) return false;
   const c = deliveryOutcomeListBoardCard(rows);
-  return (
-    p.total === c.total &&
-    p.accepted === c.accepted &&
-    p.refused === c.refused &&
-    p.failed === c.failed
-  );
+  return p.total === c.total && p.accepted === c.accepted && p.refused === c.refused && p.failed === c.failed;
 }
 
 /** L3 — parts sum to total. */
@@ -145,17 +127,13 @@ export function deliveryOutcomeListExportHeader(): string {
 }
 
 /** L3 — export line. */
-export function deliveryOutcomeListExportLine(
-  rows: readonly DeliveryOutcomeBoardInput[],
-): string {
+export function deliveryOutcomeListExportLine(rows: readonly DeliveryOutcomeBoardInput[]): string {
   const c = deliveryOutcomeListBoardCard(rows);
   return `${c.total},${c.accepted},${c.refused},${c.failed}`;
 }
 
 /** L3 — full export. */
-export function deliveryOutcomeListExportText(
-  rows: readonly DeliveryOutcomeBoardInput[],
-): string {
+export function deliveryOutcomeListExportText(rows: readonly DeliveryOutcomeBoardInput[]): string {
   return [deliveryOutcomeListExportHeader(), deliveryOutcomeListExportLine(rows)].join('\n');
 }
 

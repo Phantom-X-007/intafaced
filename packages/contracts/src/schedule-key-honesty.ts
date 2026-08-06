@@ -49,12 +49,7 @@ export function scheduleKeyCatalogStatusLineMatches(): boolean {
   const p = parseScheduleKeyCatalogStatusLine(scheduleKeyCatalogStatusLine());
   if (!p) return false;
   const c = scheduleKeyCatalogBoardCard();
-  return (
-    p.schedules === c.schedules &&
-    p.crypto === c.hasCrypto &&
-    p.fx === c.hasFx &&
-    p.cme === c.hasCme
-  );
+  return p.schedules === c.schedules && p.crypto === c.hasCrypto && p.fx === c.hasFx && p.cme === c.hasCme;
 }
 
 /** L3 — three schedules. */

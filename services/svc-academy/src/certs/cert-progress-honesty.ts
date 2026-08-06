@@ -19,8 +19,7 @@ export function certProgressBoardCard(input: CertProgressBoardInput): {
   readonly granted: number;
   readonly complete: number;
 } {
-  const complete =
-    input.requiredItems > 0 && input.completedItems >= input.requiredItems ? 1 : 0;
+  const complete = input.requiredItems > 0 && input.completedItems >= input.requiredItems ? 1 : 0;
   return {
     enrolled: input.enrolled,
     completed: input.completedItems,
@@ -44,11 +43,7 @@ export function parseCertProgressStatusLine(line: string): {
   readonly granted: number;
   readonly complete: number;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^enrolled=(\d+) completed=(\d+) required=(\d+) granted=(\d+) complete=([01])$/,
-    );
+  const m = line.trim().match(/^enrolled=(\d+) completed=(\d+) required=(\d+) granted=(\d+) complete=([01])$/);
   if (!m) return null;
   return {
     enrolled: Number(m[1]),
