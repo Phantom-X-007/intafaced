@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { AcademyError } from '../errors.js';
-import { assertScene, emptyScene, parseScene, SCENE_MAX_BYTES, SCENE_VERSION } from './scene.js';
+import {
+  assertScene,
+  emptyScene,
+  parseScene,
+  SCENE_MAX_BYTES,
+  SCENE_VERSION,
+  sceneByteSize,
+  sceneWithinSizeBudget,
+  sceneAvatarCount,
+  scenePropCount,
+  sceneBoardCard,
+  sceneStatusLine,
+  sceneStatusLineIsEmpty,
+  sceneStatusLineDetailed,
+  parseSceneStatusLine,
+  sceneStatusLineMatches,
+  sceneExportHeader,
+  sceneExportLine,
+  sceneExportText,
+  sceneAvatarCountInRange,
+  sceneBytesAtMost,
+} from './scene.js';
 
 describe('spatial scene contract (Stage-1)', () => {
   it('accepts emptyScene()', () => {
@@ -55,5 +76,36 @@ describe('spatial scene contract (Stage-1)', () => {
       expect(e).toBeInstanceOf(AcademyError);
       expect((e as AcademyError).code).toBe('academy.scene_invalid');
     }
+  });
+});
+
+describe('L3 wave49 scene status/export', () => {
+  it('board card and status for empty + populated', () => {
+    const empty = emptyScene();
+    expect(sceneStatusLineIsEmpty(empty)).toBe(true);
+    expect(sceneAvatarCount(empty)).toBe(0);
+    expect(scenePropCount(empty)).toBe(0);
+    expect(sceneWithinSizeBudget(empty)).toBe(true);
+    expect(sceneStatusLineMatches(empty)).toBe(true);
+    expect(parseSceneStatusLine('nope')).toBeNull();
+    expect(sceneExportText(empty).startsWith(sceneExportHeader())).toBe(true);
+    expect(sceneAvatarCountInRange(empty, 0, 0)).toBe(true);
+    expect(sceneAvatarCountInRange(empty, 1, 0)).toBe(false);
+    expect(sceneBytesAtMost(empty, SCENE_MAX_BYTES)).toBe(true);
+    expect(sceneBytesAtMost(empty, Number.NaN)).toBe(false);
+
+    const full = {
+      version: 1 as const,
+      stage: { width: 800, height: 600 },
+      avatars: [{ id: 'a1', participantId: 'seat-9', position: { x: 10, y: 20 } }],
+      props: [{ id: 'p1', kind: 'desk', position: { x: 1, y: 2 } }],
+    };
+    expect(sceneBoardCard(full).avatars).toBe(1);
+    expect(sceneBoardCard(full).props).toBe(1);
+    expect(sceneStatusLine(full)).toContain('avatars=1');
+    expect(sceneStatusLineDetailed(full)).toContain('stage=1');
+    expect(sceneStatusLineMatches(full)).toBe(true);
+    expect(sceneExportLine(full)).toContain('1,1,1,');
+    expect(sceneByteSize(full)).toBeGreaterThan(0);
   });
 });

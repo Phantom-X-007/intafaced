@@ -12,11 +12,12 @@
 | --- | --- | --- |
 | 46 | b8ebfc6e | threshold/range/clamp on fat free modules |
 | 47 | 1480fe1a | mute/digest/required-channels/import/bulk status parity |
-| 48 | (this) | certs progress/xp-policy/xp-emit status parity |
+| 48 | 35c85a51 | certs progress/xp-policy/xp-emit status parity |
+| 49 | (this) | spatial scene/canvas/reconnect status+export |
 
 ## When cool (total&lt;220 AND CI&lt;80)
 1. One fat push of this branch
-2. Open one Class N PR covering waves 46–48
+2. Open one Class N PR covering waves 46–49
 3. Merge on green
 4. Resume L3 factory (soft thrift → fat only)
 

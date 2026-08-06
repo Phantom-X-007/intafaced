@@ -114,3 +114,111 @@ export function assertScene(input: unknown): SceneV1 {
 export function emptyScene(): SceneV1 {
   return { version: SCENE_VERSION };
 }
+
+/** L3 — UTF-8 byte size of a scene payload. Invalid JSON → 0. */
+export function sceneByteSize(input: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(input ?? null), 'utf8');
+  } catch {
+    return 0;
+  }
+}
+
+/** L3 — true when payload is under SCENE_MAX_BYTES. */
+export function sceneWithinSizeBudget(input: unknown): boolean {
+  const n = sceneByteSize(input);
+  return n > 0 && n <= SCENE_MAX_BYTES;
+}
+
+/** L3 — avatar count (missing → 0, no invent). */
+export function sceneAvatarCount(scene: SceneV1): number {
+  return scene.avatars?.length ?? 0;
+}
+
+/** L3 — prop count (missing → 0). */
+export function scenePropCount(scene: SceneV1): number {
+  return scene.props?.length ?? 0;
+}
+
+/** L3 — scene board card for operator honesty. */
+export function sceneBoardCard(scene: SceneV1): {
+  readonly version: number;
+  readonly avatars: number;
+  readonly props: number;
+  readonly hasStage: boolean;
+  readonly bytes: number;
+  readonly withinBudget: boolean;
+} {
+  const bytes = sceneByteSize(scene);
+  return {
+    version: scene.version,
+    avatars: sceneAvatarCount(scene),
+    props: scenePropCount(scene),
+    hasStage: scene.stage != null,
+    bytes,
+    withinBudget: bytes > 0 && bytes <= SCENE_MAX_BYTES,
+  };
+}
+
+/** L3 — scene status line. */
+export function sceneStatusLine(scene: SceneV1): string {
+  const c = sceneBoardCard(scene);
+  return `v=${c.version} avatars=${c.avatars} props=${c.props} bytes=${c.bytes}`;
+}
+
+/** L3 — true when empty default (no avatars/props). */
+export function sceneStatusLineIsEmpty(scene: SceneV1): boolean {
+  return sceneAvatarCount(scene) === 0 && scenePropCount(scene) === 0;
+}
+
+/** L3 — detailed scene status. */
+export function sceneStatusLineDetailed(scene: SceneV1): string {
+  const c = sceneBoardCard(scene);
+  return `v=${c.version} avatars=${c.avatars} props=${c.props} bytes=${c.bytes} stage=${c.hasStage ? '1' : '0'} ok=${c.withinBudget ? '1' : '0'}`;
+}
+
+/** L3 — parse scene status. Invalid → null. */
+export function parseSceneStatusLine(
+  line: string,
+): { readonly version: number; readonly avatars: number; readonly props: number; readonly bytes: number } | null {
+  const m = line.trim().match(/^v=(\d+) avatars=(\d+) props=(\d+) bytes=(\d+)$/);
+  if (!m) return null;
+  return { version: Number(m[1]), avatars: Number(m[2]), props: Number(m[3]), bytes: Number(m[4]) };
+}
+
+/** L3 — true when status matches scene. */
+export function sceneStatusLineMatches(scene: SceneV1): boolean {
+  const p = parseSceneStatusLine(sceneStatusLine(scene));
+  if (!p) return false;
+  const c = sceneBoardCard(scene);
+  return p.version === c.version && p.avatars === c.avatars && p.props === c.props && p.bytes === c.bytes;
+}
+
+/** L3 — export header. */
+export function sceneExportHeader(): string {
+  return 'version,avatars,props,bytes,hasStage';
+}
+
+/** L3 — export line. */
+export function sceneExportLine(scene: SceneV1): string {
+  const c = sceneBoardCard(scene);
+  return `${c.version},${c.avatars},${c.props},${c.bytes},${c.hasStage ? '1' : '0'}`;
+}
+
+/** L3 — full export text. */
+export function sceneExportText(scene: SceneV1): string {
+  return [sceneExportHeader(), sceneExportLine(scene)].join('\n');
+}
+
+/** L3 — true when avatar count is within [min,max]. Invalid → false. */
+export function sceneAvatarCountInRange(scene: SceneV1, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = sceneAvatarCount(scene);
+  return n >= min && n <= max;
+}
+
+/** L3 — true when byte size is at most n. */
+export function sceneBytesAtMost(scene: SceneV1, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return sceneByteSize(scene) <= n;
+}

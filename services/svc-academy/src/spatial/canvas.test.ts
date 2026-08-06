@@ -10,6 +10,18 @@ import {
   removeAvatar,
   removeProp,
   CanvasError,
+  presenceCount,
+  hasPresence,
+  canvasBoardCard,
+  canvasStatusLine,
+  canvasStatusLineIsEmpty,
+  parseCanvasStatusLine,
+  canvasStatusLineMatches,
+  canvasExportHeader,
+  canvasExportLine,
+  canvasExportText,
+  presenceCountInRange,
+  isPointOnStage,
 } from './canvas.js';
 
 describe('spatial Stage-2 2D canvas', () => {
@@ -63,5 +75,29 @@ describe('spatial Stage-2 2D canvas', () => {
     s = removeProp(s, 'p1');
     expect(s.props).toEqual([]);
     expect(() => removeProp(s, 'p1')).toThrow(CanvasError);
+  });
+});
+
+describe('L3 wave49 canvas status/export', () => {
+  it('presence and status honesty', () => {
+    let s = ensureStage(emptyScene());
+    expect(canvasStatusLineIsEmpty(s)).toBe(true);
+    expect(hasPresence(s)).toBe(false);
+    expect(presenceCount(s)).toBe(0);
+    expect(canvasStatusLineMatches(s)).toBe(true);
+    expect(parseCanvasStatusLine('nope')).toBeNull();
+    expect(canvasExportText(s).startsWith(canvasExportHeader())).toBe(true);
+    expect(isPointOnStage(s, 0, 0)).toBe(true);
+    expect(isPointOnStage(s, -1, 0)).toBe(false);
+    expect(isPointOnStage(s, Number.NaN, 0)).toBe(false);
+    s = placeAvatar(s, { avatarId: 'a1', participantId: 'seat-1', x: 10, y: 10 });
+    expect(presenceCount(s)).toBe(1);
+    expect(hasPresence(s)).toBe(true);
+    expect(canvasBoardCard(s).presence).toBe(1);
+    expect(canvasStatusLine(s)).toContain('presence=1');
+    expect(canvasStatusLineMatches(s)).toBe(true);
+    expect(presenceCountInRange(s, 1, 2)).toBe(true);
+    expect(presenceCountInRange(s, 2, 1)).toBe(false);
+    expect(canvasExportLine(s)).toContain('1,0,');
   });
 });
