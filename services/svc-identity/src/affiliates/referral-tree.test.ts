@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MAX_REFERRAL_DEPTH, MemoryReferralTree, ReferralError, ancestors, chainDepth, wouldCreateCycle } from './referral-tree.js';
+import {
+  DEFAULT_MAX_REFERRAL_DEPTH,
+  MemoryReferralTree,
+  ReferralError,
+  ancestors,
+  chainDepth,
+  wouldCreateCycle,
+  referralTreeBoardCard,
+  referralTreeStatusLine,
+  referralTreeStatusLineIsEmpty,
+  parseReferralTreeStatusLine,
+  referralTreeStatusLineMatches,
+  referralTreeExportHeader,
+  referralTreeExportLine,
+  referralTreeExportText,
+  referralEdgeCountInRange,
+  referralMaxDepthAtMost,
+} from './referral-tree.js';
 
 const U = (n: number) => `${n}1111111-1111-4111-8111-11111111111${n}`;
 
@@ -136,5 +153,26 @@ describe('MemoryReferralTree Slice A', () => {
     tree.attribute({ userId: U(3), referrerId: U(2) });
     expect(tree.maxChainDepth()).toBe(2);
     expect(tree.referrerCount()).toBe(2);
+  });
+});
+
+describe('L3 wave51 referral-tree status/export', () => {
+  it('empty and populated boards', () => {
+    const tree = new MemoryReferralTree();
+    expect(referralTreeStatusLineIsEmpty(tree)).toBe(true);
+    expect(referralTreeStatusLineMatches(tree)).toBe(true);
+    expect(referralEdgeCountInRange(tree, 0, 0)).toBe(true);
+    expect(parseReferralTreeStatusLine('nope')).toBeNull();
+    tree.attribute({ userId: U(2), referrerId: U(1) });
+    tree.attribute({ userId: U(3), referrerId: U(2) });
+    expect(referralTreeBoardCard(tree).edges).toBe(2);
+    expect(referralTreeStatusLine(tree)).toContain('edges=2');
+    expect(referralTreeStatusLineMatches(tree)).toBe(true);
+    expect(referralTreeExportText(tree).startsWith(referralTreeExportHeader())).toBe(true);
+    expect(referralTreeExportLine(tree)).toContain('2,');
+    expect(referralEdgeCountInRange(tree, 1, 5)).toBe(true);
+    expect(referralEdgeCountInRange(tree, 5, 1)).toBe(false);
+    expect(referralMaxDepthAtMost(tree, 5)).toBe(true);
+    expect(referralMaxDepthAtMost(tree, Number.NaN)).toBe(false);
   });
 });

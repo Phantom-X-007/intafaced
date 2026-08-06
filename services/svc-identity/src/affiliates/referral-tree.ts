@@ -274,3 +274,73 @@ export class MemoryReferralTree {
     return this.listReferrerIds().length;
   }
 }
+
+/** L3 — tree board card from MemoryReferralTree. */
+export function referralTreeBoardCard(tree: MemoryReferralTree): {
+  readonly edges: number;
+  readonly referrers: number;
+  readonly maxDepth: number;
+} {
+  return {
+    edges: tree.edgeCount(),
+    referrers: tree.referrerCount(),
+    maxDepth: tree.maxChainDepth(),
+  };
+}
+
+/** L3 — tree status line. */
+export function referralTreeStatusLine(tree: MemoryReferralTree): string {
+  const c = referralTreeBoardCard(tree);
+  return `edges=${c.edges} referrers=${c.referrers} maxDepth=${c.maxDepth}`;
+}
+
+/** L3 — true when no edges. */
+export function referralTreeStatusLineIsEmpty(tree: MemoryReferralTree): boolean {
+  return tree.edgeCount() === 0;
+}
+
+/** L3 — parse status. Invalid → null. */
+export function parseReferralTreeStatusLine(
+  line: string,
+): { readonly edges: number; readonly referrers: number; readonly maxDepth: number } | null {
+  const m = line.trim().match(/^edges=(\d+) referrers=(\d+) maxDepth=(\d+)$/);
+  if (!m) return null;
+  return { edges: Number(m[1]), referrers: Number(m[2]), maxDepth: Number(m[3]) };
+}
+
+/** L3 — true when status matches tree. */
+export function referralTreeStatusLineMatches(tree: MemoryReferralTree): boolean {
+  const p = parseReferralTreeStatusLine(referralTreeStatusLine(tree));
+  if (!p) return false;
+  const c = referralTreeBoardCard(tree);
+  return p.edges === c.edges && p.referrers === c.referrers && p.maxDepth === c.maxDepth;
+}
+
+/** L3 — export header. */
+export function referralTreeExportHeader(): string {
+  return 'edges,referrers,maxDepth';
+}
+
+/** L3 — export line. */
+export function referralTreeExportLine(tree: MemoryReferralTree): string {
+  const c = referralTreeBoardCard(tree);
+  return `${c.edges},${c.referrers},${c.maxDepth}`;
+}
+
+/** L3 — full export. */
+export function referralTreeExportText(tree: MemoryReferralTree): string {
+  return [referralTreeExportHeader(), referralTreeExportLine(tree)].join('\n');
+}
+
+/** L3 — true when edge count is within [min,max]. Invalid → false. */
+export function referralEdgeCountInRange(tree: MemoryReferralTree, min: number, max: number): boolean {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
+  const n = tree.edgeCount();
+  return n >= min && n <= max;
+}
+
+/** L3 — true when max depth is at most n. */
+export function referralMaxDepthAtMost(tree: MemoryReferralTree, n: number): boolean {
+  if (!Number.isFinite(n)) return false;
+  return tree.maxChainDepth() <= n;
+}
