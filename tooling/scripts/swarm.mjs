@@ -21,7 +21,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { touches } from './path-collide.mjs';
-import { evaluateThrift } from '../ci/thrift-preflight.mjs';
+import { evaluateThrift, checkoutStaleness } from '../ci/thrift-preflight.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OPS = join(ROOT, 'docs', 'ops');
@@ -1131,6 +1131,18 @@ try {
   console.error('swarm — RESIDUAL_PATH_HINTS invalid (fail closed).');
   console.error(`  ${e.message || e}`);
   process.exit(2);
+}
+
+// The board is what agents steer by, so a stale board silently redirects the
+// whole swarm. Measured 2026-08-07: a checkout 178 commits behind reported
+// `freeImplementable=6 blocked=0` while origin/main reported `0` and `15` —
+// an agent on the stale copy spawns workers onto work that does not exist.
+// Same class as #954 (thrift). Announce before any number is printed; a reader
+// who stops at line one must still learn the numbers may be wrong.
+const behind = checkoutStaleness();
+if (behind && behind > 0) {
+  console.log(`  STALE CHECKOUT — this board is ${behind} commit(s) behind origin/main.`);
+  console.log('  Every count below may be wrong. git pull, or re-run from a worktree at origin/main.');
 }
 
 const m = buildModel();
