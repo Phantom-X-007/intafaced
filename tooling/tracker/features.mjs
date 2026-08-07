@@ -1009,7 +1009,15 @@ export const FEATURES = [
     dependsOn: ['ledger.double-entry'],
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
-  f('ops.analytics', 'Warehouse — read replica + cube layer', { module: 'core-ops', phase: '5', dependsOn: ['ledger.double-entry'] }),
+  f('ops.analytics', 'Warehouse — read replica + cube layer', {
+    module: 'core-ops',
+    phase: '5',
+    status: 'wip',
+    owner: 'cursor-swarm-analytics',
+    dependsOn: ['ledger.double-entry'],
+    requires: ['packages/contracts'],
+    note: 'Stage-1 2026-08-07: replica role law + honest empty warehouse surface in contracts (ops-analytics-warehouse) + ADR/runbook. No invent volume. Residual: physical replica wiring, ETL cube job, admin consumer — not tracker done.',
+  }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
     phase: '5',
