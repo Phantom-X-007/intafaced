@@ -1,21 +1,21 @@
 # Thrift hold — L3 free-TRK factory
 
 **Updated:** 2026-08-07  
-**Tip base:** #912 / 1ce0c98c  
+**Tip base:** #913 / 29c62eed  
 **Open partner:** #904 only (babysit — never dual-edit / never agent-merge)
 
 ## Rule
 
 - Soft thrift (≥120): ship **one fat** Class N PR only.
-- Hard thrift (≥220): mint local only; no push until total clears headroom.
+- Tip thrift is warn-only (never exit 1 on volume). Prefer one push per unit.
 - Never `THRIFT_ALLOW` unless Nitro emergency.
 
-## Wave 173–175 fat PR
+## Wave 176–178 fat PR
 
-One PR on `feat/l3-free-trk-wave173`:
+One PR on `feat/l3-free-trk-wave176`:
 
-- wave173 muteable-channel-honesty (svc-notify)
-- wave174 copy-plane-honesty (svc-agents)
-- wave175 queue-weight-honesty (svc-support)
+- wave176 stop-reason-honesty (svc-agents)
+- wave177 kyc-tier-honesty (svc-identity)
+- wave178 stream-channel-honesty (svc-ws)
 
 Class N pure catalogs + packs. No partner path intersect.
