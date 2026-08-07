@@ -321,7 +321,36 @@ function readClaimLock(id) {
 function claimLockCloses(id) {
   const lock = readClaimLock(id);
   if (!lock) return false;
-  if (['merged', 'retired', 'done', 'closed'].includes(lock.status)) return true;
+  // A SPENT lock does not close a feature. Fixed 2026-08-07.
+  //
+  // `merged` used to close the row permanently, and that is the defect that
+  // emptied the board. A claim covers ONE SLICE, not a whole feature: an agent
+  // shipped Stage-1 of `academy.ambassadors` on 2026-08-05, wrote `merged`, and
+  // the row vanished for good — while `features.mjs` still said `status: ready,
+  // owner: none`, i.e. real, unbuilt, claimable work.
+  //
+  // Eleven live features were invisible this way. The board reported
+  // freeProduct=0, and SWARM-MANDATE says freeProduct=0 means "do not idle —
+  // mint Stage-N slices". So the swarm manufactured catalog modules instead of
+  // building the features sitting right there. 151 of those were deleted as
+  // unreachable in #953. The make-work rule was downstream of THIS line.
+  //
+  // Scoped to TRK- deliberately. A tracker row is a MULTI-STAGE feature and
+  // `features.mjs` is the authority on whether it is finished — status `done`
+  // already excludes it upstream of here, so a spent lock needs to close nothing.
+  //
+  // A residual id (RP*, AFK-*, B12, META-*) has NO tracker row. Its claim file
+  // IS the completion record: RP1 `merged` means "#468 shipped Exchange.vue
+  // money-on-wire", and that work must never be handed out again. So a spent
+  // lock still closes those.
+  //
+  // Written as an explicit prefix test rather than relying on the caller: the
+  // REGROUP branch above happens to read `closed || active`, which is always
+  // true while a lock file exists and would mask a mistake here. Do not depend
+  // on that — it is a tautology, not a guard.
+  if (['merged', 'retired', 'done', 'closed'].includes(lock.status)) {
+    return !String(id).startsWith('TRK-');
+  }
   // residual-own: hides non-TRK residual (research finished). TRK residual-own = awaiting implement — free board.
   if (lock.status === 'residual-own' && !String(id).startsWith('TRK-')) return true;
   return false;
