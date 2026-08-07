@@ -1,7 +1,7 @@
 # Thrift hold — L3 free-TRK factory
 
 **Updated:** 2026-08-07  
-**Tip base:** #919 / 2267b338  
+**Tip base:** #920 / fcdc373f  
 **Open partner:** #904 only (babysit — never dual-edit / never agent-merge)
 
 ## Rule
@@ -11,12 +11,12 @@
 - Never `THRIFT_ALLOW` unless Nitro emergency.
 - Night-engine / keep-alive often report **stale tip + false HARD thrift** — re-derive `origin/main` every cycle.
 
-## Wave 194–196 fat PR
+## Wave 197–199 fat PR
 
-One PR on `feat/l3-free-trk-wave194`:
+One PR on `feat/l3-free-trk-wave197`:
 
-- wave194 engine-order-type-honesty (svc-matching)
-- wave195 public-order-type-honesty (exchange-contract)
-- wave196 resting-kind-honesty (svc-matching)
+- wave197 timeframe-honesty (exchange-contract)
+- wave198 market-type-honesty (exchange-contract)
+- wave199 exchange-error-code-honesty (exchange-contract)
 
 Class N pure catalogs + packs. No partner path intersect.
