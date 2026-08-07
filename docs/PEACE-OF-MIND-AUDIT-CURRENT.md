@@ -5,7 +5,7 @@
 **Cook SINCE baseline:** `8a8c19bc626e6dada49a33be1f88d17873f42502` (#107)  
 **Prior mega archives:** [`audit/2026-07-30-afk-cook-mega/`](audit/2026-07-30-afk-cook-mega/) · [`audit/2026-07-30-mega-r2/`](audit/2026-07-30-mega-r2/)  
 **This money-class archive:** [`audit/2026-07-31-money-class-mega/`](audit/2026-07-31-money-class-mega/)  
-**Claim tags:** `[VERIFIED 2026-07-31]` money-class mega · L0 local green · **not go-live** · **multi-replica journal on tip (#266); send→put P1 residual**
+**Claim tags:** `[VERIFIED 2026-07-31]` money-class mega · L0 local green · **not go-live** · **not multi-replica live rail**
 
 **Stream A:** [NITRO-STREAM-A-CLAIM.md](NITRO-STREAM-A-CLAIM.md) · uiproof PROOF **UNVERIFIED** this tip
 
@@ -13,7 +13,7 @@
 
 ## Verdict (one breath)
 
-**PASS-WITH-RESIDUALS.** Money-class deep pass on #226–#228 + #244/#246: doctrine/auth/honesty hold; live EVM rail does **not** book outside ledger-client; posture fail-closed. **Class M residual (updated):** multi-replica journal **CLOSED** (#266 + re-verify). Remaining: send→put crash window **P1**; dust policy M226-04 product. Local doctrine/build/typecheck/test/gate green; money PG + anvil suites skipped. **Not go-live. Not product bug-free. Audit exit ≠ go-live.**
+**PASS-WITH-RESIDUALS.** Money-class deep pass on #226–#228 + #244/#246: doctrine/auth/honesty hold; live EVM rail does **not** book outside ledger-client; posture fail-closed. **Open Class M residual:** outbound broadcast journal is process memory only — **P0 hold on multi-replica go-live**, P1 crash-window on single-process pilot (critic-accepted). Local doctrine/build/typecheck/test/gate green; money PG + anvil suites skipped. Actions SUCCESS observed on recent main tips (re-check live). **Not go-live. Not product bug-free. Audit exit ≠ go-live.**
 
 After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-audit.
 
@@ -21,20 +21,20 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 ## Scoreboard
 
-| System                   | Risk now                                               | Status                                               |
-| ------------------------ | ------------------------------------------------------ | ---------------------------------------------------- |
-| Ledger                   | Low if perimeter holds                                 | OK to build · PG suites skipped locally              |
-| Identity                 | ifc\_ exchange + soft revoke on tip                    | OK                                                   |
-| Pay                      | Links + checkout; live EVM #226 + durable journal #266 | OK multi-replica journal · **send→put P1 residual**  |
-| Token / bank earn        | Yield/buyback gated; bank PG skip                      | OK · residual                                        |
-| P2P                      | Prior fixes; PG suite skip                             | OK · residual                                        |
-| Edge                     | ifc\_ + region HMAC; preservePath                      | OK for dev                                           |
-| Trade                    | Private REST + convert; R5/R6 holds                    | OK · market-sell cost honest (#244)                  |
-| Protocol / DEX / indexer | Mounted shells; chain propped                          | Not product-complete                                 |
-| Deploy                   | Fleet + notify + WS JWT                                | Usable with care                                     |
-| **Vendor (shell)**       | **UI OK; high if used as books**                       | **UI shell · quarantined as ledger**                 |
-| Terminal                 | apps/web equity wired to /account/balance (#228)       | OK honesty · dual-book labeled                       |
-| CI doctrine              | Brand/custody/migrate local green                      | OK local · Actions SUCCESS on recent tips (re-check) |
+| System                   | Risk now                                         | Status                                               |
+| ------------------------ | ------------------------------------------------ | ---------------------------------------------------- |
+| Ledger                   | Low if perimeter holds                           | OK to build · PG suites skipped locally              |
+| Identity                 | ifc_ exchange + soft revoke on tip               | OK                                                   |
+| Pay                      | Links + checkout; live EVM #226 (memory journal) | OK pilot single-process · **no multi-replica**       |
+| Token / bank earn        | Yield/buyback gated; bank PG skip                | OK · residual                                        |
+| P2P                      | Prior fixes; PG suite skip                       | OK · residual                                        |
+| Edge                     | ifc_ + region HMAC; preservePath                 | OK for dev                                           |
+| Trade                    | Private REST + convert; R5/R6 holds              | OK · market-sell cost honest (#244)                  |
+| Protocol / DEX / indexer | Mounted shells; chain propped                    | Not product-complete                                 |
+| Deploy                   | Fleet + notify + WS JWT                          | Usable with care                                     |
+| **Vendor (shell)**       | **UI OK; high if used as books**                 | **UI shell · quarantined as ledger**                 |
+| Terminal                 | apps/web equity wired to /account/balance (#228) | OK honesty · dual-book labeled                       |
+| CI doctrine              | Brand/custody/migrate local green                | OK local · Actions SUCCESS on recent tips (re-check) |
 
 ---
 
@@ -60,24 +60,24 @@ After each Denon wave: [`WAVE-AUDIT.md`](WAVE-AUDIT.md) only — not a full re-a
 
 ## Still open (honest residuals)
 
-| Item                                                   | Verdict                                                      | Who                        |
-| ------------------------------------------------------ | ------------------------------------------------------------ | -------------------------- |
-| Money e2e / PG suites local                            | **SKIPPED** this host — named in money-class `01-L0.md`      | Human install or CI        |
-| OHLCV / futures positions product                      | **HOLDS** honest empty (WS path #227 ready-empty)            | Product                    |
-| Factory / chain deploy                                 | **HOLDS** honesty; not product-complete                      | **Denon**                  |
-| Live EVM rail **multi-replica**                        | **CLOSED** #266 PostgresBroadcastStore (M226-01 re-verify)   | residual send→put P1 only  |
-| Live EVM rail crash send→put (any process)             | **P1 residual** — irreversible if hit                        | Denon + pilot ops          |
-| Live EVM refund chain idempotency key                  | **CLOSED** durable refundId passed to rail (M226-02)         | residual-pay close PR      |
-| Live EVM first-tx-wins dust                            | **P1 product** (M226-04)                                     | Denon product              |
-| Watcher mark-before-webhook-2xx                        | **P2** (M226-03 critic downgrade)                            | agent later                |
-| Market sell CCXT `cost` honest null without fills      | **CLOSED** #244                                              | done                       |
-| Sub-account ownership S2S                              | **CLOSED** #246 — re-verified money-class 03A                | done                       |
-| Live EVM path doctrine (ledger-only, decimal, posture) | **HOLDS** code-reviewed money-class 03B                      | residual ops keys/RPC only |
-| Stream A PROOF / Chromium                              | **UNVERIFIED**                                               | Nitro desktop              |
-| Terminal equity **UI wire**                            | **CLOSED** #228 — re-verified 03C                            | done                       |
-| AMM compile honesty                                    | **CLOSED** artefacts compile; factory still 0x0 until deploy | deploy residual Denon      |
-| Licences · wallet secrets · counsel · kill drill       | human/ops/law                                                | Denon + you                |
-| Dual-book **policy ADR**                               | still human — UI labels do not close policy                  | owner                      |
+| Item                                                   | Verdict                                                          | Who                         |
+| ------------------------------------------------------ | ---------------------------------------------------------------- | --------------------------- |
+| Money e2e / PG suites local                            | **SKIPPED** this host — named in money-class `01-L0.md`          | Human install or CI         |
+| OHLCV / futures positions product                      | **HOLDS** honest empty (WS path #227 ready-empty)                | Product                     |
+| Factory / chain deploy                                 | **HOLDS** honesty; not product-complete                          | **Denon**                   |
+| Live EVM rail **multi-replica**                        | **P0 HOLD** — MemoryBroadcastStore only (M226-01)                | Denon durable journal + ops |
+| Live EVM rail single-process crash send→put            | **P1 residual** — irreversible if hit                            | Denon + pilot ops           |
+| Live EVM refund chain idempotency key                  | **P1** — process `refundSequence` not durable refundId (M226-02) | Denon Class M interface     |
+| Live EVM first-tx-wins dust                            | **P1 product** (M226-04)                                         | Denon product               |
+| Watcher mark-before-webhook-2xx                        | **P2** (M226-03 critic downgrade)                                | agent later                 |
+| Market sell CCXT `cost` honest null without fills      | **CLOSED** #244                                                  | done                        |
+| Sub-account ownership S2S                              | **CLOSED** #246 — re-verified money-class 03A                    | done                        |
+| Live EVM path doctrine (ledger-only, decimal, posture) | **HOLDS** code-reviewed money-class 03B                          | residual ops keys/RPC only  |
+| Stream A PROOF / Chromium                              | **UNVERIFIED**                                                   | Nitro desktop               |
+| Terminal equity **UI wire**                            | **CLOSED** #228 — re-verified 03C                                | done                        |
+| AMM compile honesty                                    | **CLOSED** artefacts compile; factory still 0x0 until deploy     | deploy residual Denon       |
+| Licences · wallet secrets · counsel · kill drill       | human/ops/law                                                    | Denon + you                 |
+| Dual-book **policy ADR**                               | still human — UI labels do not close policy                      | owner                       |
 
 ---
 
@@ -132,7 +132,7 @@ SECRETS / ADR:     still human/owner
 | #254 | P2P InsufficientFunds rehydrate                 |
 | #255 | Shared rehydrate for all service ledger clients |
 
-**Backend only.** Frontend / Stream A other chat. Multi-replica pay journal **CLOSED** #266 (send→put P1 remains). Token buyback product residual (T-01/T-02). Not go-live.
+**Backend only.** Frontend / Stream A other chat. Multi-replica pay journal still P0 hold. Token buyback product residual (T-01/T-02). Not go-live.
 
 ---
 
@@ -140,17 +140,16 @@ SECRETS / ADR:     still human/owner
 
 **Verdict:** **COMPLETE-WITH-HOLDS** · archive [`audit/2026-07-31-mega-finish/`](audit/2026-07-31-mega-finish/)  
 **Not go-live.** Local money PG e2e blocked (no Docker/Postgres on audit host).  
-**ID-P1-1 recovery codes:** hashed store + redeem on login (#275 + #277).  
-**M226-01:** **#266 merged** + re-verify residual-pay close — multi-replica CLOSED.  
-**Dual-book ADR:** Denon **#272** Accepted on main.  
+**ID-P1-1 recovery codes:** hashed store + redeem on login (this PR).  
+**M226-01:** open PR **#266** owns durable BroadcastStore — do not re-implement.  
+**Dual-book ADR:** Denon **#272** Accepted (docs) — re-check merge.  
 **Tip authority:** `git rev-parse origin/main` after merge.
 
 ---
 
-## Residual-pay close (M226-01 re-verify + M226-02) · 2026-07-31
+## Mega finish close complete (2026-07-31 late)
 
-**Honesty:** finish set was COMPLETE-WITH-HOLDS; M226-01 re-verify was deferred too long after #266 — closed here.  
-**M226-01:** PostgresBroadcastStore on live boot — multi-replica P0 **CLOSED**; send→put window **P1**.  
-**M226-02:** durable `refundId` into `RailAdapter.refund` / crypto-native chain key — **FIXED**.  
-**Archive note:** [`audit/2026-07-31-mega-finish/07-POST-FINISH-HONESTY.md`](audit/2026-07-31-mega-finish/07-POST-FINISH-HONESTY.md)  
-**Not go-live.**
+**PRs:** #275 recovery+archive · **#277** sql.json Tests green (required — #275 merged red).  
+**Also on main:** #266 durable BroadcastStore — M226-01 re-verify next residual pass.  
+**Verdict still:** COMPLETE-WITH-HOLDS · **not go-live**.  
+**Archive:** [`audit/2026-07-31-mega-finish/`](audit/2026-07-31-mega-finish/)

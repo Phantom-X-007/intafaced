@@ -1,31 +1,37 @@
-# CONTINUE AFTER COMPACT — mega FINISH + residual-pay close
+# CONTINUE AFTER COMPACT — mega FINISH fire
 
 ```
-STATUS 2026-07-31 residual-pay close SHIP
-branch: residual/pay-m226-close
-finish F1–F13: COMPLETE-WITH-HOLDS (true — definition held)
-lazy gap closed: M226-01 re-verify + PEACE honesty + M226-02 fix
-read: 07-POST-FINISH-HONESTY.md
-leave alone: #267 frontend · #278 futures F3 · smart-accounts deploy mountain
+STATUS 2026-07-31T finish-fire CLOSED ON MAIN
+PR #275 merged (recovery + archive) · fix #277 merged (sql.json CI green)
+#266 durable BroadcastStore ALSO on main — re-verify M226-01 next campaign
+finish: COMPLETE-WITH-HOLDS — 06-FINISH-VERDICT.md + 02-IMPLICIT-AND-COMPLETENESS.md
+read first: 00 · 02 · 06 · this file
 NOT go-live
 ```
 
-## Residual after this close
+## What finished means
 
-| Item                    | Status                      |
-| ----------------------- | --------------------------- |
-| M226-01 multi-replica   | **CLOSED** #266 + re-verify |
-| M226-01 send→put window | **P1 residual**             |
-| M226-02 refund key      | **FIXED** this branch       |
-| M226-04 dust            | HOLD product                |
-| B-02 bank drift         | HOLD                        |
-| R4 smart-accounts       | other lane                  |
-| Local money e2e         | BLOCKED host                |
+F1–F13 each DONE / FIXED / HELD / BLOCKED with evidence — no silent omission.  
+Residual queue after finish ≠ unfinished mega checklist.
+
+## Shipped
+
+| PR       | What                                                    | Tip                 |
+| -------- | ------------------------------------------------------- | ------------------- |
+| **#275** | ID-P1-1 recovery + mega-finish archive + residual packs | fe850f3 era         |
+| **#277** | recovery sql.json write + list normalize (Tests green)  | follow-up           |
+| **#266** | durable pay BroadcastStore (was exclusive residual)     | on main — re-verify |
+
+## Resume after compact
+
+1. `git fetch origin main && git rev-parse origin/main`
+2. Read this directory on main
+3. Next work is **residual campaign** only (M226-01 re-verify after #266, M226-02/04 product, B-02, R4)
+4. Do **not** re-open finish checklist as unfinished
 
 ## Paste
 
 ```
-Continue residual-pay if open: branch residual/pay-m226-close
-Read docs/audit/2026-07-31-mega-finish/07-POST-FINISH-HONESTY.md
-No frontend. No futures F3.
+Mega finish CLOSED. Archive: docs/audit/2026-07-31-mega-finish/
+Continue residuals from CONTINUE residual queue; tip origin/main.
 ```
