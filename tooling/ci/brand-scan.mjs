@@ -126,7 +126,34 @@ const SKIP_DIRS = new Set([
   // two cannot drift, plus `.vue`, against a frozen baseline that can only
   // shrink. The Java trees stay skipped, for the reason above.
   'vendor',
+
+  // Tool and package caches. Not our source, not in git, not in CI — but they
+  // sit under the repo root, so a scan that walks by name alone opens them.
+  '.pnpm-store',
+  '.tools',
 ]);
+
+/**
+ * A directory carrying its own `.git` is a different checkout — a linked
+ * worktree or a nested clone — not our source tree.
+ *
+ * This is the local-vs-CI drift `gates.mjs` exists to prevent, and it was
+ * living inside the gate apparatus itself. CLAUDE.md non-negotiable #1 tells
+ * every agent to work in a worktree, `pnpm wt` puts them under `.worktrees/`,
+ * and nothing is gitignored from the scan's point of view because the scan
+ * never asks git. Measured on 2026-08-07: 1491 of 1519 reported occurrences
+ * were sibling worktrees — other agents' checkouts of this same file — so an
+ * agent that obeyed non-negotiable #4 and ran `pnpm verify` saw a red that had
+ * nothing to do with its work, halting before typecheck and all 48 test
+ * packages ran. CI never saw it, because CI checks out one tree.
+ *
+ * Matching on `.git` rather than on the name `.worktrees` is deliberate: it
+ * holds for a worktree parked anywhere, which is the case that produced the
+ * false red in the first place.
+ */
+function isSeparateCheckout(dir) {
+  return existsSync(join(dir, '.git'));
+}
 
 /**
  * Paths exempt from the scan, each with a reason. Anything added here is a
@@ -324,8 +351,10 @@ function* walk(dir) {
     if (SKIP_DIRS.has(name)) continue;
     const full = join(dir, name);
     const stats = statSync(full);
-    if (stats.isDirectory()) yield* walk(full);
-    else if (EXTENSIONS.some((ext) => name.endsWith(ext))) yield full;
+    if (stats.isDirectory()) {
+      if (isSeparateCheckout(full)) continue;
+      yield* walk(full);
+    } else if (EXTENSIONS.some((ext) => name.endsWith(ext))) yield full;
   }
 }
 

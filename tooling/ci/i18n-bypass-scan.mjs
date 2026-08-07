@@ -129,9 +129,23 @@ function countStrings(objectSource) {
 
 const found = new Map();
 
+/**
+ * The denominator. `found` only counts files that carry a `copy` object, so it
+ * is 0 both when the queue is genuinely clean and when the gate opened nothing
+ * at all. Those are opposite facts and they printed the same line.
+ */
+let candidates = 0;
+let inspected = 0;
+const allowlisted = [];
+
 for (const file of walk(APPS)) {
   const rel = relative(ROOT, file).split(sep).join('/');
-  if (isAllowlisted(relative(ROOT, file))) continue;
+  candidates++;
+  if (isAllowlisted(relative(ROOT, file))) {
+    allowlisted.push(rel);
+    continue;
+  }
+  inspected++;
 
   const source = readFileSync(file, 'utf8');
   const match = COPY_BINDING.exec(source);
@@ -189,6 +203,30 @@ for (const [file, allowed] of Object.entries(BASELINE)) {
 
 const total = [...found.values()].reduce((a, b) => a + b, 0);
 const baselineTotal = Object.values(BASELINE).reduce((a, b) => a + b, 0);
+
+/**
+ * EMPTY DENOMINATOR — same defect as its sibling `i18n-scan.mjs`, same cause.
+ * `apps/web` went in #757, the one project left under `apps/` is allowlisted in
+ * full, so this gate walked zero un-allowlisted files and printed
+ * "✓ i18n-bypass — 0 file(s), 0 hardcoded string(s), at the frozen baseline (0)".
+ * Every number in that sentence is true and the sentence means nothing.
+ *
+ * An all-allowlisted scope is a declared state, so it stays exit 0 — but it
+ * says so instead of claiming a clean baseline. A scope with no candidates at
+ * all is undeclared, and that one fails.
+ */
+if (inspected === 0 && problems.length === 0) {
+  if (candidates === 0) {
+    console.error('\n✖ i18n-bypass — scope is EMPTY: apps/ exists but holds no .tsx file at all.\n');
+    console.error('  A frozen baseline compared against nothing is not a frozen baseline.');
+    process.exit(1);
+  }
+  console.log(`⚠ i18n-bypass INSPECTED NOTHING — 0 of ${candidates} candidate file(s) reached the check; all are allowlisted.`);
+  for (const rel of allowlisted) console.log(`    allowlisted: ${rel}`);
+  console.log(`  The frozen baseline (${baselineTotal}) was compared against an empty scan, not against a clean tree.`);
+  console.log('  The gate re-arms by itself when an un-allowlisted surface lands under apps/.');
+  process.exit(0);
+}
 
 if (problems.length === 0) {
   console.log(`✓ i18n-bypass — ${found.size} file(s), ${total} hardcoded string(s), at the frozen baseline (${baselineTotal})`);

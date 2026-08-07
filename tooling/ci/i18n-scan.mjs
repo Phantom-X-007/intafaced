@@ -96,12 +96,28 @@ function* walk(dir) {
 const findings = [];
 let scanned = 0;
 
+/**
+ * The denominator. `scanned` is what the gate opened; `candidates` is what it
+ * found before the allowlist and the file-level exemptions took their cut.
+ * Reporting only the first lets an empty scope print as a clean result — see
+ * the empty-denominator branch below.
+ */
+let candidates = 0;
+const swallowedBy = { allowlist: [], exemptFile: [] };
+
 for (const file of walk(APPS)) {
   const rel = relative(ROOT, file);
-  if (isAllowlisted(rel)) continue;
+  candidates++;
+  if (isAllowlisted(rel)) {
+    swallowedBy.allowlist.push(rel);
+    continue;
+  }
 
   const content = readFileSync(file, 'utf8');
-  if (/i18n-exempt-file/.test(content)) continue;
+  if (/i18n-exempt-file/.test(content)) {
+    swallowedBy.exemptFile.push(rel);
+    continue;
+  }
 
   scanned++;
   const lines = content.split('\n');
@@ -131,6 +147,45 @@ for (const file of walk(APPS)) {
 
 if (!existsSync(APPS)) {
   console.log('✓ i18n-scan — no apps/ yet; the scan re-arms when the first surface lands (§9)');
+  process.exit(0);
+}
+
+/**
+ * EMPTY DENOMINATOR. A check that cannot say how many things it inspected
+ * cannot be trusted to say they were fine.
+ *
+ * The author already guarded the case above — `apps/` missing entirely. The
+ * case that actually arrived is different and printed as a pass: `apps/`
+ * exists, `apps/web` was deleted in #757, the one project left is allowlisted
+ * in full, so the scan opened nothing and took the `findings.length === 0`
+ * success path. "✓ i18n-scan clean — 0 files" reads as reassurance.
+ *
+ * This repo has now hit that shape three times: the reachability gate
+ * inspecting zero modules on Windows (98a6812c), `value-gate` comparing an
+ * empty ancestor list against an empty one under `fetch-depth: 1` — named in
+ * its own NOT_GATES entry as half of how #832–#876 landed — and here.
+ * `wallet-rpc-mainnet-scan` is the one that got it right by design: it states
+ * "every denominator non-zero" in its own success line.
+ *
+ * Zero is not automatically a failure — an all-allowlisted scope is the real,
+ * declared state today (§14.6, operator console, English-only by design), and
+ * failing on it would red main for a condition that is correct. So: say
+ * plainly that nothing was inspected and name what swallowed the scope. Only
+ * an emptiness nobody declared — a scope with no candidates at all — is a
+ * failure, because that one means the gate silently stopped covering anything.
+ */
+if (scanned === 0) {
+  if (candidates === 0) {
+    console.error('\n✖ i18n-scan — scope is EMPTY: apps/ exists but holds no .tsx file at all.\n');
+    console.error('  Nothing was inspected, so this gate proves nothing. Either a surface moved out');
+    console.error('  of apps/ (repoint APPS) or the tree is not what this gate was written against.');
+    process.exit(1);
+  }
+  console.log(`⚠ i18n-scan INSPECTED NOTHING — 0 of ${candidates} candidate file(s); every one is allowlisted or file-exempt.`);
+  for (const rel of swallowedBy.allowlist) console.log(`    allowlisted:  ${rel}`);
+  for (const rel of swallowedBy.exemptFile) console.log(`    i18n-exempt-file: ${rel}`);
+  console.log('  This is not a clean bill of health — it is an empty scan. The gate re-arms by itself');
+  console.log('  as soon as one un-allowlisted .tsx surface lands under apps/ (§9, §14.4).');
   process.exit(0);
 }
 
