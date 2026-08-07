@@ -6,6 +6,8 @@ import { AuthError, type AuthService, type KycRecordView } from './auth/auth-ser
 import type { RankService } from './rank/rank-service.js';
 import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
+import { FreezeError } from './affiliates/freeze-store.js';
+import type { FreezeService } from './affiliates/freeze-service.js';
 
 /**
  * svc-identity's API (§4.1).
@@ -32,6 +34,18 @@ function toTrpcError(err: unknown): TRPCError {
       case 'referral.self':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'referral.invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+  }
+
+  if (err instanceof FreezeError) {
+    switch (err.code) {
+      case 'freeze.not_found':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'freeze.already':
+      case 'freeze.not_frozen':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'freeze.invalid':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     }
   }
@@ -117,16 +131,29 @@ function presentKyc(record: KycRecordView) {
 export function createIdentityRouter(
   auth: AuthService,
   rank: RankService,
-  options: { registrationOpen: boolean; webauthnEnabled?: boolean; referral?: ReferralService },
+  options: {
+    registrationOpen: boolean;
+    webauthnEnabled?: boolean;
+    referral?: ReferralService;
+    freeze?: FreezeService;
+  },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
   const referral = options.referral;
+  const freeze = options.freeze;
 
   function requireReferral(): ReferralService {
     if (!referral) {
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Referral tree is not configured' });
     }
     return referral;
+  }
+
+  function requireFreeze(): FreezeService {
+    if (!freeze) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Affiliate freeze store is not configured' });
+    }
+    return freeze;
   }
 
   return router({
@@ -721,6 +748,84 @@ export function createIdentityRouter(
         .query(async ({ ctx }) => {
           try {
             return await requireReferral().ancestorsOf(ctx.principal.userId);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /** Operator freeze beneficiary — skips accrual; no payout path here. */
+      freeze: scopedProcedure('admin:write')
+        .input(z.object({ beneficiaryId: z.string().uuid(), reason: z.string().min(3).max(500) }))
+        .output(
+          z.object({
+            beneficiaryId: z.string().uuid(),
+            frozenBy: z.string().uuid(),
+            reason: z.string(),
+            frozenAt: z.string(),
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const rec = await requireFreeze().freeze({
+              beneficiaryId: input.beneficiaryId,
+              frozenBy: ctx.principal.userId,
+              reason: input.reason,
+            });
+            return {
+              beneficiaryId: rec.beneficiaryId,
+              frozenBy: rec.frozenBy,
+              reason: rec.reason,
+              frozenAt: rec.frozenAt.toISOString(),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      unfreeze: scopedProcedure('admin:write')
+        .input(z.object({ beneficiaryId: z.string().uuid() }))
+        .output(
+          z.object({
+            beneficiaryId: z.string().uuid(),
+            frozenBy: z.string().uuid(),
+            reason: z.string(),
+            frozenAt: z.string(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            const rec = await requireFreeze().unfreeze(input.beneficiaryId);
+            return {
+              beneficiaryId: rec.beneficiaryId,
+              frozenBy: rec.frozenBy,
+              reason: rec.reason,
+              frozenAt: rec.frozenAt.toISOString(),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      freezes: scopedProcedure('admin:read')
+        .output(
+          z.array(
+            z.object({
+              beneficiaryId: z.string().uuid(),
+              frozenBy: z.string().uuid(),
+              reason: z.string(),
+              frozenAt: z.string(),
+            }),
+          ),
+        )
+        .query(async () => {
+          try {
+            const rows = await requireFreeze().list();
+            return rows.map((r) => ({
+              beneficiaryId: r.beneficiaryId,
+              frozenBy: r.frozenBy,
+              reason: r.reason,
+              frozenAt: r.frozenAt.toISOString(),
+            }));
           } catch (err) {
             throw toTrpcError(err);
           }
