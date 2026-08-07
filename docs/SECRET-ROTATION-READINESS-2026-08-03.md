@@ -336,6 +336,25 @@ Restated because these are still live and this document should be the single pla
 
 No disclosure is known for `EDGE_PRINCIPAL_SECRET`, `INTERNAL_SERVICE_SECRET` or `JWT_ACCESS_SECRET`. The values in `.env.example` are self-declaring `dev-only-*` placeholders, never valid in staging or prod. **If a real deployment has ever run on a `dev-only-*` value, treat all three as disclosed** and follow §2.3 exactly. `openssl rand -base64 48`, as `.env.example` already says.
 
+### OWNER-9 — the admin console signature factor · **new, 2026-08-07** · PENDING OWNER DECISION
+
+**Where:** `vendor/upstream-exchange/00_framework/admin/src/main/resources/dev/application.properties:58` — `spark.system.md5.key`, a 34-character literal.
+
+**Why it is not a config knob.** It is injected by `@Value("${spark.system.md5.key}")` into **eight admin controllers**, including `WithdrawRecordController`, `EmployeeController`, `AdminCtcOrderController` and `AdminCtcAcceptorController`. It is the factor the admin console signs and hashes with, on the surface that approves withdrawals.
+
+**How it was found, because the mechanism matters more than the value.** No human found it. It surfaced the moment `secret-scan`'s credential vocabulary was widened on 2026-08-07: `key` was not a credential word on its own — only `api_key`, `access_key`, `secret_key` and `private_key` were — so **every name ending in a bare `_KEY` was invisible to this gate**, including `PAY_CRYPTO_HOT_WALLET_KEY` and `PAY_CRYPTO_DEPOSIT_MNEMONIC`. This literal had been sitting in a tracked file the whole time, and the scan printed "clean" on every run.
+
+**Do:**
+
+1. Decide whether this vendored admin console is ever deployed. If it is not, say so here and downgrade the item — the same open question §5/OWNER-1 raises for `01_wallet_rpc`.
+2. If it is, rotate the factor and move it to `${SPARK_SYSTEM_MD5_KEY}` with **no default**, so a redeploy cannot quietly reuse the published value.
+3. Check what the factor actually protects before rotating: changing a password-hashing factor can invalidate stored admin credentials. This is why it is an owner action and not an agent edit.
+
+**Restart:** rebuild and redeploy `admin`. Same A1.4 consequence as OWNER-2 — set the environment before the rebuild, not after.
+**Verify:** admin login and the withdraw-approval path still work; the properties file holds no literal.
+
+**Registered, not exempted.** It sits in `KNOWN_DISCLOSED` in `tooling/ci/secret-scan.mjs` marked **PENDING OWNER DECISION** — deliberately not the "ACCEPTED by the repo owner" wording used for the captcha pair, because nobody has reviewed this one yet.
+
 ---
 
 ## 6 · What changed on this branch, and what I deliberately did not touch

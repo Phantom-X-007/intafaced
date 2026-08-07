@@ -61,8 +61,57 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const COMPOSE = 'docker-compose.apps.yml';
 
-/** Secret-shaped env var names. Deliberately the same shape the scan uses. */
-const SECRET_VAR = /(?:^|_)(?:SECRET|PASSWORD|TOKEN|PRIVATE_KEY|API_KEY|CREDENTIAL)S?$/;
+/**
+ * Secret-shaped env var names. Deliberately the same shape the scan uses — and
+ * on 2026-08-07 that meant deliberately the same blind spot.
+ *
+ * `KEY` was only recognised behind a qualifier (`PRIVATE_KEY`, `API_KEY`), so
+ * `PAY_CRYPTO_HOT_WALLET_KEY` — which signs every payout — was not secret-shaped
+ * to this check either, and its compose/env parity went unverified. `MNEMONIC`
+ * and `SEED` were absent for the same reason. A trailing deployment qualifier
+ * also hid the word: `STRIPE_SECRET_KEY_LIVE`.
+ *
+ * Widening here is safe in a way it is not in `secret-scan`: this check compares
+ * a compose block against a required zod field, so a false positive is "you
+ * declared a var and did not wire it", not "you committed a secret". The one
+ * exception is the business-key family, which is why `IDEMPOTENCY_KEY` and its
+ * relatives are excluded — those genuinely are not secrets and would be noise.
+ */
+const SECRET_VAR =
+  /(?:^|_)(?:SECRET|PASSWORD|TOKEN|CREDENTIAL|MNEMONIC|SEED|SEED_PHRASE|KEY|PRIVATE_KEY|API_KEY|ACCESS_KEY)S?(?:_(?:LIVE|TEST|PROD|PRODUCTION|STAGING|DEV|SANDBOX|V\d+|\d+))*$/;
+
+/** Names that end in KEY and are identities, not credentials. Mirrors NOT_ACTUALLY_SECRET in secret-scan.mjs. */
+const BUSINESS_KEY =
+  /(?:^|_)(?:IDEMPOTENCY|BUSINESS|DEDUPE|CACHE|ROUTING|PARTITION|SORT|PRIMARY|FOREIGN|UNIQUE|INDEX|OBJECT|STORAGE|BUCKET|RECORD|MAP|LOOKUP|PUBLIC)_KEYS?$/;
+
+const isSecretVar = (key) => SECRET_VAR.test(key) && !BUSINESS_KEY.test(key);
+
+/**
+ * `KEY: z.…` field declarations. ONE definition, because there were two copies
+ * of this regex and fixing only one left the other reporting the same false
+ * alarm — which is what a duplicated rule buys you.
+ *
+ * The chain runs to END OF LINE, not to the first comma. `[^,\n]*` looks right
+ * and is not: a comma inside the chain's own arguments ends the capture early.
+ * Real example, and it produced a false ALARM the moment `KEY` became a
+ * secret-shaped name here:
+ *
+ *     PAY_CRYPTO_HOT_WALLET_KEY: z
+ *       .string()
+ *       .regex(/^0x[0-9a-fA-F]{64}$/, 'must be 0x + 64 hex chars')
+ *       .optional(),
+ *
+ * `joinChains` folds that onto one line, then the capture stopped at the comma
+ * inside `.regex(…)`, so `.optional()` was never in the captured chain and a
+ * clearly optional secret was reported as a required one compose failed to
+ * supply. That inverts this file's stated contract: the requirement side is
+ * supposed to fail toward MISSING a requirement, never toward inventing one.
+ *
+ * `joinChains` has already put each declaration on its own line, so the line IS
+ * the chain. Over-capturing could only swallow a following field and read its
+ * `.optional()`, which errs back toward the documented direction.
+ */
+const ZOD_FIELD = /([A-Z][A-Z0-9_]*)\s*:\s*(z\.[^\n]*)/;
 
 /**
  * A zod field that is REQUIRED — no `.optional()` and no `.default(…)`. Those
@@ -94,11 +143,11 @@ const joinChains = (source) => source.replace(/\n\s*\./g, '.');
 
 function requiredSecretsIn(source) {
   const found = new Set();
-  const re = /([A-Z][A-Z0-9_]*)\s*:\s*(z\.[^,\n]*)/g;
+  const re = new RegExp(ZOD_FIELD.source, 'g');
   let m;
   while ((m = re.exec(joinChains(source))) !== null) {
     const [, key, chain] = m;
-    if (!SECRET_VAR.test(key)) continue;
+    if (!isSecretVar(key)) continue;
     if (!isRequired(chain)) continue;
     found.add(key);
   }
@@ -138,11 +187,11 @@ for (const rel of serviceEnvFiles) {
   // Inline declarations in the service's own z.object — these can also RELAX a
   // slice (svc-ws redeclares JWT_ACCESS_SECRET as `.optional()`), so a
   // non-required inline declaration removes the requirement.
-  const inlineRe = /([A-Z][A-Z0-9_]*)\s*:\s*(z\.[^,\n]*)/g;
+  const inlineRe = new RegExp(ZOD_FIELD.source, 'g');
   let m;
   while ((m = inlineRe.exec(src)) !== null) {
     const [, key, chain] = m;
-    if (!SECRET_VAR.test(key)) continue;
+    if (!isSecretVar(key)) continue;
     if (isRequired(chain)) need.add(key);
     else need.delete(key);
   }
