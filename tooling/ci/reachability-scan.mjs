@@ -30,6 +30,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, basename, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * PARKED - built, specced, not yet wired. Each entry is a real Stage-1/Stage-2
@@ -63,7 +64,31 @@ const PARKED = new Map([
   ],
 ]);
 
-const ROOT = new URL('../..', import.meta.url).pathname.replace(/\/$/, '');
+/**
+ * POSIX-shaped paths, on every platform.
+ *
+ * This was `new URL('../..', import.meta.url).pathname`, which on Windows is
+ * `/C:/Users/…` — a leading slash the filesystem does not use — while `walk()`
+ * returns `C:\Users\…` from `join`. Three things then broke at once, and every
+ * one of them SILENTLY:
+ *
+ *   · `f.includes('/src/')` matched nothing, so `sources` was EMPTY and the
+ *     scan inspected zero modules.
+ *   · `relative(ROOT, f)` produced `..\..\..\Users\…`, which matches no
+ *     PARKED key.
+ *   · so every PARKED row looked "freed", and the gate instructed the operator
+ *     to delete six rows for modules that are still imported by nothing but
+ *     their own test.
+ *
+ * Following that instruction would have DISARMED the gate for those six
+ * modules — the exact outcome it exists to prevent. Linux CI was unaffected
+ * (no drive letter, `/` separators), so this was green there and wrong on every
+ * Windows checkout, which is the worst place for a gate to disagree with itself.
+ *
+ * Normalising here and at the walk keeps both platforms on one shape.
+ */
+const posix = (p) => p.replaceAll('\\', '/');
+const ROOT = posix(fileURLToPath(new URL('../..', import.meta.url))).replace(/\/$/, '');
 const ROOTS = ['services', 'packages'];
 const SKIP_DIR = new Set(['node_modules', 'dist', 'build', '.turbo', 'coverage', 'fixtures', '__fixtures__']);
 const SKIP_FILE = /(\.test\.ts|\.d\.ts)$/;
@@ -80,7 +105,9 @@ function walk(dir, out = []) {
     if (e.isDirectory()) {
       if (!SKIP_DIR.has(e.name)) walk(join(dir, e.name), out);
     } else if (e.isFile() && /\.(ts|tsx|vue|mjs)$/.test(e.name)) {
-      out.push(join(dir, e.name));
+      // Normalised at the boundary, so every comparison below — `/src/`,
+      // `relative()`, `importer !== ownTest` — sees one separator.
+      out.push(posix(join(dir, e.name)));
     }
   }
   return out;
@@ -107,7 +134,7 @@ for (const f of sources) {
   const imported = pairs.some(
     ([importer, spec]) => importer !== f && importer !== ownTest && (spec.endsWith(`/${stem}.js`) || spec.endsWith(`/${stem}`)),
   );
-  if (!imported) failures.push(relative(ROOT, f));
+  if (!imported) failures.push(posix(relative(ROOT, f)));
 }
 
 /** a parked module that gained a caller: the row is now stale and must go */
