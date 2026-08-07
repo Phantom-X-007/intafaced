@@ -34,6 +34,13 @@ export type DeliveryStatus =
   /** Attempted, did not work, will NOT be tried again. Terminal and stated. */
   | 'abandoned';
 
+/**
+ * How long a successful claim owns a pending row before another replica may
+ * re-claim it (crash recovery). Long enough for a slow gateway; short enough
+ * that a dead process does not park a margin-call forever.
+ */
+export const DEFAULT_CLAIM_LEASE_MS = 60_000;
+
 export interface DeliveryRecord {
   id: string;
   notificationId: string;
@@ -45,6 +52,12 @@ export interface DeliveryRecord {
   attemptedAt: Date | null;
   /** When a transport accepted it. NULL unless `status === 'accepted'`. */
   acceptedAt: Date | null;
+  /**
+   * Exclusive claim window. While status is pending and this is in the future,
+   * another claim must not re-own the row (two-replica double-send guard).
+   * NULL means no active lease (legacy rows / settled).
+   */
+  leaseUntil: Date | null;
   refusalCode: RefusalCode | null;
   /** Free text from the transport, truncated. Never shown as user copy. */
   detail: string | null;
@@ -67,7 +80,11 @@ export interface ChannelTarget {
 
 export type ClaimResult =
   | { claimed: true; id: string; attempt: number }
-  | { claimed: false; reason: 'already_accepted' | 'terminal' | 'exhausted'; record: DeliveryRecord };
+  | {
+      claimed: false;
+      reason: 'already_accepted' | 'terminal' | 'exhausted' | 'in_flight';
+      record: DeliveryRecord;
+    };
 
 export interface SettleInput {
   id: string;
@@ -122,11 +139,19 @@ function deliveryKey(notificationId: string, channel: ChannelId): string {
 export class MemoryDeliveryStore implements DeliveryStore {
   private readonly byKey = new Map<string, DeliveryRecord>();
   private readonly byId = new Map<string, DeliveryRecord>();
+  private readonly leaseMs: number;
+  private readonly now: () => Date;
+
+  constructor(opts: { leaseMs?: number; now?: () => Date } = {}) {
+    this.leaseMs = opts.leaseMs ?? DEFAULT_CLAIM_LEASE_MS;
+    this.now = opts.now ?? (() => new Date());
+  }
 
   async claim(notificationId: string, channel: ChannelId, maxAttempts: number): Promise<ClaimResult> {
     const key = deliveryKey(notificationId, channel);
     const existing = this.byKey.get(key);
-    const now = new Date();
+    const now = this.now();
+    const leaseUntil = new Date(now.getTime() + this.leaseMs);
 
     if (!existing) {
       const record: DeliveryRecord = {
@@ -137,6 +162,7 @@ export class MemoryDeliveryStore implements DeliveryStore {
         attempts: 1,
         attemptedAt: null,
         acceptedAt: null,
+        leaseUntil,
         refusalCode: null,
         detail: null,
         reference: null,
@@ -155,12 +181,20 @@ export class MemoryDeliveryStore implements DeliveryStore {
     if (existing.attempts >= maxAttempts) {
       existing.status = 'abandoned';
       existing.refusalCode = 'channel.attempts_exhausted';
+      existing.leaseUntil = null;
       existing.updatedAt = now;
       return { claimed: false, reason: 'exhausted', record: existing };
     }
 
+    // Active lease on a still-pending row: another worker owns the send.
+    if (existing.status === 'pending' && existing.leaseUntil != null && existing.leaseUntil.getTime() > now.getTime()) {
+      return { claimed: false, reason: 'in_flight', record: existing };
+    }
+
+    // Reclaim: failed (retryable settle) or pending with expired / null lease.
     existing.attempts += 1;
     existing.status = 'pending';
+    existing.leaseUntil = leaseUntil;
     existing.updatedAt = now;
     return { claimed: true, id: existing.id, attempt: existing.attempts };
   }
@@ -168,13 +202,15 @@ export class MemoryDeliveryStore implements DeliveryStore {
   async settle(input: SettleInput): Promise<void> {
     const record = this.byId.get(input.id);
     if (!record) return;
-    const now = new Date();
+    const now = this.now();
     record.status = input.status;
     record.refusalCode = input.refusalCode ?? null;
     record.detail = input.detail ?? null;
     record.reference = input.reference ?? null;
     if (input.attempted) record.attemptedAt = now;
     record.acceptedAt = input.status === 'accepted' ? now : null;
+    // Lease ends when the attempt does — a settled failure is free for retry.
+    record.leaseUntil = null;
     record.updatedAt = now;
   }
 
@@ -257,6 +293,7 @@ type DeliveryPgRow = {
   attempts: number;
   attempted_at: Date | null;
   accepted_at: Date | null;
+  lease_until: Date | null;
   refusal_code: RefusalCode | null;
   detail: string | null;
   reference: string | null;
@@ -273,6 +310,7 @@ function fromDeliveryPg(row: DeliveryPgRow): DeliveryRecord {
     attempts: Number(row.attempts),
     attemptedAt: row.attempted_at,
     acceptedAt: row.accepted_at,
+    leaseUntil: row.lease_until,
     refusalCode: row.refusal_code,
     detail: row.detail,
     reference: row.reference,
@@ -282,22 +320,43 @@ function fromDeliveryPg(row: DeliveryPgRow): DeliveryRecord {
 }
 
 export class PostgresDeliveryStore implements DeliveryStore {
-  constructor(private readonly sql: Sql) {}
+  private readonly leaseMs: number;
+
+  constructor(
+    private readonly sql: Sql,
+    opts: { leaseMs?: number } = {},
+  ) {
+    this.leaseMs = opts.leaseMs ?? DEFAULT_CLAIM_LEASE_MS;
+  }
 
   async claim(notificationId: string, channel: ChannelId, maxAttempts: number): Promise<ClaimResult> {
     // ONE statement decides. Two replicas racing the same redelivered event both
     // run this; exactly one gets a row back, and the other is told why not. A
     // read-then-write here would send the same email twice under load.
+    //
+    // Lease: pending rows with a live lease_until are NOT re-owned. That is the
+    // two-replica mid-send guard. Failed rows and expired leases remain reclaimable.
+    const leaseSeconds = Math.max(1, Math.ceil(this.leaseMs / 1000));
     const claimed = await this.sql<DeliveryPgRow[]>`
-      INSERT INTO notify.deliveries (notification_id, channel, status, attempts)
-      VALUES (${notificationId}, ${channel}, 'pending', 1)
+      INSERT INTO notify.deliveries (notification_id, channel, status, attempts, lease_until)
+      VALUES (${notificationId}, ${channel}, 'pending', 1, now() + (${leaseSeconds}::text || ' seconds')::interval)
       ON CONFLICT (notification_id, channel) DO UPDATE
         SET attempts = notify.deliveries.attempts + 1,
             status = 'pending',
+            lease_until = now() + (${leaseSeconds}::text || ' seconds')::interval,
             updated_at = now()
-        WHERE notify.deliveries.status IN ('pending', 'failed')
-          AND notify.deliveries.attempts < ${maxAttempts}
-      RETURNING id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at
+        WHERE notify.deliveries.attempts < ${maxAttempts}
+          AND (
+            notify.deliveries.status = 'failed'
+            OR (
+              notify.deliveries.status = 'pending'
+              AND (
+                notify.deliveries.lease_until IS NULL
+                OR notify.deliveries.lease_until <= now()
+              )
+            )
+          )
+      RETURNING id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at
     `;
 
     if (claimed.length > 0) {
@@ -310,26 +369,31 @@ export class PostgresDeliveryStore implements DeliveryStore {
     // as "still being retried" when nothing is retrying it.
     const retired = await this.sql<DeliveryPgRow[]>`
       UPDATE notify.deliveries
-         SET status = 'abandoned', refusal_code = 'channel.attempts_exhausted', updated_at = now()
+         SET status = 'abandoned',
+             refusal_code = 'channel.attempts_exhausted',
+             lease_until = NULL,
+             updated_at = now()
        WHERE notification_id = ${notificationId}
          AND channel = ${channel}
          AND status IN ('pending', 'failed')
          AND attempts >= ${maxAttempts}
-      RETURNING id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at
+      RETURNING id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at
     `;
     if (retired.length > 0) return { claimed: false, reason: 'exhausted', record: fromDeliveryPg(retired[0]!) };
 
     const current = await this.sql<DeliveryPgRow[]>`
-      SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
+      SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
        WHERE notification_id = ${notificationId} AND channel = ${channel}
        LIMIT 1
     `;
     const record = fromDeliveryPg(current[0]!);
-    return {
-      claimed: false,
-      reason: record.status === 'accepted' ? 'already_accepted' : 'terminal',
-      record,
-    };
+    if (record.status === 'accepted') {
+      return { claimed: false, reason: 'already_accepted', record };
+    }
+    if (record.status === 'pending' && record.leaseUntil != null && record.leaseUntil.getTime() > Date.now()) {
+      return { claimed: false, reason: 'in_flight', record };
+    }
+    return { claimed: false, reason: 'terminal', record };
   }
 
   async settle(input: SettleInput): Promise<void> {
@@ -341,6 +405,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
              reference = ${input.reference ?? null},
              attempted_at = CASE WHEN ${input.attempted} THEN now() ELSE attempted_at END,
              accepted_at = CASE WHEN ${input.status === 'accepted'} THEN now() ELSE NULL END,
+             lease_until = NULL,
              updated_at = now()
        WHERE id = ${input.id}
     `;
@@ -348,7 +413,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
 
   async listForNotification(notificationId: string): Promise<DeliveryRecord[]> {
     const rows = await this.sql<DeliveryPgRow[]>`
-      SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
+      SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
        WHERE notification_id = ${notificationId}
        ORDER BY channel ASC
     `;

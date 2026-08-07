@@ -230,16 +230,28 @@ export class NotificationDispatcher {
  */
 function fromExistingClaim(
   channel: ChannelId,
-  reason: 'already_accepted' | 'terminal' | 'exhausted',
+  reason: 'already_accepted' | 'terminal' | 'exhausted' | 'in_flight',
   record: DeliveryRecord,
 ): ChannelOutcome {
   if (reason === 'already_accepted') {
     return { channel, status: 'already_accepted', code: null, detail: null, retryable: false };
   }
+  if (reason === 'in_flight') {
+    // Another replica holds the lease. Do not stack a second send and do not
+    // ask the bus to redeliver immediately — the owner will settle or the lease
+    // will expire and a later redelivery may reclaim.
+    return {
+      channel,
+      status: 'failed',
+      code: null,
+      detail: 'delivery claim held by another worker',
+      retryable: false,
+    };
+  }
   return {
     channel,
-    // 'pending' cannot reach here — claim only blocks on terminal or exhausted —
-    // but the map is total so a future status cannot slip through as `undefined`.
+    // Active pending with live lease is handled as in_flight above. Other
+    // pending rows map to failed so a reader never sees "accepted" for silence.
     status: record.status === 'pending' ? 'failed' : record.status === 'accepted' ? 'already_accepted' : record.status,
     code: record.refusalCode,
     detail: record.detail,
