@@ -73,7 +73,11 @@ describe('runFundingTick', () => {
       },
       'm1',
     );
-    expect(result).toEqual({ status: 'skipped', reason: 'no_rate' });
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reason).toBe('no_rate');
+      expect(result.periodId).toMatch(/^m1:no_rate:/);
+    }
     expect(posts).toHaveLength(0);
   });
 
@@ -146,6 +150,52 @@ describe('runFundingTick', () => {
     expect(result).toEqual({ status: 'skipped', reason: 'no_legs', periodId: 'm1:zero' });
     expect(posts).toHaveLength(0);
     expect(await periods.isSettled('m1:zero')).toBe(true);
+    // Distinguishes zero-rate period from oracle skip: settled with legCount 0, no skip row.
+    expect(await periods.settledLegCount?.('m1:zero')).toBe(0);
+    expect(await periods.lastSkip?.('m1:zero')).toBeNull();
+  });
+
+  it('no_rate is recorded as a skip, not as a settled zero-leg period', async () => {
+    const periods = memoryFundingPeriodStore();
+    const { ledger, posts } = recordingLedger();
+    const fixed = new Date('2026-08-07T12:00:00.000Z');
+    const result = await runFundingTick(
+      {
+        rates: { quote: async () => null },
+        positions: positionsOf(longShort()),
+        periods,
+        ledger,
+        now: () => fixed,
+      },
+      'm1',
+    );
+    expect(result.status).toBe('skipped');
+    if (result.status !== 'skipped') return;
+    expect(result.reason).toBe('no_rate');
+    expect(result.periodId).toBeDefined();
+    // Skip does NOT block settle identity — isSettled is false on the skip id.
+    expect(await periods.isSettled(result.periodId!)).toBe(false);
+    const skip = await periods.lastSkip?.(result.periodId!);
+    expect(skip).toEqual({ reason: 'no_rate', marketId: 'm1' });
+    expect(posts).toHaveLength(0);
+  });
+
+  it('no_positions is recorded as a skip (not settled_no_legs)', async () => {
+    const periods = memoryFundingPeriodStore();
+    const { ledger, posts } = recordingLedger();
+    const result = await runFundingTick(
+      {
+        rates: fixedRate('0.0001', 'm1:empty-book'),
+        positions: positionsOf([]),
+        periods,
+        ledger,
+      },
+      'm1',
+    );
+    expect(result).toMatchObject({ status: 'skipped', reason: 'no_positions', periodId: 'm1:empty-book' });
+    expect(await periods.isSettled('m1:empty-book')).toBe(false);
+    expect(await periods.lastSkip?.('m1:empty-book')).toEqual({ reason: 'no_positions', marketId: 'm1' });
+    expect(posts).toHaveLength(0);
   });
 
   it('rate source is asked with marketId + clock (not invented inside tick)', async () => {

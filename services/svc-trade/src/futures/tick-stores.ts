@@ -26,6 +26,29 @@ export function sqlFundingPeriodStore(sql: Sql): FundingPeriodStore {
         ON CONFLICT (period_id) DO NOTHING
       `;
     },
+    async recordSkip(periodId, meta) {
+      await sql`
+        INSERT INTO trade.funding_period_skips (period_id, market_id, reason)
+        VALUES (${periodId}, ${meta.marketId}, ${meta.reason})
+      `;
+    },
+    async lastSkip(periodId) {
+      const rows = await sql<{ reason: 'no_rate' | 'no_positions'; market_id: string }[]>`
+        SELECT reason, market_id FROM trade.funding_period_skips
+         WHERE period_id = ${periodId}
+         ORDER BY recorded_at DESC
+         LIMIT 1
+      `;
+      const row = rows[0];
+      if (!row) return null;
+      return { reason: row.reason, marketId: row.market_id };
+    },
+    async settledLegCount(periodId) {
+      const rows = await sql<{ leg_count: number }[]>`
+        SELECT leg_count FROM trade.funding_periods WHERE period_id = ${periodId} LIMIT 1
+      `;
+      return rows[0] ? rows[0].leg_count : null;
+    },
   };
 }
 

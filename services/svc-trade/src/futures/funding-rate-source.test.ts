@@ -132,7 +132,12 @@ describe('integration: rate book → funding tick', () => {
       },
       'm1',
     );
-    expect(result).toEqual({ status: 'skipped', reason: 'no_rate' });
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') {
+      expect(result.reason).toBe('no_rate');
+      // ADR §5: skip is recorded with a queryable period id (not silent void).
+      expect(result.periodId).toMatch(/^m1:no_rate:/);
+    }
     expect(posts).toHaveLength(0);
   });
 
