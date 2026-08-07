@@ -45,7 +45,43 @@ import {
   type FuturesQuotedMark,
   type MarkPolicy,
 } from './mark-policy.js';
-import { checkProfitBound, type ProfitSource } from './profit-source.js';
+import { PROFIT_SOURCE_UNCONFIGURED, checkProfitBound, type ProfitSource } from './profit-source.js';
+
+/**
+ * How long one close waits for another close of the SAME position.
+ *
+ * `close()` holds a row lock across a mark read and the ledger posts, which is
+ * the point of it — but an unbounded wait would let one wedged ledger call pin
+ * a pooled connection per queued attempt and starve every other request in the
+ * service. Three seconds is far longer than an honest close and short enough
+ * that a pile-up drains instead of accumulating. Timing out is not the lock
+ * failing, it is the lock working: the answer is "somebody is closing this
+ * right now", and that is true.
+ */
+const CLOSE_LOCK_TIMEOUT_MS = 3_000;
+
+/** Postgres `lock_timeout` expiry. Anything else from the driver is a real error. */
+const PG_LOCK_NOT_AVAILABLE = '55P03';
+
+function isLockTimeout(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === PG_LOCK_NOT_AVAILABLE;
+}
+
+/**
+ * THE IDEMPOTENCY ROOT OF A VOLUNTARY CLOSE.
+ *
+ * One position closes once, so the key is the position and nothing else — no
+ * clock, no random tail. `close-planner.ts` derives `:profit` and `:loss` from
+ * it, `futuresMarginRelease` already keys on `positionId:sequence`, and the
+ * result is that a close is a single settlement the ledger can recognise on
+ * sight however many times it is asked to perform it.
+ *
+ * Exported because a test that asserts "paid once" should be able to name the
+ * key it means, rather than re-deriving the format and drifting from it.
+ */
+export function closeIdFor(positionId: string): string {
+  return `close:${positionId}`;
+}
 
 export class FuturesError extends Error {
   constructor(
@@ -81,8 +117,23 @@ export interface PositionServiceDeps {
    * argument away.
    */
   marks: MarkSource;
-  /** The account realised profit is paid from, and the ceiling on it. */
-  profitSource: ProfitSource;
+  /**
+   * The account realised profit is paid from, and the ceiling on it.
+   *
+   * `null` when the owner has not named one. That is a deliberate inhabitant
+   * rather than an oversight: this used to be mandatory and enforced by
+   * throwing at module scope in `index.ts`, which meant an unmade decision
+   * about a futures pot crash-looped spot, ticker, orderbook, balances and the
+   * websocket feeds too. Futures is one feature; a missing futures decision
+   * disables FUTURES.
+   *
+   * With `null`, `open()` refuses outright and `close()` refuses any close that
+   * would realise a PROFIT — losing and flat closes still work, because a
+   * control that traps a trader in a position is not a safety control. Nothing
+   * is ever paid from an account nobody chose, which is the whole of the ADR's
+   * requirement.
+   */
+  profitSource: ProfitSource | null;
   /** Optional: tests may omit; production passes JetStream bus. */
   bus?: EventBus | null;
   markPolicy?: MarkPolicy;
@@ -209,6 +260,19 @@ export class PositionService {
   }
 
   async open(input: OpenPositionInput): Promise<Position> {
+    /**
+     * NO POT, NO NEW POSITIONS.
+     *
+     * Refused before the market lookup and long before any margin is locked. A
+     * deployment that has not named a profit source cannot honour a winning
+     * position, so letting someone open one would be selling a promise the
+     * platform has not funded. Losing and flat CLOSES of positions opened while
+     * a pot was configured stay available — see `close()`.
+     */
+    if (this.deps.profitSource == null) {
+      throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 503);
+    }
+
     const market = await this.sql<
       {
         id: string;
@@ -316,93 +380,208 @@ export class PositionService {
    * Close an open position at the CURRENT MARK — read from the mark port, never
    * supplied by the trader being paid.
    *
-   * Posts planClose recipes (profit / loss / flat) then marks the row closed.
-   * Nothing posts until every refusal below has been cleared: a close that is
-   * going to be refused must leave the books exactly as it found them.
+   * ───────────────────────────────────────────────────────────────────────────
+   * WHY THIS IS A TRANSACTION AND NOT A SEQUENCE OF STATEMENTS
+   * ───────────────────────────────────────────────────────────────────────────
+   *
+   * It used to be: `SELECT … status='open'` → read the mark → check the bound →
+   * `ledger.post` × N → `UPDATE … status='closed'`. Every one of those steps was
+   * correct on its own and the whole was a money drain, because there was no
+   * lock, no transaction, and the idempotency key was minted per ATTEMPT:
+   *
+   *     closeId: `close:${row.id}:${randomUUID()}`
+   *
+   * `futuresRealizeProfit` keys on `futures.profit:${profitId}`, so a fresh UUID
+   * per attempt meant the ledger had no way to recognise a duplicate and every
+   * concurrent DELETE was a genuinely new payout. `futuresMarginRelease` keys on
+   * `positionId:sequence`, so the margin release WAS deduped — which is why only
+   * the profit multiplied, and why counting successful responses would have
+   * shown nothing wrong.
+   *
+   * Eight concurrent closes of one position paid 5000 of honest PnL eight times.
+   * The payout bound did not save it: each attempt read the pot's balance before
+   * any of them had drained it, so the ceiling landed on the pot's whole balance
+   * instead of on the honest PnL. That is the ADR's sentence failing again in a
+   * new costume — *a price that moves money is never supplied by the party it
+   * pays* — because the party being paid still chose the amount, this time
+   * through N rather than through `exitPrice`.
+   *
+   * The window needs a yield between reading the row and writing it, and
+   * production always has one: `markFor()` is an HTTP round trip.
+   *
+   * ───────────────────────────────────────────────────────────────────────────
+   * TWO MECHANISMS, AND BOTH ARE LOAD-BEARING
+   * ───────────────────────────────────────────────────────────────────────────
+   *
+   * **`SELECT … FOR UPDATE` inside a transaction that spans the posts and the
+   * status write.** Concurrent closes of one position serialise on the row: the
+   * first commits, the rest are released, re-read the row they were waiting on,
+   * find it `closed` and refuse — before they post anything. This works across
+   * replicas, which an in-process mutex would not, and the lock is on ONE row so
+   * closes of other positions are unaffected.
+   *
+   * **An idempotency key derived from the position, not from the attempt.**
+   * `closeId` is now `close:${row.id}` — stable. A lock only orders attempts
+   * that overlap in time, and the sequential form of this bug does not: put the
+   * row back to `open` by a replay, a restore or an operator's UPDATE and a
+   * second close races nothing at all. The stable key is what stops that one,
+   * and it is also what covers the gap the transaction cannot close by itself —
+   * the ledger is a different system, so a commit that fails after the posts
+   * succeeded leaves the row open with the money already moved, and the retry
+   * must not pay again. It does not: the ledger returns the original
+   * transaction.
+   *
+   * Neither mechanism subsumes the other, so reverting either one is caught by
+   * `position-close-concurrency.test.ts`.
+   *
+   * Nothing posts until every refusal has been cleared, and a refusal rolls the
+   * transaction back: a close that is going to be refused leaves the books and
+   * the row exactly as it found them.
    */
   async close(userId: string, positionId: string): Promise<Position> {
-    const [row] = await this.sql<PositionRow[]>`
-      SELECT p.*, m.symbol
-      FROM trade.positions p
-      JOIN trade.markets m ON m.id = p.market_id
-      WHERE p.id = ${positionId} AND p.user_id = ${userId}
-      LIMIT 1
-    `;
-    if (!row) throw new FuturesError('position not found', 'trade.position_not_found', 404);
-    if (row.status !== 'open') {
-      throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
-    }
+    const outcome = await this.closeAtomically(userId, positionId);
+    await this.publishPositionUpdated(outcome.row, outcome.extras);
+    return presentPosition(outcome.row, outcome.extras);
+  }
 
-    const at = this.now();
-    const mark = await this.markFor(row.market_id, row.symbol, at);
+  private async closeAtomically(
+    userId: string,
+    positionId: string,
+  ): Promise<{ row: PositionRow; extras: { markPrice: string; realizedPnl: string } }> {
+    try {
+      return await this.sql.begin(async (tx) => {
+        // Bounded, so a wedged ledger call cannot pin one pooled connection per
+        // queued attempt for as long as it likes. LOCAL — it dies with the
+        // transaction and never leaks onto the next borrower of this connection.
+        // `unsafe` because SET does not take a bind parameter. The interpolated
+        // value is a module constant integer — no caller input reaches this.
+        await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
 
-    const plan = planClose({
-      closeId: `close:${row.id}:${randomUUID()}`,
-      position: {
-        positionId: row.id,
-        userId,
-        side: row.side,
-        size: parseAmount(row.size),
-        entryPrice: parseAmount(row.entry_price),
-        margin: parseAmount(row.margin_initial),
-        marginAsset: row.margin_asset,
-      },
-      exitPrice: formatAmount(mark.price),
-    });
-    if (!plan.close) {
-      throw new FuturesError(`cannot close: ${plan.reason}`, 'trade.close_refused', 400);
-    }
+        /**
+         * `FOR UPDATE OF p` — the POSITION row only. Locking the joined market
+         * row as well would serialise every close on that market against every
+         * other, which is a throughput bug wearing a correctness costume.
+         *
+         * Under READ COMMITTED a waiter re-reads the row after the lock frees,
+         * so it sees `status = 'closed'` written by the transaction it was
+         * queued behind, not the stale `open` it originally matched.
+         */
+        const [row] = await tx<PositionRow[]>`
+          SELECT p.*, m.symbol
+          FROM trade.positions p
+          JOIN trade.markets m ON m.id = p.market_id
+          WHERE p.id = ${positionId} AND p.user_id = ${userId}
+          LIMIT 1
+          FOR UPDATE OF p
+        `;
+        if (!row) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+        if (row.status !== 'open') {
+          throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
+        }
 
-    if (plan.profit > 0n) {
-      // Money is about to leave the platform on the strength of this mark, so it
-      // has to be a mark we would seize on.
-      this.requirePayoutGrade(mark, at);
+        const at = this.now();
+        const mark = await this.markFor(row.market_id, row.symbol, at);
 
-      /**
-       * THE PAYOUT BOUND. `bank.pool_underfunded`'s shape: an under-funded
-       * profit source is an operator problem at the moment of the trade, not an
-       * accounting surprise later. Checked before the first post, so a refusal
-       * cannot leave the margin released and the position half closed.
-       */
-      const bound = await checkProfitBound({
-        source: this.deps.profitSource,
-        assetId: row.margin_asset,
-        amount: plan.profit,
-        balance: (ref) => this.ledger.balance(ref),
+        const plan = planClose({
+          // STABLE, not per attempt. See the header — this is half the fix.
+          closeId: closeIdFor(row.id),
+          position: {
+            positionId: row.id,
+            userId,
+            side: row.side,
+            size: parseAmount(row.size),
+            entryPrice: parseAmount(row.entry_price),
+            margin: parseAmount(row.margin_initial),
+            marginAsset: row.margin_asset,
+          },
+          exitPrice: formatAmount(mark.price),
+        });
+        if (!plan.close) {
+          throw new FuturesError(`cannot close: ${plan.reason}`, 'trade.close_refused', 400);
+        }
+
+        if (plan.profit > 0n) {
+          // Money is about to leave the platform on the strength of this mark, so it
+          // has to be a mark we would seize on.
+          this.requirePayoutGrade(mark, at);
+
+          /**
+           * NO NAMED POT, NO PAYOUT. The deployment never chose an account for
+           * realised profit, so there is nothing to pay from and nothing to
+           * bound — and paying from an unnamed one is exactly what the ADR
+           * forbids. The trader is not trapped: a losing or flat close is
+           * untouched by this branch and still returns their margin.
+           */
+          const source = this.deps.profitSource;
+          if (source == null) {
+            throw new FuturesError(
+              `Cannot realise ${formatAmount(plan.profit)} ${row.margin_asset} of profit — ${PROFIT_SOURCE_UNCONFIGURED}`,
+              'trade.profit_source_unconfigured',
+              503,
+            );
+          }
+
+          /**
+           * THE PAYOUT BOUND. `bank.pool_underfunded`'s shape: an under-funded
+           * profit source is an operator problem at the moment of the trade, not an
+           * accounting surprise later. Checked before the first post, so a refusal
+           * cannot leave the margin released and the position half closed.
+           *
+           * Read inside the row lock now, which is also what makes it mean what
+           * it says: concurrent closes of one position used to read this balance
+           * before any of them had spent it.
+           */
+          const bound = await checkProfitBound({
+            source,
+            assetId: row.margin_asset,
+            amount: plan.profit,
+            balance: (ref) => this.ledger.balance(ref),
+          });
+          if (!bound.ok) {
+            throw new FuturesError(
+              `Cannot realise ${formatAmount(plan.profit)} ${row.margin_asset} of profit — ${bound.reason}`,
+              'trade.profit_source_underfunded',
+              409,
+            );
+          }
+        }
+
+        for (const recipe of plan.recipes) {
+          await this.ledger.post(recipe);
+        }
+
+        const [closed] = await tx<PositionRow[]>`
+          UPDATE trade.positions p
+          SET status = 'closed', closed_at = now(), updated_at = now()
+          FROM trade.markets m
+          WHERE p.id = ${positionId} AND p.user_id = ${userId} AND p.status = 'open' AND m.id = p.market_id
+          RETURNING p.*, m.symbol
+        `;
+        /**
+         * Unreachable while the lock holds — and asserted rather than assumed,
+         * because if it ever became reachable the money would already have moved
+         * and the row would still say `open`. Throwing rolls the status write
+         * back; the ledger posts stand, and the stable close key means the retry
+         * that follows settles them once, not twice.
+         */
+        if (!closed) {
+          throw new FuturesError('position changed underneath this close', 'trade.position_not_open', 409);
+        }
+
+        return {
+          row: closed,
+          extras: {
+            markPrice: formatAmount(plan.exitPrice),
+            realizedPnl: formatAmount(plan.realizedPnl),
+          },
+        };
       });
-      if (!bound.ok) {
-        throw new FuturesError(
-          `Cannot realise ${formatAmount(plan.profit)} ${row.margin_asset} of profit — ${bound.reason}`,
-          'trade.profit_source_underfunded',
-          409,
-        );
+    } catch (err) {
+      if (isLockTimeout(err)) {
+        throw new FuturesError('another close of this position is already in flight — retry in a moment', 'trade.close_in_progress', 409);
       }
+      throw err;
     }
-
-    for (const recipe of plan.recipes) {
-      await this.ledger.post(recipe);
-    }
-
-    await this.sql`
-      UPDATE trade.positions
-      SET status = 'closed', closed_at = now(), updated_at = now()
-      WHERE id = ${positionId} AND user_id = ${userId} AND status = 'open'
-    `;
-
-    const [closed] = await this.sql<PositionRow[]>`
-      SELECT p.*, m.symbol
-      FROM trade.positions p
-      JOIN trade.markets m ON m.id = p.market_id
-      WHERE p.id = ${positionId}
-    `;
-    await this.publishPositionUpdated(closed!, {
-      markPrice: formatAmount(plan.exitPrice),
-      realizedPnl: formatAmount(plan.realizedPnl),
-    });
-    return presentPosition(closed!, {
-      markPrice: formatAmount(plan.exitPrice),
-      realizedPnl: formatAmount(plan.realizedPnl),
-    });
   }
 
   /** Fan-out for private WS — honest nulls for mark/PnL until known. */

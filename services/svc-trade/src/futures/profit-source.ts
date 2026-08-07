@@ -28,8 +28,36 @@
  * funds realised profit, and how it is capitalised" to the owner — it is a fee
  * and revenue recipe, `DIRECTION` §8 item 6 and a §3 carve-out twice over. So
  * the account arrives as CONFIGURATION and there is no default. A deployment
- * that has not named one does not quietly fall back to house fees; it refuses
- * to boot, which is the only way the absence of a decision stays visible.
+ * that has not named one does not quietly fall back to house fees.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHAT "REFUSE" MEANS — AND WHAT IT COST WHEN IT MEANT THE WRONG THING
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * It used to mean REFUSE TO BOOT. `index.ts` called `profitSourceFromConfig` at
+ * module scope, `.env.example` shipped the variable commented out, and compose
+ * passed `${TRADE_FUTURES_PROFIT_SOURCE:-}`. So `pnpm platform:up` from a clean
+ * clone crash-looped svc-trade — and svc-trade is not "the futures service", it
+ * is spot orders, ticker, orderbook, balances, fees, positions and the feeds
+ * behind the websocket. An unmade decision about a futures payout pot took the
+ * exchange down with it.
+ *
+ * That is failing closed on the wrong axis. The blast radius of a missing
+ * decision should match the scope of the decision: nobody chose a futures
+ * profit pot, so FUTURES is what must not run.
+ * `optionalProfitSourceFromConfig` draws that line, and it is a narrow one:
+ *
+ *   · ABSENT → `null`. Futures opens are refused and no realised profit can be
+ *     paid. The rest of svc-trade serves normally.
+ *   · PRESENT but wrong (unparseable, or an account the recipe does not draw
+ *     from) → STILL THROWS AT BOOT. Somebody made a decision and mistyped it,
+ *     and a typo in the pot that funds payouts is not something to find out
+ *     about at the first profitable close.
+ *
+ * The ADR's rule survives whole, because the rule was never "the process must
+ * exit". It was that realised profit is paid from an account the owner named,
+ * and an unconfigured deployment now pays no realised profit at all — which is
+ * the strictest available reading of it, not a weaker one.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHY THE CONFIGURED ACCOUNT IS CHECKED AGAINST THE RECIPE
@@ -150,6 +178,13 @@ export interface ProfitSource {
   readonly configured: string;
 }
 
+/** The one sentence every "futures has no profit pot" refusal says. Written once. */
+export const PROFIT_SOURCE_UNCONFIGURED =
+  'TRADE_FUTURES_PROFIT_SOURCE is not set, so no account has been named to fund realised futures profit and futures is ' +
+  'not open for business on this deployment. There is no safe default — a fee pot is not a risk budget. Set it to ' +
+  'ownerType:ownerId:kind[:purpose] (which account, and how it is capitalised, is an owner decision: ' +
+  'docs/adr/2026-08-05-futures-risk-and-mark-law.md, DIRECTION §8 item 6).';
+
 /**
  * Build the profit source from configuration.
  *
@@ -157,16 +192,16 @@ export interface ProfitSource {
  * absent, unparseable, or names an account the profit recipe does not draw
  * from. All three are the same failure: nobody has decided where futures profit
  * comes from, and the code refuses to decide on their behalf.
+ *
+ * Callers that must not take the whole service down over an ABSENT value want
+ * `optionalProfitSourceFromConfig`. This function is still the right one
+ * wherever a profit source is genuinely mandatory — and it is what the optional
+ * variant delegates to once a value exists, so there is exactly one validator.
  */
 export function profitSourceFromConfig(raw: string | undefined): ProfitSource {
   const configured = (raw ?? '').trim();
   if (configured === '') {
-    throw new ProfitSourceConfigError(
-      'TRADE_FUTURES_PROFIT_SOURCE is not set. Realised futures profit must be paid from a named account whose balance ' +
-        'bounds the payout, and there is no safe default — a fee pot is not a risk budget. Set it to ' +
-        'ownerType:ownerId:kind[:purpose] (which account, and how it is capitalised, is an owner decision: ' +
-        'docs/adr/2026-08-05-futures-risk-and-mark-law.md, DIRECTION §8 item 6).',
-    );
+    throw new ProfitSourceConfigError(PROFIT_SOURCE_UNCONFIGURED);
   }
 
   // Parsed once against a placeholder asset so a malformed value fails at boot
@@ -187,6 +222,20 @@ export function profitSourceFromConfig(raw: string | undefined): ProfitSource {
     configured,
     accountFor: (assetId) => parseAccountRef(configured, assetId),
   };
+}
+
+/**
+ * The same validator, with ABSENCE separated from ERROR.
+ *
+ * `null` means "no owner decision exists yet", and the caller is expected to
+ * disable futures rather than to exit. Anything the owner actually wrote is
+ * validated exactly as strictly as before and still throws, because a value
+ * that is present and wrong is a mistake, not an abstention — and quietly
+ * disabling futures because someone fat-fingered the pot would hide it.
+ */
+export function optionalProfitSourceFromConfig(raw: string | undefined): ProfitSource | null {
+  if ((raw ?? '').trim() === '') return null;
+  return profitSourceFromConfig(raw);
 }
 
 export interface BoundCheck {

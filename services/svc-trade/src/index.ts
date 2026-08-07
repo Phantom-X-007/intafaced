@@ -14,7 +14,7 @@ import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
-import { profitSourceFromConfig } from './futures/profit-source.js';
+import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
@@ -127,14 +127,36 @@ const futuresJobs = startFuturesJobs({
 /**
  * WHERE REALISED FUTURES PROFIT COMES FROM.
  *
- * Not defaulted. `profitSourceFromConfig` throws when `TRADE_FUTURES_PROFIT_SOURCE`
- * is unset or names an account the profit recipe does not draw from, and that
- * throw happens HERE — at boot, before a position can be opened — rather than
- * on the first profitable close. Which account and how it is capitalised is an
+ * Still not defaulted, and a value that IS set is still validated right here at
+ * boot: unparseable, or an account `futuresRealizeProfit` does not draw from,
+ * and this process exits. Which account and how it is capitalised remains an
  * owner decision (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`).
+ *
+ * What changed is what happens when nobody has decided YET. This line used to
+ * call `profitSourceFromConfig`, which throws on an empty value — while
+ * `.env.example` ships the variable commented out and compose passes
+ * `${TRADE_FUTURES_PROFIT_SOURCE:-}`. So `pnpm platform:up` from a clean clone
+ * crash-looped svc-trade. Not "futures": svc-trade. Spot orders, ticker,
+ * orderbook, balances, fees, positions and the feeds behind the websocket all
+ * went with it, over a pot that only matters when somebody closes a winning
+ * perp. A refusal with exactly one legal answer is not a decision gate, it is
+ * an outage.
+ *
+ * So the absence of a decision now disables the FEATURE: `null` here, `open()`
+ * refuses, and a close that would realise profit refuses. Nothing is ever paid
+ * out of an account nobody chose — which is what the ADR requires — and the
+ * exchange stays up while the owner decides.
  */
-const profitSource = profitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
-app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
+const profitSource = optionalProfitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
+if (profitSource) {
+  app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
+} else {
+  app.log.warn(
+    { variable: 'TRADE_FUTURES_PROFIT_SOURCE' },
+    'FUTURES IS DISABLED: no account is named to fund realised profit, so opens are refused and no profit can be paid. ' +
+      'Losing and flat closes of existing positions still work, and the rest of svc-trade is serving normally. See .env.example.',
+  );
+}
 
 /**
  * Positions price from `futuresJobs.marks` — the same venue-fabric-then-depth

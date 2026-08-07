@@ -11,6 +11,7 @@ import {
   ProfitSourceConfigError,
   checkProfitBound,
   formatAccountRef,
+  optionalProfitSourceFromConfig,
   parseAccountRef,
   profitSourceFromConfig,
   recipeProfitFundingAccount,
@@ -187,5 +188,51 @@ describe('checkProfitBound', () => {
       balance: (ref) => ledger.balance(ref),
     });
     expect(check.ok).toBe(false);
+  });
+});
+
+/**
+ * ABSENCE AND ERROR ARE DIFFERENT ANSWERS.
+ *
+ * `profitSourceFromConfig` treats "nobody decided" and "somebody decided wrong"
+ * identically — both throw — and `index.ts` called it at module scope. Since
+ * `.env.example` ships the variable commented out and compose passes
+ * `${TRADE_FUTURES_PROFIT_SOURCE:-}`, that made the ABSENT case a crash-loop of
+ * the whole of svc-trade: spot, ticker, orderbook, balances, fees, positions
+ * and the websocket feeds, over a futures payout pot.
+ *
+ * The optional constructor splits the two, and the split is narrow on purpose:
+ * only ABSENCE becomes `null`. Everything the owner actually wrote is validated
+ * exactly as strictly as before.
+ */
+describe('optionalProfitSourceFromConfig', () => {
+  it('returns null when nobody has named an account', () => {
+    expect(optionalProfitSourceFromConfig(undefined)).toBeNull();
+    expect(optionalProfitSourceFromConfig('')).toBeNull();
+    expect(optionalProfitSourceFromConfig('   ')).toBeNull();
+  });
+
+  it('still throws on a value that is present and unparseable', () => {
+    expect(() => optionalProfitSourceFromConfig('house:fees:trade')).toThrow(ProfitSourceConfigError);
+    expect(() => optionalProfitSourceFromConfig('nonsense')).toThrow(ProfitSourceConfigError);
+    expect(() => optionalProfitSourceFromConfig('wizard:fees:trade:available')).toThrow(/not a ledger owner type/);
+  });
+
+  /**
+   * The one that matters most. A typo that names a REAL but WRONG account would
+   * bound one pot while the recipe debits another, which is worse than no bound
+   * at all because it reads like a control. Quietly disabling futures over it
+   * would hide the mistake; exiting names it.
+   */
+  it('still throws on an account the profit recipe does not draw from', () => {
+    expect(() => optionalProfitSourceFromConfig('house:insurance-fund:available')).toThrow(/Bounding one account while debiting another/);
+  });
+
+  it('returns the same source as the strict constructor for a good value', () => {
+    const strict = profitSourceFromConfig(RECIPE_SPELLING);
+    const optional = optionalProfitSourceFromConfig(RECIPE_SPELLING);
+    expect(optional).not.toBeNull();
+    expect(optional!.configured).toBe(strict.configured);
+    expect(optional!.accountFor('USDT')).toEqual(strict.accountFor('USDT'));
   });
 });
