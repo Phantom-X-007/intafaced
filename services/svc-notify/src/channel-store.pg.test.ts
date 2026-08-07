@@ -1,0 +1,216 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import postgres from 'postgres';
+import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
+
+/**
+ * `PostgresDeliveryStore` against a real database.
+ *
+ * Until this file existed, nothing anywhere executed it. `svc-notify` had no
+ * `TEST_DATABASE_URL_*` wiring, so the claim guard — the single statement the
+ * whole no-double-send promise rests on, complete with its lease predicate and
+ * an interval built by string concatenation — shipped proved by nothing but
+ * reading. The memory store was covered and the two are meant to agree branch
+ * for branch, which is exactly the kind of agreement that quietly stops being
+ * true.
+ *
+ * Postgres is real here on purpose: every property worth asserting lives in the
+ * statement, and a fake would test the fake.
+ */
+
+const URL = process.env.TEST_DATABASE_URL_NOTIFY ?? 'postgres://svc_notify:svc_notify@localhost:5433/intafaced_test';
+const here = dirname(fileURLToPath(import.meta.url));
+
+/** Every migration, in order — the lease column arrives in 0004. */
+const MIGRATIONS = [
+  '0000_notify_init.sql',
+  '0001_notify_channels.sql',
+  '0002_notify_delivery_accepted.sql',
+  '0003_notify_mute_prefs.sql',
+  '0004_notify_delivery_claim_lease.sql',
+].map((f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'));
+
+const available = await postgresAvailable(URL);
+const NOTIFICATION = '11111111-1111-4111-8111-111111111111';
+const OTHER_NOTIFICATION = '22222222-2222-4222-8222-222222222222';
+const USER = '33333333-3333-4333-8333-333333333333';
+
+const sql = available ? postgres(URL, { max: 2, onnotice: () => undefined }) : null;
+
+if (available && sql) {
+  // Asks the server for `current_database()` rather than trusting the URL, so a
+  // suite that applies migrations cannot be aimed at the shared database.
+  await assertTestDatabase(sql, 'svc-notify channel-store.pg.test');
+  for (const migration of MIGRATIONS) {
+    await sql.unsafe(migration).catch(() => undefined);
+  }
+}
+
+afterAll(async () => {
+  await sql?.end({ timeout: 1 }).catch(() => undefined);
+});
+
+describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed', () => {
+  const store = () => new PostgresDeliveryStore(sql!, { leaseMs: 60_000 });
+
+  beforeEach(async () => {
+    await sql!`DELETE FROM notify.deliveries WHERE notification_id IN (${NOTIFICATION}, ${OTHER_NOTIFICATION})`;
+  });
+
+  it('a second claim while the lease is live is refused as in_flight', async () => {
+    const s = store();
+    const first = await s.claim(NOTIFICATION, 'email', 3);
+    expect(first.claimed).toBe(true);
+
+    const second = await s.claim(NOTIFICATION, 'email', 3);
+    expect(second.claimed).toBe(false);
+    if (second.claimed) return;
+    expect(second.reason).toBe('in_flight');
+    // The blocked pass must not spend an attempt, or racing replicas would
+    // abandon a margin call between them.
+    expect(second.record.attempts).toBe(1);
+  });
+
+  it('reclaims once the lease has expired — the crash path', async () => {
+    // A one-second lease, then wait it out. This is the branch the interval
+    // expression in the upsert decides, so it is the one worth executing.
+    const s = new PostgresDeliveryStore(sql!, { leaseMs: 1_000 });
+    const first = await s.claim(NOTIFICATION, 'email', 3);
+    expect(first.claimed).toBe(true);
+
+    await new Promise((r) => setTimeout(r, 1_200));
+
+    const second = await s.claim(NOTIFICATION, 'email', 3);
+    expect(second.claimed).toBe(true);
+    if (!second.claimed) return;
+    expect(second.attempt).toBe(2);
+  });
+
+  it('a settled failure is reclaimable at once, without waiting for the lease', async () => {
+    const s = store();
+    const first = await s.claim(NOTIFICATION, 'push', 3);
+    expect(first.claimed).toBe(true);
+    if (!first.claimed) return;
+
+    await s.settle({ id: first.id, status: 'failed', attempted: true, detail: '503' });
+
+    const second = await s.claim(NOTIFICATION, 'push', 3);
+    expect(second.claimed).toBe(true);
+  });
+
+  it('an accepted row is terminal — a redelivery never sends twice', async () => {
+    const s = store();
+    const first = await s.claim(NOTIFICATION, 'sms', 3);
+    expect(first.claimed).toBe(true);
+    if (!first.claimed) return;
+
+    await s.settle({ id: first.id, status: 'accepted', attempted: true, reference: 'gw-1' });
+
+    const second = await s.claim(NOTIFICATION, 'sms', 3);
+    expect(second.claimed).toBe(false);
+    if (second.claimed) return;
+    expect(second.reason).toBe('already_accepted');
+  });
+
+  it('retires a row that has run out of attempts rather than leaving it pending', async () => {
+    const s = new PostgresDeliveryStore(sql!, { leaseMs: 1 });
+    for (let i = 0; i < 2; i += 1) {
+      const claim = await s.claim(NOTIFICATION, 'email', 2);
+      expect(claim.claimed).toBe(true);
+      if (!claim.claimed) return;
+      await s.settle({ id: claim.id, status: 'failed', attempted: true, detail: 'boom' });
+    }
+
+    const blocked = await s.claim(NOTIFICATION, 'email', 2);
+    expect(blocked.claimed).toBe(false);
+    if (blocked.claimed) return;
+    expect(blocked.reason).toBe('exhausted');
+    expect(blocked.record.status).toBe('abandoned');
+    expect(blocked.record.refusalCode).toBe('channel.attempts_exhausted');
+  });
+
+  it('settle clears the lease, so a failure does not stay owned', async () => {
+    const s = store();
+    const claim = await s.claim(NOTIFICATION, 'email', 3);
+    expect(claim.claimed).toBe(true);
+    if (!claim.claimed) return;
+
+    await s.settle({ id: claim.id, status: 'failed', attempted: true, detail: '503' });
+
+    const [row] = await s.listForNotification(NOTIFICATION);
+    expect(row?.leaseUntil).toBeNull();
+  });
+
+  it('a pure refusal leaves attempted_at NULL — nothing was tried', async () => {
+    const s = store();
+    const claim = await s.claim(NOTIFICATION, 'sms', 3);
+    expect(claim.claimed).toBe(true);
+    if (!claim.claimed) return;
+
+    await s.settle({ id: claim.id, status: 'refused', refusalCode: 'channel.no_target', attempted: false });
+
+    const [row] = await s.listForNotification(NOTIFICATION);
+    expect(row).toMatchObject({ status: 'refused', refusalCode: 'channel.no_target' });
+    expect(row?.attemptedAt).toBeNull();
+    expect(row?.acceptedAt).toBeNull();
+  });
+
+  it('the database itself refuses to let a non-accepted row carry an accepted time', async () => {
+    // The CHECK from 0002 is what stops a future bug making an undelivered
+    // margin call read as delivered. Assert the database, not our discipline.
+    const s = store();
+    const claim = await s.claim(NOTIFICATION, 'email', 3);
+    expect(claim.claimed).toBe(true);
+    if (!claim.claimed) return;
+
+    await expect(sql!`UPDATE notify.deliveries SET accepted_at = now() WHERE id = ${claim.id}`).rejects.toThrow();
+  });
+
+  it('claims on different notifications do not block each other', async () => {
+    const s = store();
+    expect((await s.claim(NOTIFICATION, 'email', 3)).claimed).toBe(true);
+    expect((await s.claim(OTHER_NOTIFICATION, 'email', 3)).claimed).toBe(true);
+  });
+});
+
+describe.skipIf(!available)('PostgresTargetStore — verified and unverified are different questions', () => {
+  const store = () => new PostgresTargetStore(sql!);
+
+  beforeEach(async () => {
+    await sql!`DELETE FROM notify.channel_targets WHERE user_id = ${USER}`;
+  });
+
+  it('an unconfirmed address is absent from verified() and named by unverifiedChannels()', async () => {
+    const s = store();
+    await s.upsert({
+      userId: USER,
+      channel: 'sms',
+      address: '+447700900000',
+      locale: 'en',
+      verifyTokenHash: 'y'.repeat(64),
+      verifyExpiresAt: new Date(Date.now() + 60_000),
+    });
+
+    expect(await s.verified(USER)).toEqual([]);
+    expect(await s.unverifiedChannels(USER)).toEqual(['sms']);
+  });
+
+  it('confirming moves it across, and it is named by neither question twice', async () => {
+    const s = store();
+    await s.upsert({
+      userId: USER,
+      channel: 'email',
+      address: 'someone@example.com',
+      locale: 'en',
+      verifyTokenHash: 'z'.repeat(64),
+      verifyExpiresAt: new Date(Date.now() + 60_000),
+    });
+    expect(await s.markVerified(USER, 'email', 'z'.repeat(64), new Date())).toBe(true);
+
+    expect((await s.verified(USER)).map((t) => t.channel)).toEqual(['email']);
+    expect(await s.unverifiedChannels(USER)).toEqual([]);
+  });
+});

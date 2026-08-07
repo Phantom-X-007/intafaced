@@ -21,6 +21,7 @@ const URLS = [
   { key: 'TEST_DATABASE_URL_BANK', note: 'svc-bank' },
   { key: 'TEST_DATABASE_URL_BLUEPRINT', note: 'svc-blueprint' },
   { key: 'TEST_DATABASE_URL_AGENTS', note: 'svc-agents' },
+  { key: 'TEST_DATABASE_URL_NOTIFY', note: 'svc-notify' },
 ];
 
 if (!required) {
