@@ -38,11 +38,13 @@ import { isHouseMmAccount } from '../mm/seed-market.js';
 import { HOUSE_MM_USER_UUID } from './ids.js';
 import {
   presentAlgoProgress,
+  SqlTwapParentStore,
   TwapEngine,
   type AlgoProgressView,
   type AlgoQuotedMark,
   type CreateTwapInput,
   type TwapParent,
+  type TwapParentStore,
 } from '../algo/index.js';
 import {
   TradeError,
@@ -126,6 +128,8 @@ export interface TradeServiceOptions {
    * any supplied subAccountId is denied until a real client is injected).
    */
   subAccounts?: SubAccountOwnershipSource;
+  /** Override TWAP durable store (tests inject MemoryTwapParentStore). */
+  algoStore?: TwapParentStore;
 }
 
 export interface ConvertQuoteRequest {
@@ -211,6 +215,8 @@ export class TradeService {
   private readonly subAccounts: SubAccountOwnershipSource;
   /** D-S-04 TWAP scheduler — parent holds no value; children go through placeOrder. */
   private readonly algo: TwapEngine;
+  /** Durable TWAP schedules — survives process restart (in-memory alone was residual). */
+  private readonly algoStore: TwapParentStore;
 
   constructor(
     private readonly sql: Sql,
@@ -229,62 +235,68 @@ export class TradeService {
     this.algoEnabled = options.algoEnabled ?? true;
     this.now = options.now ?? (() => new Date());
     this.subAccounts = options.subAccounts ?? new NoSubAccounts();
-    this.algo = new TwapEngine({
-      now: () => this.now(),
-      randomId: () => crypto.randomUUID(),
-      placeChild: async (req) => {
-        // Child is an ordinary order — same path, same holds, same gates.
-        const parent = this.algo.get(req.parentId);
-        if (!parent) throw new TradeError(`algo ${req.parentId} not found`, 'trade.algo_not_found');
-        const principal = this.algoPrincipals.get(parent.userId);
-        if (!principal) {
-          throw new TradeError('algo principal missing for child place', 'trade.algo_child_refused');
-        }
-        try {
-          const order = await this.placeOrder(principal, {
-            symbol: req.symbol,
-            marketId: req.marketId,
-            side: req.side,
-            type: req.limitPrice === null ? 'market' : 'limit',
-            qty: req.qty,
-            price: req.limitPrice,
-            tif: req.limitPrice === null ? 'IOC' : 'GTC',
-            clientOrderId: req.clientOrderId,
-            subAccountId: req.subAccountId ?? undefined,
-          });
-          return { orderId: order.id };
-        } catch (err) {
-          if (err instanceof InsufficientFundsError) {
-            throw new TradeError(err.message, 'trade.algo_insufficient_balance');
+    this.algoStore = options.algoStore ?? new SqlTwapParentStore(sql);
+    this.algo = new TwapEngine(
+      {
+        now: () => this.now(),
+        randomId: () => crypto.randomUUID(),
+        placeChild: async (req) => {
+          // Child is an ordinary order — same path, same holds, same gates.
+          const parent = this.algo.get(req.parentId);
+          if (!parent) throw new TradeError(`algo ${req.parentId} not found`, 'trade.algo_not_found');
+          const principal = this.algoPrincipals.get(parent.userId);
+          if (!principal) {
+            throw new TradeError('algo principal missing for child place', 'trade.algo_child_refused');
           }
-          throw err;
-        }
+          try {
+            const order = await this.placeOrder(principal, {
+              symbol: req.symbol,
+              marketId: req.marketId,
+              side: req.side,
+              type: req.limitPrice === null ? 'market' : 'limit',
+              qty: req.qty,
+              price: req.limitPrice,
+              tif: req.limitPrice === null ? 'IOC' : 'GTC',
+              clientOrderId: req.clientOrderId,
+              subAccountId: req.subAccountId ?? undefined,
+            });
+            return { orderId: order.id };
+          } catch (err) {
+            if (err instanceof InsufficientFundsError) {
+              throw new TradeError(err.message, 'trade.algo_insufficient_balance');
+            }
+            throw err;
+          }
+        },
+        cancelChild: async (orderId) => {
+          const row = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId} LIMIT 1`;
+          if (row[0] && (row[0].status === 'open' || row[0].status === 'pending')) {
+            const principal = this.algoPrincipals.get(row[0].user_id);
+            if (principal) await this.cancelOrder(principal, orderId);
+          }
+        },
+        bestOpposingPrice: async (marketId, side) => {
+          const depth = await this.matching.depth(marketId, 1);
+          const level = side === 'buy' ? depth.asks[0] : depth.bids[0];
+          return level ? parseAmount(level[0]) : null;
+        },
+        markFor: async (marketId): Promise<AlgoQuotedMark | null> => {
+          const depth = await this.matching.depth(marketId, 1);
+          const bid = depth.bids[0] ? parseAmount(depth.bids[0][0]) : null;
+          const ask = depth.asks[0] ? parseAmount(depth.asks[0][0]) : null;
+          if (bid === null || ask === null || bid <= 0n || ask <= 0n) return null;
+          return {
+            marketId,
+            price: (bid + ask) / 2n,
+            asOf: this.now(),
+            quality: 'mid',
+          };
+        },
       },
-      cancelChild: async (orderId) => {
-        const row = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId} LIMIT 1`;
-        if (row[0] && (row[0].status === 'open' || row[0].status === 'pending')) {
-          const principal = this.algoPrincipals.get(row[0].user_id);
-          if (principal) await this.cancelOrder(principal, orderId);
-        }
+      {
+        onChange: (parent, plan) => this.algoStore.save({ parent, plan }),
       },
-      bestOpposingPrice: async (marketId, side) => {
-        const depth = await this.matching.depth(marketId, 1);
-        const level = side === 'buy' ? depth.asks[0] : depth.bids[0];
-        return level ? parseAmount(level[0]) : null;
-      },
-      markFor: async (marketId): Promise<AlgoQuotedMark | null> => {
-        const depth = await this.matching.depth(marketId, 1);
-        const bid = depth.bids[0] ? parseAmount(depth.bids[0][0]) : null;
-        const ask = depth.asks[0] ? parseAmount(depth.asks[0][0]) : null;
-        if (bid === null || ask === null || bid <= 0n || ask <= 0n) return null;
-        return {
-          marketId,
-          price: (bid + ask) / 2n,
-          asOf: this.now(),
-          quality: 'mid',
-        };
-      },
-    });
+    );
   }
 
   private readonly algoPrincipals = new Map<string, Principal>();
@@ -1929,12 +1941,23 @@ export class TradeService {
     // Store principal on a side map so child place uses the real caller scopes.
     this.algoPrincipals.set(principal.userId, principal);
 
-    return this.algo.create(principal.userId, createInput, market.lotSize);
+    const parent = this.algo.create(principal.userId, createInput, market.lotSize);
+    // Await durable write so a crash between create and first onChange cannot lose the schedule.
+    const plan = this.algo.planOf(parent.id) ?? [];
+    await this.algoStore.save({ parent, plan });
+    return parent;
   }
 
   async getAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:read');
-    const parent = this.algo.get(parentId);
+    let parent = this.algo.get(parentId);
+    if (!parent) {
+      const loaded = await this.algoStore.load(parentId);
+      if (loaded && loaded.parent.userId === principal.userId) {
+        this.algo.hydrate(loaded.parent, loaded.plan);
+        parent = loaded.parent;
+      }
+    }
     if (!parent || parent.userId !== principal.userId) {
       throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
     }
@@ -1971,8 +1994,14 @@ export class TradeService {
     return this.algo.tick(parentId);
   }
 
-  /** Drive all active algos once. */
+  /** Drive all active algos once. Hydrates durable active parents first. */
   async tickAllAlgos() {
+    const active = await this.algoStore.listActive();
+    for (const rec of active) {
+      if (!this.algo.get(rec.parent.id)) {
+        this.algo.hydrate(rec.parent, rec.plan);
+      }
+    }
     return this.algo.tickAll();
   }
 
