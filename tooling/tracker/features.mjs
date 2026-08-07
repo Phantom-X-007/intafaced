@@ -285,8 +285,11 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent copy product.',
+    requires: ['services/svc-trade/src/copy'],
+    note: '**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 3 — D-S-03 Stage: follow/unfollow + envelope mirror refuse; blank DIRECTION §8 leader_share_bps + jurisdiction → refuse-closed; fee-share settle via ledger-client sweepFeesToRewards+rewardPay when owner publishes. Never invent rates/geo/P&L fees/ranking. Residual: owner §8 numbers, on-chain session-key caps (build order §7.1).',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',

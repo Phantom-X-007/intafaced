@@ -1,0 +1,109 @@
+/**
+ * Copy follow / unfollow — non-custody envelope (D-S-03 §2).
+ *
+ * Follower funds stay in the follower's account. This module records the
+ * signed envelope (markets, caps, expiry) and never pools. Jurisdiction
+ * screening runs before any follow is accepted — blank §8 list → refuse.
+ */
+
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { CopyError } from './errors.js';
+import { requirePublishedCopyJurisdictionLaw, type CopyJurisdictionLaw } from './fee-share-law.js';
+
+export interface CopyEnvelope {
+  /** Markets the follower permits the session to trade. */
+  readonly permittedMarkets: readonly string[];
+  /** Max notional per mirrored order (decimal string → Amount). */
+  readonly maxNotionalPerOrder: Amount;
+  /** Max aggregate open exposure (decimal string → Amount). */
+  readonly maxAggregateExposure: Amount;
+  /** Envelope expiry — unilateral revoke is always allowed before this. */
+  readonly expiresAt: Date;
+}
+
+export interface CopyFollow {
+  readonly followId: string;
+  readonly followerId: string;
+  readonly leaderId: string;
+  readonly envelope: CopyEnvelope;
+  readonly region: string;
+  readonly createdAt: Date;
+  /** Kill switch for fee-share on this follow (earnings stop; follow may remain). */
+  readonly feeShareKilled: boolean;
+}
+
+export interface PresentCopyFollow {
+  readonly followId: string;
+  readonly followerId: string;
+  readonly leaderId: string;
+  readonly permittedMarkets: readonly string[];
+  readonly maxNotionalPerOrder: string;
+  readonly maxAggregateExposure: string;
+  readonly expiresAt: string;
+  readonly region: string;
+  readonly createdAt: string;
+  readonly feeShareKilled: boolean;
+}
+
+export function parseCopyEnvelope(input: {
+  permittedMarkets: readonly string[];
+  maxNotionalPerOrder: string;
+  maxAggregateExposure: string;
+  expiresAt: Date | string;
+  now: Date;
+}): CopyEnvelope {
+  const markets = input.permittedMarkets.map((m) => m.trim()).filter(Boolean);
+  if (markets.length === 0) {
+    throw new CopyError('Copy envelope requires at least one permitted market', 'trade.copy_envelope_invalid');
+  }
+
+  let maxNotionalPerOrder: Amount;
+  let maxAggregateExposure: Amount;
+  try {
+    maxNotionalPerOrder = parseAmount(input.maxNotionalPerOrder);
+    maxAggregateExposure = parseAmount(input.maxAggregateExposure);
+  } catch {
+    throw new CopyError('Copy envelope caps must be valid decimal amounts', 'trade.copy_envelope_invalid');
+  }
+  if (maxNotionalPerOrder <= 0n || maxAggregateExposure <= 0n) {
+    throw new CopyError('Copy envelope caps must be strictly positive', 'trade.copy_envelope_invalid');
+  }
+  if (maxNotionalPerOrder > maxAggregateExposure) {
+    throw new CopyError('maxNotionalPerOrder cannot exceed maxAggregateExposure', 'trade.copy_envelope_invalid');
+  }
+
+  const expiresAt = input.expiresAt instanceof Date ? input.expiresAt : new Date(input.expiresAt);
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= input.now.getTime()) {
+    throw new CopyError('Copy envelope expiry must be in the future', 'trade.copy_envelope_invalid');
+  }
+
+  return { permittedMarkets: markets, maxNotionalPerOrder, maxAggregateExposure, expiresAt };
+}
+
+/** Screen region against owner-published allowlist. Blank law → refuse (never invent). */
+export function assertCopyRegionAllowed(law: CopyJurisdictionLaw, region: string): string {
+  const published = requirePublishedCopyJurisdictionLaw(law);
+  const code = region.trim().toUpperCase();
+  if (!code) {
+    throw new CopyError('Follower region is required for copy screening', 'trade.copy_jurisdiction_blocked');
+  }
+  if (!published.allowedRegions.includes(code)) {
+    throw new CopyError(`Copy follow refused for region ${code} — not on owner-published allowlist`, 'trade.copy_jurisdiction_blocked');
+  }
+  return code;
+}
+
+export function presentCopyFollow(follow: CopyFollow): PresentCopyFollow {
+  return {
+    followId: follow.followId,
+    followerId: follow.followerId,
+    leaderId: follow.leaderId,
+    permittedMarkets: follow.envelope.permittedMarkets,
+    maxNotionalPerOrder: formatAmount(follow.envelope.maxNotionalPerOrder),
+    maxAggregateExposure: formatAmount(follow.envelope.maxAggregateExposure),
+    expiresAt: follow.envelope.expiresAt.toISOString(),
+    region: follow.region,
+    createdAt: follow.createdAt.toISOString(),
+    feeShareKilled: follow.feeShareKilled,
+  };
+}
