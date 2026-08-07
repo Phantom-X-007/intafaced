@@ -6,6 +6,7 @@ import type { AuditedAction } from './fleet/audit.js';
 import type { ModelGateway } from './gateway/gateway.js';
 import type { UsageMeter } from './metering/meter.js';
 import type { AgentRuntime } from './runtime.js';
+import { rankFixtures } from './scanner/rank.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -391,6 +392,88 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }))
         .output(z.array(actionOutput))
         .query(({ ctx, input }) => guard(async () => (await runtime.userLog(ctx.principal.userId, input.limit)).map(toActionOutput))),
+    }),
+
+    /**
+     * Market Scanner Stage-1 — rank on caller-supplied fixtures only.
+     *
+     * Spec: docs/ops/trk/agents.scanner.md Stage 1. Never invents prices or
+     * market rows: the caller must hand fixtures in. Stage-2 live market tools
+     * are residual. No ledger, no order placement.
+     */
+    scanner: router({
+      rankFixtures: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            fixtures: z
+              .array(
+                z.object({
+                  marketId: z.string().min(1).max(64),
+                  last: z.string().nullable(),
+                  volume24h: z.string().nullable(),
+                  change24hBps: z.number().int().nullable(),
+                  asOf: z.string().min(1),
+                  maxAgeMs: z.number().int().positive().max(86_400_000),
+                }),
+              )
+              .max(500),
+            limit: z.number().int().min(1).max(100).optional(),
+            marketPlane: z.enum(['live', 'dark']).optional(),
+            marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              signals: z.array(
+                z.object({
+                  marketId: z.string(),
+                  score: z.string(),
+                  reasons: z.array(z.string()),
+                }),
+              ),
+              rankedAt: z.string(),
+              considered: z.number().int(),
+              skippedStale: z.number().int(),
+              skippedIncomplete: z.number().int(),
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.scanner.empty'),
+            }),
+            z.object({
+              status: z.literal('unavailable'),
+              userMessageKey: z.literal('agents.scanner.unavailable'),
+              reason: z.enum(['stale', 'no_quotes', 'market_plane_dark']),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = rankFixtures(input.fixtures, {
+            ...(input.limit === undefined ? {} : { limit: input.limit }),
+            ...(input.marketPlane === undefined ? {} : { marketPlane: input.marketPlane }),
+            ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
+            ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+          });
+          // Strip readonly for the wire shape (zod output is mutable arrays).
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              rankedAt: result.rankedAt,
+              considered: result.considered,
+              skippedStale: result.skippedStale,
+              skippedIncomplete: result.skippedIncomplete,
+              signals: result.signals.map((s) => ({
+                marketId: s.marketId,
+                score: s.score,
+                reasons: [...s.reasons],
+              })),
+            };
+          }
+          return result;
+        }),
     }),
   });
 }

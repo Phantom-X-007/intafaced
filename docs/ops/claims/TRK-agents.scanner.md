@@ -1,9 +1,9 @@
-# Claim TRK-agents.scanner
+# Claim — TRK-agents.scanner Stage-1 wire
 
-**status:** merged
-**owner:** nitro-ship-factory
-**proof:** Stage-1 + Stage-2 plane-dark refuse · feat/stage2-agents-scanner-copyintel
-**tip:** pending-merge
-**updated:** 2026-08-05
+**Owner session:** grok agents-scanner-rank-wire  
+**Paths:** `services/svc-agents/src/router.ts`, `services/svc-agents/src/scanner/**`, `tooling/ci/reachability-scan.mjs`  
+**Status:** open  
+**Class:** N  
+**Board-Delta:** Wire Stage-1 fixture rank to tRPC (`scanner.rankFixtures`); unpark `rank.ts` from reachability gate.
 
-Stage-2 honesty deepen. No invent PnL/signals when plane dark.
+No live market data. No ledger. No orders.
