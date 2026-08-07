@@ -25,12 +25,12 @@
 
 ### 2.1 Service / UI absence
 
-| Area                   | Reality                                                |
-| ---------------------- | ------------------------------------------------------ |
-| `services/svc-support` | **Does not exist**                                     |
-| UI desk routes         | No support-ticket product in `apps/web` / `apps/admin` |
-| KB catalog             | No support-KB product catalog in `packages/i18n` yet   |
-| Doctrine home          | core-ops phase 5 / plane F (§8.8 support desk)         |
+| Area                   | Reality                                                                 |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `services/svc-support` | **Exists** — Stage-1 in-memory ticket spine + Stage-2 KB/operator queue |
+| UI desk routes         | No support-ticket product in `apps/web` / `apps/admin`                  |
+| KB catalog             | Platform i18n-keyed spine in `svc-support` (`kb-catalog.ts`)            |
+| Doctrine home          | core-ops phase 5 / plane F (§8.8 support desk)                          |
 
 ### 2.2 Agents naming collision (not a desk)
 
@@ -73,15 +73,15 @@ Trading UI “ticket” means **order ticket**, not support ticket — do not gr
 
 ### Stage 1 — ticket spine (no money)
 
-- [ ] `packages/contracts` (+ events if needed): ticket create/list/comment/status + empty KB list.
-- [ ] Thin `svc-support` (or documented home service) + schema + auth tests.
-- [ ] No UI required for Stage 1 merge.
+- [x] `packages/contracts` (+ events if needed): ticket create/list/comment/status + empty KB list.
+- [x] Thin `svc-support` (or documented home service) + schema + auth tests.
+- [x] No UI required for Stage 1 merge.
 
 ### Stage 2 — operator queue
 
 - [ ] Operator list/detail in `apps/admin` (or staff surface after Admin-0 SoT).
 - [ ] Read-only account panel via identity/ledger **read** contracts only.
-- [ ] KB storage decision recorded; first N articles i18n-keyed.
+- [x] KB storage decision recorded; first N articles i18n-keyed.
 
 ### Stage 3 — optional agent
 
@@ -106,11 +106,11 @@ Flip only when users and operators can run a real ticket+KB loop in a real env �
 
 ## 6 · Gaps (named)
 
-1. No svc-support.
-2. No ticket schema/API.
-3. No KB product.
-4. No operator queue UI.
-5. Agent tasks exist without desk product (naming trap).
+1. No operator queue UI (`apps/admin` / staff surface).
+2. No read-only identity/ledger account panel on ticket detail.
+3. Full i18n string pack for KB keys (keys exist; copy residual).
+4. Agent assist still optional (`agents.support`) — desk works offline of agents.
+5. Agent tasks exist without desk UI (naming trap for “done”).
 
 ---
 

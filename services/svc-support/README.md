@@ -12,15 +12,16 @@ Doctrine: §0.6 no balances here; brand scan on KB copy; agent optional later.
 tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
 (`EDGE_PRINCIPAL_SECRET`).
 
-| Procedure                | Scope                 | Behaviour                   |
-| ------------------------ | --------------------- | --------------------------- |
-| `support.createTicket`   | `support:write`       | Create ticket for principal |
-| `support.listMyTickets`  | `support:read`        | List caller tickets         |
-| `support.listAllTickets` | `support:ops`         | Operator list               |
-| `support.getTicket`      | `support:read` / ops  | Self or operator            |
-| `support.comment`        | `support:write` / ops | Add comment                 |
-| `support.setStatus`      | `support:ops`         | Operator status change      |
-| `support.listKb`         | `support:read`        | Stage-1 returns `[]`        |
+| Procedure              | Scope                 | Behaviour                   |
+| ---------------------- | --------------------- | --------------------------- |
+| `support.create`       | `support:write`       | Create ticket for principal |
+| `support.listMine`     | `support:read`        | List caller tickets         |
+| `support.listAll`      | `support:ops`         | Operator list               |
+| `support.get`          | `support:read` / ops  | Self or operator            |
+| `support.comment`      | `support:write` / ops | Add comment                 |
+| `support.listComments` | `support:read` / ops  | Thread for ticket           |
+| `support.setStatus`    | `support:ops`         | Operator status change      |
+| `support.listKb`       | public                | Platform i18n-keyed spine   |
 
 HTTP: `GET /health`, `GET /ready` (`stage: 1-memory`).
 

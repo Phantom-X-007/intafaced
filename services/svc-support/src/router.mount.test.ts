@@ -53,11 +53,11 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     listAllTickets: vi.fn(async () => []),
     getTicket: vi.fn(),
     comment: vi.fn(),
+    listComments: vi.fn(async () => []),
     setStatus: vi.fn(),
     listKb: vi.fn(async () => [
       { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
     ]),
-    listComments: vi.fn(() => []),
     ...overrides,
   } as unknown as SupportService;
 }
@@ -97,5 +97,56 @@ describe('svc-support mount', () => {
     const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
     expect(kb).toHaveLength(1);
     expect(kb[0]!.titleKey).toMatch(/^support\.kb\./);
+  });
+
+  it('refuses listAll without support:ops', async () => {
+    const support = stubSupport();
+    await expect(createSupportRouter(support).createCaller(signed()).listAll()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(support.listAllTickets).not.toHaveBeenCalled();
+  });
+
+  it('allows listAll with support:ops', async () => {
+    const support = stubSupport({
+      listAllTickets: vi.fn(async () => [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          userId: USER,
+          category: 'other' as const,
+          subject: 'S',
+          body: 'B',
+          status: 'open' as const,
+          assigneeId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ]),
+    });
+    const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
+    const tickets = await createSupportRouter(support).createCaller(signed(op)).listAll();
+    expect(tickets).toHaveLength(1);
+    expect(support.listAllTickets).toHaveBeenCalled();
+  });
+
+  it('refuses setStatus without support:ops', async () => {
+    const support = stubSupport({
+      setStatus: vi.fn(async () => {
+        throw new Error('should not run');
+      }),
+    });
+    await expect(
+      createSupportRouter(support)
+        .createCaller(signed())
+        .setStatus({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', status: 'resolved' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('listComments requires authentication', async () => {
+    const support = stubSupport();
+    await expect(
+      createSupportRouter(support).createCaller(anonymous()).listComments({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(support.listComments).not.toHaveBeenCalled();
   });
 });

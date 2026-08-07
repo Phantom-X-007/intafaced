@@ -50,6 +50,14 @@ describe('SupportService Stage-1', () => {
     });
     const c = await svc.comment({ userId: USER, ticketId: t.id, body: 'More info' });
     expect(c.authorRole).toBe('user');
+    const thread = await svc.listComments({ userId: USER, ticketId: t.id });
+    expect(thread).toHaveLength(1);
+    expect(thread[0]!.id).toBe(c.id);
+    await expect(svc.listComments({ userId: OTHER, ticketId: t.id })).rejects.toMatchObject({
+      code: 'support.not_found',
+    });
+    const all = await svc.listAllTickets();
+    expect(all).toHaveLength(1);
     const resolved = await svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' });
     expect(resolved.status).toBe('resolved');
   });
