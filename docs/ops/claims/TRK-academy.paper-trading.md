@@ -1,9 +1,9 @@
 # Claim TRK-academy.paper-trading
 
-**status:** claimed
+**status:** pr-open
 **owner:** nitro-swarm-wave2
-**proof:** Stage-3 Class N · feat/academy-paper-trading-stage
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/1001
 **tip:** aa63c9b4
 **updated:** 2026-08-07
 
-Stage-3 ops: `ACADEMY_PAPER_TRADING_ENABLED` kill-switch — paper drills refuse when off; live trade unaffected.
+Stage-3 ops kill-switch PR open. Live trade unaffected.
