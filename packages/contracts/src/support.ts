@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 /**
- * Support desk contracts (ops.support Stage-1).
+ * Support desk contracts (ops.support Stage-1 ticket spine).
  *
- * Tickets + empty KB list. No money: refunds are requests only; never ledger.
+ * Tickets: create / list (mine + ops) / get / comment / status.
+ * KB list shape lives here; catalog content may be empty or platform spine.
+ * No money: refunds are requests only; never ledger.
  */
 
 export const supportTicketStatusSchema = z.enum(['open', 'pending', 'resolved', 'closed']);
@@ -54,8 +56,11 @@ export type SupportKbArticle = z.infer<typeof supportKbArticleSchema>;
 export interface SupportContract {
   createTicket(input: { userId: string } & CreateTicketInput): Promise<SupportTicket>;
   listMyTickets(input: { userId: string }): Promise<SupportTicket[]>;
+  /** Operator desk queue — all tickets, newest first. */
+  listAllTickets(): Promise<SupportTicket[]>;
   getTicket(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicket>;
   comment(input: { userId: string; ticketId: string; body: string; asOperator?: boolean }): Promise<SupportComment>;
+  listComments(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportComment[]>;
   setStatus(input: { operatorId: string; ticketId: string; status: SupportTicketStatus }): Promise<SupportTicket>;
   listKb(): Promise<SupportKbArticle[]>;
 }

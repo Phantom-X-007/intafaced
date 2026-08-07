@@ -41,6 +41,14 @@ export function createSupportRouter(support: SupportService) {
         return support.listMyTickets({ userId: ctx.principal!.userId });
       }),
 
+    /** Operator list — Stage-1 desk spine (no UI required). */
+    listAll: scopedProcedure('support:ops')
+      .output(z.array(supportTicketSchema))
+      .query(async ({ ctx }) => {
+        requireSupportOps(ctx.principal!);
+        return support.listAllTickets();
+      }),
+
     get: scopedProcedure('support:read')
       .input(z.object({ ticketId: z.string().uuid() }))
       .output(supportTicketSchema)
@@ -67,6 +75,22 @@ export function createSupportRouter(support: SupportService) {
             userId: ctx.principal!.userId,
             ticketId: input.ticketId,
             body: input.body,
+            asOperator,
+          });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    listComments: scopedProcedure('support:read')
+      .input(z.object({ ticketId: z.string().uuid() }))
+      .output(z.array(supportCommentSchema))
+      .query(async ({ ctx, input }) => {
+        try {
+          const asOperator = ctx.principal!.scopes.includes('support:ops');
+          return await support.listComments({
+            userId: ctx.principal!.userId,
+            ticketId: input.ticketId,
             asOperator,
           });
         } catch (err) {

@@ -93,6 +93,15 @@ export class SupportService implements SupportContract {
     return comment;
   }
 
+  async listComments(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportComment[]> {
+    await this.getTicket({
+      userId: input.userId,
+      ticketId: input.ticketId,
+      asOperator: input.asOperator,
+    });
+    return [...(this.comments.get(input.ticketId) ?? [])];
+  }
+
   async setStatus(input: { operatorId: string; ticketId: string; status: SupportTicketStatus }): Promise<SupportTicket> {
     const ticket = this.tickets.get(input.ticketId);
     if (!ticket) throw new SupportError(`ticket ${input.ticketId} not found`, 'support.not_found');
@@ -106,12 +115,8 @@ export class SupportService implements SupportContract {
   }
 
   async listKb(): Promise<SupportKbArticle[]> {
-    // Stage-2: platform i18n-keyed spine (TRK-ops.support). No vendor names, no money fields.
+    // Platform i18n-keyed spine (TRK-ops.support). No vendor names, no money fields.
     return [...listPlatformKb()];
-  }
-
-  listComments(ticketId: string): SupportComment[] {
-    return this.comments.get(ticketId) ?? [];
   }
 }
 
