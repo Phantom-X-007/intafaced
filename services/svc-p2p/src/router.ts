@@ -918,6 +918,48 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
     }),
 
     /**
+     * Operator surface for committed decisions whose ledger post is late
+     * (ADR 2026-08-04 — permanently-failed / late settlements).
+     *
+     * Sweep failures already log reasons each tick; this list is the query a
+     * human dashboard can call without grepping process logs. `admin:compliance`
+     * only — not either party's `p2p:write`.
+     */
+    ops: router({
+      lateSettlements: scopedProcedure('admin:compliance', { module: 'p2p' })
+        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .output(
+          z.object({
+            trades: z.array(
+              z.object({
+                tradeId: z.string().uuid(),
+                status: z.enum(['created', 'escrowed', 'fiat_sent', 'released', 'cancelled', 'disputed']),
+                resolution: z.enum(['released', 'refunded', 'voided']).nullable(),
+                resolutionReason: z.string().nullable(),
+                resolvedAt: z.string(),
+                ageSeconds: z.number().int().nonnegative(),
+              }),
+            ),
+          }),
+        )
+        .query(async ({ input }) =>
+          guard(async () => {
+            const rows = await p2p.listLateSettlements(input?.limit ?? 100);
+            return {
+              trades: rows.map((r) => ({
+                tradeId: r.tradeId,
+                status: r.status,
+                resolution: r.resolution,
+                resolutionReason: r.resolutionReason,
+                resolvedAt: r.resolvedAt.toISOString(),
+                ageSeconds: r.ageSeconds,
+              })),
+            };
+          }),
+        ),
+    }),
+
+    /**
      * WHAT WE HOLD ABOUT YOU, AND GETTING RID OF IT (§0.9).
      *
      * Self-only, and there is no `userId` in either input — the caller is the

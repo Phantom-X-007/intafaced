@@ -1802,6 +1802,60 @@ export class P2pService {
     return { settled, failed: failures.length, failures };
   }
 
+  /**
+   * SURFACE permanently-late settlements (ADR 2026-08-04 agents-may-implement).
+   *
+   * A trade with `resolved_at` set and `settled_at` null is a committed decision
+   * whose ledger post has not landed. Operators must be able to list these
+   * without grepping process logs — the sweep already logs failures each tick,
+   * but a query is what a dashboard and a human on-call actually use.
+   *
+   * Does not invent error text for trades that have not yet been re-driven;
+   * `ageSeconds` is derived from resolved_at so lateness is checkable.
+   */
+  async listLateSettlements(
+    limit = 100,
+    now: Date = new Date(),
+  ): Promise<
+    Array<{
+      tradeId: string;
+      status: TradeStatus;
+      resolution: TradeResolution | null;
+      resolutionReason: string | null;
+      resolvedAt: Date;
+      ageSeconds: number;
+    }>
+  > {
+    const lim = Math.min(Math.max(limit, 1), 200);
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        status: TradeStatus;
+        resolution: TradeResolution | null;
+        resolution_reason: string | null;
+        resolved_at: Date;
+      }>
+    >`
+      SELECT id, status, resolution, resolution_reason, resolved_at
+        FROM p2p.p2p_trades
+       WHERE resolved_at IS NOT NULL AND settled_at IS NULL
+       ORDER BY resolved_at ASC
+       LIMIT ${lim}
+    `;
+    const nowMs = now.getTime();
+    return rows.map((r) => {
+      const resolvedAt = r.resolved_at instanceof Date ? r.resolved_at : new Date(r.resolved_at);
+      return {
+        tradeId: r.id,
+        status: r.status,
+        resolution: r.resolution,
+        resolutionReason: r.resolution_reason,
+        resolvedAt,
+        ageSeconds: Math.max(0, Math.floor((nowMs - resolvedAt.getTime()) / 1000)),
+      };
+    });
+  }
+
   // ── Reads ──────────────────────────────────────────────────────────────────
 
   async getTrade(tradeId: string): Promise<TradeRecord> {
