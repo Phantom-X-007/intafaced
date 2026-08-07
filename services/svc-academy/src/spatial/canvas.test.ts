@@ -5,6 +5,7 @@ import {
   ensureStage,
   listPresence,
   moveAvatar,
+  navigateAvatarTo,
   placeAvatar,
   placeProp,
   removeAvatar,
@@ -39,6 +40,14 @@ describe('spatial Stage-2 2D canvas', () => {
     const moved = moveAvatar(s, { avatarId: 'a1', dx: 5000, dy: -5 });
     expect(moved.avatars![0]!.position).toEqual({ x: 1000, y: 5 });
     expect(() => moveAvatar(s, { avatarId: 'ghost', dx: 1, dy: 1 })).toThrow(CanvasError);
+  });
+
+  it('navigateAvatarTo absolute point clamps; missing refuses', () => {
+    let s = ensureStage(emptyScene(), { width: 100, height: 100 });
+    s = placeAvatar(s, { avatarId: 'a1', participantId: 'seat-1', x: 10, y: 10 });
+    const at = navigateAvatarTo(s, { avatarId: 'a1', x: 500, y: -5 });
+    expect(at.avatars![0]!.position).toEqual({ x: 100, y: 0 });
+    expect(() => navigateAvatarTo(s, { avatarId: 'ghost', x: 1, y: 1 })).toThrow(CanvasError);
   });
 
   it('listPresence is id-only', () => {
