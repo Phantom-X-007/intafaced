@@ -1,21 +1,30 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import swagger from '@fastify/swagger';
-import { requireScope, type Principal } from '@intafaced/auth';
+import { requireScope, type Principal, type Scope } from '@intafaced/auth';
 import { createEdgeContext, type EdgeRequest } from '@intafaced/contracts';
-import { formatAmount, type Amount } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { assertMerchantOwnership } from './merchant-ownership.js';
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
+import { SandboxRailRefusal } from './rails/posture.js';
+import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
 
 /**
- * `pay.public-api` — the merchant REST surface. STEP 1: read paths only.
+ * `pay.public-api` — the merchant REST surface.
  *
  * Law: docs/adr/2026-08-07-pay-public-api-law.md. Every decision below is that
  * ADR's, not this file's; where the two disagree the ADR wins.
  *
+ * STEP 1 — reads:
  *   GET /api/pay/v1/payments/:id          scope pay:read
  *   GET /api/pay/v1/payments              scope pay:read   ?merchantId= &status= &limit=
  *   GET /api/pay/v1/balances              scope pay:read   ?merchantId= &assetId=
- *   GET /api/pay/v1/openapi.json          public — the spec (no UI; see below)
+ *   GET /api/pay/v1/openapi.json          public — the spec
+ *
+ * STEP 2 — mutations (this PR), every POST requires `Idempotency-Key` (ADR §2.2):
+ *   POST /api/pay/v1/payments                    scope pay:write
+ *   POST /api/pay/v1/payments/:id/authorize      scope pay:write
+ *   POST /api/pay/v1/payments/:id/capture        scope pay:write
+ *   POST /api/pay/v1/payments/:id/refund         scope pay:refund
  *
  * ── A TRANSLATION, NOT A SECOND IMPLEMENTATION ───────────────────────────
  *
@@ -24,25 +33,21 @@ import { PayError, type PayService, type PaymentStatus } from './payment-service
  * tRPC router calls, gate on the same `assertMerchantOwnership`, and render
  * amounts through the same `formatAmount`. Nothing here recomputes anything.
  *
- * Read paths first, and only read paths, because they add NO new behaviour and
- * therefore no new money risk. Mutating paths are step 2 and arrive with the
- * required `Idempotency-Key` contract; that middleware is deliberately not
- * written yet, because a module nothing imports is exactly what the
- * reachability gate exists to reject.
- *
  * ── AUTH IS THE MOUNT BOUNDARY, UNCHANGED ────────────────────────────────
  *
  * ADR §2.1: merchants authenticate with `ifc_…` API keys, svc-edge exchanges
  * them at identity, and this service receives a SIGNED PRINCIPAL. It never sees
- * a raw key and there is no second auth path here — the same `createEdgeContext`
- * the tRPC mount uses, verifying the same signature. A self-asserted principal
- * header is anonymous.
+ * a raw key and there is no second auth path here.
  *
  * ── MONEY ON THE WIRE ────────────────────────────────────────────────────
  *
  * ADR §2.3: decimal strings with an explicit asset. Never minor units, never a
- * number. The conventional `amount: 110, currency: "usd"` shape is not available
- * to us because the ledger is not free to adopt it either (§4.2).
+ * number.
+ *
+ * ── WHAT THIS IS NOT ─────────────────────────────────────────────────────
+ *
+ * Not Class X go-live. Not a live acquirer. Not webhooks (step 3). Sandbox rails
+ * stay behind `assertRailMayMoveValue` — the REST layer acquires no exception.
  */
 
 /** OpenAPI mount point. `/api/pay` is the edge prefix; `/v1` is ADR §2.7. */
@@ -53,6 +58,9 @@ const PAYMENT_STATUSES: readonly PaymentStatus[] = ['created', 'authorized', 'ca
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
+/** Same decimal-string rule as the tRPC `amountSchema`. */
+const AMOUNT_PATTERN = '^\\d+(\\.\\d{1,18})?$';
+
 export interface PublicRestDeps {
   /** Shared EDGE_PRINCIPAL_SECRET — the same value the tRPC mount verifies. */
   edgeSecret: string;
@@ -60,15 +68,17 @@ export interface PublicRestDeps {
   pay: PayService;
   /** Version string for the OpenAPI document. */
   version?: string;
+  /**
+   * Idempotency journal for mutating POSTs. Defaults to in-memory (tests /
+   * single-process). Production wires `PostgresRestIdempotencyStore`.
+   */
+  idempotency?: RestIdempotencyStore;
 }
 
 /**
  * The error envelope, and it is the internal vocabulary (ADR §2.6).
  *
- * `pay.*` codes are the public codes. No competitor taxonomy: `svc-trade`
- * speaks CCXT because bots already do and that is a real interop win, and there
- * is no equivalent lingua franca for payments — adopting one vendor's would
- * name a vendor (§0.7) and buy nothing.
+ * `pay.*` codes are the public codes. No competitor taxonomy.
  */
 interface ErrorBody {
   error: { code: string; message: string };
@@ -119,7 +129,76 @@ const balanceSchema = {
   },
 } as const;
 
-/** HTTP status for a `pay.*` code — the REST half of `toTrpcError`'s job. */
+const createBodySchema = {
+  type: 'object',
+  required: ['merchantId', 'amount', 'assetId', 'method', 'railAdapter'],
+  additionalProperties: false,
+  properties: {
+    merchantId: { type: 'string', format: 'uuid' },
+    profileId: { type: 'string', format: 'uuid', nullable: true },
+    // No `type: string` here on purpose: Fastify/Ajv coerceTypes would turn a
+    // JSON number into `"1.1"` before the handler runs, and ADR §2.3 would be
+    // decorative. `requireDecimalString` enforces the wire shape.
+    amount: { description: 'Decimal string. Never a JSON number (ADR §2.3).' },
+    assetId: { type: 'string', minLength: 1, maxLength: 16 },
+    method: { type: 'string', minLength: 1 },
+    railAdapter: { type: 'string', minLength: 1 },
+    instrument: {
+      type: 'object',
+      required: ['kind'],
+      additionalProperties: false,
+      properties: {
+        kind: { type: 'string' },
+        token: { type: 'string' },
+        address: { type: 'string' },
+      },
+    },
+    customerRef: { type: 'string' },
+    metadata: { type: 'object', additionalProperties: { type: 'string' } },
+  },
+} as const;
+
+const captureBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    amount: {
+      description: 'Optional partial capture as a decimal string. Omit to capture the full authorized amount. Never a JSON number.',
+    },
+  },
+} as const;
+
+const refundBodySchema = {
+  type: 'object',
+  required: ['amount'],
+  additionalProperties: false,
+  properties: {
+    amount: { description: 'Decimal string. Never a JSON number (ADR §2.3).' },
+    refundId: { type: 'string', description: 'Optional business refund id (business key, never a random UUID).' },
+  },
+} as const;
+
+const idempotencyHeaderSchema = {
+  type: 'object',
+  // Not `required` here: Fastify's header-validation error envelope is not our
+  // `pay.*` shape and serialization then 500s. Enforcement is `requireIdempotencyKey`.
+  properties: {
+    'idempotency-key': {
+      type: 'string',
+      minLength: 1,
+      maxLength: 255,
+      description: 'Required on every mutating POST (ADR §2.2). A business key — never a random UUID per attempt.',
+    },
+  },
+} as const;
+
+/** Reject JSON numbers / anything that is not already a decimal string (ADR §2.3). */
+function requireDecimalString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !new RegExp(AMOUNT_PATTERN).test(value)) {
+    throw new PayError(`${field} must be an unsigned decimal string (never a JSON number). NOTHING WAS ATTEMPTED.`, 'pay.invalid_amount');
+  }
+  return value;
+}
 function statusFor(code: string): number {
   switch (code) {
     case 'pay.merchant_not_found':
@@ -131,12 +210,31 @@ function statusFor(code: string): number {
     case 'pay.merchant_inactive':
     case 'pay.kyb_operator_required':
       return 403;
+    case 'pay.invalid_transition':
+    case 'pay.capture_exceeds_authorized':
+    case 'pay.refund_exceeds_captured':
+    case 'pay.refund_in_flight':
+    case 'pay.idempotency_conflict':
+    case 'pay.partial_capture_unsupported':
+      return 409;
+    case 'pay.rail_operation_unsupported':
+    case 'pay.sandbox_rail_refused':
+      return 503;
     default:
       return 400;
   }
 }
 
 function send(reply: FastifyReply, err: unknown): FastifyReply {
+  if (err instanceof SandboxRailRefusal) {
+    const body: ErrorBody = {
+      error: {
+        code: 'pay.sandbox_rail_refused',
+        message: err.message,
+      },
+    };
+    return reply.code(503).send(body);
+  }
   if (err instanceof PayError) {
     const body: ErrorBody = { error: { code: err.code, message: err.message } };
     return reply.code(statusFor(err.code)).send(body);
@@ -146,6 +244,7 @@ function send(reply: FastifyReply, err: unknown): FastifyReply {
 
 export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRestDeps): Promise<void> {
   const edge = createEdgeContext({ secret: deps.edgeSecret, serviceName: deps.serviceName });
+  const idempotency = deps.idempotency ?? new MemoryRestIdempotencyStore();
 
   await app.register(swagger, {
     openapi: {
@@ -165,13 +264,27 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           '**Authentication** is an `ifc_…` API key as a bearer token. Keys are exchanged for a short-lived',
           'principal at the edge; this service never sees the key itself.',
           '',
+          '**Idempotency-Key** is required on every mutating POST. A repeated key with the same body returns',
+          'the original result; a repeated key with a different body is `409 pay.idempotency_conflict`.',
+          '',
           '**Errors** carry a stable `pay.*` code. Branch on the code, never on the message.',
+          '',
+          'This surface does **not** imply a live card acquirer (Class X / `socket.psp-partners`).',
         ].join('\n'),
       },
       servers: [{ url: BASE }],
       components: {
         securitySchemes: {
           apiKey: { type: 'http', scheme: 'bearer', description: 'An `ifc_…` API key.' },
+        },
+        parameters: {
+          IdempotencyKey: {
+            name: 'Idempotency-Key',
+            in: 'header',
+            required: true,
+            schema: { type: 'string', minLength: 1, maxLength: 255 },
+            description: 'Required on mutating POSTs (ADR §2.2). Business key — never random per attempt.',
+          },
         },
       },
       security: [{ apiKey: [] }],
@@ -182,40 +295,112 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
   /**
    * THE SPEC, NOT A UI.
    *
-   * `@fastify/swagger-ui` was here and is gone. It depends on
-   * `@fastify/static`, which carried a HIGH and a moderate advisory
-   * (GHSA-83w8-p2f5-377r, GHSA-8pvw-jcv7-9cmj) when this landed — the
-   * dependency-audit ratchet refused the PR, correctly.
-   *
-   * Patching it forward would have worked and would still have been the wrong
-   * shape: rendering documentation is not a reason to run a STATIC FILE SERVER
-   * inside the service that holds payments. The spec is the artefact; anything
-   * can render it, and the public docs site is where a reference belongs.
+   * `@fastify/swagger-ui` was refused: `@fastify/static` carried advisories, and
+   * rendering docs is not a reason to run a static file server inside the
+   * payments service. The spec is the artefact.
    */
   app.get(`${BASE}/openapi.json`, { schema: { hide: true } }, async () => app.swagger());
 
   /**
    * Resolve the caller, or refuse.
    *
-   * `requireScope` throws when the principal lacks `pay:read`; an unsigned or
-   * absent principal is anonymous and therefore also lacks it. Both land as 401
-   * rather than 403, because from the caller's side "your key was not accepted"
-   * and "your key lacks this scope" are the same next action: check the key.
+   * An unsigned or absent principal is anonymous. Missing scope and missing
+   * auth both land as 401 — from the caller's side the next action is the same.
    */
-  function principalOf(req: FastifyRequest, reply: FastifyReply): Principal | null {
+  function principalOf(req: FastifyRequest, reply: FastifyReply, scope: Scope): Principal | null {
     const ctx = edge({ headers: req.headers } as EdgeRequest);
     try {
-      // Absent principal first: an unsigned or self-asserted header is
-      // anonymous, and `requireScope` takes a principal rather than deciding
-      // that question. Both land in the same refusal below.
       if (!ctx.principal) throw new Error('anonymous');
-      requireScope(ctx.principal, 'pay:read');
+      requireScope(ctx.principal, scope);
       return ctx.principal;
     } catch {
-      reply.code(401).send({ error: { code: 'pay.unauthorized', message: 'A valid API key with the pay:read scope is required.' } });
+      reply.code(401).send({
+        error: {
+          code: 'pay.unauthorized',
+          message: `A valid API key with the ${scope} scope is required.`,
+        },
+      });
       return null;
     }
   }
+
+  function requireIdempotencyKey(req: FastifyRequest, reply: FastifyReply): string | null {
+    const raw = req.headers['idempotency-key'];
+    const key = typeof raw === 'string' ? raw.trim() : Array.isArray(raw) ? raw[0]?.trim() : '';
+    if (!key) {
+      reply.code(400).send({
+        error: {
+          code: 'pay.idempotency_required',
+          message: 'Idempotency-Key header is required on every mutating POST. NOTHING WAS ATTEMPTED.',
+        },
+      });
+      return null;
+    }
+    if (key.length > 255) {
+      reply.code(400).send({
+        error: {
+          code: 'pay.idempotency_required',
+          message: 'Idempotency-Key must be at most 255 characters. NOTHING WAS ATTEMPTED.',
+        },
+      });
+      return null;
+    }
+    return key;
+  }
+
+  /**
+   * Run a mutating handler behind the Idempotency-Key claim→put journal.
+   * 5xx abandons the claim so a retry may execute; 2xx/4xx are stored and replayed.
+   */
+  async function withIdempotency(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    ownerId: string,
+    key: string,
+    body: unknown,
+    run: () => Promise<void>,
+  ): Promise<FastifyReply> {
+    const path = req.url.split('?')[0] ?? req.url;
+    const fingerprint = fingerprintRequest(req.method, path, body ?? {});
+    const claim = await idempotency.claim(ownerId, key, fingerprint);
+    if (claim.kind === 'conflict') {
+      return reply.code(409).send({
+        error: {
+          code: 'pay.idempotency_conflict',
+          message: 'Idempotency-Key was already used with a different request body. Refusing rather than guessing which result you wanted.',
+        },
+      });
+    }
+    if (claim.kind === 'replay') {
+      return reply.code(claim.record.statusCode).send(claim.record.body);
+    }
+
+    // Capture whatever Fastify sends so we can journal it.
+    let captured: { statusCode: number; body: unknown } | undefined;
+    const originalSend = reply.send.bind(reply);
+    reply.send = ((payload: unknown) => {
+      captured = { statusCode: reply.statusCode, body: payload };
+      return originalSend(payload);
+    }) as typeof reply.send;
+
+    try {
+      await run();
+      if (captured && captured.statusCode < 500) {
+        await idempotency.put(ownerId, key, {
+          statusCode: captured.statusCode,
+          body: captured.body,
+        });
+      } else {
+        await idempotency.abandon(ownerId, key);
+      }
+      return reply;
+    } catch (err) {
+      await idempotency.abandon(ownerId, key);
+      throw err;
+    }
+  }
+
+  // ── READS (step 1) ────────────────────────────────────────────────────────
 
   app.get(
     `${BASE}/payments/:id`,
@@ -228,15 +413,9 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
     },
     async (req: FastifyRequest<{ Params: { id: string } }>, reply) => {
-      const principal = principalOf(req, reply);
+      const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
-        /**
-         * Fetched, then checked, then returned — the same order as the tRPC
-         * procedure, and the comment there says why: the row must be read to
-         * learn which merchant owns it, so the check protects the RESPONSE and
-         * has to come before the return rather than after the caller has it.
-         */
         const payment = await deps.pay.getPayment(req.params.id);
         await assertMerchantOwnership(deps.pay, principal.userId, payment.merchantId);
         return reply.send(toPaymentBody(payment));
@@ -265,7 +444,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
     },
     async (req: FastifyRequest<{ Querystring: { merchantId: string; status?: PaymentStatus; limit?: number } }>, reply) => {
-      const principal = principalOf(req, reply);
+      const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
         await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
@@ -298,7 +477,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
     },
     async (req: FastifyRequest<{ Querystring: { merchantId: string; assetId: string } }>, reply) => {
-      const principal = principalOf(req, reply);
+      const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
         await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
@@ -315,6 +494,194 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       } catch (err) {
         return send(reply, err);
       }
+    },
+  );
+
+  // ── MUTATIONS (step 2) ────────────────────────────────────────────────────
+
+  type CreateBody = {
+    merchantId: string;
+    profileId?: string | null;
+    amount: unknown;
+    assetId: string;
+    method: string;
+    railAdapter: string;
+    instrument?: { kind: string; token?: string; address?: string };
+    customerRef?: string;
+    metadata?: Record<string, string>;
+  };
+
+  app.post(
+    `${BASE}/payments`,
+    {
+      schema: {
+        tags: ['payments'],
+        summary: 'Create a payment',
+        description: 'Requires `Idempotency-Key`. Calls the same `PayService.createPayment` the tRPC router uses.',
+        headers: idempotencyHeaderSchema,
+        body: createBodySchema,
+        response: {
+          200: paymentSchema,
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          409: errorSchema,
+          503: errorSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest<{ Body: CreateBody }>, reply) => {
+      const principal = principalOf(req, reply, 'pay:write');
+      if (!principal) return reply;
+      const key = requireIdempotencyKey(req, reply);
+      if (!key) return reply;
+
+      return withIdempotency(req, reply, principal.userId, key, req.body, async () => {
+        try {
+          await assertMerchantOwnership(deps.pay, principal.userId, req.body.merchantId);
+          const amount = requireDecimalString(req.body.amount, 'amount');
+          const payment = await deps.pay.createPayment({
+            merchantId: req.body.merchantId,
+            profileId: req.body.profileId ?? null,
+            amount: parseAmount(amount),
+            assetId: req.body.assetId,
+            method: req.body.method,
+            railAdapter: req.body.railAdapter,
+            instrument: req.body.instrument,
+            customerRef: req.body.customerRef,
+            metadata: req.body.metadata,
+          });
+          return reply.send(toPaymentBody(payment));
+        } catch (err) {
+          return send(reply, err);
+        }
+      });
+    },
+  );
+
+  app.post(
+    `${BASE}/payments/:id/authorize`,
+    {
+      schema: {
+        tags: ['payments'],
+        summary: 'Authorize a payment',
+        description: 'Requires `Idempotency-Key`. No value moves on authorize — ledger untouched.',
+        headers: idempotencyHeaderSchema,
+        params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+        body: { type: 'object', additionalProperties: false, properties: {} },
+        response: {
+          200: paymentSchema,
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+          503: errorSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest<{ Params: { id: string }; Body?: Record<string, never> }>, reply) => {
+      const principal = principalOf(req, reply, 'pay:write');
+      if (!principal) return reply;
+      const key = requireIdempotencyKey(req, reply);
+      if (!key) return reply;
+
+      return withIdempotency(req, reply, principal.userId, key, req.body ?? {}, async () => {
+        try {
+          const existing = await deps.pay.getPayment(req.params.id);
+          await assertMerchantOwnership(deps.pay, principal.userId, existing.merchantId);
+          const payment = await deps.pay.authorize(req.params.id);
+          return reply.send(toPaymentBody(payment));
+        } catch (err) {
+          return send(reply, err);
+        }
+      });
+    },
+  );
+
+  app.post(
+    `${BASE}/payments/:id/capture`,
+    {
+      schema: {
+        tags: ['payments'],
+        summary: 'Capture an authorized payment',
+        description: 'Requires `Idempotency-Key`. Value moves only through ledger-client recipes inside `PayService.capture`.',
+        headers: idempotencyHeaderSchema,
+        params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+        body: captureBodySchema,
+        response: {
+          200: paymentSchema,
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+          503: errorSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest<{ Params: { id: string }; Body: { amount?: unknown } }>, reply) => {
+      const principal = principalOf(req, reply, 'pay:write');
+      if (!principal) return reply;
+      const key = requireIdempotencyKey(req, reply);
+      if (!key) return reply;
+
+      return withIdempotency(req, reply, principal.userId, key, req.body ?? {}, async () => {
+        try {
+          const existing = await deps.pay.getPayment(req.params.id);
+          await assertMerchantOwnership(deps.pay, principal.userId, existing.merchantId);
+          const opts = req.body?.amount === undefined ? {} : { amount: parseAmount(requireDecimalString(req.body.amount, 'amount')) };
+          const payment = await deps.pay.capture(req.params.id, opts);
+          return reply.send(toPaymentBody(payment));
+        } catch (err) {
+          return send(reply, err);
+        }
+      });
+    },
+  );
+
+  app.post(
+    `${BASE}/payments/:id/refund`,
+    {
+      schema: {
+        tags: ['payments'],
+        summary: 'Refund a captured payment',
+        description: 'Requires `Idempotency-Key` and `pay:refund` (not the same authority as taking payment). Ledger-only.',
+        headers: idempotencyHeaderSchema,
+        params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+        body: refundBodySchema,
+        response: {
+          200: paymentSchema,
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+          503: errorSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest<{ Params: { id: string }; Body: { amount: unknown; refundId?: string } }>, reply) => {
+      const principal = principalOf(req, reply, 'pay:refund');
+      if (!principal) return reply;
+      const key = requireIdempotencyKey(req, reply);
+      if (!key) return reply;
+
+      return withIdempotency(req, reply, principal.userId, key, req.body, async () => {
+        try {
+          const existing = await deps.pay.getPayment(req.params.id);
+          await assertMerchantOwnership(deps.pay, principal.userId, existing.merchantId);
+          const amount = requireDecimalString(req.body.amount, 'amount');
+          const payment = await deps.pay.refund(
+            req.params.id,
+            parseAmount(amount),
+            req.body.refundId ? { refundId: req.body.refundId } : {},
+          );
+          return reply.send(toPaymentBody(payment));
+        } catch (err) {
+          return send(reply, err);
+        }
+      });
     },
   );
 }
