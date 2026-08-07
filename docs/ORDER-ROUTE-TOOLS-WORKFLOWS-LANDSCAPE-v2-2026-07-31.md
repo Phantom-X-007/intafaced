@@ -41,14 +41,14 @@
 
 ### 2.1 Spec / agent workflow (how we _build_)
 
-| Repo                                                                      | ~★          | Role                                                       | Decision for this program                                                                        |
-| ------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [github/spec-kit](https://github.com/github/spec-kit)                     | **124,694** | SDD toolkit: constitution, specify, plan, tasks, implement | **Steal workflow.** Optional install later. Our constitution = doctrine + DIRECTION + Spec GC-\* |
-| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)             | **63,245**  | Delta specs; proposal→apply→archive; brownfield            | **Steal delta model** for residual REQs. Best fit to _our_ brownfield money harden               |
-| [bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) | **51,317**  | 21+ role agents, enterprise ceremony                       | **Reject full install.** Steal **role separation** (BA/Arch/Dev/QA) as subagents                 |
-| [Priivacy-ai/spec-kitty](https://github.com/Priivacy-ai/spec-kitty)       | **1,454**   | Spec-kit fork + **git worktree** orchestration             | **Study** — we already have `pnpm wt`; align Plan to worktree-per-task                           |
-| [cameronsjo/spec-compare](https://github.com/cameronsjo/spec-compare)     | research    | 6-tool SDD comparison                                      | **Read** for decision frameworks                                                                 |
-| [rihebty/flow-kit](https://github.com/rihebty/flow-kit)                   | fusion      | Combines BMAD/spec-kit/OpenSpec/superpowers                | **Optional skim** — don’t adopt mashup blindly                                                   |
+| Repo                                                                      | ~★          | Role                                                       | Decision for this program                                                                       |
+| ------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [github/spec-kit](https://github.com/github/spec-kit)                     | **124,694** | SDD toolkit: constitution, specify, plan, tasks, implement | **Steal workflow.** Optional install later. Our constitution = doctrine + DIRECTION + Spec GC-* |
+| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)             | **63,245**  | Delta specs; proposal→apply→archive; brownfield            | **Steal delta model** for residual REQs. Best fit to _our_ brownfield money harden              |
+| [bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD) | **51,317**  | 21+ role agents, enterprise ceremony                       | **Reject full install.** Steal **role separation** (BA/Arch/Dev/QA) as subagents                |
+| [Priivacy-ai/spec-kitty](https://github.com/Priivacy-ai/spec-kitty)       | **1,454**   | Spec-kit fork + **git worktree** orchestration             | **Study** — we already have `pnpm wt`; align Plan to worktree-per-task                          |
+| [cameronsjo/spec-compare](https://github.com/cameronsjo/spec-compare)     | research    | 6-tool SDD comparison                                      | **Read** for decision frameworks                                                                |
+| [rihebty/flow-kit](https://github.com/rihebty/flow-kit)                   | fusion      | Combines BMAD/spec-kit/OpenSpec/superpowers                | **Optional skim** — don’t adopt mashup blindly                                                  |
 
 ### 2.2 Financial correctness & ledgers (how we _prove money_)
 
@@ -64,14 +64,14 @@
 
 ### 2.3 Matching / exchange / market sim (domain terrain)
 
-| Repo                                                                                         | ~★         | Role                                        | Decision                                                                                       |
-| -------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [exchange-core/exchange-core](https://github.com/exchange-core/exchange-core)                | **2,585**  | LMAX-style Java matching + journal/snapshot | **Study** journal/snapshot — we already implement doctrine split                               |
-| [enewhuis/liquibook](https://github.com/enewhuis/liquibook)                                  | **1,489**  | C++ matching                                | Study only                                                                                     |
-| [chronoxor/CppTrader](https://github.com/chronoxor/CppTrader)                                | **1,059**  | Trading platform components                 | Study only                                                                                     |
-| [nkaz001/hftbacktest](https://github.com/nkaz001/hftbacktest)                                | **4,300+** | HFT/MM backtest with latency realism        | **Optional** seed/mm research — not CEX path core                                              |
-| [ccxt/ccxt](https://github.com/ccxt/ccxt)                                                    | **43,451** | Unified exchange API                        | **Hard ban on money path** (JS numbers / doctrine §27) — venue-adapter pattern already correct |
-| [jammy928/VendorExchange\_…](https://github.com/jammy928/VendorExchange_CryptoExchange_Java) | **1,717**  | Vendored Java exchange                      | **Dual-book target** — enforce Option B, don’t rebuild                                         |
+| Repo                                                                                    | ~★         | Role                                        | Decision                                                                                       |
+| --------------------------------------------------------------------------------------- | ---------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [exchange-core/exchange-core](https://github.com/exchange-core/exchange-core)           | **2,585**  | LMAX-style Java matching + journal/snapshot | **Study** journal/snapshot — we already implement doctrine split                               |
+| [enewhuis/liquibook](https://github.com/enewhuis/liquibook)                             | **1,489**  | C++ matching                                | Study only                                                                                     |
+| [chronoxor/CppTrader](https://github.com/chronoxor/CppTrader)                           | **1,059**  | Trading platform components                 | Study only                                                                                     |
+| [nkaz001/hftbacktest](https://github.com/nkaz001/hftbacktest)                           | **4,300+** | HFT/MM backtest with latency realism        | **Optional** seed/mm research — not CEX path core                                              |
+| [ccxt/ccxt](https://github.com/ccxt/ccxt)                                               | **43,451** | Unified exchange API                        | **Hard ban on money path** (JS numbers / doctrine §27) — venue-adapter pattern already correct |
+| [jammy928/CoinExchange_…](https://github.com/jammy928/CoinExchange_CryptoExchange_Java) | **1,717**  | Vendored Java exchange                      | **Dual-book target** — enforce Option B, don’t rebuild                                         |
 
 ### 2.4 Chaos / fault injection / network
 
@@ -196,12 +196,12 @@
 
 | Spec cluster                    | Primary leverage                                                 |
 | ------------------------------- | ---------------------------------------------------------------- |
-| DB-\* dual-book                 | Scan extend, Semgrep later, inventory scripts                    |
+| DB-* dual-book                  | Scan extend, Semgrep later, inventory scripts                    |
 | CX-1–6                          | Existing vitest (guard regressions)                              |
 | CX-7–9 chaos/assemble/reconcile | Custom harness + Jepsen-inspired ops · platform:up · Toxiproxy B |
-| DX-\*                           | Vitest quote · Playwright only honesty                           |
-| SD-\*                           | Seeder resume · volume tests · optional hftbacktest study        |
-| RS-\* scoreboard                | Doc + WAVE-AUDIT                                                 |
+| DX-*                            | Vitest quote · Playwright only honesty                           |
+| SD-*                            | Seeder resume · volume tests · optional hftbacktest study        |
+| RS-* scoreboard                 | Doc + WAVE-AUDIT                                                 |
 | Process                         | Spec Kit/OpenSpec _patterns_ · BMAD _roles_ · doubt-driven       |
 
 ---
