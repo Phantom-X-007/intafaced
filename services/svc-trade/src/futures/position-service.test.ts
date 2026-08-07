@@ -20,6 +20,12 @@ import {
 import { MemoryEventBus } from '@intafaced/events';
 import { PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
+import { markSourceFromDepth } from './mark-from-depth.js';
+import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
+import { sqlLiquidationPositionLoader } from './position-loaders.js';
+import { sqlPositionCloser } from './tick-stores.js';
+import { sqlAcceptedMarkStore } from './accepted-mark.js';
+import type { EngineDepth } from '../spot/matching-client.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
 
 /**
@@ -550,5 +556,323 @@ if (!available) {
     await withoutProfitSource().close(ALICE, pos.id!);
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('99000');
     expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  // ── D-S-07: the deviation breaker, armed ────────────────────────────────────
+
+  /**
+   * THE DEFECT, STATED IN BALANCES.
+   *
+   * `acceptableForLiquidation` skips the deviation breaker when `previous` is
+   * `null`, and `requirePayoutGrade` passed a literal `null`. Measured on this
+   * exact scenario before the fix: Alice's available went 100,000 → 5,050,000
+   * and the profit pot went 5,000,000 → 50,000. **4,950,000 USDT paid out on a
+   * feed that moved 100x in one step** — which confirms the figure the earlier
+   * review reported.
+   *
+   * REVERT PROOF: put `null` back in `requirePayoutGrade`, or drop
+   * `accepted_mark` from the INSERT in `open()`, and this test goes red on the
+   * balance lines below — not on an outcome string.
+   */
+  it('refuses to pay out through a 100x mark jump, and the 4,950,000 stays in the pot', async () => {
+    feed('100');
+    await fundProfitSource('5000000');
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('500'),
+      leverage: amt('1'),
+    });
+    expect(pos.entryPrice).toBe('100');
+    const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+    // 100x, in one step, on a feed nobody audited.
+    feed('10000');
+    await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_unusable' });
+
+    // THE BALANCES. 4,950,000 did not move.
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('5000000');
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userAfterOpen);
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('50000');
+    expect(await positions.listOpen(ALICE)).toHaveLength(1);
+  });
+
+  /**
+   * The basis is the ENTRY mark, from the moment the position exists. Nothing
+   * else has valued this position yet, so if `open()` did not record it the
+   * first close would be a "first valuation" and unarmed — which is the defect
+   * with one extra step in front of it.
+   */
+  it('arms the breaker at OPEN — the very first close is measured against the entry mark', async () => {
+    feed('100');
+    await fundProfitSource('100000');
+    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+    const [row] = await sql<{ accepted_mark: string }[]>`SELECT accepted_mark FROM trade.positions WHERE id = ${pos.id!}`;
+    expect(formatAmount(amt(row!.accepted_mark))).toBe('100');
+
+    // 30% up in one step: past the 2000bps breaker on the position's FIRST close.
+    feed('130');
+    await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_unusable' });
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('100000');
+  });
+
+  /**
+   * A move inside the breaker is still paid. A circuit breaker that refuses
+   * every payout is not a control, it is an outage.
+   */
+  it('pays a move INSIDE the breaker — the basis refuses jumps, not profits', async () => {
+    feed('100');
+    await fundProfitSource('100000');
+    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+    // +19%, under the 2000bps default.
+    feed('119');
+    await positions.close(ALICE, pos.id!);
+    // 100000 - 1000 margin + 1000 margin back + 190 profit
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('100190');
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('99810');
+  });
+
+  /**
+   * NO RATCHET. The basis is written inside the close transaction, so a REFUSED
+   * close rolls it back. If it were written on the read instead, a caller could
+   * walk the basis up in sub-breaker steps — attempt, refuse, attempt, refuse —
+   * and arrive at any price they liked, one refusal at a time.
+   *
+   * REVERT PROOF: move the `accepted_mark` write out of the transaction, or
+   * record it in `markFor()`, and the balance assertions below go red.
+   */
+  it('a refused close does not move the basis — the breaker cannot be ratcheted', async () => {
+    feed('100');
+    await fundProfitSource('1000000');
+    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('100'), leverage: amt('1') });
+    const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+    // Six attempts. The first already clears the breaker from the basis
+    // (2100bps) and is refused; each later one is under 2000bps from the ATTEMPT
+    // BEFORE IT, so a basis that moved on a refusal would let the whole
+    // staircase through and pay out at 287. None of them move it.
+    for (const step of ['121', '144', '171', '203', '241', '287']) {
+      feed(step);
+      await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_unusable' });
+    }
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('1000000');
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userAfterOpen);
+
+    const [row] = await sql<{ accepted_mark: string }[]>`SELECT accepted_mark FROM trade.positions WHERE id = ${pos.id!}`;
+    expect(formatAmount(amt(row!.accepted_mark))).toBe('100');
+  });
+
+  /**
+   * The other direction, and the one that decides whether this is a control or
+   * a trap: the breaker gates PAYOUTS. A trader whose position moved against
+   * them still gets out, because a losing close pays nothing out of any pot.
+   */
+  it('a losing close is never held by the breaker — it guards payouts, not exits', async () => {
+    feed('10000');
+    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    feed('9000');
+    await positions.close(ALICE, pos.id!);
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('99000');
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  // ── D-S-07: the mid is not size-blind ────────────────────────────────────────
+
+  /** A service priced off the MATCHING BOOK — the production depth mark path. */
+  function onDepth(readDepth: () => Promise<EngineDepth | null>) {
+    return new PositionService(sql, ledger, {
+      marks: markSourceFromDepth(readDepth),
+      profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      bus,
+      now: () => NOW,
+    });
+  }
+
+  /**
+   * THE SECOND DEFECT, STATED IN BALANCES.
+   *
+   * `bestFromDepth` read the PRICE at each best level and discarded the
+   * QUANTITY, so two 1-wei orders minted a payout-grade `mid`. Measured on this
+   * exact scenario before the fix: Alice's available went 100,000 → 102,000 and
+   * the profit pot went 10,000 → 8,000. **2,000 USDT paid out against a book
+   * holding two orders worth about four femto-cents.**
+   *
+   * The move is 1000bps — deliberately inside the deviation breaker, so this
+   * test measures the depth fix and nothing else.
+   *
+   * REVERT PROOF: put `depth.bids[0]?.[0]` back in `bestFromDepth` and the
+   * balance lines below go red.
+   */
+  it('refuses to pay on a mid minted from two dust orders, and the 2,000 stays in the pot', async () => {
+    await fundProfitSource('10000');
+    let book: EngineDepth = { bids: [['1999', '10']], asks: [['2001', '10']], sequence: 1 };
+    const svc = onDepth(async () => book);
+
+    const pos = await svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+    expect(pos.entryPrice).toBe('2000');
+    const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+    // Everything real is pulled. What is left is one wei a side, 2 apart.
+    book = {
+      bids: [['2199', '0.000000000000000001']],
+      asks: [['2201', '0.000000000000000001']],
+      sequence: 2,
+    };
+    await expect(svc.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_missing' });
+
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000');
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userAfterOpen);
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('20000');
+    expect(await svc.listOpen(ALICE)).toHaveLength(1);
+  });
+
+  /**
+   * Same prices, real size. The refusal is about DEPTH, not about the prices —
+   * otherwise it would be a rule against profitable closes.
+   */
+  it('the same two prices with real size behind them do pay out', async () => {
+    await fundProfitSource('10000');
+    let book: EngineDepth = { bids: [['1999', '10']], asks: [['2001', '10']], sequence: 1 };
+    const svc = onDepth(async () => book);
+    const pos = await svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+
+    book = { bids: [['2199', '10']], asks: [['2201', '10']], sequence: 2 };
+    await svc.close(ALICE, pos.id!);
+    // 100000 - 20000 margin + 20000 back + 10 * (2200 - 2000) = 102000
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('102000');
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('8000');
+  });
+
+  /** A thin book cannot even OPEN a position — no entry price is minted from dust. */
+  it('refuses to OPEN on a dust book, and locks nothing', async () => {
+    const svc = onDepth(async () => ({
+      bids: [['1999', '0.000000000000000001']],
+      asks: [['2001', '0.000000000000000001']],
+      sequence: 1,
+    }));
+    const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+    await expect(
+      svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') }),
+    ).rejects.toMatchObject({ code: 'trade.mark_missing' });
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+    expect(await svc.listOpen(ALICE)).toEqual([]);
+  });
+
+  // ── D-S-07: the breaker on the LIQUIDATION path, against the real schema ─────
+
+  /**
+   * The tick wired the way `futures-jobs.ts` wires it — the SQL loader, the SQL
+   * closer and `sqlAcceptedMarkStore` reading the same `trade.positions` row
+   * `open()` wrote. That wiring is the fix: `previousMarkFor` was optional,
+   * this call site never passed it, and so `acceptableForLiquidation` received
+   * `null` for every position on every tick and the breaker never fired once.
+   */
+  function tick() {
+    return runLiquidationTick({
+      marks: marks.source(),
+      positions: sqlLiquidationPositionLoader(sql),
+      closer: sqlPositionCloser(sql, null),
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: sqlAcceptedMarkStore(sql),
+      ledger,
+      now: () => NOW,
+    });
+  }
+
+  /**
+   * entry 100, size 10, leverage 10 → margin 100, maintenance 50 (the planner's
+   * 5000bps default). At mark 95 equity is exactly 50 and it liquidates.
+   */
+  async function marginal() {
+    feed('100');
+    return positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('10') });
+  }
+
+  it('the tick liquidates on a mark inside the breaker (the control)', async () => {
+    const pos = await marginal();
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('100');
+
+    feed('95');
+    const result = await tick();
+    expect(result.liquidated).toBe(1);
+    // THE BALANCES: 50 of margin absorbed the loss, 50 came back.
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('0');
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('99950');
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  /**
+   * REVERT PROOF for the tick half. Restore `previousMarkFor?:` and the
+   * `?? null` at the call site — or simply stop passing `acceptedMarks` here —
+   * and the collateral balance below goes to '0' instead of staying at '100'.
+   */
+  it('the tick does not seize a position through a 99% mark collapse, and the collateral stays put', async () => {
+    const pos = await marginal();
+
+    // 100 → 1. A feed that did this is broken, and a broken feed must not be
+    // allowed to close somebody's position on the strength of it.
+    feed('1');
+    const result = await tick();
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_mark_unusable');
+    expect(result.items[0]!.summary).toContain('not liquidating through it');
+
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('100');
+    expect(await positions.listOpen(ALICE)).toHaveLength(1);
+  });
+
+  /**
+   * The basis WALKS. A tick that accepts a mark records it, so an honest market
+   * that moves 19% a tick is never mistaken for one impossible jump — which is
+   * what makes refusing the jump affordable in the first place.
+   */
+  it('an accepted mark becomes the next basis, so an honest market can walk anywhere', async () => {
+    const pos = await marginal();
+    const acceptedMarks = sqlAcceptedMarkStore(sql);
+
+    // Three healthy ticks, each inside the breaker relative to the last.
+    for (const step of ['115', '132', '151']) {
+      feed(step);
+      const result = await runLiquidationTick({
+        marks: marks.source(),
+        positions: sqlLiquidationPositionLoader(sql),
+        closer: sqlPositionCloser(sql, null),
+        attempts: memoryLiquidationAttemptStore(),
+        acceptedMarks,
+        ledger,
+        now: () => NOW,
+      });
+      expect(result.items[0]!.outcome).toBe('skipped_healthy');
+    }
+
+    const previous = await acceptedMarks.previous(pos.id!);
+    expect(previous.kind).toBe('accepted');
+    expect(formatAmount(previous.kind === 'accepted' ? previous.price : 0n)).toBe('151');
+
+    // Nothing was seized on the way, and the position is still open at 151 —
+    // a 51% cumulative move that never once looked like a jump.
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('100');
+    expect(await positions.listOpen(ALICE)).toHaveLength(1);
+  });
+
+  /** A REFUSED mark is not recorded — the same no-ratchet rule as the close path. */
+  it('a refused mark does not become the basis on the tick path either', async () => {
+    const pos = await marginal();
+    const acceptedMarks = sqlAcceptedMarkStore(sql);
+
+    feed('1');
+    await runLiquidationTick({
+      marks: marks.source(),
+      positions: sqlLiquidationPositionLoader(sql),
+      closer: sqlPositionCloser(sql, null),
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks,
+      ledger,
+      now: () => NOW,
+    });
+
+    const previous = await acceptedMarks.previous(pos.id!);
+    expect(formatAmount(previous.kind === 'accepted' ? previous.price : 0n)).toBe('100');
   });
 }

@@ -9,9 +9,16 @@
  *
  * Out of scope: mark oracle product, matching engine, partial ladder, funding.
  */
-import { formatAmount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type Amount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
 import { planLiquidation, summarizeLiquidation, type LiquidationPosition, type LiquidationDecision } from './liquidation-planner.js';
-import { DEFAULT_FUTURES_MARK_POLICY, acceptableForLiquidation, type FuturesQuotedMark, type MarkPolicy } from './mark-policy.js';
+import {
+  DEFAULT_FUTURES_MARK_POLICY,
+  MARK_INVALID,
+  acceptableForLiquidation,
+  type FuturesQuotedMark,
+  type MarkPolicy,
+} from './mark-policy.js';
+import { breakerBasis, type AcceptedMarkStore } from './accepted-mark.js';
 
 /** External mark for one market. Null → skip that position (never invent). */
 export interface MarkSource {
@@ -68,11 +75,17 @@ export interface LiquidationTickDeps {
   /** Gates a labelled mark must clear before it may close a position. */
   markPolicy?: MarkPolicy;
   /**
-   * Last mark this position was accepted against, for the deviation breaker.
-   * Absent → the breaker is skipped for that position, exactly as `prices.ts`
-   * skips it on a loan's first mark.
+   * Where the deviation breaker gets its basis, and where an accepted mark goes.
+   *
+   * REQUIRED, and required on purpose. This used to be
+   * `previousMarkFor?: (row) => …` — optional, supplied by no production caller,
+   * and therefore `null` on every tick, which is precisely the branch that skips
+   * the breaker. An optional safety port is a disabled safety port. Making it
+   * mandatory means a future call site that forgets it does not compile;
+   * `memoryAcceptedMarkStore()` is the honest answer for a unit test, and
+   * `sqlAcceptedMarkStore(sql)` for production.
    */
-  previousMarkFor?: (row: LiquidationPositionRow) => Promise<bigint | null> | bigint | null;
+  acceptedMarks: AcceptedMarkStore;
 }
 
 export interface LiquidationTickItemResult {
@@ -86,6 +99,38 @@ export interface LiquidationTickResult {
   scanned: number;
   liquidated: number;
   items: LiquidationTickItemResult[];
+}
+
+/**
+ * "The source handed back something that is not a price."
+ *
+ * Distinct from `null`, which means "the source has no price right now". A
+ * source that returns `"abc"` is broken, and a broken source is not the same
+ * event as a quiet one — it used to reach `planLiquidation` and come back as
+ * `invalid_mark`, having already skipped every gate on the way.
+ */
+const UNREADABLE = Symbol('trade.mark_unreadable');
+
+/**
+ * A source that predates `quote()` gives a price and nothing else. Read it as
+ * `mid` observed now — what `markPrice` has always implied, and the same
+ * reading `position-service.ts` gives it — rather than inventing a quality it
+ * never claimed, or skipping the gates because it never claimed one.
+ */
+async function legacyQuote(
+  marks: MarkSource,
+  row: LiquidationPositionRow,
+  at: Date,
+): Promise<FuturesQuotedMark | null | typeof UNREADABLE> {
+  const price = await marks.markPrice({ marketId: row.marketId, symbol: row.symbol, at });
+  if (price == null || price.trim() === '') return null;
+  let parsed: Amount;
+  try {
+    parsed = parseAmount(price);
+  } catch {
+    return UNREADABLE;
+  }
+  return { marketId: row.marketId, symbol: row.symbol, price: parsed, asOf: at, quality: 'mid' };
 }
 
 /**
@@ -109,46 +154,69 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
     /**
      * THE GATE, BEFORE ANYTHING IS SEIZED.
      *
-     * A labelled source is asked for its quote and judged by
-     * `acceptableForLiquidation` — quality, the tighter liquidation staleness
-     * limit, and the deviation breaker. `last` never passes under the default
-     * policy, so a market with no two-sided quote cannot be liquidated at all:
-     * the position sits and an operator looks at it.
+     * Every mark — labelled or legacy — is judged by `acceptableForLiquidation`:
+     * quality, the tighter liquidation staleness limit, and the deviation
+     * breaker. `last` never passes under the default policy, so a market with no
+     * two-sided quote cannot be liquidated at all: the position sits and an
+     * operator looks at it.
      *
-     * A source with no `quote` still goes through `markPrice`, which is the
-     * behaviour that existed before and is no weaker than it was.
+     * THE LEGACY BRANCH GOES THROUGH THE SAME GATE. It used to hand
+     * `markPrice`'s bare string straight to the planner, which meant a
+     * `MarkSource` without `quote()` was seizing positions with no breaker at
+     * all — the same hole in a second costume. An unlabelled price is read as
+     * `mid` observed now, which is exactly what `markPrice` has always implied
+     * (`position-service.ts` reads it the same way), and then it is gated.
      *
      * Either way, ABSENT IS NOT ZERO. There is no branch below that turns a
      * missing mark into a price — on a perp, valuing a missing mark at zero
      * does not misprice one position, it liquidates every one of them.
      */
-    let mark: string | null = null;
-    if (deps.marks.quote) {
-      const quoted = await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at });
-      if (!quoted) {
-        items.push({ positionId: row.positionId, outcome: 'skipped_no_mark', reason: 'no_mark' });
-        continue;
-      }
-      const previous = (await deps.previousMarkFor?.(row)) ?? null;
-      const check = acceptableForLiquidation(quoted, previous, at, deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY);
-      if (!check.ok) {
-        items.push({
-          positionId: row.positionId,
-          outcome: 'skipped_mark_unusable',
-          reason: check.code ?? 'trade.mark_unusable',
-          summary: check.reason,
-        });
-        continue;
-      }
-      mark = formatAmount(quoted.price);
-    } else {
-      mark = await deps.marks.markPrice({ marketId: row.marketId, symbol: row.symbol, at });
-    }
+    const quoted = deps.marks.quote
+      ? await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at })
+      : await legacyQuote(deps.marks, row, at);
 
-    if (mark == null || mark === '') {
+    if (quoted === UNREADABLE) {
+      items.push({
+        positionId: row.positionId,
+        outcome: 'skipped_mark_unusable',
+        reason: MARK_INVALID,
+        summary: `${row.marketId}: mark source returned a value that is not a price`,
+      });
+      continue;
+    }
+    if (!quoted) {
       items.push({ positionId: row.positionId, outcome: 'skipped_no_mark', reason: 'no_mark' });
       continue;
     }
+
+    /**
+     * THE BREAKER, ARMED. `previous` is read from storage the position's owner
+     * cannot reach — `trade.positions.accepted_mark`, written by this service
+     * from marks it read itself. Before `accepted-mark.ts` existed this was a
+     * literal `null` on every tick and the breaker never fired once.
+     */
+    const previous = await deps.acceptedMarks.previous(row.positionId);
+    const check = acceptableForLiquidation(quoted, breakerBasis(previous), at, deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY);
+    if (!check.ok) {
+      items.push({
+        positionId: row.positionId,
+        outcome: 'skipped_mark_unusable',
+        reason: check.code ?? 'trade.mark_unusable',
+        summary: check.reason,
+      });
+      continue;
+    }
+
+    /**
+     * Recorded because it was ACCEPTED, not because it was acted on — a healthy
+     * position's mark is still a mark this position was judged against, and it
+     * is what keeps the basis walking with the market so an honest 30% day over
+     * many ticks never looks like one impossible jump. A REFUSED mark is
+     * deliberately not recorded: that is what stops a caller ratcheting the
+     * basis along in sub-breaker steps.
+     */
+    await deps.acceptedMarks.record(row.positionId, { price: quoted.price, at });
+    const mark = formatAmount(quoted.price);
 
     const decision: LiquidationDecision = planLiquidation({
       liquidationId,

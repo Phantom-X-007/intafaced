@@ -69,9 +69,12 @@ describe('startFuturesJobs', () => {
     const venue: MarkSource = {
       markPrice: async ({ marketId }) => (marketId === 'm1' ? '50000' : null),
     };
+    // Real size on both sides: this test is about SOURCE PREFERENCE, and a book
+    // too thin to quote is refused by `mark-from-depth.ts` before preference
+    // gets a say.
     const depth = vi.fn(async () => ({
-      bids: [['99', '1']],
-      asks: [['101', '1']],
+      bids: [['99', '100']],
+      asks: [['101', '100']],
       sequence: 1,
     }));
     const handle = startFuturesJobs({

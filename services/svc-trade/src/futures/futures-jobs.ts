@@ -20,6 +20,7 @@ import { markSourcePrefer } from './mark-from-venue.js';
 import { memoryFundingRateBook, type FundingRateEntry } from './funding-rate-source.js';
 import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
 import { sqlFundingPeriodStore, sqlLiquidationAttemptStore, sqlPositionCloser } from './tick-stores.js';
+import { sqlAcceptedMarkStore } from './accepted-mark.js';
 
 export interface FuturesJobsConfig {
   /** Master kill — false = host created but no intervals started. */
@@ -116,6 +117,16 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
   const closer = sqlPositionCloser(deps.sql, deps.bus);
   const fundLoader = sqlFundingPositionLoader(deps.sql);
   const periods = sqlFundingPeriodStore(deps.sql);
+  /**
+   * THE DEVIATION BREAKER'S BASIS, SUPPLIED.
+   *
+   * This is the wiring that was missing. `previousMarkFor` was an optional dep
+   * and this call site never passed it, so `acceptableForLiquidation` received
+   * `null` on every position on every tick and the breaker never fired. The
+   * store is now a required argument for exactly that reason — see
+   * `accepted-mark.ts`.
+   */
+  const acceptedMarks = sqlAcceptedMarkStore(deps.sql);
 
   host.every('futures.liquidation', deps.config.liqIntervalMs, async () => {
     await runLiquidationTick({
@@ -123,6 +134,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       positions: liqLoader,
       closer,
       attempts,
+      acceptedMarks,
       ledger: deps.ledger,
       now: deps.now,
     });
