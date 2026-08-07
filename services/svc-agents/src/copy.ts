@@ -50,6 +50,7 @@ export const COPY_KEYS = [
   'agents.copy_intel.empty',
   'agents.copy_intel.unavailable',
   'agents.navigator.unavailable',
+  'agents.navigator.tier_closed',
   'agents.support.unavailable',
   'agents.support.comment_refused',
 ] as const;
@@ -97,6 +98,8 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.copy_intel.empty': 'No leader performance samples were provided.',
   'agents.copy_intel.unavailable': 'Leader stats are unavailable — samples are incomplete or the window is invalid.',
   'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
+  'agents.navigator.tier_closed':
+    'This Sovereign Intelligence navigator action is closed until product tier rules are published — nothing was invented or run.',
   'agents.support.unavailable': 'Support knowledge is unavailable right now — the desk will not invent an answer.',
   'agents.support.comment_refused': 'That comment cannot be posted — missing ticket, empty body, or forbidden invent language.',
 };
