@@ -1,38 +1,37 @@
-# AFK residual stop — 2026-08-07
+# AFK residual stop — 2026-08-07 (rev 2)
 
-**Tip when written:** re-derive `origin/main`.  
-**Stop reason:** free Class N agent residual for Nitro is drained for this wave (wire/persist). No open agent babysit PR from this loop.
+**Tip when written:** re-derive `origin/main` (includes #986).  
+**Stop reason:** free Class N agent residual for Nitro is drained. No open agent ship PR. PARKED modules are dep-blocked only.
 
-## Landed this AFK wave (agent residual)
+## Landed this AFK lock (completeness residual)
 
-| PR   | Ship                                                |
-| ---- | --------------------------------------------------- |
-| #972 | Navigator grounded plane on tRPC                    |
-| #973 | Support comment draft on tRPC                       |
-| #974 | Academy certs Stage-1 durable progress/grants       |
-| #976 | Support desk grounded plane on tRPC                 |
-| #979 | Identity durable referral tree (affiliates Slice A) |
-| #980 | Identity durable affiliate freeze ledger            |
+| PR   | Ship                                                                   |
+| ---- | ---------------------------------------------------------------------- |
+| #984 | Affiliate commission **dry-run** on durable tree + freezes (no payout) |
+| #985 | Navigator **tool_select** on tRPC                                      |
+| #986 | Navigator + support **stage1Guardrail** on tRPC                        |
 
-Also already on tip from prior turn: #967 thrift delete · #969 scanner rankFixtures · #970 residency persist.
+### Already on tip from earlier AFK wave
+
+#972 navigator grounded · #973 support draft · #974 certs durable · #976 support grounded · #979 referral tree · #980 affiliate freeze · #967 thrift delete · #969 scanner · #970 residency
 
 ## Residual left (not free Class N craft)
 
-| Kind                   | What                                                                                   | Owner / gate                   |
-| ---------------------- | -------------------------------------------------------------------------------------- | ------------------------------ |
-| **Dep-blocked PARKED** | `copy-intel/stats` needs `trade.copy` done · `merchant/watch` needs `pay.routing` done | Product deps                   |
-| **Class M**            | Affiliate commission payout · cert XP/perks · tournament prizes · ambassador IFC pay   | Money self-audit + product law |
-| **HUMAN frontend**     | `nitro-frontend-all`                                                                   | Nitro human                    |
-| **Shehzad**            | Protocol / INTACHAIN mountains                                                         | shehzad002 only                |
-| **Class X**            | Gateway secrets, prod go-live, sanctions content                                       | Nitro human + counsel          |
-| **Denon direction**    | Open integrity/money product-law specs                                                 | Phantom-X-007                  |
+| Kind                   | What                                                                          | Gate                          |
+| ---------------------- | ----------------------------------------------------------------------------- | ----------------------------- |
+| **Dep-blocked PARKED** | `copy-intel/stats` needs `trade.copy` · `merchant/watch` needs `pay.routing`  | Product deps                  |
+| **Class M**            | Affiliate **payout** · cert XP/perks · tournament prizes · ambassador IFC pay | Money audit + product law     |
+| **Frontend**           | `nitro-frontend-all` (agent-afk-day honesty only when open)                   | Honesty scope / Nitro reclaim |
+| **Shehzad**            | Protocol / INTACHAIN                                                          | shehzad002                    |
+| **Class X**            | Secrets, prod go-live                                                         | Nitro human                   |
+| **Denon**              | Direction + open integrity/money product-law                                  | Phantom-X-007                 |
 
 ## Human blockers this loop
 
-None required for the ships above. Optional later: Class X notify gateways; frontend unlock if shell residual is next.
+**None** for the ships above.
 
 ## Re-open AFK when
 
-- A dep clears (`trade.copy` / `pay.routing`) and park shrinks, or
-- Denon posts free Class N specs, or
-- Frontend lane is reclaimed for agents.
+- `trade.copy` or `pay.routing` done (unblocks PARKED), or
+- Class M payout/XP specs authorized, or
+- Frontend honesty residual is explicitly free again.
