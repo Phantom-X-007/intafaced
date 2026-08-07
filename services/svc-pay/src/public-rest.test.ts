@@ -264,4 +264,16 @@ describe('the spec is served, and describes what the routes actually do', () => 
     expect(Object.keys(spec.paths)).toEqual(expect.arrayContaining(['/payments/{id}', '/payments', '/balances']));
     expect(spec.components?.securitySchemes).toHaveProperty('apiKey');
   });
+
+  it('serves the spec over HTTP, without shipping a static file server', async () => {
+    // `@fastify/swagger-ui` would have rendered a reference here and would have
+    // brought `@fastify/static` — a HIGH advisory — into the service that holds
+    // payments. The spec is the artefact; anything can render it.
+    app = await build();
+
+    const res = await app.inject({ method: 'GET', url: '/api/pay/v1/openapi.json' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().info.title).toBe('Payments API');
+  });
 });

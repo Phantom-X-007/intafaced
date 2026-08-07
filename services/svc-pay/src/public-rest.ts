@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import swagger from '@fastify/swagger';
-import swaggerUi from '@fastify/swagger-ui';
 import { requireScope, type Principal } from '@intafaced/auth';
 import { createEdgeContext, type EdgeRequest } from '@intafaced/contracts';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
@@ -16,8 +15,7 @@ import { PayError, type PayService, type PaymentStatus } from './payment-service
  *   GET /api/pay/v1/payments/:id          scope pay:read
  *   GET /api/pay/v1/payments              scope pay:read   ?merchantId= &status= &limit=
  *   GET /api/pay/v1/balances              scope pay:read   ?merchantId= &assetId=
- *   GET /api/pay/v1/openapi.json          public — the spec
- *   GET /api/pay/v1/docs                  public — the reference
+ *   GET /api/pay/v1/openapi.json          public — the spec (no UI; see below)
  *
  * ── A TRANSLATION, NOT A SECOND IMPLEMENTATION ───────────────────────────
  *
@@ -181,10 +179,20 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
     },
   });
 
-  await app.register(swaggerUi, {
-    routePrefix: `${BASE}/docs`,
-    uiConfig: { docExpansion: 'list', deepLinking: true },
-  });
+  /**
+   * THE SPEC, NOT A UI.
+   *
+   * `@fastify/swagger-ui` was here and is gone. It depends on
+   * `@fastify/static`, which carried a HIGH and a moderate advisory
+   * (GHSA-83w8-p2f5-377r, GHSA-8pvw-jcv7-9cmj) when this landed — the
+   * dependency-audit ratchet refused the PR, correctly.
+   *
+   * Patching it forward would have worked and would still have been the wrong
+   * shape: rendering documentation is not a reason to run a STATIC FILE SERVER
+   * inside the service that holds payments. The spec is the artefact; anything
+   * can render it, and the public docs site is where a reference belongs.
+   */
+  app.get(`${BASE}/openapi.json`, { schema: { hide: true } }, async () => app.swagger());
 
   /**
    * Resolve the caller, or refuse.
