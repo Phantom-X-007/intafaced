@@ -96,7 +96,14 @@ export class JetStreamEventBus implements EventBus {
         } catch (err) {
           // Redelivery is JetStream's job; after max_deliver the message is
           // parked for the operator. Never ack a message we failed to process.
-          msg.nak();
+          //
+          // The delay is the difference between retrying and only appearing to.
+          // A bare `nak()` redelivers immediately, so the default budget of five
+          // attempts against a gateway returning 503 was spent inside a few
+          // milliseconds and the message parked before the blip it was meant to
+          // ride out had finished. svc-notify says a transient failure MUST be
+          // retried; three attempts in five milliseconds is not a retry.
+          msg.nak(nakBackoffMs(msg.info.redeliveryCount));
           if (!(err instanceof Error)) throw err;
         }
       }
@@ -119,6 +126,22 @@ export class JetStreamEventBus implements EventBus {
     await Promise.all(this.subs.map((s) => s.unsubscribe()));
     await this.nc.drain();
   }
+}
+
+/**
+ * How long to wait before a nak'd message comes back.
+ *
+ * Doubling from one second, capped at eight, so a default budget of five
+ * attempts spans roughly half a minute instead of a few milliseconds. The cap
+ * matters as much as the growth: a message must still reach `max_deliver` and
+ * park while an operator is awake to see it, rather than drifting into a
+ * retry schedule nobody is watching.
+ *
+ * `redeliveryCount` is 1 on the first delivery, so the first retry waits 1s.
+ */
+export function nakBackoffMs(redeliveryCount: number): number {
+  const attempt = Number.isFinite(redeliveryCount) && redeliveryCount > 0 ? Math.floor(redeliveryCount) : 1;
+  return Math.min(1_000 * 2 ** (attempt - 1), 8_000);
 }
 
 /** Idempotent stream creation — safe to call on every boot. */
