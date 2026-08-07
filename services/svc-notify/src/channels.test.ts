@@ -122,6 +122,18 @@ async function confirmTarget(h: Harness, channel: 'email' | 'push' | 'sms', addr
   await h.targets.markVerified(USER, channel, 'x'.repeat(64), new Date());
 }
 
+/** Register an address and stop there — the user never clicked the code. */
+async function registerUnconfirmed(h: Harness, channel: 'email' | 'push' | 'sms', address: string): Promise<void> {
+  await h.targets.upsert({
+    userId: USER,
+    channel,
+    address,
+    locale: 'en',
+    verifyTokenHash: 'y'.repeat(64),
+    verifyExpiresAt: new Date(Date.now() + 60_000),
+  });
+}
+
 describe('channel registry — a channel with no credentials refuses, it does not vanish', () => {
   it('registers every channel even when nothing is configured', () => {
     const reg = channelsFromEnv(NO_GATEWAYS);
@@ -386,6 +398,76 @@ describe('a critical notification that reached nobody says so', () => {
     }
   });
 
+  it('says the address was never confirmed, rather than that there was no address', async () => {
+    // `channel.target_unverified` was declared in the refusal vocabulary and
+    // never emitted, so somebody one click from a margin-call SMS was told they
+    // had no phone number. Logged at docs/MEGA-AUDIT-2026-08-07-FINDINGS.md.
+    const h = harness();
+    await registerUnconfirmed(h, 'sms', '+447700900000');
+    await confirmTarget(h, 'email', 'someone@example.com');
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: bankMarginCalled.subject,
+      sourceIdempotencyKey: `${LOAN}:unverified`,
+    });
+
+    const rows = await h.deliveries.listForNotification(result.notification!.id);
+    // Registered but unconfirmed — a fix the user can make.
+    expect(rows.find((r) => r.channel === 'sms')).toMatchObject({
+      status: 'refused',
+      refusalCode: 'channel.target_unverified',
+      attemptedAt: null,
+    });
+    // Never registered at all — a different fact.
+    expect(rows.find((r) => r.channel === 'push')).toMatchObject({
+      status: 'refused',
+      refusalCode: 'channel.no_target',
+    });
+  });
+
+  it('never sends to the unconfirmed address it just named', async () => {
+    const sms = new SpyChannel('sms');
+    const h = harness(registry([sms]));
+    await registerUnconfirmed(h, 'sms', '+447700900000');
+
+    await h.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: bankMarginCalled.subject,
+      sourceIdempotencyKey: `${LOAN}:unverified-no-send`,
+    });
+
+    expect(sms.sent).toHaveLength(0);
+  });
+
+  it('goes back to no_target once the address is confirmed and then removed', async () => {
+    const h = harness();
+    await registerUnconfirmed(h, 'sms', '+447700900000');
+    await h.targets.remove(USER, 'sms');
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: bankMarginCalled.subject,
+      sourceIdempotencyKey: `${LOAN}:unverified-removed`,
+    });
+
+    expect((await h.deliveries.listForNotification(result.notification!.id)).find((r) => r.channel === 'sms')).toMatchObject({
+      refusalCode: 'channel.no_target',
+    });
+  });
+
   it('leaves an informational notification alone — nothing was promised on a channel nobody registered', async () => {
     const h = harness();
     const result = await h.notify.create({
@@ -539,6 +621,32 @@ describe('the operator switch stops sending without blinding anyone', () => {
 
     const rows = await h.deliveries.listForNotification(result.notification!.id);
     expect(rows.map((r) => r.channel)).toEqual(['inapp']);
+  });
+
+  it('distinguishes unconfirmed from absent in the detail, even with the switch off', async () => {
+    const h = harness(registry(), { outOfAppEnabled: false });
+    await registerUnconfirmed(h, 'sms', '+447700900000');
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: bankMarginCalled.subject,
+      sourceIdempotencyKey: `${LOAN}:switch-off-unconfirmed`,
+    });
+
+    const rows = await h.deliveries.listForNotification(result.notification!.id);
+    // The switch is still the binding cause on both, but the second fact differs.
+    expect(rows.find((r) => r.channel === 'sms')).toMatchObject({
+      refusalCode: 'channel.disabled',
+      detail: 'address registered but never confirmed',
+    });
+    expect(rows.find((r) => r.channel === 'push')).toMatchObject({
+      refusalCode: 'channel.disabled',
+      detail: 'no confirmed address on this channel',
+    });
   });
 
   it('records the switch, not the missing address, when the user does have a confirmed one', async () => {
