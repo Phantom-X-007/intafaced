@@ -12,26 +12,86 @@
  *
  * Does not open WS streams here — a single REST snapshot is enough for a mark
  * tick. Streaming/gap-detection stays inside the fabric for adapters that need it.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THIS MID USED TO BE SIZE-BLIND TOO
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * `midFromVenueBook` and the `readBook` below both read `snap.bids[0][0]` — the
+ * PRICE at each best level — and discarded `[1]`, the QUANTITY, entirely. It is
+ * the same defect `bestFromDepth` had before c7dfb5e4, named in that PR's
+ * "honestly unproven" section and deliberately left for this one.
+ *
+ * It is the WORSE half of the pair. `mark-from-depth.ts` could at least argue
+ * that its book is ours: nobody can rest an order on the matching engine
+ * without going through our order path. This book belongs to somebody else.
+ * A thin listing on an external venue, a market the venue is delisting, an
+ * hour when its market makers have pulled — none of those need an attacker and
+ * none of them are within this platform's control. `snapshotBook` returns what
+ * the venue publishes, and what the venue publishes at 03:00 on an illiquid
+ * pair can be two orders worth a fraction of a cent.
+ *
+ * The rule is `mark-from-depth.ts`'s, imported rather than restated: a best
+ * level worth less than `minBestLevelNotional` is read as ABSENT, one absent
+ * side makes the book one-sided, and a one-sided book already had exactly one
+ * honest answer here — `null`, at the top of this header, already written.
+ *
+ * REFUSING, NOT DOWNGRADING, for the reason `mark-from-depth.ts` argues at
+ * length: a `last`-shaped downgrade still clears `acceptableForMarking`, so it
+ * still reaches margin-call arithmetic and a trader's screen as though somebody
+ * had quoted it. And on the preference chain in `futures-jobs.ts` a refusal is
+ * not even an outage — `markSourcePrefer` falls through to matching depth,
+ * which runs the same gate on its own book.
+ *
+ * THE NUMBER IS THE SAME NUMBER, deliberately. See `DepthQuotePolicy`.
  */
-import { formatAmount } from '@intafaced/ledger-client/money';
+import { formatAmount, type Amount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter } from '@intafaced/venue-contracts';
 import { BinanceSpotMarketData } from '@intafaced/venue-adapter';
 import type { MarkSource, QuotedMarkSource } from './liquidation-tick.js';
 import { markSourceFromBook, midFromBook } from './mark-source.js';
+import { DEFAULT_DEPTH_QUOTE_POLICY, bestLevelIsQuotable, minBestLevelNotional, type DepthQuotePolicy } from './mark-from-depth.js';
 import type { MarkPolicy } from './mark-policy.js';
 
 export type VenueSymbolResolver = (marketId: string) => string | null;
 
-/**
- * Mid from a venue book snapshot (top of book).
- * Null when either side missing — never invents.
- */
-export function midFromVenueBook(snapshot: {
+/** Top-of-book levels as the fabric hands them over: scaled-bigint pairs. */
+interface VenueTopOfBook {
   bids: readonly (readonly [bigint, bigint])[];
   asks: readonly (readonly [bigint, bigint])[];
-}): string | null {
-  const bestBid = snapshot.bids[0] ? formatAmount(snapshot.bids[0][0]) : null;
-  const bestAsk = snapshot.asks[0] ? formatAmount(snapshot.asks[0][0]) : null;
+}
+
+/**
+ * Best bid/ask price strings from a venue snapshot, or null if the side is
+ * empty — or too thin to be worth quoting, which this file treats as the same
+ * thing, exactly as `bestFromDepth` does for the matching book.
+ *
+ * The policy argument DEFAULTS rather than being required: the unsafe reading
+ * must not be the one you get by leaving an argument off. There is no way to
+ * call this function and be handed a dust mid.
+ */
+export function bestFromVenueBook(
+  snapshot: VenueTopOfBook,
+  policy: DepthQuotePolicy = DEFAULT_DEPTH_QUOTE_POLICY,
+): { bestBid: string | null; bestAsk: string | null } {
+  const minimum: Amount = minBestLevelNotional(policy);
+
+  const side = (level: readonly [bigint, bigint] | undefined): string | null => {
+    if (!level) return null;
+    const [price, quantity] = level;
+    if (typeof price !== 'bigint' || typeof quantity !== 'bigint') return null;
+    return bestLevelIsQuotable(price, quantity, minimum) ? formatAmount(price) : null;
+  };
+
+  return { bestBid: side(snapshot.bids[0]), bestAsk: side(snapshot.asks[0]) };
+}
+
+/**
+ * Mid from a venue book snapshot (top of book).
+ * Null when either side is missing, or too thin to quote — never invents.
+ */
+export function midFromVenueBook(snapshot: VenueTopOfBook, policy: DepthQuotePolicy = DEFAULT_DEPTH_QUOTE_POLICY): string | null {
+  const { bestBid, bestAsk } = bestFromVenueBook(snapshot, policy);
   return midFromBook(bestBid, bestAsk);
 }
 
@@ -46,8 +106,15 @@ export function markSourceFromVenuePublicBook(input: {
   policy?: MarkPolicy;
   /** Snapshot depth — top of book only needs a few levels. Default 5. */
   depthLimit?: number;
+  /**
+   * Minimum resting notional at a best level. Optional, and omitting it applies
+   * the default — see `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` in `mark-from-depth.ts`
+   * for the number and for whose ruling it is awaiting.
+   */
+  depthPolicy?: DepthQuotePolicy;
 }): QuotedMarkSource {
   const limit = input.depthLimit ?? 5;
+  const depthPolicy = input.depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY;
   return markSourceFromBook({
     policy: input.policy,
     async readBook(marketId) {
@@ -55,8 +122,7 @@ export function markSourceFromVenuePublicBook(input: {
       if (symbol == null || symbol.trim() === '') return null;
       try {
         const snap = await input.adapter.snapshotBook(symbol, limit);
-        const bestBid = snap.bids[0] ? formatAmount(snap.bids[0][0]) : null;
-        const bestAsk = snap.asks[0] ? formatAmount(snap.asks[0][0]) : null;
+        const { bestBid, bestAsk } = bestFromVenueBook(snap, depthPolicy);
         return { bestBid, bestAsk, last: null };
       } catch {
         // Venue down / rate limited / malformed — null, never invent a mid.
@@ -142,6 +208,15 @@ export function createConfiguredVenueMarkSource(input: {
   policy?: MarkPolicy;
   /** Injectable for tests (skip real HTTP). Requires a non-empty venueId. */
   adapter?: Pick<MarketDataAdapter, 'snapshotBook'> | null;
+  /**
+   * Minimum resting notional at a best level. Omitted → the default.
+   *
+   * Present so that the day the owner rules a different floor for external
+   * venues than for our own book, the answer lands here and no call site moves.
+   * Today it is deliberately the same number on both paths — see the note on
+   * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`.
+   */
+  depthPolicy?: DepthQuotePolicy;
 }): { source: QuotedMarkSource; venueId: string; symbolCount: number } | null {
   const venueId = input.venueId.trim().toLowerCase();
   // Feature off — empty / off / none never invents a mark port.
@@ -158,6 +233,7 @@ export function createConfiguredVenueMarkSource(input: {
       adapter,
       resolveSymbol: (marketId) => map.get(marketId) ?? null,
       policy: input.policy,
+      ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
     }),
   };
 }
