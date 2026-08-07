@@ -35,8 +35,35 @@ const anyAmount = (): fc.Arbitrary<Amount> => fc.bigInt({ min: -(10n ** 38n), ma
 /** Non-negative amounts, for the properties that only make sense on a credit. */
 const positiveAmount = (): fc.Arbitrary<Amount> => fc.bigInt({ min: 0n, max: 10n ** 38n });
 
-/** Strictly positive weights — `proRata` refuses a non-positive total weight. */
-const weights = (): fc.Arbitrary<Amount[]> => fc.array(fc.bigInt({ min: 1n, max: 10n ** 24n }), { minLength: 1, maxLength: 40 });
+/**
+ * Weights, INCLUDING zero ones. `proRata` refuses a non-positive *total*
+ * weight, so the first entry is forced positive; every other entry may be `0n`.
+ *
+ * This generator used to start at `min: 1n`. A zero weight was outside the
+ * search space, so no property here could ever be evaluated on one — and a zero
+ * weight is exactly where `proRata` misallocated on a negative total, handing
+ * dust to participants entitled to nothing. The gate was not weak; its input
+ * domain was narrower than the function's, and a defect that lives in the gap
+ * is invisible however many runs you do.
+ *
+ * A zero weight is not a contrived input either: an unstaked participant, a
+ * miner with no accepted shares in the round, a follower with the position
+ * closed — all of them arrive as `0n` and all of them are in the array.
+ *
+ * Zero is drawn as its OWN branch rather than as one value in a `min: 0n`
+ * range. Widening the range to include it is not the same as generating it:
+ * over 0…10^24 uniform, `0n` essentially never appears, and a suite that
+ * "covers" zero weights without ever producing one is the original defect
+ * wearing a fix. Measured — with the range-only version, reverting the
+ * `proRata` sort left the zero-weight property GREEN. With this one it fails.
+ */
+const weights = (): fc.Arbitrary<Amount[]> =>
+  fc
+    .array(fc.oneof({ arbitrary: fc.constant(0n), weight: 1 }, { arbitrary: fc.bigInt({ min: 1n, max: 10n ** 24n }), weight: 2 }), {
+      minLength: 1,
+      maxLength: 40,
+    })
+    .map((w) => (sum(w) > 0n ? w : [1n, ...w.slice(1)]));
 
 describe('parse / format are exact inverses', () => {
   it('format then parse returns the original amount, for every amount', () => {
@@ -276,11 +303,37 @@ describe('proRata — the conservation law', () => {
     );
   });
 
+  /**
+   * A ZERO WEIGHT RECEIVES EXACTLY ZERO.
+   *
+   * The property that was missing, and the one that catches the defect the
+   * conservation law cannot see. On a negative total the old dust order paid
+   * zero-weight participants first — 42 817 of 58 713 negative-total splits
+   * misallocated — while the shares still summed to `total` exactly, so every
+   * property in this file passed and the ledger accepted every one of them.
+   *
+   * `anyAmount()` deliberately, not `positiveAmount()`: on a positive total
+   * this property was never violated, so a positive-only generator proves
+   * nothing here.
+   */
+  it('pays a zero weight exactly zero, on a total of either sign', () => {
+    fc.assert(
+      fc.property(anyAmount(), weights(), (total, w) => {
+        const shares = proRata(total, w);
+        w.forEach((weight, i) => {
+          if (weight === 0n) expect(shares[i]).toBe(0n);
+        });
+      }),
+    );
+  });
+
   it('no share is off its exact entitlement by more than one unit', () => {
     // Dust distribution is allowed to move a unit; it is not allowed to
     // reallocate a stake. This is what separates "fair rounding" from "wrong".
+    // On `anyAmount()` — a clawback, a reversal or a negative settlement splits
+    // the same way, and this bound has to hold there too.
     fc.assert(
-      fc.property(positiveAmount(), weights(), (total, w) => {
+      fc.property(anyAmount(), weights(), (total, w) => {
         const totalWeight = sum(w);
         const shares = proRata(total, w);
 
@@ -302,18 +355,28 @@ describe('proRata — the conservation law', () => {
    * monotonicity check. That mutant survived this suite until this test, and it
    * is not cosmetic — it systematically pays the participants who earned least
    * of the final unit, every single round, forever.
+   *
+   * Stated on the MAGNITUDE of the remainder so it means the same thing on both
+   * signs. Comparing raw remainders is the bug, not the test of it: on a
+   * negative total every remainder is negative except a zero weight's, whose
+   * remainder is `0` and therefore the largest — which is precisely how the
+   * dust reached participants owed nothing.
    */
   it('hands the leftover units to the largest remainders, not the smallest', () => {
     fc.assert(
-      fc.property(positiveAmount(), weights(), (total, w) => {
+      fc.property(anyAmount(), weights(), (total, w) => {
         const totalWeight = sum(w);
         const shares = proRata(total, w);
+        const abs = (v: bigint) => (v < 0n ? -v : v);
 
         const rows = w.map((weight, i) => ({
-          remainder: (total * weight) % totalWeight,
-          // For a positive total, truncating division IS floor, so this is the
-          // entitlement before dust and the difference is the dust received.
-          dust: (shares[i] ?? 0n) - (total * weight) / totalWeight,
+          // Magnitude of the truncation loss: how much of a unit this
+          // participant gave up, regardless of which way the total points.
+          remainder: abs((total * weight) % totalWeight),
+          // Division truncates toward zero on both signs, so this is the
+          // entitlement before dust and the difference is the dust received —
+          // +1 on a positive total, -1 on a negative one, hence the magnitude.
+          dust: abs((shares[i] ?? 0n) - (total * weight) / totalWeight),
         }));
 
         for (const a of rows) {

@@ -21,7 +21,8 @@ runLedgerConformance('MemoryLedger', async () => ({
   totalsByAsset: async () => conformanceLedger.totalsByAsset(),
 }));
 import { formatAmount, parseAmount as amt, sum } from './money.js';
-import { assertBalanced, assertPairedLocks, assertPurposedHolds, assertValidPost } from './client.js';
+import { assertBalanced, assertPairedLocks, assertPurposedHolds, assertValidPost, LOCK_KINDS } from './client.js';
+import { ACCOUNT_KINDS, ACCOUNT_KIND_CLASS } from './types.js';
 import {
   houseFees,
   insuranceFund,
@@ -325,6 +326,38 @@ describe('INVARIANT 3 — locks are funded from the owner’s own available bala
         { account: userAvailable(USER_B, 'BTC'), direction: 'debit', amount: amt('1') },
       ]),
     ).not.toThrow();
+  });
+
+  /**
+   * The invariant above is only as good as the list it tests `kind` against.
+   *
+   * That list used to be hand-written in two places, with ACCOUNT_KINDS as a
+   * silent third, and nothing checked that they agreed. A kind present in the
+   * enum but absent from the list is not rejected as unknown — `assertPairedLocks`
+   * reads it as available balance, so a post that credits the house and debits
+   * an unclassified lock pot is ACCEPTED. It sums to zero per asset, the hash
+   * chain verifies, reconciliation replays clean: locked value funded by nobody,
+   * invisible from every reading of the book.
+   *
+   * These are the three lines that would have caught it.
+   */
+  describe('the lock list agrees with the account-kind enum', () => {
+    it('classifies every account kind — no kind is silently unclassified', () => {
+      for (const kind of ACCOUNT_KINDS) {
+        expect(ACCOUNT_KIND_CLASS[kind]).toBeDefined();
+      }
+    });
+
+    it('locks are exactly the kinds that are not spendable', () => {
+      const nonSpendable = ACCOUNT_KINDS.filter((kind) => kind !== 'available');
+      expect([...LOCK_KINDS].sort()).toEqual([...nonSpendable].sort());
+    });
+
+    it('holds no kind the enum does not declare', () => {
+      for (const kind of LOCK_KINDS) {
+        expect(ACCOUNT_KINDS).toContain(kind);
+      }
+    });
   });
 });
 

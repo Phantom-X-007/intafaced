@@ -11,12 +11,21 @@
  * satisfied by an implementation that ignores its rounding argument entirely.
  *
  * That is not hypothetical. When `money.property.test.ts` was first written it
- * caught 3 of these 6 mutants. Three real defects — a `mulBps` that ignores the
+ * caught 3 of these mutants. Three real defects — a `mulBps` that ignores the
  * caller's rounding mode, a `parseAmount` that truncates over-precision instead
  * of refusing it, and a `proRata` that hands dust to the SMALLEST remainders —
  * sailed through a suite of eighteen passing properties. The properties were
  * strengthened until all six died. Without this file that gap would have
  * shipped as "the money primitives have property tests".
+ *
+ * A SEVENTH was added on 2026-08-07, and it is the one this harness could not
+ * previously have caught — not because the mutant was missing, but because the
+ * SUITE'S INPUT DOMAIN was narrower than the function's. The weight generator
+ * could not produce a zero weight (`min: 1n`), and the two properties that
+ * constrain allocation both ran on positive totals only. `proRata`'s sign
+ * blindness lived exactly in that intersection, so no number of runs could
+ * reach it. A mutation gate proves the properties are strong; it cannot prove
+ * they are pointed at the whole input space, and that is where this one hid.
  *
  * A mutant is KILLED if `vitest run` exits non-zero with it applied.
  *
@@ -54,8 +63,30 @@ const MUTANTS = [
   {
     name: 'proRata: dust goes to the smallest remainders',
     guards: 'largest-remainder fairness',
-    find: 'b.remainder > a.remainder ? 1 : -1',
-    replace: 'b.remainder > a.remainder ? -1 : 1',
+    find: 'return ma === mb ? a.index - b.index : mb > ma ? 1 : -1;',
+    replace: 'return ma === mb ? a.index - b.index : mb > ma ? -1 : 1;',
+  },
+  {
+    /**
+     * The seventh mutant, and the one this gate could not previously have had.
+     *
+     * Sorting raw remainders instead of their magnitude is the real defect that
+     * shipped: on a NEGATIVE total every remainder is negative except a zero
+     * weight's, whose remainder is exactly `0` and therefore sorts first, so
+     * participants entitled to nothing were paid before those weighted 7 and 5.
+     * Conservation still held — the shares summed back to the total exactly —
+     * which is why every property in the suite passed over it.
+     *
+     * This mutant is the pre-fix line, verbatim. It stays here so the sign
+     * blindness cannot come back silently: it is only killable because the
+     * weight generator now DRAWS zero as its own branch and the allocation
+     * properties run on `anyAmount()`. Narrow either of those again and this
+     * mutant survives, which is the alarm.
+     */
+    name: 'proRata: dust ordered by raw remainder, so a negative total pays zero weights first',
+    guards: 'a zero weight receives exactly zero, on a total of either sign',
+    find: 'return ma === mb ? a.index - b.index : mb > ma ? 1 : -1;',
+    replace: 'return a.remainder === b.remainder ? a.index - b.index : b.remainder > a.remainder ? 1 : -1;',
   },
   {
     name: 'divideScaled: half-up boundary loses the exact half',
