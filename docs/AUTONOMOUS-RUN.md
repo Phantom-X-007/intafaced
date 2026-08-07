@@ -1,5 +1,12 @@
 # Autonomous run status — brokerage Wave-1
 
+> **SUPERSEDED 2026-08-07 — HISTORICAL RECORD ONLY.** Live run state is now
+> `docs/ops/RUN-LEDGER.json`, written by `tooling/scripts/run-ledger.mjs` in code at
+> every transition. This file was maintained by hand, was last written 2026-07-27, and
+> is the "lagged / lied mid-flight" ledger the failure autopsy names. Kept because it
+> records what the Wave-1 run actually did. **Do not update it. Do not read it as
+> current state.**
+
 **Wave:** 1 — Foundation  
 **Status:** **`stopped_success` (freeze empty for graph rules)**  
 **Policy:** auto-open green PRs · auto-merge money/core/holds = **NO** (still)  

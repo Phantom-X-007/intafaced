@@ -74,6 +74,24 @@ mustInclude('docs/ops/FINISH-ONTOLOGY.md', 'F-STANDBY', 'session finish types mu
 mustInclude('docs/ops/FINISH-ONTOLOGY.md', 'never evidence of success', 'the noise bans are the anti-volume rule; do not drop them');
 mustInclude('docs/ops/SWARM-MANDATE.md', 'FINISH-ONTOLOGY', 'the mandate must cite the in-repo ontology, never a path on one machine');
 
+// Run memory. The ledger is useless if nothing routes a resuming agent to it, and
+// docs/AUTONOMOUS-RUN.md already proved that: same idea in 2026-07, maintained by hand,
+// nothing has written it since the day it was created, and the failure autopsy records
+// it as "lagged / lied mid-flight". The ledger file itself is gitignored runtime state,
+// so this citation in AGENTS.md is the only thing that makes it reachable at all.
+//
+// Measured 2026-08-07: the harness rebuilds AGENTS.md into live context at EVERY
+// compaction, verbatim — so this instruction survives indefinitely. It is a snapshot
+// taken at session start, so an edit reaches new sessions only; never put state here.
+mustInclude('AGENTS.md', 'pnpm ledger', 'a resuming agent must be routed to the run ledger without a paste');
+mustInclude('AGENTS.md', 'RESUME HERE', 'the resume instruction must survive edits — it is what a cold agent acts on');
+mustInclude('AGENTS.md', 'open-count', 'module-Done is satisfiable infinitely; the run-level check must stay in the done ritual');
+mustInclude(
+  'tooling/scripts/run-ledger.mjs',
+  'cannot be done without a proof link',
+  'no-proof-no-done is enforced in code, not by convention',
+);
+
 // Binding law may not delegate authority to a path outside the repo. Same class as the
 // four reachability failures of 2026-08-07: correct doctrine no teammate can reach is
 // doctrine that does not exist. Operational paths an agent execs (tokens, tool bins)
