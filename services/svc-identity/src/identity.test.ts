@@ -643,6 +643,67 @@ if (!available) {
 
       await expect(auth.getSubAccountOwnership('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
     });
+
+    describe('assertSubAccountTransferDoor — ownership at the door', () => {
+      it('accepts two live partitions the caller owns', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'from');
+        const b = await auth.createSubAccount(owner.userId, 'to');
+
+        await expect(auth.assertSubAccountTransferDoor(owner.userId, a.id, b.id)).resolves.toEqual({
+          fromId: a.id,
+          toId: b.id,
+        });
+      });
+
+      it('refuses a missing from or to — never defaults to primary', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'only');
+
+        await expect(auth.assertSubAccountTransferDoor(owner.userId, null, a.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_required',
+        });
+        await expect(auth.assertSubAccountTransferDoor(owner.userId, a.id, undefined)).rejects.toMatchObject({
+          code: 'auth.sub_account_required',
+        });
+        await expect(auth.assertSubAccountTransferDoor(owner.userId, '', a.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_required',
+        });
+      });
+
+      it('refuses same partition twice', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'solo');
+        await expect(auth.assertSubAccountTransferDoor(owner.userId, a.id, a.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_same',
+        });
+      });
+
+      it('refuses a foreign or missing partition without confirming which', async () => {
+        const owner = await register();
+        const other = await register();
+        const mine = await auth.createSubAccount(owner.userId, 'mine');
+        const theirs = await auth.createSubAccount(other.userId, 'theirs');
+
+        await expect(auth.assertSubAccountTransferDoor(owner.userId, mine.id, theirs.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_denied',
+        });
+        await expect(
+          auth.assertSubAccountTransferDoor(owner.userId, mine.id, '00000000-0000-4000-8000-000000000099'),
+        ).rejects.toMatchObject({ code: 'auth.sub_account_denied' });
+      });
+
+      it('refuses when either side is revoked', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'live');
+        const b = await auth.createSubAccount(owner.userId, 'dead');
+        await auth.revokeSubAccount(owner.userId, b.id);
+
+        await expect(auth.assertSubAccountTransferDoor(owner.userId, a.id, b.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_revoked',
+        });
+      });
+    });
   });
 
   describe('KYC', () => {

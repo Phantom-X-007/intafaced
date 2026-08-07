@@ -105,6 +105,12 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     case 'auth.not_found':
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+    case 'auth.sub_account_required':
+    case 'auth.sub_account_same':
+      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    case 'auth.sub_account_denied':
+    case 'auth.sub_account_revoked':
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
   }
 }
 
@@ -743,6 +749,29 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => ({
           revoked: await auth.revokeSubAccount(ctx.principal.userId, input.subAccountId),
         })),
+
+      /**
+       * Transfer ownership door (SPEC-SUBACCOUNTS residual).
+       *
+       * Pure assert — does not move value. Money services call this (or the
+       * AuthService method) before posting `recipes.subAccountTransfer`. A
+       * missing id refuses; it never defaults to primary.
+       */
+      assertTransferDoor: scopedProcedure('identity:write')
+        .input(
+          z.object({
+            fromSubAccountId: z.string().uuid().optional().nullable(),
+            toSubAccountId: z.string().uuid().optional().nullable(),
+          }),
+        )
+        .output(z.object({ fromId: z.string().uuid(), toId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            return await auth.assertSubAccountTransferDoor(ctx.principal.userId, input.fromSubAccountId, input.toSubAccountId);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
     }),
 
     /**
