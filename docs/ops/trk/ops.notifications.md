@@ -54,16 +54,16 @@
 
 ### 2.3 Bus consumers (durable names)
 
-| Event key                        | Subject (catalog)                    | Effect                                                                                                      |
-| -------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `fillSettled`                    | `intafaced.trade.fill.settled`       | Inbox for fill owner                                                                                        |
-| `p2pEscrowLocked`                | `intafaced.p2p.escrow.locked`        | Seller + buyer                                                                                              |
-| `p2pEscrowReleased` / `Refunded` | p2p escrow subjects                  | Party rows                                                                                                  |
-| `p2pTradeDisputed`               | disputed                             | **Opener only** (payload has no counterparty)                                                               |
-| `kycApproved`                    | identity KYC                         | Tier granted                                                                                                |
-| `rankUpdated`                    | identity rank                        | Rank change                                                                                                 |
-| `stakeCreated`                   | token stake                          | Stake locked                                                                                                |
-| `bankMarginCalled`               | `intafaced.bank.margin_call.created` | **Critical** + fan-out; stream may still be **pending** until svc-bank publishes (`ownedStreams: ['bank']`) |
+| Event key                        | Subject (catalog)                    | Effect                                                            |
+| -------------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| `fillSettled`                    | `intafaced.trade.fill.settled`       | Inbox for fill owner                                              |
+| `p2pEscrowLocked`                | `intafaced.p2p.escrow.locked`        | Seller + buyer                                                    |
+| `p2pEscrowReleased` / `Refunded` | p2p escrow subjects                  | Party rows                                                        |
+| `p2pTradeDisputed`               | disputed                             | **Opener only** (payload has no counterparty)                     |
+| `kycApproved`                    | identity KYC                         | Tier granted                                                      |
+| `rankUpdated`                    | identity rank                        | Rank change                                                       |
+| `stakeCreated`                   | token stake                          | Stake locked                                                      |
+| `bankMarginCalled`               | `intafaced.bank.margin_call.created` | **Critical** + fan-out; svc-bank publishes (stream owned by bank) |
 
 **Deliberately not fanned:** some P2P resolve subjects name moderator/system only — documented in `packages/events` catalog + notify wiring comments.
 
@@ -118,8 +118,8 @@
 1. **Which channels are required** for production margin and KYC? (`email` alone vs `email,sms` vs `none` + in-app only) — risk call.
 2. **Provider vs forwarder:** point gateways at vendor HTTP APIs or run a small forwarder? (URL+token design supports both.)
 3. **User-facing “delivered” language:** forbidden as stronger than `accepted` unless receipts are designed (currently not modelled).
-4. **bankMarginCalled stream:** when does human-claimed bank work attach bus publish? Notify consumer is ready; publish is not this mountain.
-5. **Preference / mute / digest cadence:** not built; product law if users can silence critical.
+4. **bankMarginCalled stream:** closed — svc-bank publishes; notify consumer attaches when stream exists.
+5. **Preference / mute / digest cadence:** mute is durable for info/action; critical never muted. Digest cadence not wired into dispatch.
 6. **Push device tokens lifecycle:** register/confirm exists; mobile app ownership of token refresh is outside this pack.
 
 ---
@@ -130,7 +130,8 @@
 2. Socket rows `socket.notify-*` still open until credentials + proven delivery.
 3. No delivery-receipt webhook model (by design: `accepted_at` only).
 4. Alerts/watchlists product not this mountain.
-5. Possible orphan bank stream until svc-bank publishes margin events.
+5. Digest cadence prefs exist as pure helpers but are **not** wired into dispatch (product law still open).
+6. Mute prefs are durable (`notify.channel_mutes`) — **shipped** in residual-N; critical never muted.
 
 ---
 

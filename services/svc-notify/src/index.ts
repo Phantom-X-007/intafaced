@@ -8,7 +8,7 @@ import { PostgresNotifyStore } from './store.js';
 import { PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
-import { MemoryMuteStore } from './preferences/mute.js';
+import { PostgresMuteStore } from './preferences/mute-store.js';
 import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
@@ -72,6 +72,9 @@ await sql`SELECT 1 FROM notify.notifications LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM notify.deliveries LIMIT 1`.catch(() => {
   throw new Error('notify.deliveries is missing — run migration 0001_notify_channels before starting svc-notify');
 });
+await sql`SELECT 1 FROM notify.channel_mutes LIMIT 1`.catch(() => {
+  throw new Error('notify.channel_mutes is missing — run migration 0003_notify_mute_prefs before starting svc-notify');
+});
 
 // Consumer only — trade / p2p / identity / token / bank own their streams.
 // `ownedStreams: []` matches svc-ws: we never create a stream for subjects we do
@@ -88,7 +91,7 @@ const store = new PostgresNotifyStore(sql);
 const targets = new PostgresTargetStore(sql);
 const deliveries = new PostgresDeliveryStore(sql);
 const channels = channelsFromEnv(env);
-const muteStore = new MemoryMuteStore();
+const muteStore = new PostgresMuteStore(sql);
 const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
   maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS,
   outOfAppEnabled: env.NOTIFY_OUT_OF_APP_ENABLED,
@@ -150,11 +153,8 @@ for (const consumer of pending) {
   // A pending consumer is a DECLARED SOCKET or a DEFECT, and never both — see
   // the `PendingConsumer` docstring in ./events.ts.
   //
-  // This was one WARN per pending consumer. `bankMarginCalled` has been pending
-  // since svc-notify shipped, so that warning has fired on every boot this
-  // service has ever had. A warning that is always present is not a warning; it
-  // is a permanent feature of the log, and it trains whoever reads it to skim
-  // past warnings — including the next one, about something that just broke.
+  // Declared sockets log at info (known gap). Undeclared pending is an error —
+  // notifications for that subject are dark and nothing in WIRING_SOCKETS admits it.
   if (consumer.socket !== null) {
     app.log.info(
       { subject: consumer.subject, durable: consumer.durable, socket: consumer.socket },

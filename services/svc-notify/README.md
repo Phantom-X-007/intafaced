@@ -150,25 +150,33 @@ rather than a green tick over silence.
 
 ## API
 
-| Procedure               | Scope          | Input                              | Output                                 |
-| ----------------------- | -------------- | ---------------------------------- | -------------------------------------- |
-| `health`                | public         | —                                  | `{ ok, service, fanoutEnabled }`       |
-| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }` | `{ items, nextCursor }`                |
-| `notify.unreadCount`    | `notify:read`  | —                                  | `{ count }`                            |
-| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                  | `{ marked }`                           |
-| `notify.markAllRead`    | `notify:write` | —                                  | `{ marked }`                           |
-| `notify.channels`       | `notify:read`  | —                                  | per-channel availability + missing env |
-| `notify.targets`        | `notify:read`  | —                                  | the caller's registered addresses      |
-| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`    | `{ status, channel, code, expiresAt }` |
-| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                | `{ verified }`                         |
-| `notify.removeTarget`   | `notify:write` | `{ channel }`                      | `{ removed }`                          |
-| `notify.deliveries`     | `notify:read`  | `{ notificationId }`               | per-channel attempt + outcome          |
+| Procedure               | Scope          | Input                              | Output                                  |
+| ----------------------- | -------------- | ---------------------------------- | --------------------------------------- |
+| `health`                | public         | —                                  | `{ ok, service, fanoutEnabled }`        |
+| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }` | `{ items, nextCursor }`                 |
+| `notify.unreadCount`    | `notify:read`  | —                                  | `{ count }`                             |
+| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                  | `{ marked }`                            |
+| `notify.markAllRead`    | `notify:write` | —                                  | `{ marked }`                            |
+| `notify.channels`       | `notify:read`  | —                                  | per-channel availability + missing env  |
+| `notify.targets`        | `notify:read`  | —                                  | the caller's registered addresses       |
+| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`    | `{ status, channel, code, expiresAt }`  |
+| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                | `{ verified }`                          |
+| `notify.removeTarget`   | `notify:write` | `{ channel }`                      | `{ removed }`                           |
+| `notify.deliveries`     | `notify:read`  | `{ notificationId }`               | per-channel attempt + outcome           |
+| `notify.mutePrefs`      | `notify:read`  | —                                  | per-channel mute flags (email/push/sms) |
+| `notify.setMute`        | `notify:write` | `{ channel, muted }`               | updated mute flags                      |
 
 Every procedure is self-only via `principal.userId`. Title/body are i18n keys
 (`title_key` / `body_key`); clients render copy from `@intafaced/i18n`
 (`notify.*` keys). `notify.deliveries` is user-facing on purpose: if a margin
 call's email never went out, the person whose collateral is at risk is the one
 who most needs to see it.
+
+**Mute law.** `notify.setMute` silences out-of-app `info` / `action` traffic on
+one channel. Prefs live in `notify.channel_mutes` (migration `0003`) so a restart
+cannot silently unmute. **Critical** severity never respects mute — a muted
+email channel still receives margin calls, and the delivery row says `accepted`
+or a real refusal, never `channel.muted`.
 
 ### Edge path
 
@@ -227,12 +235,14 @@ at the moment it mattered rather than an inference from an empty table later.
 
 A durable consumer cannot be created against a stream no service has published
 to. When that happens the consumer is reported as **pending** on `GET /ready` and
-logged at warn, rather than failing the whole boot or being skipped in silence.
-Nothing is lost: JetStream retains 90 days and the consumer replays from the
-start of the stream on a later boot.
+logged at info (declared wiring socket) or error (undeclared defect), rather than
+failing the whole boot or being skipped in silence. Nothing is lost: JetStream
+retains 90 days and the consumer replays from the start of the stream on a later
+boot.
 
-`intafaced.bank.margin_call.created` is in exactly that state until svc-bank
-connects a bus with `ownedStreams: ['bank']`.
+`intafaced.bank.margin_call.created` used to sit in that state; svc-bank now
+owns the bank stream and publishes margin calls. The consumer attaches when the
+stream is present — pending is no longer the steady state for that subject.
 
 ## Ledger
 

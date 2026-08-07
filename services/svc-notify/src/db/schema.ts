@@ -86,6 +86,22 @@ export const deliveries = schema.table(
   (t) => [uniqueIndex('deliveries_notification_channel_idx').on(t.notificationId, t.channel)],
 );
 
+/**
+ * Out-of-app mute prefs. Presence of a row = muted for info/action.
+ * Critical severity ignores mute in dispatch — this table has no severity column
+ * on purpose (product answer: users cannot silence critical).
+ */
+export const channelMutes = schema.table(
+  'channel_mutes',
+  {
+    userId: text('user_id').notNull(),
+    channel: text('channel').$type<'email' | 'push' | 'sms'>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.channel] })],
+);
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type ChannelTargetRow = typeof channelTargets.$inferSelect;
 export type DeliveryRow = typeof deliveries.$inferSelect;
+export type ChannelMuteRow = typeof channelMutes.$inferSelect;

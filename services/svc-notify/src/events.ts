@@ -50,8 +50,8 @@ import type { CreateResult, NotifyService } from './notify-service.js';
  * DECLARED SOCKET, OR DEFECT — NEVER BOTH
  *
  * This used to be one flat list that produced one WARN per entry on every boot.
- * `bankMarginCalled` has been in it since svc-notify shipped, so the warning has
- * fired at every start for its whole life, and no boot has ever been free of it.
+ * `bankMarginCalled` lived in that WARN forever while its publisher was missing,
+ * so the warning fired at every start and trained operators to skim past it.
  *
  * A warning that is always there is not a warning. It is a permanent feature of
  * the log that teaches whoever reads it to skim past warnings — including the
@@ -73,6 +73,10 @@ import type { CreateResult, NotifyService } from './notify-service.js';
  * healthy without any one consumer, and taking the whole inbox down over a single
  * dark subject would turn a wiring gap into an outage. The loudness lives where
  * it costs nothing — the gate, at the commit.
+ *
+ * Note: `bankMarginCalled` used to be the permanent pending example. svc-bank
+ * now publishes it; the attach path and pending report remain for any future
+ * subject whose stream is not yet created.
  */
 export interface PendingConsumer {
   readonly event: EventName;
@@ -124,11 +128,10 @@ interface Attachment {
  *
  * The failure this tolerates is real and specific: a durable consumer cannot be
  * created against a stream that does not exist, and a stream does not exist
- * until its owning service has connected a bus. `intafaced.bank.margin_call.created`
- * is in exactly that state until svc-bank wires one. Refusing to boot over it
+ * until its owning service has connected a bus. Refusing to boot over it
  * would take the whole inbox down for every other subject; skipping it in
- * silence would leave nobody able to tell that margin-call notifications are
- * dark. So: attach what attaches, and report the rest by name.
+ * silence would leave nobody able to tell that notifications for that subject
+ * are dark. So: attach what attaches, and report the rest by name.
  */
 async function attach<K extends EventName>(
   bus: EventBus,

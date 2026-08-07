@@ -1,11 +1,12 @@
 /**
- * NOTIFICATION PREFERENCES — mute law (TRK-ops.notifications residual slice).
+ * NOTIFICATION PREFERENCES — mute law (TRK-ops.notifications residual).
  *
  * Product open question from the TRK pack: can users silence critical?
  * Stage answer: **no**. Critical (margin / safety) always fans out when a
  * target exists; mute applies only to `info` and `action`.
  *
- * Digest cadence is residual. No Class X gateway work here.
+ * Prefs are durable (`notify.channel_mutes` via PostgresMuteStore). Digest
+ * cadence remains a separate residual and is not wired into dispatch.
  */
 
 export type NotifySeverity = 'info' | 'action' | 'critical';
@@ -80,17 +81,29 @@ export function applyMuteToggle(current: ChannelMutePrefs, input: { channel: str
   return { muted: next };
 }
 
-/** In-memory prefs for tests / Stage-1 process store. */
-export class MemoryMuteStore {
+/**
+ * Who holds mute prefs.
+ *
+ * Production uses Postgres (`PostgresMuteStore`) so a restart cannot silently
+ * unmute. Tests use `MemoryMuteStore`. Both are async so dispatch and the API
+ * share one shape — a sync memory store would let prod drift into a second path.
+ */
+export interface MuteStore {
+  get(userId: string): Promise<ChannelMutePrefs>;
+  setMuted(userId: string, channel: MuteableChannel, muted: boolean): Promise<ChannelMutePrefs>;
+}
+
+/** In-memory prefs for unit tests (and harnesses that skip Postgres). */
+export class MemoryMuteStore implements MuteStore {
   private readonly byUser = new Map<string, Set<MuteableChannel>>();
 
-  get(userId: string): ChannelMutePrefs {
+  async get(userId: string): Promise<ChannelMutePrefs> {
     const s = this.byUser.get(userId);
     return { muted: new Set(s ?? []) };
   }
 
-  setMuted(userId: string, channel: MuteableChannel, muted: boolean): ChannelMutePrefs {
-    const cur = this.get(userId);
+  async setMuted(userId: string, channel: MuteableChannel, muted: boolean): Promise<ChannelMutePrefs> {
+    const cur = await this.get(userId);
     const next = applyMuteToggle(cur, { channel, muted });
     this.byUser.set(userId, new Set(next.muted));
     return next;
@@ -99,15 +112,15 @@ export class MemoryMuteStore {
   /**
    * L3 — whether channel is muted for user. Missing prefs → false (never invent mute).
    */
-  isMuted(userId: string, channel: MuteableChannel): boolean {
-    return this.get(userId).muted.has(channel);
+  async isMuted(userId: string, channel: MuteableChannel): Promise<boolean> {
+    return (await this.get(userId)).muted.has(channel);
   }
 
   /**
    * L3 — muted channel count for user. Missing → 0.
    */
-  muteCount(userId: string): number {
-    return this.get(userId).muted.size;
+  async muteCount(userId: string): Promise<number> {
+    return (await this.get(userId)).muted.size;
   }
 }
 
