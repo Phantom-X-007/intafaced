@@ -3,10 +3,10 @@
 **Tracker id:** `ops.analytics`  
 **Title:** Warehouse — read replica + cube layer  
 **Module / phase:** `core-ops` · phase **5**  
-**Status on tip:** `ready` · **owner:** none  
+**Status on tip:** `wip` · **owner:** cursor-swarm-analytics  
 **Depends on:** `ledger.double-entry`  
-**Tip freeze:** `origin/main` @ `56696496` (re-derive before implement)  
-**Pack type:** research only — no invent KPIs; warehouse is **read** path.
+**Tip freeze:** re-derive from `origin/main` before next residual  
+**Pack type:** Stage-1 shipped in contracts — no invent KPIs; warehouse is **read** path.
 
 ---
 
@@ -53,18 +53,22 @@ There is **no** cube project, no dbt project, no dedicated replica wiring in mon
 
 ### Slice A — replica + contract
 
-- [ ] Document which DBs replicate (ledger, trade, …)
-- [ ] Lag SLO + fail-closed for “live” labels
+- [x] Document which DBs replicate (ledger, trade, …) — ADR + `WAREHOUSE_REPLICA_PLAN_V0`
+- [x] Lag SLO + fail-closed for “live” labels — `queryWarehouseSurface` + Slice A `lagFreshness`
+- [x] Forbidden: analytics writer credentials on primary — `assertAnalyticsReplicaRole`
+- [x] Honest empty warehouse (no invent volume) — `status=empty|unavailable`
 
 ### Slice B — cube metrics v1
 
-- [ ] Metric definitions mapped to SQL/views
-- [ ] Tests: fixture ledger → expected cube numbers
+- [x] Metric definitions mapped to SQL/views — `CUBE_VIEWS_V0` (prior)
+- [x] Tests: fixture ledger → expected cube numbers — cube + warehouse surface tests
+- [ ] Physical ETL / warehouse process (residual)
 
 ### Slice C — consumer
 
-- [ ] Admin or BI tool read path
-- [ ] No write credentials in BI layer
+- [x] Consumer purity gate — `consumeCubePoints` (prior; no invent empty series)
+- [ ] Admin or BI tool read path (residual)
+- [x] No write credentials in BI layer — role law in Stage-1
 
 ---
 

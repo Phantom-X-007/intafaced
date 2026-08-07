@@ -50,19 +50,21 @@ Infra + product scope open.
 
 ### Stage 1 — infra
 
-- [ ] Read replica connection package + runbook
-- [ ] Forbidden: analytics writer credentials on primary
+- [x] Read replica connection package + runbook — `ops-analytics-warehouse` + ADR + `docs/ops/ANALYTICS-WAREHOUSE-REPLICA-RUNBOOK.md`
+- [x] Forbidden: analytics writer credentials on primary — `assertAnalyticsReplicaRole`
+- [x] Honest empty warehouse surface — never invent trading volume
 
 ### Stage 2 — first cube
 
-- [ ] One volume/users cube from events batch job
-- [ ] Staleness field required
+- [x] Metric views + fixture evaluation (contracts Slice B) — not a live ETL yet
+- [ ] One volume/users cube from events batch job (residual)
+- [x] Staleness field required — surface returns freshness / unavailable on stale lag
 
 ### Stage 3 — operator UI
 
 - [ ] apps/admin or ops surface read-only
 
-**Tracker `done`:** replica + ≥1 honest cube + access control — not a Notion dashboard.
+**Tracker `done`:** replica + ≥1 honest cube + access control — not a Notion dashboard. Stage-1 does **not** flip tracker done.
 
 ---
 

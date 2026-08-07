@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**45 of 109 shipped (41%)** · 4 in progress · 31 ready to claim · 29 blocked · 39 deliberate §13 sockets
+**45 of 109 shipped (41%)** · 5 in progress · 30 ready to claim · 29 blocked · 39 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -53,7 +53,6 @@ pnpm wt feat/<the-thing>
 | Support desk, tickets, KB | `core-ops` | 5 | `ops.support` |
 | Multi-tier affiliate / IB trees, payout automation | `core-ops` | 5 | `ops.affiliates` |
 | Screening queues, geo-block, VPN/Tor detection | `core-ops` | 5 | `ops.compliance` |
-| Warehouse — read replica + cube layer | `core-ops` | 5 | `ops.analytics` |
 | apps/admin — listings, fee params, treasury, kill-switches | `core-ops` | 5 | `ops.admin` |
 | Event-driven fan-out: in-app, push, email, SMS | `notify` | 5 | `ops.notifications` |
 
@@ -80,6 +79,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
 | Payment instruments — where the buyer actually pays | **nitro-agent** | `p2p` |
+| Warehouse — read replica + cube layer | **cursor-swarm-analytics** | `core-ops` |
 
 ---
 
@@ -246,7 +246,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Support desk, tickets, KB <br/>_Stage-1 2026-08-04: contracts + svc-support in-memory ticket spine (create/list/comment/status) + empty KB. No money. Operator UI Stage-2 residual._ | F |  | `ops.support` |
 | 🟢 | Multi-tier affiliate / IB trees, payout automation | F |  | `ops.affiliates` |
 | 🟢 | Screening queues, geo-block, VPN/Tor detection | F |  | `ops.compliance` |
-| 🟢 | Warehouse — read replica + cube layer | F |  | `ops.analytics` |
+| 🔨 | Warehouse — read replica + cube layer <br/>_Stage-1 2026-08-07: replica role law + honest empty warehouse surface in contracts (ops-analytics-warehouse) + ADR/runbook. No invent volume. Residual: physical replica wiring, ETL cube job, admin consumer — not tracker done._ | F |  | `ops.analytics` |
 | 🟢 | apps/admin — listings, fee params, treasury, kill-switches <br/>_Downgraded 2026-07-28: apps/admin has ZERO test files and makes no network call of any kind. Every kill-switch, freeze and reconcile is React `useState` in the browser — flipping one changes a local boolean and nothing else. An operator console that appears to halt the ledger and does not is worse than no console._ | F |  | `ops.admin` |
 | 🟢 | Event-driven fan-out: in-app, push, email, SMS <br/>_In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers: fillSettled, p2pEscrowLocked, p2pEscrowReleased, p2pEscrowRefunded, p2pTradeDisputed (openedBy only #157), kycApproved, rankUpdated, stakeCreated, bankMarginCalled; ON CONFLICT dedupe). Multi-channel fan-out now exists: one NotificationChannel adapter interface with three real out-of-app adapters (email/push/SMS), per-channel delivery rows with attempted_at kept apart from accepted_at, claim-per-(notification,channel) idempotency, confirmed-address targets, and a retryable/permanent split that decides whether the bus redelivers. The outcome column is accepted_at, not delivered_at: a 2xx from a gateway is custody, not receipt, and no delivery receipts are modelled (migration 0002). NOT done: no out-of-app channel can actually deliver until the owner supplies gateway credentials — until then email, push and SMS refuse every message with channel.not_configured and the refusal is on the record. In-app is the honest fallback and is genuinely delivering._ | F |  | `ops.notifications` |
 | 🔌 | Push notification channel (device tokens + provider) <br/>_§13 — PushChannel shipped and proved against a real HTTP server (title/body plus a data payload the app routes on; device token registered and confirmed per user; opaque-token validation refuses channel.target_unroutable without calling out). NOTIFY_PUSH_GATEWAY_URL/TOKEN now exist in .env.example and docker-compose.apps.yml, so there is somewhere to put them. Blocked on credentials the owner must obtain, not on code; listing push in NOTIFY_REQUIRED_CHANNELS makes their absence fatal at boot. Owner list: docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md._ | F |  | `socket.notify-push` |
