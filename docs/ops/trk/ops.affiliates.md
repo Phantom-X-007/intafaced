@@ -61,6 +61,7 @@ Any commission is **fee share of real volume**. Without fee events + ledger reci
 - [x] Multi-tier depth limit law
 - [x] Cycle / self-referral rejection tests
 - [x] Admin tree board + node status read (`admin:read`) — Stage spine 2026-08-07
+- [x] Admin member listing + freeze/unfreeze honestyLine — Stage-2 2026-08-07
 - [x] Payout path refuse-closed until DIRECTION §8 rates + ledger recipe (Class M)
 
 ### Slice B — accrual

@@ -1,9 +1,9 @@
 # Claim TRK-ops.affiliates
 
-**status:** merged
+**status:** wip
 **owner:** cursor-swarm-affiliates
-**proof:** https://github.com/Phantom-X-007/intafaced/pull/996
-**tip:** feat/ops-affiliates-stage
+**proof:** (pending Stage-2 PR)
+**tip:** feat/ops-affiliates-stage2
 **updated:** 2026-08-07
 
-Stage spine — admin tree structure / node status / payout refuse-closed (Class N). Merged #996. No fee-share invent; Class M payout residual named DIRECTION §8.
+Stage-2 — admin member listing + freeze/unfreeze honestyLine (Class N). Builds on #996 treeStatus/node. No fee-share invent; payout remains refuse-closed (DIRECTION §8).

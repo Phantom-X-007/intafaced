@@ -4,7 +4,13 @@ import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
-import { AffiliatePayoutRefuseError, affiliateTreeStatusLine, refuseAffiliatePayout } from './affiliates/admin-tree-read.js';
+import {
+  AffiliatePayoutRefuseError,
+  affiliateFreezeHonestyLine,
+  affiliateMemberListStatusLine,
+  affiliateTreeStatusLine,
+  refuseAffiliatePayout,
+} from './affiliates/admin-tree-read.js';
 import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
@@ -778,20 +784,28 @@ export function createIdentityRouter(
             frozenBy: z.string().uuid(),
             reason: z.string(),
             frozenAt: z.string(),
+            honestyLine: z.string(),
           }),
         )
         .mutation(async ({ ctx, input }) => {
           try {
-            const rec = await requireFreeze().freeze({
+            const svc = requireFreeze();
+            const rec = await svc.freeze({
               beneficiaryId: input.beneficiaryId,
               frozenBy: ctx.principal.userId,
               reason: input.reason,
             });
+            const frozenIds = await svc.frozenIds();
             return {
               beneficiaryId: rec.beneficiaryId,
               frozenBy: rec.frozenBy,
               reason: rec.reason,
               frozenAt: rec.frozenAt.toISOString(),
+              honestyLine: affiliateFreezeHonestyLine({
+                beneficiaryId: rec.beneficiaryId,
+                frozenIds,
+                action: 'freeze',
+              }),
             };
           } catch (err) {
             throw toTrpcError(err);
@@ -806,16 +820,24 @@ export function createIdentityRouter(
             frozenBy: z.string().uuid(),
             reason: z.string(),
             frozenAt: z.string(),
+            honestyLine: z.string(),
           }),
         )
         .mutation(async ({ input }) => {
           try {
-            const rec = await requireFreeze().unfreeze(input.beneficiaryId);
+            const svc = requireFreeze();
+            const rec = await svc.unfreeze(input.beneficiaryId);
+            const frozenIds = await svc.frozenIds();
             return {
               beneficiaryId: rec.beneficiaryId,
               frozenBy: rec.frozenBy,
               reason: rec.reason,
               frozenAt: rec.frozenAt.toISOString(),
+              honestyLine: affiliateFreezeHonestyLine({
+                beneficiaryId: rec.beneficiaryId,
+                frozenIds,
+                action: 'unfreeze',
+              }),
             };
           } catch (err) {
             throw toTrpcError(err);
@@ -906,6 +928,54 @@ export function createIdentityRouter(
               directDownlineCount: node.directDownlineCount,
               frozen: node.frozen,
               attributedAt: node.attributedAt,
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Stage-2 admin read — attributed member roster (+ optional root filter).
+       * Structure + freeze overlay only; no rates / payouts.
+       */
+      members: scopedProcedure('admin:read')
+        .input(z.object({ rootId: z.string().uuid().optional() }).optional())
+        .output(
+          z.object({
+            members: z.array(
+              z.object({
+                userId: z.string().uuid(),
+                referrerId: z.string().uuid(),
+                depth: z.number().int().nonnegative(),
+                frozen: z.boolean(),
+                attributedAt: z.string().nullable(),
+              }),
+            ),
+            total: z.number().int().nonnegative(),
+            frozenInList: z.number().int().nonnegative(),
+            maxDepthInList: z.number().int().nonnegative(),
+            rootId: z.string().uuid().nullable(),
+            statusLine: z.string(),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            const frozen = freeze ? await requireFreeze().frozenIds() : new Set<string>();
+            const rootId = input?.rootId ?? null;
+            const { members, board } = await requireReferral().listMembers(frozen, rootId);
+            return {
+              members: members.map((m) => ({
+                userId: m.userId,
+                referrerId: m.referrerId,
+                depth: m.depth,
+                frozen: m.frozen,
+                attributedAt: m.attributedAt,
+              })),
+              total: board.total,
+              frozenInList: board.frozenInList,
+              maxDepthInList: board.maxDepthInList,
+              rootId: board.rootId,
+              statusLine: affiliateMemberListStatusLine(board),
             };
           } catch (err) {
             throw toTrpcError(err);

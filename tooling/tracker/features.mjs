@@ -1018,7 +1018,10 @@ export const FEATURES = [
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',
     phase: '5',
+    status: 'wip',
+    owner: 'cursor-swarm-affiliates',
     dependsOn: ['ledger.double-entry'],
+    note: 'Stage-1 2026-08-07 #996: admin treeStatus/node + payout refuse-closed. Stage-2 2026-08-07: members roster + freeze/unfreeze honestyLine — no invent rates. Residual: Class M ledger recipe after DIRECTION §8 owner rates.',
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', {

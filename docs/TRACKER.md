@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**45 of 109 shipped (41%)** · 9 in progress · 26 ready to claim · 29 blocked · 39 deliberate §13 sockets
+**45 of 109 shipped (41%)** · 10 in progress · 25 ready to claim · 29 blocked · 39 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -47,7 +47,6 @@ pnpm wt feat/<the-thing>
 | ERC-20 deploy from audited templates | `launch` | 5 | `launch.token-factory` |
 | Vendor lifecycle — apply, vet, list, stake-gated slots | `market` | 5 | `market.vendors` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
-| Multi-tier affiliate / IB trees, payout automation | `core-ops` | 5 | `ops.affiliates` |
 | Screening queues, geo-block, VPN/Tor detection | `core-ops` | 5 | `ops.compliance` |
 | apps/admin — listings, fee params, treasury, kill-switches | `core-ops` | 5 | `ops.admin` |
 | Event-driven fan-out: in-app, push, email, SMS | `notify` | 5 | `ops.notifications` |
@@ -79,6 +78,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Payment instruments — where the buyer actually pays | **nitro-agent** | `p2p` |
 | Fiat on/off ramp reusing svc-pay adapters | **cursor-swarm-bank** | `bank` |
 | Support desk, tickets, KB | **cursor-swarm-ops-support** | `core-ops` |
+| Multi-tier affiliate / IB trees, payout automation | **cursor-swarm-affiliates** | `core-ops` |
 | Warehouse — read replica + cube layer | **cursor-swarm-analytics** | `core-ops` |
 
 ---
@@ -244,7 +244,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Stratum share protocol, PPLNS payouts <br/>_HUMAN mining epoch/share protocol surface @shehzad002 (token minter remains svc-token). Agents babysit chain half. Plane deliberately left F 2026-08-07: the share/epoch protocol is the chain owner's, but minting stays custodial in svc-token, and relabelling the row P would misdescribe where the value moves._ | F |  | `mining.pool` |
 | 🔌 | Custody operations — cold/warm/hot wallet tiers, multi-sig approval workflow <br/>_Law §25 custody line, gap-closed 2026-08-07 and DELIBERATELY SPLIT rather than given one owner. This is how the PLATFORM holds its own funds — which wallets are online, how much sits in each tier, and who must approve a movement. The on-chain half (the multi-sig contract, the threshold policy, the hot-wallet perimeter) is @shehzad002 and already has board coverage as S-B2; the operational half (tiering policy, approval workflow, the console an operator uses) is ordinary agent work and Class X where real keys are involved. Naming it here so the capability stops being invisible: an unrowed custody surface is the one nobody notices is missing until it is needed under pressure._ | F |  | `ops.custody` |
 | 🔨 | Support desk, tickets, KB <br/>_Stage-1 2026-08-07 #989: ticket spine. Stage-2 2026-08-07: operator queue API (listQueue/next/claim) wired on svc-support — no money. Residual: apps/admin desk UI + read-only account panel._ | F |  | `ops.support` |
-| 🟢 | Multi-tier affiliate / IB trees, payout automation | F |  | `ops.affiliates` |
+| 🔨 | Multi-tier affiliate / IB trees, payout automation <br/>_Stage-1 2026-08-07 #996: admin treeStatus/node + payout refuse-closed. Stage-2 2026-08-07: members roster + freeze/unfreeze honestyLine — no invent rates. Residual: Class M ledger recipe after DIRECTION §8 owner rates._ | F |  | `ops.affiliates` |
 | 🟢 | Screening queues, geo-block, VPN/Tor detection | F |  | `ops.compliance` |
 | 🔨 | Warehouse — read replica + cube layer <br/>_Stage-1 2026-08-07: replica role law + honest empty warehouse surface in contracts (ops-analytics-warehouse) + ADR/runbook. No invent volume. Residual: physical replica wiring, ETL cube job, admin consumer — not tracker done._ | F |  | `ops.analytics` |
 | 🟢 | apps/admin — listings, fee params, treasury, kill-switches <br/>_Downgraded 2026-07-28: apps/admin has ZERO test files and makes no network call of any kind. Every kill-switch, freeze and reconcile is React `useState` in the browser — flipping one changes a local boolean and nothing else. An operator console that appears to halt the ledger and does not is worse than no console._ | F |  | `ops.admin` |
