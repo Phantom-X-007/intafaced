@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes, formatAmount, userAvailable } from '@intafaced/ledger-client';
 import { CopyService } from './copy-service.js';
+import { MemoryCopyFollowStore } from './follow-store.js';
 import { UNPUBLISHED_COPY_FEE_SHARE_LAW, type CopyFeeShareLaw, type CopyJurisdictionLaw } from './fee-share-law.js';
 import { CopyError } from './errors.js';
 
@@ -32,12 +33,12 @@ describe('CopyService', () => {
     expect(s.residual).toContain('DIRECTION §8');
   });
 
-  it('follow refuses when jurisdiction law blank — never invents allowlist', () => {
+  it('follow refuses when jurisdiction law blank — never invents allowlist', async () => {
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
       jurisdictionLaw: { published: false },
     });
-    expect(() =>
+    await expect(
       svc.follow(principal, {
         leaderId: LEADER,
         region: 'SG',
@@ -46,27 +47,15 @@ describe('CopyService', () => {
         maxAggregateExposure: '1000',
         expiresAt: futureExpiry,
       }),
-    ).toThrow(CopyError);
-    try {
-      svc.follow(principal, {
-        leaderId: LEADER,
-        region: 'SG',
-        permittedMarkets: ['BTC-USDT'],
-        maxNotionalPerOrder: '100',
-        maxAggregateExposure: '1000',
-        expiresAt: futureExpiry,
-      });
-    } catch (err) {
-      expect((err as CopyError).code).toBe('trade.copy_jurisdiction_blank');
-    }
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blank' });
   });
 
-  it('follow refuses region not on owner allowlist', () => {
+  it('follow refuses region not on owner allowlist', async () => {
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
     });
-    try {
+    await expect(
       svc.follow(principal, {
         leaderId: LEADER,
         region: 'US',
@@ -74,14 +63,11 @@ describe('CopyService', () => {
         maxNotionalPerOrder: '100',
         maxAggregateExposure: '1000',
         expiresAt: futureExpiry,
-      });
-      expect.unreachable('should refuse');
-    } catch (err) {
-      expect((err as CopyError).code).toBe('trade.copy_jurisdiction_blocked');
-    }
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
-  it('follow → mirror plan within envelope; cap exceed refuses', () => {
+  it('follow → mirror plan within envelope; cap exceed refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
@@ -89,7 +75,7 @@ describe('CopyService', () => {
       now: () => now,
     });
 
-    const follow = svc.follow(principal, {
+    const follow = await svc.follow(principal, {
       leaderId: LEADER,
       region: 'sg',
       permittedMarkets: ['BTC-USDT'],
@@ -100,7 +86,7 @@ describe('CopyService', () => {
     expect(follow.region).toBe('SG');
     expect(follow.maxNotionalPerOrder).toBe('100');
 
-    const plan = svc.planMirrorForFollow(principal, {
+    const plan = await svc.planMirrorForFollow(principal, {
       followId: follow.followId,
       marketId: 'BTC-USDT',
       side: 'buy',
@@ -110,53 +96,44 @@ describe('CopyService', () => {
     expect(plan.notional).toBe('80');
     expect(plan.reason).toBe('within_envelope');
 
-    try {
+    await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.01',
         notional: '80',
-      });
-      expect.unreachable('cap');
-    } catch (err) {
-      expect((err as CopyError).code).toBe('trade.copy_cap_exceeded');
-    }
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
 
-    try {
+    await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
         marketId: 'ETH-USDT',
         side: 'buy',
         qty: '1',
         notional: '10',
-      });
-      expect.unreachable('market');
-    } catch (err) {
-      expect((err as CopyError).code).toBe('trade.copy_market_not_permitted');
-    }
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_market_not_permitted' });
 
     now = new Date('2027-01-01T00:00:00.000Z');
-    try {
+    await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.001',
         notional: '10',
-      });
-      expect.unreachable('expiry');
-    } catch (err) {
-      expect((err as CopyError).code).toBe('trade.copy_key_expired');
-    }
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_key_expired' });
   });
 
-  it('unfollow always works (unilateral revoke)', () => {
+  it('unfollow always works (unilateral revoke)', async () => {
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: UNPUBLISHED_COPY_FEE_SHARE_LAW,
       jurisdictionLaw: publishedJur,
     });
-    const follow = svc.follow(principal, {
+    const follow = await svc.follow(principal, {
       leaderId: LEADER,
       region: 'SG',
       permittedMarkets: ['BTC-USDT'],
@@ -164,7 +141,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '1000',
       expiresAt: futureExpiry,
     });
-    const revoked = svc.unfollow(principal, { followId: follow.followId });
+    const revoked = await svc.unfollow(principal, { followId: follow.followId });
     expect(revoked.revoked).toBe(true);
   });
 
@@ -173,7 +150,7 @@ describe('CopyService', () => {
       feeShareLaw: UNPUBLISHED_COPY_FEE_SHARE_LAW,
       jurisdictionLaw: publishedJur,
     });
-    const f0 = blank.follow(principal, {
+    const f0 = await blank.follow(principal, {
       leaderId: LEADER,
       region: 'SG',
       permittedMarkets: ['BTC-USDT'],
@@ -216,7 +193,7 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
     });
-    const follow = svc.follow(principal, {
+    const follow = await svc.follow(principal, {
       leaderId: LEADER,
       region: 'SG',
       permittedMarkets: ['BTC-USDT'],
@@ -251,5 +228,52 @@ describe('CopyService', () => {
     } catch (err) {
       expect((err as CopyError).code).toBe('trade.copy_pnl_fee_forbidden');
     }
+  });
+
+  it('follow + exposure survive a process restart (shared durable store)', async () => {
+    // Two CopyService instances share one store — models restart with SqlCopyFollowStore.
+    const store = new MemoryCopyFollowStore();
+    const first = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await first.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await first.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '40',
+    });
+
+    // "Restart": new service, same store — no in-process Maps left.
+    const second = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const reloaded = await store.getFollow(follow.followId);
+    expect(reloaded).not.toBeNull();
+    expect(reloaded!.leaderId).toBe(LEADER);
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('40');
+
+    // Cap still enforced against durable exposure.
+    await expect(
+      second.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '970',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
   });
 });
