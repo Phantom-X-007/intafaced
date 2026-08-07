@@ -164,6 +164,12 @@ export const accounts = ledger.table(
      * balances must fail loudly — `active = false` is how one is withdrawn.
      */
     foreignKey({ columns: [t.assetId], foreignColumns: [assets.id], name: 'accounts_asset_id_fk' }).onDelete('restrict'),
+    /**
+     * Not for the key — its check reads `assets.id`, already a primary key.
+     * This serves the reconciliation job's GROUP BY asset_id and the RESTRICT
+     * check. `ledger_entries` deliberately has no counterpart: nothing queries
+     * entries by asset, and the posting path is globally serial (0006).
+     */
     index('accounts_asset_id_idx').on(t.assetId),
 
     /** Only the treasury boundary may run negative (0000). */
@@ -244,7 +250,6 @@ export const ledgerEntries = ledger.table(
      * independently.
      */
     foreignKey({ columns: [t.assetId], foreignColumns: [assets.id], name: 'ledger_entries_asset_id_fk' }).onDelete('restrict'),
-    index('ledger_entries_asset_id_idx').on(t.assetId),
     /** Direction carries the sign; the amount never does (0000). */
     check('ledger_entries_positive_ck', sql`amount > 0`),
   ],

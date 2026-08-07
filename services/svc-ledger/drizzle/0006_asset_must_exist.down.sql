@@ -8,10 +8,9 @@
 --
 -- STEP 1 of the forward migration raises rather than writing, so it has nothing
 -- to reverse: no row was changed, moved or deleted in either direction. The
--- indexes go with the constraints they were added to serve.
+-- index goes with the constraint it was added to serve.
 
 ALTER TABLE "ledger"."ledger_entries" DROP CONSTRAINT IF EXISTS "ledger_entries_asset_id_fk";
 ALTER TABLE "ledger"."accounts" DROP CONSTRAINT IF EXISTS "accounts_asset_id_fk";
 
-DROP INDEX IF EXISTS "ledger"."ledger_entries_asset_id_idx";
 DROP INDEX IF EXISTS "ledger"."accounts_asset_id_idx";

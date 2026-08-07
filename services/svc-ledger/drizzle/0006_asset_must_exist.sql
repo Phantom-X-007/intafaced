@@ -91,8 +91,18 @@ ALTER TABLE "ledger"."ledger_entries"
   ADD CONSTRAINT "ledger_entries_asset_id_fk"
   FOREIGN KEY ("asset_id") REFERENCES "ledger"."assets" ("id") ON DELETE RESTRICT;
 
--- A foreign key does not index the referencing side, and both of these are
--- checked on every account upsert and every entry insert on a globally-serial
--- posting path.
+-- ONE index, on `accounts` only, and not for the foreign key.
+--
+-- The key's own check reads `assets.id`, which is already the primary key —
+-- neither of these indexes would serve it. What this one serves is the
+-- reconciliation job's `SELECT asset_id, SUM(balance) ... GROUP BY asset_id`
+-- (src/ledger/reconcile.ts), which runs on a schedule, plus the RESTRICT check
+-- when someone tries to delete an asset.
+--
+-- `ledger_entries` deliberately gets NO such index. Nothing queries entries by
+-- asset, the only reader would be that same RESTRICT check on an admin
+-- operation that is refused anyway and essentially never runs, and every insert
+-- on the globally-serial posting path would pay to maintain it against a table
+-- with ninety days of retention. A seq scan on a delete nobody performs is the
+-- cheaper side of that trade.
 CREATE INDEX IF NOT EXISTS "accounts_asset_id_idx" ON "ledger"."accounts" ("asset_id");
-CREATE INDEX IF NOT EXISTS "ledger_entries_asset_id_idx" ON "ledger"."ledger_entries" ("asset_id");
