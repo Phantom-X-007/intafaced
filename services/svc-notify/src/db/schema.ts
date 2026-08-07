@@ -77,6 +77,8 @@ export const deliveries = schema.table(
     attempts: integer('attempts').notNull().default(0),
     attemptedAt: timestamp('attempted_at', { withTimezone: true, mode: 'date' }),
     acceptedAt: timestamp('accepted_at', { withTimezone: true, mode: 'date' }),
+    /** Exclusive claim window — see 0004_notify_delivery_claim_lease.sql. */
+    leaseUntil: timestamp('lease_until', { withTimezone: true, mode: 'date' }),
     refusalCode: text('refusal_code'),
     detail: text('detail'),
     reference: text('reference'),
