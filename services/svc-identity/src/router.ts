@@ -4,6 +4,8 @@ import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
+import { ReferralError } from './affiliates/referral-tree.js';
+import type { ReferralService } from './affiliates/referral-service.js';
 
 /**
  * svc-identity's API (§4.1).
@@ -18,6 +20,20 @@ function toTrpcError(err: unknown): TRPCError {
   // shared package's AuthError, which is a different class from this service's.
   if (err instanceof GuardError) {
     return new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
+  }
+
+  if (err instanceof ReferralError) {
+    switch (err.code) {
+      case 'referral.unknown_referrer':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'referral.already_set':
+      case 'referral.cycle':
+      case 'referral.depth':
+      case 'referral.self':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'referral.invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
   }
 
   if (!(err instanceof AuthError)) {
@@ -101,9 +117,17 @@ function presentKyc(record: KycRecordView) {
 export function createIdentityRouter(
   auth: AuthService,
   rank: RankService,
-  options: { registrationOpen: boolean; webauthnEnabled?: boolean },
+  options: { registrationOpen: boolean; webauthnEnabled?: boolean; referral?: ReferralService },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
+  const referral = options.referral;
+
+  function requireReferral(): ReferralService {
+    if (!referral) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Referral tree is not configured' });
+    }
+    return referral;
+  }
 
   return router({
     health: publicProcedure
@@ -636,6 +660,71 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => ({
           revoked: await auth.revokeSubAccount(ctx.principal.userId, input.subAccountId),
         })),
+    }),
+
+    /**
+     * Affiliate referral tree Slice A — attribution only (no commission, no pay).
+     * Spec: docs/ops/trk/ops.affiliates.md Slice A.
+     */
+    affiliates: router({
+      attribute: scopedProcedure('identity:write')
+        .input(z.object({ referrerId: z.string().uuid() }))
+        .output(
+          z.object({
+            userId: z.string().uuid(),
+            referrerId: z.string().uuid(),
+            attributedAt: z.string(),
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const edge = await requireReferral().attribute({
+              userId: ctx.principal.userId,
+              referrerId: input.referrerId,
+            });
+            return {
+              userId: edge.userId,
+              referrerId: edge.referrerId,
+              attributedAt: edge.attributedAt.toISOString(),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      myReferrer: scopedProcedure('identity:read')
+        .output(
+          z
+            .object({
+              userId: z.string().uuid(),
+              referrerId: z.string().uuid(),
+              attributedAt: z.string(),
+            })
+            .nullable(),
+        )
+        .query(async ({ ctx }) => {
+          try {
+            const edge = await requireReferral().edgeOf(ctx.principal.userId);
+            if (!edge) return null;
+            return {
+              userId: edge.userId,
+              referrerId: edge.referrerId,
+              attributedAt: edge.attributedAt.toISOString(),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      myAncestors: scopedProcedure('identity:read')
+        .output(z.array(z.string().uuid()))
+        .query(async ({ ctx }) => {
+          try {
+            return await requireReferral().ancestorsOf(ctx.principal.userId);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
     }),
   });
 }
