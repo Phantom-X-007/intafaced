@@ -5,6 +5,7 @@ import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
 import { getCurriculumItem, listCurriculum } from './curriculum/catalog.js';
 import { curriculumInventory } from './curriculum/import-pipeline.js';
+import { startPaperDrillForCatalogItem } from './paper/workbook-loop.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -92,6 +93,20 @@ const curriculumInventoryOut = z.object({
   residualPlaybooks: z.number().int(),
   residualWorkbooks: z.number().int(),
 });
+
+const paperDrillOut = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    marketId: z.string(),
+    symbol: z.string(),
+    steps: z.array(z.object({ id: z.string(), instruction: z.string() })),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.enum(['not_paper', 'no_market', 'unknown_step', 'bad_fill']),
+    message: z.string(),
+  }),
+]);
 
 const ambassadorStatus = z.enum(['active', 'frozen']);
 const ambassadorOut = z.object({
@@ -245,6 +260,46 @@ export function createAcademyRouter(academy: AcademyService) {
     curriculumInventory: scopedProcedure('academy:read', { module: 'academy' })
       .output(curriculumInventoryOut)
       .query(() => curriculumInventory()),
+
+    /**
+     * Paper drill gate for a workbook (TRK-academy.paper-trading Stage 2).
+     *
+     * Read-only on purpose: the drill loop is a pure state machine and academy
+     * holds no run state, so this answers one question — may this catalog item
+     * be drilled against this market, and with which steps. A market that is
+     * not flagged `paper: true` by trade refuses here rather than anywhere a
+     * user could mistake it for live. No fills, prices or balances cross this
+     * boundary; money truth stays on trade.
+     */
+    paperDrill: scopedProcedure('academy:read', { module: 'academy' })
+      .input(
+        z.object({
+          slug: z.string().min(1),
+          market: z
+            .object({ marketId: z.string().min(1), paper: z.boolean(), symbol: z.string().min(1) })
+            .nullable()
+            .default(null),
+        }),
+      )
+      .output(paperDrillOut)
+      .query(({ input }) =>
+        guard(async () => {
+          const item = getCurriculumItem(input.slug);
+          if (!item) {
+            throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
+          }
+          const result = startPaperDrillForCatalogItem({ slug: input.slug, kind: item.kind, market: input.market });
+          if (!result.ok) {
+            return { ok: false as const, reason: result.reason, message: result.message };
+          }
+          return {
+            ok: true as const,
+            marketId: result.run.marketId,
+            symbol: result.run.symbol,
+            steps: result.run.steps.map((step) => ({ id: step.id, instruction: step.instruction })),
+          };
+        }),
+      ),
 
     // ── Lobbies ──────────────────────────────────────────────────────────────
 
