@@ -174,6 +174,22 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     expect(isScoreWritable(season.status)).toBe(false);
   });
 
+  it('Stage-3: transition / freeze refuse prize attachment invent', () => {
+    const withPrize = { ...base, status: 'live' as const, prize: '100.00' } as typeof base & {
+      status: 'live';
+      prize: string;
+    };
+    expect(() => transitionSeason(withPrize, 'frozen')).toThrow(TournamentError);
+    expect(() =>
+      snapshotStandingsAtFreeze({
+        seasonId: 's1',
+        status: 'live',
+        rows: [],
+        prizePool: '1',
+      } as { seasonId: string; status: 'live'; rows: StandingRecord[]; prizePool: string }),
+    ).toThrow(TournamentError);
+  });
+
   it('L3 countSeasonsByStatus histogram without invent', () => {
     expect(countSeasonsByStatus([])).toEqual({
       scheduled: 0,
