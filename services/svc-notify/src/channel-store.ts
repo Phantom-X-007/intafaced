@@ -125,6 +125,16 @@ export interface TargetStore {
   list(userId: string): Promise<ChannelTarget[]>;
   /** The only list the dispatcher may use. */
   verified(userId: string): Promise<ChannelTarget[]>;
+  /**
+   * Channels holding a registered but UNCONFIRMED address.
+   *
+   * Ids only, deliberately — never addresses. The dispatcher needs this to tell
+   * "you gave us nothing" apart from "you gave us something and never clicked
+   * the code", which are different facts and only the second one is something
+   * the user can fix. Returning ids and not rows means the dispatcher cannot
+   * send to one of these even by mistake: it never holds the address.
+   */
+  unverifiedChannels(userId: string): Promise<readonly ChannelId[]>;
   /** Confirm with the token we sent. Returns false for a wrong, expired or spent token. */
   markVerified(userId: string, channel: ChannelId, tokenHash: string, now: Date): Promise<boolean>;
   remove(userId: string, channel: ChannelId): Promise<boolean>;
@@ -252,6 +262,10 @@ export class MemoryTargetStore implements TargetStore {
 
   async verified(userId: string): Promise<ChannelTarget[]> {
     return (await this.list(userId)).filter((r) => r.verifiedAt !== null);
+  }
+
+  async unverifiedChannels(userId: string): Promise<readonly ChannelId[]> {
+    return (await this.list(userId)).filter((r) => r.verifiedAt === null).map((r) => r.channel);
   }
 
   async markVerified(userId: string, channel: ChannelId, tokenHash: string, now: Date): Promise<boolean> {
@@ -483,6 +497,17 @@ export class PostgresTargetStore implements TargetStore {
        ORDER BY channel ASC
     `;
     return rows.map(fromTargetPg);
+  }
+
+  async unverifiedChannels(userId: string): Promise<readonly ChannelId[]> {
+    // `channel` and nothing else. This answers a labelling question, so it has
+    // no reason to load an address the caller must not send to.
+    const rows = await this.sql<{ channel: ChannelId }[]>`
+      SELECT channel FROM notify.channel_targets
+       WHERE user_id = ${userId} AND verified_at IS NULL
+       ORDER BY channel ASC
+    `;
+    return rows.map((r) => r.channel);
   }
 
   async markVerified(userId: string, channel: ChannelId, tokenHash: string, now: Date): Promise<boolean> {

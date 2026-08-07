@@ -36,10 +36,14 @@ import { EMPTY_MUTE_PREFS, isChannelMuted, type ChannelMutePrefs, type MuteableC
  *                 user never confirmed is not an address we may use.
  *
  * When the user has no confirmed address and the notification is `critical`, the
- * refusal is still recorded. A margin call that reached nobody but the inbox is
- * exactly the fact a borrower disputing a liquidation needs, and "we have no
- * way to contact you" has to be on the record at the moment it mattered — not
- * inferred later from an empty table.
+ * refusal is still recorded, and it says WHICH kind of nothing it was:
+ * `channel.no_target` when the user gave us no address at all,
+ * `channel.target_unverified` when they gave us one and never confirmed it. A
+ * margin call that reached nobody but the inbox is exactly the fact a borrower
+ * disputing a liquidation needs, and "we have no way to contact you" has to be
+ * on the record at the moment it mattered — not inferred later from an empty
+ * table, and not collapsed into a sentence that hides a fix the user could have
+ * made in one click.
  *
  * That holds whether or not `NOTIFY_OUT_OF_APP_ENABLED` is on. The operator
  * switch changes the REASON on the row, never whether a critical message gets
@@ -92,6 +96,12 @@ export class NotificationDispatcher {
         const byChannel = new Map<ChannelId, ChannelTarget>(verified.map((t) => [t.channel, t]));
         const outcomes: ChannelOutcome[] = [];
 
+        // Only a critical message writes a row for a channel it could not use, so
+        // only a critical message needs to know WHY there was nothing to use. A
+        // fill notification does not pay for this read.
+        const unverified =
+          notification.severity === 'critical' ? new Set(await this.targets.unverifiedChannels(notification.userId)) : new Set<ChannelId>();
+
         // The inbox row already exists — the notification IS the in-app delivery.
         // Recording it as a delivery keeps one shape for "what happened to this
         // message across every channel", which is what the API answers.
@@ -111,7 +121,16 @@ export class NotificationDispatcher {
             // into the first.
             if (target || notification.severity === 'critical') {
               outcomes.push(
-                await this.refuse(notification, channel, 'channel.disabled', target ? null : 'no confirmed address on this channel'),
+                await this.refuse(
+                  notification,
+                  channel,
+                  'channel.disabled',
+                  target
+                    ? null
+                    : unverified.has(channel)
+                      ? 'address registered but never confirmed'
+                      : 'no confirmed address on this channel',
+                ),
               );
             }
             continue;
@@ -121,8 +140,16 @@ export class NotificationDispatcher {
             // Nothing was promised on a channel the user never gave us — except
             // when the message is critical, where silence is the thing worth
             // recording. See the header.
+            //
+            // Which silence it was, matters. "You gave us nothing" and "you gave
+            // us an address and never clicked the code" are different facts about
+            // the same user, and only the second is one the user can fix — the
+            // same argument `channel.ts` makes for keeping `target_unroutable`
+            // separate. Recording both as `no_target` told somebody who was one
+            // click from a margin-call SMS that they had no phone number.
             if (notification.severity === 'critical') {
-              outcomes.push(await this.refuse(notification, channel, 'channel.no_target'));
+              const code = unverified.has(channel) ? 'channel.target_unverified' : 'channel.no_target';
+              outcomes.push(await this.refuse(notification, channel, code));
             }
             continue;
           }
