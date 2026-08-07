@@ -25,7 +25,15 @@ export interface ClosePosition {
 }
 
 export interface ClosePlanInput {
-  /** Unique close attempt id (idempotency root). */
+  /**
+   * Idempotency root for this close — `:profit` and `:loss` hang off it.
+   *
+   * ONE PER CLOSE, NOT ONE PER ATTEMPT. This used to read "unique close attempt
+   * id", and `position-service.ts` obliged with a fresh `randomUUID()` on every
+   * call — which made `futures.profit:${profitId}` unique per attempt and left
+   * the ledger nothing to dedupe on, so concurrent and replayed closes each paid
+   * the same realised profit over again. Build it with `closeIdFor(positionId)`.
+   */
   closeId: string;
   position: ClosePosition;
   /** External exit mark — decimal string. Never invent. */

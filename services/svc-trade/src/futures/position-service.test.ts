@@ -481,4 +481,74 @@ if (!available) {
       }),
     ).rejects.toMatchObject({ code: 'trade.not_futures_market' });
   });
+
+  // ── Futures with no profit source named: the FEATURE is off, not the service ──
+
+  /**
+   * `index.ts` used to call `profitSourceFromConfig` at module scope, which
+   * throws on an empty value — and `.env.example` ships the variable commented
+   * out while compose passes `${TRADE_FUTURES_PROFIT_SOURCE:-}`. So a clean
+   * clone crash-looped svc-trade: spot orders, ticker, orderbook, balances,
+   * fees, positions and the websocket feeds, all down over a futures payout pot.
+   *
+   * The blast radius now matches the scope of the decision. These three tests
+   * are what "futures is disabled" means, stated in balances.
+   */
+  function withoutProfitSource() {
+    return new PositionService(sql, ledger, {
+      marks: marks.source(),
+      profitSource: null,
+      bus,
+      now: () => NOW,
+    });
+  }
+
+  it('refuses to OPEN when no profit source is named, and locks nothing', async () => {
+    feed('50000');
+    const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+    await expect(
+      withoutProfitSource().open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') }),
+    ).rejects.toMatchObject({ code: 'trade.futures_unconfigured', status: 503 });
+
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  /**
+   * A position opened while a pot WAS configured. Profit cannot be paid from an
+   * account nobody chose — the ADR's rule, unchanged — so the close refuses and
+   * the books are exactly as they were.
+   */
+  it('refuses a PROFITABLE close when no profit source is named, and nothing moves', async () => {
+    feed('50000');
+    await fundProfitSource('10000');
+    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const userBefore = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+    feed('51000');
+    await expect(withoutProfitSource().close(ALICE, pos.id!)).rejects.toMatchObject({
+      code: 'trade.profit_source_unconfigured',
+      status: 503,
+    });
+
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userBefore);
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+    expect(await positions.listOpen(ALICE)).toHaveLength(1);
+  });
+
+  /**
+   * And the trader is not trapped. A losing close pays nothing out of any pot,
+   * so an unnamed pot has no bearing on it — the same reasoning that lets a
+   * losing position out on a `last` mark. A control that traps funds is not a
+   * safety control.
+   */
+  it('still lets a LOSING position out when no profit source is named', async () => {
+    feed('50000');
+    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    feed('49000');
+    await withoutProfitSource().close(ALICE, pos.id!);
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('99000');
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
 }
