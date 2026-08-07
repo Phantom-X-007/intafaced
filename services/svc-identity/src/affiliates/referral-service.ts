@@ -11,7 +11,8 @@ export class ReferralService {
     private readonly maxDepth: number = DEFAULT_MAX_REFERRAL_DEPTH,
   ) {}
 
-  private async loadParentMap(): Promise<Map<string, string>> {
+  /** Parent map for accrual dry-run (userId → referrerId). */
+  async loadParentMap(): Promise<Map<string, string>> {
     const rows = await this.sql<Array<{ user_id: string; referrer_id: string }>>`
       SELECT user_id, referrer_id FROM referral_edges
     `;
