@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import postgres from 'postgres';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
+import { ledgerPostgresOptions } from './db/connection-options.js';
 import { LedgerService } from './service.js';
 import { createLedgerRouter } from './router.js';
 import { writeSnapshots } from './ledger/reconcile.js';
@@ -31,12 +32,7 @@ registerProcessHooks(
  * auth land for real deploy.
  */
 
-const sql = postgres(env.DATABASE_URL, {
-  max: env.DATABASE_POOL_MAX,
-  ssl: env.DATABASE_SSL ? 'require' : false,
-  connection: { search_path: 'ledger,public', application_name: env.SERVICE_NAME },
-  onnotice: () => undefined,
-});
+const sql = postgres(env.DATABASE_URL, ledgerPostgresOptions(env));
 
 const [tip] = await sql<Array<{ seq: string }>>`SELECT seq FROM chain_tip WHERE id = true`;
 if (!tip) throw new Error('chain_tip is missing — run migrations before starting svc-ledger');
