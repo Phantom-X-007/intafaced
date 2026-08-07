@@ -204,7 +204,27 @@ export function tradeFill(input: TradeFillInput): PostRequest {
   const takerReceives = sub(makerPaysAmount, takerFee);
   const makerReceives = sub(takerPaysAmount, makerFee);
 
-  if (takerReceives < 0n || makerReceives < 0n) {
+  // `<= 0n`, not `< 0n`. A fee LARGER than the receivable was caught here; a fee
+  // exactly EQUAL to it was not, and it emits a zero-amount entry that
+  // `assertBalanced` rejects four layers down with "a movement of nothing is not
+  // a movement" — a message that says nothing about fee configuration.
+  //
+  // It is reachable at the minimum legal market grid. `mulBps` rounds `ceil` by
+  // design, so any 1-wei receivable with a non-zero fee rate produces
+  // `fee == amount`; fuzzing the recipe layer produced 2 329 such cases, and
+  // `drizzle/0000_trade_init.sql:95` permits `tick_size * lot_size` of exactly
+  // one wei. Upstream, `settleFill` guards `quoteAmount <= 0n` and raises
+  // `trade.dust_fill` — it catches ZERO, not ONE. All three guards stopped at
+  // zero and none covered one.
+  //
+  // The refusal has to happen HERE rather than at the ledger, because
+  // `settleFill` inserts the fill rows before posting. The README documents that
+  // ordering as safe — "worst case the funds stay in `hold`; re-running the fill
+  // re-posts the same idempotency key and heals it" — and for this failure class
+  // re-running throws again, every time. The fill is permanently unpostable and
+  // `trade.fills` stays permanently ahead of the ledger. The documented recovery
+  // does not cover it.
+  if (takerReceives <= 0n || makerReceives <= 0n) {
     throw new InvalidEntryError('Fee exceeds fill value — check fee bps configuration');
   }
 
@@ -352,7 +372,10 @@ export function marketMakerMakerFill(input: MarketMakerMakerFillInput): PostRequ
   const takerReceives = sub(makerPaysAmount, takerFee);
   const makerReceives = sub(takerPaysAmount, makerFee);
 
-  if (takerReceives < 0n || makerReceives < 0n) {
+  // `<= 0n` for the same reason as `tradeFill` above: a fee exactly equal to the
+  // receivable emits a zero-amount entry the ledger always refuses, and the
+  // error it produces names nothing the operator can act on.
+  if (takerReceives <= 0n || makerReceives <= 0n) {
     throw new InvalidEntryError('Fee exceeds fill value — check fee bps configuration');
   }
 

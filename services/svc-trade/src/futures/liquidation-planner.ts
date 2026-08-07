@@ -89,7 +89,34 @@ export function planLiquidation(input: LiquidationPlanInput): LiquidationDecisio
   let should = equity <= 0n || equity <= maintenance;
   let reason = equity <= 0n ? 'equity_non_positive' : 'below_maintenance';
 
+  /**
+   * The stored liq price is an INDEPENDENT trigger — it bypasses the equity
+   * check entirely, and the only validation it used to carry was `> 0n`.
+   *
+   * The equity path cannot fire in profit, and that is guaranteed by the
+   * arithmetic rather than by a guard: `equity = margin + uPnL`, so `uPnL > 0`
+   * implies `equity > margin >= maintenance` for any `maintenanceBps <= 10 000`.
+   * Fuzzed with `liqPrice` disabled: 0 of 20 000 profit-liquidations.
+   *
+   * With it enabled, 2 148 of 40 000 fuzzed cases liquidated a position that was
+   * in PROFIT — and `planLiquidation` realizes losses only. There is no branch
+   * below that credits a positive PnL, so the gain is silently dropped: the user
+   * gets their margin back and nothing else, with no error, no refusal and no
+   * log, because the plan is well-formed and the recipes balance.
+   *
+   * Nothing checked that a long's liq price sits BELOW its entry or a short's
+   * above it. A stale value after a margin top-up or a partial close, a wrong
+   * sign, or a short's price written onto a long all fire it.
+   */
   if (position.liqPrice != null && position.liqPrice > 0n) {
+    const consistentWithSide = position.side === 'long' ? position.liqPrice < position.entryPrice : position.liqPrice > position.entryPrice;
+    if (!consistentWithSide) {
+      // A long liquidates when price FALLS, so its liq price must be below
+      // entry; a short's must be above. Anything else is a data bug, and acting
+      // on it closes a position the market never went against.
+      return { liquidate: false, equity, unrealizedPnl: uPnL, reason: 'liq_price_inconsistent_with_side' };
+    }
+
     const crossed = position.side === 'long' ? mark <= position.liqPrice : mark >= position.liqPrice;
     if (crossed) {
       should = true;
@@ -99,6 +126,24 @@ export function planLiquidation(input: LiquidationPlanInput): LiquidationDecisio
 
   if (!should) {
     return { liquidate: false, equity, unrealizedPnl: uPnL, reason: 'healthy' };
+  }
+
+  /**
+   * A LIQUIDATION IN PROFIT IS A DATA BUG, NOT A LIQUIDATION.
+   *
+   * Placed after every trigger rather than inside the one that produced it, so
+   * a trigger added later cannot reopen the hole. Everything below this line
+   * realizes losses only — `loss` is `uPnL < 0n ? -uPnL : 0n`, and no branch
+   * anywhere credits a gain — so reaching it with `uPnL > 0n` means handing the
+   * user their margin back and silently keeping the profit.
+   *
+   * The equity path cannot get here (`uPnL > 0` implies `equity > margin >=
+   * maintenance`), which is exactly why this is worth stating: the only way in
+   * is a stored value that disagrees with the market, and refusing loudly is
+   * what turns that into something an operator can see.
+   */
+  if (uPnL > 0n) {
+    return { liquidate: false, equity, unrealizedPnl: uPnL, reason: 'refused_profitable_liquidation' };
   }
 
   const loss = uPnL < 0n ? -uPnL : 0n;

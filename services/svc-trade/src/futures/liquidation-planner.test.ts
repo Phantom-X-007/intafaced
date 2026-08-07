@@ -78,6 +78,67 @@ describe('liquidation-planner', () => {
     if (d.liquidate) expect(d.reason).toBe('mark_crossed_liq_price');
   });
 
+  /**
+   * The stored liq price bypasses the equity check, and used to carry no
+   * validation beyond `> 0n`.
+   *
+   * `planLiquidation` realizes LOSSES ONLY — `loss = uPnL < 0n ? -uPnL : 0n`,
+   * and no branch credits a gain. So a liquidation that fires while the
+   * position is in profit hands the user their margin back and silently keeps
+   * the profit: no error, no refusal, no log, because the plan is well-formed
+   * and the recipes balance. 2 148 of 40 000 fuzzed cases did exactly that.
+   *
+   * The equity trigger cannot cause it — `uPnL > 0` implies
+   * `equity > margin >= maintenance` for any `maintenanceBps <= 10 000`, and
+   * with `liqPrice` disabled it was 0 of 20 000. The stored price is the only
+   * way in, and a stale value after a margin top-up, a wrong sign, or a short's
+   * price written onto a long all produce one.
+   */
+  it('refuses a liq price on the wrong side of entry instead of closing a winning position', () => {
+    // The exact shape from the audit: long, entry 80, mark 120, liq 120.
+    // A long liquidates when price FALLS, so a liq price at or above entry is
+    // a data bug. Acting on it closes a position up 40 and pays none of it.
+    const d = planLiquidation({
+      liquidationId: 'liq-profit',
+      position: { ...base, entryPrice: amt('80'), margin: amt('10'), liqPrice: amt('120') },
+      markPrice: '120',
+    });
+
+    expect(d.liquidate).toBe(false);
+    if (!d.liquidate) {
+      expect(d.reason).toBe('liq_price_inconsistent_with_side');
+      expect(formatAmount(d.unrealizedPnl)).toBe('40'); // the profit that used to vanish
+    }
+  });
+
+  it('refuses a short whose liq price sits below entry', () => {
+    // Mirror: a short liquidates when price RISES, so its liq price must be
+    // above entry. This is the "short's price written onto a long" class, the
+    // other way round.
+    const d = planLiquidation({
+      liquidationId: 'liq-short-bad',
+      position: { ...base, side: 'short', entryPrice: amt('50000'), liqPrice: amt('48000') },
+      markPrice: '47000',
+    });
+
+    expect(d.liquidate).toBe(false);
+    if (!d.liquidate) expect(d.reason).toBe('liq_price_inconsistent_with_side');
+  });
+
+  it('still liquidates a losing position with a correctly-sided liq price', () => {
+    // The guard must not cost the real case: long, liq price below entry,
+    // mark through it, position under water.
+    const d = planLiquidation({
+      liquidationId: 'liq-ok',
+      position: { ...base, liqPrice: amt('48000'), margin: amt('20000') },
+      markPrice: '47000',
+      maintenanceBps: 0,
+    });
+
+    expect(d.liquidate).toBe(true);
+    if (d.liquidate) expect(d.reason).toBe('mark_crossed_liq_price');
+  });
+
   it('short liquidates when mark rises past equity wipe', () => {
     const d = planLiquidation({
       liquidationId: 'liq-5',

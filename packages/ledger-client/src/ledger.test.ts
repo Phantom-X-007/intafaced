@@ -795,6 +795,63 @@ describe('recipes — the money paths', () => {
     expect(ledger.totalsByAsset()).toEqual({ BTC: '0', USDT: '0' });
   });
 
+  /**
+   * A fee EXACTLY equal to the receivable — the case the old `< 0n` guard let
+   * through.
+   *
+   * `mulBps` rounds `ceil` by design, so a 1-wei receivable with any non-zero
+   * fee rate produces `fee === amount` and the recipe emitted a zero-amount
+   * entry. `assertBalanced` then threw "a movement of nothing is not a
+   * movement" — four layers below the actual cause, naming nothing an operator
+   * could act on.
+   *
+   * Worse than a rejected post: `settleFill` inserts the fill rows into
+   * `trade.fills` BEFORE posting, and the README documents that ordering as
+   * safe because re-running heals it. For this class re-running throws every
+   * time, so the fill is permanently unpostable and the table stays permanently
+   * ahead of the ledger. `drizzle/0000_trade_init.sql:95` allows a market grid
+   * whose `tick_size * lot_size` is exactly one wei, so the trigger is a legal
+   * listing, not an exotic input.
+   */
+  it('trade fill: refuses a fee exactly equal to the receivable, and says why', () => {
+    const oneWei = 1n;
+
+    expect(() =>
+      recipes.tradeFill({
+        fillId: 'f-dust',
+        makerId: USER_B,
+        takerId: USER_A,
+        makerOrderId: 'maker-dust',
+        takerOrderId: 'taker-dust',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        qty: oneWei,
+        quoteAmount: oneWei,
+        takerSide: 'buy',
+        makerFeeBps: 10,
+        takerFeeBps: 20, // ceil(1 wei × 0.20%) === 1 wei — the whole receivable
+      }),
+    ).toThrow(/Fee exceeds fill value/);
+  });
+
+  it('market-maker fill: the same guard, the same message', () => {
+    expect(() =>
+      recipes.marketMakerMakerFill({
+        fillId: 'mm-dust',
+        takerId: USER_A,
+        makerOrderId: 'maker-mm-dust',
+        takerOrderId: 'taker-mm-dust',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        qty: 1n,
+        quoteAmount: 1n,
+        takerSide: 'buy',
+        makerFeeBps: 10,
+        takerFeeBps: 20,
+      }),
+    ).toThrow(/Fee exceeds fill value/);
+  });
+
   it('p2p escrow: lock → release strands nothing', async () => {
     await fund(USER_A, 'USDT', '500');
 
