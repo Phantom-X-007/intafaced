@@ -151,10 +151,6 @@ jobs:
           --health-timeout 3s
           --health-retries 20
 
-      nats:
-        image: nats:2.10-alpine
-        ports: ['4222:4222', '8222:8222']
-
     env:
       # Residual #9: every money suite must hit real Postgres on CI — not skip.
       # Local defaults use :5433 + svc_* users; CI is :5432 after bootstrap.
@@ -240,6 +236,32 @@ jobs:
 
       - name: Prove money-test DB URLs resolve (residual #9)
         run: node tooling/ci/assert-test-db-env.mjs
+
+      # NATS, with JetStream ON.
+      #
+      # It used to be a `services:` container, and GitHub gives those no way to
+      # pass a command — so it ran with JetStream OFF while every service in this
+      # repo publishes and consumes through JetStream. `nc.jetstreamManager()`
+      # answers 503 on such a server. Nothing noticed for as long as the container
+      # has existed, because no test connected to it; the first suite that did
+      # (packages/events) failed on exactly that.
+      #
+      # Same reason and same shape as the EVM chain below. Mirrors the `nats`
+      # service in docker-compose.yml, which has always passed `--jetstream`.
+      - name: Local NATS with JetStream (§10 event bus)
+        run: |
+          docker run -d --name intafaced-ci-nats -p 4222:4222 -p 8222:8222 nats:2.10-alpine \
+            --jetstream --http_port=8222 --name=intafaced-ci-nats
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8222/healthz >/dev/null; then
+              echo "nats answering on 4222, JetStream enabled"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::NATS never answered — the JetStream bus suite cannot run"
+          docker logs intafaced-ci-nats || true
+          exit 1
 
       # A throwaway EVM for svc-protocol. Started with `docker run` rather than
       # as a `services:` container because GitHub gives service containers no
