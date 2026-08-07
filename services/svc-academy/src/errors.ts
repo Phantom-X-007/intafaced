@@ -39,6 +39,8 @@ export type AcademyErrorCode =
   | 'academy.season_not_live'
   | 'academy.season_invalid'
   | 'academy.standing_invalid'
+  /** Paper trading Stage-3 ops kill-switch. */
+  | 'academy.paper_trading_disabled'
   /** Residency applications Stage-1 (no pay). */
   | 'academy.residency_invalid'
   | 'academy.residency_not_found'
@@ -84,6 +86,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.season_not_live',
   'academy.season_invalid',
   'academy.standing_invalid',
+  'academy.paper_trading_disabled',
   'academy.residency_invalid',
   'academy.residency_not_found',
   'academy.residency_already_open',

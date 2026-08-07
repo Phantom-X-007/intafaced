@@ -95,6 +95,13 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
     streamCredential: vi.fn(),
     createRoom: vi.fn(async () => room),
     invite: vi.fn(async () => undefined),
+    assertPaperTradingEnabled: vi.fn(() => undefined),
+    paperOpsStatus: vi.fn(() => ({
+      enabled: true,
+      flagId: 'academy.paper-trading' as const,
+      envKey: 'ACADEMY_PAPER_TRADING_ENABLED' as const,
+      liveTradeUnaffected: true as const,
+    })),
     ...overrides,
   } as unknown as AcademyService;
 }
@@ -121,6 +128,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'curriculumPathDeepLinks',
         'curriculumItemLocalized',
         'paperDrill',
+        'paperOpsStatus',
         'ambassadorBadge',
         'ambassadors',
         'appointAmbassador',
@@ -424,5 +432,26 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
 
   it('rejects a slug that is not in the spine at all', async () => {
     await expect(caller().paperDrill({ slug: 'no-such-workbook', market: paperMarket })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('Stage-3 ops kill refuses paperDrill — live trade path not involved', async () => {
+    const academy = stubAcademy({
+      assertPaperTradingEnabled: vi.fn(() => {
+        throw new AcademyError('Paper trading drills are disabled by ops — live trade unchanged.', 'academy.paper_trading_disabled');
+      }),
+    });
+    await expect(
+      createAcademyRouter(academy).createCaller(signed()).paperDrill({ slug: 'foundations-paper-workbook', market: paperMarket }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('Stage-3 paperOpsStatus reports enable + liveTradeUnaffected', async () => {
+    const status = await caller().paperOpsStatus();
+    expect(status).toEqual({
+      enabled: true,
+      flagId: 'academy.paper-trading',
+      envKey: 'ACADEMY_PAPER_TRADING_ENABLED',
+      liveTradeUnaffected: true,
+    });
   });
 });

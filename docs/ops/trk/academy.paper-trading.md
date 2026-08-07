@@ -63,19 +63,19 @@
 
 ### Stage 1 — flag + isolation
 
-- [ ] Product law: paper venue id / market flag shape on trade.
-- [ ] placeOrder on paper cannot debit real available balances.
-- [ ] Tests: live unchanged; paper refuses real asset spend.
+- [x] Product law: paper venue id / market flag shape on trade.
+- [x] placeOrder on paper cannot debit real available balances.
+- [x] Tests: live unchanged; paper refuses real asset spend.
 
 ### Stage 2 — workbook loop
 
-- [ ] Academy workbook calls paper APIs.
-- [ ] Simulated fill history for outline drills.
+- [x] Academy workbook calls paper APIs.
+- [x] Simulated fill history for outline drills (trade-supplied opaque fill refs only).
 - [ ] Optional progress hook to certs.
 
 ### Stage 3 — ops
 
-- [ ] Enable/kill paper without killing live.
+- [x] Enable/kill paper without killing live (`ACADEMY_PAPER_TRADING_ENABLED` + `paperOpsStatus`).
 
 ### Tracker `done` bar
 

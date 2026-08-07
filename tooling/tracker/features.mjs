@@ -865,7 +865,10 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['trade.spot'],
-    note: 'Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). Workbook wire + sim fills Stage-2 residual.',
+    note:
+      'Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). ' +
+      'Stage-2 workbook wire + fill-ref attach. ' +
+      'Stage-3 2026-08-07: ACADEMY_PAPER_TRADING_ENABLED ops kill-switch (live trade unaffected) — #1001.',
   }),
   f('launch.token-factory', 'ERC-20 deploy from audited templates', {
     owner: 'shehzad002',

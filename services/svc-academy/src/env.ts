@@ -70,6 +70,16 @@ const schema = serviceEnvSchema
         .union([z.boolean(), z.string()])
         .default(true)
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase()))),
+
+      /**
+       * Stage-3 paper-trading ops kill-switch (TRK-academy.paper-trading).
+       * When false, paperDrill / paperOps refuse `academy.paper_trading_disabled`.
+       * Live trade on svc-trade is unaffected.
+       */
+      ACADEMY_PAPER_TRADING_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase()))),
     }),
   );
 
