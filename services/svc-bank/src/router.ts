@@ -162,6 +162,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.below_minimum':
       case 'bank.native_asset_not_earnable':
       case 'bank.ltv_exceeded':
+      /** Borrower short of collateral at open — same class as ltv_exceeded. */
+      case 'bank.loan_collateral_short':
       case 'bank.card_not_found':
       case 'bank.card_not_active':
       case 'bank.card_limit_exceeded':
