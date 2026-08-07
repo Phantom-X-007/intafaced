@@ -74,6 +74,8 @@ It used to. A 7-day timer called `backstop_resolve` refunded the buyer and attri
 
 Past its SLA a dispute now **escalates**: `escalated_at` is stamped, the count goes up, the dispute keeps its (now past) deadline so the moderator queue's "most overdue first" ordering keeps telling the truth, and the trade's own `deadline_at` re-arms on `P2P_DISPUTE_ESCALATION_RECHECK_SECONDS` so it stays visible to the sweeper. The escrow does not move.
 
+**Who can moderate.** `disputes.list` / `disputes.resolve` require a human: either a principal that holds `admin:compliance`, or a natural-person id listed in `P2P_MODERATOR_USER_IDS` (ordinary `p2p:read` is enough for those ids). An empty allowlist is not a soft default — the API returns `p2p.moderation_unreachable` rather than pretending a console is staffed. `disputes.open` and `/health` disclose `moderationReachable` so clients never imply a watcher that is not configured. The `p2p:moderate` scope split remains an owner sign-off and is not minted here.
+
 That reads like a conflict with `p2p_trades_live_has_deadline_ck`, which makes "a trade sits in escrow with no clock on it" unrepresentable. It is not: **the constraint requires a live trade to carry a deadline; it does not require the deadline to dispose of value.**
 
 And the database enforces the rest. `p2p_trades_disputed_needs_ruling_trg` refuses any write that terminates a `disputed` trade unless the dispute row is already `resolved` and attributed to a moderator id that is not a `system:` principal. A future timer cannot become a moderator again without impersonating a person, which is a thing a reviewer sees rather than a default nobody read.
@@ -98,11 +100,11 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `trades.cancel`                  | `p2p:write`              | **→ `escrowRefund`**, in full                                             |
 | `trades.get` / `trades.list`     | `p2p:read`               | Never carry a payment instrument — see below                              |
 | `trades.paymentInstrument`       | `p2p:read`               | **Where to send the money.** Party-or-moderator, live escrow only, logged |
-| `disputes.open`                  | `p2p:write`              | Either party. Discloses what happens if nobody rules                      |
+| `disputes.open`                  | `p2p:write`              | Either party. Discloses `ifNobodyRules` + `moderationReachable`           |
 | `disputes.appendEvidence`        | `p2p:write`              | Either party, while open. **Append-only** — no edit, no remove            |
 | `disputes.get`                   | `p2p:read`               | Party sees their own evidence; moderator sees all of it                   |
-| `disputes.list`                  | `admin:compliance`       | **The queue** — open disputes, most overdue first, paginated              |
-| `disputes.resolve`               | `admin:compliance`       | **Moderator only** — release or refund, no third option                   |
+| `disputes.list`                  | `p2p:read` + moderator   | **The queue** — allowlisted id or `admin:compliance`; else honest refuse  |
+| `disputes.resolve`               | `p2p:read` + moderator   | **Moderator only** — release or refund; empty allowlist → unreachable     |
 | `reputation.get`                 | `p2p:read`               | Completion rate, average release time, disputes lost, badges              |
 | `instruments.methods.list`       | `p2p:read`               | What each method needs, per country. About methods, never about people    |
 | `instruments.methods.register`   | `admin:compliance`       | **Operator only** — declare a market's field requirements                 |
