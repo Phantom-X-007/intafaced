@@ -6,6 +6,7 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
 import { cardIssuerFor } from './cards/issuer.js';
+import { rampProgrammeFor } from './ramps/rails.js';
 import { eventMarginCallSink } from './loans/margin-call-publisher.js';
 import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
@@ -97,6 +98,14 @@ const bank = createBankServices(sql, ledger, history, {
    * deployment gets by SAYING ANYTHING.
    */
   cards: { issuer: cardIssuerFor(env.BANK_CARD_ISSUER) },
+  /**
+   * RAMPS — same missing-wiring shape as cards.
+   *
+   * Silence is `none` (`BANK_RAMP_MODE` default). `crypto-ledger` turns on the
+   * crypto ledger half only; fiat remains `socket.psp-partners` and refuses by
+   * name. `simulated` is always true on this surface.
+   */
+  ramps: { programme: rampProgrammeFor(env.BANK_RAMP_MODE) },
 });
 
 /**
@@ -108,6 +117,7 @@ const bank = createBankServices(sql, ledger, history, {
  * cannot drift into disagreeing about whether this deployment issues real cards.
  */
 const cardProgramme = bank.cards.programme();
+const rampProgramme = bank.ramps.programmeInfo();
 
 export const appRouter = createBankRouter(bank);
 export type AppRouter = typeof appRouter;
@@ -142,6 +152,20 @@ app.get('/ready', async () => ({
    * cannot appear here at all because it is `socket.live-issuer`, a contract.
    */
   cardProgramme: { id: cardProgramme.id, simulated: cardProgramme.simulated, displayName: cardProgramme.displayName },
+  /**
+   * WHETHER THIS DEPLOYMENT'S BANK RAMP IS LIVE, ON THE READINESS ENDPOINT.
+   *
+   * `simulated` is never false here. Fiat is always named as the socket. An
+   * operator asking "can this process move fiat / broadcast crypto" should not
+   * have to read an env file to learn the answer is no.
+   */
+  rampProgramme: {
+    id: rampProgramme.id,
+    simulated: rampProgramme.simulated,
+    displayName: rampProgramme.displayName,
+    cryptoRail: rampProgramme.cryptoRail,
+    fiatLeg: rampProgramme.fiatLeg,
+  },
 }));
 
 /**
@@ -283,6 +307,9 @@ app.log.info(
     // exactly the fact that must not be discovered later from a support ticket.
     cardProgramme: cardProgramme.id,
     cardProgrammeSimulated: cardProgramme.simulated,
+    rampProgramme: rampProgramme.id,
+    rampProgrammeSimulated: rampProgramme.simulated,
+    rampFiatLeg: rampProgramme.fiatLeg,
   },
   'svc-bank ready',
 );

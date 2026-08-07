@@ -134,7 +134,8 @@ if (!available) {
     await sql`
       TRUNCATE bank.interest_accruals, bank.earn_positions, bank.earn_pools,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
-               bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards
+               bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards,
+               bank.ramp_offramps, bank.ramp_onramps
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
@@ -1084,6 +1085,14 @@ if (!available) {
         'card_authorizations.amount': 'a RECORD of one authorisation request; written once',
         'card_settlements.amount': 'a RECORD of one completed capture or reversal; written once with its ledger tx id',
         'card_cashback.amount': 'a RECORD of one reward; summing the table is the lifetime figure',
+
+        // ── Ramps (§8.1 / D-S-09, crypto ledger half) ────────────────────────
+        //
+        // No `ramp_*.balance` and no running capacity. Amount columns are
+        // records of one completed (or claimed) movement; the ledger is the
+        // only place "how much is available" is answered.
+        'ramp_onramps.amount': 'a RECORD of one on-ramp credit; written once with its ledger tx id',
+        'ramp_offramps.amount': 'a RECORD of one off-ramp instruction; written once with hold+settle tx ids',
       };
 
       const moneyColumns = columns

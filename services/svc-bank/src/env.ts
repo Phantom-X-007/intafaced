@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema, internalServiceEnvSchema } from '@intafaced/config';
 import { CARD_ISSUER_SETTINGS } from './cards/issuer.js';
+import { RAMP_SETTINGS } from './ramps/rails.js';
 
 // This service self-mounts /trpc, so it must be able to authenticate the edge.
 // Every procedure here resolves `ctx.principal.userId` into somebody's spaces
@@ -140,6 +141,21 @@ const schema = serviceEnvSchema
        * which act was performed, so it can be checked rather than assumed.
        */
       BANK_CARD_ISSUER: z.enum(CARD_ISSUER_SETTINGS).default('none'),
+
+      // ── Ramps (§8.1 / D-S-09, crypto ledger half) ───────────────────────────
+
+      /**
+       * WHICH BANK RAMP PROGRAMME THIS DEPLOYMENT HAS, AND `none` IS A REAL ANSWER.
+       *
+       * Defaults to `none`. `crypto-ledger` turns on the CRYPTO LEDGER half only:
+       * deposit / withdraw recipes against `bank-crypto-ledger`, always with
+       * `simulated: true`. It does not broadcast to a chain and it does not open
+       * a fiat path — fiat remains `socket.psp-partners` and refuses by name.
+       *
+       * Same posture as `BANK_CARD_ISSUER`: the dangerous default is the
+       * plausible one, so choosing the ledger half is an act somebody performed.
+       */
+      BANK_RAMP_MODE: z.enum(RAMP_SETTINGS).default('none'),
     }),
   );
 

@@ -166,12 +166,17 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.card_authorization_declined':
       case 'bank.card_authorization_closed':
       case 'bank.card_capture_exceeds_authorization':
+      case 'bank.ramp_invalid_amount':
+      case 'bank.ramp_invalid_destination':
+      case 'bank.ramp_conflict':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
 
       // Named refusals where the platform, not the caller, is missing something.
       // Same shape and the same reason as `bank.no_liquidation_counterparty`.
       case 'bank.no_card_issuer':
       case 'bank.cashback_pot_unfunded':
+      case 'bank.no_ramp_rail':
+      case 'bank.fiat_ramp_socket':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
 
       default: {
@@ -1360,6 +1365,197 @@ export function createBankRouter(bank: BankServices) {
           };
         }),
       ),
+
+    /**
+     * Operator on-ramp credit for the CRYPTO ledger half.
+     *
+     * Not user-callable: a user who credits their own balance does not need a
+     * ramp. Fiat refuses `bank.fiat_ramp_socket` before a row is written.
+     */
+    creditOnramp: scopedProcedure('admin:treasury')
+      .input(
+        z.object({
+          userId: z.string().min(1),
+          assetId: z.string().min(1).max(16),
+          amount: amountString,
+          kind: z.enum(['crypto', 'fiat']).default('crypto'),
+          railRef: z.string().min(1).max(256),
+        }),
+      )
+      .output(
+        z.object({
+          id: z.string(),
+          userId: z.string(),
+          assetId: z.string(),
+          amount: amountString,
+          kind: z.enum(['crypto', 'fiat']),
+          rail: z.string(),
+          railRef: z.string(),
+          simulated: z.boolean(),
+          status: z.string(),
+          ledgerTxId: z.string().nullable(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const row = await bank.ramps.creditOnramp({
+            userId: input.userId,
+            assetId: input.assetId,
+            amount: parseAmount(input.amount),
+            kind: input.kind,
+            railRef: input.railRef,
+            creditedBy: ctx.principal.userId,
+          });
+          return {
+            id: row.id,
+            userId: row.userId,
+            assetId: row.assetId,
+            amount: formatAmount(row.amount),
+            kind: row.kind,
+            rail: row.rail,
+            railRef: row.railRef,
+            simulated: row.simulated,
+            status: row.status,
+            ledgerTxId: row.ledgerTxId,
+          };
+        }),
+      ),
+  });
+
+  /**
+   * RAMPS — crypto ledger half. Fiat is socket.psp-partners and refuses by name.
+   *
+   * `simulated` is never omitted: this surface does not broadcast to a chain and
+   * never claims a live PSP. Live confirmation stays in svc-pay; Class X is a
+   * human decision to point working code at real money.
+   */
+  const rampProgrammeOutput = z.object({
+    id: z.string(),
+    simulated: z.boolean(),
+    displayName: z.string(),
+    cryptoRail: z.string().nullable(),
+    fiatLeg: z.literal('socket.psp-partners'),
+  });
+
+  const onrampOutput = z.object({
+    id: z.string(),
+    assetId: z.string(),
+    amount: amountString,
+    kind: z.enum(['crypto', 'fiat']),
+    rail: z.string(),
+    railRef: z.string(),
+    simulated: z.boolean(),
+    status: z.string(),
+    ledgerTxId: z.string().nullable(),
+    createdAt: z.string(),
+  });
+
+  const offrampOutput = z.object({
+    id: z.string(),
+    assetId: z.string(),
+    amount: amountString,
+    kind: z.enum(['crypto', 'fiat']),
+    rail: z.string(),
+    destinationRef: z.string(),
+    clientRef: z.string(),
+    simulated: z.boolean(),
+    status: z.string(),
+    holdLedgerTxId: z.string().nullable(),
+    settleLedgerTxId: z.string().nullable(),
+    createdAt: z.string(),
+  });
+
+  const ramps = router({
+    /** What this deployment's ramp programme is — including that it is not one. */
+    programme: scopedProcedure('bank:read', { module: 'bank' })
+      .output(rampProgrammeOutput)
+      .query(async () => guard(async () => bank.ramps.programmeInfo())),
+
+    onramps: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.array(onrampOutput))
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const rows = await bank.ramps.onrampsOf(ctx.principal.userId);
+          return rows.map((r) => ({
+            id: r.id,
+            assetId: r.assetId,
+            amount: formatAmount(r.amount),
+            kind: r.kind,
+            rail: r.rail,
+            railRef: r.railRef,
+            simulated: r.simulated,
+            status: r.status,
+            ledgerTxId: r.ledgerTxId,
+            createdAt: r.createdAt.toISOString(),
+          }));
+        }),
+      ),
+
+    offramps: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.array(offrampOutput))
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const rows = await bank.ramps.offrampsOf(ctx.principal.userId);
+          return rows.map((r) => ({
+            id: r.id,
+            assetId: r.assetId,
+            amount: formatAmount(r.amount),
+            kind: r.kind,
+            rail: r.rail,
+            destinationRef: r.destinationRef,
+            clientRef: r.clientRef,
+            simulated: r.simulated,
+            status: r.status,
+            holdLedgerTxId: r.holdLedgerTxId,
+            settleLedgerTxId: r.settleLedgerTxId,
+            createdAt: r.createdAt.toISOString(),
+          }));
+        }),
+      ),
+
+    /**
+     * User off-ramp. `offrampId` + `clientRef` are client-supplied so a retry
+     * is the same withdrawal (§5). Fiat refuses before any hold is posted.
+     */
+    offramp: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          offrampId: z.string().uuid(),
+          assetId: z.string().min(1).max(16),
+          amount: amountString,
+          kind: z.enum(['crypto', 'fiat']).default('crypto'),
+          destinationRef: z.string().min(1).max(256),
+          clientRef: z.string().min(1).max(128),
+        }),
+      )
+      .output(offrampOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const row = await bank.ramps.offramp({
+            offrampId: input.offrampId,
+            userId: ctx.principal.userId,
+            assetId: input.assetId,
+            amount: parseAmount(input.amount),
+            kind: input.kind,
+            destinationRef: input.destinationRef,
+            clientRef: input.clientRef,
+          });
+          return {
+            id: row.id,
+            assetId: row.assetId,
+            amount: formatAmount(row.amount),
+            kind: row.kind,
+            rail: row.rail,
+            destinationRef: row.destinationRef,
+            clientRef: row.clientRef,
+            simulated: row.simulated,
+            status: row.status,
+            holdLedgerTxId: row.holdLedgerTxId,
+            settleLedgerTxId: row.settleLedgerTxId,
+            createdAt: row.createdAt.toISOString(),
+          };
+        }),
+      ),
   });
 
   return router({
@@ -1371,6 +1567,7 @@ export function createBankRouter(bank: BankServices) {
     earn,
     loans,
     cards,
+    ramps,
     analytics,
     ops,
   });

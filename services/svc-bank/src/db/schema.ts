@@ -801,6 +801,69 @@ export const cardCashback = bank.table(
   ],
 );
 
+// ── Ramps (§8.1 / D-S-09, crypto ledger half) ────────────────────────────────
+
+export const rampKindEnum = bank.enum('ramp_kind', ['crypto', 'fiat']);
+
+/**
+ * ON-RAMP — value entering the book. Amount is a RECORD of one credit, written
+ * once. No running total. Unique (rail, rail_ref) is the double-credit guard.
+ */
+export const rampOnramps = bank.table(
+  'ramp_onramps',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    amount: amount('amount').notNull(),
+    kind: rampKindEnum('kind').notNull().default('crypto'),
+    rail: text('rail').notNull(),
+    railRef: text('rail_ref').notNull(),
+    simulated: boolean('simulated').notNull().default(true),
+    creditedBy: text('credited_by').notNull(),
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    ledgerTxId: text('ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [
+    uniqueIndex('ramp_onramps_rail_ref_idx').on(t.rail, t.railRef),
+    index('ramp_onramps_user_idx').on(t.userId, t.createdAt),
+    index('ramp_onramps_status_idx').on(t.status),
+  ],
+);
+
+/**
+ * OFF-RAMP — value leaving the book. Amount is a RECORD of one withdrawal
+ * instruction. Unique (user_id, client_ref) so a retry is the same offramp.
+ */
+export const rampOfframps = bank.table(
+  'ramp_offramps',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    amount: amount('amount').notNull(),
+    kind: rampKindEnum('kind').notNull().default('crypto'),
+    rail: text('rail').notNull(),
+    destinationRef: text('destination_ref').notNull(),
+    clientRef: text('client_ref').notNull(),
+    simulated: boolean('simulated').notNull().default(true),
+    status: loanEventStatusEnum('status').notNull().default('pending'),
+    holdLedgerTxId: text('hold_ledger_tx_id'),
+    settleLedgerTxId: text('settle_ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [
+    uniqueIndex('ramp_offramps_client_ref_idx').on(t.userId, t.clientRef),
+    index('ramp_offramps_user_idx').on(t.userId, t.createdAt),
+    index('ramp_offramps_status_idx').on(t.status),
+  ],
+);
+
 export const schema = {
   spaces,
   scheduledTransfers,
@@ -819,4 +882,6 @@ export const schema = {
   cardAuthorizations,
   cardSettlements,
   cardCashback,
+  rampOnramps,
+  rampOfframps,
 };
