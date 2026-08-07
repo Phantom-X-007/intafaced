@@ -25,6 +25,9 @@ import { startCandleJobs } from './spot/candle-jobs.js';
 import { checkEngineSequences, describeRegressions } from './spot/sequence-guard.js';
 import { parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+import { parseOtcDeskLawJson } from './otc/desk-law.js';
+import { OtcDeskService } from './otc/otc-service.js';
+import { createOtcStakeSource } from './otc/stake-source.js';
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
@@ -85,7 +88,12 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
-export const appRouter = createTradeRouter(trade);
+// trade.otc — D-S-02 Stage. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
+const otcDeskLaw = parseOtcDeskLawJson(env.TRADE_OTC_DESK_LAW);
+const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET);
+const otc = new OtcDeskService(ledger, otcStakes, { law: otcDeskLaw });
+
+export const appRouter = createTradeRouter(trade, otc);
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });

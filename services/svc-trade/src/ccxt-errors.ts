@@ -84,6 +84,19 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.seed_must_make': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_disabled': { ccxt: 'OnMaintenance', status: 503 },
+  /** DIRECTION §8 desk law unpublished — refuse-closed, not invent. */
+  'trade.otc_desk_law_blank': { ccxt: 'OnMaintenance', status: 503 },
+  'trade.otc_settle_refused': { ccxt: 'OnMaintenance', status: 503 },
+  'trade.otc_stake_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.otc_stake_gate': { ccxt: 'PermissionDenied', status: 403 },
+  'trade.otc_not_owner': { ccxt: 'PermissionDenied', status: 403 },
+  'trade.otc_no_reference_price': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.otc_invalid_qty': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.otc_invalid_price': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.otc_bad_spread': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.otc_quote_expired': { ccxt: 'InvalidOrder', status: 409 },
+  'trade.otc_last_look_forbidden': { ccxt: 'InvalidOrder', status: 409 },
+  'trade.otc_quote_missing': { ccxt: 'OrderNotFound', status: 404 },
 
   // ── The order itself is malformed: fix it, then resubmit ──────────────────
   'trade.order_type_unsupported': { ccxt: 'InvalidOrder', status: 400 },

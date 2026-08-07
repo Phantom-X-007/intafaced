@@ -1,0 +1,101 @@
+/**
+ * OTC desk product law (D-S-02 / SPEC-OTC-RFQ-AND-EARN Part A).
+ *
+ * Spread bps, min stake, and whether we act as principal are DIRECTION §8 —
+ * never defaulted. Blank / unpublished → refuse-closed.
+ */
+
+import { parseAmount, type Amount } from '@intafaced/ledger-client';
+import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
+
+export type OtcCounterpartyMode = 'platform' | 'maker';
+
+export type OtcDeskLaw =
+  | { readonly published: false }
+  | {
+      readonly published: true;
+      /** Disclosed house spread on RFQ, bps of mid notional. Owner-published only. */
+      readonly spreadBps: number;
+      /** Minimum active stake (decimal string → Amount). Owner-published only. */
+      readonly minStake: Amount;
+      /** Platform principal vs routed maker — must be disclosed on the quote. */
+      readonly counterparty: OtcCounterpartyMode;
+      /** Quote TTL in ms. */
+      readonly quoteTtlMs: number;
+    };
+
+/** Production default — no invent. */
+export const UNPUBLISHED_OTC_DESK_LAW: OtcDeskLaw = { published: false };
+
+/**
+ * Parse owner-published desk law from env JSON.
+ * Empty / whitespace → unpublished. Invalid → throw (fail boot, do not invent).
+ */
+export function parseOtcDeskLawJson(raw: string | null | undefined): OtcDeskLaw {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return UNPUBLISHED_OTC_DESK_LAW;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new OtcError('TRADE_OTC_DESK_LAW is not valid JSON', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new OtcError('TRADE_OTC_DESK_LAW must be an object', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (obj.published === false) return UNPUBLISHED_OTC_DESK_LAW;
+  if (obj.published !== true) {
+    throw new OtcError('TRADE_OTC_DESK_LAW.published must be true or false', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+
+  const spreadBps = obj.spreadBps;
+  if (typeof spreadBps !== 'number' || !Number.isInteger(spreadBps) || spreadBps < 0 || spreadBps > 5000) {
+    throw new OtcError('TRADE_OTC_DESK_LAW.spreadBps must be an integer 0..5000', 'trade.otc_bad_spread', OTC_DESK_LAW_RESIDUAL);
+  }
+
+  if (typeof obj.minStake !== 'string' || !obj.minStake.trim()) {
+    throw new OtcError('TRADE_OTC_DESK_LAW.minStake must be a decimal string', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+  let minStake: Amount;
+  try {
+    minStake = parseAmount(obj.minStake);
+  } catch {
+    throw new OtcError('TRADE_OTC_DESK_LAW.minStake is not a valid amount', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+  if (minStake < 0n) {
+    throw new OtcError('TRADE_OTC_DESK_LAW.minStake must be non-negative', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+
+  const counterparty = obj.counterparty;
+  if (counterparty !== 'platform' && counterparty !== 'maker') {
+    throw new OtcError('TRADE_OTC_DESK_LAW.counterparty must be platform|maker', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+
+  const quoteTtlMs = obj.quoteTtlMs ?? 30_000;
+  if (typeof quoteTtlMs !== 'number' || !Number.isInteger(quoteTtlMs) || quoteTtlMs < 1_000 || quoteTtlMs > 3_600_000) {
+    throw new OtcError('TRADE_OTC_DESK_LAW.quoteTtlMs must be 1000..3600000', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+  }
+
+  return { published: true, spreadBps, minStake, counterparty, quoteTtlMs };
+}
+
+/** Require published law or throw refuse-closed. */
+export function requirePublishedOtcDeskLaw(law: OtcDeskLaw | null | undefined): Extract<OtcDeskLaw, { published: true }> {
+  if (!law || law.published !== true) {
+    throw new OtcError(
+      'OTC RFQ desk is refuse-closed until owner publishes DIRECTION §8 desk law (spread, stake gate, counterparty)',
+      'trade.otc_desk_law_blank',
+      OTC_DESK_LAW_RESIDUAL,
+    );
+  }
+  return law;
+}
+
+export function otcDeskLawStatusLine(law: OtcDeskLaw): string {
+  if (law.published !== true) return 'published=0 residual=DIRECTION_§8_refuse_closed';
+  return `published=1 spreadBps=${law.spreadBps} counterparty=${law.counterparty} ttlMs=${law.quoteTtlMs}`;
+}
