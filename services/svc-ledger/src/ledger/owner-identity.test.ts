@@ -55,6 +55,18 @@ const MEMBER_ID = '1042';
 
 const CHECK_VIOLATION = '23514';
 
+/**
+ * The asset these drift rows are written in.
+ *
+ * It used to be the sentinel string 'DRIFT', which was convenient for cleanup
+ * and is now impossible: 0006 added `accounts_asset_id_fk`, so an account may
+ * only exist in an asset `ledger.assets` actually carries. Seeding a fake one to
+ * keep the sentinel would have been the exact move 0006 refuses — blessing an
+ * asset nothing can settle. A real seeded asset costs this test nothing; it
+ * isolates by schema, not by asset.
+ */
+const DRIFT_ASSET = 'USDT';
+
 const available = await postgresAvailable(URL);
 
 if (!available) {
@@ -155,7 +167,7 @@ if (!available) {
         try {
           await db.sql`
             INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
-            VALUES (${ownerType}::owner_type, ${ownerId}, 'DRIFT', 'available'::account_kind, '')
+            VALUES (${ownerType}::owner_type, ${ownerId}, ${DRIFT_ASSET}, 'available'::account_kind, '')
           `;
           database = true;
         } catch (err) {
@@ -167,7 +179,7 @@ if (!available) {
         }
       }
 
-      await db.sql`DELETE FROM accounts WHERE asset_id = 'DRIFT'`;
+      await db.sql`DELETE FROM accounts WHERE asset_id = ${DRIFT_ASSET}`;
       expect(disagreements).toEqual([]);
     });
   });

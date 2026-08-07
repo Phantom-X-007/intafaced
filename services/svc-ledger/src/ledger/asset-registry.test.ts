@@ -110,8 +110,8 @@ if (!available) {
         RETURNING id
       `;
       const [tx] = await db.sql<{ id: string }[]>`
-        INSERT INTO ledger_tx (module, recipe, idempotency_key)
-        VALUES ('ledger', 'test', ${`asset-fk-${Date.now()}`})
+        INSERT INTO ledger_tx (module, reason, idempotency_key, hash)
+        VALUES ('ledger', 'asset-fk-probe', ${`asset-fk-${USER}`}, 'not-a-real-chain-hash')
         RETURNING id
       `;
       await expect(
