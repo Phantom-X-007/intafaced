@@ -28,7 +28,7 @@
  * a module resolver. It errs toward finding an importer, so the failure mode is
  * a miss, never a false accusation. Swap in a real resolver if a miss costs us.
  */
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -135,6 +135,42 @@ for (const f of sources) {
     ([importer, spec]) => importer !== f && importer !== ownTest && (spec.endsWith(`/${stem}.js`) || spec.endsWith(`/${stem}`)),
   );
   if (!imported) failures.push(posix(relative(ROOT, f)));
+}
+
+/**
+ * KEEPERS - files a cleanup sweep must never remove, asserted by machine.
+ *
+ * #953 deleted 151 `*-honesty.ts` modules and kept 9. The keep-list existed only
+ * as prose in docs/NITRO-L3-SLICE-FACTORY-LAW.md, so nothing mechanically stopped
+ * the next sweep from globbing `*-honesty.ts` and taking the survivors with it.
+ * Four of these guard the agent money-tool deny lists: deleting one silently
+ * removes a safety property while every other gate stays green - the exact shape
+ * of failure this repo has now hit twice.
+ *
+ * A missing keeper is a hard failure, not a warning. If one is deliberately
+ * retired, delete its line here in the same PR and say why in the body.
+ */
+const KEEPERS = [
+  'packages/config/src/fiat-currency-honesty.ts',
+  'packages/config/src/module-id-honesty.ts',
+  'packages/contracts/src/analytics-metric-honesty.ts',
+  'services/svc-agents/src/copy-intel/money-deny-honesty.ts',
+  'services/svc-agents/src/merchant/guardrail-honesty.ts',
+  'services/svc-agents/src/navigator/money-deny-honesty.ts',
+  'services/svc-agents/src/support-agent/money-deny-honesty.ts',
+  'services/svc-identity/src/affiliates/commission-tier-honesty.ts',
+  'services/svc-notify/src/channels/refusal-code-honesty.ts',
+];
+
+const missingKeepers = KEEPERS.filter((k) => !existsSync(join(ROOT, k)));
+if (missingKeepers.length) {
+  console.error(`\n  x REACHABILITY - ${missingKeepers.length} protected module(s) were deleted:\n`);
+  for (const k of missingKeepers) console.error(`      ${k}`);
+  console.error('\n  These import a live source and assert against it. Four guard agent money-tool');
+  console.error('  deny lists - removing one drops a safety property with every other gate green.');
+  console.error('  Never sweep by filename pattern. Restore them, or retire a line here with a reason.');
+  console.error('  Law: docs/NITRO-L3-SLICE-FACTORY-LAW.md, protected keep-list.\n');
+  process.exit(1);
 }
 
 /** a parked module that gained a caller: the row is now stale and must go */
