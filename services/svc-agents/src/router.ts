@@ -18,6 +18,7 @@ import { invokeNavigatorDataTool } from './navigator/data-tools.js';
 import { navigatorTierGate } from './navigator/tier-gate.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
+import { buildLeaderStats } from './copy-intel/stats.js';
 import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
@@ -1274,6 +1275,107 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }),
         )
         .query(() => serialiseGuardrail(supportAgentGuardrail())),
+    }),
+
+    /**
+     * Copy-Intel Stage-1 — audited leader stats from caller fixtures only.
+     * trade.copy is on tip; live leader plane is residual — dark refuses invent.
+     * Spec: docs/ops/trk/agents.copy-intel.md Stage 1.
+     */
+    copyIntel: router({
+      buildStats: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            fixtures: z
+              .array(
+                z.object({
+                  leaderId: z.string().min(1).max(64),
+                  realisedPnl: z.string().nullable(),
+                  closedTrades: z.number().int().nullable(),
+                  winningTrades: z.number().int().nullable(),
+                  windowStart: z.string().min(1),
+                  windowEnd: z.string().min(1),
+                  source: z.string().min(1).max(64),
+                }),
+              )
+              .max(500),
+            copyPlane: z.enum(['live', 'dark']).optional(),
+            leaderAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              stats: z.array(
+                z.object({
+                  leaderId: z.string(),
+                  realisedPnl: z.string(),
+                  closedTrades: z.number().int(),
+                  winRate: z.string(),
+                  windowStart: z.string(),
+                  windowEnd: z.string(),
+                }),
+              ),
+              audit: z.array(
+                z.object({
+                  id: z.string(),
+                  writtenAt: z.string(),
+                  source: z.string(),
+                  leaderId: z.string(),
+                  stat: z.object({
+                    leaderId: z.string(),
+                    realisedPnl: z.string(),
+                    closedTrades: z.number().int(),
+                    winRate: z.string(),
+                    windowStart: z.string(),
+                    windowEnd: z.string(),
+                  }),
+                  provenance: z.object({
+                    fixture: z.literal(true),
+                    source: z.string(),
+                    windowStart: z.string(),
+                    windowEnd: z.string(),
+                  }),
+                }),
+              ),
+              skippedIncomplete: z.number().int(),
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.copy_intel.empty'),
+            }),
+            z.object({
+              status: z.literal('unavailable'),
+              userMessageKey: z.literal('agents.copy_intel.unavailable'),
+              reason: z.enum(['no_data', 'invalid_window', 'copy_plane_dark']),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = buildLeaderStats(input.fixtures, {
+            ...(input.copyPlane === undefined ? {} : { copyPlane: input.copyPlane }),
+            ...(input.leaderAllowlist === undefined ? {} : { leaderAllowlist: input.leaderAllowlist }),
+            ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+          });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              skippedIncomplete: result.skippedIncomplete,
+              stats: result.stats.map((s) => ({ ...s })),
+              audit: result.audit.map((a) => ({
+                id: a.id,
+                writtenAt: a.writtenAt,
+                source: a.source,
+                leaderId: a.leaderId,
+                stat: { ...a.stat },
+                provenance: { ...a.provenance },
+              })),
+            };
+          }
+          return result;
+        }),
     }),
   });
 }
