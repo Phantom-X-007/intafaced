@@ -79,6 +79,54 @@ Nitro’s goal: agents **always** have L3 tasks. When free board empty → **do 
 6. **Depends on** (L1 doc + prior slice PR#)
 7. Explicit: **does NOT invent L1/L2** OR **needs Denon green-light because …**
 8. **Board-Delta** one line for the PR
+9. **Consumer** — name the **existing** file that will import this slice, **or** state that the slice imports a real source and guards it. A slice with no reachable consumer is not a slice (see Reachability law).
+
+---
+
+## Reachability law (added 2026-08-07 — binding)
+
+**Why this exists.** Between roughly #905 and #946 the factory produced **151 catalog modules that nothing
+imports**, each re-declaring a constant that already exists elsewhere, with a test asserting the copy against a
+hardcoded literal. Every one passed doctrine gates, format, typecheck, tests, CI and the stamp-mill gate — the
+gate led with `docsOnly`, so code PRs were never checked (#884). 22k lines, zero reachable behaviour, and each
+copy is a silent drift trap: change the real list and the copy disagrees while CI stays green.
+
+**The ban, by name:**
+
+1. **Never copy a constant and then assert the copy.** If a catalog already exists in the codebase, the only
+   legal slice against it **imports it** and guards it. Re-declaring the values is banned.
+2. **Every slice names a consumer** (plan completeness §9). "An operator board will use it" is not a consumer
+   unless that board exists on tip and the PR wires it.
+3. **A green test is not a Done bar** when the module under test is imported by nothing.
+4. `freeProduct=0` still never authorises manufacturing work. Minting a pack that satisfies the template shape
+   while reaching nothing is the stamp mill in a `feat(` wrapper.
+
+**Machine enforcement — LIVE:** `tooling/ci/reachability-scan.mjs`, doctrine gate `reachability`, runs in
+`pnpm gates` / `pnpm verify` / CI. A non-test module that imports nothing from the repo **and** is imported by
+nothing outside its own test **fails the build**. Verified both ways on 2026-08-07: clean on the cleaned tree
+(387 modules), and red within one second when a single deleted copy is restored.
+
+**PARKED — built, specced, awaiting a caller.** Six real Stage-1/Stage-2 modules (~2,384 lines) pass the ban on
+manufacturing but have no caller yet: ambassador residency, paper workbook loop, copy-intel stats, merchant
+watch, scanner rank, support comment draft. They are listed by name with a reason in the scan's `PARKED` map so
+unwired work stays **visible and owed** rather than invisible. **The list may only shrink** — when a parked
+module gains a caller the gate fails until its row is deleted. Adding a row is a decision to owe the wiring, not
+a way to pass.
+
+### Protected keep-list — these 9 `*-honesty.ts` files are real and must never be swept
+
+They import a live source and assert against it. Four guard the agent **money-tool deny lists**. Deleting any of
+them removes a safety property. Never delete `*-honesty.ts` by filename pattern — only by explicit list.
+
+- `packages/config/src/fiat-currency-honesty.ts`
+- `packages/config/src/module-id-honesty.ts`
+- `packages/contracts/src/analytics-metric-honesty.ts`
+- `services/svc-agents/src/copy-intel/money-deny-honesty.ts`
+- `services/svc-agents/src/merchant/guardrail-honesty.ts`
+- `services/svc-agents/src/navigator/money-deny-honesty.ts`
+- `services/svc-agents/src/support-agent/money-deny-honesty.ts`
+- `services/svc-identity/src/affiliates/commission-tier-honesty.ts`
+- `services/svc-notify/src/channels/refusal-code-honesty.ts`
 
 ---
 
@@ -114,5 +162,5 @@ Claims stay `docs/ops/claims/`.
 
 ## Success
 
-Standing order: when free board empty → mint L3 packs from existing L1 → spawn → ship → repeat.  
+Standing order: when free board empty → mint L3 packs from existing L1 → spawn → ship → repeat — **only for packs that name a reachable consumer.** A pack nothing can reach is not shipped work; see Reachability law.  
 This law stacks with the 24h build program and the continuation ladder; it does **not** replace partner/Shehzad bans.

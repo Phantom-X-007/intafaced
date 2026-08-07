@@ -77,6 +77,18 @@ export const GATES = [
       'runs and `pnpm verify` does not is the exact drift gates.mjs exists to make impossible.',
   },
   {
+    id: 'reachability',
+    script: 'tooling/ci/reachability-scan.mjs',
+    doctrine: 'L3 slice factory law, Reachability law',
+    why:
+      'a module that imports nothing and is imported by nothing is not shipped work. Between #905 and #946 the ' +
+      'slice factory produced 151 such modules - each re-declaring a constant that already existed and testing ' +
+      'the copy against a literal - and every one passed this gate list, format, typecheck, tests and CI. The ' +
+      'stamp-mill gate led with docsOnly (#884) so it never looked. This is the gate that would have caught it ' +
+      'on the first wave instead of the two hundredth. Modules built but not yet wired are PARKED by name with a ' +
+      'reason, and that list may only shrink.',
+  },
+  {
     id: 'brand',
     script: 'tooling/ci/brand-scan.mjs',
     doctrine: '§0.7',
