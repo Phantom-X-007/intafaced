@@ -14,7 +14,9 @@ import { P2pError, isNaturalPersonId } from './p2p-service.js';
  * `p2p:moderate`). Named natural-person ids may moderate with ordinary
  * `p2p:read`. An empty list is not a soft default: it means moderation is
  * not configured, and the API must refuse rather than pretend a human can
- * reach the queue. (Stage residual — no fake adjudication.)
+ * reach the queue.
+ *
+ * Residual stage only — no machine adjudication, no invented outcome.
  */
 
 /** Comma / whitespace separated canonical UUIDs. Invalid tokens are refused. */
