@@ -177,6 +177,7 @@ jobs:
       TEST_DATABASE_URL_BANK: postgres://svc_bank:svc_bank@127.0.0.1:5432/intafaced_test
       TEST_DATABASE_URL_BLUEPRINT: postgres://svc_blueprint:svc_blueprint@127.0.0.1:5432/intafaced_test
       TEST_DATABASE_URL_AGENTS: postgres://svc_agents:svc_agents@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_NOTIFY: postgres://svc_notify:svc_notify@127.0.0.1:5432/intafaced_test
       REDIS_URL: redis://127.0.0.1:6379
       NATS_URL: nats://127.0.0.1:4222
       # Same bargain as REQUIRE_POSTGRES, for the same reason. svc-protocol's
@@ -228,9 +229,9 @@ jobs:
         run: |
           # "Created but empty" was the real failure mode, and it is
           # indistinguishable from success unless something asserts on contents.
-          expected=12
+          expected=13
           count=$(psql -h localhost -U intafaced -d intafaced_test -tAc \
-            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('identity','ledger','token','matching','trade','pay','p2p','blueprint','bank','agents','indexer','protocol');")
+            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('identity','ledger','token','matching','trade','pay','p2p','blueprint','bank','agents','indexer','protocol','notify');")
           echo "service schemas in intafaced_test: $count / $expected"
           if [ "$count" -ne "$expected" ]; then
             echo "::error::intafaced_test missing service schemas ($count/$expected) — 02-intafaced-test-db.sh did not do its job"
