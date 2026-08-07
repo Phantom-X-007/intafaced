@@ -93,12 +93,12 @@ export GH_TOKEN="$(tr -d '\n\r ' < /Users/Nitro/.grok/agent-auth/github_token)"
 | Question                                | File                                          |
 | --------------------------------------- | --------------------------------------------- |
 | Product free / wip / done / human-owned | `tooling/tracker/features.mjs`                |
-| Campaign “ship next”                    | `docs/BOARD-CLEAR-NEXT.md` (sequence only)    |
+| What to ship next                       | `pnpm swarm:next` (live board, re-derived)    |
 | Session who-codes-what + dual-build     | `docs/LIVE-LANES.md` + open PR path intersect |
 | Code on main                            | git                                           |
 
 **Tracker touch = mountain events only** (claim, owner handoff/human lock, done/cut, optional wave note) — **not** every craft PR under an already-`wip` row.  
-**Does not add:** PR caps, Denon Approves, CI “must edit features.mjs,” or Nitro manual steps. Thrift + parallel + Class merge matrix unchanged.
+**Does not add:** PR caps, Denon Approves, CI “must edit features.mjs,” or Nitro manual steps. Parallel + Class merge matrix unchanged.
 
 ---
 
@@ -167,21 +167,21 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 
 **L3 slice factory (Nitro):** when freeProduct=0, mint Stage-N slices from existing L1 — not idle, not wait for Denon re-spec. Law: [`docs/NITRO-L3-SLICE-FACTORY-LAW.md`](docs/NITRO-L3-SLICE-FACTORY-LAW.md).
 
-## GitHub Actions thrift (mandatory — Nitro and Denon agents)
+## CI habits (mandatory — Nitro and Denon agents)
 
-**Intent:** cut **wasted** Actions spend without slowing delivery. GitHub is the **merge seal**, not the workshop.  
-**Full law + economics:** [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Keep this section and that doc in sync.
+**There is no Actions budget.** The repo is **public**, and GitHub Actions on standard runners are
+free and unlimited for public repositories. The "thrift" law that metered runs and asked agents to
+batch, hold, and throttle was **deleted on 2026-08-07** — retirement note:
+[`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+**Never hold finished work back to save CI.** Open the PR.
 
-### Local-first (habit — not a hard exit)
+What survives, for reasons that were never about money:
 
-1. **Workshop is local.** Write and prove as much as the machine can run locally. Remote CI is the seal after a coherent unit is done — not the first debugger.
-2. **Push once per finished unit.** Do not re-push every tiny edit to watch CI. Re-push only after a real local fix.
-3. **`pnpm thrift:check` meters and WARNs** (pre-push + `pnpm pr`). **It never exit-1s on run counts.** Stamp-mill protection is **value-gate** (content), not a volume gate.
-4. **`pnpm verify` honesty:** if the machine has no Docker, verify may exit 0 with **INCOMPLETE** — do **not** call that full green. Install local infra once: `tooling/scripts/local-infra-bootstrap.sh` (Colima/Docker + Foundry; see script header). Foundry lives under `.tools/foundry` when bootstrapped in-repo.
-5. **Open product PRs** via **`pnpm pr -- …`**. Prefer path-cluster batches over one micro-PR per residual id when they share a service — soft preference, not a hard “one PR per day.”
-6. Prefer **pure docs/markdown** when docs-only (full CI skipped; Docs format **PR only**).
-7. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
-8. **Re-run all jobs** only for flake or known infra fix.
+1. **`pnpm verify` before the push that opens or updates a code PR** — local is seconds, a CI round trip is minutes. Fast feedback, not spend.
+2. **`pnpm verify` honesty:** if the machine has no Docker, verify may exit 0 with **INCOMPLETE** — do **not** call that full green. Install local infra once: `tooling/scripts/local-infra-bootstrap.sh` (Colima/Docker + Foundry; see script header). Foundry lives under `.tools/foundry` when bootstrapped in-repo.
+3. **One service per PR** (CONTRIBUTING §15.1) — reviewability. A 200-line PR gets a real review; a 2,000-line PR gets "LGTM" and a bug in production. This is the opposite of the old "batch it fatter" advice, which existed only to save runs.
+4. **Open product PRs** via **`pnpm pr -- …`**.
+5. **`pnpm value-gate:self-test`** stays green; docs tip-bumps without `Board-Delta:` fail Docs format (STRICT).
 
 **Code stamp-mill (value-gate, CI `gates` job — 2026-08-06, from #832–#876).**
 The gate now evaluates near-duplicate subjects on **code** PRs too, not only
@@ -199,24 +199,17 @@ a `Serial-Work: <why>` commit trailer (auditable —
 **Do not open a PR whose only job is status, keepalive, peace, cycle stamp, FREEZE tip-bump, claims-only meter, or “board unchanged.”**  
 Claims / FREEZE / R00–R02 / DASHBOARD stay **files** agents edit in worktrees. They ship **only** when a real product or law PR needs them as part of that delta — never alone as swarm chat.
 
-### Never (false thrift — integrity only)
+### Never — integrity only
 
-These are **integrity violations**, not cost preferences:
+These are **integrity violations**. They were never cost preferences, and no cost argument was ever a valid excuse for them:
 
-- Skip doctrine/money tests “to save money.”
+- Skip doctrine/money tests.
 - Claim green without an honest verify (including calling an INCOMPLETE local run full green).
-- Disable required checks “to save money.”
-- Restore `push: main` full CI / Docs-format without a spend review (double-bill thrash).
+- Disable required checks.
 
-### Public vs private (not thrift)
+### Repo visibility
 
-**Making the repo public is a business/IP decision (Nitro + Denon), not thrift and not an integrity sin.**  
-Agents **do not** flip visibility. Standard GitHub-hosted Actions minutes are free on public repos; private Free plan has a minute pool. Do **not** invent security myths to justify staying private, and do **not** go public to “save money” without an explicit owner decision. Secrets unique-to-this-repo vs public CoinExchange vendor import: see forensic notes / spend-control — the #197 “secrets ban” is not a thrift rule.
-
-### Denon-only infra (agents may implement workflow PR after he installs the runner app)
-
-- Actions budget ~$50–80/mo, stop-when-reached ON, alerts — high fuse while private.
-- Prefer cheaper managed runners (e.g. Ubicloud) for heavy jobs if the repo stays private — same GitHub checks UI; see spend-control doc.
+The repo is **public**. Visibility is a business/IP decision (Nitro + Denon) — **agents do not flip it**, in either direction.
 
 ---
 

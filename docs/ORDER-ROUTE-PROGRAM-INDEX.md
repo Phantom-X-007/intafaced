@@ -57,7 +57,7 @@ ORIENT (60s) then BUILD
 3. Read INDEX + Plan § Build start order. Claim LIVE-LANES order-route-harden.
 4. Start remaining P0 then P1-0 guard then P1-1 chaos F1–F4 spine.
 5. Class M: self-audit + fresh adversarial; Denon carve-outs (external value, scopes, new ledger recipes, posture/kill/custody) — do not silent-merge.
-6. pnpm verify (or scoped + document) green before push. CI thrift: no push storms.
+6. pnpm verify (or scoped + document) green before push — local is seconds, CI is minutes.
 7. Builder never grades self — fresh Verify for money ships.
 8. No go-live claim. No futures engine invent as program lead. No fake tracker done.
 

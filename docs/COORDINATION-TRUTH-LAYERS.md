@@ -24,7 +24,7 @@
 
 | Guarantee             | Meaning                                                                          |
 | --------------------- | -------------------------------------------------------------------------------- |
-| **Speed**             | No PR cap · no serialize-agents · no “wait for CI idle” · thrift stays           |
+| **Speed**             | No PR cap · no serialize-agents · no “wait for CI idle” · no CI throttle at all  |
 | **Quality**           | False `done` still fails `pnpm tracker:check` · doctrine gates unchanged         |
 | **Autonomy**          | Agents claim, ship, merge under Class matrix — **no new Denon/Nitro Approve**    |
 | **Zero Nitro manual** | Agents own claim + registry + LIVE-LANES + PR loop                               |
@@ -68,7 +68,7 @@ If a future change breaks a row above, **reject the change**.
 ### Explicitly **not** required
 
 - Every craft / a11y / polish PR under an already-claimed `wip` row
-- Pure docs / thrift docs-only PRs that do not change product ownership
+- Pure docs-only PRs that do not change product ownership
 - Path refactors that do not change feature meaning
 
 **Denon intent (plain):** main’s product map must not _lie_ about ownership and free work. That is **not** “maximize `features.mjs` diffs.”
@@ -104,7 +104,7 @@ docs/BOARD-CLEAR-HUMAN-BLOCKERS.md
 ```
 
 **Resume home:** `docs/ops/FREEZE-LIVE.md` (from `pnpm swarm:freeze`) — not a separate RESUME.md.  
-**Cost line:** `swarm:status` prints Actions runs last 24h; if Docs-format dominates, thrift before more stamp PRs.  
+**Actions line:** `swarm:status` prints Actions runs last 24h — informational only. The repo is public, so Actions are free and unlimited; a high count is never a reason to hold work back. Stamp PRs are stopped by `value-gate`, on content.  
 **F-STANDBY:** when freeProduct=0, idling is valid; only P1–P5 with Board-Delta. Law: `docs/ops/SWARM-MANDATE.md`.  
 **Value gate:** `tooling/ci/value-gate.mjs` (Docs format workflow) + L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`.
 
@@ -129,4 +129,4 @@ If tracker owner is **shehzad002** (Protocol Plane / INTACHAIN) or LIVE-LANES hu
 - Plan + anti-list: [`TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md`](TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md)
 - Evidence: [`DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md`](DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md)
 - Claim how-to: `CONTRIBUTING.md` §3.5 · `AGENTS.md`
-- Thrift: [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md) (unchanged)
+- CI spend: none — retired 2026-08-07, [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md)

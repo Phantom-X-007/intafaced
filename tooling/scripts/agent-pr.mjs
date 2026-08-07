@@ -1,28 +1,23 @@
 #!/usr/bin/env node
 /**
- * agent-pr — PR open for agents (thrift meter first, then gh).
+ * agent-pr — PR open for agents.
  *
  *   pnpm pr -- --title "…" --body "…"
  *   node tooling/scripts/agent-pr.mjs create …   # any gh pr create args after --
  *
- * Runs thrift-preflight (meter + WARN only — never blocks on run counts), then
- * `gh pr create`. Prefer this over bare `gh pr create` in AFK / swarm workers
- * so the Actions meter stays visible. Do not open coordination-only PRs
- * (SWARM-MANDATE / AGENTS thrift).
+ * A thin wrapper over `gh pr create` that survives `pnpm pr -- …` argument
+ * mangling. It used to run a thrift meter first; thrift was deleted on
+ * 2026-08-07 because the repo is public and GitHub Actions are free and
+ * unlimited on standard runners, so there was no bill left to meter.
+ *
+ * There is deliberately no gate here. Opening a PR is how work is claimed —
+ * a tool that can refuse to open one is a tool that stops the build.
  */
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const thrift = join(ROOT, 'tooling/ci/thrift-preflight.mjs');
-
-// Meter only — thrift always exits 0 on run-count signals (local-first law).
-spawnSync(process.execPath, [thrift], {
-  cwd: ROOT,
-  env: process.env,
-  stdio: 'inherit',
-});
 
 let args = process.argv.slice(2);
 // pnpm pr -- --title …  leaves a leading "--" that gh rejects as unknown.

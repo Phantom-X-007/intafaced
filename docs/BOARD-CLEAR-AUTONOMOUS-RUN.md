@@ -58,7 +58,7 @@ LOCKED B: protocol audit+deploy; trade HARD human/LIGHT agent; card=M1; Phase5 m
 DECISIONS: agent default; X1–X5 queued until agent residual done
 ANTI-SLOP: evidence; Class M failures; design bar; no invent; no fake Done; no apps/web
 
-EVERY TURN: collision ritual; worktree from tip; evidence; thrift; update NEXT tip+exact ship
+EVERY TURN: collision ritual; worktree from tip; evidence; local verify before push; update NEXT tip+exact ship
 GH_TOKEN from ~/.grok/agent-auth/github_token
 
 START / CONTINUE:

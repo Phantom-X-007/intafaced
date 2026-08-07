@@ -17,7 +17,7 @@ Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURR
 
 - **Internet leverage LAW (agents must obey — you do not pick):** [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md) — Phase A is enough for **now**; wire shell + ledger + services; no rebuild.
 - **Phase A map (what we already own):** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md).
-- **Full residual paths (every open tracker row):** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — not a thrift “top 5 only” list.
+- **Full residual paths (every open tracker row):** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — the whole board, not a “top 5 only” list.
 - **Send to Denon / partner agent:** [`INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md`](INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md) — full context pack, no compromise.
 - **Post-Denon close-out (2026-08-05):** [`POST-DENON-REUSE-CLOSEOUT-2026-08-05.md`](POST-DENON-REUSE-CLOSEOUT-2026-08-05.md) — law aligned; what remains Denon vs Nitro residual.
 - **You do not manage this day-to-day.** Agents load it from `AGENTS.md`; CI fails if that chain is removed.
@@ -91,7 +91,7 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Residual campaign (older partial-first mode):** [`NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md`](NITRO-RESIDUAL-CAMPAIGN-2026-07-31.md) · lanes [`LIVE-LANES.md`](LIVE-LANES.md) — use only if Board Clear docs missing.
 - **Order-route:** #289 merged under Board Clear A-OR-1; residual Java dual-book = shehzad M7.
 - **Who owns what (durable — not a status board):** [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) · also in [`AGENTS.md`](../AGENTS.md) · paste [`NITRO-SESSION-PROMPT.md`](NITRO-SESSION-PROMPT.md). **Denon = direction; Nitro agents = ship + merge when gates pass.** Live tip/PRs: re-derive with git/`gh`, never from memory.
-- **GitHub CI money (Actions thrift — active law):** [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md) · also in `AGENTS.md`. Parallel/autonomous shipping stays; cut waste + cheaper runners. Not a Denon review gate.
+- **GitHub CI money — there is none:** the repo is public, so Actions on standard runners are free and unlimited. The old throttling law was **retired 2026-08-07**; the note explaining why lives at [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md) so nobody reinvents it. Agents never hold finished work back to save CI.
 - **#86 landed on main** (shell rebrand + custody locks). **Board Clear** authorizes trade-mountain Done bars (thin/§13, never invent prices) without waiting on new Denon chat — see constitution + ownership precedence.
 
 History only (may lag): [`STATUS-2026-07-27.md`](STATUS-2026-07-27.md)

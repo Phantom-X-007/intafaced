@@ -12,6 +12,17 @@
 
 ## Deferred X1–X5 (Nitro only / Denon admin)
 
+> **MOVED 2026-08-07 → [`docs/ops/OWNER-GITHUB-CONFIG.md`](ops/OWNER-GITHUB-CONFIG.md).**
+> These are standing repo-security facts, not campaign artifacts, and they outlived the campaign.
+> The new home carries the current state: the repo is **public**, so the "needs GitHub Pro"
+> blocker on X2/X3 is gone and four of the five are now free to fix.
+> **The table below is frozen as filed on 2026-08-04. Do not act on it — act on the new home.**
+>
+> Note also: these `X1–X5` are **ticket IDs**, and they collide with the `X1–X5`
+> **escalation classes** in `BOARD-CLEAR-DECISION-AUTHORITY.md:42-46`, where X1 means
+> _production go-live / real mainnet money_. An agent escalating a genuine money event
+> lands in a billing table. Use the new home's `G1–G5` for the config findings.
+
 | ID  | Queued (UTC)      | Issue                                                                                                                                                                                                                             | Sandbox/§13 tried?                        | Status             |
 | --- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------ |
 | X1  | 2026-08-04T01:00Z | **Actions billing** — last 24h ~677 runs (≈90 CI + ≈582 Docs-format). `paths-ignore` moved spend, did not remove it. Issue #197 already hit ceiling once (2026-07-30). **Only Denon can see the bill.** Confirm headroom tonight. | value-gate shipping on Docs-format (#721) | OPEN — Denon       |

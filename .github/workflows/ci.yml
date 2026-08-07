@@ -1,15 +1,17 @@
 name: CI
 
 on:
-  # THRIFT 2026-08-04: no push:main full matrix.
-  # Re-running 4 jobs (~11–12 min billable sum) on every merge doubled thrash-day
-  # spend. PR CI is the merge seal; workflow_dispatch re-checks main if needed.
+  # RESTORED 2026-08-07: push:main is back.
   #
-  # Documentation cannot break a typecheck, a test or a doctrine gate, and a
-  # full run is four parallel Linux jobs. On 30 July eight docs-only PRs each
-  # burned the full matrix -- roughly 90 billable minutes spent formatting
-  # Markdown, out of a 2,000-minute monthly pool. The gates that DO apply to
-  # docs (brand-scan, tracker) are cheap and still run on any PR touching code.
+  # It was removed on 2026-08-04 as a thrift measure, to stop "double-billing"
+  # a merge out of "a 2,000-minute monthly pool". That pool was a private-repo
+  # quota. This repo is PUBLIC, and GitHub Actions on standard runners are free
+  # and unlimited for public repositories — the bill it protected does not exist.
+  #
+  # What it cost while it was off: nothing verified main after a merge. Two PRs
+  # that each passed independently could land and leave the trunk red, on a repo
+  # that moves money. That is exactly what #901 ("main is red") and #221 were.
+  # A PR check proves the branch was green; only a push check proves the trunk is.
   #
   # ONE MARKDOWN FILE IS NOT DOCUMENTATION. INTAFACED_DEFINITIVE_BUILD.md is
   # the law, and coverage-check reads it: a chapter appearing there is exactly
@@ -17,6 +19,9 @@ on:
   # adding §39 would skip CI entirely and no gate would ever see it — which is
   # a fair description of how §27–§37 arrived with nobody noticing. Negation
   # needs `paths` rather than `paths-ignore`; the last matching pattern wins.
+  # That path filter stays: it is about relevance, not cost.
+  push:
+    branches: [main]
   pull_request:
     paths:
       - '**'

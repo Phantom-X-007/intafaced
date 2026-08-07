@@ -11,10 +11,13 @@
 # should not begin by adding some. Everything here is `pnpm audit` — already in
 # the toolchain — read by tooling/ci/dependency-audit.mjs.
 #
-# THRIFT: this does not run on every push. It runs when the dependency surface
-# actually changes, plus once a week to catch advisories published against
-# dependencies we did not touch (which is how most of them arrive). One job,
-# no build, no services. See docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md.
+# RELEVANCE, NOT COST: this does not run on every push because a `pnpm audit`
+# against an unchanged lockfile answers the same thing it answered last time.
+# It runs when the dependency surface actually changes, plus once a week to
+# catch advisories published against dependencies we did not touch (which is
+# how most of them arrive). One job, no build, no services. (Actions are free
+# and unlimited on this public repo — the "thrift" spend law was deleted
+# 2026-08-07; see docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md.)
 name: Supply chain
 
 on:

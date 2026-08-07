@@ -83,7 +83,7 @@ It is still **not** a free upgrade for every hot path. Measured (~4,050 patterns
 
 ---
 
-## 4 · Phase B (no thrift ceiling · no Nitro queue pick)
+## 4 · Phase B (no ceiling · no Nitro queue pick)
 
 - Full residual map: every open tracker id has a path.
 - **Start order (agents may proceed without asking Nitro):**

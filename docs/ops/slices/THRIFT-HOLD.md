@@ -1,21 +1,29 @@
-# Thrift hold — L3 free-TRK factory
+# L3 free-TRK factory — hold LIFTED (2026-08-07)
 
 **Updated:** 2026-08-07  
 **Tip base:** #925 / 1bd51cf4  
 **Open partner:** #904 only (babysit — never dual-edit / never agent-merge)  
 **Open other:** #926 doctrine-red — do not dual-edit
 
-## Rule
+## There is no hold
 
-- Tip thrift is warn-only (never exit 1 on volume). Prefer one fat push per unit.
-- **No workflow_dispatch** on branches that already have PR checks.
-- Soft ≥120 / total_ref ≥220: ship **one fat** Class N PR only.
-- Never `THRIFT_ALLOW` unless Nitro emergency.
-- Night-engine “HARD thrift / stop L3” is often stale vs tip law.
+The throttle this file used to carry — run-count caps, "ship one fat PR only", `THRIFT_ALLOW`,
+waiting for a 24h window to cool — was **deleted on 2026-08-07**. The repo is public, so GitHub
+Actions on standard runners are free and unlimited, and the bill it protected does not exist.
+Retirement note: [`../../GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](../../GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
 
-## Wave 209–211 fat PR
+**Never hold a finished slice back.** Open the PR when the unit is done. One concern per PR —
+reviewability, not batching.
 
-One PR on `feat/l3-free-trk-wave209`:
+## Rules that survive (never about cost)
+
+- **Partner open PRs are a hard wall.** #904 is Denon's — babysit, never dual-edit, never agent-merge.
+- **No `workflow_dispatch`** on a branch that already has PR checks — it runs the same thing twice for no new signal.
+- **`pnpm verify` green locally before the push** that opens or updates a code PR. Local is seconds; CI is minutes.
+
+## Wave 209–211
+
+On `feat/l3-free-trk-wave209`:
 
 - wave209 app-env-honesty (packages/config)
 - wave210 plane-honesty (packages/config)
