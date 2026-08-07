@@ -316,6 +316,18 @@ describe('the spec is served, and describes what the routes actually do', () => 
     expect(res.statusCode).toBe(200);
     expect(res.json().info.title).toBe('Payments API');
   });
+
+  it('OpenAPI description matches sandbox-key + quickstart behaviour (step 5)', async () => {
+    app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/pay/v1/openapi.json' });
+    const desc = String(res.json().info.description ?? '');
+    expect(desc).toContain('MERCHANT-PUBLIC-API-QUICKSTART');
+    expect(desc).toMatch(/sandbox/i);
+    expect(desc).toContain('ifc_test_');
+    expect(desc).toContain('pay.sandbox_rail_refused');
+    expect(desc).toContain('Idempotency-Key');
+    expect(desc).toMatch(/decimal string/i);
+  });
 });
 
 describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {

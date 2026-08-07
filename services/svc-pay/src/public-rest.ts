@@ -54,10 +54,14 @@ import { resolveMerchantRail } from './sandbox-key-routing.js';
  *   DELETE /api/pay/v1/webhook-endpoints/:id          pay:write
  *   GET    /api/pay/v1/webhook-deliveries             pay:read   (failure dashboard)
  *
- * STEP 4 — sandbox keys (this residual): principal `key_env` from the API-key
- * exchange routes createPayment onto the sandbox rail (`card-sandbox`). A live
- * key may not name a sandbox rail. `assertRailMayMoveValue` remains the second
- * gate for value-leaving caps — REST acquires no exception. No parallel stack.
+ * STEP 4 — sandbox keys: principal `key_env` from the API-key exchange routes
+ * createPayment onto the sandbox rail (`card-sandbox`). A live key may not name
+ * a sandbox rail. `assertRailMayMoveValue` remains the second gate for
+ * value-leaving caps — REST acquires no exception. No parallel stack.
+ *
+ * STEP 5 — public docs + merchant quickstart (this residual):
+ *   docs/pay/MERCHANT-PUBLIC-API-QUICKSTART.md — callable without monorepo.
+ *   OpenAPI description below stays the machine contract (must match behaviour).
  *
  * Not Class X go-live. Not a live acquirer. Outbound webhooks do not move value.
  */
@@ -270,14 +274,20 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         description: [
           'Merchant payments API.',
           '',
+          'Human quickstart (no monorepo required): docs/pay/MERCHANT-PUBLIC-API-QUICKSTART.md',
+          '',
           '**Amounts are decimal strings** with an explicit `assetId` — never minor units and never a JSON number.',
           'A payment of one dollar ten is `"1.1"`, not `110` and not `1.1` as a number.',
           '',
           'Amounts are **canonical**: no trailing zeros. An amount created as `1.10` is returned as `"1.1"`.',
           'Compare amounts numerically or with a decimal library — never by string equality.',
           '',
-          '**Authentication** is an `ifc_…` API key as a bearer token. Keys are exchanged for a short-lived',
-          'principal at the edge; this service never sees the key itself.',
+          '**Authentication** is an `ifc_…` (live) or `ifc_test_…` (sandbox) API key as a bearer token.',
+          'Keys are exchanged for a short-lived principal at the edge; this service never sees the key itself.',
+          '',
+          '**Sandbox keys** (mode=sandbox / `key_env=sandbox`): createPayment always uses the sandbox rail',
+          '(`card-sandbox`). A **live** key that names a sandbox rail is refused (`pay.sandbox_rail_refused`).',
+          'There is no parallel sandbox deployment — same API, rail posture only.',
           '',
           '**Idempotency-Key** is required on every mutating POST. A repeated key with the same body returns',
           'the original result; a repeated key with a different body is `409 pay.idempotency_conflict`.',
