@@ -5,6 +5,8 @@ import { formatAmount, parseAmount, InsufficientFundsError, LedgerError } from '
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
 import type { TradeService } from './spot/trade-service.js';
+import { OtcError } from './otc/errors.js';
+import type { OtcDeskService } from './otc/otc-service.js';
 
 /**
  * svc-trade's API (§5.2).
@@ -148,6 +150,24 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
 
+  if (err instanceof OtcError) {
+    switch (err.code) {
+      case 'trade.otc_quote_missing':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'trade.otc_not_owner':
+      case 'trade.otc_stake_gate':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'trade.otc_desk_law_blank':
+      case 'trade.otc_settle_refused':
+      case 'trade.otc_stake_unavailable':
+      case 'trade.otc_no_reference_price':
+      case 'trade.otc_bad_spread':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      default:
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+  }
+
   if (err instanceof TradeError) {
     switch (err.code) {
       case 'trade.market_not_found':
@@ -190,7 +210,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export function createTradeRouter(trade: TradeService) {
+export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-trade') }))
@@ -377,6 +397,74 @@ export function createTradeRouter(trade: TradeService) {
               }),
             ),
           ),
+        ),
+    }),
+
+    /**
+     * OTC RFQ desk (trade.otc / D-S-02 Part A).
+     * Default desk law unpublished → refuse-closed (DIRECTION §8). Never invents spread/stake.
+     */
+    otc: router({
+      deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
+        if (!otc) {
+          return {
+            published: false,
+            statusLine: 'published=0 residual=DIRECTION_§8_refuse_closed',
+            residual: 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed',
+          };
+        }
+        return otc.deskStatus();
+      }),
+
+      quote: scopedProcedure('trade:read', { module: 'trade' })
+        .input(
+          z.object({
+            side: orderSideSchema,
+            baseAsset: z.string().min(1).max(32),
+            quoteAsset: z.string().min(1).max(32),
+            qty: decimal,
+            midPrice: decimal,
+            makerId: z.string().min(1).max(120).optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.quote(ctx.principal, {
+              side: input.side,
+              baseAsset: input.baseAsset,
+              quoteAsset: input.quoteAsset,
+              qty: input.qty,
+              midPrice: input.midPrice,
+              makerId: input.makerId,
+            });
+          }),
+        ),
+
+      accept: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            quoteId: z.string().uuid(),
+            assertedPrice: decimal.optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.accept(ctx.principal, {
+              quoteId: input.quoteId,
+              assertedPrice: input.assertedPrice,
+            });
+          }),
+        ),
+
+      settle: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ quoteId: z.string().uuid() }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.settle(ctx.principal, { quoteId: input.quoteId });
+          }),
         ),
     }),
 

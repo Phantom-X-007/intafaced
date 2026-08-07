@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**45 of 109 shipped (41%)** · 7 in progress · 28 ready to claim · 29 blocked · 39 deliberate §13 sockets
+**45 of 109 shipped (41%)** · 8 in progress · 27 ready to claim · 29 blocked · 39 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -27,7 +27,6 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
-| OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
@@ -73,6 +72,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Feature | Owner | Module |
 |---|---|---|
+| OTC RFQ desk, staked-tier gate | **cursor-swarm-otc** | `trade` |
 | TWAP / VWAP / POV execution | **Nitro** | `trade` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
@@ -130,7 +130,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining._ | F |  | `trade.convert` |
 | 🟢 | Perps: cross/isolated margin, funding, liquidation ladder <br/>_**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent._ | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
-| 🟢 | OTC RFQ desk, staked-tier gate <br/>_**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent OTC product truth._ | F |  | `trade.otc` |
+| 🔨 | OTC RFQ desk, staked-tier gate <br/>_Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table._ | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, profit share <br/>_**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent copy product._ | B |  | `trade.copy` |
 | 🟢 | Fiat pairs on the same engine <br/>_NOT started as a product. What exists: the instrument model (asset_class + schedule on trade.markets) and venue-hours enforcement on order-create — #102 added assertMarketOpen before the hold, so a weekend EUR/USD order is refused with trade.market_closed rather than funded. Hours coverage completed since: the unrecognised-schedule fail-safe (rows.ts casts the DB enum with no runtime parse, so an enum added without a TRADING_SCHEDULES entry must refuse, not throw), the cme-globex daily settlement break, Chicago DST, and an end-to-end proof that a closed venue takes no hold and writes no intent row. Still missing for the actual feature: fiat settlement rails, so no forex market is listed in production._ | F |  | `trade.forex` |
 | 🔨 | TWAP / VWAP / POV execution <br/>_**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 2 — D-S-04 TWAP Stage (parent=schedule, children via placeOrder, refuse blank mark/empty book). VWAP/POV still out (no honest volume series)._ | F |  | `trade.algo` |

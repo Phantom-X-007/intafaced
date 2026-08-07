@@ -71,6 +71,26 @@ export function moveAvatar(scene: SceneV1, input: { avatarId: string; dx: number
   return check.scene;
 }
 
+/**
+ * Navigate one avatar to an absolute point on the server scene (Stage-2 canvas).
+ * Clamps to stage; missing avatar refuses invent. Same SoT as moveAvatar.
+ */
+export function navigateAvatarTo(scene: SceneV1, input: { avatarId: string; x: number; y: number }): SceneV1 {
+  if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) {
+    throw new CanvasError('position must be finite', 'academy.scene_invalid');
+  }
+  const avatars = scene.avatars ?? [];
+  const cur = avatars.find((a) => a.id === input.avatarId);
+  if (!cur) {
+    throw new CanvasError(`avatar ${input.avatarId} not in scene`, 'academy.avatar_missing');
+  }
+  return moveAvatar(scene, {
+    avatarId: input.avatarId,
+    dx: input.x - cur.position.x,
+    dy: input.y - cur.position.y,
+  });
+}
+
 /** Presence list for UI — ids only, no labels that could smuggle PII. */
 export function listPresence(scene: SceneV1): readonly { avatarId: string; participantId: string; x: number; y: number }[] {
   return (scene.avatars ?? []).map((a) => ({
