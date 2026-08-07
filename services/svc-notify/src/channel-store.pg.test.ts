@@ -58,6 +58,20 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
 
   beforeEach(async () => {
     await sql!`DELETE FROM notify.deliveries WHERE notification_id IN (${NOTIFICATION}, ${OTHER_NOTIFICATION})`;
+    await sql!`DELETE FROM notify.notifications WHERE id IN (${NOTIFICATION}, ${OTHER_NOTIFICATION})`;
+    // `deliveries.notification_id` is a foreign key: a delivery cannot exist
+    // without the inbox row it belongs to. That is the design — there is no
+    // orphan delivery — so the fixture has to build the parent.
+    for (const [index, id] of [NOTIFICATION, OTHER_NOTIFICATION].entries()) {
+      await sql!`
+        INSERT INTO notify.notifications (id, user_id, kind, title_key, body_key, severity, source_subject, source_idempotency_key)
+        VALUES (
+          ${id}, ${USER}, 'bank.margin_call',
+          'notify.bank.margin_call.title', 'notify.bank.margin_call.body', 'critical',
+          'intafaced.bank.margin_call.created', ${`pg-test-${index}`}
+        )
+      `;
+    }
   });
 
   it('a second claim while the lease is live is refused as in_flight', async () => {
