@@ -7,6 +7,10 @@ import type { ModelGateway } from './gateway/gateway.js';
 import type { UsageMeter } from './metering/meter.js';
 import type { AgentRuntime } from './runtime.js';
 import { rankFixtures } from './scanner/rank.js';
+import { rankLiveFromTickers } from './scanner/rank-live.js';
+import { scannerAgentGuardrail } from './scanner/guardrail.js';
+import { invokeScannerDataTool } from './scanner/data-tools.js';
+import { scannerTierGate } from './scanner/tier-gate.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
@@ -405,11 +409,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
     }),
 
     /**
-     * Market Scanner Stage-1 — rank on caller-supplied fixtures only.
+     * Market Scanner — Stage-1 fixture rank + Stage-2 live data tools residual.
      *
-     * Spec: docs/ops/trk/agents.scanner.md Stage 1. Never invents prices or
-     * market rows: the caller must hand fixtures in. Stage-2 live market tools
-     * are residual. No ledger, no order placement.
+     * Spec: docs/ops/trk/agents.scanner.md. Never invents prices or market rows:
+     * caller hands allowlisted fixtures / tool rows. Dark plane + blank tier law
+     * refuse-closed. No ledger, no order placement.
      */
     scanner: router({
       rankFixtures: scopedProcedure('agents:read', { module: 'agents' })
@@ -475,6 +479,337 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               considered: result.considered,
               skippedStale: result.skippedStale,
               skippedIncomplete: result.skippedIncomplete,
+              signals: result.signals.map((s) => ({
+                marketId: s.marketId,
+                score: s.score,
+                reasons: [...s.reasons],
+              })),
+            };
+          }
+          return result;
+        }),
+
+      /**
+       * Stage-2 declared read-only spot toolset. Money-write tools are not on
+       * the list (refuse as undeclared / money_write before dispatch).
+       */
+      stage2Guardrail: scopedProcedure('agents:read', { module: 'agents' })
+        .output(
+          z.object({
+            agentId: z.string(),
+            version: z.number().int(),
+            tools: z.array(
+              z.object({
+                name: z.string(),
+                module: z.string(),
+                mode: z.enum(['read', 'write']),
+                requiresApproval: z.boolean(),
+                maxCallsPerSession: z.number().int().optional(),
+              }),
+            ),
+            limits: z.object({
+              maxActionsPerSession: z.number().int(),
+              maxOutputTokensPerCall: z.number().int(),
+              maxSpendPerSession: z.string().nullable(),
+              allowedModules: z.array(z.string()),
+              allowedTasks: z.array(z.string()),
+            }),
+          }),
+        )
+        .query(() => serialiseGuardrail(scannerAgentGuardrail())),
+
+      /**
+       * Stage-2 tier gate — signal depth. Product-law matrix blank/unpublished
+       * → refuse-closed. Does not invent free/staked depth.
+       */
+      tierGate: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            userTier: z.string().max(64),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z
+                    .record(
+                      z.object({
+                        maxSignals: z.number().int().min(0).max(100),
+                        tools: z.array(z.string().min(1).max(120)).max(100),
+                      }),
+                    )
+                    .default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              userTier: z.string(),
+              maxSignals: z.number().int(),
+              allowedTools: z.array(z.string()),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['tier_law_blank', 'tier_not_granted', 'depth_invalid']),
+              userMessageKey: z.literal('agents.scanner.tier_closed'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = scannerTierGate({ law: input.law ?? null, userTier: input.userTier });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              userTier: result.userTier,
+              maxSignals: result.maxSignals,
+              allowedTools: [...result.allowedTools],
+            };
+          }
+          return result;
+        }),
+
+      /**
+       * Stage-2 real data tool invoke. Fixtures only — no invent quotes.
+       * Tier law blank → refuse-closed. Max-age / incomplete → typed refuse.
+       */
+      invokeDataTool: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            tool: z.string().min(1).max(120),
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64).optional(),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z
+                    .record(
+                      z.object({
+                        maxSignals: z.number().int().min(0).max(100),
+                        tools: z.array(z.string().min(1).max(120)).max(100),
+                      }),
+                    )
+                    .default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            now: z.string().datetime().optional(),
+            ticker: z
+              .object({
+                marketId: z.string().min(1).max(64),
+                last: z.string().nullable(),
+                volume24h: z.string().nullable(),
+                change24hBps: z.number().int().nullable(),
+                asOf: z.string().min(1),
+                maxAgeMs: z.number().int().positive().max(86_400_000),
+              })
+              .nullable()
+              .optional(),
+            markets: z
+              .array(
+                z.object({
+                  marketId: z.string().min(1).max(64),
+                  symbol: z.string().min(1).max(64),
+                  status: z.enum(['open', 'halted', 'closed']),
+                }),
+              )
+              .max(500)
+              .nullable()
+              .optional(),
+            bookTop: z
+              .object({
+                marketId: z.string().min(1).max(64),
+                bid: z.string().nullable(),
+                ask: z.string().nullable(),
+                asOf: z.string().min(1),
+                maxAgeMs: z.number().int().positive().max(86_400_000),
+              })
+              .nullable()
+              .optional(),
+          }),
+        )
+        .output(
+          z.union([
+            z.object({
+              status: z.literal('ok'),
+              tool: z.literal('trade.ticker'),
+              marketId: z.string(),
+              last: z.string(),
+              volume24h: z.string(),
+              change24hBps: z.number().int(),
+              asOf: z.string(),
+            }),
+            z.object({
+              status: z.literal('ok'),
+              tool: z.literal('trade.markets.list'),
+              markets: z.array(
+                z.object({
+                  marketId: z.string(),
+                  symbol: z.string(),
+                  status: z.enum(['open', 'halted', 'closed']),
+                }),
+              ),
+            }),
+            z.object({
+              status: z.literal('ok'),
+              tool: z.literal('trade.book.top'),
+              marketId: z.string(),
+              bid: z.string(),
+              ask: z.string(),
+              asOf: z.string(),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              tool: z.string(),
+              reason: z.enum([
+                'market_plane_dark',
+                'tier_law_blank',
+                'tier_not_granted',
+                'depth_invalid',
+                'tool_not_declared',
+                'money_write',
+                'tool_not_in_tier',
+                'missing_fixture',
+                'incomplete_ticker',
+                'incomplete_book',
+                'invalid_decimal',
+                'stale',
+                'empty_markets',
+              ]),
+              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = invokeScannerDataTool({
+            tool: input.tool,
+            plane: input.plane,
+            tierLaw: input.law ?? null,
+            userTier: input.userTier ?? '',
+            ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            ticker: input.ticker ?? null,
+            markets: input.markets ?? null,
+            bookTop: input.bookTop ?? null,
+          });
+          if (result.status === 'ok' && result.tool === 'trade.markets.list') {
+            return {
+              status: 'ok' as const,
+              tool: 'trade.markets.list' as const,
+              markets: result.markets.map((m) => ({
+                marketId: m.marketId,
+                symbol: m.symbol,
+                status: m.status,
+              })),
+            };
+          }
+          return result;
+        }),
+
+      /**
+       * Stage-2 rank via allowlisted ticker tools + tier depth.
+       * Blank law / dark plane / all tickers refused → typed refuse (no invent).
+       */
+      rankLive: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z
+                    .record(
+                      z.object({
+                        maxSignals: z.number().int().min(0).max(100),
+                        tools: z.array(z.string().min(1).max(120)).max(100),
+                      }),
+                    )
+                    .default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            tickers: z
+              .array(
+                z.object({
+                  marketId: z.string().min(1).max(64),
+                  last: z.string().nullable(),
+                  volume24h: z.string().nullable(),
+                  change24hBps: z.number().int().nullable(),
+                  asOf: z.string().min(1),
+                  maxAgeMs: z.number().int().positive().max(86_400_000),
+                }),
+              )
+              .max(500),
+            marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              signals: z.array(
+                z.object({
+                  marketId: z.string(),
+                  score: z.string(),
+                  reasons: z.array(z.string()),
+                }),
+              ),
+              rankedAt: z.string(),
+              considered: z.number().int(),
+              skippedStale: z.number().int(),
+              skippedIncomplete: z.number().int(),
+              maxSignals: z.number().int(),
+              userTier: z.string(),
+              tickersAccepted: z.number().int(),
+              tickersRefused: z.number().int(),
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.scanner.empty'),
+            }),
+            z.object({
+              status: z.literal('unavailable'),
+              userMessageKey: z.literal('agents.scanner.unavailable'),
+              reason: z.enum(['stale', 'no_quotes', 'market_plane_dark']),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['tier_law_blank', 'tier_not_granted', 'depth_invalid', 'market_plane_dark', 'no_live_tickers']),
+              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = rankLiveFromTickers({
+            plane: input.plane,
+            tierLaw: input.law ?? null,
+            userTier: input.userTier,
+            tickers: input.tickers,
+            ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
+            ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+          });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              rankedAt: result.rankedAt,
+              considered: result.considered,
+              skippedStale: result.skippedStale,
+              skippedIncomplete: result.skippedIncomplete,
+              maxSignals: result.maxSignals,
+              userTier: result.userTier,
+              tickersAccepted: result.tickersAccepted,
+              tickersRefused: result.tickersRefused,
               signals: result.signals.map((s) => ({
                 marketId: s.marketId,
                 score: s.score,
