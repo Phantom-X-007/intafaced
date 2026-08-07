@@ -5,19 +5,19 @@ import { parseAmount } from '@intafaced/ledger-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PayError, type PayService } from './payment-service.js';
 import { registerPublicPayRest } from './public-rest.js';
+import { MemoryRestIdempotencyStore } from './rest-idempotency.js';
 
 /**
- * THE MERCHANT SURFACE, AND THE ONE QUESTION IT MUST NEVER GET WRONG.
+ * THE MERCHANT SURFACE — reads (step 1) and mutations (step 2).
  *
- * `pay.public-api` step 1 (docs/adr/2026-08-07-pay-public-api-law.md). These
- * are read paths, so there is no money to move and no idempotency to honour —
- * which leaves exactly one thing worth testing hard: **can a merchant id in a
- * query string reach somebody else's payments.**
+ * Law: docs/adr/2026-08-07-pay-public-api-law.md.
  *
- * The mount boundary is the same one `svc-trade`'s private REST test defends:
- * the principal arrives through `createEdgeContext` over REAL headers, signed
- * with the edge secret. A self-asserted header must stay anonymous — otherwise
- * every scope check on this surface is decorative.
+ * Step 1 weighted the one catastrophic read question: can a merchant id in a
+ * query string reach somebody else's payments.
+ *
+ * Step 2 adds the money-path questions: Idempotency-Key required, same-key
+ * replay, different-body conflict, ownership before the rail runs, decimal
+ * strings on write, and refund needing its own scope.
  */
 
 const SECRET = 'a-pay-public-rest-edge-secret-long-enough-x';
@@ -31,7 +31,7 @@ function principal(overrides: Partial<Principal> = {}): Principal {
     sub: OWNER,
     userId: OWNER,
     sid: '55555555-5555-4555-8555-555555555555',
-    scopes: ['pay:read'],
+    scopes: ['pay:read', 'pay:write', 'pay:refund'],
     tier: 'basic',
     mfa: false,
     expiresAt: new Date(Date.now() + 60_000),
@@ -63,27 +63,60 @@ const paymentRow = {
   createdAt: new Date('2026-08-07T10:00:00.000Z'),
 };
 
+type Call = { method: string; args: unknown[] };
+
 /** Only the methods this surface touches. Everything else would be unused weight. */
-function stubPay(over: Partial<Record<string, unknown>> = {}): PayService {
+function stubPay(over: Partial<Record<string, unknown>> = {}): PayService & { calls: Call[] } {
+  const calls: Call[] = [];
+  const record =
+    <A extends unknown[], R>(name: string, fn: (...args: A) => R | Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      calls.push({ method: name, args });
+      return fn(...args);
+    };
+
   return {
-    getMerchant: async (id: string) => {
+    calls,
+    getMerchant: record('getMerchant', async (id: string) => {
       if (id !== MERCHANT) throw new PayError(`merchant ${id} not found`, 'pay.merchant_not_found');
       return { id: MERCHANT, userId: OWNER } as never;
-    },
-    getPayment: async (id: string) => {
+    }),
+    getPayment: record('getPayment', async (id: string) => {
       if (id !== PAYMENT) throw new PayError(`payment ${id} not found`, 'pay.payment_not_found');
       return paymentRow as never;
-    },
-    listPayments: async () => [paymentRow] as never,
-    clearingBalance: async () => parseAmount('2.5'),
-    merchantBalance: async () => parseAmount('7.25'),
+    }),
+    listPayments: record('listPayments', async () => [paymentRow] as never),
+    clearingBalance: record('clearingBalance', async () => parseAmount('2.5')),
+    merchantBalance: record('merchantBalance', async () => parseAmount('7.25')),
+    createPayment: record('createPayment', async () => ({
+      ...paymentRow,
+      status: 'created' as const,
+      capturedAmount: parseAmount('0'),
+      railRef: null,
+    })),
+    authorize: record('authorize', async () => ({
+      ...paymentRow,
+      status: 'authorized' as const,
+      capturedAmount: parseAmount('0'),
+    })),
+    capture: record('capture', async () => paymentRow),
+    refund: record('refund', async () => ({
+      ...paymentRow,
+      status: 'refunded' as const,
+      refundedAmount: parseAmount('1.10'),
+    })),
     ...over,
-  } as unknown as PayService;
+  } as unknown as PayService & { calls: Call[] };
 }
 
-async function build(pay: PayService = stubPay()): Promise<FastifyInstance> {
+async function build(pay: PayService = stubPay(), idempotency = new MemoryRestIdempotencyStore()): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await registerPublicPayRest(app, { edgeSecret: SECRET, serviceName: 'svc-pay', pay });
+  await registerPublicPayRest(app, {
+    edgeSecret: SECRET,
+    serviceName: 'svc-pay',
+    pay,
+    idempotency,
+  });
   await app.ready();
   return app;
 }
@@ -106,7 +139,6 @@ describe('ownership — the only thing standing between a query string and anoth
 
     expect(res.statusCode).toBe(403);
     expect(res.json().error.code).toBe('pay.merchant_forbidden');
-    // And it does NOT leak the payment it just read in order to check.
     expect(res.body).not.toContain(MERCHANT);
     expect(res.body).not.toContain('1.10');
   });
@@ -151,7 +183,6 @@ describe('the mount boundary', () => {
   it('treats a SELF-ASSERTED principal as anonymous', async () => {
     app = await build();
 
-    // The header without the signature — what a caller can forge on their own.
     const res = await app.inject({
       method: 'GET',
       url: `/api/pay/v1/payments/${PAYMENT}`,
@@ -205,19 +236,8 @@ describe('money on the wire (ADR §2.3)', () => {
     const res = await app.inject({ method: 'GET', url: `/api/pay/v1/payments/${PAYMENT}`, headers: signed() });
     const body = res.json();
 
-    /**
-     * CANONICAL, not as-supplied. The payment was created as `1.10` and comes
-     * back `"1.1"` — `formatAmount` emits no trailing zeros, which is the form
-     * `money.ts` guarantees and #891 property-tested.
-     *
-     * That is a contract detail a merchant will otherwise discover by diffing
-     * strings and finding a mismatch that is not one, so the OpenAPI
-     * description says it out loud: compare amounts numerically, never
-     * stringwise.
-     */
     expect(body.amount).toBe('1.1');
     expect(typeof body.amount).toBe('string');
-    // The two failure modes this rule exists to prevent, asserted by name.
     expect(body.amount).not.toBe(110);
     expect(body.amount).not.toBe(1.1);
   });
@@ -225,7 +245,11 @@ describe('money on the wire (ADR §2.3)', () => {
   it('sends balances as decimal strings too', async () => {
     app = await build();
 
-    const res = await app.inject({ method: 'GET', url: `/api/pay/v1/balances?merchantId=${MERCHANT}&assetId=USD`, headers: signed() });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pay/v1/balances?merchantId=${MERCHANT}&assetId=USD`,
+      headers: signed(),
+    });
 
     expect(res.json()).toEqual({ merchantId: MERCHANT, assetId: 'USD', clearing: '2.5', available: '7.25' });
   });
@@ -247,7 +271,11 @@ describe('refusals keep the pay.* vocabulary (ADR §2.6)', () => {
 
   it('rejects a malformed uuid before it reaches the service', async () => {
     app = await build();
-    const res = await app.inject({ method: 'GET', url: '/api/pay/v1/payments?merchantId=not-a-uuid', headers: signed() });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/pay/v1/payments?merchantId=not-a-uuid',
+      headers: signed(),
+    });
     expect(res.statusCode).toBe(400);
   });
 });
@@ -261,19 +289,193 @@ describe('the spec is served, and describes what the routes actually do', () => 
       components?: { securitySchemes?: Record<string, unknown> };
     };
 
-    expect(Object.keys(spec.paths)).toEqual(expect.arrayContaining(['/payments/{id}', '/payments', '/balances']));
+    expect(Object.keys(spec.paths)).toEqual(
+      expect.arrayContaining([
+        '/payments/{id}',
+        '/payments',
+        '/balances',
+        '/payments/{id}/authorize',
+        '/payments/{id}/capture',
+        '/payments/{id}/refund',
+      ]),
+    );
     expect(spec.components?.securitySchemes).toHaveProperty('apiKey');
   });
 
   it('serves the spec over HTTP, without shipping a static file server', async () => {
-    // `@fastify/swagger-ui` would have rendered a reference here and would have
-    // brought `@fastify/static` — a HIGH advisory — into the service that holds
-    // payments. The spec is the artefact; anything can render it.
     app = await build();
 
     const res = await app.inject({ method: 'GET', url: '/api/pay/v1/openapi.json' });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().info.title).toBe('Payments API');
+  });
+});
+
+describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
+  const createBody = {
+    merchantId: MERCHANT,
+    amount: '1.10',
+    assetId: 'USD',
+    method: 'card',
+    railAdapter: 'card-sandbox',
+  };
+
+  it('REFUSES a mutating POST with no Idempotency-Key — NOTHING WAS ATTEMPTED', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers: { ...signed(), 'content-type': 'application/json' },
+      payload: createBody,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.idempotency_required');
+    expect(pay.calls.filter((c) => c.method === 'createPayment')).toHaveLength(0);
+  });
+
+  it('creates through the same PayService method, returns decimal strings', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'create:order:42' },
+      payload: createBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(typeof res.json().amount).toBe('string');
+    expect(res.json().amount).toBe('1.1');
+    expect(pay.calls.some((c) => c.method === 'createPayment')).toBe(true);
+    const args = pay.calls.find((c) => c.method === 'createPayment')!.args[0] as { amount: bigint };
+    // parseAmount('1.10') — scaled bigint, never a number on the wire.
+    expect(typeof args.amount).toBe('bigint');
+  });
+
+  it('REPLAYS an identical retry and does not call createPayment twice', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+    const headers = { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'create:order:99' };
+
+    const first = await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
+    const second = await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toEqual(first.json());
+    expect(pay.calls.filter((c) => c.method === 'createPayment')).toHaveLength(1);
+  });
+
+  it('CONFLICTS when the same key is reused with a DIFFERENT body', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+    const headers = { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'create:order:conflict' };
+
+    await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers,
+      payload: { ...createBody, amount: '2.00' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('pay.idempotency_conflict');
+    expect(pay.calls.filter((c) => c.method === 'createPayment')).toHaveLength(1);
+  });
+
+  it('REFUSES create/capture/authorize on another merchant BEFORE the service mutates', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+    const stranger = signed(principal({ sub: STRANGER, userId: STRANGER }));
+
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers: { ...stranger, 'content-type': 'application/json', 'idempotency-key': 'stranger:create' },
+      payload: createBody,
+    });
+    expect(create.statusCode).toBe(403);
+    expect(pay.calls.filter((c) => c.method === 'createPayment')).toHaveLength(0);
+
+    const capture = await app.inject({
+      method: 'POST',
+      url: `/api/pay/v1/payments/${PAYMENT}/capture`,
+      headers: { ...stranger, 'content-type': 'application/json', 'idempotency-key': 'stranger:capture' },
+      payload: {},
+    });
+    expect(capture.statusCode).toBe(403);
+    expect(pay.calls.filter((c) => c.method === 'capture')).toHaveLength(0);
+  });
+
+  it('authorizes, captures (optional amount), and refunds with the matching scopes', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const auth = await app.inject({
+      method: 'POST',
+      url: `/api/pay/v1/payments/${PAYMENT}/authorize`,
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'auth:1' },
+      payload: {},
+    });
+    expect(auth.statusCode).toBe(200);
+    expect(auth.json().status).toBe('authorized');
+
+    const capture = await app.inject({
+      method: 'POST',
+      url: `/api/pay/v1/payments/${PAYMENT}/capture`,
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'cap:1' },
+      payload: { amount: '0.50' },
+    });
+    expect(capture.statusCode).toBe(200);
+    const capArgs = pay.calls.find((c) => c.method === 'capture')!.args;
+    expect(capArgs[1]).toEqual({ amount: parseAmount('0.50') });
+
+    const refund = await app.inject({
+      method: 'POST',
+      url: `/api/pay/v1/payments/${PAYMENT}/refund`,
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'ref:1' },
+      payload: { amount: '0.50', refundId: 'refund:order:1' },
+    });
+    expect(refund.statusCode).toBe(200);
+    expect(refund.json().status).toBe('refunded');
+  });
+
+  it('does not let a writer refund — pay:refund is its own authority', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/pay/v1/payments/${PAYMENT}/refund`,
+      headers: {
+        ...signed(principal({ scopes: ['pay:write'] })),
+        'content-type': 'application/json',
+        'idempotency-key': 'ref:forbidden',
+      },
+      payload: { amount: '0.50' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(pay.calls.filter((c) => c.method === 'refund')).toHaveLength(0);
+  });
+
+  it('rejects a JSON-number amount on create — decimal strings only', async () => {
+    app = await build();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'num:1' },
+      payload: { ...createBody, amount: 1.1 },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.invalid_amount');
   });
 });

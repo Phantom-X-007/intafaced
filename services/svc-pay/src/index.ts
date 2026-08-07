@@ -10,6 +10,7 @@ import { RailRegistry } from './rails/registry.js';
 import { CryptoChainWatcher } from './rails/chain-watcher.js';
 import { EvmLiveChain } from './rails/evm-chain.js';
 import { PostgresBroadcastStore } from './rails/broadcast-store.js';
+import { PostgresRestIdempotencyStore } from './rest-idempotency.js';
 import {
   assertRailPosture,
   defaultChainFor,
@@ -267,20 +268,23 @@ app.get('/ready', async () => ({
 await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
 
 /**
- *  STEP 1 — the merchant REST surface, read paths only.
+ * STEP 1+2 — the merchant REST surface (reads + mutating paths).
  *
  * Law: docs/adr/2026-08-07-pay-public-api-law.md. Auth is the same mount
- * boundary the tRPC router uses — svc-edge exchanges the  key and signs
+ * boundary the tRPC router uses — svc-edge exchanges the key and signs
  * a principal; this service never sees a raw key and grows no second auth path.
  *
- * Read paths only, on purpose: they add no new behaviour and therefore no new
- * money risk. Mutating paths are step 2 and arrive with the required
- *  contract.
+ * Mutating POSTs require Idempotency-Key (ADR §2.2). The durable journal is
+ * the same claim→put shape as crypto broadcasts — Memory alone is not
+ * multi-replica safe on a money path.
+ *
+ * Not Class X go-live. Not webhooks (step 3). Not a live acquirer.
  */
 await registerPublicPayRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
   pay,
+  idempotency: new PostgresRestIdempotencyStore(sql),
 });
 
 /**

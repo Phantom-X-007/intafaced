@@ -1,4 +1,4 @@
-import { bigserial, boolean, index, integer, jsonb, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigserial, boolean, index, integer, jsonb, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -480,6 +480,24 @@ export const cryptoBroadcasts = pay.table('crypto_broadcasts', {
   updatedAt: updatedAt(),
 });
 
+/**
+ * Merchant REST Idempotency-Key journal (pay.public-api step 2 / ADR §2.2).
+ * Not money — fingerprints + prior HTTP responses so retries never double-charge.
+ */
+export const restIdempotency = pay.table(
+  'rest_idempotency',
+  {
+    ownerId: text('owner_id').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestFingerprint: text('request_fingerprint').notNull(),
+    statusCode: integer('status_code').notNull().default(0),
+    responseBody: jsonb('response_body'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ name: 'rest_idempotency_pkey', columns: [t.ownerId, t.idempotencyKey] })],
+);
+
 export const schema = {
   merchants,
   paymentProfiles,
@@ -491,4 +509,5 @@ export const schema = {
   deposits,
   withdrawals,
   cryptoBroadcasts,
+  restIdempotency,
 };
