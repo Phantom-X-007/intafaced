@@ -46,6 +46,7 @@ import {
   type MarkPolicy,
 } from './mark-policy.js';
 import { PROFIT_SOURCE_UNCONFIGURED, checkProfitBound, type ProfitSource } from './profit-source.js';
+import { breakerBasis, readAcceptedMark, type PreviousMark } from './accepted-mark.js';
 
 /**
  * How long one close waits for another close of the SAME position.
@@ -157,6 +158,14 @@ export interface PositionRow {
   opened_at: Date;
   closed_at: Date | null;
   symbol: string;
+  /**
+   * The last mark this position was accepted against — the deviation breaker's
+   * basis, written by this service and reachable by nobody else. NULL only for
+   * rows written before `0007_position_accepted_mark.sql`; `open()` fills it in
+   * with the entry mark from the moment a position exists.
+   */
+  accepted_mark: string | null;
+  accepted_mark_at: Date | null;
 }
 
 export class PositionService {
@@ -232,9 +241,19 @@ export class PositionService {
    * is one-sided would trap them in a position they asked to leave, and this
    * repo has already decided that a control which traps funds is not a safety
    * control (`TRADE_SPOT_ENABLED`).
+   *
+   * ── `previous` is the half of this that used to be missing ──────────────────
+   *
+   * This method passed a literal `null` here, and `null` is the branch
+   * `acceptableForLiquidation` uses to SKIP the deviation breaker. Every other
+   * clause was live and that one was dead, so a feed that jumped 100x cleared
+   * this gate and the house paid 4,950,000 USDT on it — measured, not
+   * hypothesised (`position-service.test.ts`). The basis now comes from the
+   * position row the caller cannot write, read inside the same lock as the
+   * close that is about to use it.
    */
-  private requirePayoutGrade(mark: FuturesQuotedMark, at: Date): void {
-    const check = acceptableForLiquidation(mark, null, at, this.markPolicy);
+  private requirePayoutGrade(mark: FuturesQuotedMark, previous: PreviousMark, at: Date): void {
+    const check = acceptableForLiquidation(mark, breakerBasis(previous), at, this.markPolicy);
     if (!check.ok) {
       throw new FuturesError(`Refusing to pay realised profit on this mark — ${check.reason}`, check.code ?? 'trade.mark_unusable', 503);
     }
@@ -333,10 +352,25 @@ export class PositionService {
     );
 
     try {
+      /**
+       * THE BREAKER IS ARMED FROM BIRTH.
+       *
+       * `accepted_mark` is seeded with the entry mark, because the entry mark is
+       * a price this platform read and acted on: it sized the margin lock. So a
+       * position's very first close already has something to be measured
+       * against, and the legitimately-unarmed `first_valuation` case narrows to
+       * rows that predate `0007_position_accepted_mark.sql`.
+       *
+       * Seeding it here is safe in the direction that matters. An attacker who
+       * pumps the feed BEFORE opening buys in at the pumped price and has
+       * nothing to realise; the only way to profit from a jump is to make it
+       * after entry, and that is precisely what this number now catches.
+       */
       await this.sql`
         INSERT INTO trade.positions (
           id, user_id, market_id, side, status, margin_mode,
-          size, entry_price, leverage, margin_initial, margin_asset, funding_paid
+          size, entry_price, leverage, margin_initial, margin_asset, funding_paid,
+          accepted_mark, accepted_mark_at
         ) VALUES (
           ${positionId},
           ${input.userId},
@@ -349,7 +383,9 @@ export class PositionService {
           ${formatAmount(leverage)},
           ${formatAmount(margin)},
           ${m.quote_asset},
-          '0'
+          '0',
+          ${formatAmount(entryPrice)},
+          ${at}
         )
       `;
     } catch (err) {
@@ -482,6 +518,15 @@ export class PositionService {
         const at = this.now();
         const mark = await this.markFor(row.market_id, row.symbol, at);
 
+        /**
+         * The breaker's basis, read off the row this transaction already holds
+         * under `FOR UPDATE`. Not a second query: it has to be the same row, the
+         * same lock and the same snapshot as the close it is judging, or two
+         * concurrent closes could each be measured against a basis the other one
+         * had already moved.
+         */
+        const previous = readAcceptedMark(row);
+
         const plan = planClose({
           // STABLE, not per attempt. See the header — this is half the fix.
           closeId: closeIdFor(row.id),
@@ -503,7 +548,7 @@ export class PositionService {
         if (plan.profit > 0n) {
           // Money is about to leave the platform on the strength of this mark, so it
           // has to be a mark we would seize on.
-          this.requirePayoutGrade(mark, at);
+          this.requirePayoutGrade(mark, previous, at);
 
           /**
            * NO NAMED POT, NO PAYOUT. The deployment never chose an account for
@@ -550,9 +595,21 @@ export class PositionService {
           await this.ledger.post(recipe);
         }
 
+        /**
+         * `accepted_mark` moves here and nowhere else on this path — INSIDE the
+         * transaction, after every refusal has been cleared. That is what makes
+         * the breaker unratchetable: a close that is refused rolls this write
+         * back with the rest of the transaction, so a caller cannot walk the
+         * basis upward in sub-breaker steps by making attempts that fail. The
+         * basis only ever moves to a mark the platform actually settled on.
+         */
         const [closed] = await tx<PositionRow[]>`
           UPDATE trade.positions p
-          SET status = 'closed', closed_at = now(), updated_at = now()
+          SET status = 'closed',
+              closed_at = now(),
+              updated_at = now(),
+              accepted_mark = ${formatAmount(mark.price)},
+              accepted_mark_at = ${at}
           FROM trade.markets m
           WHERE p.id = ${positionId} AND p.user_id = ${userId} AND p.status = 'open' AND m.id = p.market_id
           RETURNING p.*, m.symbol

@@ -8,6 +8,7 @@ import {
   type QuotedMarkSource,
 } from './liquidation-tick.js';
 import { DEFAULT_FUTURES_MARK_POLICY, type FuturesQuotedMark } from './mark-policy.js';
+import { memoryAcceptedMarkStore } from './accepted-mark.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -73,6 +74,7 @@ describe('runLiquidationTick', () => {
         },
       },
       attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
     });
     expect(result.liquidated).toBe(0);
@@ -96,6 +98,7 @@ describe('runLiquidationTick', () => {
         },
       },
       attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
     });
     expect(result.liquidated).toBe(0);
@@ -119,6 +122,7 @@ describe('runLiquidationTick', () => {
         },
       },
       attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       now: () => new Date('2026-07-31T12:00:00.000Z'),
       liquidationIdFor: (row) => `liq-test:${row.positionId}`,
@@ -141,6 +145,7 @@ describe('runLiquidationTick', () => {
       },
       closer: { async markLiquidated() {} },
       attempts,
+      acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       liquidationIdFor: () => 'liq-once',
     };
@@ -167,6 +172,7 @@ describe('runLiquidationTick', () => {
       },
       closer: { async markLiquidated() {} },
       attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       now: () => fixed,
     });
@@ -228,6 +234,7 @@ describe('runLiquidationTick — mark gates', () => {
         },
       },
       attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       now: () => AT,
       ...extra,
@@ -294,7 +301,7 @@ describe('runLiquidationTick — mark gates', () => {
   it('does not liquidate through the deviation breaker', async () => {
     const { result, posts } = await tick(quotedMark(), {
       // Previous mark 200 → 80 is a 6000bps move, well past the 2000bps breaker.
-      previousMarkFor: () => amt('200'),
+      acceptedMarks: memoryAcceptedMarkStore({ 'pos-1': amt('200') }),
     });
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.summary).toContain('not liquidating through it');

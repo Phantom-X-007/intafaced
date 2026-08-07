@@ -107,6 +107,19 @@ function formatScaled(v: bigint, scale: bigint): string {
  * willing to close a position on" — so the strict gate is the honest one here.
  * Callers that need the weaker valuation bar ask for `quote()` and gate it
  * themselves with `acceptableForMarking`.
+ *
+ * ── THE DEVIATION BREAKER IS NOT ARMED HERE, AND CANNOT BE ───────────────────
+ *
+ * Its basis is "the last mark THIS POSITION was accepted against", and this is a
+ * per-MARKET port with no position in scope — there is nothing for it to look
+ * up, so `null` here is a statement about the shape of the port and not the
+ * oversight that `accepted-mark.ts` was written to fix.
+ *
+ * The money-moving callers do not rely on this gate for the breaker. Both
+ * `liquidation-tick.ts` and `PositionService.requirePayoutGrade` hold a position
+ * id, read a basis, and re-run `acceptableForLiquidation` with it before
+ * anything is seized or paid. What reaches a screen through `markPrice()` is
+ * still gated on quality, staleness and sign.
  */
 function markPriceFromQuote(
   quote: (input: { marketId: string; symbol?: string; at: Date }) => Promise<FuturesQuotedMark | null>,
