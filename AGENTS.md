@@ -112,6 +112,28 @@ git rev-parse --show-toplevel && git branch --show-current
 
 **Never push to `main`.** Branch → PR → merge only.
 
+### Then read the run ledger — before choosing any work
+
+```bash
+pnpm ledger              # what this run has already done, is doing, and is blocked on
+```
+
+**If it prints `RESUME HERE`, finish those rows before starting anything new.** Your own context is
+not memory. On 2026-08-05/07 the coordinator compacted 22 times and merged 64 near-identical PRs
+without noticing it was repeating itself, because nothing on disk held "what I already did".
+
+Record every claim as you go — the ledger is written by code, never by remembering:
+
+```bash
+pnpm ledger start  <id> <branch>     # taking it
+pnpm ledger pr     <id> <url>        # PR opened
+pnpm ledger done   <id> <url>        # proof link REQUIRED — there is no "done" without one
+pnpm ledger block  <id> "<reason>"   # a reason a human can read, REQUIRED
+```
+
+Live state is `docs/ops/RUN-LEDGER.json` (gitignored — runtime state, not law). What counts as
+finished for a whole run: [`docs/ops/FINISH-ONTOLOGY.md`](docs/ops/FINISH-ONTOLOGY.md).
+
 ---
 
 ## Nitro operator mode (mandatory when working for Nitro)
@@ -239,6 +261,17 @@ pnpm gate      # the per-service §14 Definition of Done alone
 ```
 
 Report what it actually printed. If tests fail, say so with the output.
+
+Then check the ledger is actually clear — `pnpm verify` proves a **module** is shippable, which is
+satisfiable an unlimited number of times. It says nothing about whether the **run** is finished:
+
+```bash
+pnpm ledger open-count   # exits 1 while any row is still open
+```
+
+A non-zero count means work remains, whatever else is green. Stopping there is the forbidden stop
+([`docs/ops/FINISH-ONTOLOGY.md`](docs/ops/FINISH-ONTOLOGY.md) §4) — "made good progress" and
+"you can leave" are not finish states.
 
 ## Scope
 
