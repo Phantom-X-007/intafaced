@@ -5,10 +5,14 @@
  * status: scheduled → live → frozen → ended. Score writes still gated by
  * assertMayWriteScore (live only). Freeze may capture an immutable ranked
  * snapshot for operator audit — still zero money fields.
+ *
+ * Stage-3: freeze / end edges call assertNoPrizeAttachment — IFC prizes
+ * refuse-closed (see prize-refuse.ts). Ending never invents a pool.
  */
 
 import type { RankedStanding, SeasonRecord, SeasonStatus, StandingRecord } from './ladder.js';
 import { rankStandings, TournamentError } from './ladder.js';
+import { assertNoPrizeAttachment } from './prize-refuse.js';
 
 const ALLOWED: Readonly<Record<SeasonStatus, readonly SeasonStatus[]>> = {
   scheduled: ['live', 'ended'],
@@ -22,6 +26,7 @@ const ALLOWED: Readonly<Record<SeasonStatus, readonly SeasonStatus[]>> = {
  * Ending a season does not invent prizes — payout is a separate Class M path.
  */
 export function transitionSeason(season: SeasonRecord, next: SeasonStatus): SeasonRecord {
+  assertNoPrizeAttachment(season);
   const allowed = ALLOWED[season.status];
   if (!allowed.includes(next)) {
     throw new TournamentError(`Cannot move season from ${season.status} to ${next}`, 'academy.season_invalid');
@@ -54,6 +59,7 @@ export type FreezeStandingsSnapshot = {
 /**
  * Capture ranked standings for freeze. Caller still must transitionSeason → frozen.
  * Does not invent empty winners — empty standings list is allowed (no entries yet).
+ * Prize / IFC fields on the input or snapshot are refuse-closed.
  */
 export function snapshotStandingsAtFreeze(input: {
   seasonId: string;
@@ -62,15 +68,18 @@ export function snapshotStandingsAtFreeze(input: {
   frozenAt?: Date;
 }): FreezeStandingsSnapshot {
   assertMayFreeze(input.status);
+  assertNoPrizeAttachment(input);
   if (!input.seasonId?.trim()) {
     throw new TournamentError('seasonId required for freeze snapshot', 'academy.season_invalid');
   }
   const forSeason = input.rows.filter((r) => r.seasonId === input.seasonId);
-  return {
+  const snapshot: FreezeStandingsSnapshot = {
     seasonId: input.seasonId,
     frozenAt: input.frozenAt ?? new Date(),
     standings: rankStandings(forSeason),
   };
+  assertNoPrizeAttachment(snapshot);
+  return snapshot;
 }
 
 /**
