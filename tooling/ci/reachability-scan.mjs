@@ -41,12 +41,8 @@ import { fileURLToPath } from 'node:url';
  * so and the row must be deleted - that is the whole mechanism. Adding a row is
  * a decision to owe the wiring, not a way to pass the gate.
  */
-const PARKED = new Map([
-  [
-    'services/svc-agents/src/merchant/watch.ts',
-    'Merchant Stage-1 (docs/ops/trk/agents.merchant.md). Blocked at the Stage 0 dependency gate the spec itself sets: tracker pay.routing is not done.',
-  ],
-]);
+/** Empty when every Stage-1 residual that was parked has a real caller. List may only shrink. */
+const PARKED = new Map([]);
 
 /**
  * POSIX-shaped paths, on every platform.
