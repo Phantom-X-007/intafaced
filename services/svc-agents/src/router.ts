@@ -8,6 +8,8 @@ import type { UsageMeter } from './metering/meter.js';
 import type { AgentRuntime } from './runtime.js';
 import { rankFixtures } from './scanner/rank.js';
 import { navigatorGrounded } from './navigator/grounded.js';
+import { selectNavigatorTools } from './navigator/tool-select.js';
+import { parseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
 
@@ -511,6 +513,81 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               status: 'ok' as const,
               plane: 'live' as const,
               allowedTasks: ['navigator.plan', 'navigator.tool_select'] as ['navigator.plan', 'navigator.tool_select'],
+            };
+          }
+          return result;
+        }),
+
+      /**
+       * Stage-2 tool_select: intersect candidates with declared read tools.
+       * Dark plane / empty candidates refuse; money-write candidates refused.
+       * Caller supplies the session guardrail tool grants — no invent tools.
+       */
+      selectTools: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            candidates: z.array(z.string().min(1).max(120)).max(100),
+            tools: z
+              .array(
+                z.object({
+                  name: z.string().min(1).max(120),
+                  module: z.string().min(1).max(64),
+                  mode: z.enum(['read', 'write']),
+                  requiresApproval: z.boolean().optional(),
+                }),
+              )
+              .max(100),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              selected: z.array(z.string()),
+              refused: z.array(
+                z.object({
+                  tool: z.string(),
+                  reason: z.enum(['not_declared', 'money_write', 'write_mode']),
+                }),
+              ),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['trade_plane_dark', 'no_candidates']),
+              userMessageKey: z.literal('agents.navigator.unavailable').optional(),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const modules = [...new Set(input.tools.map((t) => t.module))];
+          const guardrail = parseGuardrail({
+            agentId: 'navigator',
+            version: 1,
+            tools: input.tools.map((t) => ({
+              name: t.name,
+              module: t.module,
+              mode: t.mode,
+              requiresApproval: t.requiresApproval ?? false,
+            })),
+            limits: {
+              maxActionsPerSession: 100,
+              maxOutputTokensPerCall: 4096,
+              maxSpendPerSession: null,
+              allowedModules: modules,
+              allowedTasks: ['navigator.plan', 'navigator.tool_select'],
+            },
+          });
+          const result = selectNavigatorTools({
+            plane: input.plane,
+            guardrail,
+            candidates: input.candidates,
+          });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              selected: [...result.selected],
+              refused: result.refused.map((r) => ({ tool: r.tool, reason: r.reason })),
             };
           }
           return result;
