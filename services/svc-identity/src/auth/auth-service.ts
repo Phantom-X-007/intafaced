@@ -58,7 +58,18 @@ export class AuthError extends Error {
       /** WebAuthn ceremony failed (bad signature, origin, challenge, counter). */
       | 'auth.webauthn_invalid'
       /** Account has no registered WebAuthn credential for assertion. */
-      | 'auth.webauthn_not_enrolled',
+      | 'auth.webauthn_not_enrolled'
+      /**
+       * Transfer door: a sub-account id was missing or empty.
+       * SPEC-SUBACCOUNTS §2 — never default to primary.
+       */
+      | 'auth.sub_account_required'
+      /** Transfer door: caller does not own the named partition. */
+      | 'auth.sub_account_denied'
+      /** Transfer door: partition is soft-revoked. */
+      | 'auth.sub_account_revoked'
+      /** Transfer door: from and to name the same partition. */
+      | 'auth.sub_account_same',
   ) {
     super(message);
     this.name = 'AuthError';
@@ -1127,6 +1138,57 @@ export class AuthService {
     const row = rows[0];
     if (!row) return null;
     return { id: row.id, parentUserId: row.parent_user_id, revoked: row.revoked };
+  }
+
+  /**
+   * OWNERSHIP-AT-THE-DOOR for a sub-account transfer (SPEC-SUBACCOUNTS §1–§2).
+   *
+   * The ledger recipe (`recipes.subAccountTransfer`) is pure and does not know
+   * who owns which partition. Every money service that posts that recipe MUST
+   * call this first — a valid scope is not ownership of a specific row.
+   *
+   * Fail-closed rules:
+   *   - missing / empty from or to → refuse (never invent primary)
+   *   - same id twice → refuse
+   *   - unknown id → denied (same answer as foreign — no existence oracle)
+   *   - parent_user_id ≠ caller → denied
+   *   - either side revoked → revoked
+   *
+   * Does not post to the ledger. Identity holds no balances.
+   */
+  async assertSubAccountTransferDoor(
+    userId: string,
+    fromSubAccountId: string | null | undefined,
+    toSubAccountId: string | null | undefined,
+  ): Promise<{ fromId: string; toId: string }> {
+    const fromId = typeof fromSubAccountId === 'string' ? fromSubAccountId.trim() : '';
+    const toId = typeof toSubAccountId === 'string' ? toSubAccountId.trim() : '';
+
+    if (!fromId || !toId) {
+      throw new AuthError(
+        'Both from and to sub-account ids are required — a missing id is a refusal, never a default to primary',
+        'auth.sub_account_required',
+      );
+    }
+    if (fromId === toId) {
+      throw new AuthError('A transfer needs two different sub-accounts', 'auth.sub_account_same');
+    }
+
+    const from = await this.getSubAccountOwnership(fromId);
+    const to = await this.getSubAccountOwnership(toId);
+
+    // Unknown and foreign both refuse as denied — do not confirm which.
+    if (!from || from.parentUserId !== userId) {
+      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
+    }
+    if (!to || to.parentUserId !== userId) {
+      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
+    }
+    if (from.revoked || to.revoked) {
+      throw new AuthError('Sub-account is revoked', 'auth.sub_account_revoked');
+    }
+
+    return { fromId: from.id, toId: to.id };
   }
 
   /**

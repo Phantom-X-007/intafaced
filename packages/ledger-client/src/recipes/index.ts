@@ -4,6 +4,7 @@ import { InvalidEntryError } from '../types.js';
 import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
 import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
 import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfallRecovered } from './chargeback.js';
+import { subAccountTransfer } from './sub-accounts.js';
 import {
   burnAccount,
   houseFees,
@@ -1043,6 +1044,8 @@ export const recipes = {
   earnWithdraw,
   earnPoolFund,
   earnInterest,
+  // SPEC-SUBACCOUNTS — only legal cross-partition value path. See ./sub-accounts.ts.
+  subAccountTransfer,
 } as const;
 
 export type RecipeName = keyof typeof recipes;
