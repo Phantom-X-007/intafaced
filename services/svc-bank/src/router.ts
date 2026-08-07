@@ -152,6 +152,9 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.position_closed':
       case 'bank.position_locked':
       case 'bank.loan_product_closed':
+      // CONFLICT rather than BAD_REQUEST: the request is well-formed, it just
+      // collides with a loan that already exists under that id on other terms.
+      case 'bank.loan_principal_mismatch':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
       case 'bank.same_space':

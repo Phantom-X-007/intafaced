@@ -1061,6 +1061,81 @@ if (!available) {
         expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
       });
 
+      /**
+       * ═══════════════════════════════════════════════════════════════════════
+       * A RETRY MUST CARRY THE SAME TERMS, OR IT IS A DIFFERENT LOAN
+       * ═══════════════════════════════════════════════════════════════════════
+       *
+       * The crash window above is safe because the retry re-drives the SAME
+       * loan. That is only true while the retry asks for the same thing.
+       *
+       * `ON CONFLICT (id) DO NOTHING` means a retry writes nothing and the
+       * service reads back the FIRST call's row — with the FIRST call's
+       * principal. Every guard above it ran on the NEW input. `completePending`
+       * then locks the new collateral and draws the old principal, and nothing
+       * reconciled the two.
+       *
+       * So: fail an enormous loan for want of collateral, then retry the same
+       * id for a trivial amount you can actually cover. The LTV check passes on
+       * the trivial numbers; the payout uses the enormous stored one. Repeat
+       * until the lending reserve is empty.
+       */
+      it('refuses a retry that changes the principal, instead of drawing the stored one', async () => {
+        const product = await makeProduct();
+        await fundReserve('USDT', '100000');
+        const loanId = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+
+        // 1. Ask for 5 000 against 1 BTC the borrower does not hold. LTV passes,
+        //    the row persists at 5 000, the collateral lock fails, loan pending.
+        await expect(
+          loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), loanId, now }),
+        ).rejects.toThrow(BankError);
+
+        const pending = await sql<
+          Array<{ status: string; principal: string }>
+        >`SELECT status, principal FROM bank.loans WHERE id = ${loanId}`;
+        expect(pending[0]!.status).toBe('pending');
+
+        // 2. Now hold a little real collateral and retry the SAME id for 1 USDT.
+        await fund(BORROWER, 'BTC', '0.01');
+
+        await expect(
+          loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('0.01'), principal: amt('1'), loanId, now }),
+        ).rejects.toThrow(/same terms/);
+
+        // The reserve never moved and the borrower drew nothing.
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+        expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('100000');
+      });
+
+      it('still lets an unchanged retry re-drive the same loan', async () => {
+        // The guard must not cost idempotency, which is the whole point of a
+        // caller-supplied loan id.
+        const product = await makeProduct();
+        await fund(BORROWER, 'BTC', '1');
+        const loanId = '3fa85f64-5717-4562-b3fc-2c963f66afa7';
+
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), loanId, now })
+          .catch(() => undefined);
+
+        await fundReserve('USDT', '100000');
+        const retried = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          loanId,
+          now,
+        });
+
+        expect(retried.loan.id).toBe(loanId);
+        expect(retried.loan.status).toBe('active');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
+        // Locked exactly once.
+        expect(formatAmount(await loans.collateralOf(retried.loan))).toBe('1');
+      });
+
       it('recovers by abandoning — the collateral goes back to the borrower', async () => {
         await fund(BORROWER, 'BTC', '1');
         const product = await makeProduct();
