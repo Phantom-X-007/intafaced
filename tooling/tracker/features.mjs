@@ -864,6 +864,12 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'token.staking'],
+    status: 'wip',
+    owner: 'Nitro',
+    note:
+      'Stage-1 programme appoint/freeze + Stage-2 residency desk (non-money). ' +
+      'Stage next 2026-08-07: IFC pay + revenue share refuse-closed Class M (ambassadors/ifc-pay.ts) — no invent rates. ' +
+      'Not tracker done until residencies seasons + real pay/share (or product-cut) match title.',
   }),
   f('academy.tournaments', 'Seasonal ladders, IFC prize pools', {
     module: 'academy',

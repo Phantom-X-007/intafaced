@@ -1,9 +1,9 @@
 # Claim TRK-academy.ambassadors
 
 **status:** merged
-**owner:** nitro-ship-factory
-**proof:** Stage-1 + Stage-2 non-money admin · feat/stage2-ambassador-tournament-admin
-**tip:** pending-merge
-**updated:** 2026-08-05
+**owner:** nitro-swarm-wave3
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/1005
+**tip:** 84b4f5eb+
+**updated:** 2026-08-07
 
-Stage-2 non-money only. Pay/prizes remain Class M — not free invent.
+Overwrite prior Stage-1/2 claim. Stage next: Class M IFC pay + revenue share refuse-closed (`ambassadors/ifc-pay.ts`) — no invent rates. Programme/admin freeze residual stays non-money. Tracker mountain remains `wip` until residencies seasons + real pay/share (or product-cut).

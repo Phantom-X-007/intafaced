@@ -14,9 +14,9 @@
 
 Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 5/17 · **3P** 1/8 · **4** 4/5 · **4P** 0/3 · **5** 8/35 · **5P** 0/2
 
-**In progress:** OTC RFQ desk, staked-tier gate (cursor-swarm-otc) · Copy trading, audited leaders, profit share (Nitro) · TWAP / VWAP / POV execution (Nitro) · Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro) · Payment instruments — where the buyer actually pays (nitro-agent) · Fiat on/off ramp reusing svc-pay adapters (cursor-swarm-bank) · Support desk, tickets, KB (cursor-swarm-ops-support) · Multi-tier affiliate / IB trees, payout automation (cursor-swarm-affiliates) · Warehouse — read replica + cube layer (cursor-swarm-analytics)
+**In progress:** OTC RFQ desk, staked-tier gate (cursor-swarm-otc) · Copy trading, audited leaders, profit share (Nitro) · TWAP / VWAP / POV execution (Nitro) · Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Branded gateway, hosted checkout, payment links (Nitro) · Payment instruments — where the buyer actually pays (nitro-agent) · Fiat on/off ramp reusing svc-pay adapters (cursor-swarm-bank) · Residencies, IFC pay, revenue share (Nitro) · Support desk, tickets, KB (cursor-swarm-ops-support) · Multi-tier affiliate / IB trees, payout automation (cursor-swarm-affiliates) · Warehouse — read replica + cube layer (cursor-swarm-analytics)
 
-**🟢 24 ready to claim** — nothing blocks these:
+**🟢 23 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
@@ -26,7 +26,7 @@ Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 5/17 · **3P** 1/8 · **
 - `venue.aggregation` — External venue adapters via CCXT (cross-venue)
 - `pay.routing` — Smart routing — geo, method, risk, approval rate
 - `pay.settlement` — Dual settlement — bank or crypto
-- …and 16 more
+- …and 15 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

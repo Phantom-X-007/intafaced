@@ -3,6 +3,12 @@ import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
+import {
+  AmbassadorPayRefuseError,
+  ambassadorPayPlaneStatus,
+  refuseAmbassadorIfcPay,
+  refuseAmbassadorRevenueShare,
+} from './ambassadors/ifc-pay.js';
 import { getCurriculumItem, listCurriculum } from './curriculum/catalog.js';
 import { curriculumInventory, curriculumImportStageStatus } from './curriculum/import-pipeline.js';
 import { resolveCurriculumDeepLink, listCurriculumPathDeepLinks } from './curriculum/deep-links.js';
@@ -237,6 +243,14 @@ const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room,
  * a bad request, and it is reported as one.
  */
 function toTrpcError(err: unknown): TRPCError {
+  if (err instanceof AmbassadorPayRefuseError) {
+    // PRECONDITION_FAILED: operator asked for pay before owner rates + ledger recipe exist.
+    return new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: err.message,
+      cause: err,
+    });
+  }
   if (!(err instanceof AcademyError)) {
     return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
   }
@@ -644,6 +658,52 @@ export function createAcademyRouter(academy: AcademyService) {
           }),
         ),
       ),
+
+    /**
+     * Class M IFC pay / revenue share — refuse-closed. Never invent rates.
+     * Plane status is always dark until owner-published schedule + ledger recipes.
+     */
+    ambassadorPayPlane: scopedProcedure('admin:read', { module: 'academy' })
+      .output(
+        z.object({
+          ifcPayEnabled: z.literal(false),
+          revenueShareEnabled: z.literal(false),
+          classM: z.literal(true),
+          residualIfcPay: z.string(),
+          residualRevenueShare: z.string(),
+        }),
+      )
+      .query(() => ambassadorPayPlaneStatus()),
+
+    ambassadorIfcPay: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          beneficiaryId: z.string().uuid().optional(),
+          dryRun: z.boolean().optional(),
+        }),
+      )
+      .mutation(async () => {
+        try {
+          refuseAmbassadorIfcPay();
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    ambassadorRevenueShare: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          beneficiaryId: z.string().uuid().optional(),
+          dryRun: z.boolean().optional(),
+        }),
+      )
+      .mutation(async () => {
+        try {
+          refuseAmbassadorRevenueShare();
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
 
     // ── Residency applications Stage-1 (durable, NO PAY) ──────────────────────
     //

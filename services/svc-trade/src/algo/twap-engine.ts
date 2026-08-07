@@ -52,6 +52,11 @@ export interface TwapEngineOptions {
   maxDurationMs?: number;
   /** Min slice interval (default 1s). */
   minSliceIntervalMs?: number;
+  /**
+   * Durable schedule hook (SQL store in production). Called after every
+   * parent/plan mutation so process restart can resume. Never invents fills.
+   */
+  onChange?: (parent: TwapParent, plan: readonly Amount[]) => void | Promise<void>;
 }
 
 export type SliceTickResult =
@@ -68,6 +73,7 @@ export class TwapEngine {
   private readonly markPolicy: AlgoMarkPolicy;
   private readonly maxDurationMs: number;
   private readonly minSliceIntervalMs: number;
+  private readonly onChange: ((parent: TwapParent, plan: readonly Amount[]) => void | Promise<void>) | null;
 
   constructor(
     private readonly ports: TwapEnginePorts,
@@ -76,10 +82,21 @@ export class TwapEngine {
     this.markPolicy = options.markPolicy ?? DEFAULT_ALGO_MARK_POLICY;
     this.maxDurationMs = options.maxDurationMs ?? 86_400_000;
     this.minSliceIntervalMs = options.minSliceIntervalMs ?? 1_000;
+    this.onChange = options.onChange ?? null;
   }
 
   get(parentId: string): TwapParent | undefined {
     return this.parents.get(parentId);
+  }
+
+  /** Restore a parent + plan after process restart (from durable store). */
+  hydrate(parent: TwapParent, plan: readonly Amount[]): void {
+    this.parents.set(parent.id, parent);
+    this.plans.set(parent.id, plan);
+  }
+
+  planOf(parentId: string): readonly Amount[] | undefined {
+    return this.plans.get(parentId);
   }
 
   listForUser(userId: string): TwapParent[] {
@@ -133,6 +150,7 @@ export class TwapEngine {
 
     this.parents.set(id, parent);
     this.plans.set(id, plan.slices);
+    this.emitChange(parent);
     return parent;
   }
 
@@ -276,6 +294,7 @@ export class TwapEngine {
         status: next >= plan.length ? 'completed' : parent.status,
       };
       this.parents.set(parent.id, updated);
+      this.emitChange(updated);
       return { kind: 'placed', child };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -337,6 +356,7 @@ export class TwapEngine {
       status: next >= plan.length ? 'completed' : parent.status,
     };
     this.parents.set(parent.id, updated);
+    this.emitChange(updated);
     return { kind: 'miss', miss };
   }
 
@@ -349,6 +369,15 @@ export class TwapEngine {
 
   private replace(id: string, parent: TwapParent): TwapParent {
     this.parents.set(id, parent);
+    this.emitChange(parent);
     return parent;
+  }
+
+  private emitChange(parent: TwapParent): void {
+    if (!this.onChange) return;
+    const plan = this.plans.get(parent.id) ?? [];
+    void Promise.resolve(this.onChange(parent, plan)).catch(() => {
+      // Persistence failures must not invent progress; next tick retries save.
+    });
   }
 }
