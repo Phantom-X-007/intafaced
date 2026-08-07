@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**45 of 109 shipped (41%)** · 9 in progress · 26 ready to claim · 29 blocked · 39 deliberate §13 sockets
+**45 of 109 shipped (41%)** · 10 in progress · 25 ready to claim · 29 blocked · 39 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -27,7 +27,6 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
-| Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
 | Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
@@ -72,6 +71,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Feature | Owner | Module |
 |---|---|---|
 | OTC RFQ desk, staked-tier gate | **cursor-swarm-otc** | `trade` |
+| Copy trading, audited leaders, profit share | **Nitro** | `trade` |
 | TWAP / VWAP / POV execution | **Nitro** | `trade` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
@@ -131,7 +131,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Perps: cross/isolated margin, funding, liquidation ladder <br/>_**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent._ | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | 🔨 | OTC RFQ desk, staked-tier gate <br/>_Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table._ | F |  | `trade.otc` |
-| 🟢 | Copy trading, audited leaders, profit share <br/>_**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent copy product._ | B |  | `trade.copy` |
+| 🔨 | Copy trading, audited leaders, profit share <br/>_**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 3 — D-S-03 Stage: follow/unfollow + envelope mirror refuse; blank DIRECTION §8 leader_share_bps + jurisdiction → refuse-closed; fee-share settle via ledger-client sweepFeesToRewards+rewardPay when owner publishes. Never invent rates/geo/P&L fees/ranking. Residual: owner §8 numbers, on-chain session-key caps (build order §7.1)._ | B |  | `trade.copy` |
 | 🟢 | Fiat pairs on the same engine <br/>_NOT started as a product. What exists: the instrument model (asset_class + schedule on trade.markets) and venue-hours enforcement on order-create — #102 added assertMarketOpen before the hold, so a weekend EUR/USD order is refused with trade.market_closed rather than funded. Hours coverage completed since: the unrecognised-schedule fail-safe (rows.ts casts the DB enum with no runtime parse, so an enum added without a TRADING_SCHEDULES entry must refuse, not throw), the cme-globex daily settlement break, Chicago DST, and an end-to-end proof that a closed venue takes no hold and writes no intent row. Still missing for the actual feature: fiat settlement rails, so no forex market is listed in production._ | F |  | `trade.forex` |
 | 🔨 | TWAP / VWAP / POV execution <br/>_**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 2 — D-S-04 TWAP Stage (parent=schedule, children via placeOrder, refuse blank mark/empty book). VWAP/POV still out (no honest volume series)._ | F |  | `trade.algo` |
 | 🟢 | CCXT-compatible public API (bots + terminals connect) <br/>_partial — public REST: markets, orderbook, ticker, tickers, trades (tape; ?since= ms), ohlcv (live fill aggregation #345 + materialize job default OFF TRADE_CANDLE_JOBS_*; honest [] when never traded; never invent candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed (?since= ms on closed), GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills; ?symbol= filter + ?since= ms), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance (ledger projection, real self-only balances — not stub), GET positions (open futures rows when present; [] when none — never invent); POST/DELETE positions with required exitPrice on close (realized PnL via planClose). setLeverage/setMarginMode still not mounted. Still open: OHLCV empty (no candle job); futures jobs default OFF; live index/matching seed residual. Private WS is under `ws.gateway` (/private/stream), not this REST surface. LIVE PROBE 2026-07-30 found orderbook/ticker **502 MatchingUnavailable** when matching returned 404 for never-journalled markets; **#185** fixed that code path — empty/missing book is now honest empty depth `[]` (not engine-down 502). Residual: svc-matching still derives markets from journal replay only, so books stay empty until an order lands or trade.mm-bot seeds depth — bots may still see empty books, not "exchange down", until seeding. OHLCV remains [] until candle job._ | F |  | `trade.ccxt-api` |
