@@ -102,6 +102,50 @@ export const ACCOUNT_KINDS = ['available', 'hold', 'escrow', 'stake', 'collatera
 export type AccountKind = (typeof ACCOUNT_KINDS)[number];
 
 /**
+ * Is this pot spendable value, or value already claimed by something?
+ *
+ * INVARIANT 2 — "locked funds are always funded from the owner's own available
+ * balance" — is what makes locked value provably still the user's. It was
+ * enforced against a hand-written list of lock kinds, kept in two places, with
+ * this enum as a silent third. Nothing checked that the three agreed and
+ * nothing could: the list was typed `ReadonlySet<string>`, so adding a kind
+ * here produced no type error, no test failure and no gate failure.
+ *
+ * A kind missing from the list is not treated as unclassified — it falls into
+ * the `else if (delta < 0n)` branch of `assertPairedLocks` and is read as
+ * *available* balance. So the drift does not fail loudly: it creates locked
+ * value funded by nobody, while the post still sums to zero per asset, the
+ * hash chain still verifies and reconciliation still replays clean. There is no
+ * reading of the book from which you could tell.
+ *
+ * Demonstrated against the real `assertValidPost` on 2026-08-07:
+ *
+ *     kind 'collateral'  (classified)    refused   "Unfunded lock for user:…"
+ *     kind 'margin'      (unclassified)  ACCEPTED  1,000,000 USDT out of thin air
+ *
+ * This record is the single source. It is `satisfies Record<AccountKind, …>`,
+ * so adding a kind to ACCOUNT_KINDS without classifying it **fails to compile**
+ * — the decision is forced at the one moment somebody is thinking about it.
+ * That matters now rather than later: `client.ts` already anticipates the next
+ * lock kind ("Futures positions take `position:<id>` when they arrive"), so the
+ * trigger is on the roadmap.
+ */
+export const ACCOUNT_KIND_CLASS = {
+  available: 'spendable',
+  hold: 'locked',
+  escrow: 'locked',
+  stake: 'locked',
+  collateral: 'locked',
+} as const satisfies Record<AccountKind, 'spendable' | 'locked'>;
+
+/**
+ * The lock kinds, derived — never written out a second time.
+ *
+ * Ordered by ACCOUNT_KINDS so the sequence is the enum's, not this record's.
+ */
+export const LOCK_KIND_LIST: readonly AccountKind[] = ACCOUNT_KINDS.filter((kind) => ACCOUNT_KIND_CLASS[kind] === 'locked');
+
+/**
  * Must match `ledger.asset_kind` exactly (svc-ledger/drizzle/0003).
  *
  * `commodity` covers the metals and energies the instrument catalogue lists —

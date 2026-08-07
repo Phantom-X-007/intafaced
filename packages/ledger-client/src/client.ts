@@ -5,6 +5,8 @@ import {
   OwnerIdentitySpaceError,
   accountPurpose,
   isValidOwnerId,
+  LOCK_KIND_LIST,
+  type AccountKind,
   type AccountRef,
   type Balance,
   type EntryInput,
@@ -104,7 +106,12 @@ export function assertBalanced(entries: readonly EntryInput[]): void {
   if (Object.keys(offenders).length > 0) throw new UnbalancedTransactionError(offenders);
 }
 
-export const LOCK_KINDS: ReadonlySet<string> = new Set(['hold', 'escrow', 'stake', 'collateral']);
+/**
+ * Derived from `ACCOUNT_KIND_CLASS` in types.ts — the one place a kind is
+ * classified. Typed `ReadonlySet<AccountKind>` rather than `ReadonlySet<string>`
+ * so a kind that does not exist cannot be spelled here either.
+ */
+export const LOCK_KINDS: ReadonlySet<AccountKind> = new Set(LOCK_KIND_LIST);
 
 /**
  * INVARIANT 2 — locked funds are always funded from the owner's own available
@@ -180,7 +187,7 @@ export function assertPurposedHolds(entries: readonly EntryInput[]): void {
 
 /** Every lock kind names its claim. `available` is the only unpurposed pot left. */
 export function assertPurposedLocks(entries: readonly EntryInput[]): void {
-  assertPurposedLockKinds(entries, ['hold', 'escrow', 'stake', 'collateral'], 'lock pot', 'P0-3 / L3-4 / L1-L3-5 / §8.1');
+  assertPurposedLockKinds(entries, LOCK_KIND_LIST, 'lock pot', 'P0-3 / L3-4 / L1-L3-5 / §8.1');
 }
 
 function assertPurposedLockKinds(entries: readonly EntryInput[], kinds: readonly string[], label: string, doctrine: string): void {
