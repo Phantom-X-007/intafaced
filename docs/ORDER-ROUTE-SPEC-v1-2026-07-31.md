@@ -222,14 +222,14 @@ Hypothesis: **S holds under F1–F8** in CI/dev. Disproof = failing test.
 
 Must inform Plan; do not skip:
 
-1. **LW-\*** law on tip + lanes
-2. **DB-\*** dual-book enforce (silent money risk)
+1. **LW-*** law on tip + lanes
+2. **DB-*** dual-book enforce (silent money risk)
 3. **CX-7/8/9** chaos + assemble + reconcile (prove path)
-4. **DX-\*** residual DEX honesty
-5. **SD-\*** seed honesty (Denon #1)
-6. **MA-\*** multi-asset resume
-7. **PY-\*** durable broadcast if still open
-8. **RS-\*** scoreboard + WAVE-AUDIT
+4. **DX-*** residual DEX honesty
+5. **SD-*** seed honesty (Denon #1)
+6. **MA-*** multi-asset resume
+7. **PY-*** durable broadcast if still open
+8. **RS-*** scoreboard + WAVE-AUDIT
 
 Walking skeleton for Build: **CX assemble + F1–F4 minimum** early so later dual-book/seed hang on a proven path.
 
