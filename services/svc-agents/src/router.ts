@@ -8,6 +8,7 @@ import type { UsageMeter } from './metering/meter.js';
 import type { AgentRuntime } from './runtime.js';
 import { rankFixtures } from './scanner/rank.js';
 import { navigatorGrounded } from './navigator/grounded.js';
+import { draftTicketComment } from './support-agent/comment-draft.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -513,6 +514,38 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
           return result;
         }),
+    }),
+
+    /**
+     * Support Stage-2 comment draft gate.
+     *
+     * Pure validation for ticket comments: missing ticket, empty/overlong body,
+     * and money-invent language refuse. Does not post — caller still needs a
+     * real ticket surface + guardrail. Spec: docs/ops/trk/ops.support.md.
+     */
+    support: router({
+      draftComment: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            ticketId: z.string().max(120).nullable().optional(),
+            body: z.string().max(5_000).nullable().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              ticketId: z.string(),
+              body: z.string(),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['missing_ticket', 'empty_body', 'body_too_long', 'money_invent_language']),
+              userMessageKey: z.literal('agents.support.comment_refused'),
+            }),
+          ]),
+        )
+        .query(({ input }) => draftTicketComment({ ticketId: input.ticketId, body: input.body })),
     }),
   });
 }
