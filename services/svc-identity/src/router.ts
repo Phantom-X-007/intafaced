@@ -17,6 +17,7 @@ import { FreezeError } from './affiliates/freeze-store.js';
 import type { FreezeService } from './affiliates/freeze-service.js';
 import { accrueCommission, CommissionError, DEFAULT_ACCRUAL_TIERS, type TierRate } from './affiliates/commission.js';
 import { accrueWithFreezes } from './affiliates/freeze.js';
+import type { AccrualStore } from './affiliates/accrual-store.js';
 
 /**
  * svc-identity's API (§4.1).
@@ -164,11 +165,14 @@ export function createIdentityRouter(
     webauthnEnabled?: boolean;
     referral?: ReferralService;
     freeze?: FreezeService;
+    /** Slice B durable accrual rows (no ledger). Optional for light tests. */
+    accruals?: AccrualStore;
   },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
   const referral = options.referral;
   const freeze = options.freeze;
+  const accruals = options.accruals;
 
   function requireReferral(): ReferralService {
     if (!referral) {
@@ -182,6 +186,13 @@ export function createIdentityRouter(
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Affiliate freeze store is not configured' });
     }
     return freeze;
+  }
+
+  function requireAccruals(): AccrualStore {
+    if (!accruals) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Affiliate accrual store is not configured' });
+    }
+    return accruals;
   }
 
   return router({
@@ -1133,6 +1144,91 @@ export function createIdentityRouter(
             return {
               frozenSkipped: Math.max(0, without.length - withFreeze.length),
               rows: withFreeze.map((r) => ({
+                feeEventId: r.feeEventId,
+                beneficiaryId: r.beneficiaryId,
+                payerId: r.payerId,
+                hop: r.hop,
+                rate: r.rate,
+                feeAmount: r.feeAmount,
+                commissionAmount: r.commissionAmount,
+                asset: r.asset,
+                accruedAt: r.accruedAt.toISOString(),
+              })),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Slice B persist: same accrual as dry-run, written to durable store.
+       * NEVER posts ledger. Idempotent on (feeEventId, beneficiary, hop).
+       * Zero fee → zero rows. Payout remains refuse-closed (Slice C / §8).
+       */
+      accrue: scopedProcedure('admin:write')
+        .input(
+          z.object({
+            feeEventId: z.string().min(1).max(120),
+            userId: z.string().uuid(),
+            feeAmount: z.string().regex(/^(0|[1-9]\d*)(\.\d{1,18})?$/),
+            asset: z.string().min(1).max(32),
+            at: z.string().datetime().optional(),
+            tiers: z
+              .array(
+                z.object({
+                  hop: z.number().int().min(0).max(20),
+                  rate: z.string().regex(/^(0(\.\d{1,18})?|1(\.0{1,18})?)$/),
+                }),
+              )
+              .max(20)
+              .optional(),
+          }),
+        )
+        .output(
+          z.object({
+            inserted: z.number().int(),
+            rows: z.array(
+              z.object({
+                feeEventId: z.string(),
+                beneficiaryId: z.string().uuid(),
+                payerId: z.string().uuid(),
+                hop: z.number().int(),
+                rate: z.string(),
+                feeAmount: z.string(),
+                commissionAmount: z.string(),
+                asset: z.string(),
+                accruedAt: z.string(),
+              }),
+            ),
+            frozenSkipped: z.number().int(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            const parent = await requireReferral().loadParentMap();
+            const frozen = await requireFreeze().frozenIds();
+            const store = requireAccruals();
+            const tiers: readonly TierRate[] = input.tiers ?? DEFAULT_ACCRUAL_TIERS;
+            const fee = {
+              feeEventId: input.feeEventId,
+              userId: input.userId,
+              feeAmount: input.feeAmount,
+              asset: input.asset,
+              at: input.at ? new Date(input.at) : new Date(),
+            };
+            const without = accrueCommission({ fee, parent, tiers });
+            const withFreeze = accrueWithFreezes({
+              fee,
+              parent,
+              tiers,
+              frozenBeneficiaryIds: frozen,
+            });
+            const inserted = await store.saveRows(withFreeze);
+            const stored = await store.listByFeeEvent(input.feeEventId);
+            return {
+              inserted,
+              frozenSkipped: Math.max(0, without.length - withFreeze.length),
+              rows: stored.map((r) => ({
                 feeEventId: r.feeEventId,
                 beneficiaryId: r.beneficiaryId,
                 payerId: r.payerId,
