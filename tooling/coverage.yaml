@@ -1615,6 +1615,35 @@ tracker_extra:
     reason: >-
       Passkey P-256 owner verifier contract. §17.4:525 promises passkey-native accounts; the verifier
       that makes it true is held as a socket the law does not list.
+  - id: socket.paymaster-policy
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Who pays gas. §17.4:525 promises passkey-native accounts and says nothing about gas, so an
+      account that is provably the user's and cannot move is inside the law as written. The paymaster
+      fields already exist in the user operation this repo builds; the policy and the funded account
+      behind it do not, and §13 has no room for that gap.
+  - id: socket.bundler-policy
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Bundler dependency, public relay or self-hosted. The law assumes a user operation reaches the
+      chain and never names who relays it. A public bundler can censor or reorder that operation,
+      which is a sovereignty question §16-§17 implies and does not decide.
+  - id: socket.price-oracle
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Price oracle for on-chain marks and liquidations. §17.5 lending markets require marks and the
+      law names no source; a guessed mark liquidates real collateral, so this is held open rather
+      than invented. Blocks protocol.lending and couples to protocol.amm.
+  - id: socket.deployment-registry
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Which contracts are deployed where, verified against which source. §17.2 P0 assumes contracts
+      on proven rails; nothing in the law asks for the record of what was deployed, and without it a
+      deployed address cannot be reconstructed or audited later.
   - id: socket.ledger-sharding
     basis: law-extension
     extends: 13
