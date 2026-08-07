@@ -99,7 +99,28 @@ export type BankErrorCode =
    * operator seeing this refuse has learned something true on the day it became
    * true. The capture it belongs to still stands; only the reward refuses.
    */
-  | 'bank.cashback_pot_unfunded';
+  | 'bank.cashback_pot_unfunded'
+  // ── Ramps (§8.1 / D-S-09, crypto ledger half) ──────────────────────────────
+  /**
+   * NO RAMP PROGRAMME IS CONFIGURED.
+   *
+   * Sibling of `bank.no_card_issuer` / `bank.no_liquidation_counterparty`: a
+   * missing counterparty (here: an unchosen crypto ledger half) is a refusal,
+   * never a default to a simulator. Fiat is not selectable at all — see
+   * `bank.fiat_ramp_socket`.
+   */
+  | 'bank.no_ramp_rail'
+  /**
+   * FIAT ON/OFF RAMP IS §13 `socket.psp-partners`.
+   *
+   * A bank/PSP partner and money-transmission permission are a commercial
+   * relationship. Refusing by this code is the whole fiat half of the ADR split.
+   */
+  | 'bank.fiat_ramp_socket'
+  | 'bank.ramp_invalid_amount'
+  | 'bank.ramp_invalid_destination'
+  /** Same (rail, railRef) or (user, clientRef) already booked with different facts. */
+  | 'bank.ramp_conflict';
 
 export class BankError extends Error {
   constructor(

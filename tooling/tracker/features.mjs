@@ -772,16 +772,17 @@ export const FEATURES = [
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',
     phase: '5',
+    status: 'wip',
+    owner: 'cursor-swarm-bank',
     dependsOn: ['pay.rails'],
+    requires: ['services/svc-bank/src/ramps/ramp-service.ts', 'services/svc-bank/src/ramps/rails.ts'],
     note:
-      '**SPLIT 2026-08-06** per docs/adr/2026-08-04-bank-vertical-law.md correction 3. Two halves that fail for different reasons, and ' +
-      'collapsing them made a buildable leg look like a licence problem. ' +
-      'CRYPTO LEG — this row. Buildable today, no counterparty missing: `crypto-native` is already a real rail in svc-pay ' +
-      '(services/svc-pay/src/rails/chain-port.ts + chain-watcher.ts, live-rail-e2e green under #226). What is missing is a ledger-client ' +
-      'recipe and a router surface, which is engineering time. NOT STARTED — verified 2026-08-06, `grep -ri ramp services/svc-bank/src` ' +
-      'returns nothing, so this row has zero lines and no status is claimed for it. ' +
-      'FIAT LEG — **socket.psp-partners**, not this row. A bank/PSP partner and money-transmission permission are a contract and a licence; ' +
-      "no engineering time produces either, which is the ADR's §13 test. Only the adapters would be code. " +
+      '**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF wip 2026-08-07** (feat/bank-denon-residual, claim TRK-bank.ramps). ' +
+      'CRYPTO LEG — ledger surface on main path: `ramps.programme|onramps|offramps|offramp` + ops `creditOnramp`; value only via ' +
+      'ledger-client `deposit` / `withdrawHold` / `withdrawSettle` against rail `bank-crypto-ledger` (distinct from svc-pay ' +
+      '`crypto-native` so operator credit cannot desync pay chain reconciliation). `BANK_RAMP_MODE=none|crypto-ledger`, default none; ' +
+      '`simulated: true` always; fiat refuses `bank.fiat_ramp_socket` → socket.psp-partners. No earn APY / card BIN invented. ' +
+      'FIAT LEG — **socket.psp-partners**, not this row. Live chain confirm/send remains svc-pay + Class X. ' +
       '**Reclaimed 2026-08-04** M6 — Nitro agents thin Class M.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {

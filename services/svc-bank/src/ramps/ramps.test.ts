@@ -1,0 +1,303 @@
+import { randomUUID } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { MemoryLedger, formatAmount, parseAmount as amt, railBoundary, userAvailable } from '@intafaced/ledger-client';
+import { createBankServices, type BankServices } from '../bank-service.js';
+import { memoryLedgerHistory } from '../analytics/ledger-history.js';
+import { BankError } from '../errors.js';
+import { BANK_CRYPTO_LEDGER_RAIL, CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgrammeFor } from './rails.js';
+import { RampService } from './ramp-service.js';
+
+/**
+ * bank.ramps — CRYPTO LEDGER half (D-S-09 / ADR 2026-08-04).
+ *
+ * Proves money paths, named refusals, and that fiat is a socket — not a missing
+ * module. Does not claim a live chain or a PSP.
+ */
+
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+const here = dirname(fileURLToPath(import.meta.url));
+const drizzle = join(here, '..', '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+
+const USER = '11111111-1111-4111-8111-111111111111';
+const OPERATOR = '33333333-3333-4333-8333-333333333333';
+
+describe('choosing a ramp programme is a closed decision with a refusing default', () => {
+  it('offers exactly two settings, and no third one can be spelled', () => {
+    expect([...RAMP_SETTINGS]).toEqual(['none', 'crypto-ledger']);
+  });
+
+  it('maps silence to the programme that refuses money paths', () => {
+    expect(rampProgrammeFor('none')).toBe(NO_RAMP_PROGRAMME);
+    expect(rampProgrammeFor('none').cryptoRail).toBeNull();
+    expect(rampProgrammeFor('none').fiatLeg).toBe('socket.psp-partners');
+  });
+
+  it('crypto-ledger is always simulated and names the fiat socket', () => {
+    const p = rampProgrammeFor('crypto-ledger');
+    expect(p).toEqual(CRYPTO_LEDGER_PROGRAMME);
+    expect(p.simulated).toBe(true);
+    expect(p.cryptoRail).toBe(BANK_CRYPTO_LEDGER_RAIL);
+    expect(p.fiatLeg).toBe('socket.psp-partners');
+  });
+});
+
+const available = await postgresAvailable(URL);
+
+if (!available) {
+  describe.skip('svc-bank ramps (Postgres unavailable)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: URL, migrations });
+  const sql = db.sql;
+
+  let ledger: MemoryLedger;
+  let bank: BankServices;
+  let ramps: RampService;
+
+  beforeEach(async () => {
+    await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.spaces RESTART IDENTITY CASCADE`;
+    ledger = new MemoryLedger();
+    bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+    });
+    ramps = bank.ramps;
+  });
+
+  afterAll(async () => {
+    await db.drop();
+  }, 30_000);
+
+  describe('refuse-closed defaults', () => {
+    it('refuses every money path when no programme is configured', async () => {
+      const none = new RampService(sql, ledger, { programme: NO_RAMP_PROGRAMME });
+      await expect(
+        none.creditOnramp({
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('10'),
+          kind: 'crypto',
+          railRef: 'tx-1',
+          creditedBy: OPERATOR,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.no_ramp_rail' });
+
+      await expect(
+        none.offramp({
+          offrampId: randomUUID(),
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('10'),
+          kind: 'crypto',
+          destinationRef: '0xabc',
+          clientRef: 'c1',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.no_ramp_rail' });
+    });
+
+    it('refuses fiat before a row is written', async () => {
+      await expect(
+        ramps.creditOnramp({
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('10'),
+          kind: 'fiat',
+          railRef: 'ach-1',
+          creditedBy: OPERATOR,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+
+      const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
+      expect(count[0]!.n).toBe(0);
+
+      await expect(
+        ramps.offramp({
+          offrampId: randomUUID(),
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('10'),
+          kind: 'fiat',
+          destinationRef: 'IBAN',
+          clientRef: 'fiat-1',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+    });
+  });
+
+  describe('crypto on-ramp — deposit recipe only', () => {
+    it('credits available via recipes.deposit and keeps simulated true', async () => {
+      const row = await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('100'),
+        kind: 'crypto',
+        railRef: '0xdeposit1',
+        creditedBy: OPERATOR,
+      });
+
+      expect(row.status).toBe('settled');
+      expect(row.simulated).toBe(true);
+      expect(row.rail).toBe(BANK_CRYPTO_LEDGER_RAIL);
+      expect(row.ledgerTxId).toBeTruthy();
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('100');
+      // Boundary is the other side of the deposit: a credit posts as a signed
+      // negative on balance() for treasury/rail accounts in MemoryLedger.
+      expect(formatAmount((await ledger.balance(railBoundary(BANK_CRYPTO_LEDGER_RAIL, 'USDT'))).amount)).toBe('-100');
+      expect(ledger.reconcile().ok).toBe(true);
+    });
+
+    it('is idempotent on (rail, railRef) and refuses a conflicting amount', async () => {
+      const first = await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('50'),
+        kind: 'crypto',
+        railRef: 'same-ref',
+        creditedBy: OPERATOR,
+      });
+      const second = await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('50'),
+        kind: 'crypto',
+        railRef: 'same-ref',
+        creditedBy: OPERATOR,
+      });
+      expect(second.id).toBe(first.id);
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('50');
+
+      await expect(
+        ramps.creditOnramp({
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('99'),
+          kind: 'crypto',
+          railRef: 'same-ref',
+          creditedBy: OPERATOR,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.ramp_conflict' });
+    });
+  });
+
+  describe('crypto off-ramp — hold then settle', () => {
+    it('moves value to the rail boundary and leaves the hold at zero', async () => {
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('80'),
+        kind: 'crypto',
+        railRef: 'fund-off',
+        creditedBy: OPERATOR,
+      });
+
+      const id = randomUUID();
+      const row = await ramps.offramp({
+        offrampId: id,
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('30'),
+        kind: 'crypto',
+        destinationRef: '0xout',
+        clientRef: 'off-1',
+      });
+
+      expect(row.status).toBe('settled');
+      expect(row.simulated).toBe(true);
+      expect(row.holdLedgerTxId).toBeTruthy();
+      expect(row.settleLedgerTxId).toBeTruthy();
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('50');
+      expect(formatAmount((await ledger.balance(ramps.holdAccount(USER, 'USDT', id))).amount)).toBe('0');
+    });
+
+    it('refuses insufficient funds by name and rejects the row', async () => {
+      const id = randomUUID();
+      await expect(
+        ramps.offramp({
+          offrampId: id,
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('5'),
+          kind: 'crypto',
+          destinationRef: '0xout',
+          clientRef: 'broke',
+        }),
+      ).rejects.toThrow(/insufficient/i);
+
+      const rows = await sql<Array<{ status: string; rejection_code: string }>>`
+        SELECT status, rejection_code FROM bank.ramp_offramps WHERE id = ${id}
+      `;
+      expect(rows[0]).toMatchObject({ status: 'rejected', rejection_code: 'ledger.insufficient_funds' });
+    });
+
+    it('retries on the same clientRef return the same settled offramp', async () => {
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('40'),
+        kind: 'crypto',
+        railRef: 'fund-retry',
+        creditedBy: OPERATOR,
+      });
+      const id = randomUUID();
+      const a = await ramps.offramp({
+        offrampId: id,
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('10'),
+        kind: 'crypto',
+        destinationRef: '0xout',
+        clientRef: 'retry-me',
+      });
+      const b = await ramps.offramp({
+        offrampId: id,
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('10'),
+        kind: 'crypto',
+        destinationRef: '0xout',
+        clientRef: 'retry-me',
+      });
+      expect(b.id).toBe(a.id);
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('30');
+    });
+  });
+
+  describe('conservation', () => {
+    it('closes the books after on-ramp then off-ramp', async () => {
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('25'),
+        kind: 'crypto',
+        railRef: 'cons-1',
+        creditedBy: OPERATOR,
+      });
+      await ramps.offramp({
+        offrampId: randomUUID(),
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('25'),
+        kind: 'crypto',
+        destinationRef: '0xout',
+        clientRef: 'cons-off',
+      });
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('0');
+      expect(formatAmount((await ledger.balance(railBoundary(BANK_CRYPTO_LEDGER_RAIL, 'USDT'))).amount)).toBe('0');
+      expect(ledger.reconcile().ok).toBe(true);
+    });
+  });
+
+  it('BankError codes stay named for the fiat socket', () => {
+    expect(() => {
+      throw new BankError('fiat', 'bank.fiat_ramp_socket');
+    }).toThrow(BankError);
+  });
+}

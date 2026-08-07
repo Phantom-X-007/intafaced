@@ -7,6 +7,7 @@ import { SpendAnalytics } from './analytics/spend.js';
 import { LoanService, type LoanServiceOptions } from './loans/loan-service.js';
 import { fixedPriceSource } from './loans/prices.js';
 import { CardService, type CardServiceOptions } from './cards/card-service.js';
+import { RampService, type RampServiceOptions } from './ramps/ramp-service.js';
 import type { LedgerHistory } from './analytics/ledger-history.js';
 
 /**
@@ -30,6 +31,7 @@ export interface BankServices {
   readonly analytics: SpendAnalytics;
   readonly loans: LoanService;
   readonly cards: CardService;
+  readonly ramps: RampService;
 }
 
 export interface BankServiceOptions {
@@ -59,6 +61,14 @@ export interface BankServiceOptions {
    * programme (and none has one: the live rail is `socket.live-issuer`).
    */
   cards?: CardServiceOptions;
+  /**
+   * Ramp wiring: crypto ledger half, if any.
+   *
+   * Not defaulted to crypto-ledger. Silence is no programme; every ramp money
+   * path refuses `bank.no_ramp_rail`. Fiat is never selectable — see
+   * `ramps/rails.ts` and `bank.fiat_ramp_socket`.
+   */
+  ramps?: RampServiceOptions;
 }
 
 export function createBankServices(sql: Sql, ledger: LedgerClient, history: LedgerHistory, options: BankServiceOptions = {}): BankServices {
@@ -73,11 +83,13 @@ export function createBankServices(sql: Sql, ledger: LedgerClient, history: Ledg
   // No issuer configured = no card programme, and every card procedure refuses
   // by name rather than simulating one. See `cards/issuer.ts`.
   const cards = new CardService(sql, ledger, options.cards ?? {});
+  // No ramp programme = every ramp procedure refuses `bank.no_ramp_rail`.
+  const ramps = new RampService(sql, ledger, options.ramps ?? {});
 
-  return { spaces, transfers, earn, analytics, loans, cards };
+  return { spaces, transfers, earn, analytics, loans, cards, ramps };
 }
 
-export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService, CardService };
+export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService, CardService, RampService };
 export { BankError, type BankErrorCode } from './errors.js';
 export { accountForSpace, type SpaceRecord, type SpaceView } from './spaces/space-service.js';
 export { planDue, occurrenceStart, dueOccurrence, type Cadence } from './transfers/schedule.js';
@@ -135,5 +147,7 @@ export {
   type CaptureResult,
   type CashbackOutcome,
 } from './cards/card-service.js';
+export { rampProgrammeFor, BANK_CRYPTO_LEDGER_RAIL, RAMP_SETTINGS, type RampProgramme, type RampSetting } from './ramps/rails.js';
+export { type OnrampRecord, type OfframpRecord, type RampKind, type RampServiceOptions } from './ramps/ramp-service.js';
 export { categorise, SPEND_CATEGORIES, type SpendCategory, type SpendSummary } from './analytics/spend.js';
 export { memoryLedgerHistory, type LedgerHistory, type LedgerEntryRecord } from './analytics/ledger-history.js';

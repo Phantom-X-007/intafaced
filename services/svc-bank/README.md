@@ -6,7 +6,7 @@
 
 **What this service is not:** it is not a wallet, it does not hold balances, and it does not price anything. It stores names, policies, instructions, and records of jobs that already ran. Every "how much" question is answered by `ledger.balance(...)` at the moment it is asked.
 
-Also here: **loans** (§8.1) and the **ledger half of cards**. `bank.sovereign-card` is a separate tracker feature and is not started. The card **live rail** is a §13 socket, not unbuilt code — see [Cards](#cards-what-is-built-and-what-is-a-contract).
+Also here: **loans** (§8.1), the **ledger half of cards**, and the **crypto ledger half of ramps**. `bank.sovereign-card` is a separate tracker feature and is not started. The card **live rail** and the ramp **fiat leg** are §13 sockets — see [Cards](#cards-what-is-built-and-what-is-a-contract) and [Ramps](#ramps-crypto-ledger-half-vs-fiat-socket).
 
 ---
 
@@ -99,6 +99,22 @@ tRPC, `packages/contracts`. All money crosses the wire as **decimal strings**.
 | ----------------- | ----------- | ----------------------------------------------------------- |
 | `analytics.spend` | `bank:read` | Outflow by category over a window, computed from the ledger |
 
+### `ramps` — **crypto ledger half. Fiat is a socket.**
+
+| Procedure         | Scope        | Purpose                                                                |
+| ----------------- | ------------ | ---------------------------------------------------------------------- |
+| `ramps.programme` | `bank:read`  | What this deployment's ramp is — including that it is a ledger sandbox |
+| `ramps.onramps`   | `bank:read`  | The user's on-ramp credits. Every row carries `simulated`              |
+| `ramps.offramps`  | `bank:read`  | The user's off-ramps. Every row carries `simulated`                    |
+| `ramps.offramp`   | `bank:write` | Hold then settle to `bank-crypto-ledger`. Does **not** broadcast       |
+
+`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat always refuses `bank.fiat_ramp_socket` → `socket.psp-partners`.
+
+```bash
+BANK_RAMP_MODE=none            # default — every ramp money path refuses bank.no_ramp_rail
+BANK_RAMP_MODE=crypto-ledger   # ledger half only; simulated: true always
+```
+
 ### `ops` — operator only
 
 | Procedure             | Scope            | Purpose                                                             |
@@ -110,6 +126,7 @@ tRPC, `packages/contracts`. All money crosses the wire as **decimal strings**.
 | `ops.cardCapture`     | `admin:treasury` | The merchant took this much; the remainder of the hold goes back    |
 | `ops.cardReverse`     | `admin:treasury` | The authorisation expired or was voided; the whole hold goes back   |
 | `ops.fundCashbackPot` | `admin:treasury` | Sweep bank revenue into the pot cashback is paid from               |
+| `ops.creditOnramp`    | `admin:treasury` | Crypto ledger-half on-ramp credit (never user-callable)             |
 
 The two jobs are deliberately **not user-callable**: a user who can trigger "run every due transfer" is a user who can choose when other people's money moves. `admin:treasury` is interactive-only (§4.1), so it can never be held by a long-lived API key.
 
@@ -360,5 +377,15 @@ What `card-sim` **does** get you is the ledger half, end to end, over real posti
 ## Sockets (§13)
 
 - **`socket.live-issuer`** — a card programme needs a **card-scheme sponsor and an issuing BIN**. That is a licence and a commercial relationship, not code: no amount of engineering time produces one, which is precisely the §13 test. `CardIssuerAdapter` is written against the shape a live issuer would implement, and the only implementation in the tree is `cardSim()`, which says on every surface that it is a simulator. Pointing working code at real money is additionally Class X.
+- **`socket.psp-partners`** — fiat on/off ramp needs a **bank/PSP partner and money-transmission permission**. Same §13 test. `bank.ramps` crypto ledger half does not claim this function; fiat refuses `bank.fiat_ramp_socket` by name.
 - **`ledger.history`** — spend analytics needs a transaction-history read that svc-ledger does not expose yet. Declaring it is a `packages/contracts` + svc-ledger PR that must land first (§1). `createLedgerHistory()` is written against the shape and **fails loudly** rather than returning an empty answer: a spend view that silently reports zero is worse than one that is unavailable, because the user cannot tell "you spent nothing" from "we could not ask".
 - **Chunked interest keys** — one accrual is one ledger transaction per (pool, day). When a pool outgrows a single transaction the key gains a deterministic chunk index, `bank.interest:<poolId>:<date>:<chunk>`, which keeps the same property per chunk. The shape was chosen so that change is additive.
+
+## Ramps: crypto ledger half vs fiat socket
+
+| Half       | Missing in the WORLD                                    | Verdict                                            |
+| ---------- | ------------------------------------------------------- | -------------------------------------------------- |
+| **Crypto** | Nothing for the ledger half. Chain confirm/send is pay. | **Built** as ledger sandbox (`bank-crypto-ledger`) |
+| **Fiat**   | A bank/PSP partner and money-transmission permission    | **§13 forever.** Lands on `socket.psp-partners`    |
+
+`BANK_RAMP_MODE=crypto-ledger` books deposits/withdrawals against rail `bank-crypto-ledger` — deliberately distinct from svc-pay's `crypto-native` boundary so an operator credit here cannot desync pay's chain reconciliation. `simulated: true` is never omitted. Live broadcast and inbound confirmation stay in svc-pay; Class X is pointing working code at real money.
