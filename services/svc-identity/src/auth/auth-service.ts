@@ -674,28 +674,31 @@ export class AuthService {
     grantorScopes: readonly string[];
     domainWhitelist?: string[];
     expiresAt?: Date;
-  }): Promise<{ id: string; key: string; prefix: string }> {
+    /** pay.public-api step 4 — sandbox keys route to the sandbox rail. Default live. */
+    mode?: 'live' | 'sandbox';
+  }): Promise<{ id: string; key: string; prefix: string; mode: 'live' | 'sandbox' }> {
     // §9: a long-lived key must never move value off the platform, must name
     // real scopes, and must never exceed the session that created it.
     assertDelegatableScopes(input.scopes, input.grantorScopes);
 
-    const { key, hash, prefix } = generateApiKey();
+    const mode = input.mode === 'sandbox' ? 'sandbox' : 'live';
+    const { key, hash, prefix } = generateApiKey(mode);
     const rows = await this.sql<Array<{ id: string }>>`
-      INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes, domain_whitelist, expires_at)
+      INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes, domain_whitelist, expires_at, mode)
       VALUES (
         ${input.userId}, ${input.name}, ${hash}, ${prefix},
-        ${input.scopes}, ${input.domainWhitelist ?? []}, ${input.expiresAt ?? null}
+        ${input.scopes}, ${input.domainWhitelist ?? []}, ${input.expiresAt ?? null}, ${mode}
       )
       RETURNING id
     `;
 
     // Returned once. There is no endpoint that can retrieve it again.
-    return { id: rows[0]!.id, key, prefix };
+    return { id: rows[0]!.id, key, prefix, mode };
   }
 
-  async verifyApiKey(key: string): Promise<{ userId: string; scopes: string[]; keyId: string } | null> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; scopes: string[]; expires_at: Date | null }>>`
-      SELECT id, user_id, scopes, expires_at FROM api_keys
+  async verifyApiKey(key: string): Promise<{ userId: string; scopes: string[]; keyId: string; mode: 'live' | 'sandbox' } | null> {
+    const rows = await this.sql<Array<{ id: string; user_id: string; scopes: string[]; expires_at: Date | null; mode: string | null }>>`
+      SELECT id, user_id, scopes, expires_at, mode FROM api_keys
        WHERE key_hash = ${hashToken(key)} AND revoked = false
     `;
     const row = rows[0];
@@ -703,7 +706,8 @@ export class AuthService {
     if (row.expires_at && row.expires_at.getTime() < Date.now()) return null;
 
     await this.sql`UPDATE api_keys SET last_used_at = now() WHERE id = ${row.id}`;
-    return { userId: row.user_id, scopes: row.scopes, keyId: row.id };
+    const mode: 'live' | 'sandbox' = row.mode === 'sandbox' ? 'sandbox' : 'live';
+    return { userId: row.user_id, scopes: row.scopes, keyId: row.id, mode };
   }
 
   /**
@@ -727,6 +731,7 @@ export class AuthService {
     userId: string;
     keyId: string;
     scopes: string[];
+    mode: 'live' | 'sandbox';
   }> {
     const verified = await this.verifyApiKey(key);
     if (!verified) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
@@ -741,6 +746,8 @@ export class AuthService {
     const tier = await this.kycTier(verified.userId);
     // sessionId = key id: access tokens require a sid claim; there is no
     // refresh session row for API-key traffic.
+    // key_env rides on the short JWT so pay.public-api can route sandbox vs
+    // live without a second identity round-trip (ADR §2.5 step 4).
     const { token: accessToken, expiresAt } = await issueAccessToken(
       {
         userId: verified.userId,
@@ -749,6 +756,7 @@ export class AuthService {
         tier,
         mfa: false,
         apiKeyId: verified.keyId,
+        keyEnv: verified.mode,
       },
       this.tokens,
     );
@@ -759,6 +767,7 @@ export class AuthService {
       userId: verified.userId,
       keyId: verified.keyId,
       scopes: verified.scopes,
+      mode: verified.mode,
     };
   }
 
@@ -770,8 +779,18 @@ export class AuthService {
   }
 
   async listApiKeys(userId: string) {
-    return this.sql<Array<{ id: string; name: string; key_prefix: string; scopes: string[]; last_used_at: Date | null; revoked: boolean }>>`
-      SELECT id, name, key_prefix, scopes, last_used_at, revoked FROM api_keys
+    return this.sql<
+      Array<{
+        id: string;
+        name: string;
+        key_prefix: string;
+        scopes: string[];
+        last_used_at: Date | null;
+        revoked: boolean;
+        mode: string;
+      }>
+    >`
+      SELECT id, name, key_prefix, scopes, last_used_at, revoked, mode FROM api_keys
        WHERE user_id = ${userId} ORDER BY created_at DESC
     `;
   }

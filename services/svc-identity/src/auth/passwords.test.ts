@@ -111,6 +111,9 @@ describe('tokens', () => {
   it('builds an API key whose prefix identifies it without revealing it', () => {
     const { key, hash, prefix } = generateApiKey();
     expect(key.startsWith('ifc_')).toBe(true);
+    expect(key.startsWith('ifc_test_')).toBe(false);
+    const sandbox = generateApiKey('sandbox');
+    expect(sandbox.key.startsWith('ifc_test_')).toBe(true);
     expect(prefix).toBe(key.slice(0, 12));
     expect(hash).toBe(hashToken(key));
     expect(key.length).toBeGreaterThan(prefix.length + 16);

@@ -20,6 +20,15 @@ export const accessClaimsSchema = z.object({
   sub_account: z.string().uuid().optional(),
   /** Present when an API key issued this token, so a leak can be traced to a key. */
   kid: z.string().optional(),
+  /**
+   * API-key environment (pay.public-api step 4 / ADR §2.5).
+   *
+   * Set only when the token was minted from a long-lived `ifc_…` key.
+   * Interactive sessions omit it. `sandbox` routes merchant REST to the
+   * sandbox rail; `live` may not name a sandbox rail. Absence is treated as
+   * live at money surfaces that care — never as a silent sandbox upgrade.
+   */
+  key_env: z.enum(['live', 'sandbox']).optional(),
   /** Verification tier at issue time; jurisdiction checks read it. */
   tier: z.enum(['none', 'basic', 'full', 'institutional']).default('none'),
   /** True once the session has passed 2FA. Gates INTERACTIVE_ONLY_SCOPES. */
@@ -85,6 +94,8 @@ export interface IssueAccessInput {
   mfa?: boolean;
   subAccountId?: string;
   apiKeyId?: string;
+  /** Only for tokens minted from an API key (ADR pay.public-api §2.5). */
+  keyEnv?: 'live' | 'sandbox';
 }
 
 export async function issueAccessToken(input: IssueAccessInput, config: TokenConfig): Promise<{ token: string; expiresAt: Date }> {
@@ -98,6 +109,7 @@ export async function issueAccessToken(input: IssueAccessInput, config: TokenCon
     sid: input.sessionId,
     ...(input.subAccountId ? { sub_account: input.subAccountId } : {}),
     ...(input.apiKeyId ? { kid: input.apiKeyId } : {}),
+    ...(input.keyEnv ? { key_env: input.keyEnv } : {}),
   } satisfies JWTPayload)
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(input.userId)

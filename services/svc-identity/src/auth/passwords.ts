@@ -184,8 +184,13 @@ export function generateToken(bytes = 32): string {
 /**
  * API keys are shown once. The prefix is stored so the UI can say which key is
  * which without ever holding the secret.
+ *
+ * Sandbox keys use `ifc_test_…` so a merchant can tell them apart at a glance;
+ * live keys keep the historical `ifc_…` prefix. Mode of record is still the
+ * `api_keys.mode` column — the prefix is presentation, not the gate.
  */
-export function generateApiKey(): { key: string; hash: string; prefix: string } {
-  const key = `ifc_${generateToken(24)}`;
+export function generateApiKey(mode: 'live' | 'sandbox' = 'live'): { key: string; hash: string; prefix: string } {
+  const head = mode === 'sandbox' ? 'ifc_test_' : 'ifc_';
+  const key = `${head}${generateToken(24)}`;
   return { key, hash: hashToken(key), prefix: key.slice(0, 12) };
 }

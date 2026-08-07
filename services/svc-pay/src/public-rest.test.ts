@@ -327,6 +327,11 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     railAdapter: 'card-sandbox',
   };
 
+  /** Step-2 fixtures use a sandbox key so createPayment may name card-sandbox. */
+  function sandboxSigned(p: Principal = principal({ key_env: 'sandbox', kid: 'key-sandbox' })): Record<string, string> {
+    return signed(p);
+  }
+
   it('REFUSES a mutating POST with no Idempotency-Key — NOTHING WAS ATTEMPTED', async () => {
     const pay = stubPay();
     app = await build(pay);
@@ -334,7 +339,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/pay/v1/payments',
-      headers: { ...signed(), 'content-type': 'application/json' },
+      headers: { ...sandboxSigned(), 'content-type': 'application/json' },
       payload: createBody,
     });
 
@@ -350,7 +355,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/pay/v1/payments',
-      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'create:order:42' },
+      headers: { ...sandboxSigned(), 'content-type': 'application/json', 'idempotency-key': 'create:order:42' },
       payload: createBody,
     });
 
@@ -366,7 +371,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
   it('REPLAYS an identical retry and does not call createPayment twice', async () => {
     const pay = stubPay();
     app = await build(pay);
-    const headers = { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'create:order:99' };
+    const headers = { ...sandboxSigned(), 'content-type': 'application/json', 'idempotency-key': 'create:order:99' };
 
     const first = await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
     const second = await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
@@ -380,7 +385,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
   it('CONFLICTS when the same key is reused with a DIFFERENT body', async () => {
     const pay = stubPay();
     app = await build(pay);
-    const headers = { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'create:order:conflict' };
+    const headers = { ...sandboxSigned(), 'content-type': 'application/json', 'idempotency-key': 'create:order:conflict' };
 
     await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
     const res = await app.inject({
@@ -398,7 +403,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
   it('REFUSES create/capture/authorize on another merchant BEFORE the service mutates', async () => {
     const pay = stubPay();
     app = await build(pay);
-    const stranger = signed(principal({ sub: STRANGER, userId: STRANGER }));
+    const stranger = signed(principal({ sub: STRANGER, userId: STRANGER, key_env: 'sandbox' }));
 
     const create = await app.inject({
       method: 'POST',
@@ -532,5 +537,75 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
+  });
+});
+
+describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
+  const createBody = {
+    merchantId: MERCHANT,
+    amount: '1.00',
+    assetId: 'USD',
+    method: 'card',
+    railAdapter: 'crypto-native',
+  };
+
+  it('sandbox principal forces card-sandbox even when body names a live rail', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers: {
+        ...signed(principal({ key_env: 'sandbox', kid: 'k-sandbox' })),
+        'content-type': 'application/json',
+        'idempotency-key': 'sandbox:force',
+      },
+      payload: createBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const args = pay.calls.find((c) => c.method === 'createPayment')!.args[0] as { railAdapter: string };
+    expect(args.railAdapter).toBe('card-sandbox');
+  });
+
+  it('live principal naming card-sandbox is refused — NOTHING WAS ATTEMPTED', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers: {
+        ...signed(principal({ key_env: 'live', kid: 'k-live' })),
+        'content-type': 'application/json',
+        'idempotency-key': 'live:sandbox-refuse',
+      },
+      payload: { ...createBody, railAdapter: 'card-sandbox' },
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.code).toBe('pay.sandbox_rail_refused');
+    expect(pay.calls.filter((c) => c.method === 'createPayment')).toHaveLength(0);
+  });
+
+  it('live principal may name a non-sandbox rail', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/payments',
+      headers: {
+        ...signed(principal({ key_env: 'live', kid: 'k-live-2' })),
+        'content-type': 'application/json',
+        'idempotency-key': 'live:ok',
+      },
+      payload: createBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const args = pay.calls.find((c) => c.method === 'createPayment')!.args[0] as { railAdapter: string };
+    expect(args.railAdapter).toBe('crypto-native');
   });
 });
