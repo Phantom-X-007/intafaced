@@ -12,10 +12,32 @@ import {
 } from '@intafaced/contracts';
 import { SupportError, SupportService, requireSupportOps } from './support-service.js';
 
+const queueEntrySchema = z.object({
+  ticketId: z.string().uuid(),
+  userId: z.string().uuid(),
+  category: z.string().min(1),
+  status: supportTicketStatusSchema,
+  subject: z.string().min(1),
+  score: z.number().finite(),
+  ageMs: z.number().nonnegative(),
+  createdAt: z.string().datetime(),
+});
+
+const queueResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('ok'), entries: z.array(queueEntrySchema) }),
+  z.object({ status: z.literal('empty') }),
+]);
+
 function mapError(err: unknown): never {
   if (err instanceof SupportError) {
-    if (err.code === 'support.not_found') {
+    if (err.code === 'support.not_found' || err.code === 'support.claim.not_found') {
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
+    }
+    if (err.code === 'support.claim.already_claimed') {
+      throw new TRPCError({ code: 'CONFLICT', message: err.message });
+    }
+    if (err.code === 'support.claim.not_queueable' || err.code === 'support.claim.invalid_operator') {
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
     }
     throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
   }
@@ -117,6 +139,41 @@ export function createSupportRouter(support: SupportService) {
     listKb: publicProcedure.output(z.array(supportKbArticleSchema)).query(async () => {
       return support.listKb();
     }),
+
+    /** Stage-2 — prioritised operator queue (open/pending only). */
+    listQueue: scopedProcedure('support:ops')
+      .input(z.object({ limit: z.number().int().positive().max(500).optional() }).optional())
+      .output(queueResultSchema)
+      .query(async ({ ctx, input }) => {
+        requireSupportOps(ctx.principal!);
+        const q = await support.listOperatorQueue({ limit: input?.limit });
+        if (q.status === 'empty') return q;
+        return { status: 'ok' as const, entries: [...q.entries] };
+      }),
+
+    /** Stage-2 — peek next queue ticket without claiming. */
+    next: scopedProcedure('support:ops')
+      .output(queueEntrySchema.nullable())
+      .query(async ({ ctx }) => {
+        requireSupportOps(ctx.principal!);
+        return support.peekNext();
+      }),
+
+    /** Stage-2 — exclusive claim; refuse steal. No money. */
+    claim: scopedProcedure('support:ops')
+      .input(z.object({ ticketId: z.string().uuid() }))
+      .output(supportTicketSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          requireSupportOps(ctx.principal!);
+          return await support.claimForOperator({
+            operatorId: ctx.principal!.userId,
+            ticketId: input.ticketId,
+          });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
   });
 }
 

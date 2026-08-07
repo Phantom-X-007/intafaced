@@ -1010,8 +1010,10 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
+    status: 'wip',
+    owner: 'cursor-swarm-ops-support',
     dependsOn: ['identity.accounts'],
-    note: 'Stage-1 2026-08-04: contracts + svc-support in-memory ticket spine (create/list/comment/status) + empty KB. No money. Operator UI Stage-2 residual.',
+    note: 'Stage-1 2026-08-07 #989: ticket spine. Stage-2 2026-08-07: operator queue API (listQueue/next/claim) wired on svc-support — no money. Residual: apps/admin desk UI + read-only account panel.',
   }),
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',

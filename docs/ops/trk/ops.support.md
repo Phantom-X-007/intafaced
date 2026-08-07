@@ -79,7 +79,8 @@ Trading UI “ticket” means **order ticket**, not support ticket — do not gr
 
 ### Stage 2 — operator queue
 
-- [ ] Operator list/detail in `apps/admin` (or staff surface after Admin-0 SoT).
+- [x] Operator queue staff API on `svc-support` (`listQueue` / `next` / `claim`) — exclusive claim, no money.
+- [ ] Operator list/detail in `apps/admin` (or staff surface after Admin-0 SoT) — residual UI.
 - [ ] Read-only account panel via identity/ledger **read** contracts only.
 - [x] KB storage decision recorded; first N articles i18n-keyed.
 

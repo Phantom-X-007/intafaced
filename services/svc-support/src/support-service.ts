@@ -9,6 +9,7 @@ import type {
   SupportTicketStatus,
 } from '@intafaced/contracts';
 import { listPlatformKb } from './kb-catalog.js';
+import { assignNext, buildOperatorQueue, claimTicket, type QueueEntry, type QueueResult } from './operator-queue.js';
 import { withSupportSpan } from './tracing.js';
 
 export class SupportError extends Error {
@@ -22,7 +23,7 @@ export class SupportError extends Error {
 }
 
 /**
- * In-memory support desk (Stage-1).
+ * In-memory support desk (Stage-1 spine + Stage-2 operator queue).
  * Zero money: no ledger client, no balance fields on tickets.
  */
 export class SupportService implements SupportContract {
@@ -117,6 +118,39 @@ export class SupportService implements SupportContract {
   async listKb(): Promise<SupportKbArticle[]> {
     // Platform i18n-keyed spine (TRK-ops.support). No vendor names, no money fields.
     return [...listPlatformKb()];
+  }
+
+  /** Stage-2 — prioritised open/pending queue for operators. No money. */
+  async listOperatorQueue(options: { limit?: number } = {}): Promise<QueueResult> {
+    return withSupportSpan('support.listOperatorQueue', { op: 'listOperatorQueue' }, async () =>
+      buildOperatorQueue([...this.tickets.values()], { limit: options.limit }),
+    );
+  }
+
+  /** Stage-2 — peek next queue ticket without claiming. */
+  async peekNext(): Promise<QueueEntry | null> {
+    return withSupportSpan('support.peekNext', { op: 'peekNext' }, async () => assignNext([...this.tickets.values()]));
+  }
+
+  /**
+   * Stage-2 — exclusive operator claim. Refuse steal / closed tickets.
+   * Persists assignee; never invents refund money.
+   */
+  async claimForOperator(input: { operatorId: string; ticketId: string }): Promise<SupportTicket> {
+    return withSupportSpan('support.claimForOperator', { op: 'claimForOperator' }, async (span) => {
+      const result = claimTicket({
+        tickets: [...this.tickets.values()],
+        ticketId: input.ticketId,
+        operatorId: input.operatorId,
+      });
+      if (result.status === 'refuse') {
+        throw new SupportError(`claim refused: ${result.reason}`, `support.claim.${result.reason}`);
+      }
+      this.tickets.set(result.ticket.id, result.ticket);
+      span.setAttribute('intafaced.support.ticket_id', result.ticket.id);
+      span.setAttribute('intafaced.support.assignee_id', input.operatorId);
+      return result.ticket;
+    });
   }
 }
 
