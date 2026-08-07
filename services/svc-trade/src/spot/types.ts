@@ -190,6 +190,21 @@ export type TradeErrorCode =
   | 'trade.convert_bad_depth'
   | 'trade.convert_bad_spread'
   | 'trade.convert_spread_too_high'
+  /** Algo (D-S-04 TWAP) kill-switch / schedule / state. */
+  | 'trade.algo_disabled'
+  | 'trade.algo_invalid_qty'
+  | 'trade.algo_invalid_schedule'
+  | 'trade.algo_unsupported_kind'
+  | 'trade.algo_not_found'
+  | 'trade.algo_duplicate_id'
+  | 'trade.algo_bad_state'
+  | 'trade.algo_no_liquidity'
+  | 'trade.algo_price_band'
+  | 'trade.algo_mark_unusable'
+  | 'trade.algo_mark_missing'
+  | 'trade.algo_insufficient_balance'
+  | 'trade.algo_child_refused'
+  | 'trade.algo_market_closed'
   /** Identity S2S ownership consult failed — refuse rather than store an unvalidated id */
   | 'trade.sub_account_unavailable'
   /** Missing or foreign sub-account (existence not leaked) */

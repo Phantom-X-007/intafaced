@@ -379,7 +379,135 @@ export function createTradeRouter(trade: TradeService) {
           ),
         ),
     }),
+
+    /**
+     * TWAP algo (D-S-04 / trade.algo) — schedule emits child orders.
+     * Parent holds no value; progress is sum of child fills only.
+     */
+    algo: router({
+      createTwap: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            symbol: z.string().min(3),
+            side: orderSideSchema,
+            totalQty: decimal,
+            durationMs: z.number().int().min(1_000).max(86_400_000),
+            sliceIntervalMs: z.number().int().min(1_000).max(86_400_000),
+            limitPrice: decimal.optional(),
+            clientAlgoId: z.string().min(1).max(48).optional(),
+            subAccountId: z.string().uuid().optional(),
+            kind: z.enum(['twap']).optional(),
+          }),
+        )
+        .output(
+          z.object({
+            id: z.string(),
+            symbol: z.string(),
+            side: orderSideSchema,
+            kind: z.literal('twap'),
+            totalQty: decimal,
+            durationMs: z.number().int(),
+            sliceIntervalMs: z.number().int(),
+            limitPrice: decimal.nullable(),
+            status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
+            slicesPlanned: z.number().int(),
+            nextSliceIndex: z.number().int(),
+            childrenEmitted: z.number().int(),
+            missesRecorded: z.number().int(),
+            haltReason: z.string().nullable(),
+            createdAt: z.string(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            const parent = await trade.createTwap(ctx.principal, {
+              symbol: input.symbol,
+              side: input.side,
+              totalQty: parseAmount(input.totalQty),
+              durationMs: input.durationMs,
+              sliceIntervalMs: input.sliceIntervalMs,
+              limitPrice: input.limitPrice === undefined ? null : parseAmount(input.limitPrice),
+              clientAlgoId: input.clientAlgoId,
+              subAccountId: input.subAccountId,
+              kind: input.kind ?? 'twap',
+            });
+            return presentAlgo(parent);
+          }),
+        ),
+
+      get: scopedProcedure('trade:read')
+        .input(z.object({ algoId: z.string().min(1) }))
+        .output(
+          z.object({
+            id: z.string(),
+            symbol: z.string(),
+            side: orderSideSchema,
+            kind: z.literal('twap'),
+            totalQty: decimal,
+            durationMs: z.number().int(),
+            sliceIntervalMs: z.number().int(),
+            limitPrice: decimal.nullable(),
+            status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
+            slicesPlanned: z.number().int(),
+            nextSliceIndex: z.number().int(),
+            childrenEmitted: z.number().int(),
+            missesRecorded: z.number().int(),
+            haltReason: z.string().nullable(),
+            createdAt: z.string(),
+          }),
+        )
+        .query(({ ctx, input }) => guard(async () => presentAlgo(await trade.getAlgo(ctx.principal, input.algoId)))),
+
+      progress: scopedProcedure('trade:read')
+        .input(z.object({ algoId: z.string().min(1) }))
+        .output(
+          z.object({
+            parentId: z.string(),
+            status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
+            haltReason: z.string().nullable(),
+            childrenEmitted: z.number().int(),
+            missesRecorded: z.number().int(),
+            slicesPlanned: z.number().int(),
+            nextSliceIndex: z.number().int(),
+            filledQty: decimal,
+            totalQty: decimal,
+          }),
+        )
+        .query(({ ctx, input }) => guard(async () => trade.algoProgress(ctx.principal, input.algoId))),
+
+      pause: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ algoId: z.string().min(1) }))
+        .mutation(({ ctx, input }) => guard(async () => presentAlgo(await trade.pauseAlgo(ctx.principal, input.algoId)))),
+
+      resume: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ algoId: z.string().min(1) }))
+        .mutation(({ ctx, input }) => guard(async () => presentAlgo(await trade.resumeAlgo(ctx.principal, input.algoId)))),
+
+      cancel: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ algoId: z.string().min(1) }))
+        .mutation(({ ctx, input }) => guard(async () => presentAlgo(await trade.cancelAlgo(ctx.principal, input.algoId)))),
+    }),
   });
+}
+
+function presentAlgo(parent: import('./algo/index.js').TwapParent) {
+  return {
+    id: parent.id,
+    symbol: parent.symbol,
+    side: parent.side,
+    kind: 'twap' as const,
+    totalQty: formatAmount(parent.totalQty),
+    durationMs: parent.durationMs,
+    sliceIntervalMs: parent.sliceIntervalMs,
+    limitPrice: parent.limitPrice === null ? null : formatAmount(parent.limitPrice),
+    status: parent.status,
+    slicesPlanned: parent.slicesPlanned,
+    nextSliceIndex: parent.nextSliceIndex,
+    childrenEmitted: parent.children.length,
+    missesRecorded: parent.misses.length,
+    haltReason: parent.haltReason,
+    createdAt: parent.createdAt.toISOString(),
+  };
 }
 
 export type TradeRouter = ReturnType<typeof createTradeRouter>;
