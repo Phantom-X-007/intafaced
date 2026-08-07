@@ -66,6 +66,8 @@ export type SettlementStatus = 'pending' | 'posted' | 'paid_out' | 'failed';
 
 export type PayErrorCode =
   | 'pay.merchant_not_found'
+  /** The principal does not own this merchant. One rule, in merchant-ownership.ts. */
+  | 'pay.merchant_forbidden'
   | 'pay.merchant_inactive'
   | 'pay.merchant_pricing_invalid'
   /** KYB transition refused (wrong status, or stub decide blocked under live-only). */

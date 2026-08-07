@@ -15,6 +15,7 @@
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
+    "@fastify/swagger": "^9.5.1",
     "@intafaced/auth": "workspace:*",
     "@intafaced/config": "workspace:*",
     "@intafaced/contracts": "workspace:*",
