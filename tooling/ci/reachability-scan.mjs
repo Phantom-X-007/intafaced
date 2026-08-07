@@ -43,10 +43,6 @@ import { fileURLToPath } from 'node:url';
  */
 const PARKED = new Map([
   [
-    'services/svc-agents/src/copy-intel/stats.ts',
-    'Copy-Intel Stage-1 (docs/ops/trk/agents.copy-intel.md). Blocked at the Stage 0 dependency gate the spec itself sets: tracker trade.copy is not done, and Stage 1 says "add task route when product law ready".',
-  ],
-  [
     'services/svc-agents/src/merchant/watch.ts',
     'Merchant Stage-1 (docs/ops/trk/agents.merchant.md). Blocked at the Stage 0 dependency gate the spec itself sets: tracker pay.routing is not done.',
   ],
