@@ -424,7 +424,7 @@ export const positionUpdated = defineEvent(
     userId: userIdSchema,
     marketId: z.string().min(1),
     symbol: z.string().min(1),
-    status: z.enum(['open', 'closed', 'liquidated']),
+    status: z.enum(['open', 'closing', 'closed', 'liquidated']),
     side: z.enum(['long', 'short']),
     /** Absolute contract size — decimal string, never a JS number. */
     contracts: amountSchema,
@@ -439,6 +439,8 @@ export const positionUpdated = defineEvent(
     marginMode: z.enum(['cross', 'isolated']).nullable(),
     /** Cumulative funding paid (positive) or received (negative) as decimal string. */
     fundingPaid: amountSchema,
+    /** Set when status=closing — futures-namespaced refuse code; null otherwise. */
+    closingReason: z.string().nullable().optional(),
     ts: z.string().datetime({ offset: true }),
   }),
   'svc-trade futures position changed — private WS fans this to the owning principal only.',

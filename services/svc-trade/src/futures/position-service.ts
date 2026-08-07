@@ -141,12 +141,19 @@ export interface PositionServiceDeps {
   now?: () => Date;
 }
 
+/** Why a position is frozen waiting for a mark — futures-namespaced refuse codes. */
+export type ClosingReason = 'trade.mark_missing' | 'trade.mark_unusable';
+
 export interface PositionRow {
   id: string;
   user_id: string;
   market_id: string;
   side: 'long' | 'short';
-  status: 'open' | 'closed' | 'liquidated';
+  /**
+   * `closing` = trader asked to leave while the feed was dark
+   * (`docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md`).
+   */
+  status: 'open' | 'closing' | 'closed' | 'liquidated';
   margin_mode: 'cross' | 'isolated';
   size: string;
   entry_price: string;
@@ -166,6 +173,8 @@ export interface PositionRow {
    */
   accepted_mark: string | null;
   accepted_mark_at: Date | null;
+  /** Non-null only while status=closing. */
+  closing_reason: string | null;
 }
 
 export class PositionService {
@@ -184,30 +193,51 @@ export class PositionService {
   }
 
   /**
-   * Ask the mark port for a labelled price, and refuse rather than guess.
+   * Ask the mark port for a labelled price usable for valuation, or name why not.
    *
-   * Three refusals, all of them deliberate:
-   *   · no quote at all → `trade.mark_missing`. NOT zero. A missing mark valued
-   *     at zero does not misprice one position on a perp, it wipes out every
-   *     long at once.
-   *   · a quote the source can produce but the valuation gate rejects (stale,
-   *     non-positive, dated in the future) → `trade.mark_unusable`.
-   *   · a quote good enough to value but not to PAY on → refused by the caller
-   *     via `requirePayoutGrade`, below.
+   * Two darkness outcomes (never a zero mark):
+   *   · no quote at all → `trade.mark_missing`
+   *   · a quote the valuation gate rejects (stale, non-positive, future-dated)
+   *     → `trade.mark_unusable`
+   *
+   * `open()` throws on either. `close()` freezes to `closing` instead — see
+   * `docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md`. A quote good
+   * enough to value but not to PAY on is a later gate (`requirePayoutGrade`).
    */
-  private async markFor(marketId: string, symbol: string, at: Date): Promise<FuturesQuotedMark> {
+  private async tryMarkForMarking(
+    marketId: string,
+    symbol: string,
+    at: Date,
+  ): Promise<{ ok: true; mark: FuturesQuotedMark } | { ok: false; reason: ClosingReason; detail: string }> {
     const quoted = this.deps.marks.quote
       ? await this.deps.marks.quote({ marketId, symbol, at })
       : await this.legacyQuote(marketId, symbol, at);
 
     if (!quoted) {
-      throw new FuturesError(markMissing(marketId).reason!, 'trade.mark_missing', 503);
+      return { ok: false, reason: 'trade.mark_missing', detail: markMissing(marketId).reason! };
     }
     const check = acceptableForMarking(quoted, at, this.markPolicy);
     if (!check.ok) {
-      throw new FuturesError(`Refusing to value this position — ${check.reason}`, check.code ?? 'trade.mark_unusable', 503);
+      return {
+        ok: false,
+        reason: check.code === 'trade.mark_missing' ? 'trade.mark_missing' : 'trade.mark_unusable',
+        detail: check.reason ?? 'mark unusable',
+      };
     }
-    return quoted;
+    return { ok: true, mark: quoted };
+  }
+
+  /** Open path: darkness refuses. Close path uses `tryMarkForMarking` + freeze. */
+  private async markFor(marketId: string, symbol: string, at: Date): Promise<FuturesQuotedMark> {
+    const got = await this.tryMarkForMarking(marketId, symbol, at);
+    if (!got.ok) {
+      throw new FuturesError(
+        got.reason === 'trade.mark_missing' ? got.detail : `Refusing to value this position — ${got.detail}`,
+        got.reason,
+        503,
+      );
+    }
+    return got.mark;
   }
 
   /**
@@ -236,11 +266,14 @@ export class PositionService {
    * liquidation does — quality, the tighter staleness limit, the deviation
    * breaker — and `last` therefore cannot fund a payout.
    *
-   * A losing or flat close is deliberately NOT held to that bar. It returns the
-   * trader their own margin and pays out nothing; refusing it because the book
-   * is one-sided would trap them in a position they asked to leave, and this
-   * repo has already decided that a control which traps funds is not a safety
-   * control (`TRADE_SPOT_ENABLED`).
+   * A losing or flat close is deliberately NOT held to that bar once a usable
+   * marking-grade quote exists — it returns the trader their own margin and
+   * pays out nothing. When NO usable mark exists at all, this method is not
+   * reached: `close()` freezes the row to `closing` first
+   * (`docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md`). An older
+   * comment here claimed the losing-close exemption alone prevented trapping;
+   * that was false while `markFor` threw before this gate — do not restore
+   * that lie.
    *
    * ── `previous` is the half of this that used to be missing ──────────────────
    *
@@ -259,20 +292,27 @@ export class PositionService {
     }
   }
 
+  /**
+   * Active positions: `open` and `closing`. A frozen exit must remain visible
+   * and must never render as a normal open (ADR 2026-08-07 done bar 7).
+   */
   async listOpen(userId: string, symbol?: string): Promise<Position[]> {
     const rows = symbol
       ? await this.sql<PositionRow[]>`
           SELECT p.*, m.symbol
           FROM trade.positions p
           JOIN trade.markets m ON m.id = p.market_id
-          WHERE p.user_id = ${userId} AND p.status = 'open' AND m.symbol = ${symbol}
+          WHERE p.user_id = ${userId}
+            AND p.status IN ('open', 'closing')
+            AND m.symbol = ${symbol}
           ORDER BY p.opened_at DESC
         `
       : await this.sql<PositionRow[]>`
           SELECT p.*, m.symbol
           FROM trade.positions p
           JOIN trade.markets m ON m.id = p.market_id
-          WHERE p.user_id = ${userId} AND p.status = 'open'
+          WHERE p.user_id = ${userId}
+            AND p.status IN ('open', 'closing')
           ORDER BY p.opened_at DESC
         `;
     return rows.map((row) => presentPosition(row));
@@ -483,7 +523,7 @@ export class PositionService {
   private async closeAtomically(
     userId: string,
     positionId: string,
-  ): Promise<{ row: PositionRow; extras: { markPrice: string; realizedPnl: string } }> {
+  ): Promise<{ row: PositionRow; extras: { markPrice: string | null; realizedPnl: string | null } }> {
     try {
       return await this.sql.begin(async (tx) => {
         // Bounded, so a wedged ledger call cannot pin one pooled connection per
@@ -511,12 +551,46 @@ export class PositionService {
           FOR UPDATE OF p
         `;
         if (!row) throw new FuturesError('position not found', 'trade.position_not_found', 404);
-        if (row.status !== 'open') {
+        if (row.status !== 'open' && row.status !== 'closing') {
           throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
         }
 
         const at = this.now();
-        const mark = await this.markFor(row.market_id, row.symbol, at);
+        const markOrDark = await this.tryMarkForMarking(row.market_id, row.symbol, at);
+
+        /**
+         * EXIT WHEN THE FEED IS DARK.
+         *
+         * Valuing is something the platform does TO a trader — refuse without a
+         * mark. Releasing is something the trader asks for — without a mark the
+         * platform may not price the exit, but it also may not keep them in the
+         * trade. Freeze: no funding, no liquidation, settle later.
+         * ADR: `docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md`.
+         */
+        if (!markOrDark.ok) {
+          if (row.status === 'closing') {
+            // Idempotent retry while still dark — same row, not an error.
+            return { row, extras: { markPrice: null, realizedPnl: null } };
+          }
+          const [frozen] = await tx<PositionRow[]>`
+            UPDATE trade.positions p
+            SET status = 'closing',
+                closing_reason = ${markOrDark.reason},
+                updated_at = now()
+            FROM trade.markets m
+            WHERE p.id = ${positionId}
+              AND p.user_id = ${userId}
+              AND p.status = 'open'
+              AND m.id = p.market_id
+            RETURNING p.*, m.symbol
+          `;
+          if (!frozen) {
+            throw new FuturesError('position changed underneath this close', 'trade.position_not_open', 409);
+          }
+          return { row: frozen, extras: { markPrice: null, realizedPnl: null } };
+        }
+
+        const mark = markOrDark.mark;
 
         /**
          * The breaker's basis, read off the row this transaction already holds
@@ -602,24 +676,30 @@ export class PositionService {
          * back with the rest of the transaction, so a caller cannot walk the
          * basis upward in sub-breaker steps by making attempts that fail. The
          * basis only ever moves to a mark the platform actually settled on.
+         *
+         * Settling from `closing` clears `closing_reason` with the status write.
          */
         const [closed] = await tx<PositionRow[]>`
           UPDATE trade.positions p
           SET status = 'closed',
               closed_at = now(),
               updated_at = now(),
+              closing_reason = NULL,
               accepted_mark = ${formatAmount(mark.price)},
               accepted_mark_at = ${at}
           FROM trade.markets m
-          WHERE p.id = ${positionId} AND p.user_id = ${userId} AND p.status = 'open' AND m.id = p.market_id
+          WHERE p.id = ${positionId}
+            AND p.user_id = ${userId}
+            AND p.status IN ('open', 'closing')
+            AND m.id = p.market_id
           RETURNING p.*, m.symbol
         `;
         /**
          * Unreachable while the lock holds — and asserted rather than assumed,
          * because if it ever became reachable the money would already have moved
-         * and the row would still say `open`. Throwing rolls the status write
-         * back; the ledger posts stand, and the stable close key means the retry
-         * that follows settles them once, not twice.
+         * and the row would still say `open`/`closing`. Throwing rolls the status
+         * write back; the ledger posts stand, and the stable close key means the
+         * retry that follows settles them once, not twice.
          */
         if (!closed) {
           throw new FuturesError('position changed underneath this close', 'trade.position_not_open', 409);
@@ -672,6 +752,7 @@ export class PositionService {
         liquidationPrice: row.liq_price != null ? formatAmount(parseAmount(row.liq_price)) : null,
         marginMode: row.margin_mode,
         fundingPaid: formatAmount(parseAmount(row.funding_paid ?? '0')),
+        closingReason: row.status === 'closing' ? (row.closing_reason ?? null) : null,
         ts,
       },
       { idempotencyKey: `trade.position.updated:${row.id}:${row.status}:${ts}` },
@@ -694,6 +775,8 @@ function presentPosition(row: PositionRow, extras?: { markPrice?: string | null;
     timestamp: opened.getTime(),
     datetime: opened.toISOString(),
     side: row.side,
+    status: row.status,
+    closingReason: row.status === 'closing' ? (row.closing_reason ?? null) : null,
     contracts: formatAmount(size),
     contractSize: null,
     entryPrice: formatAmount(entry),

@@ -683,8 +683,9 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   /**
    * Derivatives positions — REST_ROUTES.fetchPositions.
    *
-   * Lists open rows from trade.positions (F2/F3). Empty [] when none — never
-   * invents leverage/mark. Optional ?symbol= filters. Auth fail-closed.
+   * Lists open and closing rows from trade.positions (F2/F3). Empty [] when none —
+   * never invents leverage/mark. `closing` is a voluntary exit waiting on a mark
+   * (ADR 2026-08-07) and must not look like a normal open. Optional ?symbol= filters.
    */
   app.get<{ Querystring: { symbol?: string } }>('/api/v1/positions', async (req, reply) => {
     const principal = requirePrincipal(req, reply);

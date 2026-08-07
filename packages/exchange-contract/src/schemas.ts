@@ -300,6 +300,14 @@ export const positionSchema = z.object({
   timestamp: timestampMs,
   datetime: isoDatetime,
   side: z.enum(['long', 'short']),
+  /**
+   * Lifecycle. `closing` = trader asked to exit while no usable mark existed
+   * (ADR 2026-08-07) — must never render as `open`. Optional for older
+   * integrators; svc-trade always sets it on futures rows it returns.
+   */
+  status: z.enum(['open', 'closing', 'closed', 'liquidated']).nullable().optional(),
+  /** Futures-namespaced reason while status=closing; null otherwise. */
+  closingReason: z.string().nullable().optional(),
   contracts: decimal,
   contractSize: decimal.nullable(),
   entryPrice: decimal,

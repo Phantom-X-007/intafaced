@@ -48,7 +48,7 @@ function mapLiq(row: OpenPosRow): LiquidationPositionRow {
   };
 }
 
-/** Open positions for one market (funding settlement). */
+/** Open positions for one market (funding settlement). `closing` rows are excluded — they accrue no funding (ADR 2026-08-07). */
 export function sqlFundingPositionLoader(sql: Sql): FundingPositionLoader {
   return {
     async listOpenForMarket(marketId) {
@@ -65,7 +65,7 @@ export function sqlFundingPositionLoader(sql: Sql): FundingPositionLoader {
   };
 }
 
-/** All open futures positions (liquidation scan). */
+/** All open futures positions (liquidation scan). `closing` rows are excluded — not liquidatable (ADR 2026-08-07). */
 export function sqlLiquidationPositionLoader(sql: Sql): LiquidationPositionLoader {
   return {
     async listOpen() {
