@@ -37,6 +37,13 @@ describe('support agent Stage-1 guardrail', () => {
   it('allows read-only desk tools that are declared', () => {
     expect(evaluateToolCall(g(), state(), { tool: 'support.kb.search' })).toEqual({ allowed: true });
     expect(evaluateToolCall(g(), state(), { tool: 'support.ticket.read' })).toEqual({ allowed: true });
+    expect(evaluateToolCall(g(), state(), { tool: 'identity.account.read' })).toEqual({ allowed: true });
+  });
+
+  it('the account projection is a read in identity — never a money module', () => {
+    const account = g().tools.find((t) => t.name === 'identity.account.read');
+    expect(account).toMatchObject({ module: 'identity', mode: 'read' });
+    expect(account?.requiresApproval ?? false).toBe(false);
   });
 
   it('allows support.classify / support.reply completion tasks', () => {
@@ -87,13 +94,23 @@ describe('support agent Stage-1 guardrail', () => {
       code: 'agents.tool_not_declared',
     });
   });
+
+  it('allowing the identity module did not open the identity module', () => {
+    for (const tool of ['identity.account.freeze', 'identity.session.read', 'identity.kyc.approve']) {
+      expect(evaluateToolCall(g(), state(), { tool }), tool).toMatchObject({
+        allowed: false,
+        code: 'agents.tool_not_declared',
+      });
+    }
+  });
 });
 
 describe('L3 wave50 support guardrail status/export', () => {
   it('board card and denylist honesty', () => {
     const g = supportAgentGuardrail();
-    expect(supportDeclaredToolCount(g)).toBe(3);
+    expect(supportDeclaredToolCount(g)).toBe(4);
     expect(supportDeclaredTools(g)).toContain('support.ticket.read');
+    expect(supportDeclaredTools(g)).toContain('identity.account.read');
     expect(supportApprovalRequiredCount(g)).toBe(1);
     expect(supportMoneyDenylistCount()).toBe(SUPPORT_MONEY_TOOLS.length);
     expect(supportMoneyDenylistComplete()).toBe(true);

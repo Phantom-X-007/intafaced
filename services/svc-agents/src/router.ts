@@ -23,6 +23,9 @@ import { watchApprovalFixtures } from './merchant/watch.js';
 import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
+import { supportTierGate } from './support-agent/tier-gate.js';
+import { invokeSupportDataTool, supportAnswerOrEscalate } from './support-agent/data-tools.js';
+import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -1276,6 +1279,275 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }),
         )
         .query(() => serialiseGuardrail(supportAgentGuardrail())),
+
+      /**
+       * Stage-2 tier gate. Product-law matrix blank/unpublished → refuse-closed.
+       * Does not invent which plan may use the assist layer.
+       */
+      tierGate: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            userTier: z.string().max(64),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z.record(z.array(z.string().min(1).max(120)).max(100)).default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              userTier: z.string(),
+              allowedTools: z.array(z.string()),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['tier_law_blank', 'tier_not_granted']),
+              userMessageKey: z.literal('agents.support.tier_closed'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = supportTierGate({ law: input.law ?? null, userTier: input.userTier });
+          if (result.status === 'ok') {
+            return { status: 'ok' as const, userTier: result.userTier, allowedTools: [...result.allowedTools] };
+          }
+          return result;
+        }),
+
+      /**
+       * Stage-2 desk data tool invoke + user-affecting audit row.
+       *
+       * Fixtures only — no invent KB answers, tickets or account state. The
+       * requester is `ctx.principal.userId`, never an input field: a ticket or
+       * account belonging to somebody else refuses rather than reads.
+       */
+      invokeDataTool: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            tool: z.string().min(1).max(120),
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64).optional(),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z.record(z.array(z.string().min(1).max(120)).max(100)).default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            articles: z
+              .array(
+                z.object({
+                  articleKey: z.string().min(1).max(160),
+                  titleKey: z.string().min(1).max(160),
+                  bodyKey: z.string().min(1).max(160),
+                }),
+              )
+              .max(200)
+              .nullable()
+              .optional(),
+            ticket: z
+              .object({
+                ticketId: z.string().min(1).max(120),
+                ownerUserId: z.string().max(120),
+                status: z.enum(['open', 'pending', 'resolved', 'closed']),
+                category: z.string().max(64),
+              })
+              .nullable()
+              .optional(),
+            account: z
+              .object({
+                userId: z.string().max(120),
+                status: z.enum(['active', 'frozen', 'closed']),
+                kycTier: z.string().max(64),
+              })
+              .nullable()
+              .optional(),
+            occurredAt: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.object({
+            result: z.union([
+              z.object({
+                status: z.literal('ok'),
+                tool: z.literal('support.kb.search'),
+                articles: z.array(
+                  z.object({
+                    articleKey: z.string(),
+                    titleKey: z.string(),
+                    bodyKey: z.string(),
+                  }),
+                ),
+              }),
+              z.object({
+                status: z.literal('ok'),
+                tool: z.literal('support.ticket.read'),
+                ticket: z.object({
+                  ticketId: z.string(),
+                  ownerUserId: z.string(),
+                  status: z.enum(['open', 'pending', 'resolved', 'closed']),
+                  category: z.string(),
+                }),
+              }),
+              z.object({
+                status: z.literal('ok'),
+                tool: z.literal('identity.account.read'),
+                account: z.object({
+                  userId: z.string(),
+                  status: z.enum(['active', 'frozen', 'closed']),
+                  kycTier: z.string(),
+                }),
+              }),
+              z.object({
+                status: z.literal('refuse'),
+                tool: z.string(),
+                reason: z.enum([
+                  'desk_plane_dark',
+                  'kb_empty',
+                  'tier_law_blank',
+                  'tier_not_granted',
+                  'tool_not_declared',
+                  'money_tool',
+                  'tool_not_in_tier',
+                  'missing_requester',
+                  'missing_fixture',
+                  'empty_results',
+                  'incomplete_article',
+                  'incomplete_ticket',
+                  'incomplete_account',
+                  'not_ticket_owner',
+                  'account_owner_mismatch',
+                ]),
+                userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
+              }),
+            ]),
+            audit: z.object({
+              sequence: z.number().int(),
+              kind: z.literal('tool_call'),
+              status: z.enum(['executed', 'refused']),
+              tool: z.string(),
+              reason: z.string().nullable(),
+              userMessageKey: z.string(),
+              occurredAt: z.string(),
+            }),
+          }),
+        )
+        .query(({ ctx, input }) => {
+          const result = invokeSupportDataTool({
+            tool: input.tool,
+            plane: input.plane,
+            requesterUserId: ctx.principal.userId,
+            tierLaw: input.law ?? null,
+            userTier: input.userTier ?? '',
+            articles: input.articles ?? null,
+            ticket: input.ticket ?? null,
+            account: input.account ?? null,
+          });
+          const occurredAt = input.occurredAt ?? new Date().toISOString();
+          const audit = auditSupportDataTool(emptySupportAuditLog(), result, occurredAt).entries[0]!;
+          return {
+            result:
+              result.status === 'ok' && result.tool === 'support.kb.search'
+                ? {
+                    status: 'ok' as const,
+                    tool: 'support.kb.search' as const,
+                    articles: result.articles.map((a) => ({
+                      articleKey: a.articleKey,
+                      titleKey: a.titleKey,
+                      bodyKey: a.bodyKey,
+                    })),
+                  }
+                : result,
+            audit: {
+              sequence: audit.sequence,
+              kind: 'tool_call' as const,
+              status: audit.status,
+              tool: audit.tool,
+              reason: audit.reason,
+              userMessageKey: audit.userMessageKey,
+              occurredAt: audit.occurredAt,
+            },
+          };
+        }),
+
+      /**
+       * Stage-2 typed "I don't know" — the escalate path.
+       *
+       * A KB read that refused or came back empty, or a request to move money,
+       * escalates to a human ticket. There is no branch here that answers anyway.
+       */
+      answerOrEscalate: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            tool: z.string().min(1).max(120),
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64).optional(),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z.record(z.array(z.string().min(1).max(120)).max(100)).default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            articles: z
+              .array(
+                z.object({
+                  articleKey: z.string().min(1).max(160),
+                  titleKey: z.string().min(1).max(160),
+                  bodyKey: z.string().min(1).max(160),
+                }),
+              )
+              .max(200)
+              .nullable()
+              .optional(),
+            moneyRequest: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('answer'),
+              citedArticleKeys: z.array(z.string()).min(1),
+            }),
+            z.object({
+              status: z.literal('escalate'),
+              reason: z.enum(['kb_no_hit', 'money_request', 'desk_refused']),
+              userMessageKey: z.literal('agents.support.escalated'),
+            }),
+          ]),
+        )
+        .query(({ ctx, input }) => {
+          const kbResult = invokeSupportDataTool({
+            tool: input.tool,
+            plane: input.plane,
+            requesterUserId: ctx.principal.userId,
+            tierLaw: input.law ?? null,
+            userTier: input.userTier ?? '',
+            articles: input.articles ?? null,
+          });
+          const decision = supportAnswerOrEscalate({
+            kbResult,
+            ...(input.moneyRequest === undefined ? {} : { moneyRequest: input.moneyRequest }),
+          });
+          if (decision.status === 'answer') {
+            return { status: 'answer' as const, citedArticleKeys: [...decision.citedArticleKeys] };
+          }
+          return decision;
+        }),
     }),
 
     /**

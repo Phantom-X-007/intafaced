@@ -30,14 +30,20 @@ export const SUPPORT_MONEY_TOOLS = [
  * Tools: ticket/kb read; ticket.comment is write + requiresApproval (never silent).
  * Completions: support.classify + support.reply.
  * Money tools stay undeclared → refuse before dispatch.
+ *
+ * `identity.account.read` (v3) is the Stage-2 read-only account projection the
+ * tracker asks for. It is a read in the `identity` module and carries status +
+ * KYC tier only — never a balance, which is why granting it does not put the
+ * support agent anywhere near a money path (Doctrine §0.6).
  */
 export function supportAgentGuardrail(overrides: { version?: number } = {}): Guardrail {
   return parseGuardrail({
     agentId: 'support',
-    version: overrides.version ?? 2,
+    version: overrides.version ?? 3,
     tools: [
       { name: 'support.ticket.read', module: 'support', mode: 'read' },
       { name: 'support.kb.search', module: 'support', mode: 'read' },
+      { name: 'identity.account.read', module: 'identity', mode: 'read' },
       // Stage-2 L3: comment only with explicit user/operator approval.
       {
         name: 'support.ticket.comment',
@@ -51,7 +57,7 @@ export function supportAgentGuardrail(overrides: { version?: number } = {}): Gua
       maxActionsPerSession: 40,
       maxOutputTokensPerCall: 2048,
       maxSpendPerSession: '0.5',
-      allowedModules: ['support'],
+      allowedModules: ['support', 'identity'],
       allowedTasks: ['support.classify', 'support.reply'],
     },
   });
