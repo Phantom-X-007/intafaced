@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter, VenueBookSnapshot } from '@intafaced/venue-contracts';
 import {
+  bestFromVenueBook,
   createConfiguredVenueMarkSource,
   createVenueMarketDataAdapter,
   markSourceFromVenuePublicBook,
@@ -9,7 +10,14 @@ import {
   midFromVenueBook,
   parseVenueMarkSymbols,
 } from './mark-from-venue.js';
+import { DEFAULT_MIN_BEST_LEVEL_NOTIONAL } from './mark-from-depth.js';
 import type { MarkSource } from './liquidation-tick.js';
+
+/** One wei. The smallest order the ledger's 18-decimal scale can express. */
+const DUST = '0.000000000000000001';
+
+/** `[price, quantity]` decimal strings → the scaled-bigint pair the fabric hands over. */
+const lvl = (p: string, q: string) => [parseAmount(p), parseAmount(q)] as const;
 
 function snap(partial: { bids?: [string, string][]; asks?: [string, string][]; venueId?: string; symbol?: string }): VenueBookSnapshot {
   const level = ([p, q]: [string, string]) => [parseAmount(p), parseAmount(q)] as const;
@@ -30,22 +38,86 @@ function fakeAdapter(impl: MarketDataAdapter['snapshotBook']): Pick<MarketDataAd
 
 describe('midFromVenueBook', () => {
   it('mids two-sided top of book', () => {
-    expect(
-      midFromVenueBook({
-        bids: [[parseAmount('100'), parseAmount('1')]],
-        asks: [[parseAmount('102'), parseAmount('1')]],
-      }),
-    ).toBe('101');
+    expect(midFromVenueBook({ bids: [lvl('100', '10')], asks: [lvl('102', '10')] })).toBe('101');
   });
 
   it('empty or one-sided → null (never invent)', () => {
     expect(midFromVenueBook({ bids: [], asks: [] })).toBeNull();
-    expect(
-      midFromVenueBook({
-        bids: [[parseAmount('100'), parseAmount('1')]],
-        asks: [],
-      }),
-    ).toBeNull();
+    expect(midFromVenueBook({ bids: [lvl('100', '10')], asks: [] })).toBeNull();
+  });
+
+  /**
+   * THE DEFECT, AT THE LEVEL IT LIVED AT.
+   *
+   * This function read index 0 of each level — the price — and discarded index
+   * 1, the quantity, so one wei resting at 1000 and one wei resting at 3000 on
+   * an EXTERNAL venue read as a perfectly ordinary two-sided book and minted a
+   * payout-grade mid of 2000.
+   */
+  it('a best level carrying dust is not a level (it used to answer 2000)', () => {
+    expect(midFromVenueBook({ bids: [lvl('1000', DUST)], asks: [lvl('3000', DUST)] })).toBeNull();
+  });
+
+  it('reads the QUANTITY, not just the price — same prices, different sizes, different answer', () => {
+    expect(midFromVenueBook({ bids: [lvl('1000', '0.001')], asks: [lvl('3000', '0.001')] })).toBeNull();
+    expect(midFromVenueBook({ bids: [lvl('1000', '1')], asks: [lvl('3000', '1')] })).toBe('2000');
+  });
+});
+
+describe('bestFromVenueBook', () => {
+  it('reads top of book when the best levels carry real size', () => {
+    expect(bestFromVenueBook({ bids: [lvl('99', '10')], asks: [lvl('101', '20')] })).toEqual({
+      bestBid: '99',
+      bestAsk: '101',
+    });
+  });
+
+  it('empty book → null sides', () => {
+    expect(bestFromVenueBook({ bids: [], asks: [] })).toEqual({ bestBid: null, bestAsk: null });
+  });
+
+  it('one thin side is enough to make the book one-sided', () => {
+    expect(bestFromVenueBook({ bids: [lvl('1000', '10')], asks: [lvl('3000', DUST)] })).toEqual({
+      bestBid: '1000',
+      bestAsk: null,
+    });
+  });
+
+  /**
+   * THE SAME NUMBER AS THE MATCHING-BOOK PATH, ON PURPOSE.
+   *
+   * A second default here would be a second unruled risk parameter, not a
+   * second decision. This asserts the two paths cannot drift apart silently.
+   */
+  it('applies the SHARED threshold by default — omitting the policy does not disable it', () => {
+    expect(DEFAULT_MIN_BEST_LEVEL_NOTIONAL).toBe('100');
+    // 99.999… quote units a side: one wei under the floor, and refused.
+    const justUnder = { bids: [lvl('99.999999999999999999', '1')], asks: [lvl('101', '0.99')] };
+    expect(bestFromVenueBook(justUnder)).toEqual({ bestBid: null, bestAsk: null });
+    // Exactly the floor is enough — the level is worth the minimum.
+    expect(bestFromVenueBook({ bids: [lvl('100', '1')], asks: [lvl('100', '1')] })).toEqual({
+      bestBid: '100',
+      bestAsk: '100',
+    });
+  });
+
+  it('honours a configured threshold in both directions', () => {
+    const book = { bids: [lvl('100', '0.5')], asks: [lvl('102', '0.5')] };
+    // 50 / 51 quote units a side: under the default 100, over a configured 10.
+    expect(bestFromVenueBook(book)).toEqual({ bestBid: null, bestAsk: null });
+    expect(bestFromVenueBook(book, { minBestLevelNotional: '10' })).toEqual({ bestBid: '100', bestAsk: '102' });
+    expect(bestFromVenueBook(book, { minBestLevelNotional: '1000' })).toEqual({ bestBid: null, bestAsk: null });
+  });
+
+  it('an unreadable threshold falls back to the default rather than to no check', () => {
+    expect(bestFromVenueBook({ bids: [lvl('1000', DUST)], asks: [lvl('3000', DUST)] }, { minBestLevelNotional: 'not-a-number' })).toEqual({
+      bestBid: null,
+      bestAsk: null,
+    });
+  });
+
+  it('a non-positive quantity is no size at all', () => {
+    expect(bestFromVenueBook({ bids: [lvl('1000', '0')], asks: [lvl('3000', '99')] }).bestBid).toBeNull();
   });
 });
 
@@ -128,6 +200,59 @@ describe('markSourceFromVenuePublicBook', () => {
     });
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
   });
+
+  /**
+   * THE DEFECT ON THE MONEY PATH, IN ONE ASSERTION.
+   *
+   * Before the fix this returned '2000' — a payout-grade `mid`, quality and
+   * all, minted from two orders on an EXTERNAL venue worth about four
+   * femto-cents between them. `readBook` here had its own copy of the
+   * size-blind read, so fixing `midFromVenueBook` alone would have left the
+   * money path untouched.
+   */
+  it('refuses to mint a mid from two dust orders on the venue book', async () => {
+    const src = markSourceFromVenuePublicBook({
+      adapter: fakeAdapter(async () => snap({ bids: [['1000', DUST]], asks: [['3000', DUST]] })),
+      resolveSymbol: () => 'BTC/USDT',
+    });
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  /**
+   * REFUSES, rather than downgrading to `last`. A downgraded quote still clears
+   * `acceptableForMarking`, so it would still reach margin-call arithmetic and
+   * a trader's screen as though the venue had quoted it. There is no quote here
+   * at all.
+   */
+  it('a thin venue book yields no quote of any quality — not a downgraded one', async () => {
+    const src = markSourceFromVenuePublicBook({
+      adapter: fakeAdapter(async () => snap({ bids: [['1000', DUST]], asks: [['3000', DUST]] })),
+      resolveSymbol: () => 'BTC/USDT',
+    });
+    expect(await src.quote({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('the same venue book with real size behind it still quotes normally', async () => {
+    const src = markSourceFromVenuePublicBook({
+      adapter: fakeAdapter(async () => snap({ bids: [['1000', '1']], asks: [['3000', '1']] })),
+      resolveSymbol: () => 'BTC/USDT',
+    });
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBe('2000');
+  });
+
+  it('honours an injected depthPolicy without any call site changing', async () => {
+    const book = fakeAdapter(async () => snap({ bids: [['100', '0.5']], asks: [['102', '0.5']] }));
+    expect(
+      await markSourceFromVenuePublicBook({ adapter: book, resolveSymbol: () => 'BTC/USDT' }).markPrice({ marketId: 'm1', at: new Date() }),
+    ).toBeNull();
+    expect(
+      await markSourceFromVenuePublicBook({
+        adapter: book,
+        resolveSymbol: () => 'BTC/USDT',
+        depthPolicy: { minBestLevelNotional: '10' },
+      }).markPrice({ marketId: 'm1', at: new Date() }),
+    ).toBe('101');
+  });
 });
 
 describe('markSourcePrefer', () => {
@@ -166,12 +291,33 @@ describe('createConfiguredVenueMarkSource', () => {
     const cfg = createConfiguredVenueMarkSource({
       venueId: 'binance-spot',
       symbols: 'm1:BTC/USDT',
-      adapter: fakeAdapter(async () => snap({ bids: [['10', '1']], asks: [['12', '1']] })),
+      // 100 / 120 quote units a side — a real book, not two orders.
+      adapter: fakeAdapter(async () => snap({ bids: [['10', '10']], asks: [['12', '10']] })),
     });
     expect(cfg).not.toBeNull();
     expect(cfg!.symbolCount).toBe(1);
     expect(await cfg!.source.markPrice({ marketId: 'm1', at: new Date() })).toBe('11');
     expect(await cfg!.source.markPrice({ marketId: 'unmapped', at: new Date() })).toBeNull();
+  });
+
+  /** The production factory is gated too — not just the function under it. */
+  it('configured + a DUST venue book → null, through the real ops factory', async () => {
+    const cfg = createConfiguredVenueMarkSource({
+      venueId: 'binance-spot',
+      symbols: 'm1:BTC/USDT',
+      adapter: fakeAdapter(async () => snap({ bids: [['1000', DUST]], asks: [['3000', DUST]] })),
+    });
+    expect(await cfg!.source.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('carries an owner-set threshold through to the venue book', async () => {
+    const cfg = createConfiguredVenueMarkSource({
+      venueId: 'binance-spot',
+      symbols: 'm1:BTC/USDT',
+      adapter: fakeAdapter(async () => snap({ bids: [['10', '1']], asks: [['12', '1']] })),
+      depthPolicy: { minBestLevelNotional: '5' },
+    });
+    expect(await cfg!.source.markPrice({ marketId: 'm1', at: new Date() })).toBe('11');
   });
 
   it('unknown venue without inject → null', () => {
@@ -186,7 +332,7 @@ describe('createConfiguredVenueMarkSource', () => {
 
 describe('honesty: fabric snapshot is the only data path', () => {
   it('calls snapshotBook once per mark read with mapped symbol', async () => {
-    const snapshotBook = vi.fn(async () => snap({ bids: [['50', '1']], asks: [['50', '1']] }));
+    const snapshotBook = vi.fn(async () => snap({ bids: [['50', '10']], asks: [['50', '10']] }));
     const src = markSourceFromVenuePublicBook({
       adapter: { snapshotBook },
       resolveSymbol: () => 'ETH/USDT',

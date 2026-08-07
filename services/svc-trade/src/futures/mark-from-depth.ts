@@ -87,6 +87,16 @@ import type { MarkPolicy } from './mark-policy.js';
  * risk-parameter table and squarely the owner's call, so this file does not
  * invent one — it takes a policy object so the owner's answer has somewhere to
  * land without touching any call site.
+ *
+ * IT GOVERNS THE VENUE PATH TOO. `mark-from-venue.ts` mids an EXTERNAL venue's
+ * public book and had the identical size-blind defect; it now imports this
+ * constant, this type and `bestLevelIsQuotable` rather than growing a second
+ * floor with a second name. The unit is the same — quote-asset units of the
+ * pair being read — and so is the reasoning, so a second default here would be
+ * a second unruled number, not a second decision. When the owner rules, they
+ * rule once; if they rule DIFFERENTLY for external venues, the mechanism is
+ * already there (`createConfiguredVenueMarkSource`'s `depthPolicy`) and no call
+ * site has to move.
  */
 export const DEFAULT_MIN_BEST_LEVEL_NOTIONAL = '100';
 
@@ -106,17 +116,46 @@ export type DepthReader = (marketId: string) => Promise<EngineDepth | null>;
 
 const SCALE = 10n ** 18n;
 
-/** Scaled-bigint notional of one depth level, or null when it is not readable. */
-function levelNotional(level: readonly [string, string] | undefined): Amount | null {
+/**
+ * The policy's threshold as a scaled bigint.
+ *
+ * An unreadable threshold is NOT permission to skip the check — it falls back
+ * to the default.
+ *
+ * Exported because `mark-from-venue.ts` reads the same number through the same
+ * fallback. A venue's book is a book: the reason a level too small to trade
+ * against is not a quote does not change because the levels arrived over HTTP
+ * from somebody else's matching engine. One threshold, one fallback, one place
+ * for the owner's ruling to land.
+ */
+export function minBestLevelNotional(policy: DepthQuotePolicy = DEFAULT_DEPTH_QUOTE_POLICY): Amount {
+  try {
+    return parseAmount(policy.minBestLevelNotional);
+  } catch {
+    return parseAmount(DEFAULT_MIN_BEST_LEVEL_NOTIONAL);
+  }
+}
+
+/**
+ * Is a best level worth quoting? `price` and `quantity` are 1e18-scaled
+ * bigints; `minimum` is whatever `minBestLevelNotional` returned.
+ *
+ * THE WHOLE RULE, IN ONE FUNCTION, so "too thin to be a quote" cannot come to
+ * mean one thing on our matching book and another on a venue's.
+ */
+export function bestLevelIsQuotable(price: Amount, quantity: Amount, minimum: Amount): boolean {
+  if (price <= 0n || quantity <= 0n) return false;
+  // Both operands are 1e18-scaled, so the product is 1e36-scaled. No floats.
+  return (price * quantity) / SCALE >= minimum;
+}
+
+/** One depth level as scaled bigints, or null when it is not readable as money. */
+function parseLevel(level: readonly [string, string] | undefined): readonly [Amount, Amount] | null {
   if (!level) return null;
   const [price, quantity] = level;
   if (price == null || price.length === 0 || quantity == null || quantity.length === 0) return null;
   try {
-    const p = parseAmount(price);
-    const q = parseAmount(quantity);
-    if (p <= 0n || q <= 0n) return null;
-    // Both operands are 1e18-scaled, so the product is 1e36-scaled. No floats.
-    return (p * q) / SCALE;
+    return [parseAmount(price), parseAmount(quantity)] as const;
   } catch {
     return null;
   }
@@ -139,17 +178,11 @@ export function bestFromDepth(
 } {
   if (!depth) return { bestBid: null, bestAsk: null };
 
-  let minimum: Amount;
-  try {
-    minimum = parseAmount(policy.minBestLevelNotional);
-  } catch {
-    // An unreadable threshold is not permission to skip the check.
-    minimum = parseAmount(DEFAULT_MIN_BEST_LEVEL_NOTIONAL);
-  }
+  const minimum = minBestLevelNotional(policy);
 
   const side = (level: readonly [string, string] | undefined): string | null => {
-    const notional = levelNotional(level);
-    if (notional == null || notional < minimum) return null;
+    const parsed = parseLevel(level);
+    if (parsed == null || !bestLevelIsQuotable(parsed[0], parsed[1], minimum)) return null;
     return level![0]!;
   };
 
