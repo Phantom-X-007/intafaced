@@ -9,6 +9,7 @@ import type { AgentRuntime } from './runtime.js';
 import { rankFixtures } from './scanner/rank.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
+import { supportGrounded } from './support-agent/grounded.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -546,6 +547,49 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           ]),
         )
         .query(({ input }) => draftTicketComment({ ticketId: input.ticketId, body: input.body })),
+
+      /**
+       * Stage-2 desk plane gate: dark or empty-KB refuses invent answers.
+       * Spec: docs/ops/trk/ops.support.md / agents.support.
+       */
+      grounded: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            kbHitCount: z.number().int().min(0).max(10_000).optional(),
+            requireKb: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              plane: z.literal('live'),
+              allowedTasks: z.tuple([z.literal('support.classify'), z.literal('support.reply')]),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              plane: z.literal('dark'),
+              reason: z.enum(['desk_plane_dark', 'kb_empty']),
+              userMessageKey: z.literal('agents.support.unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = supportGrounded({
+            plane: input.plane,
+            ...(input.kbHitCount === undefined ? {} : { kbHitCount: input.kbHitCount }),
+            ...(input.requireKb === undefined ? {} : { requireKb: input.requireKb }),
+          });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              plane: 'live' as const,
+              allowedTasks: ['support.classify', 'support.reply'] as ['support.classify', 'support.reply'],
+            };
+          }
+          return result;
+        }),
     }),
   });
 }
