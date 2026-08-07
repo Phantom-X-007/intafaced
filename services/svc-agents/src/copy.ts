@@ -54,6 +54,8 @@ export const COPY_KEYS = [
   'agents.navigator.tier_closed',
   'agents.support.unavailable',
   'agents.support.comment_refused',
+  'agents.support.tier_closed',
+  'agents.support.escalated',
 ] as const;
 
 export type CopyKey = (typeof COPY_KEYS)[number];
@@ -105,6 +107,9 @@ export const EN: Readonly<Record<CopyKey, string>> = {
     'This Sovereign Intelligence navigator action is closed until product tier rules are published — nothing was invented or run.',
   'agents.support.unavailable': 'Support knowledge is unavailable right now — the desk will not invent an answer.',
   'agents.support.comment_refused': 'That comment cannot be posted — missing ticket, empty body, or forbidden invent language.',
+  'agents.support.tier_closed':
+    'This Sovereign Intelligence support action is closed until product tier rules are published — nothing was read or answered.',
+  'agents.support.escalated': 'This one goes to a person — a support ticket has the answer, and nothing was guessed here.',
 };
 
 const KEY_SET: ReadonlySet<string> = new Set(COPY_KEYS);
