@@ -366,6 +366,8 @@ export const positions = trade.table(
     entryPrice: amount('entry_price').notNull(),
     leverage: amount('leverage').notNull().default('1'),
     marginInitial: amount('margin_initial').notNull(),
+    /** Current residual margin after funding pays; planners read this, not margin_initial. */
+    marginCurrent: amount('margin_current').notNull(),
     marginAsset: text('margin_asset').notNull(),
     fundingPaid: amount('funding_paid').notNull().default('0'),
     liqPrice: amount('liq_price'),

@@ -19,7 +19,7 @@ import { markSourceFromDepth } from './mark-from-depth.js';
 import { markSourcePrefer } from './mark-from-venue.js';
 import { memoryFundingRateBook, type FundingRateEntry } from './funding-rate-source.js';
 import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
-import { sqlFundingPeriodStore, sqlLiquidationAttemptStore, sqlPositionCloser } from './tick-stores.js';
+import { sqlFundingMarginApplier, sqlFundingPeriodStore, sqlLiquidationAttemptStore, sqlPositionCloser } from './tick-stores.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 
 export interface FuturesJobsConfig {
@@ -117,6 +117,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
   const closer = sqlPositionCloser(deps.sql, deps.bus);
   const fundLoader = sqlFundingPositionLoader(deps.sql);
   const periods = sqlFundingPeriodStore(deps.sql);
+  const margins = sqlFundingMarginApplier(deps.sql);
   /**
    * THE DEVIATION BREAKER'S BASIS, SUPPLIED.
    *
@@ -149,6 +150,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
           positions: fundLoader,
           periods,
           ledger: deps.ledger,
+          margins,
           now: deps.now,
         },
         marketId,

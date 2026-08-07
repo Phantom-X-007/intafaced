@@ -11,7 +11,7 @@
  * Wire a real rate source + setInterval/cron in ops when ready — this file
  * only proves the tick cannot invent money.
  */
-import type { LedgerClient, PostRequest } from '@intafaced/ledger-client';
+import type { Amount, LedgerClient, PostRequest } from '@intafaced/ledger-client';
 import { planFundingSettlement, summarizeFundingPlan, type FundingOpenPosition, type FundingLeg } from './funding-settlement.js';
 
 /** External period rate. Null / refuse → tick skips; never synthesize a rate. */
@@ -61,11 +61,24 @@ export interface FundingPeriodStore {
   settledLegCount?(periodId: string): Promise<number | null>;
 }
 
+/**
+ * After ledger posts, move the position row with the money.
+ *
+ * Payers: margin_current -= paid, funding_paid += paid.
+ * Payees: funding_paid -= received (receipt goes to available, not re-margin).
+ * Optional on older wires — production must set it or close over-releases.
+ */
+export interface FundingMarginApplier {
+  applyFundingNets(nets: readonly { positionId: string; paid: Amount }[]): Promise<void>;
+}
+
 export interface FundingTickDeps {
   rates: FundingRateSource;
   positions: FundingPositionLoader;
   periods: FundingPeriodStore;
   ledger: Pick<LedgerClient, 'post'>;
+  /** Required in production so margin_current tracks collateral. */
+  margins?: FundingMarginApplier;
   /** Optional clock for tests. */
   now?: () => Date;
 }
@@ -129,6 +142,12 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
 
   await postLegs(deps.ledger, legs);
 
+  // Ledger first, then row — same period cannot re-post (idempotent keys + period store).
+  // Without this, close/liquidation still read open-time margin and over-release.
+  if (deps.margins) {
+    await deps.margins.applyFundingNets(netFundingPaid(legs));
+  }
+
   await deps.periods.markSettled(quote.periodId, {
     legCount: legs.length,
     totalPosted: legs.length,
@@ -148,6 +167,16 @@ async function postLegs(ledger: Pick<LedgerClient, 'post'>, legs: readonly Fundi
   for (const leg of legs) {
     await ledger.post(leg.recipe as PostRequest);
   }
+}
+
+/** Net paid per position: positive = paid out of collateral, negative = received to available. */
+export function netFundingPaid(legs: readonly FundingLeg[]): { positionId: string; paid: Amount }[] {
+  const byId = new Map<string, Amount>();
+  for (const leg of legs) {
+    byId.set(leg.payerPositionId, (byId.get(leg.payerPositionId) ?? 0n) + leg.amount);
+    byId.set(leg.payeePositionId, (byId.get(leg.payeePositionId) ?? 0n) - leg.amount);
+  }
+  return [...byId.entries()].map(([positionId, paid]) => ({ positionId, paid }));
 }
 
 /** In-memory period store for unit tests and single-process dev. */

@@ -159,6 +159,8 @@ export interface PositionRow {
   entry_price: string;
   leverage: string;
   margin_initial: string;
+  /** Residual after funding; close/liq release from this, not margin_initial. */
+  margin_current: string;
   margin_asset: string;
   funding_paid: string;
   liq_price: string | null;
@@ -409,7 +411,7 @@ export class PositionService {
       await this.sql`
         INSERT INTO trade.positions (
           id, user_id, market_id, side, status, margin_mode,
-          size, entry_price, leverage, margin_initial, margin_asset, funding_paid,
+          size, entry_price, leverage, margin_initial, margin_current, margin_asset, funding_paid,
           accepted_mark, accepted_mark_at
         ) VALUES (
           ${positionId},
@@ -421,6 +423,7 @@ export class PositionService {
           ${formatAmount(input.size)},
           ${formatAmount(entryPrice)},
           ${formatAmount(leverage)},
+          ${formatAmount(margin)},
           ${formatAmount(margin)},
           ${m.quote_asset},
           '0',
@@ -610,7 +613,7 @@ export class PositionService {
             side: row.side,
             size: parseAmount(row.size),
             entryPrice: parseAmount(row.entry_price),
-            margin: parseAmount(row.margin_initial),
+            margin: parseAmount(row.margin_current ?? row.margin_initial),
             marginAsset: row.margin_asset,
           },
           exitPrice: formatAmount(mark.price),
@@ -746,7 +749,7 @@ export class PositionService {
         markPrice: extras?.markPrice ?? null,
         notional: formatAmount(notional),
         leverage: formatAmount(parseAmount(row.leverage)),
-        collateral: formatAmount(parseAmount(row.margin_initial)),
+        collateral: formatAmount(parseAmount(row.margin_current ?? row.margin_initial)),
         unrealizedPnl: null,
         realizedPnl: extras?.realizedPnl ?? null,
         liquidationPrice: row.liq_price != null ? formatAmount(parseAmount(row.liq_price)) : null,
@@ -764,7 +767,7 @@ function presentPosition(row: PositionRow, extras?: { markPrice?: string | null;
   const size = parseAmount(row.size);
   const entry = parseAmount(row.entry_price);
   const leverage = parseAmount(row.leverage);
-  const margin = parseAmount(row.margin_initial);
+  const margin = parseAmount(row.margin_current ?? row.margin_initial);
   const SCALE = 10n ** 18n;
   const notional = (size * entry) / SCALE;
   const opened = row.opened_at instanceof Date ? row.opened_at : new Date(row.opened_at);
