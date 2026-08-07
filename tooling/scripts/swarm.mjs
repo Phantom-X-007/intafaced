@@ -951,7 +951,7 @@ function printStatus(m) {
       const ev = evaluateThrift(m.actionsRuns24h);
       const msg = ev.level === 'soft' ? 'WARN — volume high (never a delivery block); one push per unit; no coordination PRs' : 'OK';
       console.log(
-        `  thrift: level=${ev.level} soft≥${ev.soft} total_ref≥${ev.hard} docs_warn≥${ev.hardDocs} ci_warn≥${ev.hardCi} — ${msg}`,
+        `  thrift: DELIVERY=ALLOWED level=${ev.level} soft≥${ev.soft} total_warn≥${ev.hard} docs_warn≥${ev.hardDocs} ci_warn≥${ev.hardCi} — ${msg}`,
       );
     } catch {
       console.log('  thrift: (evaluate failed)');

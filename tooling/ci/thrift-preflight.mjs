@@ -104,20 +104,55 @@ export function evaluateRepush({ branch, ciRunsOnBranch, maxPerBranch = MAX_CI_P
   };
 }
 
-export function formatThriftReport(ev, repush = null) {
-  const lines = [
+/**
+ * How stale is the checkout this file is executing from?
+ * Returns commits-behind origin/main, or null when git can't answer.
+ *
+ * Why this exists: an obsolete copy of THIS file (pre-#794) printed
+ * "FAIL — hard cap. Do NOT open/update PRs" and told agents to "batch the next
+ * wave into 1-3 fat PRs". A checkout 178 commits behind was still running it,
+ * so the coordinator correctly obeyed a gate that origin/main had already
+ * retired — stranding 12 landable branches and minting wave PRs for days.
+ * A gate that cannot tell it is obsolete is more dangerous than no gate.
+ */
+export function checkoutStaleness() {
+  try {
+    const n = execFileSync('git', ['rev-list', '--count', 'HEAD..origin/main'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return Number.isFinite(Number(n)) ? Number(n) : null;
+  } catch {
+    return null; // no git / no origin ref — fail open, never crash a meter
+  }
+}
+
+export function formatThriftReport(ev, repush = null, behind = undefined) {
+  // DELIVERY line is first and unconditional. The verdict must be readable by
+  // someone who stops after one line — the previous format buried it under a
+  // threshold table, and both the coordinator and peace-pulse read the table.
+  const stale = behind === undefined ? checkoutStaleness() : behind;
+  const lines = [];
+  if (stale && stale > 0) {
+    lines.push(
+      `  STALE CHECKOUT — this copy is ${stale} commit(s) behind origin/main. Its verdict may be obsolete.`,
+      '  Re-run from a current checkout before acting on anything below.',
+    );
+  }
+  lines.push(
+    '  DELIVERY: ALLOWED — thrift is a meter, never a block. Exit is always 0.',
     `thrift-preflight: level=${ev.level} total_24h=${ev.total} docs_24h=${ev.docsRuns} ci_24h=${ev.ciRuns}`,
-    `  caps (warn only): soft≥${ev.soft} total_ref≥${ev.hard} docs_warn≥${ev.hardDocs} ci_warn≥${ev.hardCi} max_ci_per_branch≥${MAX_CI_PER_BRANCH}`,
-  ];
+    `  thresholds (meter only — none of these block): soft≥${ev.soft} total_warn≥${ev.hard} docs_warn≥${ev.hardDocs} ci_warn≥${ev.hardCi} max_ci_per_branch≥${MAX_CI_PER_BRANCH}`,
+  );
   if (ev.level === 'ok') {
     lines.push('  OK — under soft cap. Push once after local work; GitHub is the merge seal, not the workshop.');
   } else {
     lines.push('  WARN — volume high. NEW work still allowed (no exit 1). Prefer one push per unit; no coordination PRs.');
-    if (ev.overDocs) lines.push(`  trip: Docs-format volume ≥${ev.hardDocs} (stamp mill → value-gate content, not a push block)`);
-    if (ev.overCi) lines.push(`  trip: CI volume ≥${ev.hardCi} (soft — re-push habit is the real waste)`);
-    if (ev.overHard) lines.push(`  trip: total 24h ≥${ev.hard} (soft for new opens)`);
+    if (ev.overDocs) lines.push(`  over: Docs-format volume ≥${ev.hardDocs} (stamp mill → value-gate content, not a push block)`);
+    if (ev.overCi) lines.push(`  over: CI volume ≥${ev.hardCi} (soft — re-push habit is the real waste)`);
+    if (ev.overHard) lines.push(`  over: total 24h ≥${ev.hard} (warn only — new opens still allowed)`);
     if (ev.overSoft && !ev.overHard && !ev.overCi && !ev.overDocs) {
-      lines.push(`  trip: total 24h ≥${ev.soft}`);
+      lines.push(`  over: total 24h ≥${ev.soft} (warn only)`);
     }
   }
   if (repush?.warn) {
@@ -236,6 +271,32 @@ function selfTest() {
 
   const mainSkip = evaluateRepush({ branch: 'main', ciRunsOnBranch: 99, maxPerBranch: 2 });
   assert(!mainSkip.block && !mainSkip.warn, 'main not gated by re-push');
+
+  // READABILITY REGRESSION — the defect this file shipped for days.
+  // The verdict was correct (level=soft, block=false, exit 0) while the printed
+  // THRESHOLD was labelled "hard". Two independent agents read the label instead
+  // of the verdict and stopped opening PRs, stranding 12 landable branches.
+  // These assertions fail if any output can be read as a prohibition again.
+  const worstReport = formatThriftReport(totalHigh, { warn: true, reason: 'x', ciRunsOnBranch: 9 }, 0);
+  assert(
+    worstReport.split('\n')[0].includes('DELIVERY: ALLOWED'),
+    'verdict must be the FIRST line — a reader who stops early must still see "allowed"',
+  );
+
+  // STALENESS — the actual cause of the 2026-08 wave mill: an obsolete copy of
+  // this file said "FAIL — hard cap, do NOT open PRs" and was believed.
+  const staleReport = formatThriftReport(totalHigh, null, 178);
+  assert(
+    staleReport.split('\n')[0].includes('STALE CHECKOUT'),
+    'a stale copy must announce staleness BEFORE its verdict, or it will be obeyed',
+  );
+  assert(/178 commit/.test(staleReport), 'staleness banner states how far behind');
+  assert(!formatThriftReport(totalHigh, null, 0).includes('STALE CHECKOUT'), 'a current checkout must not cry stale');
+  assert(!/\bhard\b/i.test(worstReport), 'no output line may contain the word "hard" — it reads as a block on a meter that never blocks');
+  assert(!/\btrip\b/i.test(worstReport), 'no output line may say "trip" — it reads as a tripped breaker');
+  const okReport = formatThriftReport(ok, null, 0);
+  assert(okReport.split('\n')[0].includes('DELIVERY: ALLOWED'), 'ok path also leads with the verdict');
+  assert(!/\bhard\b/i.test(okReport), 'ok path free of "hard" too');
 
   if (fails.length) {
     console.error('thrift-preflight --self-test FAIL:');
