@@ -143,12 +143,12 @@ results.push(
   ),
 );
 
-// ── 4 · Depth reads ─────────────────────────────────────────────────────────
-// svc-ws re-broadcasts this on a loop, so it runs far more often than any
-// submit does.
+// ── 4 · Depth reads, UNCHANGED book (the memo's hit path) ───────────────────
+// svc-ws re-broadcasts depth on a loop, so between trades it asks the same
+// question of the same book repeatedly. This is that pattern.
 results.push(
   measure(
-    'depth(50) · 10k-deep book',
+    'depth(50) · 10k-deep book · repeat read',
     () => {
       const book = new OrderBook('perf-market');
       for (let i = 0; i < 10_000; i++) {
@@ -158,6 +158,31 @@ results.push(
       return book;
     },
     (book) => book.depth(50),
+  ),
+);
+
+// ── 5 · Depth reads, MUTATED between every call (the memo's miss path) ──────
+//
+// Reported next to case 4 on purpose. The memo is keyed on the book's sequence,
+// so a book that changes before every read never hits it — and quoting only
+// case 4 would advertise a speed-up that a busy market does not get. This is
+// the number that does not improve, and it belongs in the same table as the one
+// that does.
+results.push(
+  measure(
+    'depth(50) · submit before every read (cache miss)',
+    () => {
+      const book = new OrderBook('perf-market');
+      for (let i = 0; i < 10_000; i++) {
+        book.submit(restingOrder('buy', 100 - (i % 1000) * 0.01));
+        book.submit(restingOrder('sell', 200 + (i % 1000) * 0.01));
+      }
+      return book;
+    },
+    (book, i) => {
+      book.submit(restingOrder('buy', 100 - (i % 1000) * 0.01));
+      book.depth(50);
+    },
   ),
 );
 

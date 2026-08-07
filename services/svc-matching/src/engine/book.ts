@@ -117,6 +117,15 @@ export class OrderBook {
   private readonly index = new Map<OrderId, RestingOrder>();
   private lastTradePrice: Amount | null = null;
 
+  /**
+   * MEMOISED DEPTH — see `depth()` for the correctness argument.
+   *
+   * Derived state, not book state. `toState`/`fromState` ignore it on purpose:
+   * a snapshot carrying a cache could restore a book whose cache disagreed with
+   * its own orders, which is the one failure this must not be able to have.
+   */
+  private depthCache: { sequence: number; limit: number; bids: Array<[string, string]>; asks: Array<[string, string]> } | null = null;
+
   constructor(marketId: MarketId) {
     this.marketId = marketId;
   }
@@ -139,8 +148,60 @@ export class OrderBook {
     return this.asks[0]?.price ?? null;
   }
 
-  /** Aggregated depth, CCXT level shape: `[price, amount]` decimal-string tuples. */
+  /**
+   * Aggregated depth, CCXT level shape: `[price, amount]` decimal-string tuples.
+   *
+   * ── WHY THIS IS MEMOISED ────────────────────────────────────────────────
+   *
+   * Measured (`pnpm perf:book`, 10k-deep book): depth was ~21k ops/s at p50
+   * 44.8us against ~628k ops/s at p50 0.90us for a submit — fifty times the
+   * cost of the write path. And svc-ws re-broadcasts depth on a loop, so the
+   * read that runs most often was by far the most expensive thing the engine
+   * did. The cost is not the summing; it is `formatAmount`, called 2x`limit`
+   * times per call, each one a BigInt divide, a pad and a regex.
+   *
+   * ── WHY KEYED ON `sequence`, AND WHY THAT IS SOUND ──────────────────────
+   *
+   * `this.sequence` strictly increases on every operation that can change what
+   * depth would report, and there is no mutating path that does not consume one:
+   *
+   *   · `submit`  — `nextSequence()` before `execute`, which is what fills,
+   *                 rests and removes levels.
+   *   · `cancel`  — `removeResting` then `nextSequence()`.
+   *   · stops     — `drainStops` takes a sequence per trigger, and a trigger
+   *                 executes through the same path.
+   *   · restore   — `fromState` builds a NEW OrderBook, so it starts with an
+   *                 empty cache rather than inheriting a stale one.
+   *
+   * Rejections (`validate`, PO/FOK viability) return BEFORE `nextSequence`,
+   * and that is exactly right: a rejected order leaves the book untouched, so
+   * the previous depth answer is still the correct one.
+   *
+   * So equal `sequence` means an unchanged book, and the cached answer is not
+   * an approximation of the current one — it IS the current one.
+   *
+   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────────────────────────
+   *
+   * That was the faster option and it was rejected. It needs maintaining at
+   * seven mutation sites, including the in-place `remaining` decrement inside a
+   * partial fill. A total that drifts at any one of them reports WRONG DEPTH
+   * to every caller, and nothing in the suite would notice: `toState` folds
+   * from `orders`, not from a cached total, so journal-replay determinism would
+   * stay byte-identical while the market data lied. One cache with one
+   * invalidation rule can be reasoned about; seven hooks cannot.
+   *
+   * ── SHARING ─────────────────────────────────────────────────────────────
+   *
+   * The outer arrays are fresh on every call. The `[price, amount]` tuples are
+   * shared with the cache and must be treated as read-only — every caller
+   * serialises them, none mutates them.
+   */
   depth(limit = 50): { bids: Array<[string, string]>; asks: Array<[string, string]>; sequence: number } {
+    const cached = this.depthCache;
+    if (cached !== null && cached.sequence === this.sequence && cached.limit === limit) {
+      return { bids: [...cached.bids], asks: [...cached.asks], sequence: this.sequence };
+    }
+
     const fold = (levels: readonly PriceLevel[]): Array<[string, string]> =>
       levels.slice(0, limit).map((level) => {
         let total = ZERO;
@@ -148,7 +209,11 @@ export class OrderBook {
         return [formatAmount(level.price), formatAmount(total)];
       });
 
-    return { bids: fold(this.bids), asks: fold(this.asks), sequence: this.sequence };
+    const bids = fold(this.bids);
+    const asks = fold(this.asks);
+    this.depthCache = { sequence: this.sequence, limit, bids, asks };
+
+    return { bids: [...bids], asks: [...asks], sequence: this.sequence };
   }
 
   // ── Write surface ─────────────────────────────────────────────────────────
