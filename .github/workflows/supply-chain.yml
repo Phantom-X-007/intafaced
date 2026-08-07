@@ -11,23 +11,28 @@
 # should not begin by adding some. Everything here is `pnpm audit` — already in
 # the toolchain — read by tooling/ci/dependency-audit.mjs.
 #
-# RELEVANCE, NOT COST: this does not run on every push because a `pnpm audit`
-# against an unchanged lockfile answers the same thing it answered last time.
-# It runs when the dependency surface actually changes, plus once a week to
-# catch advisories published against dependencies we did not touch (which is
-# how most of them arrive). One job, no build, no services. (Actions are free
-# and unlimited on this public repo — the "thrift" spend law was deleted
-# 2026-08-07; see docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md.)
+# RUNS ON EVERY PULL REQUEST, and the path filter that used to narrow it is
+# gone. Two reasons, and the second is the one that matters.
+#
+# 1. It was filtered to save a bill that no longer exists. Actions are free and
+#    unlimited on this public repo, and the thrift spend law was deleted on
+#    2026-08-07 (#967). The job is one step, ~20s, no build and no services.
+#
+# 2. A REQUIRED CHECK MUST RUN ON EVERY PR OR IT BLOCKS THE ONES IT SKIPS.
+#    GitHub waits for a context it was told to expect; a workflow that filters
+#    itself out never reports, and the PR sits pending forever. So a path filter
+#    and a required check are mutually exclusive, and this needs to be required:
+#    #898 merged with this job RED, and that is exactly how a fixed `fast-uri`
+#    HIGH came back to main (#904). The gate worked; nothing made anyone wait
+#    for it.
+#
+# The weekly cron stays. Most advisories arrive against dependencies nobody
+# touched — `js-yaml` (#942) landed that way, clean in the morning and a HIGH by
+# lunchtime — and no per-PR trigger can catch those.
 name: Supply chain
 
 on:
   pull_request:
-    paths:
-      - 'pnpm-lock.yaml'
-      - '**/package.json'
-      - '.github/workflows/**'
-      - '.github/dependabot.yml'
-      - 'tooling/ci/dependency-audit.mjs'
   schedule:
     # Mondays, ahead of the dependabot run on the same day, so a human opening
     # the grouped PR already knows what the tree looked like before it.
