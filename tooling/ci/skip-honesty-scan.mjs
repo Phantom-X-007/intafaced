@@ -69,6 +69,11 @@ const CONDITIONAL_SKIP = [
 const PRIVATE_PROBE_SHAPES = [
   { re: /\bpostgres\s*\(\s*[^)]*connect_timeout/, what: 'its own Postgres connection with a connect timeout' },
   { re: /createPublicClient\s*\(/, what: 'its own JSON-RPC client' },
+  // A NATS probe was invisible here until a suite wrote one. The gate knew the
+  // two shapes that had already been written and nothing else, so the first
+  // hand-rolled probe against a third dependency passed unnoticed — which is
+  // the failure this gate exists to prevent, one dependency over.
+  { re: /\bconnect\s*\(\s*\{[^}]*servers\s*:/, what: 'its own NATS connection' },
 ];
 
 /** The sanctioned, CI-aware, journalled probes. */

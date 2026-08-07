@@ -54,7 +54,7 @@ import { dirname, join, relative, resolve } from 'node:path';
  */
 
 /** The external dependencies a suite is allowed to skip itself over. */
-export type InfraDependency = 'postgres' | 'evm-chain';
+export type InfraDependency = 'postgres' | 'evm-chain' | 'nats';
 
 /**
  * What the probe decided.
