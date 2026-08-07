@@ -21,3 +21,4 @@ export * from './catalogs.js';
 export * from './locales.js';
 export * from './format.js';
 export * from './t.js';
+export * from './exchange.js';
