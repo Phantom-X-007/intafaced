@@ -31,23 +31,30 @@
  *
  * It rebuilds the environment a clean-clone `pnpm platform:up` gives THIS
  * container — `.env.example` as the env file, the compose anchors, the
- * `svc-trade` block — and then runs the two things that would have exited:
- * the env schema, and the futures profit-source wiring.
+ * `svc-trade` block — and then asks the two questions that would have exited
+ * the process: does every variable the env schema REQUIRES actually arrive, and
+ * does the futures profit-source wiring survive the value it is handed.
  *
- * It cannot claim the process reaches `listen`, because it does not open a
- * socket, a database or a bus. The full statement is proven by running the
- * container, and this file is the cheap guard that keeps it true between those
- * runs. It reads the real files rather than a fixture, so it goes red when
- * somebody edits `.env.example` or the compose block, which is exactly when the
- * question is being re-asked.
+ * The first half is `compose-secret-parity`'s technique with its one deliberate
+ * limitation removed. That gate covers SECRET-shaped names only and says so in
+ * its own header — a required `DATABASE_URL` absent from compose crash-loops
+ * identically and is invisible to it. Here the name filter is dropped: every
+ * required variable is checked, for this one service. Requirements are read out
+ * of the zod SOURCE rather than by importing it, because `env.ts` calls
+ * `loadEnv(process.env)` at module scope and importing it would answer a
+ * question about this machine instead of about the shipped config.
+ *
+ * It cannot claim the process reaches `listen`: it opens no socket, no database
+ * and no bus. That statement is proven by running the container, and this file
+ * is the cheap guard that keeps it true between those runs. It reads the real
+ * files rather than a fixture, so it goes red when somebody edits
+ * `.env.example` or the compose block — which is exactly when the question is
+ * being re-asked.
  */
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-// `env-schema.js`, not `env.js`: importing the latter runs `loadEnv(process.env)`
-// at module scope, which would answer a question this file is not asking.
-import { envSchema } from './env-schema.js';
 import { optionalProfitSourceFromConfig, profitSourceFromConfig } from './futures/profit-source.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -138,8 +145,80 @@ function composeEnvironmentFor(service: string, compose: string, envFile: Map<st
   return out;
 }
 
+/**
+ * Zod chains wrap. Prettier turns a long one into
+ *
+ *     JWT_ACCESS_SECRET: z
+ *       .string()
+ *       .min(32),
+ *
+ * and a line-bounded regex sees `z` and stops — so the `.optional()`, or worse
+ * its absence, is invisible. Re-joining continuation lines first removes the
+ * whole class; `compose-secret-parity.mjs` learned that the hard way.
+ */
+const joinChains = (source: string) => source.replace(/\n\s*\./g, '.');
+
+/**
+ * One declaration, from `z.` to the end of its (re-joined) line.
+ *
+ * NOT `[^,\n]*`, which is what `compose-secret-parity.mjs` uses and gets away
+ * with only because its name filter hides the bug. Stopping at the first comma
+ * truncates any chain with a comma inside a call —
+ *
+ *     INTERNAL_SERVICE_BODY_BIND: z.enum(['accept-both', 'require']).default('accept-both'),
+ *     TRADE_SPOT_ENABLED: z.union([z.boolean(), z.string()]).default(true)…
+ *
+ * — cutting off the `.default(…)` and reporting both as REQUIRED. Six of
+ * svc-trade's own flags land in that shape. Prettier puts one declaration per
+ * line after re-joining, so the line is the honest boundary.
+ */
+const DECLARATION = /([A-Z][A-Z0-9_]*)\s*:\s*(z\.[^\n]*)/g;
+
+/** No `.optional()` and no `.default(…)`. Those two are the whole distinction. */
+const isRequiredChain = (chain: string) => !/\.optional\s*\(/.test(chain) && !/\.default\s*\(/.test(chain);
+
+/**
+ * Which variables svc-trade cannot start without.
+ *
+ * The shared slices in `packages/config` plus this service's own inline
+ * declarations — and an inline declaration may RELAX a slice, so a non-required
+ * one REMOVES the requirement rather than adding to it.
+ *
+ * Regex rather than a TypeScript parse, deliberately and for the same reason
+ * the compose side is: the failure direction is a MISSED requirement, which
+ * cannot invent a green tick over a real gap.
+ */
+function requiredEnvVars(): Set<string> {
+  const configSrc = joinChains(read('packages/config/src/env.ts'));
+  const slices = new Map<string, Set<string>>();
+  for (const m of configSrc.matchAll(/export const (\w+EnvSchema)\s*=\s*z\.object\(\{([\s\S]*?)\n\}\)/g)) {
+    const found = new Set<string>();
+    for (const d of m[2]!.matchAll(DECLARATION)) {
+      if (isRequiredChain(d[2]!)) found.add(d[1]!);
+    }
+    slices.set(m[1]!, found);
+  }
+  // `serviceEnvSchema` is a composition of other slices; expand it the same way.
+  const composed = /export const serviceEnvSchema\s*=([\s\S]*?);/.exec(configSrc);
+  if (composed) {
+    const union = new Set<string>();
+    for (const slice of composed[1]!.matchAll(/(\w+EnvSchema)/g)) for (const v of slices.get(slice[1]!) ?? []) union.add(v);
+    slices.set('serviceEnvSchema', union);
+  }
+
+  const src = joinChains(read('services/svc-trade/src/env.ts'));
+  const need = new Set<string>();
+  for (const m of src.matchAll(/(\w+EnvSchema)/g)) for (const v of slices.get(m[1]!) ?? []) need.add(v);
+  for (const m of src.matchAll(DECLARATION)) {
+    if (isRequiredChain(m[2]!)) need.add(m[1]!);
+    else need.delete(m[1]!);
+  }
+  return need;
+}
+
 const envExample = parseEnvFile(read('.env.example'));
 const shipped = composeEnvironmentFor('svc-trade', read('docker-compose.apps.yml'), envExample);
+const requiredVars = requiredEnvVars();
 
 describe('svc-trade boots on shipped configuration', () => {
   /** Guard on the parser itself: an empty map would make everything below vacuous. */
@@ -149,10 +228,39 @@ describe('svc-trade boots on shipped configuration', () => {
     expect(shipped.size).toBeGreaterThan(10);
   });
 
-  it('the env schema accepts it — no variable is required that nothing supplies', () => {
-    const parsed = envSchema.safeParse(Object.fromEntries(shipped));
-    const issues = parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
-    expect(issues).toEqual([]);
+  /**
+   * Guard on the requirement parser: an empty or wrong set would make the next
+   * test vacuous.
+   *
+   * The expected answer is known independently. Importing `env.ts` with an
+   * empty environment produces exactly:
+   *
+   *     Invalid environment for process:
+   *       - DATABASE_URL: Required
+   *       - EDGE_PRINCIPAL_SECRET: Required
+   *       - INTERNAL_SERVICE_SECRET: Required
+   *
+   * so three is the real number and these are the three. `>=` rather than `===`
+   * because a genuinely new required variable should make the NEXT test decide
+   * whether compose supplies it, not fail here on a count.
+   */
+  it('derives a real requirement list from the zod source', () => {
+    expect(requiredVars.size).toBeGreaterThanOrEqual(3);
+    // Known members, so a regex that has quietly stopped matching is caught.
+    expect([...requiredVars]).toEqual(expect.arrayContaining(['DATABASE_URL', 'EDGE_PRINCIPAL_SECRET', 'INTERNAL_SERVICE_SECRET']));
+    // And a known NON-member. `TRADE_FUTURES_PROFIT_SOURCE` has `.default('')`,
+    // which is exactly why no schema-shaped check could ever have caught the
+    // defect this file is named for — the throw was downstream of zod. The next
+    // test is not the one that catches it; the profit-source ones below are.
+    expect(requiredVars.has('TRADE_FUTURES_PROFIT_SOURCE')).toBe(false);
+  });
+
+  it('every variable the schema REQUIRES actually arrives — secret-shaped or not', () => {
+    const missing = [...requiredVars].filter((key) => {
+      const value = shipped.get(key);
+      return value === undefined || value === '';
+    });
+    expect(missing).toEqual([]);
   });
 
   /**
