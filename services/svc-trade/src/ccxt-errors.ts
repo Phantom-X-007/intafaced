@@ -160,6 +160,22 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * human has to look.
    */
   'trade.fill_sequence_conflict': { ccxt: 'ExchangeError', status: 500 },
+
+  // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
+  'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },
+  'trade.algo_invalid_qty': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.algo_invalid_schedule': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.algo_unsupported_kind': { ccxt: 'NotSupported', status: 400 },
+  'trade.algo_not_found': { ccxt: 'OrderNotFound', status: 404 },
+  'trade.algo_duplicate_id': { ccxt: 'InvalidOrder', status: 409 },
+  'trade.algo_bad_state': { ccxt: 'InvalidOrder', status: 409 },
+  'trade.algo_no_liquidity': { ccxt: 'OrderNotFillable', status: 400 },
+  'trade.algo_price_band': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.algo_mark_unusable': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.algo_mark_missing': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.algo_insufficient_balance': { ccxt: 'InsufficientFunds', status: 400 },
+  'trade.algo_child_refused': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.algo_market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
 };
 
 /**

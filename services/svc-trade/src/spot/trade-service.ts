@@ -5,6 +5,7 @@ import type { EventBus } from '@intafaced/events';
 import { requireScope, type Principal } from '@intafaced/auth';
 import {
   formatAmount,
+  InsufficientFundsError,
   mul,
   mulBps,
   orderHoldAccount,
@@ -35,6 +36,14 @@ import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitR
 import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
 import { isHouseMmAccount } from '../mm/seed-market.js';
 import { HOUSE_MM_USER_UUID } from './ids.js';
+import {
+  presentAlgoProgress,
+  TwapEngine,
+  type AlgoProgressView,
+  type AlgoQuotedMark,
+  type CreateTwapInput,
+  type TwapParent,
+} from '../algo/index.js';
 import {
   TradeError,
   type Candle,
@@ -97,6 +106,8 @@ export interface TradeServiceOptions {
   convertSpreadBps?: number;
   /** How long an indicative quote is considered fresh (ms). */
   convertQuoteTtlMs?: number;
+  /** Kill-switch for TWAP algo (D-S-04). OFF refuses create; cancel/pause still work. */
+  algoEnabled?: boolean;
   /**
    * The clock the venue-hours check reads.
    *
@@ -195,8 +206,11 @@ export class TradeService {
   private readonly convertEnabled: boolean;
   private readonly convertSpreadBps: number;
   private readonly convertQuoteTtlMs: number;
+  private readonly algoEnabled: boolean;
   private readonly now: () => Date;
   private readonly subAccounts: SubAccountOwnershipSource;
+  /** D-S-04 TWAP scheduler — parent holds no value; children go through placeOrder. */
+  private readonly algo: TwapEngine;
 
   constructor(
     private readonly sql: Sql,
@@ -212,9 +226,68 @@ export class TradeService {
     this.convertEnabled = options.convertEnabled ?? true;
     this.convertSpreadBps = options.convertSpreadBps ?? 10;
     this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
+    this.algoEnabled = options.algoEnabled ?? true;
     this.now = options.now ?? (() => new Date());
     this.subAccounts = options.subAccounts ?? new NoSubAccounts();
+    this.algo = new TwapEngine({
+      now: () => this.now(),
+      randomId: () => crypto.randomUUID(),
+      placeChild: async (req) => {
+        // Child is an ordinary order — same path, same holds, same gates.
+        const parent = this.algo.get(req.parentId);
+        if (!parent) throw new TradeError(`algo ${req.parentId} not found`, 'trade.algo_not_found');
+        const principal = this.algoPrincipals.get(parent.userId);
+        if (!principal) {
+          throw new TradeError('algo principal missing for child place', 'trade.algo_child_refused');
+        }
+        try {
+          const order = await this.placeOrder(principal, {
+            symbol: req.symbol,
+            marketId: req.marketId,
+            side: req.side,
+            type: req.limitPrice === null ? 'market' : 'limit',
+            qty: req.qty,
+            price: req.limitPrice,
+            tif: req.limitPrice === null ? 'IOC' : 'GTC',
+            clientOrderId: req.clientOrderId,
+            subAccountId: req.subAccountId ?? undefined,
+          });
+          return { orderId: order.id };
+        } catch (err) {
+          if (err instanceof InsufficientFundsError) {
+            throw new TradeError(err.message, 'trade.algo_insufficient_balance');
+          }
+          throw err;
+        }
+      },
+      cancelChild: async (orderId) => {
+        const row = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId} LIMIT 1`;
+        if (row[0] && (row[0].status === 'open' || row[0].status === 'pending')) {
+          const principal = this.algoPrincipals.get(row[0].user_id);
+          if (principal) await this.cancelOrder(principal, orderId);
+        }
+      },
+      bestOpposingPrice: async (marketId, side) => {
+        const depth = await this.matching.depth(marketId, 1);
+        const level = side === 'buy' ? depth.asks[0] : depth.bids[0];
+        return level ? parseAmount(level[0]) : null;
+      },
+      markFor: async (marketId): Promise<AlgoQuotedMark | null> => {
+        const depth = await this.matching.depth(marketId, 1);
+        const bid = depth.bids[0] ? parseAmount(depth.bids[0][0]) : null;
+        const ask = depth.asks[0] ? parseAmount(depth.asks[0][0]) : null;
+        if (bid === null || ask === null || bid <= 0n || ask <= 0n) return null;
+        return {
+          marketId,
+          price: (bid + ask) / 2n,
+          asOf: this.now(),
+          quality: 'mid',
+        };
+      },
+    });
   }
+
+  private readonly algoPrincipals = new Map<string, Principal>();
 
   // ── Listings (operator surface) ────────────────────────────────────────────
 
@@ -1783,6 +1856,124 @@ export class TradeService {
    */
   async candles(marketId: string, timeframe: Timeframe, limit = 500, sinceMs?: number): Promise<Candle[]> {
     return queryCandlesFromFills(this.sql, { marketId, timeframe, limit, sinceMs });
+  }
+
+  // ── Algo TWAP (D-S-04) — schedule emits children; parent holds no value ─────
+
+  /**
+   * Create a TWAP schedule. Refuses when market not listed/tradable/open.
+   * Does not post to the ledger. Children place through `placeOrder` on tick.
+   */
+  async createTwap(
+    principal: Principal,
+    input: {
+      symbol?: string;
+      marketId?: string;
+      side: OrderSide;
+      totalQty: Amount;
+      durationMs: number;
+      sliceIntervalMs: number;
+      limitPrice?: Amount | null;
+      subAccountId?: string;
+      clientAlgoId?: string;
+      /** Only `twap` in v1 — VWAP/POV refused by name. */
+      kind?: string;
+    },
+  ): Promise<TwapParent> {
+    requireScope(principal, 'trade:write');
+    if (!this.algoEnabled) {
+      throw new TradeError('algo execution is disabled by the operator kill-switch', 'trade.algo_disabled');
+    }
+    if (!this.spotEnabled) {
+      throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
+    }
+    const kind = (input.kind ?? 'twap').toLowerCase();
+    if (kind !== 'twap') {
+      throw new TradeError(
+        `algo kind "${kind}" is not available — v1 is TWAP only (VWAP/POV wait on a real volume series)`,
+        'trade.algo_unsupported_kind',
+      );
+    }
+
+    const market = await this.requireMarket(input);
+    assertTradable(market);
+    assertMarketOpen(market, this.now());
+    assertQty(market, input.totalQty);
+    if (input.subAccountId) {
+      await assertSubAccountOwned(this.subAccounts, principal.userId, input.subAccountId);
+    }
+
+    // Refuse at creation when mark feed is blank — never accept a schedule that cannot run.
+    const depth = await this.matching.depth(market.id, 1);
+    const bid = depth.bids[0] ? parseAmount(depth.bids[0][0]) : null;
+    const ask = depth.asks[0] ? parseAmount(depth.asks[0][0]) : null;
+    if (bid === null || ask === null) {
+      throw new TradeError(
+        `${market.symbol}: no two-sided mark at creation — refusing TWAP rather than inventing a feed`,
+        'trade.algo_mark_missing',
+      );
+    }
+
+    const createInput: CreateTwapInput = {
+      marketId: market.id,
+      symbol: market.symbol,
+      side: input.side,
+      totalQty: input.totalQty,
+      durationMs: input.durationMs,
+      sliceIntervalMs: input.sliceIntervalMs,
+      limitPrice: input.limitPrice ?? null,
+      subAccountId: input.subAccountId ?? null,
+      clientAlgoId: input.clientAlgoId,
+    };
+
+    // Store principal on a side map so child place uses the real caller scopes.
+    this.algoPrincipals.set(principal.userId, principal);
+
+    return this.algo.create(principal.userId, createInput, market.lotSize);
+  }
+
+  async getAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
+    requireScope(principal, 'trade:read');
+    const parent = this.algo.get(parentId);
+    if (!parent || parent.userId !== principal.userId) {
+      throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
+    }
+    return parent;
+  }
+
+  async algoProgress(principal: Principal, parentId: string): Promise<AlgoProgressView> {
+    const parent = await this.getAlgo(principal, parentId);
+    let filled = 0n;
+    for (const child of parent.children) {
+      const fills = await this.fillsForOrder(principal, child.orderId);
+      for (const f of fills) filled += f.qty;
+    }
+    return presentAlgoProgress(parent, filled);
+  }
+
+  async pauseAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
+    requireScope(principal, 'trade:write');
+    return this.algo.pause(principal.userId, parentId);
+  }
+
+  async resumeAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
+    requireScope(principal, 'trade:write');
+    return this.algo.resume(principal.userId, parentId);
+  }
+
+  async cancelAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
+    requireScope(principal, 'trade:write');
+    return this.algo.cancel(principal.userId, parentId);
+  }
+
+  /** Drive one parent's next due slice (job host / tests). */
+  async tickAlgo(parentId: string) {
+    return this.algo.tick(parentId);
+  }
+
+  /** Drive all active algos once. */
+  async tickAllAlgos() {
+    return this.algo.tickAll();
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────

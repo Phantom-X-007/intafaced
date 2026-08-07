@@ -57,6 +57,15 @@ const schema = serviceEnvSchema
       TRADE_CONVERT_SPREAD_BPS: z.coerce.number().int().min(0).max(5000).default(10),
 
       /**
+       * Kill-switch for TWAP algo execution (D-S-04 / trade.algo).
+       * OFF refuses new schedules; cancel/pause of existing still work.
+       */
+      TRADE_ALGO_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
        * Futures residual jobs (liquidation scan + funding ticks).
        * Default OFF — must be explicitly enabled. Never invents markets/rates.
        */

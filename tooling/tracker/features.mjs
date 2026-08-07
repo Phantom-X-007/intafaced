@@ -297,8 +297,11 @@ export const FEATURES = [
   f('trade.algo', 'TWAP / VWAP / POV execution', {
     module: 'trade',
     phase: '2',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent algo product.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 2 — D-S-04 TWAP Stage (parent=schedule, children via placeOrder, refuse blank mark/empty book). VWAP/POV still out (no honest volume series).',
+    requires: ['services/svc-trade/src/algo'],
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
