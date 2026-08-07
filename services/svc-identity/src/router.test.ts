@@ -544,3 +544,74 @@ describe('apiKeys.exchange turns a key into an edge-usable access token', () => 
     expect(codeOf(err)).toBe('UNAUTHORIZED');
   });
 });
+
+// ── Affiliates Stage: admin tree read + payout refuse-closed ─────────────────
+
+describe('affiliates admin tree read (Stage spine, non-pay)', () => {
+  const NODE = '55555555-5555-4555-8555-555555555555';
+  const REF = '66666666-6666-4666-8666-666666666666';
+
+  function affiliatesRouter() {
+    const referral = {
+      treeBoard: async (frozenIds?: ReadonlySet<string>) => ({
+        edges: 2,
+        referrers: 1,
+        maxDepth: 2,
+        frozenCount: frozenIds?.size ?? 0,
+        maxDepthCap: 5,
+      }),
+      nodeStatus: async (userId: string, frozenIds?: ReadonlySet<string>) => ({
+        userId,
+        referrerId: REF,
+        depth: 1,
+        ancestors: [REF],
+        directDownline: [],
+        directDownlineCount: 0,
+        frozen: frozenIds?.has(userId) ?? false,
+        attributedAt: '2026-08-07T12:00:00.000Z',
+      }),
+    } as unknown as import('./affiliates/referral-service.js').ReferralService;
+
+    const freeze = {
+      frozenIds: async () => new Set([NODE]),
+      list: async () => [],
+    } as unknown as import('./affiliates/freeze-service.js').FreezeService;
+
+    return createIdentityRouter(stub.auth, stub.rank, {
+      registrationOpen: true,
+      referral,
+      freeze,
+    });
+  }
+
+  it('treeStatus requires admin:read', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['identity:read']));
+    const err = await api.affiliates.treeStatus().catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+
+  it('treeStatus returns structure board for admin:read', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const board = await api.affiliates.treeStatus();
+    expect(board.edges).toBe(2);
+    expect(board.frozenCount).toBe(1);
+    expect(board.statusLine).toContain('edges=2');
+    expect(board.statusLine).toContain('frozen=1');
+  });
+
+  it('node returns place-in-tree for admin:read', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const node = await api.affiliates.node({ userId: NODE });
+    expect(node.referrerId).toBe(REF);
+    expect(node.depth).toBe(1);
+    expect(node.frozen).toBe(true);
+    expect(node.ancestors).toEqual([REF]);
+  });
+
+  it('payout is refuse-closed (PRECONDITION_FAILED) — no invent rates', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+    const err = await api.affiliates.payout({}).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('DIRECTION §8');
+  });
+});

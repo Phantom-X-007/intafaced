@@ -57,9 +57,11 @@ Any commission is **fee share of real volume**. Without fee events + ledger reci
 
 ### Slice A — tree + attribution
 
-- [ ] Referral edge write on signup (identity) with audit
-- [ ] Multi-tier depth limit law
-- [ ] Cycle / self-referral rejection tests
+- [x] Referral edge write on signup (identity) with audit
+- [x] Multi-tier depth limit law
+- [x] Cycle / self-referral rejection tests
+- [x] Admin tree board + node status read (`admin:read`) — Stage spine 2026-08-07
+- [x] Payout path refuse-closed until DIRECTION §8 rates + ledger recipe (Class M)
 
 ### Slice B — accrual
 
@@ -70,6 +72,7 @@ Any commission is **fee share of real volume**. Without fee events + ledger reci
 
 - [ ] Recipe + operator freeze
 - [ ] Notify optional
+- [ ] **Blocked:** owner-published fee-share rates (DIRECTION §8) — agents must not invent
 
 ### Tracker `done` bar
 

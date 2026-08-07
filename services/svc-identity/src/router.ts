@@ -4,6 +4,7 @@ import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
+import { AffiliatePayoutRefuseError, affiliateTreeStatusLine, refuseAffiliatePayout } from './affiliates/admin-tree-read.js';
 import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
@@ -54,6 +55,15 @@ function toTrpcError(err: unknown): TRPCError {
 
   if (err instanceof CommissionError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
+
+  if (err instanceof AffiliatePayoutRefuseError) {
+    // PRECONDITION_FAILED: operator asked for pay before owner rates + ledger recipe exist.
+    return new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: `${err.message} [${err.residual}]`,
+      cause: err,
+    });
   }
 
   if (!(err instanceof AuthError)) {
@@ -832,6 +842,90 @@ export function createIdentityRouter(
               reason: r.reason,
               frozenAt: r.frozenAt.toISOString(),
             }));
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Stage admin read — multi-tier tree board (structure + freeze count).
+       * No rates, no payout amounts.
+       */
+      treeStatus: scopedProcedure('admin:read')
+        .output(
+          z.object({
+            edges: z.number().int().nonnegative(),
+            referrers: z.number().int().nonnegative(),
+            maxDepth: z.number().int().nonnegative(),
+            frozenCount: z.number().int().nonnegative(),
+            maxDepthCap: z.number().int().positive(),
+            statusLine: z.string(),
+          }),
+        )
+        .query(async () => {
+          try {
+            const frozen = freeze ? await requireFreeze().frozenIds() : new Set<string>();
+            const board = await requireReferral().treeBoard(frozen);
+            return {
+              ...board,
+              statusLine: affiliateTreeStatusLine(board),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Stage admin read — one node's place in the IB / affiliate tree.
+       * Structure + freeze flag only.
+       */
+      node: scopedProcedure('admin:read')
+        .input(z.object({ userId: z.string().uuid() }))
+        .output(
+          z.object({
+            userId: z.string().uuid(),
+            referrerId: z.string().uuid().nullable(),
+            depth: z.number().int().nonnegative(),
+            ancestors: z.array(z.string().uuid()),
+            directDownline: z.array(z.string().uuid()),
+            directDownlineCount: z.number().int().nonnegative(),
+            frozen: z.boolean(),
+            attributedAt: z.string().nullable(),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            const frozen = freeze ? await requireFreeze().frozenIds() : new Set<string>();
+            const node = await requireReferral().nodeStatus(input.userId, frozen);
+            return {
+              userId: node.userId,
+              referrerId: node.referrerId,
+              depth: node.depth,
+              ancestors: [...node.ancestors],
+              directDownline: [...node.directDownline],
+              directDownlineCount: node.directDownlineCount,
+              frozen: node.frozen,
+              attributedAt: node.attributedAt,
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Class M payout — refuse-closed. DIRECTION §8 rates are owner-only;
+       * never invent fee-share bps or post ledger from this path.
+       */
+      payout: scopedProcedure('admin:write')
+        .input(
+          z.object({
+            beneficiaryId: z.string().uuid().optional(),
+            dryRun: z.boolean().optional(),
+          }),
+        )
+        .mutation(async () => {
+          try {
+            refuseAffiliatePayout();
           } catch (err) {
             throw toTrpcError(err);
           }
