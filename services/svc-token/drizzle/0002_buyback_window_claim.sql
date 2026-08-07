@@ -1,3 +1,7 @@
+-- intafaced:destructive drops the index buyback_runs_window_idx, superseded in this
+-- same migration by the EXCLUDE constraint buyback_runs_window_no_overlap_ex. Keeping
+-- both would leave which SQLSTATE a duplicate raises up to index ordering; the
+-- guarantee is strictly strengthened, never weakened.
 -- ── Buyback: claim the window BEFORE the burn, and make overlap impossible ───
 --
 -- Two defects, both of which moved real value. Neither fix decides an economic

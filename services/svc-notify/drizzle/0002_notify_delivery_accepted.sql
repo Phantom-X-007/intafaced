@@ -1,3 +1,7 @@
+-- intafaced:destructive drops the constraint deliveries_delivered_ck, replaced in this
+-- same migration by deliveries_accepted_ck. The guarantee is strengthened, not
+-- relaxed: accepted_at may not be written on a failure, so an undelivered margin
+-- call cannot be confused with one a transport took.
 -- svc-notify · rename the outcome to what it can actually prove
 -- Reversal: 0002_notify_delivery_accepted.down.sql
 --

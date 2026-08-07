@@ -54,6 +54,57 @@ if (!/BLOCKED_URI_FRAGMENTS|member-wallet\/recharge|withdraw\/apply/.test(interc
   process.exit(1);
 }
 
+/**
+ * THE REGISTRATION, not the word.
+ *
+ * This check used to be `text.includes('DualBookMoneyDoorInterceptor')` over the
+ * whole file. Every one of these configs also carries an `import` line naming
+ * the interceptor class — so the import ALONE satisfied it. Proved by taking the
+ * door off its hinges in memory and re-running the old check:
+ *
+ *     registration line still present after gutting?               false
+ *     old check  text.includes("DualBookMoneyDoorInterceptor") ->  true
+ *     what still satisfied it: the unused import line, nothing else
+ *
+ * Delete the real `registry.addInterceptor(…).addPathPatterns("/**")` line,
+ * leave the import — which Java compiles happily as unused — and the gate still
+ * printed "✓ interceptor + registration on admin, ucenter-api, otc-api,
+ * exchange-api."
+ *
+ * The dual-book door is the boundary between the vendored exchange's own wallet
+ * tables and the sovereign ledger, which makes it the most important guard in
+ * the system, and it was being proved by an unused import line.
+ *
+ * `.addPathPatterns("/**")` is required rather than optional: an interceptor
+ * registered against a narrower path set is a door with a gap, and the gap is
+ * exactly where a money controller nobody remembered would sit.
+ *
+ * Comments are stripped first for the reason the kill-switch gate already
+ * documents — a commented-out registration reads as a registration to a naive
+ * matcher, and that is the same class of defect this fix is closing.
+ */
+const REGISTRATION =
+  /registry\s*\.\s*addInterceptor\s*\(\s*new\s+DualBookMoneyDoorInterceptor\s*\([^)]*\)\s*\)\s*\.\s*addPathPatterns\s*\(\s*"\/\*\*"\s*\)/;
+
+/**
+ * Block and line comments, so commented-out code cannot satisfy a check.
+ *
+ * STRING LITERALS ARE MASKED FIRST, and that is not defensive tidiness — the
+ * naive version broke this exact gate on its first run. The thing being matched
+ * is `.addPathPatterns("/**")`, and `"/**"` opens a block comment as far as a
+ * plain regex is concerned: the stripper ate from there to the next `*​/` in the
+ * file and took the registration with it, so all four configs reported as
+ * unregistered. A comment stripper that cannot tell a comment from a path
+ * pattern is the same class of defect as an import that passes for a
+ * registration.
+ */
+function stripComments(source) {
+  const literals = [];
+  const masked = source.replace(/"(?:\\.|[^"\\])*"/g, (s) => `"\u0000${literals.push(s) - 1}\u0000"`);
+  const decommented = masked.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  return decommented.replace(/"\u0000(\d+)\u0000"/g, (_, i) => literals[Number(i)]);
+}
+
 /** Apps that host money controllers per P2-1 inventory. */
 const REQUIRED_CONFIG_MARKERS = [
   { id: 'admin', pathIncludes: ['admin', 'ApplicationConfig.java'] },
@@ -71,9 +122,12 @@ for (const marker of REQUIRED_CONFIG_MARKERS) {
     failures.push(`no ApplicationConfig.java found for ${marker.id}`);
     continue;
   }
-  const text = readFileSync(match, 'utf8');
-  if (!text.includes('DualBookMoneyDoorInterceptor')) {
-    failures.push(`${relative(ROOT, match)} does not register DualBookMoneyDoorInterceptor`);
+  const text = stripComments(readFileSync(match, 'utf8'));
+  if (!REGISTRATION.test(text)) {
+    failures.push(
+      `${relative(ROOT, match)} does not REGISTER DualBookMoneyDoorInterceptor ` +
+        `(need registry.addInterceptor(new DualBookMoneyDoorInterceptor()).addPathPatterns("/**"))`,
+    );
   }
 }
 

@@ -15,12 +15,87 @@ import { join, relative } from 'node:path';
 const ROOT = process.cwd();
 const SERVICES = join(ROOT, 'services');
 
-const DESTRUCTIVE = [/\bDROP\s+TABLE\b/i, /\bDROP\s+COLUMN\b/i, /\bTRUNCATE\b/i, /\bDROP\s+SCHEMA\b/i];
+/**
+ * `DELETE FROM` was not on this list, and neither was constraint removal.
+ *
+ * A migration that deletes rows from the ledger was not destructive as far as
+ * this gate was concerned — which is the one table in the platform where losing
+ * rows is unrecoverable, because the book IS the rows. Dropping a CHECK or a
+ * FOREIGN KEY is the same shape one level down: it destroys an invariant rather
+ * than data, silently, and every row written afterwards is written without it.
+ *
+ * None of these are forbidden. They need the `-- intafaced:destructive <reason>`
+ * acknowledgement, which is a sentence somebody has to write on purpose.
+ */
+const DESTRUCTIVE = [
+  /\bDROP\s+TABLE\b/i,
+  /\bDROP\s+COLUMN\b/i,
+  /\bTRUNCATE\b/i,
+  /\bDROP\s+SCHEMA\b/i,
+  /\bDELETE\s+FROM\b/i,
+  /\bDROP\s+(?:NOT\s+NULL|DEFAULT)\b/i,
+  /\bDROP\s+(?:VIEW|TYPE|SEQUENCE)\b/i,
+];
+
+/**
+ * Constraints and indexes that are dropped and NEVER PUT BACK.
+ *
+ * `DROP CONSTRAINT` cannot be a flat pattern here. Every migration in this repo
+ * opens with the idempotent re-create idiom —
+ *
+ *     ALTER TABLE … DROP CONSTRAINT IF EXISTS "orders_hold_positive_ck";
+ *     ALTER TABLE … ADD  CONSTRAINT        "orders_hold_positive_ck" CHECK (…);
+ *
+ * — so a flat rule flagged 28 of 48 migrations, none of which lose anything.
+ * That is worse than no rule: a gate that fires on the house style trains
+ * everyone to paste the acknowledgement without reading it, and then it is
+ * decoration on the one migration that really does drop an invariant.
+ *
+ * So the check is the DIFFERENCE: dropped names minus restored names. A
+ * constraint re-added under the SAME name in the SAME file is a re-create. One
+ * that is not is a real loss and needs the acknowledgement — which is exactly
+ * how `0006_paper_markets.sql` is caught, because it drops
+ * `orders_hold_positive_ck` and adds `orders_hold_non_negative_ck`: a different
+ * name, a genuinely relaxed rule, and previously invisible to this gate.
+ */
+function unrestoredDrops(sql) {
+  const names = (re) => new Set([...sql.matchAll(re)].map((m) => m[1]));
+  const droppedConstraints = names(/\bDROP\s+CONSTRAINT\s+(?:IF\s+EXISTS\s+)?"?([\w.]+)"?/gi);
+  const addedConstraints = names(/\bADD\s+CONSTRAINT\s+"?([\w.]+)"?/gi);
+  const droppedIndexes = names(/\bDROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?"?([\w."]+?)"?\s*;/gi);
+  const createdIndexes = names(/\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([\w."]+?)"?\s+ON/gi);
+
+  const bare = (n) => n.replace(/"/g, '').split('.').pop();
+  const restored = new Set([...addedConstraints, ...createdIndexes].map(bare));
+  return [...droppedConstraints, ...droppedIndexes].map(bare).filter((n) => !restored.has(n));
+}
+
+/**
+ * A `.down.sql` that reverses nothing.
+ *
+ * Reversibility was decided by `up.replace(/\.sql$/, '.down.sql')` existing in a
+ * filename set — the gate printed "all 48 migrations reversible" having never
+ * OPENED a single down file. An empty file satisfied it. So did one holding
+ * only a comment. "Reversible" meant "a file with the right name is present."
+ *
+ * This does not try to prove a down migration is CORRECT; nothing short of
+ * running it against a real database can, and that is the integration suite's
+ * job. It proves the weaker thing the filename check was silently claiming:
+ * that the file contains at least one statement.
+ */
+const SQL_STATEMENT = /^\s*[A-Za-z]/m;
+
+/** SQL comments, so a down file holding only an explanation does not read as a statement. */
+function stripSqlComments(sql) {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ');
+}
 const ACKNOWLEDGEMENT = /--\s*intafaced:destructive\b/i;
 
 const problems = [];
 let migrationsChecked = 0;
 let servicesChecked = 0;
+/** Reversal files actually OPENED — the number the old success line implied and never had. */
+let downsRead = 0;
 
 if (!existsSync(SERVICES)) {
   console.log('✓ migration-check — no services yet');
@@ -46,10 +121,24 @@ for (const service of readdirSync(SERVICES)) {
         file: relative(ROOT, join(drizzleDir, up)),
         problem: `missing reversal — write ${expectedDown}`,
       });
+    } else {
+      // OPEN IT. The filename proved a file exists, never that it reverses
+      // anything — see SQL_STATEMENT above.
+      const downSql = stripSqlComments(readFileSync(join(drizzleDir, expectedDown), 'utf8'));
+      downsRead++;
+      if (!SQL_STATEMENT.test(downSql)) {
+        problems.push({
+          service,
+          file: relative(ROOT, join(drizzleDir, expectedDown)),
+          problem: 'reversal file contains no SQL — an empty .down.sql is not a reversal, it is a filename',
+        });
+      }
     }
 
     const sql = readFileSync(join(drizzleDir, up), 'utf8');
-    const destructive = DESTRUCTIVE.find((p) => p.test(sql));
+    const orphaned = unrestoredDrops(sql);
+    const destructive =
+      DESTRUCTIVE.find((p) => p.test(sql)) || (orphaned.length > 0 ? `dropped and not restored: ${orphaned.join(', ')}` : null);
     if (destructive && !ACKNOWLEDGEMENT.test(sql)) {
       problems.push({
         service,
@@ -90,4 +179,7 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(`✓ migration-check clean — ${migrationsChecked} migration(s) across ${servicesChecked} service(s), all reversible`);
+console.log(
+  `\u2713 migration-check clean \u2014 ${migrationsChecked} migration(s) across ${servicesChecked} service(s), ` +
+    `${downsRead} reversal file(s) opened and non-empty`,
+);
