@@ -19,6 +19,7 @@ import { navigatorTierGate } from './navigator/tier-gate.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
+import { watchApprovalFixtures } from './merchant/watch.js';
 import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
@@ -1372,6 +1373,82 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 stat: { ...a.stat },
                 provenance: { ...a.provenance },
               })),
+            };
+          }
+          return result;
+        }),
+    }),
+
+    /**
+     * Merchant Stage-1 — approval-rate watch from caller fixtures only.
+     * pay.routing / live metrics residual — dark pay plane refuses invent.
+     * Money tools denied (guardrail). Spec: docs/ops/trk/agents.merchant.md Stage 1.
+     */
+    merchant: router({
+      watch: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            points: z
+              .array(
+                z.object({
+                  railId: z.string().min(1).max(64),
+                  approvalRate: z.string().nullable(),
+                  attempts: z.number().int().nullable(),
+                  asOf: z.string().min(1),
+                  maxAgeMs: z.number().int().positive(),
+                }),
+              )
+              .max(500),
+            threshold: z.string().optional(),
+            payPlane: z.enum(['live', 'dark']).optional(),
+            railAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              watchedAt: z.string(),
+              considered: z.number().int(),
+              skippedStale: z.number().int(),
+              skippedIncomplete: z.number().int(),
+              alerts: z.array(
+                z.object({
+                  railId: z.string(),
+                  approvalRate: z.string(),
+                  attempts: z.number().int(),
+                  threshold: z.string(),
+                  kind: z.literal('below_threshold'),
+                }),
+              ),
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.merchant.empty'),
+            }),
+            z.object({
+              status: z.literal('unavailable'),
+              userMessageKey: z.literal('agents.merchant.unavailable'),
+              reason: z.enum(['stale', 'no_metrics', 'pay_plane_dark']),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = watchApprovalFixtures(input.points, {
+            ...(input.threshold === undefined ? {} : { threshold: input.threshold }),
+            ...(input.payPlane === undefined ? {} : { payPlane: input.payPlane }),
+            ...(input.railAllowlist === undefined ? {} : { railAllowlist: input.railAllowlist }),
+            ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+          });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              watchedAt: result.watchedAt,
+              considered: result.considered,
+              skippedStale: result.skippedStale,
+              skippedIncomplete: result.skippedIncomplete,
+              alerts: result.alerts.map((a) => ({ ...a })),
             };
           }
           return result;
