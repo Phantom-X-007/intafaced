@@ -17,26 +17,26 @@ That is the whole failure: **the work was done and the pointer was missing.** Th
 
 ## The index
 
-| ID            | Status   | Where the law lives                                                                                                                                                                |
-| ------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **D-S-01** ✅ | **done** | [`adr/2026-08-05-futures-risk-and-mark-law.md`](adr/2026-08-05-futures-risk-and-mark-law.md) on `DIRECTION` §1.                                                                    |
-| **D-S-02** ✅ | **done** | [`SPEC-OTC-RFQ-AND-EARN-2026-08-02.md`](SPEC-OTC-RFQ-AND-EARN-2026-08-02.md) Part A                                                                                                |
-| **D-S-03** ✅ | **done** | [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md). `DIRECTION` §1 marks the old ban superseded by it.                               |
-| **D-S-04** ✅ | **done** | [`adr/2026-08-04-algo-execution-law.md`](adr/2026-08-04-algo-execution-law.md), on `DIRECTION` §1 (TWAP only, icebergs out).                                                       |
-| **D-S-05** ✅ | **done** | [`adr/2026-08-04-instrument-enum-authority.md`](adr/2026-08-04-instrument-enum-authority.md) on `DIRECTION` §2.                                                                    |
-| **D-S-06** ✅ | **done** | [`adr/2026-08-04-matching-dual-target.md`](adr/2026-08-04-matching-dual-target.md) — fill-finality answered; INTACORE has zero code refs.                                          |
-| **D-S-07** ✅ | **done** | Lending: [`SPEC-LENDING-2026-08-02.md`](SPEC-LENDING-2026-08-02.md) §1. Futures mark: [`adr/2026-08-05-futures-risk-and-mark-law.md`](adr/2026-08-05-futures-risk-and-mark-law.md) |
-| **D-S-08** ✅ | **done** | [`adr/2026-08-04-p2p-escrow-and-dispute-law.md`](adr/2026-08-04-p2p-escrow-and-dispute-law.md) — escrow-plane conflict resolved.                                                   |
-| **D-S-09** ✅ | **done** | Earn half: `SPEC-OTC-RFQ-AND-EARN` Part B + `DIRECTION` §7. Cards/ramps §13 boundary: [`adr/2026-08-04-bank-vertical-law.md`](adr/2026-08-04-bank-vertical-law.md)                 |
-| **D-S-10** ✅ | **done** | [`SPEC-PAY-VERTICALS-2026-08-02.md`](SPEC-PAY-VERTICALS-2026-08-02.md) + [`adr/2026-08-04-pay-rails-and-psp-socket.md`](adr/2026-08-04-pay-rails-and-psp-socket.md)                |
-| **D-S-11** ✅ | **done** | [`SPEC-SUBACCOUNTS-2026-08-02.md`](SPEC-SUBACCOUNTS-2026-08-02.md). Adjacent: [`adr/2026-08-04-authority-and-refusal-shape.md`](adr/2026-08-04-authority-and-refusal-shape.md)     |
-| **D-S-12** ✅ | **done** | [`adr/2026-08-04-cross-plane-bridge-accounting.md`](adr/2026-08-04-cross-plane-bridge-accounting.md) — accounting law only; chain side is Shehzad S-D7/S-B5.                       |
-| **D-S-13** ✅ | **done** | [`adr/2026-08-04-event-socket-vs-broken-promise.md`](adr/2026-08-04-event-socket-vs-broken-promise.md)                                                                             |
-| **D-S-14** ✅ | **done** | [`adr/2026-08-04-token-economics-outcomes.md`](adr/2026-08-04-token-economics-outcomes.md) — decides no number; decides whose they are.                                            |
-| **D-S-15** ✅ | **done** | [`adr/2026-08-04-platform-pages-ia.md`](adr/2026-08-04-platform-pages-ia.md) — law only, craft stays Nitro.                                                                        |
-| **D-S-16** ✅ | **done** | [`adr/2026-08-04-class-m-hold-language.md`](adr/2026-08-04-class-m-hold-language.md) on `DIRECTION` §3.                                                                            |
-| **D-S-17** ✅ | **done** | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                            |
-| **D-S-18** ✅ | **done** | [`adr/2026-08-04-predict-quant-connect-law.md`](adr/2026-08-04-predict-quant-connect-law.md) — §27 in scope; §28/29 blocked on it; §32 is 5P.                                      |
+| ID            | Status   | Where the law lives                                                                                                                                                                                                                        |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **D-S-01** ✅ | **done** | [`adr/2026-08-05-futures-risk-and-mark-law.md`](adr/2026-08-05-futures-risk-and-mark-law.md) on `DIRECTION` §1, amended by [`adr/2026-08-07-futures-exit-when-the-feed-is-dark.md`](adr/2026-08-07-futures-exit-when-the-feed-is-dark.md). |
+| **D-S-02** ✅ | **done** | [`SPEC-OTC-RFQ-AND-EARN-2026-08-02.md`](SPEC-OTC-RFQ-AND-EARN-2026-08-02.md) Part A                                                                                                                                                        |
+| **D-S-03** ✅ | **done** | [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md). `DIRECTION` §1 marks the old ban superseded by it.                                                                                       |
+| **D-S-04** ✅ | **done** | [`adr/2026-08-04-algo-execution-law.md`](adr/2026-08-04-algo-execution-law.md), on `DIRECTION` §1 (TWAP only, icebergs out).                                                                                                               |
+| **D-S-05** ✅ | **done** | [`adr/2026-08-04-instrument-enum-authority.md`](adr/2026-08-04-instrument-enum-authority.md) on `DIRECTION` §2.                                                                                                                            |
+| **D-S-06** ✅ | **done** | [`adr/2026-08-04-matching-dual-target.md`](adr/2026-08-04-matching-dual-target.md) — fill-finality answered; INTACORE has zero code refs.                                                                                                  |
+| **D-S-07** ✅ | **done** | Lending: [`SPEC-LENDING-2026-08-02.md`](SPEC-LENDING-2026-08-02.md) §1. Futures mark: [`adr/2026-08-05-futures-risk-and-mark-law.md`](adr/2026-08-05-futures-risk-and-mark-law.md)                                                         |
+| **D-S-08** ✅ | **done** | [`adr/2026-08-04-p2p-escrow-and-dispute-law.md`](adr/2026-08-04-p2p-escrow-and-dispute-law.md) — escrow-plane conflict resolved.                                                                                                           |
+| **D-S-09** ✅ | **done** | Earn half: `SPEC-OTC-RFQ-AND-EARN` Part B + `DIRECTION` §7. Cards/ramps §13 boundary: [`adr/2026-08-04-bank-vertical-law.md`](adr/2026-08-04-bank-vertical-law.md)                                                                         |
+| **D-S-10** ✅ | **done** | [`SPEC-PAY-VERTICALS-2026-08-02.md`](SPEC-PAY-VERTICALS-2026-08-02.md) + [`adr/2026-08-04-pay-rails-and-psp-socket.md`](adr/2026-08-04-pay-rails-and-psp-socket.md)                                                                        |
+| **D-S-11** ✅ | **done** | [`SPEC-SUBACCOUNTS-2026-08-02.md`](SPEC-SUBACCOUNTS-2026-08-02.md). Adjacent: [`adr/2026-08-04-authority-and-refusal-shape.md`](adr/2026-08-04-authority-and-refusal-shape.md)                                                             |
+| **D-S-12** ✅ | **done** | [`adr/2026-08-04-cross-plane-bridge-accounting.md`](adr/2026-08-04-cross-plane-bridge-accounting.md) — accounting law only; chain side is Shehzad S-D7/S-B5.                                                                               |
+| **D-S-13** ✅ | **done** | [`adr/2026-08-04-event-socket-vs-broken-promise.md`](adr/2026-08-04-event-socket-vs-broken-promise.md)                                                                                                                                     |
+| **D-S-14** ✅ | **done** | [`adr/2026-08-04-token-economics-outcomes.md`](adr/2026-08-04-token-economics-outcomes.md) — decides no number; decides whose they are.                                                                                                    |
+| **D-S-15** ✅ | **done** | [`adr/2026-08-04-platform-pages-ia.md`](adr/2026-08-04-platform-pages-ia.md) — law only, craft stays Nitro.                                                                                                                                |
+| **D-S-16** ✅ | **done** | [`adr/2026-08-04-class-m-hold-language.md`](adr/2026-08-04-class-m-hold-language.md) on `DIRECTION` §3.                                                                                                                                    |
+| **D-S-17** ✅ | **done** | Decision: `DIRECTION` §4 (Option B). Residual: [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)                                                                                                    |
+| **D-S-18** ✅ | **done** | [`adr/2026-08-04-predict-quant-connect-law.md`](adr/2026-08-04-predict-quant-connect-law.md) — §27 in scope; §28/29 blocked on it; §32 is 5P.                                                                                              |
 
 **Tally: 18 done · 0 partial · 0 blank.** Every slot is law. The board read as 17 blank.
 
@@ -73,6 +73,24 @@ The sharpest of these: **`dex.quote-router` is finished code that cannot serve a
 A red that must be routed around to get any work done is a red that gets deleted, and it takes the honest part with it. The pin achieves the real requirement — the finding cannot be shipped further, resolved silently, or forgotten — without holding the repo hostage to a decision that is not the gate's to make.
 
 Both ADRs carry the correction where the rule lives. It is recorded here as well, because it was the same mistake twice in one afternoon and the next author should meet it before making it a third time.
+
+---
+
+## The rule that has now cost three findings in one subsystem
+
+> **A guard that is correct in isolation and unreachable in place is not a guard. Test it where it is wired, not where it is written.**
+
+`svc-trade` futures produced the same defect three separate times, each caught only by adversarial review and never by a test:
+
+| Guard                                             | Correct in isolation                           | Why it never ran                                                                          |
+| ------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| The deviation breaker                             | Unit-tested, integer-only, rounds up correctly | `previous` is `null` at every call site — no production caller supplies `previousMarkFor` |
+| `requirePayoutGrade`'s losing-close exemption     | Genuinely exempts losing closes                | `markFor` threw two calls earlier, so the exemption is dead code                          |
+| `profitSourceFromConfig`'s refusal (#883, `#950`) | Refuses an unnamed payout account              | Exactly one value was legal, so the refusal was an outage, not a decision gate            |
+
+Each has a comment stating the property it does not have. **A comment asserting a guard's behaviour is not evidence the guard runs** — in all three cases the comment is what stopped anyone looking. The test that would have caught every one of them is the same shape: exercise the guard through the public entry point and assert the refusal, rather than calling the guard function directly.
+
+[The exit-when-dark ADR](adr/2026-08-07-futures-exit-when-the-feed-is-dark.md) carries the product half of this. This row is the engineering half, and it generalises past futures.
 
 ---
 
