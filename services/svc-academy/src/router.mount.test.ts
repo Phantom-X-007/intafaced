@@ -116,6 +116,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'curriculum',
         'curriculumItem',
         'curriculumInventory',
+        'paperDrill',
         'ambassadorBadge',
         'ambassadors',
         'appointAmbassador',
@@ -344,5 +345,49 @@ describe('svc-academy mount — no SFU means an error, never a fake token', () =
     // got `{ url, token }` here would try to connect and hang.
     await expect(call).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
     await expect(call).rejects.not.toHaveProperty('token');
+  });
+});
+
+describe('svc-academy mount — the paper drill gate is reachable, and refuses live', () => {
+  const caller = () => createAcademyRouter(stubAcademy()).createCaller(signed());
+  const paperMarket = { marketId: 'mkt-paper-1', paper: true, symbol: 'BTC-USDT' };
+
+  it('returns the drill steps for a workbook on a paper market', async () => {
+    const result = await caller().paperDrill({ slug: 'foundations-paper-workbook', market: paperMarket });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected a paper drill');
+    expect(result.marketId).toBe('mkt-paper-1');
+    expect(result.steps.length).toBeGreaterThan(0);
+    expect(result.steps.every((step) => step.id && step.instruction)).toBe(true);
+  });
+
+  it('REFUSES a market trade did not flag as paper — this is the whole point', async () => {
+    const result = await caller().paperDrill({
+      slug: 'foundations-paper-workbook',
+      market: { ...paperMarket, paper: false },
+    });
+
+    expect(result).toMatchObject({ ok: false, reason: 'not_paper' });
+  });
+
+  it('refuses with no market rather than defaulting to one', async () => {
+    const result = await caller().paperDrill({ slug: 'foundations-paper-workbook', market: null });
+
+    expect(result).toMatchObject({ ok: false, reason: 'no_market' });
+  });
+
+  it('refuses a catalog item that is not a workbook', async () => {
+    const notAWorkbook = await caller().curriculum({ kind: 'playbook' });
+    const slug = notAWorkbook[0]?.slug;
+    expect(slug).toBeTruthy();
+
+    const result = await caller().paperDrill({ slug: slug as string, market: paperMarket });
+
+    expect(result).toMatchObject({ ok: false });
+  });
+
+  it('rejects a slug that is not in the spine at all', async () => {
+    await expect(caller().paperDrill({ slug: 'no-such-workbook', market: paperMarket })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

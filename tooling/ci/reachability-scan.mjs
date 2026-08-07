@@ -43,27 +43,23 @@ import { join, basename, relative } from 'node:path';
 const PARKED = new Map([
   [
     'services/svc-academy/src/ambassadors/residency.ts',
-    'Ambassador Stage-2 residency apply/review. Spec: docs/ops/trk/academy.ambassadors.md. Awaits the academy route that accepts applications.',
-  ],
-  [
-    'services/svc-academy/src/paper/workbook-loop.ts',
-    'Paper-trading Stage-2 drill loop (TRK-academy.paper-trading). Awaits the trade paper-market flag caller.',
+    'Ambassador Stage-1 residency model (docs/ops/trk/academy.ambassadors.md). NOT wired on purpose: MemoryResidencyDesk is in-process, so a route over it would lose every application on restart. Needs a persistence table before it can be exposed honestly.',
   ],
   [
     'services/svc-agents/src/copy-intel/stats.ts',
-    'Copy-Intel Stage-1 audited leader stats. Spec: docs/ops/trk/agents.copy-intel.md. Awaits the agent runtime that feeds it leader rows.',
+    'Copy-Intel Stage-1 (docs/ops/trk/agents.copy-intel.md). Blocked at the Stage 0 dependency gate the spec itself sets: tracker trade.copy is not done, and Stage 1 says "add task route when product law ready".',
   ],
   [
     'services/svc-agents/src/merchant/watch.ts',
-    'Merchant agent Stage-1 approval-rate watch. Spec: docs/ops/trk/agents.merchant.md. Awaits the merchant agent runtime.',
+    'Merchant Stage-1 (docs/ops/trk/agents.merchant.md). Blocked at the Stage 0 dependency gate the spec itself sets: tracker pay.routing is not done.',
   ],
   [
     'services/svc-agents/src/scanner/rank.ts',
-    'Market Scanner Stage-1 rank. Spec: docs/ops/trk/agents.scanner.md. Awaits the scanner runtime.',
+    'Scanner Stage-1 (docs/ops/trk/agents.scanner.md). Deps are done, but svc-agents registers agents at runtime via registerAgent() and src/index.ts states that Scanner and Merchant registration is separate work - wiring it here would invent that path.',
   ],
   [
     'services/svc-agents/src/support-agent/comment-draft.ts',
-    'Support agent Stage-2 comment draft gate. Awaits the support ticket write path.',
+    'Support Stage-2 comment draft (docs/ops/trk/ops.support.md). Same runtime-registration story as the other agents: no agent module in svc-agents is reached from the service entry point yet.',
   ],
 ]);
 
