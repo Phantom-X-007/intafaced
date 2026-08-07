@@ -43,10 +43,6 @@ import { fileURLToPath } from 'node:url';
  */
 const PARKED = new Map([
   [
-    'services/svc-academy/src/ambassadors/residency.ts',
-    'Ambassador Stage-1 residency model (docs/ops/trk/academy.ambassadors.md). NOT wired on purpose: MemoryResidencyDesk is in-process, so a route over it would lose every application on restart. Needs a persistence table before it can be exposed honestly.',
-  ],
-  [
     'services/svc-agents/src/copy-intel/stats.ts',
     'Copy-Intel Stage-1 (docs/ops/trk/agents.copy-intel.md). Blocked at the Stage 0 dependency gate the spec itself sets: tracker trade.copy is not done, and Stage 1 says "add task route when product law ready".',
   ],
