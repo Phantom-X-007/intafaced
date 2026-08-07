@@ -150,6 +150,52 @@ describe('channel registry — a channel with no credentials refuses, it does no
   it('refuses to construct a registry missing a channel — an absent channel cannot refuse', () => {
     expect(() => new ChannelRegistry([new InAppChannel()])).toThrow(/missing "email"/);
   });
+
+  it('reports a fully configured channel as unavailable while the out-of-app switch is off', () => {
+    // The user-facing answer to "can this reach me right now" has two halves:
+    // credentials, and the operator switch. Reporting only the first told a user
+    // whose margin-call email never arrived that email was available and nothing
+    // was missing — the one thing they cannot check for themselves.
+    const wired = {
+      ...NO_GATEWAYS,
+      NOTIFY_EMAIL_GATEWAY_URL: 'https://gateway.internal/send',
+      NOTIFY_EMAIL_GATEWAY_TOKEN: 'a-token-long-enough-to-pass',
+    };
+    const reg = channelsFromEnv({ ...wired, NOTIFY_OUT_OF_APP_ENABLED: false });
+
+    expect(reg.status().find((s) => s.channel === 'email')).toMatchObject({
+      available: false,
+      reason: 'channel.disabled',
+      // Nothing is missing — the operator turned it off. Do not send someone
+      // hunting for an env var that is already set.
+      requires: [],
+    });
+    expect(reg.availableChannels()).toEqual(['inapp']);
+  });
+
+  it('leaves in-app available with the switch off — it is the fallback, not an out-of-app channel', () => {
+    const reg = channelsFromEnv({ ...NO_GATEWAYS, NOTIFY_OUT_OF_APP_ENABLED: false });
+    expect(reg.status().find((s) => s.channel === 'inapp')).toMatchObject({ available: true, reason: null });
+    expect(reg.availableChannels()).toEqual(['inapp']);
+  });
+
+  it('keeps naming the missing env vars when a channel is both unconfigured and switched off', () => {
+    // Credentials are the reason a caller can act on, so it wins over the switch.
+    const email = channelsFromEnv({ ...NO_GATEWAYS, NOTIFY_OUT_OF_APP_ENABLED: false })
+      .status()
+      .find((s) => s.channel === 'email');
+    expect(email).toMatchObject({ available: false, reason: 'channel.not_configured' });
+    expect(email?.requires).toEqual(['NOTIFY_EMAIL_GATEWAY_URL', 'NOTIFY_EMAIL_GATEWAY_TOKEN']);
+  });
+
+  it('an absent switch means on — every caller that predates it is unchanged', () => {
+    const reg = channelsFromEnv({
+      ...NO_GATEWAYS,
+      NOTIFY_EMAIL_GATEWAY_URL: 'https://gateway.internal/send',
+      NOTIFY_EMAIL_GATEWAY_TOKEN: 'a-token-long-enough-to-pass',
+    });
+    expect(reg.availableChannels()).toEqual(['inapp', 'email']);
+  });
 });
 
 describe('an unconfigured channel never reports success', () => {
