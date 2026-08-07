@@ -21,6 +21,7 @@ import { createPayRouter } from './router.js';
 import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
+import { registerPublicPayRest } from './public-rest.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -264,6 +265,23 @@ app.get('/ready', async () => ({
  * Browser reaches it via edge `/api/pay/checkout?token=…` (prefix stripped).
  */
 await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
+
+/**
+ *  STEP 1 — the merchant REST surface, read paths only.
+ *
+ * Law: docs/adr/2026-08-07-pay-public-api-law.md. Auth is the same mount
+ * boundary the tRPC router uses — svc-edge exchanges the  key and signs
+ * a principal; this service never sees a raw key and grows no second auth path.
+ *
+ * Read paths only, on purpose: they add no new behaviour and therefore no new
+ * money risk. Mutating paths are step 2 and arrive with the required
+ *  contract.
+ */
+await registerPublicPayRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  pay,
+});
 
 /**
  * THE WEBHOOK ENDPOINT.

@@ -6,6 +6,7 @@ import type { UserMoneyService, WithdrawalRecord } from './user-money-service.js
 import type { RailRegistry } from './rails/registry.js';
 import { RAIL_CAPABILITIES, RAIL_MODES } from './rails/rail-adapter.js';
 import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.js';
+import { assertMerchantOwnership } from './merchant-ownership.js';
 
 /**
  * svc-pay's internal tRPC surface (§2 — cross-service calls go through
@@ -124,11 +125,14 @@ type WithdrawalViewOut = z.infer<typeof withdrawalView>;
  * to them is an engineer's afternoon. The disclosure bought by the lie is one
  * bit about a uuid nobody can enumerate.
  */
+/**
+ * Delegates to the ONE ownership rule (`merchant-ownership.ts`). It threw a
+ * TRPCError here while tRPC was the only way in; `pay.public-api` adds a second,
+ * and a rule copied into two files is a rule with two futures. `wrap` maps the
+ * PayError to FORBIDDEN, so the wire shape is unchanged.
+ */
 async function assertMerchantOwner(pay: PayService, principalUserId: string | undefined, merchantId: string): Promise<void> {
-  const merchant = await pay.getMerchant(merchantId);
-  if (merchant.userId !== principalUserId) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'This merchant belongs to another user' });
-  }
+  await assertMerchantOwnership(pay, principalUserId, merchantId);
 }
 
 export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService) {
@@ -989,6 +993,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.webhook_invalid':
         return 'UNAUTHORIZED' as const;
       case 'pay.merchant_inactive':
+      case 'pay.merchant_forbidden':
       case 'pay.rail_not_creditable':
       case 'pay.kyb_operator_required':
         return 'FORBIDDEN' as const;
