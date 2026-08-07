@@ -1,9 +1,9 @@
 # Claim TRK-agents.navigator
 
-**status:** claimed
+**status:** pr-open
 **owner:** cursor-swarm-navigator
 **slice:** Stage-2
-**proof:** pending
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/990
 **tip:** feat/agents-navigator-stage2
 **updated:** 2026-08-07
 
