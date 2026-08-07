@@ -2,6 +2,7 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
+import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
 import { assertScene } from './spatial/scene.js';
 import {
   assertFreezeReason,
@@ -159,6 +160,8 @@ export interface AcademyServiceOptions {
   maxRoomCapacity: number;
   /** Stage-1 tournament ladder kill-switch (`ACADEMY_TOURNAMENT_ENABLED`). */
   tournamentEnabled?: boolean;
+  /** Stage-3 paper-trading ops kill-switch (`ACADEMY_PAPER_TRADING_ENABLED`). */
+  paperTradingEnabled?: boolean;
 }
 
 export class AcademyService {
@@ -482,6 +485,18 @@ export class AcademyService {
     if (this.options.tournamentEnabled === false) {
       throw new AcademyError('Tournament ladder is disabled', 'academy.tournament_disabled');
     }
+  }
+
+  /** Stage-3 — ops kill paper drills without touching live trade. */
+  assertPaperTradingEnabled(): void {
+    if (!isPaperOpsEnabled(this.options.paperTradingEnabled)) {
+      throw new AcademyError(paperOpsDisabledMessage(), 'academy.paper_trading_disabled');
+    }
+  }
+
+  /** Stage-3 — ops status snapshot (live trade always unaffected). */
+  paperOpsStatus(): PaperOpsStatus {
+    return paperOpsStatus(this.options.paperTradingEnabled);
   }
 
   private mapTournamentErr(err: unknown): never {

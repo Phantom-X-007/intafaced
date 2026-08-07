@@ -8,6 +8,7 @@ import { curriculumInventory, curriculumImportStageStatus } from './curriculum/i
 import { resolveCurriculumDeepLink, listCurriculumPathDeepLinks } from './curriculum/deep-links.js';
 import { curriculumBodyForLocale, curriculumI18nStrategyLine } from './curriculum/i18n-strategy.js';
 import { startPaperDrillForCatalogItem } from './paper/workbook-loop.js';
+import { PAPER_OPS_ENV_KEY, PAPER_OPS_FLAG_ID } from './paper/ops-gate.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -286,6 +287,7 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
 
     case 'academy.tournament_disabled':
+    case 'academy.paper_trading_disabled':
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
 
     case 'academy.season_not_live':
@@ -415,13 +417,15 @@ export function createAcademyRouter(academy: AcademyService) {
       ),
 
     /**
-     * Paper drill gate for a workbook (TRK-academy.paper-trading Stage 2).
+     * Paper drill gate for a workbook (TRK-academy.paper-trading Stage 2+3).
      *
      * Read-only on purpose: the drill loop is a pure state machine and academy
      * holds no run state, so this answers one question — may this catalog item
      * be drilled against this market, and with which steps. A market that is
      * not flagged `paper: true` by trade refuses here rather than anywhere a
-     * user could mistake it for live. No fills, prices or balances cross this
+     * user could mistake it for live. Stage-3 ops kill-switch
+     * (`ACADEMY_PAPER_TRADING_ENABLED=false`) refuses before the market check —
+     * live trade is unaffected. No fills, prices or balances cross this
      * boundary; money truth stays on trade.
      */
     paperDrill: scopedProcedure('academy:read', { module: 'academy' })
@@ -437,6 +441,7 @@ export function createAcademyRouter(academy: AcademyService) {
       .output(paperDrillOut)
       .query(({ input }) =>
         guard(async () => {
+          academy.assertPaperTradingEnabled();
           const item = getCurriculumItem(input.slug);
           if (!item) {
             throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
@@ -453,6 +458,21 @@ export function createAcademyRouter(academy: AcademyService) {
           };
         }),
       ),
+
+    /**
+     * Stage-3 ops status for paper drills (TRK-academy.paper-trading).
+     * Reports enable/kill only — never invents prices; live trade unaffected.
+     */
+    paperOpsStatus: scopedProcedure('academy:read', { module: 'academy' })
+      .output(
+        z.object({
+          enabled: z.boolean(),
+          flagId: z.literal(PAPER_OPS_FLAG_ID),
+          envKey: z.literal(PAPER_OPS_ENV_KEY),
+          liveTradeUnaffected: z.literal(true),
+        }),
+      )
+      .query(() => academy.paperOpsStatus()),
 
     // ── Lobbies ──────────────────────────────────────────────────────────────
 

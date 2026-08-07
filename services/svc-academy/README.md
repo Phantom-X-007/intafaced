@@ -163,6 +163,16 @@ Anti-cheat basics: scores only while season `live`; rank = score DESC, earlier `
 
 Migration: `drizzle/0002_tournaments.sql`.
 
+## Paper trading (Stage-3 ops — no live money)
+
+Workbook paper drills consume trade's `paper` market flag. **No prices invented here.** Ops kill-switch: `ACADEMY_PAPER_TRADING_ENABLED` (flag `academy.paper-trading`) — when false, `paperDrill` refuses `academy.paper_trading_disabled`. Live trade on svc-trade is unaffected.
+
+| Capability                          | Gate                                  |
+| ----------------------------------- | ------------------------------------- |
+| `paperDrill` / `paperOpsStatus`     | `academy:read` when enabled           |
+| Kill paper without killing live     | `ACADEMY_PAPER_TRADING_ENABLED=false` |
+| Real ledger holds / live placeOrder | **Never** — trade Stage-1 isolation   |
+
 ## Curriculum import pipeline (Stage-1)
 
 - Content source on tip: **platform-native-expansion** (licensed import pending product/Class X).
