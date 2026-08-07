@@ -264,15 +264,30 @@ function fromExistingClaim(
     return { channel, status: 'already_accepted', code: null, detail: null, retryable: false };
   }
   if (reason === 'in_flight') {
-    // Another replica holds the lease. Do not stack a second send and do not
-    // ask the bus to redeliver immediately — the owner will settle or the lease
-    // will expire and a later redelivery may reclaim.
+    // Another replica holds the lease, so this pass must not stack a second
+    // send. It must still ask the bus to redeliver.
+    //
+    // Not retrying looks safer and is not. `events.ts` naks only when some
+    // outcome is retryable, so an unretryable in-flight outcome ACKS the
+    // message — and an ack is the end of it: there is no sweeper over
+    // `notify.deliveries` and no other path that re-drives a dispatch. If the
+    // lease holder crashed mid-send, its own copy of the message is gone too
+    // (this ack retired it), the lease expires with nobody left to reclaim the
+    // row, and a margin call is neither sent nor recorded as abandoned — it
+    // sits `pending` forever. That is the one failure this service exists to
+    // make impossible, and it would be traded for a duplicate email.
+    //
+    // Retrying costs a redelivery. On the next pass the row is either
+    // `accepted` — `already_accepted`, nothing sent twice — or the lease has
+    // expired and this pass sends the message that would otherwise have been
+    // lost. Worst case the bus parks the message after `max_deliver`, which an
+    // operator can see and redrive. Visible beats silent.
     return {
       channel,
       status: 'failed',
       code: null,
       detail: 'delivery claim held by another worker',
-      retryable: false,
+      retryable: true,
     };
   }
   return {
