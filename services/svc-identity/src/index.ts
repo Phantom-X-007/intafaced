@@ -7,6 +7,7 @@ import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
 import { RankService } from './rank/rank-service.js';
 import { ReferralService } from './affiliates/referral-service.js';
+import { FreezeService } from './affiliates/freeze-service.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
@@ -94,11 +95,13 @@ const auth = new AuthService(
 );
 
 const referral = new ReferralService(sql);
+const freeze = new FreezeService(sql);
 
 export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
   webauthnEnabled: env.WEBAUTHN_ENABLED,
   referral,
+  freeze,
 });
 export type AppRouter = typeof appRouter;
 
