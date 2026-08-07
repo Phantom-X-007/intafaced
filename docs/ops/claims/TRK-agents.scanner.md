@@ -1,9 +1,10 @@
-# Claim — TRK-agents.scanner Stage-1 wire
+# Claim — TRK-agents.scanner Stage-2 live tools
 
-**Owner session:** grok agents-scanner-rank-wire  
-**Paths:** `services/svc-agents/src/router.ts`, `services/svc-agents/src/scanner/**`, `tooling/ci/reachability-scan.mjs`  
-**Status:** open  
+**Owner session:** grok agents-scanner-stage  
+**Paths:** `services/svc-agents/src/scanner/**`, `services/svc-agents/src/router.ts`, `services/svc-agents/src/copy.ts`  
+**Status:** claimed  
 **Class:** N  
-**Board-Delta:** Wire Stage-1 fixture rank to tRPC (`scanner.rankFixtures`); unpark `rank.ts` from reachability gate.
+**slice:** Stage-2  
+**Board-Delta:** Stage-2 live data tools residual — guardrail + ticker/markets/book tools with typed refusals, tier-gated signal depth refuse-closed, `scanner.rankLive` compose; fixtures only (no invent prices).
 
-No live market data. No ledger. No orders.
+No ledger. No orders. No navigator/** edits.
