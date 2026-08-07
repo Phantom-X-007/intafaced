@@ -1,9 +1,14 @@
 # Claim TRK-academy.curriculum
 
-**status:** claimed
+**status:** merged
 **owner:** cursor-swarm-curriculum
-**proof:** Stage-3 Class N polish · feat/academy-curriculum-stage
-**tip:** pending-merge
-**updated:** 2026-08-07
+**proof:** #993 merged 2026-08-07 — Stage-3 curriculum polish — deep-links, i18n, import status
+**tip:** on main
+**updated:** 2026-08-07 (claim closed against merged main)
 
 Stage-3 in flight: Blueprint deep-links, i18n fallback strategy, workbook live-quote refuse, import/status API.
+
+> Closed by the claim-board honesty pass. The code merged; the claim was never closed, so
+> `swarm:freeze` kept reporting this mountain as owned by a session that no longer exists.
+> Residual noted above (if any) is unchanged and still real — closing the claim closes the
+> SLICE, not the mountain. Mountain state lives in `tooling/tracker/features.mjs`.

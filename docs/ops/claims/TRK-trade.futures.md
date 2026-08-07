@@ -1,11 +1,12 @@
 # Claim TRK-trade.futures
 
-**status:** pr-open
+**status:** merged
+**proof:** #995 merged 2026-08-07 — freeze voluntary futures exits when the mark feed is dark
 **owner:** cursor-swarm-futures
 **class:** M
 **scope:** D-S-01 / D-S-07 decided halves — exit-when-dark `closing` state (ADR 2026-08-07); no invent of mark/funding/mid; no owner-gated profit-account choice
 **branch:** feat/futures-denon-residual
-**updated:** 2026-08-07
+**updated:** 2026-08-07 (claim closed against merged main)
 
 ## Human blockers (blank L1 — do not invent)
 
@@ -16,3 +17,8 @@
 ## Shipping
 
 Exit-when-dark done bar: freeze on dark voluntary close, skip liq/funding, idempotent retry, settle at mark return through ordinary bound + armed breaker, honest `closing` render.
+
+> Closed by the claim-board honesty pass. The code merged; the claim was never closed, so
+> `swarm:freeze` kept reporting this mountain as owned by a session that no longer exists.
+> Residual noted above (if any) is unchanged and still real — closing the claim closes the
+> SLICE, not the mountain. Mountain state lives in `tooling/tracker/features.mjs`.
