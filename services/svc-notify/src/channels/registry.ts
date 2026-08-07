@@ -51,6 +51,13 @@ export interface ChannelEnv {
   readonly NOTIFY_SMS_MAX_CHARS?: number | undefined;
   /** Comma-separated out-of-app channels that MUST be configured, or `none`. */
   readonly NOTIFY_REQUIRED_CHANNELS?: string | undefined;
+  /**
+   * The operator switch for everything that leaves the platform. The registry
+   * needs it because `notify.channels` answers "can this reach me right now",
+   * and the switch is half of that answer. Absent → treated as on, which is the
+   * behaviour of every caller that predates the switch.
+   */
+  readonly NOTIFY_OUT_OF_APP_ENABLED?: boolean | undefined;
 }
 
 /** Env var names per channel. Reported to operators verbatim, so they are data. */
@@ -132,10 +139,12 @@ export interface ChannelStatus {
 export class ChannelRegistry {
   private readonly channels: Map<ChannelId, NotificationChannel>;
   private readonly required: ReadonlySet<ChannelId>;
+  private readonly outOfAppEnabled: boolean;
 
-  constructor(channels: readonly NotificationChannel[], required: readonly OutOfAppChannel[] = []) {
+  constructor(channels: readonly NotificationChannel[], required: readonly OutOfAppChannel[] = [], outOfAppEnabled = true) {
     this.channels = new Map(channels.map((c) => [c.channel, c]));
     this.required = new Set<ChannelId>(required);
+    this.outOfAppEnabled = outOfAppEnabled;
 
     for (const id of CHANNEL_IDS) {
       if (!this.channels.has(id)) {
@@ -164,9 +173,28 @@ export class ChannelRegistry {
     return this.channels.get(channel)!;
   }
 
+  /**
+   * Why this channel cannot deliver right now, or null.
+   *
+   * Credentials are one reason and the operator switch is the other, and the
+   * switch has to be asked about HERE rather than only in the dispatcher.
+   * `channelStatus` is a user-facing answer — someone who registered a phone
+   * number is entitled to know nothing will arrive — and a channel that reports
+   * `available: true` while `NOTIFY_OUT_OF_APP_ENABLED` is off tells that user
+   * the one thing they cannot check for themselves is fine when it is not.
+   *
+   * The switch is out-of-app only. `inapp` needs no gateway and no address, so
+   * it stays the honest fallback in every operator state (§13).
+   */
+  private blockedReason(channel: NotificationChannel): RefusalCode | null {
+    if (channel.unavailableReason !== null) return channel.unavailableReason;
+    if (!this.outOfAppEnabled && channel.channel !== 'inapp') return 'channel.disabled';
+    return null;
+  }
+
   /** Channels that could deliver right now. `inapp` is always among them. */
   availableChannels(): readonly ChannelId[] {
-    return CHANNEL_IDS.filter((id) => this.get(id).unavailableReason === null);
+    return CHANNEL_IDS.filter((id) => this.blockedReason(this.get(id)) === null);
   }
 
   /** The operator's view: what works, what does not, and what to set. */
@@ -174,10 +202,11 @@ export class ChannelRegistry {
     return CHANNEL_IDS.map((id) => {
       const channel = this.get(id);
       const requires = channel instanceof UnconfiguredChannel ? channel.missingEnv : [];
+      const reason = this.blockedReason(channel);
       return {
         channel: id,
-        available: channel.unavailableReason === null,
-        reason: channel.unavailableReason,
+        available: reason === null,
+        reason,
         requires,
         required: this.required.has(id),
       };
@@ -222,5 +251,5 @@ export function channelsFromEnv(env: ChannelEnv, fetchImpl: typeof fetch = fetch
     throw new Error(`NOTIFY_REQUIRED_CHANNELS names channels that do not exist: ${required.invalid.join(', ')}`);
   }
 
-  return new ChannelRegistry(channels, required.channels);
+  return new ChannelRegistry(channels, required.channels, env.NOTIFY_OUT_OF_APP_ENABLED ?? true);
 }
