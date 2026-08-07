@@ -1,10 +1,19 @@
 import type { Sql } from 'postgres';
-import { buildAffiliateNodeStatus, buildAffiliateTreeBoard, type AffiliateNodeStatus, type AffiliateTreeBoard } from './admin-tree-read.js';
+import {
+  buildAffiliateMemberListBoard,
+  buildAffiliateNodeStatus,
+  buildAffiliateTreeBoard,
+  listAffiliateTreeMembers,
+  type AffiliateMemberListBoard,
+  type AffiliateNodeStatus,
+  type AffiliateTreeBoard,
+  type AffiliateTreeMember,
+} from './admin-tree-read.js';
 import { DEFAULT_MAX_REFERRAL_DEPTH, ReferralError, ancestors, chainDepth, wouldCreateCycle, type ReferralEdge } from './referral-tree.js';
 
 /**
  * Durable referral tree (Slice A) — attribution only, no commission/payout.
- * Stage admin read: treeBoard / nodeStatus (structure + freeze overlay).
+ * Stage admin read: treeBoard / nodeStatus / listMembers (structure + freeze overlay).
  */
 
 export class ReferralService {
@@ -55,6 +64,29 @@ export class ReferralService {
       frozenIds,
       maxDepth: this.maxDepth,
     });
+  }
+
+  /**
+   * Stage-2 admin member roster — attributed edges (+ optional root filter).
+   * Structure + freeze only; no rates / payouts.
+   */
+  async listMembers(
+    frozenIds?: ReadonlySet<string>,
+    rootId?: string | null,
+  ): Promise<{ readonly members: readonly AffiliateTreeMember[]; readonly board: AffiliateMemberListBoard }> {
+    const parent = await this.loadParentMap();
+    const attributedAt = await this.loadAttributedAtMap();
+    const members = listAffiliateTreeMembers({
+      parent,
+      attributedAt,
+      frozenIds,
+      rootId,
+      maxDepth: this.maxDepth,
+    });
+    return {
+      members,
+      board: buildAffiliateMemberListBoard(members, rootId ?? null),
+    };
   }
 
   private async userExists(userId: string): Promise<boolean> {

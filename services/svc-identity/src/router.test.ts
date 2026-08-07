@@ -550,8 +550,10 @@ describe('apiKeys.exchange turns a key into an edge-usable access token', () => 
 describe('affiliates admin tree read (Stage spine, non-pay)', () => {
   const NODE = '55555555-5555-4555-8555-555555555555';
   const REF = '66666666-6666-4666-8666-666666666666';
+  const CHILD = '77777777-7777-4777-8777-777777777777';
 
   function affiliatesRouter() {
+    const frozen = new Set<string>([NODE]);
     const referral = {
       treeBoard: async (frozenIds?: ReadonlySet<string>) => ({
         edges: 2,
@@ -570,11 +572,56 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
         frozen: frozenIds?.has(userId) ?? false,
         attributedAt: '2026-08-07T12:00:00.000Z',
       }),
+      listMembers: async (frozenIds?: ReadonlySet<string>, rootId?: string | null) => {
+        const members = [
+          {
+            userId: NODE,
+            referrerId: REF,
+            depth: 1,
+            frozen: frozenIds?.has(NODE) ?? false,
+            attributedAt: '2026-08-07T12:00:00.000Z',
+          },
+          {
+            userId: CHILD,
+            referrerId: NODE,
+            depth: 2,
+            frozen: frozenIds?.has(CHILD) ?? false,
+            attributedAt: null,
+          },
+        ].filter((m) => !rootId || rootId === REF || (rootId === NODE && m.userId === CHILD));
+        return {
+          members,
+          board: {
+            total: members.length,
+            frozenInList: members.filter((m) => m.frozen).length,
+            maxDepthInList: members.reduce((max, m) => Math.max(max, m.depth), 0),
+            rootId: rootId ?? null,
+          },
+        };
+      },
     } as unknown as import('./affiliates/referral-service.js').ReferralService;
 
     const freeze = {
-      frozenIds: async () => new Set([NODE]),
+      frozenIds: async () => new Set(frozen),
       list: async () => [],
+      freeze: async (input: { beneficiaryId: string; frozenBy: string; reason: string }) => {
+        frozen.add(input.beneficiaryId);
+        return {
+          beneficiaryId: input.beneficiaryId,
+          frozenBy: input.frozenBy,
+          reason: input.reason,
+          frozenAt: new Date('2026-08-07T16:00:00.000Z'),
+        };
+      },
+      unfreeze: async (beneficiaryId: string) => {
+        frozen.delete(beneficiaryId);
+        return {
+          beneficiaryId,
+          frozenBy: OPERATOR,
+          reason: 'prior',
+          frozenAt: new Date('2026-08-07T15:00:00.000Z'),
+        };
+      },
     } as unknown as import('./affiliates/freeze-service.js').FreezeService;
 
     return createIdentityRouter(stub.auth, stub.rank, {
@@ -606,6 +653,35 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
     expect(node.depth).toBe(1);
     expect(node.frozen).toBe(true);
     expect(node.ancestors).toEqual([REF]);
+  });
+
+  it('members lists attributed roster for admin:read', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const roster = await api.affiliates.members();
+    expect(roster.total).toBe(2);
+    expect(roster.frozenInList).toBe(1);
+    expect(roster.members[0]?.userId).toBe(NODE);
+    expect(roster.statusLine).toContain('total=2');
+    const under = await api.affiliates.members({ rootId: NODE });
+    expect(under.total).toBe(1);
+    expect(under.members[0]?.userId).toBe(CHILD);
+    expect(under.rootId).toBe(NODE);
+  });
+
+  it('members requires admin:read', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['identity:read']));
+    const err = await api.affiliates.members().catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+
+  it('freeze/unfreeze return honestyLine confirming set membership', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+    const frozen = await api.affiliates.freeze({ beneficiaryId: CHILD, reason: 'ops hold' });
+    expect(frozen.honestyLine).toContain('action=freeze');
+    expect(frozen.honestyLine).toContain('ok=1');
+    const thawed = await api.affiliates.unfreeze({ beneficiaryId: CHILD });
+    expect(thawed.honestyLine).toContain('action=unfreeze');
+    expect(thawed.honestyLine).toContain('ok=1');
   });
 
   it('payout is refuse-closed (PRECONDITION_FAILED) — no invent rates', async () => {
