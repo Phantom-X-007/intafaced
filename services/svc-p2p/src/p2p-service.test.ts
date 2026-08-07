@@ -1480,7 +1480,14 @@ if (!available) {
       // And the decision is still on the row, so the next sweep re-drives it.
       expect((await p2p.getTrade(trade.id)).resolution).toBe('released');
       expect((await p2p.getTrade(trade.id)).settledAt).toBeNull();
+
+      // Operator surface: late settlement is listable without grepping logs.
+      const late = await p2p.listLateSettlements(50);
+      expect(late.some((t) => t.tradeId === trade.id)).toBe(true);
+      expect(late.find((t) => t.tradeId === trade.id)?.ageSeconds).toBeGreaterThanOrEqual(0);
+
       expect((await p2p.sweepSettlements()).settled).toBe(1);
+      expect(await p2p.listLateSettlements()).toEqual([]);
     });
 
     it('names the trade and the guard when a timeout sweep is refused', async () => {
