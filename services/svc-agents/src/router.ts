@@ -7,6 +7,7 @@ import type { ModelGateway } from './gateway/gateway.js';
 import type { UsageMeter } from './metering/meter.js';
 import type { AgentRuntime } from './runtime.js';
 import { rankFixtures } from './scanner/rank.js';
+import { navigatorGrounded } from './navigator/grounded.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -470,6 +471,44 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 score: s.score,
                 reasons: [...s.reasons],
               })),
+            };
+          }
+          return result;
+        }),
+    }),
+
+    /**
+     * Navigator Stage-2 grounded plane gate.
+     *
+     * Caller states whether the trade data plane is live or dark. Dark refuses
+     * plan/tool_select grounding rather than inventing market context.
+     * Spec: docs/ops/trk/agents.navigator.md Stage 2.
+     */
+    navigator: router({
+      grounded: scopedProcedure('agents:read', { module: 'agents' })
+        .input(z.object({ plane: z.enum(['live', 'dark']) }))
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              plane: z.literal('live'),
+              allowedTasks: z.tuple([z.literal('navigator.plan'), z.literal('navigator.tool_select')]),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              plane: z.literal('dark'),
+              reason: z.literal('trade_plane_dark'),
+              userMessageKey: z.literal('agents.navigator.unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = navigatorGrounded(input.plane);
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              plane: 'live' as const,
+              allowedTasks: ['navigator.plan', 'navigator.tool_select'] as ['navigator.plan', 'navigator.tool_select'],
             };
           }
           return result;
