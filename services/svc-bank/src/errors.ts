@@ -36,6 +36,23 @@ export type BankErrorCode =
   /** The requested principal puts the loan over the product's opening LTV. */
   | 'bank.ltv_exceeded'
   /**
+   * A retry reused a loan id but changed the principal.
+   *
+   * The insert is `ON CONFLICT (id) DO NOTHING`, so a retry reads back the
+   * first call's row. Every guard runs on the new input while the payout draws
+   * the stored principal — put up dust against a huge pending loan and the
+   * service locks the dust and pays out the original amount. Same id must mean
+   * same terms; a different amount needs a different id.
+   */
+  | 'bank.loan_principal_mismatch'
+  /**
+   * Borrower cannot fund the collateral lock at open. Distinct from
+   * `bank.loan_reserve_underfunded` (platform short) and from a raw
+   * `ledger.insufficient_funds` (which would leak past open() and mask the
+   * principal-mismatch refusal on a retried id).
+   */
+  | 'bank.loan_collateral_short'
+  /**
    * The lending reserve cannot fund this draw. An operator alarm, not a user
    * error, and deliberately distinct from `ledger.insufficient_funds`: one means
    * the borrower is short, the other means the platform is.

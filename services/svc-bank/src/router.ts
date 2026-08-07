@@ -152,6 +152,9 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.position_closed':
       case 'bank.position_locked':
       case 'bank.loan_product_closed':
+      // CONFLICT rather than BAD_REQUEST: the request is well-formed, it just
+      // collides with a loan that already exists under that id on other terms.
+      case 'bank.loan_principal_mismatch':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
       case 'bank.same_space':
@@ -159,6 +162,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.below_minimum':
       case 'bank.native_asset_not_earnable':
       case 'bank.ltv_exceeded':
+      /** Borrower short of collateral at open — same class as ltv_exceeded. */
+      case 'bank.loan_collateral_short':
       case 'bank.card_not_found':
       case 'bank.card_not_active':
       case 'bank.card_limit_exceeded':

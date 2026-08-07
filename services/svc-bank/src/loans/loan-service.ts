@@ -500,6 +500,37 @@ export class LoanService {
 
     const loan = inserted.length > 0 ? toLoan(inserted[0]!) : await this.loan(loanId);
 
+    /**
+     * THE RETRY MUST BE THE SAME LOAN, NOT JUST THE SAME ID.
+     *
+     * `ON CONFLICT (id) DO NOTHING` means a retry writes nothing and `loan`
+     * becomes the FIRST call's row — carrying the FIRST call's principal. Every
+     * check above ran on `input`. `completePending` below then locks
+     * `input.collateralAmount` and draws `loan.principal`. Nothing reconciled
+     * the two, so the guard and the payout could read different numbers.
+     *
+     * The attack that gets: open loan X for 1 000 000 against 2 000 000 of
+     * collateral you do not hold. The LTV check passes on those numbers, the row
+     * persists at 1 000 000, the collateral lock fails for insufficient funds
+     * and the loan stays `pending`. Retry loan X for 1 against 2 of collateral
+     * you DO hold — LTV passes on the new numbers, the insert conflicts and does
+     * nothing, and the service locks 2 units and draws 1 000 000. Repeat until
+     * the reserve is empty.
+     *
+     * Refusing is the right shape rather than re-deriving LTV from
+     * `loan.principal`: a retry that asks for different terms is a different
+     * loan, and silently honouring the stored ones would answer a request
+     * nobody made. Same id + same principal stays idempotent, which is what the
+     * caller-supplied id is for.
+     */
+    if (loan.principal !== input.principal) {
+      throw new BankError(
+        `Loan ${loan.id} already exists with a principal of ${formatAmount(loan.principal)} ${loan.debtAssetId}, but this request asks for ` +
+          `${formatAmount(input.principal)} — a retry must carry the same terms. Use a new loan id to borrow a different amount`,
+        'bank.loan_principal_mismatch',
+      );
+    }
+
     if (loan.status !== 'pending') {
       // A completed retry. Return what already exists rather than opening a
       // second position against the same collateral.
@@ -533,7 +564,25 @@ export class LoanService {
       // A crash after this and before step 2 leaves the borrower's collateral in
       // their OWN purposed ledger account with the reserve untouched. Nothing is
       // stranded in the platform's hands.
-      const collateralTxId = await this.lockCollateral(loan, collateralAmount, 0);
+      let collateralTxId: string;
+      try {
+        collateralTxId = await this.lockCollateral(loan, collateralAmount, 0);
+      } catch (err) {
+        if (isInsufficientFunds(err)) {
+          // Borrower cannot fund the lock. Loan stays `pending` with no lock
+          // committed to the ledger (or with a claimed event awaiting re-drive).
+          // Typed as BankError so callers never see a raw ledger insufficient
+          // bubble out of open() — and so a retry with DIFFERENT terms can hit
+          // the principal-mismatch gate as a BankError rather than racing the
+          // lock again under a ledger message that names nothing about terms.
+          throw new BankError(
+            `Borrower cannot lock ${formatAmount(collateralAmount)} ${loan.collateralAssetId} for loan ${loan.id}. ` +
+              `The loan is pending; fund the collateral or abandon the pending row.`,
+            'bank.loan_collateral_short',
+          );
+        }
+        throw err;
+      }
 
       // ── STEP 2: PRINCIPAL ─────────────────────────────────────────────────
       let drawTxId: string;
