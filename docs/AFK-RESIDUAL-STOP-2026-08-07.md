@@ -1,6 +1,6 @@
 # AFK residual STOP — 2026-08-07 (overnight)
 
-**Tip at stop:** `228046fc` — `fix(notify): a margin call told someone with an unconfirmed number they had no number (#1035)`  
+**Tip at stop:** `5ede426f` — `fix(notify): the new claim lease acked the margin call it was meant to protect (#1037)`  
 **Open Nitro PRs:** none (re-derived).  
 **Reason to stop:** no open Nitro PR · overnight queue O1–O7 Stage residual landable on tip · no further agent-landable product strand without human/Denon numbers or Class X.
 
@@ -15,6 +15,8 @@
 | #1033       | notify delivery claim lease (mid-send double-send guard)                                |
 | #1034       | futures `margin_current` tracks funding (mega-audit Tier 1 #3)                          |
 | #1035       | notify unconfirmed target code honesty                                                  |
+| #1036       | this STOP note (then tip-bumped)                                                        |
+| #1037       | claim lease `in_flight` must retry (not ack) — closes #1033 hole                        |
 
 ## Overnight queue disposition
 
