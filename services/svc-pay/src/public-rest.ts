@@ -4,6 +4,7 @@ import { requireScope, type Principal, type Scope } from '@intafaced/auth';
 import { createEdgeContext, type EdgeRequest } from '@intafaced/contracts';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { assertMerchantOwnership } from './merchant-ownership.js';
+import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merchant-webhooks.js';
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
 import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
@@ -46,8 +47,15 @@ import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencySto
  *
  * ── WHAT THIS IS NOT ─────────────────────────────────────────────────────
  *
- * Not Class X go-live. Not a live acquirer. Not webhooks (step 3). Sandbox rails
- * stay behind `assertRailMayMoveValue` — the REST layer acquires no exception.
+ * STEP 3 — outbound merchant webhooks (this PR residual after tip #994):
+ *   POST   /api/pay/v1/webhook-endpoints              pay:write
+ *   GET    /api/pay/v1/webhook-endpoints              pay:read
+ *   DELETE /api/pay/v1/webhook-endpoints/:id          pay:write
+ *   GET    /api/pay/v1/webhook-deliveries             pay:read   (failure dashboard)
+ *
+ * Not Class X go-live. Not a live acquirer. Not sandbox-key routing (step 4).
+ * Sandbox rails stay behind `assertRailMayMoveValue` — the REST layer acquires
+ * no exception. Outbound webhooks do not move value.
  */
 
 /** OpenAPI mount point. `/api/pay` is the edge prefix; `/v1` is ADR §2.7. */
@@ -73,6 +81,8 @@ export interface PublicRestDeps {
    * single-process). Production wires `PostgresRestIdempotencyStore`.
    */
   idempotency?: RestIdempotencyStore;
+  /** Outbound merchant webhooks (step 3). Optional so read/mutate tests stay light. */
+  webhooks?: MerchantWebhookService;
 }
 
 /**
@@ -205,6 +215,7 @@ function statusFor(code: string): number {
     case 'pay.payment_not_found':
     case 'pay.profile_not_found':
     case 'pay.settlement_not_found':
+    case 'pay.webhook_endpoint_not_found':
       return 404;
     case 'pay.merchant_forbidden':
     case 'pay.merchant_inactive':
@@ -269,6 +280,11 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           '',
           '**Errors** carry a stable `pay.*` code. Branch on the code, never on the message.',
           '',
+          '**Webhooks** (ADR §2.4): HMAC-SHA256 over `timestamp + "." + raw body` in',
+          '`X-Intafaced-Signature`, with `X-Intafaced-Timestamp`. At-least-once — dedupe on event `id`.',
+          'Bodies carry payment **state**, not instructions. Permanently failing endpoints are disabled',
+          'and listed under webhook-deliveries.',
+          '',
           'This surface does **not** imply a live card acquirer (Class X / `socket.psp-partners`).',
         ].join('\n'),
       },
@@ -288,7 +304,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         },
       },
       security: [{ apiKey: [] }],
-      tags: [{ name: 'payments' }, { name: 'balances' }],
+      tags: [{ name: 'payments' }, { name: 'balances' }, { name: 'webhooks' }],
     },
   });
 
@@ -684,6 +700,219 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       });
     },
   );
+
+  // ── WEBHOOKS (step 3) ─────────────────────────────────────────────────────
+
+  if (deps.webhooks) {
+    const webhooks = deps.webhooks;
+
+    const endpointSchema = {
+      type: 'object',
+      required: ['id', 'merchantId', 'url', 'status', 'consecutiveFailures', 'createdAt'],
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        merchantId: { type: 'string', format: 'uuid' },
+        url: { type: 'string' },
+        status: { type: 'string', enum: ['active', 'disabled'] },
+        disabledReason: { type: 'string', nullable: true },
+        consecutiveFailures: { type: 'integer' },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' },
+        secret: {
+          type: 'string',
+          description: 'Signing secret — returned ONLY on create. Store it; we will not show it again.',
+        },
+      },
+    } as const;
+
+    const deliverySchema = {
+      type: 'object',
+      required: ['id', 'endpointId', 'merchantId', 'eventId', 'eventType', 'status', 'attempts', 'createdAt'],
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        endpointId: { type: 'string', format: 'uuid' },
+        merchantId: { type: 'string', format: 'uuid' },
+        eventId: { type: 'string', description: 'Merchant dedupe key (ADR §2.4).' },
+        eventType: { type: 'string' },
+        status: { type: 'string', enum: ['pending', 'delivered', 'failed', 'dead'] },
+        attempts: { type: 'integer' },
+        nextAttemptAt: { type: 'string', format: 'date-time' },
+        lastStatusCode: { type: 'integer', nullable: true },
+        lastError: { type: 'string', nullable: true },
+        createdAt: { type: 'string', format: 'date-time' },
+        deliveredAt: { type: 'string', format: 'date-time', nullable: true },
+      },
+    } as const;
+
+    app.post(
+      `${BASE}/webhook-endpoints`,
+      {
+        schema: {
+          tags: ['webhooks'],
+          summary: 'Register an outbound webhook endpoint',
+          description: 'HTTPS required (localhost http allowed). Signing secret returned once. ADR §2.4 — no value moves.',
+          body: {
+            type: 'object',
+            required: ['merchantId', 'url'],
+            additionalProperties: false,
+            properties: {
+              merchantId: { type: 'string', format: 'uuid' },
+              url: { type: 'string', minLength: 8, maxLength: 2048 },
+            },
+          },
+          response: { 200: endpointSchema, 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (req: FastifyRequest<{ Body: { merchantId: string; url: string } }>, reply) => {
+        const principal = principalOf(req, reply, 'pay:write');
+        if (!principal) return reply;
+        try {
+          await assertMerchantOwnership(deps.pay, principal.userId, req.body.merchantId);
+          const created = await webhooks.registerEndpoint(req.body.merchantId, req.body.url);
+          return reply.send({
+            id: created.id,
+            merchantId: created.merchantId,
+            url: created.url,
+            status: created.status,
+            disabledReason: created.disabledReason,
+            consecutiveFailures: created.consecutiveFailures,
+            createdAt: created.createdAt.toISOString(),
+            updatedAt: created.updatedAt.toISOString(),
+            secret: created.secret,
+          });
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
+    app.get(
+      `${BASE}/webhook-endpoints`,
+      {
+        schema: {
+          tags: ['webhooks'],
+          summary: 'List webhook endpoints for a merchant',
+          querystring: {
+            type: 'object',
+            required: ['merchantId'],
+            properties: { merchantId: { type: 'string', format: 'uuid' } },
+          },
+          response: { 200: { type: 'array', items: endpointSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (req: FastifyRequest<{ Querystring: { merchantId: string } }>, reply) => {
+        const principal = principalOf(req, reply, 'pay:read');
+        if (!principal) return reply;
+        try {
+          await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+          const rows = await webhooks.listEndpoints(req.query.merchantId);
+          return reply.send(
+            rows.map((e) => ({
+              id: e.id,
+              merchantId: e.merchantId,
+              url: e.url,
+              status: e.status,
+              disabledReason: e.disabledReason,
+              consecutiveFailures: e.consecutiveFailures,
+              createdAt: e.createdAt.toISOString(),
+              updatedAt: e.updatedAt.toISOString(),
+            })),
+          );
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
+    app.delete(
+      `${BASE}/webhook-endpoints/:id`,
+      {
+        schema: {
+          tags: ['webhooks'],
+          summary: 'Disable a webhook endpoint',
+          params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+          querystring: {
+            type: 'object',
+            required: ['merchantId'],
+            properties: { merchantId: { type: 'string', format: 'uuid' } },
+          },
+          response: {
+            200: { type: 'object', properties: { disabled: { type: 'boolean' } } },
+            401: errorSchema,
+            403: errorSchema,
+            404: errorSchema,
+          },
+        },
+      },
+      async (req: FastifyRequest<{ Params: { id: string }; Querystring: { merchantId: string } }>, reply) => {
+        const principal = principalOf(req, reply, 'pay:write');
+        if (!principal) return reply;
+        try {
+          await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+          await webhooks.disableEndpoint(req.query.merchantId, req.params.id);
+          return reply.send({ disabled: true });
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
+    app.get(
+      `${BASE}/webhook-deliveries`,
+      {
+        schema: {
+          tags: ['webhooks'],
+          summary: 'Webhook delivery dashboard (failures / dead / all)',
+          description:
+            'Permanently failing endpoints are disabled rather than silently dropped (ADR §2.4). Filter with `status=failed` or `status=dead`.',
+          querystring: {
+            type: 'object',
+            required: ['merchantId'],
+            properties: {
+              merchantId: { type: 'string', format: 'uuid' },
+              status: { type: 'string', enum: ['pending', 'delivered', 'failed', 'dead'] },
+              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
+            },
+          },
+          response: { 200: { type: 'array', items: deliverySchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (
+        req: FastifyRequest<{
+          Querystring: { merchantId: string; status?: WebhookDeliveryStatus; limit?: number };
+        }>,
+        reply,
+      ) => {
+        const principal = principalOf(req, reply, 'pay:read');
+        if (!principal) return reply;
+        try {
+          await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+          const rows = await webhooks.listDeliveries(req.query.merchantId, {
+            status: req.query.status,
+            limit: req.query.limit,
+          });
+          return reply.send(
+            rows.map((d) => ({
+              id: d.id,
+              endpointId: d.endpointId,
+              merchantId: d.merchantId,
+              eventId: d.eventId,
+              eventType: d.eventType,
+              status: d.status,
+              attempts: d.attempts,
+              nextAttemptAt: d.nextAttemptAt.toISOString(),
+              lastStatusCode: d.lastStatusCode,
+              lastError: d.lastError,
+              createdAt: d.createdAt.toISOString(),
+              deliveredAt: d.deliveredAt ? d.deliveredAt.toISOString() : null,
+            })),
+          );
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+  }
 }
 
 /** Identical field-for-field to the tRPC `toPaymentOut` — see the header. */
