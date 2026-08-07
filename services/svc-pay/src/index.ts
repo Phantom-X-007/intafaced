@@ -11,6 +11,7 @@ import { CryptoChainWatcher } from './rails/chain-watcher.js';
 import { EvmLiveChain } from './rails/evm-chain.js';
 import { PostgresBroadcastStore } from './rails/broadcast-store.js';
 import { PostgresRestIdempotencyStore } from './rest-idempotency.js';
+import { MerchantWebhookService, PostgresMerchantWebhookStore } from './merchant-webhooks.js';
 import {
   assertRailPosture,
   defaultChainFor,
@@ -134,6 +135,13 @@ for (const { railId } of env.PAY_CHECKOUT_RAILS) {
   }
 }
 
+/**
+ * Outbound merchant webhooks (pay.public-api step 3 / ADR §2.4).
+ * Durable journal — Memory alone is not multi-replica safe.
+ * Does not move value; enqueue runs after money commits.
+ */
+const merchantWebhooks = new MerchantWebhookService(new PostgresMerchantWebhookStore(sql));
+
 const pay = new PayService(sql, ledger, rails, {
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
   valueMovement: railPosture.policy,
@@ -146,6 +154,9 @@ const pay = new PayService(sql, ledger, rails, {
   linkDefaultTtlDays: env.PAY_LINK_DEFAULT_TTL_DAYS,
   linkMaxTtlDays: env.PAY_LINK_MAX_TTL_DAYS,
   maxOpenSessionsPerLink: env.PAY_CHECKOUT_MAX_OPEN_SESSIONS,
+  afterPaymentEvent: async (event) => {
+    await merchantWebhooks.enqueue(event);
+  },
 });
 
 /**
@@ -268,7 +279,7 @@ app.get('/ready', async () => ({
 await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
 
 /**
- * STEP 1+2 — the merchant REST surface (reads + mutating paths).
+ * STEP 1–3 — the merchant REST surface (reads + mutations + webhooks).
  *
  * Law: docs/adr/2026-08-07-pay-public-api-law.md. Auth is the same mount
  * boundary the tRPC router uses — svc-edge exchanges the key and signs
@@ -278,14 +289,24 @@ await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
  * the same claim→put shape as crypto broadcasts — Memory alone is not
  * multi-replica safe on a money path.
  *
- * Not Class X go-live. Not webhooks (step 3). Not a live acquirer.
+ * Step 3 webhooks: signed outbound deliveries, retry/backoff, failure dashboard.
+ * Not Class X go-live. Not sandbox-key routing (step 4). Not a live acquirer.
  */
 await registerPublicPayRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
   pay,
   idempotency: new PostgresRestIdempotencyStore(sql),
+  webhooks: merchantWebhooks,
 });
+
+/** Drain outbound merchant webhook deliveries (ADR §2.4 retry). */
+const webhookDrain = setInterval(() => {
+  void merchantWebhooks.processDue().catch((err) => {
+    app.log.warn({ err }, 'merchant webhook drain failed');
+  });
+}, 15_000);
+webhookDrain.unref?.();
 
 /**
  * THE WEBHOOK ENDPOINT.

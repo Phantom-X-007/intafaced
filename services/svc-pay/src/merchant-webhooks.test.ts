@@ -1,0 +1,216 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { parseAmount } from '@intafaced/ledger-client';
+import { afterEach, describe, expect, it } from 'vitest';
+import { verifySignature } from './rails/webhook-signature.js';
+import {
+  MemoryMerchantWebhookStore,
+  MerchantWebhookService,
+  buildSignedHeaders,
+  eventIdFor,
+  paymentStateBody,
+} from './merchant-webhooks.js';
+import type { PaymentView } from './payment-service.js';
+
+const MERCHANT = '33333333-3333-4333-8333-333333333333';
+
+function payment(over: Partial<PaymentView> = {}): PaymentView {
+  return {
+    id: '44444444-4444-4444-8444-444444444444',
+    merchantId: MERCHANT,
+    profileId: null,
+    amount: parseAmount('1.10'),
+    assetId: 'USD',
+    method: 'card',
+    railAdapter: 'card-sandbox',
+    railRef: 'ref-1',
+    status: 'captured',
+    capturedAmount: parseAmount('1.10'),
+    refundedAmount: parseAmount('0'),
+    createdAt: new Date('2026-08-07T10:00:00.000Z'),
+    ...over,
+  } as PaymentView;
+}
+
+type Captured = { headers: Record<string, string>; body: string; count: number };
+
+async function listen(
+  handler: (req: IncomingMessage, res: ServerResponse, cap: Captured) => void,
+): Promise<{ url: string; server: Server; cap: Captured }> {
+  const cap: Captured = { headers: {}, body: '', count: 0 };
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      cap.body = Buffer.concat(chunks).toString('utf8');
+      cap.count += 1;
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (typeof v === 'string') cap.headers[k.toLowerCase()] = v;
+      }
+      handler(req, res, cap);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const addr = server.address();
+  if (!addr || typeof addr === 'string') throw new Error('no port');
+  return { url: `http://127.0.0.1:${addr.port}/hook`, server, cap };
+}
+
+let server: Server | undefined;
+afterEach(async () => {
+  await new Promise<void>((resolve) => {
+    if (!server) return resolve();
+    server.close(() => resolve());
+  });
+  server = undefined;
+});
+
+describe('merchant webhook signing (ADR §2.4)', () => {
+  it('signs raw body + timestamp the same way inbound rails verify', () => {
+    const body = JSON.stringify({ id: 'evt', type: 'payment.captured' });
+    const ts = '1723000000';
+    const headers = buildSignedHeaders('secret-at-least-32-chars-xxxxxxxxxxxx', ts, body);
+    expect(
+      verifySignature({
+        body,
+        signature: headers['x-intafaced-signature'],
+        timestamp: headers['x-intafaced-timestamp'],
+        secret: 'secret-at-least-32-chars-xxxxxxxxxxxx',
+        toleranceSeconds: 300,
+        now: new Date(Number(ts) * 1000),
+      }),
+    ).toBe(true);
+  });
+
+  it('event ids are stable per logical payment state (merchant dedupe key)', () => {
+    const p = payment();
+    expect(eventIdFor('payment.captured', p)).toBe(`payment.captured:${p.id}`);
+    expect(eventIdFor('payment.refunded', { ...p, refundedAmount: parseAmount('0.5') })).toBe(`payment.refunded:${p.id}:0.5`);
+  });
+
+  it('payment state body uses decimal strings, never numbers', () => {
+    const body = paymentStateBody(payment());
+    expect(body.amount).toBe('1.1');
+    expect(typeof body.amount).toBe('string');
+    expect(typeof body.capturedAmount).toBe('string');
+  });
+});
+
+describe('MerchantWebhookService', () => {
+  it('REFUSES non-https remote URLs', async () => {
+    const svc = new MerchantWebhookService(new MemoryMerchantWebhookStore());
+    await expect(svc.registerEndpoint(MERCHANT, 'http://example.com/hook')).rejects.toMatchObject({
+      code: 'pay.webhook_url_invalid',
+    });
+  });
+
+  it('enqueues once per endpoint and dedupes on event id', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const svc = new MerchantWebhookService(store);
+    const { url, server: s } = await listen((_req, res) => {
+      res.writeHead(200);
+      res.end('ok');
+    });
+    server = s;
+
+    await svc.registerEndpoint(MERCHANT, url);
+    await svc.registerEndpoint(MERCHANT, url.replace('/hook', '/hook2'));
+
+    const n1 = await svc.enqueue({ type: 'payment.captured', payment: payment() });
+    const n2 = await svc.enqueue({ type: 'payment.captured', payment: payment() });
+    expect(n1).toBe(2);
+    expect(n2).toBe(0);
+  });
+
+  it('delivers with verifiable signature and marks delivered', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    let seenSecret = '';
+    const {
+      url,
+      server: s,
+      cap,
+    } = await listen((_req, res) => {
+      res.writeHead(200);
+      res.end('ok');
+    });
+    server = s;
+
+    const svc = new MerchantWebhookService(store, { disableAfterFailures: 3, maxAttempts: 3 });
+    const created = await svc.registerEndpoint(MERCHANT, url);
+    seenSecret = created.secret;
+    expect(seenSecret.length).toBe(64);
+
+    await svc.enqueue({ type: 'payment.captured', payment: payment() });
+    const result = await svc.processDue();
+    expect(result.delivered).toBe(1);
+    expect(cap.count).toBe(1);
+
+    expect(
+      verifySignature({
+        body: cap.body,
+        signature: cap.headers['x-intafaced-signature'],
+        timestamp: cap.headers['x-intafaced-timestamp'],
+        secret: seenSecret,
+        toleranceSeconds: 300,
+        now: new Date(Number(cap.headers['x-intafaced-timestamp']) * 1000),
+      }),
+    ).toBe(true);
+
+    const payload = JSON.parse(cap.body) as { type: string; data: { payment: { amount: string } } };
+    expect(payload.type).toBe('payment.captured');
+    expect(payload.data.payment.amount).toBe('1.1');
+  });
+
+  it('retries on 5xx, then disables the endpoint after consecutive failures', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const { url, server: s } = await listen((_req, res) => {
+      res.writeHead(500);
+      res.end('nope');
+    });
+    server = s;
+
+    const svc = new MerchantWebhookService(store, { disableAfterFailures: 2, maxAttempts: 8 });
+    await svc.registerEndpoint(MERCHANT, url);
+    await svc.enqueue({ type: 'payment.authorized', payment: payment({ status: 'authorized' }) });
+
+    const r1 = await svc.processDue();
+    expect(r1.failed).toBe(1);
+    expect(r1.disabled).toBe(0);
+
+    // Make due again immediately.
+    for (const d of store.deliveries.values()) {
+      d.nextAttemptAt = new Date(0);
+    }
+    const r2 = await svc.processDue();
+    expect(r2.failed).toBe(1);
+    expect(r2.disabled).toBe(1);
+
+    const eps = await svc.listEndpoints(MERCHANT);
+    expect(eps[0]?.status).toBe('disabled');
+    expect(eps[0]?.disabledReason).toBe('consecutive_failures');
+
+    const dashboard = await svc.listDeliveries(MERCHANT, { status: 'failed' });
+    expect(dashboard.length).toBe(1);
+    expect(dashboard[0]?.lastStatusCode).toBe(500);
+  });
+
+  it('surfaces dead deliveries on the failure dashboard', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const { url, server: s } = await listen((_req, res) => {
+      res.writeHead(503);
+      res.end('down');
+    });
+    server = s;
+
+    const svc = new MerchantWebhookService(store, { disableAfterFailures: 99, maxAttempts: 2 });
+    await svc.registerEndpoint(MERCHANT, url);
+    await svc.enqueue({ type: 'payment.failed', payment: payment({ status: 'failed' }) });
+
+    await svc.processDue();
+    for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
+    await svc.processDue();
+
+    const dead = await svc.listDeliveries(MERCHANT, { status: 'dead' });
+    expect(dead).toHaveLength(1);
+    expect(dead[0]?.attempts).toBe(2);
+  });
+});

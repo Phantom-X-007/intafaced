@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { afterEach, describe, expect, it } from 'vitest';
+import { MemoryMerchantWebhookStore, MerchantWebhookService } from './merchant-webhooks.js';
 import { PayError, type PayService } from './payment-service.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { MemoryRestIdempotencyStore } from './rest-idempotency.js';
@@ -109,13 +110,18 @@ function stubPay(over: Partial<Record<string, unknown>> = {}): PayService & { ca
   } as unknown as PayService & { calls: Call[] };
 }
 
-async function build(pay: PayService = stubPay(), idempotency = new MemoryRestIdempotencyStore()): Promise<FastifyInstance> {
+async function build(
+  pay: PayService = stubPay(),
+  idempotency = new MemoryRestIdempotencyStore(),
+  webhooks?: MerchantWebhookService,
+): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await registerPublicPayRest(app, {
     edgeSecret: SECRET,
     serviceName: 'svc-pay',
     pay,
     idempotency,
+    webhooks: webhooks ?? new MerchantWebhookService(new MemoryMerchantWebhookStore()),
   });
   await app.ready();
   return app;
@@ -477,5 +483,54 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe('pay.invalid_amount');
+  });
+});
+
+describe('webhooks step 3 — register + ownership + dashboard', () => {
+  it('registers an endpoint and returns the signing secret once', async () => {
+    app = await build();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/webhook-endpoints',
+      headers: { ...signed(), 'content-type': 'application/json' },
+      payload: { merchantId: MERCHANT, url: 'https://merchant.example/hooks/pay' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { secret: string; status: string; url: string };
+    expect(body.status).toBe('active');
+    expect(body.url).toBe('https://merchant.example/hooks/pay');
+    expect(body.secret).toHaveLength(64);
+  });
+
+  it('REFUSES webhook registration for a merchant the caller does not own', async () => {
+    app = await build();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/pay/v1/webhook-endpoints',
+      headers: {
+        ...signed(principal({ sub: STRANGER, userId: STRANGER })),
+        'content-type': 'application/json',
+      },
+      payload: { merchantId: MERCHANT, url: 'https://evil.example/x' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe('pay.merchant_forbidden');
+  });
+
+  it('lists deliveries for the failure dashboard under pay:read', async () => {
+    app = await build();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pay/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed`,
+      headers: signed(),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
   });
 });
