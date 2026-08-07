@@ -839,6 +839,7 @@ describe('recipes — the money paths', () => {
       recipes.marketMakerMakerFill({
         fillId: 'mm-dust',
         takerId: USER_A,
+        makerOrderId: 'maker-mm-dust',
         takerOrderId: 'taker-mm-dust',
         baseAsset: 'BTC',
         quoteAsset: 'USDT',
