@@ -781,6 +781,8 @@ if (!available) {
         'disputes.list': {},
         'disputes.get': { tradeId: trade.id },
         'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
+        // Operator-only late settlement queue — no instrument fields; stranger refuses.
+        'ops.lateSettlements': {},
         'reputation.get': { userId: SELLER },
         'instruments.methods.list': {},
         'instruments.methods.register': { methodId: 'probe', country: 'DE', label: 'p', fields: [{ key: 'a', label: 'A' }] },
