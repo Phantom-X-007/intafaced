@@ -319,6 +319,14 @@ export const FEATURES = [
     requires: ['packages/venue-adapter', 'packages/venue-contracts'],
     note: 'Updated 2026-08-02 A-TRADE-VENUE-OPS. NOT "via CCXT" — §27 forbids a third-party connectivity library in the money path and there is no `ccxt` in the workspace by design; we are that layer. Fabric: packages/venue-contracts + packages/venue-adapter (Binance spot public market data only; trading half deliberately not ready). Mounted in svc-trade: TRADE_VENUE_MARK_VENUE + TRADE_VENUE_MARK_SYMBOLS default empty/OFF — when set to binance-spot + marketId:symbol map, public book mid preferred for futures marks (A-TRADE-VENUE-1); optional TRADE_MM_SEED_MID_FROM_VENUE for MM mid after env map miss (A-TRADE-MM-3). Ops enable path: services/svc-trade/README.md "Venue fabric mark". Never invents mid (empty venue, unknown id, unmapped market, empty book → null). Still `ready`, not `done`: (1) one public venue only — second venue needs a real MarketDataAdapter + createVenueMarketDataAdapter id; (2) TRADING half NOT BUILT (credentials throw not_ready); (3) Venue Vault absent; (4) no live-network CI; (5) futures risk truth remains human M3.',
   }),
+  f('connect.venue-vault', 'Venue Vault — per-user external API keys, HSM-backed, withdrawal refused (§27)', {
+    module: 'trade',
+    phase: '5',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['venue.aggregation'],
+    note: 'Law §27:761, gap-closed 2026-08-07. venue.aggregation\'s own note has admitted "Venue Vault absent" since 2026-08-02 while no row existed for it — a KEY CUSTODY SURFACE holding users\' credentials to other exchanges, with no owner. It is also the hard blocker under socket.dex-execution: quoting needs no credentials, executing does. Owner is the chain owner because this is key custody and that is where the expertise sits, NOT because it is protocol plane — the keys are for custodial venues. The split, so it is not confused later: the vault design, the key handling and the withdrawal-permission refusal are his; wiring svc-trade to a vault that exists is ordinary agent work. Non-negotiable in any design: a stored key that carries withdrawal permission is refused at registration, not filtered at use.',
+  }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
     phase: '2',
@@ -933,6 +941,38 @@ export const FEATURES = [
     status: 'socket',
     dependsOn: ['launch.token-factory'],
   }),
+  f('launch.trust-layer', 'Launch trust — enforced LP locks, vesting proofs, deployer reputation (§35)', {
+    module: 'launch',
+    phase: '5',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['launch.token-factory'],
+    note: 'Law §35:834, gap-closed 2026-08-07. THE LAW CALLS TRUST THE MOAT IN MEME SEASON and nothing on the board carried it, which meant the anti-rug architecture was missing without being recorded as missing. launch.token-factory already removes the crudest rug — the deployed token has no mint, no owner, no pause and no upgrade selector, proven against the deployed bytecode — but the pool is the other half: liquidity that can be pulled, a team allocation that can dump, and a deployer with no history. LP locks and vesting must be ENFORCED BY CONTRACT rather than promised in a listing, or the badge is worse than no badge.',
+  }),
+  f('launch.treasury-yield', 'Tokenized T-bill vaults — stable balances opt into RWA yield (§36)', {
+    module: 'launch',
+    phase: '5',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['launch.rwa'],
+    note: 'Law §36:841, gap-closed 2026-08-07. launch.rwa records the licensing blocker for the issuance registry; this rides the same rail and had no row, so the blocker was written down for one half of the pair and not the other. The contract half is his. THE LICENCE IS CLASS X and remains Nitro human — a yield product over tokenised treasuries is a regulated instrument in most places we would offer it, and no contract makes that go away.',
+  }),
+  f('launch.fundraising', 'Fundraising module — milestones, investor management (§25:658)', {
+    module: 'launch',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['launch.token-factory'],
+    note: 'Gap-closed 2026-08-07, and DELIBERATELY UNOWNED. The law names it with a service and a phase and no row carried it. It is a product surface — milestones, investor records, reporting — not chain work, so putting it on the chain owner would widen him into the fiat plane against his own sole-mountain law. The ON-CHAIN legs it would need (milestone escrow, vesting release) are his, under launch.trust-layer and S-G2. Agents may claim the product half.',
+  }),
+  f('launch.structured', 'Structured issuance — wrapped, synthetic, structured products (§25:661)', {
+    module: 'launch',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['launch.token-factory'],
+    note: 'Gap-closed 2026-08-07. The law flags it §13 and there was no socket row, so §14.8 could not check it either — a deferral nobody could see is indistinguishable from an oversight. Unowned for the same reason as launch.fundraising: the product is fiat-plane, the wrapper contracts are chain. Nothing here may be built while any leg of it invents a price.',
+  }),
   f('market.vendors', 'Vendor lifecycle — apply, vet, list, stake-gated slots', {
     module: 'market',
     phase: '5',
@@ -949,6 +989,13 @@ export const FEATURES = [
     module: 'mining-pool',
     phase: '5',
     dependsOn: ['token.emissions'],
+  }),
+  f('ops.custody', 'Custody operations — cold/warm/hot wallet tiers, multi-sig approval workflow', {
+    module: 'core-ops',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['ledger.double-entry'],
+    note: 'Law §25 custody line, gap-closed 2026-08-07 and DELIBERATELY SPLIT rather than given one owner. This is how the PLATFORM holds its own funds — which wallets are online, how much sits in each tier, and who must approve a movement. The on-chain half (the multi-sig contract, the threshold policy, the hot-wallet perimeter) is @shehzad002 and already has board coverage as S-B2; the operational half (tiering policy, approval workflow, the console an operator uses) is ordinary agent work and Class X where real keys are involved. Naming it here so the capability stops being invisible: an unrowed custody surface is the one nobody notices is missing until it is needed under pressure.',
   }),
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
@@ -1094,6 +1141,45 @@ export const FEATURES = [
     phase: '5P',
     plane: 'P',
     dependsOn: ['chain.validators', 'token.governance'],
+  }),
+
+  // ── PROTOCOL PLANE CAPABILITIES THE LAW NAMES AND THE BOARD NEVER DID ─────
+  //
+  // Added 2026-08-07. Each of these was a COUNTED GAP in tooling/coverage.yaml
+  // — the law names the capability, no tracker row carried it, and the ratchet
+  // held the count so it could not quietly grow. Counted is not the same as
+  // assigned: a chain engineer reading the board could not see them, so a
+  // handover that claimed to be his complete scope was not.
+  //
+  // The gap entries are closed in the same PR. Non-chain gaps (trading
+  // engines, quant, mobile, CRM, tax, B2B) are deliberately NOT closed here —
+  // that is a separate product-scope question and not a blockchain one.
+  f('protocol.stealth-handles', 'Stealth handles — one human, two unlinkable presentations (§26)', {
+    module: 'protocol',
+    phase: '5P',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['protocol.smart-accounts'],
+    note: 'Law §26:746, gap-closed 2026-08-07. blueprint.attestations covers the zero-PII half — proving a rank without naming the person. This is the OTHER half and nothing carried it: a user receiving on-chain without the receiving address being linkable back to their other activity, plus indexer-side analytics that stay aggregate-only. Both are protocol-plane privacy and neither can be retrofitted once addresses are public, which is why it is a row now rather than after launch.',
+  }),
+  f('protocol.crew-vaults', 'Crew vaults — shared multi-sig treasuries, threshold spend, split on exit (§33)', {
+    module: 'protocol',
+    phase: '5P',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['protocol.smart-accounts', 'blueprint.crews'],
+    note: 'Gap-closed 2026-08-07. Crews already exist and are `done` on the custodial side (blueprint.crews — matching, capacity, membership). A shared TREASURY for one is a contract problem: member shares, an M-of-N spend threshold, and a defined split when someone leaves. The exit split is the part that must be designed before anyone deposits, not after — a vault that cannot fairly release a departing member is worse than no vault.',
+  }),
+  f('protocol.legacy-vaults', 'Legacy vaults — time-locked inheritance, staged heir release (§34)', {
+    module: 'protocol',
+    phase: '5P',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['protocol.smart-accounts'],
+    note: 'Gap-closed 2026-08-07, AND IT ARRIVES WITH A CONTRADICTION THAT MUST BE SETTLED BEFORE ANY CODE. §34:829 describes guardian M-of-N recovery; socket.social-recovery states the platform must never be a guardian, because a guardian is a second party who can take the account. Both cannot stand. The shape that satisfies both, and the only one to build without an explicit owner ruling: heirs and time locks the USER sets and can revoke, with no platform-controlled key ever eligible and no platform quorum able to move funds. If inheritance cannot be built without the platform being a party, the honest outcome is that this stays a socket — say so rather than shipping it. An ADR settles this, not a PR.',
   }),
 
   // ── §13 · DELIBERATELY NOT IN v1 ─────────────────────────────────────────

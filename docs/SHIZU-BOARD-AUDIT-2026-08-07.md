@@ -362,3 +362,35 @@ Delta banner · **§0.5 Waiting on Nitro** (six owner-gated blockers) · **§1.5
 - `docs/LIVE-LANES.md` — `shehzad-346-handoff` lane closed; his lane row widened with the newly-owned rows; free-work item 6 updated; board-update entry added
 - `.github/CODEOWNERS` — `svc-indexer` added (Tier C was invisible to him), `svc-chain` / `svc-bridge` pre-added, this audit doc added
 - Remote branch `feat/protocol-amm` (2026-07-29, 797 commits behind, content already landed) deleted
+
+---
+
+# PART THREE — the scope was still not complete (2026-08-07, second pass)
+
+## 14 · The correction I owed
+
+Part One §4 checked the board against the **tracker**, and against the tracker it was complete. It was not complete against the **law**.
+
+This repo runs a gate that walks the definitive build and asks "does every named capability have a task behind it?" On 2026-08-07 it answered: **39 do not.** Those are recorded as gaps and frozen by name so the number cannot quietly grow — the repo knew. But _counted_ is not _assigned_: a chain engineer reading his board could not see any of them.
+
+**Nine of the thirty-nine were blockchain work.** They are now rows with owners, and their gap entries are closed in the same PR. Gaps went **39 → 30**; tracker rows **139 → 148**.
+
+| Law capability            | New tracker row            | Owner      | Why it matters                                                                                            |
+| ------------------------- | -------------------------- | ---------- | --------------------------------------------------------------------------------------------------------- |
+| §33 crew vaults           | `protocol.crew-vaults`     | shehzad002 | Turns an existing, finished social object into a balance sheet. The **exit split** must be designed first |
+| §34 legacy vaults         | `protocol.legacy-vaults`   | shehzad002 | **Collides with the never-a-guardian rule.** An ADR settles it, not a PR — added as S-K7                  |
+| §26 stealth handles       | `protocol.stealth-handles` | shehzad002 | The receiving half of privacy. **Cannot be retrofitted once addresses are public**                        |
+| §35 launch trust layer    | `launch.trust-layer`       | shehzad002 | The law calls trust "the moat in meme season". The anti-rug architecture was missing, unrecorded          |
+| §36 treasury yield vaults | `launch.treasury-yield`    | shehzad002 | The licence blocker was recorded for one half of the RWA pair and not the other                           |
+| §27 Venue Vault           | `connect.venue-vault`      | shehzad002 | `venue.aggregation` has said "Venue Vault absent" in its own note since 2026-08-02 with no row behind it  |
+| §25 custody operations    | `ops.custody`              | **split**  | Multi-sig contract + hot-wallet perimeter his; tiering and console agent; real keys Class X               |
+| §25 fundraising           | `launch.fundraising`       | **none**   | Fiat-plane product. Its on-chain legs are his; the module is not                                          |
+| §25 structured issuance   | `launch.structured`        | **none**   | Same. The entry itself asked for a socket row, and now has one                                            |
+
+**Board:** new **Tier L** carries the six that are his, with S-K7 added to force the inheritance ADR before any vault code.
+
+**The thirty that remain are not chain work** — trading engines (`execution.*`), quant and strategy tooling, mobile apps, CRM/marketing, tax, alerts, business banking, prediction markets, B2B infra. Whether those get owners is a product-scope question for Nitro and Denon; it is not a hole in the chain owner's board, and closing them here would have widened him past his own sole-mountain law.
+
+## 15 · What "complete" now means, precisely
+
+Shizu's scope is complete against **both** axes the repo can check: every tracker row that is chain work has an owner, and every law capability that is chain work has a tracker row. Anything still missing would have to be missing from the definitive build itself — which no tool in this repo can detect, and which is the honest limit of this audit.

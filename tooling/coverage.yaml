@@ -791,9 +791,11 @@ capabilities:
     law: '25:658'
     plane: F
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #13'
-      note: Named in the matrix with a service and a phase, and carried by no row on the board.
+    tracker: [launch.fundraising]
+    note: >-
+      Gap closed 2026-08-07. Row added deliberately UNOWNED — the product surface is fiat plane and
+      putting it on the chain owner would widen him past his sole mountain; the on-chain milestone
+      escrow and vesting legs sit under launch.trust-layer.
   - id: m.launch.nft
     capability: NFT marketplace — mint/auction, on-chain royalties
     law: '25:659'
@@ -811,11 +813,11 @@ capabilities:
     law: '25:661'
     plane: F
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #14'
-      note: >-
-        The law flags it §13 but there is no socket row for it, so §14.8 cannot check it either. A
-        socket row or an exemption is the fix.
+    tracker: [launch.structured]
+    note: >-
+      Gap closed 2026-08-07 with the socket row the entry itself asked for, so §14.8 can check it.
+      Unowned for the same reason as launch.fundraising: the product is fiat plane, the wrapper
+      contracts are chain.
 
   # ── §25 · BANK ─────────────────────────────────────────────────────────────
   - id: m.bank.accounts
@@ -1146,11 +1148,11 @@ capabilities:
     law: '25:722'
     plane: F
     phase: 2
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #3'
-      note: >-
-        Phased at 2 by the law — the phase being worked now. A three-layer custody runbook with an
-        admin multi-sig approval workflow has no board presence at all.
+    tracker: [ops.custody]
+    note: >-
+      Gap closed 2026-08-07. Split rather than given one owner: the multi-sig contract and the
+      hot-wallet perimeter are the chain owner's (board S-B2), the tiering policy and approval
+      console are agent work, and real keys stay Class X.
   - id: m.core.portfolio
     capability: Portfolio suite — users and house
     law: '25:723'
@@ -1290,11 +1292,11 @@ capabilities:
   - id: privacy.stealth-and-client-analytics
     capability: Optional stealth handles on the Protocol Plane, and client-side analytics for sovereign vaults
     law: '26:746'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #18'
-      note: >-
-        blueprint.attestations covers the zero-PII half. Stealth handles — one human, two unlinkable
-        presentations — and indexer-side aggregate-only analytics have no row.
+    tracker: [protocol.stealth-handles]
+    note: >-
+      Gap closed 2026-08-07. blueprint.attestations covers the zero-PII half; the stealth half — one
+      human, two unlinkable presentations — and aggregate-only indexer analytics are now a row owned
+      by the chain owner. Neither can be retrofitted once addresses are public.
 
   # ── §27 INTAFACED CONNECT · v2.1, 0% tracked ───────────────────────────────
   - id: connect.venue-fabric
@@ -1313,11 +1315,11 @@ capabilities:
   - id: connect.venue-vault
     capability: Venue Vault — per-user encrypted external API keys, HSM-backed, withdrawal permission refused
     law: '27:761'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #21'
-      note: >-
-        venue.aggregation's own note admits "Venue Vault absent" (features.mjs:318). A key custody
-        surface holding user credentials for external venues, with no row and no owner.
+    tracker: [connect.venue-vault]
+    note: >-
+      Gap closed 2026-08-07. venue.aggregation had admitted "Venue Vault absent" in its own note
+      since 2026-08-02 with no row behind it. Owned by the chain owner because it is key custody,
+      not because it is protocol plane — and it is the hard blocker under socket.dex-execution.
   - id: connect.data-lake
     capability: Unified data lake — normalised ticks, books and fills to a time-series store
     law: '27:762'
@@ -1472,41 +1474,43 @@ capabilities:
   - id: v22.crew-vaults
     capability: Crew vaults — shared multi-sig crew treasuries, member shares, threshold spending, split on exit
     law: '33:825'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #36'
-      note: >-
-        Turns blueprint.crews from a social object into a balance sheet, which is a money path and
-        therefore a Class M row. It does not exist on the board in any form.
+    tracker: [protocol.crew-vaults]
+    note: >-
+      Gap closed 2026-08-07. It turns blueprint.crews from a social object into a balance sheet, so
+      it is a money path and a Class M row; the exit split must be designed before anyone deposits,
+      not after.
 
   # ── §34 LEGACY VAULTS ──────────────────────────────────────────────────────
   - id: v22.legacy-vaults
     capability: Legacy vaults — time-locked inheritance, guardian M-of-N recovery, staged heir release
     law: '34:829'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #37'
-      note: >-
-        And worse than absent — socket.social-recovery states the platform must never be a guardian,
-        which contradicts this section and §17.4:525 with no ADR. Audit §B5 row 2. One of them must give.
+    tracker: [protocol.legacy-vaults]
+    note: >-
+      Gap closed 2026-08-07, and the contradiction is carried onto the row rather than buried:
+      §34:829 describes guardian M-of-N recovery, socket.social-recovery states the platform must
+      never be a guardian. The row names the only shape that satisfies both — heirs and time locks
+      the user sets, no platform key ever eligible — and says an ADR settles it, not a PR.
 
   # ── §35 LAUNCH TRUST LAYER ─────────────────────────────────────────────────
   - id: v22.launch-trust
     capability: Launch trust layer — enforced LP locks, vesting proofs, deployer reputation, honest-market badges
     law: '35:834'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #38'
-      note: >-
-        The law calls trust the moat in meme season. launch.meme-factory and launch.token-factory carry
-        none of it, and nothing on the board says the anti-rug architecture is missing.
+    tracker: [launch.trust-layer]
+    note: >-
+      Gap closed 2026-08-07. The token factory already removes the crudest rug — no mint, no owner,
+      no pause, no upgrade selector in the deployed bytecode — but the pool half (LP locks, vesting
+      proofs, deployer reputation) had no row, so the anti-rug architecture was missing without
+      being recorded as missing.
 
   # ── §36 TREASURY YIELD ON STABLES ──────────────────────────────────────────
   - id: v22.treasury-yield
     capability: Tokenized T-bill vaults — stable balances opt into RWA treasury yield, licence-gated
     law: '36:841'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #39'
-      note: >-
-        launch.rwa is an honest socket for the RWA module; this row rides it and has no socket of its
-        own, so the licensing blocker is recorded for one half of the pair and not the other.
+    tracker: [launch.treasury-yield]
+    note: >-
+      Gap closed 2026-08-07. launch.rwa recorded the licensing blocker for the issuance registry
+      while this half of the pair had no row at all. Contract half is the chain owner's; the licence
+      is Class X and no contract makes that go away.
 
   # ── §37 INTAFACED INFRA ────────────────────────────────────────────────────
   - id: v22.infra-b2b
@@ -1813,21 +1817,16 @@ baseline:
     - data.pii-isolation
     - core.drop-flags
     - dod.slo-dashboards
-    - m.launch.fundraising
-    - m.launch.structured
     - m.academy.video
     - m.academy.coach
     - m.core.business-systems
     - m.core.marketing
     - m.core.kb-workflow
-    - m.core.custody-ops
     - m.core.portfolio
     - m.core.site-builder
     - m.core.social-promotion
     - core.mobile-apps
-    - privacy.stealth-and-client-analytics
     - connect.latency-grading
-    - connect.venue-vault
     - connect.data-lake
     - execution.sor
     - execution.arbitrage
@@ -1842,10 +1841,6 @@ baseline:
     - v22.alerts
     - v22.business-banking
     - v22.predict
-    - v22.crew-vaults
-    - v22.legacy-vaults
-    - v22.launch-trust
-    - v22.treasury-yield
     - v22.infra-b2b
   # Tracker rows with no law basis and no written decision anywhere.
   # The audit's headline says 18 extra-legal rows; its own class breakdown

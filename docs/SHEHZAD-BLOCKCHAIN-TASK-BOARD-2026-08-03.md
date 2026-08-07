@@ -16,6 +16,8 @@
 > 5. **#346 is closed as a question** — it merged 2026-08-06 with your source landing unmodified. Nothing is owed. Old §7 struck.
 > 6. **Tracker rows that said "free" while this board said they were yours now carry `owner: shehzad002`** — an agent doing the correct check could legitimately have started them.
 >
+> 7. **Tier L is new — six capabilities the LAW names that this board never did.** They were counted as gaps in `tooling/coverage.yaml`, which meant the repo knew they were missing and no engineer could see them. Crew vaults, legacy vaults, stealth handles, launch trust, treasury yield, Venue Vault.
+>
 > Evidence and reasoning: [`SHIZU-BOARD-AUDIT-2026-08-07.md`](SHIZU-BOARD-AUDIT-2026-08-07.md).
 
 **Law:** [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · definitive build **§16–§25 / §17**
@@ -210,6 +212,29 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 | **S-K4** | Multi-chain deployment topology                                                                                 |
 | **S-K5** | Testnet faucet / mint policy for IFC-on-EVM                                                                     |
 | **S-K6** | Cross-plane identity: rank travels without PII                                                                  |
+| **S-K7** | **Inheritance vs the never-a-guardian rule** — settles S-L2 (see below). Write this one before any vault code   |
+
+### Tier L — Vaults, privacy and trust (added 2026-08-07)
+
+Every row here was a **counted gap** in `tooling/coverage.yaml`: the law named the capability, no task carried it, and the ratchet held the number so it could not quietly grow. **Counted is not assigned** — a chain engineer reading this board could not see any of them, so the previous handover was not the complete scope it claimed to be. All six now exist as tracker rows with an owner, and the gap entries are closed.
+
+| ID       | Outcome                         | Why it was not visible                                                                                                                   | Done bar                                                                                                                                                                                                            |
+| -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-L1** | **Crew vaults** (§33)           | Crews are `done` as a social object; a shared treasury for one is a contract and had no row in any form                                  | Member shares · M-of-N spend threshold · **a defined split on exit, designed before anyone deposits** · money-path invariant tests                                                                                  |
+| **S-L2** | **Legacy vaults** (§34) 🔴      | **Arrives with a contradiction.** §34 describes guardian M-of-N recovery; `socket.social-recovery` forbids the platform being a guardian | **S-K7 ADR first.** Then: heirs and time locks the USER sets and revokes · no platform key ever eligible · no platform quorum can move funds. If it cannot be built without us being a party, say it stays a socket |
+| **S-L3** | **Stealth handles** (§26)       | `blueprint.attestations` covered the zero-PII half; the receiving half had no row                                                        | One human, two unlinkable presentations · indexer analytics stay aggregate-only · **cannot be retrofitted once addresses are public**                                                                               |
+| **S-L4** | **Launch trust layer** (§35)    | The law calls trust the moat in meme season; the anti-rug architecture was missing without being recorded as missing                     | LP locks and vesting **enforced by contract, not promised in a listing** · deployer reputation · a badge that would be false must be unissuable                                                                     |
+| **S-L5** | **Treasury yield vaults** (§36) | `launch.rwa` recorded the licence blocker for one half of the pair and nothing recorded the other                                        | Contract half yours · **licence is Class X, Nitro human** — no contract makes that go away                                                                                                                          |
+| **S-L6** | **Venue Vault** (§27) 🔴        | `venue.aggregation` has admitted "Venue Vault absent" in its own note since 2026-08-02 with no row behind it                             | Per-user encrypted external venue keys · **a key carrying withdrawal permission refused at registration, not filtered at use** · this is the hard blocker under S-I4                                                |
+
+**Yours because it is key custody, not because it is protocol plane** — S-L6 holds credentials to _custodial_ venues. The split: the vault design, key handling and refusal are yours; wiring svc-trade to a vault that exists is agent work.
+
+**Three more gaps closed and deliberately NOT given to you**, so the boundary stays where the ownership law puts it:
+
+- `ops.custody` — how the platform holds its own funds. The multi-sig contract and hot-wallet perimeter are yours (already S-B2); the tiering policy and approval console are agent work; real keys are Class X.
+- `launch.fundraising` and `launch.structured` — fiat-plane product surfaces. Their on-chain legs (milestone escrow, vesting, wrappers) are yours under S-L4 and S-G2.
+
+**Still open and not chain work:** 30 counted gaps remain — trading engines, quant, mobile apps, CRM, tax, B2B infra. That is a product-scope question for Nitro and Denon, not a hole in this board.
 
 ---
 
@@ -303,8 +328,17 @@ accounts" true on-chain), S-A10 who pays gas / paymaster, S-A11 bundler decision
 oracle (S-A4 cannot start without it), S-A13 deployment + verification registry, S-I3 venue fees,
 S-I4 execution (Venue Vault §27 + an OMS service that does not exist yet).
 
-Recovery: doctrine wins — the platform is NEVER a guardian. User-elected guardians only, or say
-it stays a socket. The board no longer invites the other design.
+NEW TIER L — six capabilities the LAW names and this board never did. They were counted as gaps
+in tooling/coverage.yaml, so the repo knew and no engineer could see them: S-L1 crew vaults
+(shared multi-sig treasuries), S-L2 legacy vaults (inheritance), S-L3 stealth handles (receive
+on-chain unlinkably), S-L4 launch trust layer (enforced LP locks + vesting — the law calls trust
+the moat in meme season), S-L5 tokenised treasury-yield vaults, S-L6 Venue Vault (external venue
+API keys — the hard blocker under S-I4, and venue.aggregation has admitted it was absent since
+2026-08-02 with no row behind it).
+
+Recovery / inheritance: doctrine wins — the platform is NEVER a guardian. That collides head-on
+with §34's guardian M-of-N recovery, so S-L2 does not start with code: write the S-K7 ADR first.
+User-elected heirs and time locks only, no platform key ever eligible, or say it stays a socket.
 
 #346 is merged (2026-08-06), your source landed unmodified. Nothing owed. No pay expand.
 
