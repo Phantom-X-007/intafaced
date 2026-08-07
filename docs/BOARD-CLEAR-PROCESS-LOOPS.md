@@ -72,8 +72,8 @@ every orchestrator cycle:
   if foreign open PR intersects PATHS_ONLY → skip ship or babysit theirs
   LIVE-LANES claim before code; first claimer wins
   prefer merge order: contracts → ledger recipes → service wire → UI
-  never exceed safe parallel: default ≤5 code PRs open; babysit before opening more
-  CI thrift: local verify before push storms
+  no PR cap (COORDINATION-TRUTH-LAYERS "No PR cap" — CI-enforced); babysit red CI, never throttle green work
+  local verify green before push (speed, not spend — CI is free on a public repo)
   after any main tip move: rewrite NEXT open-PR table + tip line before next ship
 ```
 

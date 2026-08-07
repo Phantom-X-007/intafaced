@@ -1,5 +1,6 @@
 # CX-8 assembled order-path proof (B-layer).
-# Thrift: path-filtered + workflow_dispatch — not on pure docs PRs.
+# Path-filtered + workflow_dispatch — a docs-only PR cannot change the order
+# path, so running this against one proves nothing. Relevance, not cost.
 name: Order-path CX-8
 
 on:

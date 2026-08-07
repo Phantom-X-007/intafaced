@@ -21,7 +21,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from 
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { touches } from './path-collide.mjs';
-import { evaluateThrift, checkoutStaleness } from '../ci/thrift-preflight.mjs';
+import { checkoutStaleness } from '../ci/checkout-staleness.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OPS = join(ROOT, 'docs', 'ops');
@@ -321,6 +321,7 @@ function readClaimLock(id) {
 function claimLockCloses(id) {
   const lock = readClaimLock(id);
   if (!lock) return false;
+
   // A SPENT lock does not close a feature. Fixed 2026-08-07.
   //
   // `merged` used to close the row permanently, and that is the defect that
@@ -329,7 +330,8 @@ function claimLockCloses(id) {
   // the row vanished for good — while `features.mjs` still said `status: ready,
   // owner: none`, i.e. real, unbuilt, claimable work.
   //
-  // Eleven live features were invisible this way. The board reported
+  // Six live features were invisible this way (academy.ambassadors/.curriculum/
+  // .tournaments, ops.affiliates/.analytics/.notifications). The board reported
   // freeProduct=0, and SWARM-MANDATE says freeProduct=0 means "do not idle —
   // mint Stage-N slices". So the swarm manufactured catalog modules instead of
   // building the features sitting right there. 151 of those were deleted as
@@ -351,6 +353,7 @@ function claimLockCloses(id) {
   if (['merged', 'retired', 'done', 'closed'].includes(lock.status)) {
     return !String(id).startsWith('TRK-');
   }
+
   // residual-own: hides non-TRK residual (research finished). TRK residual-own = awaiting implement — free board.
   if (lock.status === 'residual-own' && !String(id).startsWith('TRK-')) return true;
   return false;
@@ -499,56 +502,6 @@ function countActionsRuns24h() {
   } catch {
     return null;
   }
-}
-
-/**
- * Mill meter — shape-independent. Every previous stamp-mill gate was written
- * for one family and the next family evaded it:
- *
- *   grind loop        07-30 → 08-01   18 PRs
- *   R0x cycle         08-03 → 08-04  135 PRs  ┐ three families at once
- *   P-WS still        08-03 → 08-04   58 PRs  ├ value-gate landed 08-04 09:09
- *   invent re-scan    08-03 → 08-04   68 PRs  ┘ all three dead within the hour
- *   free-TRK wave     08-05 → 08-07   74 PRs    value-gate could not see it
- *
- * Per-PR title similarity is evadable by varying nouns — the wave family scored
- * 0.63–0.77 against a 0.80 threshold, 64 times. Aggregate concentration is not:
- * to lower it you must actually vary the work.
- *
- * Threshold set from this repo's own history, not taste. Across 851 windows:
- * the highest share any LEGITIMATE family ever reached was 15% ("docs ops trk
- * research"); mill families reach 100%. WARN at 30% is double the legitimate
- * ceiling and fires roughly 12 PRs into a mill instead of 64.
- *
- * Meter only, never a block: it is a lagging indicator, and a hard gate here
- * would also block the PRs that fix the mill.
- */
-const MILL_WARN_PCT = Number(process.env.SWARM_MILL_WARN_PCT || 30);
-
-function millConcentration(window = 40) {
-  const raw = git(['log', 'origin/main', `-${window}`, '--format=%s']);
-  if (!raw) return null;
-  const subjects = raw.split('\n').filter(Boolean);
-  if (subjects.length < window) return null; // too little history to judge
-  const stem = (s) =>
-    s
-      .replace(/\(#\d+\)/g, '')
-      .replace(/\d+/g, '')
-      .replace(/[^a-zA-Z ]/g, ' ')
-      .toLowerCase()
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 4)
-      .join(' ');
-  const counts = new Map();
-  for (const s of subjects) {
-    const k = stem(s);
-    counts.set(k, (counts.get(k) || 0) + 1);
-  }
-  let stemTop = '';
-  let n = 0;
-  for (const [k, v] of counts) if (v > n) [stemTop, n] = [k, v];
-  return { stem: stemTop, n, window: subjects.length, share: Math.round((n / subjects.length) * 100) };
 }
 
 function buildLanes(m) {
@@ -888,7 +841,7 @@ function renderFreezeMd(m) {
       .map(([n, c]) => `${n}=${c}`)
       .join(', ');
     lines.push(
-      `- **Actions runs (24h):** ${m.actionsRuns24h.total}${by ? ` (${by})` : ''} — billing ceiling risk if Docs-format dominates; Denon owns Actions budget`,
+      `- **Actions runs (24h):** ${m.actionsRuns24h.total}${by ? ` (${by})` : ''} — informational only; the repo is public, so Actions are free and unlimited`,
     );
   } else {
     lines.push('- **Actions runs (24h):** (gh unavailable — re-run with network)');
@@ -1016,12 +969,6 @@ function printStatus(m) {
   console.log(
     `  ops-churn: ${churn.consecutive} consecutive docs-only tip merges${churn.consecutive >= 5 ? ' ⚠ CHURN' : ''}${churn.sample?.length ? ` (${churn.sample.slice(0, 5).join(',')})` : ''}`,
   );
-  const mill = millConcentration();
-  if (mill) {
-    console.log(
-      `  mill-meter: top family ${mill.n}/${mill.window} = ${mill.share}% "${mill.stem}" (warn ≥${MILL_WARN_PCT}%, highest legit ever 15%)${mill.share >= MILL_WARN_PCT ? ' ⚠ MILL — vary the work, not the nouns' : ''}`,
-    );
-  }
   console.log(`  stranded(P1): ${m.strandedCount ?? 0}`);
   console.log(`  worktrees: ${m.worktreeCount ?? '?'}${m.worktreeOverCap ? ' ⚠ OVER CAP 20 — pnpm wt:gc:apply' : ''}`);
   if (m.actionsRuns24h) {
@@ -1032,15 +979,6 @@ function printStatus(m) {
     console.log(
       `  actions-24h: total=${m.actionsRuns24h.total}${m.actionsRuns24h.capped ? '+' : ''} ${by}${m.actionsRuns24h.capped ? ' (list capped — true total may be higher)' : ''}`,
     );
-    try {
-      const ev = evaluateThrift(m.actionsRuns24h);
-      const msg = ev.level === 'soft' ? 'WARN — volume high (never a delivery block); one push per unit; no coordination PRs' : 'OK';
-      console.log(
-        `  thrift: DELIVERY=ALLOWED level=${ev.level} soft≥${ev.soft} total_warn≥${ev.hard} docs_warn≥${ev.hardDocs} ci_warn≥${ev.hardCi} — ${msg}`,
-      );
-    } catch {
-      console.log('  thrift: (evaluate failed)');
-    }
   } else {
     console.log('  actions-24h: (gh unavailable)');
   }
@@ -1222,7 +1160,7 @@ try {
 // whole swarm. Measured 2026-08-07: a checkout 178 commits behind reported
 // `freeImplementable=6 blocked=0` while origin/main reported `0` and `15` —
 // an agent on the stale copy spawns workers onto work that does not exist.
-// Same class as #954 (thrift). Announce before any number is printed; a reader
+// Announce before any number is printed; a reader
 // who stops at line one must still learn the numbers may be wrong.
 const behind = checkoutStaleness();
 if (behind && behind > 0) {

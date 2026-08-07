@@ -1,8 +1,6 @@
 #!/bin/sh
 #
 # Refuse direct push to main + require format:check before any push.
-# THRIFT: thrift-preflight meters + WARNs only (never exit 1 on run counts).
-# Stamp mill = value-gate content on Docs format. Local-first is habit.
 # Safety net only — --no-verify bypasses; real enforcement is branch protection (needs Pro).
 #
 # P1: format:check covers tooling/scripts/*.mjs (what red-trunked main via #471).
@@ -10,10 +8,6 @@
 
 TOP=$(git rev-parse --show-toplevel)
 
-# --- thrift meter (warn only — never blocks delivery) ---
-if command -v node >/dev/null 2>&1 && [ -f "$TOP/tooling/ci/thrift-preflight.mjs" ]; then
-  (CDPATH= cd -- "$TOP" && node tooling/ci/thrift-preflight.mjs) || true
-fi
 COMMON_GIT=$(git rev-parse --git-common-dir)
 # git-common-dir is e.g. /repo/.git or /repo/.git/worktrees/x → parent of .git is main checkout
 REPO_ROOT=$(CDPATH= cd -- "$(dirname "$COMMON_GIT")" && pwd)

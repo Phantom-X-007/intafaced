@@ -19,14 +19,15 @@
 #
 # So: run the one cheap check that docs actually can break, on the exact paths
 # `ci.yml` skips. One job, no matrix, no services, no database — a fraction of a
-# minute against the full run it deliberately avoids. This is thrift, not an
-# exception to it: the alternative is not "no CI", it is a red `main` and three
-# people debugging their own checkouts.
+# minute against the full run it deliberately avoids. The alternative is not
+# "no CI", it is a red `main` and three people debugging their own checkouts.
 #
-# THRIFT 2026-08-04: pull_request ONLY — do not re-run on push to main after merge.
-# Squash/merge already paid for Docs format on the PR; a second main run doubled
-# the mill (~half of 619 Docs-format runs in one thrash day). Local `pnpm verify`
-# still catches unformatted md before the next code PR. Manual: workflow_dispatch.
+# pull_request ONLY, and this one is kept on purpose after thrift was deleted
+# (2026-08-07). The reason is no longer cost — Actions are free on a public repo.
+# It is that a squash merge cannot introduce a formatting error the PR did not
+# already have, so a second run on main would check a diff that cannot exist.
+# `ci.yml` DOES run on push:main, because a merge genuinely can break the trunk
+# there. Manual re-check: workflow_dispatch.
 name: Docs format
 
 on:

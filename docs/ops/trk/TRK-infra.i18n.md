@@ -71,7 +71,7 @@ Tracker note (2026-07-28): package imported by zero external files; apps/web har
 | §0.7 brand      | Catalog copy: only allowed product names (Identity Blueprint, Sovereign Intelligence, Neural Engine) — never partner/model vendors |
 | Money           | No `Number`/`parseFloat` on money format path; display precision from fiat registry                                                |
 | Class / content | Non-English money copy is **owner content + review**, not agent MT. Mistranslated “confirm withdraw” is a loss event               |
-| Agent thrift    | Per-surface keying PRs; never “bulk-MT 100 catalogs” as one PR                                                                     |
+| PR shape        | Per-surface keying PRs; never “bulk-MT 100 catalogs” as one PR — reviewability, not CI cost                                        |
 
 ---
 

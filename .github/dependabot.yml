@@ -1,16 +1,13 @@
 # Dependency updates.
 #
-# Chosen over self-hosted Renovate for one reason: it costs no Actions minutes
-# to FIND an update. Dependabot runs on GitHub's own infrastructure and only
-# spends our budget when a PR it opens triggers CI — which is the spend we
-# actually want, because that is the run that proves the bump is safe.
+# Chosen over self-hosted Renovate because it runs on GitHub's own
+# infrastructure and needs no workflow of ours to find an update.
 #
-# GROUPING IS THE WHOLE CONFIG. Ungrouped, a monorepo with 33 workspace packages
-# opens dependency PRs faster than anyone reviews them, every one of them burns
-# a full CI run, and the thrift law's "prefer path-cluster batches" is violated
-# by a bot. Grouped weekly, this is a handful of PRs a month.
-#
-# See docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md for the budget this respects.
+# GROUPING IS THE WHOLE CONFIG, and the reason is review capacity, not cost —
+# there is no Actions bill on a public repo. Ungrouped, a monorepo with 33
+# workspace packages opens dependency PRs faster than anyone reviews them, and
+# a queue of bot PRs nobody reads is indistinguishable from no scanning at all.
+# Grouped weekly, this is a handful of PRs a month that get looked at.
 version: 2
 
 updates:
@@ -21,7 +18,7 @@ updates:
       interval: 'weekly'
       day: 'monday'
     # Low, on purpose. A queue of bot PRs nobody merges is indistinguishable
-    # from no scanning at all, and it costs runner minutes to stay that way.
+    # from no scanning at all.
     open-pull-requests-limit: 3
     commit-message:
       prefix: 'chore(deps)'

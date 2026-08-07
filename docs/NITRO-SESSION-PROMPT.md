@@ -64,7 +64,7 @@ MANDATORY WORKFLOW
 4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of spine branches; **no agent implement on Shehzad M1–M7 paths**. Board Clear agent Done bars only on agent-owned rows.
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand) + Class M path.
 6. No commits/PRs unless I asked to ship (or residual/Board Clear/AFK campaign / I said go all-out). AFK-ACTIVE + residual tip_note AFK-ACTIVE = Class N Stream A ship authorized without per-PR ask. No random new architecture.
-7. GitHub Actions thrift (mandatory, does NOT slow parallel/autonomy): local pnpm verify green before the push that opens/updates a code PR; batch fixes — no push storms using remote CI as debugger; pure docs PRs when work is docs; never public-repo / skip-tests / fake-green to save $. Parallel PRs allowed. Full law: docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md + AGENTS.md thrift section.
+7. CI: local pnpm verify green before the push that opens/updates a code PR — local is seconds, CI is minutes. There is NO Actions budget (public repo = free unlimited Actions), so never hold finished work back, never batch a PR fatter, never skip tests or fake green "to save $". Parallel PRs unlimited. The old thrift law was deleted 2026-08-07 (see AGENTS.md · docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
 
 RIGHT WAY (quality bar)
 - Senior, surgical, doctrine-true. Prefer smallest green PR over hero branch.
@@ -138,7 +138,7 @@ I am AFK. Peace scoreboard when free residual empty or blocked-only.
 | LIVE-LANES + agent map   | Parallel agents don’t double-build or steal Shehzad M1–M7   |
 | GITHUB-OWNERSHIP-SHEHZAD | Tip GitHub is the collision wall, not chat memory           |
 | Hard bans in the prompt  | Cold agents still hit the money bar                         |
-| CI thrift line           | Cut waste without capping parallel ship speed               |
+| CI line                  | Verify locally for speed; no cap on parallel ship speed     |
 | AFK-ACTIVE + afk_safe    | Leave laptop without continue-loops or auth-stalls          |
 | SWARM orient + REGROUP   | Cold agents find Denon queue + free work on GitHub          |
 | Branch + PR discovery    | Specs not only on main — fetch branches too                 |

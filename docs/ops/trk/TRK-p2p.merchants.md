@@ -43,7 +43,7 @@ Clean extension point.
 | §6.2         | p2p_merchants fifth table                                |
 | Escrow/money | Still ledger + p2p recipes; merchants not a side balance |
 | Reputation   | No trust borrow for fresh accounts                       |
-| Agent thrift | One service PR: svc-p2p only                             |
+| PR shape     | One service PR: svc-p2p only (reviewability, §15.1)      |
 
 ---
 

@@ -83,7 +83,7 @@ pnpm gate             # the full §14 Definition of Done, per service
 
 A red gate is not a discussion.
 
-**Actions thrift (private repo — metered):** run the local equivalents green **before** the push that opens/updates a code PR. Do not use remote CI as the first debugger. Parallel PRs remain fine. Never weaken these gates or open the repo to “save money.” Full law: `docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md` · thrift section in `AGENTS.md`.
+**Run the local equivalents green before the push that opens/updates a code PR** — local is seconds, a CI round trip is minutes. That is the only reason: the repo is **public**, so Actions on standard runners are free and unlimited and there is nothing to ration. Parallel PRs are unlimited, and finished work is never held back to keep a run count down. Never weaken a gate for any reason. (The old "Actions thrift" law was deleted 2026-08-07 — retirement note: `docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`.)
 
 ---
 

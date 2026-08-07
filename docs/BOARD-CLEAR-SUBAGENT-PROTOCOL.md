@@ -13,7 +13,7 @@ Every cycle:
 2. Read SCOREBOARD + AGENT-BACKLOG + LIVE-LANES
 3. Babysit red CI; shehzad PRs per DECISION-AUTHORITY
 4. Pick **path-clear** agent ships (skip SHIPPED; never M1–M7; no dual-build)
-5. Spawn ≤ N workers with PATHS_ONLY exclusive (default **3–5**; thrift)
+5. Spawn N workers with PATHS_ONLY exclusive (**6–8** concurrent, per `docs/ops/SWARM-MANDATE.md` spawn width; 3–6 when only tracker rows are free)
 6. On worker return: verify evidence; merge if gates pass
 7. Update SCOREBOARD + NEXT (tip + exact ship + open PRs) + DECISION-LOG if needed
 8. Wave audit every 4 product merges

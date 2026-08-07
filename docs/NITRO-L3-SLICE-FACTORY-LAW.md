@@ -61,7 +61,7 @@ Nitro’s goal: agents **always** have L3 tasks. When free board empty → **do 
 
 1. Enumerate mountains with L1 done and Stage-N incomplete (trk + claims)
 2. Mint next slice packs (fat, path-disjoint, Class-correct)
-3. Spawn width 3–6; thrift soft = fat PRs only
+3. Spawn width 3–6; one concern per PR (no run budget to batch around)
 4. Partner open PR paths = hard wall (Denon/Shehzad dual-edit ban)
 5. Shehzad protocol/INTACHAIN = babysit only
 
