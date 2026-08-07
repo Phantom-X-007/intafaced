@@ -67,20 +67,21 @@ Catalog header: full proprietary DERIV//DESK library **is not in this monorepo**
 
 ### Stage 1 — import pipeline
 
-- [ ] Content source decision: licensed import vs commissioned platform-native expansion.
-- [ ] Import format + brand-scan checklist.
-- [ ] Count gate: 20 playbooks + 3 workbooks **or** product renames title.
+- [x] Content source decision: licensed import vs commissioned platform-native expansion.
+- [x] Import format + brand-scan checklist.
+- [x] Count gate: 20 playbooks + 3 workbooks **or** product renames title.
 
 ### Stage 2 — catalog expansion
 
-- [ ] Items in catalog (or DB-backed) with tests.
-- [ ] List/filter by path/kind remains pure.
-- [ ] Workbooks needing paper stay outline-honest until `academy.paper-trading`.
+- [x] Items in catalog (or DB-backed) with tests.
+- [x] List/filter by path/kind remains pure.
+- [x] Workbooks needing paper stay outline-honest until `academy.paper-trading`.
 
 ### Stage 3 — polish
 
-- [ ] i18n strategy for long bodies.
-- [ ] Blueprint curriculumPath deep-links verified.
+- [x] i18n strategy for long bodies (default `en`, missing locale falls back — never invent).
+- [x] Blueprint curriculumPath deep-links verified (`/academy/curriculum/{path}[/{slug}]`).
+- [x] Import/status extended: workbook live-quote refuse + stage readiness API.
 
 ### Tracker `done` bar
 

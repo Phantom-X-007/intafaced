@@ -1,9 +1,9 @@
 # Claim TRK-academy.curriculum
 
-**status:** merged
-**owner:** nitro-ship-factory
-**proof:** Stage-2 Class N residual · feat/stage2-curriculum-notify-agents
+**status:** claimed
+**owner:** cursor-swarm-curriculum
+**proof:** Stage-3 Class N polish · feat/academy-curriculum-stage
 **tip:** pending-merge
-**updated:** 2026-08-05
+**updated:** 2026-08-07
 
-Stage-2 landed. No Stage-1 re-open. Further residual remains on tip specs.
+Stage-3 in flight: Blueprint deep-links, i18n fallback strategy, workbook live-quote refuse, import/status API.
