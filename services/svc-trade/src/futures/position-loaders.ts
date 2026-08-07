@@ -16,7 +16,8 @@ interface OpenPosRow {
   side: 'long' | 'short';
   size: string;
   entry_price: string;
-  margin_initial: string;
+  /** Residual margin after funding — not the open-time figure. */
+  margin_current: string;
   margin_asset: string;
   liq_price: string | null;
   symbol: string;
@@ -40,7 +41,7 @@ function mapLiq(row: OpenPosRow): LiquidationPositionRow {
     side: row.side,
     size: parseAmount(row.size),
     entryPrice: parseAmount(row.entry_price),
-    margin: parseAmount(row.margin_initial),
+    margin: parseAmount(row.margin_current),
     marginAsset: row.margin_asset,
     liqPrice: row.liq_price != null ? parseAmount(row.liq_price) : null,
     marketId: row.market_id,
@@ -54,7 +55,7 @@ export function sqlFundingPositionLoader(sql: Sql): FundingPositionLoader {
     async listOpenForMarket(marketId) {
       const rows = await sql<OpenPosRow[]>`
         SELECT p.id, p.user_id, p.market_id, p.side, p.size, p.entry_price,
-               p.margin_initial, p.margin_asset, p.liq_price, m.symbol
+               p.margin_current, p.margin_asset, p.liq_price, m.symbol
         FROM trade.positions p
         JOIN trade.markets m ON m.id = p.market_id
         WHERE p.status = 'open' AND p.market_id = ${marketId}
@@ -71,7 +72,7 @@ export function sqlLiquidationPositionLoader(sql: Sql): LiquidationPositionLoade
     async listOpen() {
       const rows = await sql<OpenPosRow[]>`
         SELECT p.id, p.user_id, p.market_id, p.side, p.size, p.entry_price,
-               p.margin_initial, p.margin_asset, p.liq_price, m.symbol
+               p.margin_current, p.margin_asset, p.liq_price, m.symbol
         FROM trade.positions p
         JOIN trade.markets m ON m.id = p.market_id
         WHERE p.status = 'open'

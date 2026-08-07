@@ -4,10 +4,43 @@
  * Period / attempt IDENTITY only — never invents rates, marks, or balances.
  */
 import type { Sql } from 'postgres';
-import type { FundingPeriodStore } from './funding-tick.js';
+import type { FundingMarginApplier, FundingPeriodStore } from './funding-tick.js';
 import type { LiquidationAttemptStore, PositionCloser } from './liquidation-tick.js';
 import type { EventBus } from '@intafaced/events';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+
+/**
+ * Move margin_current / funding_paid with the ledger after funding posts.
+ * paid > 0: position paid (margin_current down). paid < 0: received to available only.
+ */
+export function sqlFundingMarginApplier(sql: Sql): FundingMarginApplier {
+  return {
+    async applyFundingNets(nets) {
+      for (const { positionId, paid } of nets) {
+        if (paid === 0n) continue;
+        const paidStr = formatAmount(paid < 0n ? -paid : paid);
+        if (paid > 0n) {
+          // Payer: reduce residual margin (floor at 0), accumulate funding_paid.
+          await sql`
+            UPDATE trade.positions
+               SET margin_current = GREATEST(margin_current - ${paidStr}::numeric, 0),
+                   funding_paid = funding_paid + ${paidStr}::numeric,
+                   updated_at = now()
+             WHERE id = ${positionId} AND status = 'open'
+          `;
+        } else {
+          // Payee: funding lands in available, not re-margin; track net only.
+          await sql`
+            UPDATE trade.positions
+               SET funding_paid = funding_paid - ${paidStr}::numeric,
+                   updated_at = now()
+             WHERE id = ${positionId} AND status = 'open'
+          `;
+        }
+      }
+    },
+  };
+}
 
 export function sqlFundingPeriodStore(sql: Sql): FundingPeriodStore {
   return {
@@ -94,6 +127,7 @@ export function sqlPositionCloser(sql: Sql, bus: EventBus | null = null): Positi
           entry_price: string;
           leverage: string;
           margin_initial: string;
+          margin_current: string | null;
           margin_mode: 'cross' | 'isolated';
           funding_paid: string;
           liq_price: string | null;
@@ -113,6 +147,7 @@ export function sqlPositionCloser(sql: Sql, bus: EventBus | null = null): Positi
       const SCALE = 10n ** 18n;
       const notional = (size * entry) / SCALE;
       const ts = new Date().toISOString();
+      const collateral = parseAmount(row.margin_current ?? row.margin_initial);
       await bus.publish(
         'positionUpdated',
         {
@@ -127,7 +162,7 @@ export function sqlPositionCloser(sql: Sql, bus: EventBus | null = null): Positi
           markPrice: null,
           notional: formatAmount(notional),
           leverage: formatAmount(parseAmount(row.leverage)),
-          collateral: formatAmount(parseAmount(row.margin_initial)),
+          collateral: formatAmount(collateral),
           unrealizedPnl: null,
           realizedPnl: null,
           liquidationPrice: row.liq_price != null ? formatAmount(parseAmount(row.liq_price)) : null,
