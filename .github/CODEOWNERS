@@ -41,6 +41,18 @@
 # protocol/chain paths while shehzad002 owns tracker rows.
 /services/svc-protocol/              @shehzad002 @Phantom-X-007 @ZenYoda3
 /services/svc-dex/                   @shehzad002 @Phantom-X-007 @ZenYoda3
+#
+# Added 2026-08-07. svc-indexer was missing and Tier C of his board — the VENUE
+# CONTRACT the indexer decodes — is his mountain, so PRs touching it were not
+# reaching him. The adapter half stays agent residual; a review request is not
+# an ownership claim, and CODEOWNERS cannot express half a directory.
+# svc-chain and svc-bridge do not exist yet (§17.5) and are listed ahead of
+# time: GitHub ignores a path with no files, and the alternative is remembering
+# to add them on the day they are created, which is the day it matters.
+/services/svc-indexer/               @shehzad002 @Phantom-X-007 @ZenYoda3
+/services/svc-chain/                 @shehzad002 @Phantom-X-007 @ZenYoda3
+/services/svc-bridge/                @shehzad002 @Phantom-X-007 @ZenYoda3
 /docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md @shehzad002 @ZenYoda3
+/docs/SHIZU-BOARD-AUDIT-2026-08-07.md @shehzad002 @ZenYoda3
 /docs/GITHUB-OWNERSHIP-SHEHZAD.md    @shehzad002 @ZenYoda3
 /docs/THREE-WAY-DISTRIBUTION-2026-08-04.md @shehzad002 @ZenYoda3 @Phantom-X-007
