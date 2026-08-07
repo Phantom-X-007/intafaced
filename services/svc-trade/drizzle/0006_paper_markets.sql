@@ -1,3 +1,9 @@
+-- intafaced:destructive drops orders_hold_positive_ck and replaces it in the same
+-- migration with orders_hold_non_negative_ck (`>= 0`), so paper rows can hold zero.
+-- Declared because constraint removal became a checked destructive class on
+-- 2026-08-07: dropping a CHECK destroys an invariant rather than data, which is
+-- silent, and every row written afterwards is written without it. This one is
+-- deliberate and immediately re-tightened — the declaration says so out loud.
 -- Paper-trading market flag (TRK academy.paper-trading Stage-1).
 -- Paper markets never post real ledger holds on placeOrder.
 -- Reversal: 0006_paper_markets.down.sql

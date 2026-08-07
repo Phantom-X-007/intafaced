@@ -1,3 +1,6 @@
+-- intafaced:destructive drops the index accounts_identity_idx, superseded in this
+-- same migration by the wider unique index accounts_identity_purpose_idx, which
+-- adds "purpose" to the key. Nothing it enforced is lost; it is a strict widening.
 -- svc-ledger · P0-3 purpose-keyed holds
 -- Reversal: 0001_purpose_keyed_holds.down.sql
 --

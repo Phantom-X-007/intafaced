@@ -1,3 +1,6 @@
+-- intafaced:destructive relaxes payment_instruments.details with DROP NOT NULL, so an
+-- instrument can exist before its schema-validated field map does. No row is
+-- deleted and no other invariant is removed.
 -- svc-p2p · payment instruments (§6.2 "any payment method")
 -- Reversal: 0001_p2p_payment_instruments.down.sql
 --
