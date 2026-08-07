@@ -10,6 +10,9 @@ import { rankFixtures } from './scanner/rank.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
+import { invokeNavigatorDataTool } from './navigator/data-tools.js';
+import { navigatorTierGate } from './navigator/tier-gate.js';
+import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
@@ -622,6 +625,215 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
           }
           return result;
+        }),
+
+      /**
+       * Stage-2 tier gate. Product-law matrix blank/unpublished → refuse-closed.
+       * Does not invent free/staked/premium grants.
+       */
+      tierGate: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            userTier: z.string().max(64),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z.record(z.array(z.string().min(1).max(120)).max(100)).default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              userTier: z.string(),
+              allowedTools: z.array(z.string()),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['tier_law_blank', 'tier_not_granted']),
+              userMessageKey: z.literal('agents.navigator.tier_closed'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = navigatorTierGate({ law: input.law ?? null, userTier: input.userTier });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              userTier: result.userTier,
+              allowedTools: [...result.allowedTools],
+            };
+          }
+          return result;
+        }),
+
+      /**
+       * Stage-2 real data tool invoke + user-affecting audit row.
+       * Fixtures only — no invent quotes. Tier law blank → refuse-closed.
+       */
+      invokeDataTool: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            tool: z.string().min(1).max(120),
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64).optional(),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z.record(z.array(z.string().min(1).max(120)).max(100)).default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            now: z.string().datetime().optional(),
+            quote: z
+              .object({
+                marketId: z.string().min(1).max(64),
+                last: z.string().nullable(),
+                asOf: z.string().min(1),
+                maxAgeMs: z.number().int().positive().max(86_400_000),
+              })
+              .nullable()
+              .optional(),
+            markets: z
+              .array(
+                z.object({
+                  marketId: z.string().min(1).max(64),
+                  symbol: z.string().min(1).max(64),
+                  status: z.enum(['open', 'halted', 'closed']),
+                }),
+              )
+              .max(500)
+              .nullable()
+              .optional(),
+            session: z
+              .object({
+                sessionId: z.string().min(1).max(120),
+                userId: z.string().min(1).max(120),
+                status: z.enum(['open', 'closed']),
+              })
+              .nullable()
+              .optional(),
+            occurredAt: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.object({
+            result: z.union([
+              z.object({
+                status: z.literal('ok'),
+                tool: z.literal('trade.quote'),
+                marketId: z.string(),
+                last: z.string(),
+                asOf: z.string(),
+              }),
+              z.object({
+                status: z.literal('ok'),
+                tool: z.literal('trade.markets.list'),
+                markets: z.array(
+                  z.object({
+                    marketId: z.string(),
+                    symbol: z.string(),
+                    status: z.enum(['open', 'halted', 'closed']),
+                  }),
+                ),
+              }),
+              z.object({
+                status: z.literal('ok'),
+                tool: z.literal('identity.session.read'),
+                session: z.object({
+                  sessionId: z.string(),
+                  userId: z.string(),
+                  status: z.enum(['open', 'closed']),
+                }),
+              }),
+              z.object({
+                status: z.literal('refuse'),
+                tool: z.string(),
+                reason: z.enum([
+                  'trade_plane_dark',
+                  'tier_law_blank',
+                  'tier_not_granted',
+                  'tool_not_declared',
+                  'money_write',
+                  'tool_not_in_tier',
+                  'missing_fixture',
+                  'incomplete_quote',
+                  'invalid_decimal',
+                  'stale',
+                  'empty_markets',
+                  'incomplete_session',
+                ]),
+                userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
+              }),
+            ]),
+            audit: z.object({
+              sequence: z.number().int(),
+              kind: z.literal('tool_call'),
+              status: z.enum(['executed', 'refused']),
+              tool: z.string(),
+              reason: z.string().nullable(),
+              userMessageKey: z.string(),
+              occurredAt: z.string(),
+            }),
+          }),
+        )
+        .query(({ input }) => {
+          const result = invokeNavigatorDataTool({
+            tool: input.tool,
+            plane: input.plane,
+            tierLaw: input.law ?? null,
+            userTier: input.userTier ?? '',
+            ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            quote: input.quote ?? null,
+            markets: input.markets ?? null,
+            session: input.session ?? null,
+          });
+          const occurredAt = input.occurredAt ?? new Date().toISOString();
+          const log = auditNavigatorDataTool(emptyNavigatorAuditLog(), result, occurredAt);
+          const audit = log.entries[0]!;
+          if (result.status === 'ok' && result.tool === 'trade.markets.list') {
+            return {
+              result: {
+                status: 'ok' as const,
+                tool: 'trade.markets.list' as const,
+                markets: result.markets.map((m) => ({
+                  marketId: m.marketId,
+                  symbol: m.symbol,
+                  status: m.status,
+                })),
+              },
+              audit: {
+                sequence: audit.sequence,
+                kind: 'tool_call' as const,
+                status: audit.status,
+                tool: audit.tool,
+                reason: audit.reason,
+                userMessageKey: audit.userMessageKey,
+                occurredAt: audit.occurredAt,
+              },
+            };
+          }
+          return {
+            result,
+            audit: {
+              sequence: audit.sequence,
+              kind: 'tool_call' as const,
+              status: audit.status,
+              tool: audit.tool,
+              reason: audit.reason,
+              userMessageKey: audit.userMessageKey,
+              occurredAt: audit.occurredAt,
+            },
+          };
         }),
     }),
 
