@@ -22,6 +22,7 @@ import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
+import { checkEngineSequences, describeRegressions } from './spot/sequence-guard.js';
 import { parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -228,7 +229,43 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async (_req, reply) => {
   if (!env.TRADE_SPOT_ENABLED) return reply.code(503).send({ ready: false, reason: 'trade.spot flag is off' });
-  return { ready: true };
+
+  /**
+   * Is the engine behind what we have already settled? (`spot/sequence-guard.ts`)
+   *
+   * A restart that lost the journal while Postgres kept `trade.fills` leaves the
+   * engine re-issuing sequences that already identify settled trades — and
+   * `fillIdFor(market, sequence)` is the ledger's idempotency key.
+   *
+   * `insertFillLeg` already refuses that at settlement, so nothing is
+   * mis-settled either way. What this adds is WHEN it is noticed: on a probe a
+   * load balancer reads, rather than on the first user whose order is refused.
+   * A replica in this state was unfit the moment it finished booting.
+   */
+  const sequences = await checkEngineSequences({
+    sql,
+    markets: () => trade.markets(),
+    engineSequence: async (marketId) => {
+      try {
+        return (await matching.depth(marketId, 1)).sequence;
+      } catch {
+        // Matching being unreachable is a different readiness question and not
+        // this check's to answer — reported as unjudged, never as healthy.
+        return null;
+      }
+    },
+  });
+
+  if (sequences.regressions.length > 0) {
+    const reason = describeRegressions(sequences.regressions);
+    app.log.error({ regressions: sequences.regressions }, reason);
+    return reply.code(503).send({ ready: false, reason, markets: sequences.regressions.map((r) => r.symbol) });
+  }
+
+  // Counts, not a bare boolean: "checked 12" and "checked 0 because nothing has
+  // traded yet" are different facts, and a probe that renders both as `true`
+  // cannot tell an operator which one they are looking at.
+  return { ready: true, engineSequences: { checked: sequences.checked, unjudged: sequences.unjudged } };
 });
 
 // Public CCXT-style REST (markets, orderbook, ticker, tickers, trades, ohlcv).
