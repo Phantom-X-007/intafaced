@@ -40,10 +40,18 @@ const DEFAULT_ADMIN_URL = 'postgres://intafaced_ops:intafaced_ops@localhost:5433
 
 /**
  * How long a per-run schema or database may live before the sweeper treats it
- * as abandoned. Suites here run in seconds; two hours is orders of magnitude of
- * headroom and still bounds the leak (see `sweepStaleTestObjects`).
+ * as abandoned. Suites here run in seconds, so this is still orders of
+ * magnitude of headroom, and the `backends = 0` condition is the real safety —
+ * a live run is connected to its own object.
+ *
+ * Was two hours. Fifteen minutes, because the leak is no longer rare: a bounded
+ * `drop()` (see DROP_WAIT_MS) deliberately walks away from a slow drop, so the
+ * sweeper went from catching the occasional crashed worker to being the normal
+ * way a database is reclaimed. Measured on this machine, the leftover count went
+ * 5 -> 9 across a handful of runs at two hours; at fifteen minutes the backlog
+ * drains between runs instead of compounding.
  */
-const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
+const STALE_AFTER_MS = 15 * 60 * 1000;
 
 /** Marker written into the object's COMMENT so the sweeper can date it. */
 const STAMP = 'intafaced-test-run';
@@ -188,6 +196,48 @@ export interface TestDatabase {
 /** Prefix that marks a database as ours, so the sweeper can recognise it. */
 const RUN_DB_PREFIX = 'itf_run_';
 
+/**
+ * How long a suite WAITS for its database to be dropped before walking away and
+ * leaving it to the sweeper.
+ *
+ * MEASURED, not guessed. Docker Desktop for Windows, idle server, nothing else
+ * running, five consecutive create/drop pairs:
+ *
+ *   CREATE   921 ms   DROP   4919 ms
+ *   CREATE    72 ms   DROP  30277 ms
+ *   CREATE    76 ms   DROP  26339 ms
+ *   CREATE    62 ms   DROP    345 ms
+ *   CREATE    29 ms   DROP     45 ms
+ *
+ * Creating is cheap; dropping is not. `DROP DATABASE` is a recursive delete of
+ * the data directory, and on a Docker overlay filesystem that occasionally
+ * takes half a minute for seven megabytes. Two of those five exceed the entire
+ * 30s `afterAll` budget the suites had already raised for this — so the run
+ * fails in TEARDOWN, after every assertion passed, usually on a service the
+ * change under test never touched.
+ *
+ * That is the flake that has been landing on `svc-trade`, `svc-bank`,
+ * `svc-indexer` and `packages/db` at random. It is NOT contention between
+ * worktrees and NOT connection exhaustion — 10 of 200 connections were in use
+ * when this was measured. Both were blamed in earlier notes, mine included.
+ *
+ * Two seconds covers the common case with room to spare. Waiting longer buys
+ * nothing a suite cares about: the database is already unreachable to everyone
+ * else, its name is unique to a run that has ended, and
+ * `sweepStaleTestDatabases` exists precisely to reclaim what a crash leaves.
+ */
+const DROP_WAIT_MS = 2_000;
+
+/**
+ * Total time one sweep may spend dropping, across all candidates.
+ *
+ * The sweep runs inside `createTestDatabase`, so it is inside somebody's
+ * `beforeAll`. Without a budget, a suite that happens to start when five
+ * databases are due for collection pays for all five — housekeeping becoming
+ * the failure it exists to clean up after.
+ */
+const SWEEP_BUDGET_MS = 2_000;
+
 function withDatabase(url: string, database: string): string {
   const parsed = new URL(url);
   parsed.pathname = `/${database}`;
@@ -310,10 +360,36 @@ export async function createTestDatabase(options: TestDatabaseOptions): Promise<
        * a vitest `afterAll` budget spent waiting to throw work away.
        */
       await sql.end({ timeout: 0 }).catch(() => undefined);
-      // FORCE terminates leftover backends; without it a straggler connection
-      // makes DROP fail and the database leaks until the sweeper catches it.
-      await admin.unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => undefined);
-      await admin.end({ timeout: 0 }).catch(() => undefined);
+
+      /**
+       * BOUNDED WAIT — see DROP_WAIT_MS for the measurements behind it.
+       *
+       * The drop is still issued, and is still the normal way a database goes
+       * away. What changed is that the suite stops WAITING for it after two
+       * seconds instead of holding the `afterAll` budget open for up to thirty.
+       *
+       * The connection is deliberately NOT closed on the timeout path. Ending
+       * the pool would cancel the in-flight `DROP DATABASE` server-side and
+       * turn a slow drop into a guaranteed leak — so the pool closes when the
+       * drop settles, whenever that is, and this function returns before it.
+       *
+       * FORCE terminates leftover backends; without it one straggler connection
+       * fails the drop and the database leaks until the sweeper catches it.
+       */
+      const dropped = admin
+        .unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`)
+        .catch(() => undefined)
+        .then(() => admin.end({ timeout: 0 }).catch(() => undefined));
+
+      // `unref` so a slow drop can never be the reason a vitest worker stays
+      // alive — the whole point is that nothing waits on this.
+      await Promise.race([
+        dropped,
+        new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, DROP_WAIT_MS);
+          timer.unref?.();
+        }),
+      ]);
     },
   };
 }
@@ -377,7 +453,20 @@ export async function sweepStaleTestDatabases(admin: postgres.Sql, staleAfterMs 
         FROM pg_database d
        WHERE d.datname LIKE ${`${RUN_DB_PREFIX}%\\_test`}
     `;
+    /**
+     * BUDGETED, for the same reason `drop()` is bounded: a `DROP DATABASE` can
+     * take half a minute on a Docker overlay filesystem (see DROP_WAIT_MS), and
+     * this loop runs inside `createTestDatabase` — which is inside a suite's
+     * `beforeAll`. Sweeping five abandoned databases without a budget would
+     * blow the setup hook of the suite that was merely unlucky enough to start
+     * next, turning housekeeping into the very failure it cleans up after.
+     *
+     * Whatever is not reclaimed this pass is reclaimed on a later one. The
+     * backlog is bounded by the staleness window, not by finishing here.
+     */
+    const deadline = Date.now() + SWEEP_BUDGET_MS;
     for (const row of rows) {
+      if (Date.now() >= deadline) break;
       const age = stampAgeMs(row.comment);
       if (age === null || age < staleAfterMs) continue;
       if (row.backends > 0) continue;
