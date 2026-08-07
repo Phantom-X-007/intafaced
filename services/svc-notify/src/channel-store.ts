@@ -36,10 +36,25 @@ export type DeliveryStatus =
 
 /**
  * How long a successful claim owns a pending row before another replica may
- * re-claim it (crash recovery). Long enough for a slow gateway; short enough
- * that a dead process does not park a margin-call forever.
+ * re-claim it (crash recovery).
+ *
+ * Two bounds decide this, and they pull opposite ways:
+ *
+ *   at least  the longest a single attempt can take — `NOTIFY_GATEWAY_TIMEOUT_MS`
+ *             — or a lease expires under a sender that is merely slow, and the
+ *             double-send this lease exists to stop comes back.
+ *   at most   the bus `ack_wait` (30s, `packages/events/src/jetstream-bus.ts`) —
+ *             or the natural redelivery of a crashed sender's message arrives
+ *             while the lease is still live and can do nothing but nak again.
+ *
+ * `index.ts` derives it from the configured gateway timeout for that reason
+ * rather than taking this default, which only covers callers that build a store
+ * by hand. An operator who raises `NOTIFY_GATEWAY_TIMEOUT_MS` to its 30s ceiling
+ * puts the two bounds in genuine conflict: an attempt that may run as long as
+ * `ack_wait` will always be redelivered mid-flight, and no lease length fixes
+ * that. Keep the gateway timeout well under 30s.
  */
-export const DEFAULT_CLAIM_LEASE_MS = 60_000;
+export const DEFAULT_CLAIM_LEASE_MS = 15_000;
 
 export interface DeliveryRecord {
   id: string;

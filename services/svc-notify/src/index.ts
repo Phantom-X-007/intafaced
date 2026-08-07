@@ -89,7 +89,10 @@ const bus = await JetStreamEventBus.connect({
 
 const store = new PostgresNotifyStore(sql);
 const targets = new PostgresTargetStore(sql);
-const deliveries = new PostgresDeliveryStore(sql);
+// The claim lease has to outlast one gateway attempt and stay under the bus
+// `ack_wait`. Deriving it from the configured timeout keeps the first half true
+// when an operator changes that timeout — see DEFAULT_CLAIM_LEASE_MS.
+const deliveries = new PostgresDeliveryStore(sql, { leaseMs: env.NOTIFY_GATEWAY_TIMEOUT_MS * 2 });
 const channels = channelsFromEnv(env);
 const muteStore = new PostgresMuteStore(sql);
 const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
