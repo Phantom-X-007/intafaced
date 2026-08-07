@@ -250,6 +250,16 @@ const ALLOWLIST = [
       'internal overlap audit; its entire product is a per-capability decision about which vendored module we adopt, rebuild or delete, and that decision cannot be taken against paraphrased paths. It cites the exact controller files whose money paths are in scope, the exact schema the balances sit in, and the exact module jars that are and are not running — the same rationale as docs/adr and LICENCE-POSITION.md. Seven occurrences, all of them a path or a database name an engineer must be able to copy. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
   },
   {
+    path: join('docs', 'MEGA-AUDIT-2026-08-07-FINDINGS.md'),
+    reason:
+      'internal code + systems audit; a finding that cannot name the file and line it sits at is not a finding, it is a rumour. Every occurrence here is a vendored Java path, a package root or a quoted source line inside a defect report — including the dual-book door registration and the wallet-RPC modules, which are the two places where a paraphrased path would send an engineer to the wrong file on a money guard. Same rationale as VENDORED-OVERLAP-AUDIT.md and LICENCE-POSITION.md. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',
+  },
+  {
+    path: join('docs', 'MEGA-AUDIT-2026-08-07-PLAN.md'),
+    reason:
+      'the scope and lens map for the findings document above; it names the vendored trees by path because the audit targets are chosen by path. Not shipped to users. Remove with its findings entry once the vendor directory and Java package root are renamed.',
+  },
+  {
     path: join('docs', 'BIZZAN-ADOPTION-QUEUE-2026-08-02.md'),
     reason:
       'internal adoption-queue audit; decide adopt/rebuild/delete per vendored module by citing exact paths (wallet_rpc, DualBookMoneyDoor, package roots). Same rationale as VENDORED-OVERLAP-AUDIT.md and LICENCE-POSITION.md — paraphrased paths make the queue unactionable. Not shipped to users. Remove this entry once the vendor directory and Java package root are renamed.',

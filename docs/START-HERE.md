@@ -15,6 +15,7 @@ Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURR
 
 ---
 
+- **Code + systems mega audit (2026-08-07):** [`MEGA-AUDIT-2026-08-07-FINDINGS.md`](MEGA-AUDIT-2026-08-07-FINDINGS.md) — 59 adversarially verified findings, and **33 of them are in the gate apparatus itself**: the thing most likely to be wrong in this repo is the machine that says nothing is wrong. §0a lists which fixes have since landed and which are still open. The two that matter most and are **still open** are futures leverage (no maximum is enforced) and futures funding (collateral drains while `margin_initial` never moves — live, not latent).
 - **Internet leverage LAW (agents must obey — you do not pick):** [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md) — Phase A is enough for **now**; wire shell + ledger + services; no rebuild.
 - **Phase A map (what we already own):** [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md).
 - **Full residual paths (every open tracker row):** [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — the whole board, not a “top 5 only” list.
