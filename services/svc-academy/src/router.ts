@@ -155,6 +155,40 @@ const residencyOut = z.object({
   decisionNote: z.string().nullable(),
 });
 
+const certDefinitionOut = z.object({
+  id: z.string(),
+  title: z.string(),
+  requiredItemSlugs: z.array(z.string()),
+});
+const enrollmentOut = z.object({
+  userId: z.string().uuid(),
+  pathSlug: z.string(),
+  enrolledAt: z.date(),
+});
+const itemCompletionOut = z.object({
+  userId: z.string().uuid(),
+  itemSlug: z.string(),
+  completedAt: z.date(),
+});
+const certGrantOut = z.object({
+  userId: z.string().uuid(),
+  certId: z.string(),
+  grantedAt: z.date(),
+  idempotencyKey: z.string(),
+});
+const certProgressOut = z.object({
+  userId: z.string().uuid(),
+  certId: z.string(),
+  title: z.string(),
+  requiredCount: z.number().int(),
+  completedCount: z.number().int(),
+  ratio: z.string(),
+  missingItemSlugs: z.array(z.string()),
+  complete: z.boolean(),
+  granted: z.boolean(),
+  grantIdempotencyKey: z.string().nullable(),
+});
+
 const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room, minStake: formatAmount(room.minStake) });
 
 /**
@@ -202,7 +236,15 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.ambassador_already_frozen':
     case 'academy.residency_already_open':
     case 'academy.residency_not_pending':
+    case 'academy.cert_already_granted':
+    case 'academy.cert_incomplete':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+
+    case 'academy.cert_not_found':
+      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+
+    case 'academy.cert_invalid':
+      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
 
     case 'academy.season_not_found':
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -594,6 +636,81 @@ export function createAcademyRouter(academy: AcademyService) {
       .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))
       .output(standingOut.omit({ rank: true }))
       .mutation(({ input }) => guard(() => academy.setStanding(input))),
+
+    // ── Certifications Stage-1 (progress + grants — NO XP / NO PAY) ───────────
+    //
+    // Definitions are code-seeded. Completions and grants are durable. XP emit
+    // and rank perks remain Stage-2 residual.
+
+    certDefinitions: scopedProcedure('academy:read', { module: 'academy' })
+      .output(z.array(certDefinitionOut))
+      .query(() =>
+        academy.listCertDefinitions().map((c) => ({
+          id: c.id,
+          title: c.title,
+          requiredItemSlugs: [...c.requiredItemSlugs],
+        })),
+      ),
+
+    enrollCertPath: scopedProcedure('academy:write', { module: 'academy' })
+      .input(z.object({ pathSlug: z.string().min(1).max(64) }))
+      .output(enrollmentOut)
+      .mutation(({ input, ctx }) => guard(() => academy.enrollCertPath({ userId: ctx.principal!.userId, pathSlug: input.pathSlug }))),
+
+    markCurriculumComplete: scopedProcedure('academy:write', { module: 'academy' })
+      .input(z.object({ itemSlug: z.string().min(1).max(120) }))
+      .output(itemCompletionOut)
+      .mutation(({ input, ctx }) =>
+        guard(() => academy.markCurriculumComplete({ userId: ctx.principal!.userId, itemSlug: input.itemSlug })),
+      ),
+
+    grantCert: scopedProcedure('academy:write', { module: 'academy' })
+      .input(z.object({ certId: z.string().min(1).max(64) }))
+      .output(
+        z.object({
+          grant: certGrantOut,
+          alreadyGranted: z.boolean(),
+        }),
+      )
+      .mutation(({ input, ctx }) =>
+        guard(async () => {
+          const result = await academy.grantCert({ userId: ctx.principal!.userId, certId: input.certId });
+          return {
+            alreadyGranted: result.alreadyGranted,
+            grant: {
+              userId: result.grant.userId,
+              certId: result.grant.certId,
+              grantedAt: result.grant.grantedAt,
+              idempotencyKey: result.grant.idempotencyKey,
+            },
+          };
+        }),
+      ),
+
+    myCerts: scopedProcedure('academy:read', { module: 'academy' })
+      .output(z.array(certGrantOut))
+      .query(({ ctx }) => guard(() => academy.myCertGrants(ctx.principal!.userId))),
+
+    certProgress: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ certId: z.string().min(1).max(64) }))
+      .output(certProgressOut)
+      .query(({ input, ctx }) =>
+        guard(async () => {
+          const p = await academy.certProgress({ userId: ctx.principal!.userId, certId: input.certId });
+          return {
+            userId: p.userId,
+            certId: p.certId,
+            title: p.title,
+            requiredCount: p.requiredCount,
+            completedCount: p.completedCount,
+            ratio: p.ratio,
+            missingItemSlugs: [...p.missingItemSlugs],
+            complete: p.complete,
+            granted: p.granted,
+            grantIdempotencyKey: p.grantIdempotencyKey,
+          };
+        }),
+      ),
   });
 }
 

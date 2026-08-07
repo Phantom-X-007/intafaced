@@ -18,6 +18,20 @@ import {
   type ResidencyApplication,
   type ResidencyStatus,
 } from './ambassadors/residency.js';
+import { certById, listCertCatalog } from './certs/catalog.js';
+import {
+  CertError,
+  certIdempotencyKey,
+  decideGrant,
+  decideItemComplete,
+  progressReport,
+  type CertDefinition,
+  type CertGrantRecord,
+  type EnrollmentRecord,
+  type ItemCompletionRecord,
+  type ProgressReport,
+} from './certs/progress.js';
+import { hasCurriculumSlug } from './curriculum/catalog.js';
 import {
   assertMayWriteScore,
   assertScore,
@@ -1023,6 +1037,163 @@ export class AcademyService {
            ORDER BY applied_at ASC
         `;
     return rows.map((r) => this.toResidency(r));
+  }
+
+  // ── Certifications Stage-1 (progress + grants — NO XP / NO PAY) ───────────
+
+  private mapCertErr(err: unknown): never {
+    if (err instanceof CertError) {
+      throw new AcademyError(err.message, err.code);
+    }
+    throw err;
+  }
+
+  listCertDefinitions(): CertDefinition[] {
+    return [...listCertCatalog()];
+  }
+
+  async enrollCertPath(input: { userId: string; pathSlug: string }): Promise<EnrollmentRecord> {
+    const pathSlug = input.pathSlug.trim().toLowerCase();
+    if (!pathSlug || pathSlug.length > 64) {
+      throw new AcademyError('Invalid path slug', 'academy.cert_invalid');
+    }
+    const rows = await this.sql<Array<{ user_id: string; path_slug: string; enrolled_at: Date }>>`
+      INSERT INTO academy.cert_enrollments (user_id, path_slug, enrolled_at)
+      VALUES (${input.userId}, ${pathSlug}, now())
+      ON CONFLICT (user_id, path_slug) DO UPDATE SET path_slug = EXCLUDED.path_slug
+      RETURNING user_id, path_slug, enrolled_at
+    `;
+    const row = rows[0]!;
+    return { userId: row.user_id, pathSlug: row.path_slug, enrolledAt: row.enrolled_at };
+  }
+
+  async markCurriculumComplete(input: { userId: string; itemSlug: string }): Promise<ItemCompletionRecord> {
+    const slug = input.itemSlug.trim();
+    if (!hasCurriculumSlug(slug)) {
+      throw new AcademyError('Unknown curriculum item', 'academy.curriculum_not_found');
+    }
+    const existingRows = await this.sql<Array<{ user_id: string; item_slug: string; completed_at: Date }>>`
+      SELECT user_id, item_slug, completed_at FROM academy.cert_item_completions
+       WHERE user_id = ${input.userId} AND item_slug = ${slug}
+    `;
+    const existing = existingRows[0]
+      ? {
+          userId: existingRows[0].user_id,
+          itemSlug: existingRows[0].item_slug,
+          completedAt: existingRows[0].completed_at,
+        }
+      : null;
+    let decision: { record: ItemCompletionRecord; alreadyComplete: boolean };
+    try {
+      decision = decideItemComplete({ userId: input.userId, itemSlug: slug, existing });
+    } catch (err) {
+      this.mapCertErr(err);
+    }
+    if (decision.alreadyComplete) return decision.record;
+    const rows = await this.sql<Array<{ user_id: string; item_slug: string; completed_at: Date }>>`
+      INSERT INTO academy.cert_item_completions (user_id, item_slug, completed_at)
+      VALUES (${input.userId}, ${slug}, now())
+      ON CONFLICT (user_id, item_slug) DO NOTHING
+      RETURNING user_id, item_slug, completed_at
+    `;
+    if (rows[0]) {
+      return { userId: rows[0].user_id, itemSlug: rows[0].item_slug, completedAt: rows[0].completed_at };
+    }
+    // concurrent insert — re-read
+    const again = await this.sql<Array<{ user_id: string; item_slug: string; completed_at: Date }>>`
+      SELECT user_id, item_slug, completed_at FROM academy.cert_item_completions
+       WHERE user_id = ${input.userId} AND item_slug = ${slug}
+    `;
+    return {
+      userId: again[0]!.user_id,
+      itemSlug: again[0]!.item_slug,
+      completedAt: again[0]!.completed_at,
+    };
+  }
+
+  private async completedSlugs(userId: string): Promise<Set<string>> {
+    const rows = await this.sql<Array<{ item_slug: string }>>`
+      SELECT item_slug FROM academy.cert_item_completions WHERE user_id = ${userId}
+    `;
+    return new Set(rows.map((r) => r.item_slug));
+  }
+
+  private async existingGrant(userId: string, certId: string): Promise<CertGrantRecord | null> {
+    const key = certIdempotencyKey(userId, certId);
+    const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
+      SELECT user_id, cert_id, granted_at, idempotency_key FROM academy.cert_grants
+       WHERE user_id = ${userId} AND cert_id = ${certId}
+    `;
+    if (!rows[0]) return null;
+    return {
+      userId: rows[0].user_id,
+      certId: rows[0].cert_id,
+      grantedAt: rows[0].granted_at,
+      idempotencyKey: rows[0].idempotency_key ?? key,
+    };
+  }
+
+  async grantCert(input: { userId: string; certId: string }): Promise<{ grant: CertGrantRecord; alreadyGranted: boolean }> {
+    const cert = certById(input.certId);
+    const completed = await this.completedSlugs(input.userId);
+    const existing = await this.existingGrant(input.userId, input.certId);
+    let decision: { grant: CertGrantRecord; alreadyGranted: boolean };
+    try {
+      decision = decideGrant({
+        userId: input.userId,
+        cert,
+        completedSlugs: completed,
+        existing,
+      });
+    } catch (err) {
+      this.mapCertErr(err);
+    }
+    if (decision.alreadyGranted) return decision;
+    const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
+      INSERT INTO academy.cert_grants (user_id, cert_id, granted_at, idempotency_key)
+      VALUES (${decision.grant.userId}, ${decision.grant.certId}, ${decision.grant.grantedAt}, ${decision.grant.idempotencyKey})
+      ON CONFLICT (user_id, cert_id) DO UPDATE SET cert_id = EXCLUDED.cert_id
+      RETURNING user_id, cert_id, granted_at, idempotency_key
+    `;
+    return {
+      alreadyGranted: false,
+      grant: {
+        userId: rows[0]!.user_id,
+        certId: rows[0]!.cert_id,
+        grantedAt: rows[0]!.granted_at,
+        idempotencyKey: rows[0]!.idempotency_key,
+      },
+    };
+  }
+
+  async myCertGrants(userId: string): Promise<CertGrantRecord[]> {
+    const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
+      SELECT user_id, cert_id, granted_at, idempotency_key FROM academy.cert_grants
+       WHERE user_id = ${userId}
+       ORDER BY granted_at DESC
+    `;
+    return rows.map((r) => ({
+      userId: r.user_id,
+      certId: r.cert_id,
+      grantedAt: r.granted_at,
+      idempotencyKey: r.idempotency_key,
+    }));
+  }
+
+  async certProgress(input: { userId: string; certId: string }): Promise<ProgressReport> {
+    const cert = certById(input.certId);
+    const completed = await this.completedSlugs(input.userId);
+    const existing = await this.existingGrant(input.userId, input.certId);
+    try {
+      return progressReport({
+        userId: input.userId,
+        cert,
+        completedSlugs: completed,
+        existingGrant: existing,
+      });
+    } catch (err) {
+      this.mapCertErr(err);
+    }
   }
 
   private async liveInvite(roomId: string, userId: string): Promise<{ expiresAt: Date | null } | null> {
