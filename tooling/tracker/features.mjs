@@ -538,7 +538,23 @@ export const FEATURES = [
     owner: 'shehzad002',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-protocol'],
-    note: 'HUMAN Protocol Plane @shehzad002 (2026-08-04 sole chain lock). Deploy + adversarial audit package. Agents babysit only. Not go-live Class X.',
+    note:
+      'HUMAN Protocol Plane @shehzad002 (2026-08-04 sole chain lock). Agents babysit only. Not go-live Class X. ' +
+      'WHAT IS ALREADY ON MAIN — stated 2026-08-07 because this row carried an ownership stamp and no state, which is ' +
+      'exactly how an owner ends up rebuilding merged work. SmartAccount.sol, AccountFactory.sol and SessionKeyLib.sol ' +
+      'compile as a pinned suite (solc 0.8.28) and RUN AGAINST A REAL DEV CHAIN in CI (REQUIRE_EVM_CHAIN=1): 31 ' +
+      'contract tests including the CREATE2 cross-check proving the TypeScript address derivation agrees with the ' +
+      'deployed factory (#210). The service surface is mounted with typed refusals on every chain-dependent path ' +
+      '(#193) and factory honesty on predict/build (#128). ERC-4337 v0.7 user operations are built and hashed ' +
+      'independently by src/chain/userop.ts, which is the whole basis on which the relay can refuse to forward ' +
+      'something the user did not authorise. ' +
+      'WHAT REMAINS, and none of it is "write the contracts": (1) the adversarial AUDIT PACKAGE — threat model, ' +
+      'findings, fix-or-residual — and no external audit exists (socket.contract-audit); (2) the passkey P-256 ' +
+      'verifier contract does not exist, so a passkey cannot yet own an account ON-CHAIN — the title of this row is ' +
+      'not fully true until it does (socket.p256-verifier); (3) the user-operation hash has never been checked ' +
+      'against a live EntryPoint (socket.userop-differential-test); (4) no fuzz/invariant suite and no gas snapshots ' +
+      '(socket.contract-toolchain); (5) NOBODY OWNS GAS — socket.paymaster-policy and socket.bundler-policy; (6) no ' +
+      'deployment beyond a local dev chain and no address registry (socket.deployment-registry).',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',
@@ -548,7 +564,18 @@ export const FEATURES = [
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
     requires: ['services/svc-protocol/contracts/amm', 'services/svc-protocol/src/amm'],
-    note: 'HUMAN Protocol Plane @shehzad002 after SA. Agents babysit only.',
+    note:
+      'HUMAN Protocol Plane @shehzad002 after SA. Agents babysit only. ' +
+      'THE COMPILE-AND-PROVE HALF IS ALREADY MERGED — recorded 2026-08-07 because this row stated only who owns it, ' +
+      'and the blockchain task board consequently asks its owner for work that landed eight days earlier. The pool ' +
+      'once did not compile at all (swapExactIn called an `external swap` by name); fixed with a private `_swap` ' +
+      'shared by both entrypoints, external ABI unchanged for calldata builders (#228, by @shehzad002). PoolFactory ' +
+      'then landed on the dev chain (#264), and mint + swapExactIn are PROVEN ON A CHAIN rather than asserted in a ' +
+      'unit test (#288 — src/amm/mint-swap-onchain.test.ts, src/amm/pool-factory-onchain.test.ts). Constant-product ' +
+      'maths is a pure tested module (src/amm/math.ts). ' +
+      'WHAT REMAINS: invariant/property suites (k never decreases, no free extraction, fee accrual), LP accounting ' +
+      'and fee tiers, oracle coupling (socket.price-oracle), and the `audited` flag staying false until a real audit ' +
+      'package exists. Do not re-derive the compile fix or the on-chain proof.',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',
@@ -629,7 +656,9 @@ export const FEATURES = [
     module: 'blueprint',
     phase: '4',
     plane: 'B',
+    owner: 'shehzad002',
     dependsOn: ['blueprint.onboarding', 'protocol.smart-accounts'],
+    note: 'Owner set 2026-08-07. The blockchain task board has claimed this as Tier F since 2026-08-03 while this row said `ready` and unowned — so an agent doing the correct free-work check would have started it legitimately. The blueprint half (what a rank means, how it is computed) is already `done`; what is unbuilt is the on-chain half: attestations that verify without disclosing identity.',
   }),
 
   // ── PHASE 4P · INTACHAIN ─────────────────────────────────────────────────
@@ -881,9 +910,10 @@ export const FEATURES = [
   }),
   f('launch.launchpad', 'Presale / fair launch, vesting, staked allocation tiers', {
     owner: 'shehzad002',
-    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only.',
+    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only. Plane corrected to P 2026-08-07 — presale, vesting and allocation are contracts, and this row rendered as Fiat Plane on the board its own owner reads.',
     module: 'launch',
     phase: '5',
+    plane: 'P',
     dependsOn: ['launch.token-factory', 'token.staking'],
   }),
   f('launch.nft', 'NFT mint / list / auction, on-chain royalties', {
@@ -896,9 +926,10 @@ export const FEATURES = [
   }),
   f('launch.rwa', 'RWA issuance registry, licence-gated', {
     owner: 'shehzad002',
-    note: 'HUMAN on-chain launch @shehzad002 (licence honesty). Agents babysit only.',
+    note: 'HUMAN on-chain launch @shehzad002 (licence honesty). Agents babysit only. Plane corrected to P 2026-08-07 — the registry is on-chain; the LICENCE half is Class X and remains Nitro human.',
     module: 'launch',
     phase: '5',
+    plane: 'P',
     status: 'socket',
     dependsOn: ['launch.token-factory'],
   }),
@@ -914,7 +945,7 @@ export const FEATURES = [
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
     owner: 'shehzad002',
-    note: 'HUMAN mining epoch/share protocol surface @shehzad002 (token minter remains svc-token). Agents babysit chain half.',
+    note: "HUMAN mining epoch/share protocol surface @shehzad002 (token minter remains svc-token). Agents babysit chain half. Plane deliberately left F 2026-08-07: the share/epoch protocol is the chain owner's, but minting stays custodial in svc-token, and relabelling the row P would misdescribe where the value moves.",
     module: 'mining-pool',
     phase: '5',
     dependsOn: ['token.emissions'],
@@ -1015,24 +1046,27 @@ export const FEATURES = [
     phase: '5',
     plane: 'P',
     status: 'socket',
+    owner: 'Nitro',
     dependsOn: ['dex.quote-router'],
-    note: '§13 — THE BLOCKER, and it is a DECISION, not code, not a chain. svc-dex can read three kinds of venue and all three are dark for different reasons. (1) `intachain-clob` reads svc-indexer, whose chain feed needs a contract emitting BookLevel/Fill/Position; only contracts/dev/DevVenue.sol does, a dev fixture with no book and no access control, INDEXER_VENUE_ADDRESS is the zero address and the adapter refuses to construct on it — that is socket.clob-contracts, a contracts decision. (2) `internal-book` reads svc-matching, which derives markets from journal replay, so its books stay empty until an order lands or trade.mm-bot seeds depth — an operations problem, not a code one. (3) External venues need one row in DEX_EXTERNAL_VENUES, and the default is `[]` deliberately: a service that had no outbound egress yesterday does not silently acquire it. THAT THIRD PATH NEEDS NO CODE, NO CHAIN AND NO CREDENTIALS — public depth is unauthenticated on any tier-one venue, and a live probe against a throwaway depth server proved the adapter prices correctly the moment a row exists. So the honest blocker is: NOBODY HAS DECIDED WHICH VENUE THIS PLATFORM QUOTES. Checked 2026-08-03 against both accepted ADRs (2026-07-28-vendored-exchange-integration, Accepted 2026-07-31 Option B; 2026-08-02-adopt-vendored-product-keep-our-ledger, Accepted 2026-08-02) and docs/SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md: NONE of them mentions svc-dex, a DEX, a CLOB, INTACORE or a venue at all, and none lists a DEX question among its open owner-gated items. The decision is not taken AND not tracked as pending — which is why this socket exists. Until it is taken, refusing with 503 is the correct product behaviour and must not be softened to make a screen look alive.',
+    note: "OWNER-GATED, assigned to Nitro 2026-08-07 rather than left unowned — an unowned decision reads as unclaimed engineering, and this one is neither. It is not the chain owner's to take and no PR closes it. §13 — THE BLOCKER, and it is a DECISION, not code, not a chain. svc-dex can read three kinds of venue and all three are dark for different reasons. (1) `intachain-clob` reads svc-indexer, whose chain feed needs a contract emitting BookLevel/Fill/Position; only contracts/dev/DevVenue.sol does, a dev fixture with no book and no access control, INDEXER_VENUE_ADDRESS is the zero address and the adapter refuses to construct on it — that is socket.clob-contracts, a contracts decision. (2) `internal-book` reads svc-matching, which derives markets from journal replay, so its books stay empty until an order lands or trade.mm-bot seeds depth — an operations problem, not a code one. (3) External venues need one row in DEX_EXTERNAL_VENUES, and the default is `[]` deliberately: a service that had no outbound egress yesterday does not silently acquire it. THAT THIRD PATH NEEDS NO CODE, NO CHAIN AND NO CREDENTIALS — public depth is unauthenticated on any tier-one venue, and a live probe against a throwaway depth server proved the adapter prices correctly the moment a row exists. So the honest blocker is: NOBODY HAS DECIDED WHICH VENUE THIS PLATFORM QUOTES. Checked 2026-08-03 against both accepted ADRs (2026-07-28-vendored-exchange-integration, Accepted 2026-07-31 Option B; 2026-08-02-adopt-vendored-product-keep-our-ledger, Accepted 2026-08-02) and docs/SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md: NONE of them mentions svc-dex, a DEX, a CLOB, INTACORE or a venue at all, and none lists a DEX question among its open owner-gated items. The decision is not taken AND not tracked as pending — which is why this socket exists. Until it is taken, refusing with 503 is the correct product behaviour and must not be softened to make a screen look alive.",
   }),
   f('socket.dex-fee-source', 'Authoritative per-venue fee and settlement schedule', {
     module: 'dex',
     phase: '5',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['dex.quote-router'],
-    note: "§13 — named in services/svc-dex/src/env.ts and never tracked until 2026-08-03. Fees are CONFIGURED, not sourced: DEX_CLOB_FEE_BPS (0), DEX_INTERNAL_BOOK_FEE_BPS (20) and DEX_CLOB_SETTLEMENT_COST ('0'). Understate either and the effective price reported is better than the one the user actually gets. The authoritative figures cannot be read yet — the per-market spot schedule lives in svc-trade's own `markets` row and §2 forbids reading another service's tables, and the on-chain CLOB has no deployed contract to publish one. The settlement cost of '0' is a DECLARED UNDERSTATEMENT: converting gas into the quote asset needs a gas oracle and a native-token price and neither exists in this stack. It costs nothing today because that venue has no chain to read, and it must be set before the first real on-chain quote is served. What keeps this honest rather than hidden is that every quote response discloses the exact feeBps and settlementCost applied per venue, so a caller can check the arithmetic against the venue's real schedule.",
+    note: "Owner set 2026-08-07 (board S-I3). §13 — named in services/svc-dex/src/env.ts and never tracked until 2026-08-03. Fees are CONFIGURED, not sourced: DEX_CLOB_FEE_BPS (0), DEX_INTERNAL_BOOK_FEE_BPS (20) and DEX_CLOB_SETTLEMENT_COST ('0'). Understate either and the effective price reported is better than the one the user actually gets. The authoritative figures cannot be read yet — the per-market spot schedule lives in svc-trade's own `markets` row and §2 forbids reading another service's tables, and the on-chain CLOB has no deployed contract to publish one. The settlement cost of '0' is a DECLARED UNDERSTATEMENT: converting gas into the quote asset needs a gas oracle and a native-token price and neither exists in this stack. It costs nothing today because that venue has no chain to read, and it must be set before the first real on-chain quote is served. What keeps this honest rather than hidden is that every quote response discloses the exact feeBps and settlementCost applied per venue, so a caller can check the arithmetic against the venue's real schedule.",
   }),
   f('socket.dex-execution', 'Order execution against a quoted venue (§27 vault, §28 OMS)', {
     module: 'dex',
     phase: '5',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['dex.quote-router'],
-    note: "§13 — svc-dex QUOTES AND ROUTES; it cannot execute, and that is deliberate rather than unfinished. Every adapter declares `capabilities: ['quote','orderbook']` and `MarketDataSource.submit()` throws `VenueExecutionRefused` rather than returning a plausible rejection. Quoting needs no credentials (public depth is unauthenticated); execution needs trade-scoped Venue Vault credentials (§27) and an OMS (§28, svc-execution), and neither exists — there is no services/svc-execution in this repo. Keeping the refusal loud matters more here than anywhere else in the service: a silent or plausible-looking rejection on an execution path is how a caller concludes an order was placed. Also absent and named rather than implied: no per-venue rate-limit governor (this adapter fetches on every quote, so a busy market will be throttled — a venue answering 429 degrades to `unreachable` and drops out of routing, which is correct but is a degradation, not a governor), no WS streaming or sequenced/gap-detected books (§27 asks for WS-first; this is REST polling, and packages/market-data already holds the sequence machinery), and no cross-venue latency weighting (health() records round-trip per venue, so the input exists and nothing consumes it).",
+    note: "Owner set 2026-08-07 (board S-I4) — and note the SIZE of this row, which the one-line title hides: closing it means a Venue Vault (§27) and a whole service that does not exist (services/svc-execution, §28). It is not a residual on svc-dex. §13 — svc-dex QUOTES AND ROUTES; it cannot execute, and that is deliberate rather than unfinished. Every adapter declares `capabilities: ['quote','orderbook']` and `MarketDataSource.submit()` throws `VenueExecutionRefused` rather than returning a plausible rejection. Quoting needs no credentials (public depth is unauthenticated); execution needs trade-scoped Venue Vault credentials (§27) and an OMS (§28, svc-execution), and neither exists — there is no services/svc-execution in this repo. Keeping the refusal loud matters more here than anywhere else in the service: a silent or plausible-looking rejection on an execution path is how a caller concludes an order was placed. Also absent and named rather than implied: no per-venue rate-limit governor (this adapter fetches on every quote, so a busy market will be throttled — a venue answering 429 degrades to `unreachable` and drops out of routing, which is correct but is a degradation, not a governor), no WS streaming or sequenced/gap-detected books (§27 asks for WS-first; this is REST polling, and packages/market-data already holds the sequence machinery), and no cross-venue latency weighting (health() records round-trip per venue, so the input exists and nothing consumes it).",
   }),
 
   // ── PHASE 5P · PROTOCOL P2–P3 ────────────────────────────────────────────
@@ -1124,7 +1158,9 @@ export const FEATURES = [
     phase: '5P',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
+    note: 'Owner set 2026-08-07: this is Protocol Plane key custody and belongs to the chain owner, not to whoever claims it first.',
   }),
   f('socket.ledger-sharding', 'Per-asset hash chains with cross-shard anchor', {
     module: 'ledger',
@@ -1141,38 +1177,45 @@ export const FEATURES = [
     phase: '3P',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: '2026-07-30 PARTIALLY CLOSED. Solidity is compiled and executed now: solc 0.8.28 pinned in package.json, `contracts:build` emits committed artefacts, and the account suite runs against anvil in CI (REQUIRE_EVM_CHAIN=1) — 31 contract tests including the CREATE2 cross-check. FIRST COMPILE FOUND A BUG NOBODY COULD HAVE SEEN: ConstantProductPool.swapExactIn calls `swap`, which is `external`, so the AMM pool has never produced bytecode and is undeployable. That is pinned as a known-broken suite in scripts/contract-sources.mjs, not silently skipped. Remaining: no Foundry/forge invariant or fuzz suite, no gas snapshots, and no audit — this proves the contracts compile and behave, not that they are safe. Blocks any mainnet deploy.',
+    note: '2026-07-30 PARTIALLY CLOSED. Solidity is compiled and executed now: solc 0.8.28 pinned in package.json, `contracts:build` emits committed artefacts, and the account suite runs against anvil in CI (REQUIRE_EVM_CHAIN=1) — 31 contract tests including the CREATE2 cross-check. FIRST COMPILE FOUND A BUG NOBODY COULD HAVE SEEN: ConstantProductPool.swapExactIn called `swap`, which is `external`, so the AMM pool produced no bytecode and was undeployable. THAT IS FIXED — #228 introduced a private `_swap` shared by both entrypoints and the suite is now pinned `expect: compiles` in scripts/contract-sources.mjs (corrected here 2026-08-07; this note claimed a broken suite eight days after it was repaired, which is how the AMM ends up on a task board as if it were greenfield). Remaining: no Foundry/forge invariant or fuzz suite, no gas snapshots, and no audit — this proves the contracts compile and behave, not that they are safe. Blocks any mainnet deploy.',
   }),
   f('socket.contract-audit', 'External audit of the account + factory suite', {
     module: 'protocol',
     phase: '3P',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['socket.contract-toolchain'],
+    note: 'Owner set 2026-08-07. NOTE THE OWNER-GATED HALF: choosing and PAYING an audit firm is a Nitro decision (budget), so this row can be prepared — scope, threat model, artefact hashes, `audited:false` honesty — but cannot be closed by engineering alone.',
   }),
   f('socket.userop-differential-test', 'getUserOperationHash checked against a live EntryPoint', {
     module: 'protocol',
     phase: '3P',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['socket.contract-toolchain'],
+    note: 'Owner set 2026-08-07. Small job, serious failure mode: src/chain/userop.ts computes the hash a user signs and has only ever been checked against itself and golden vectors. If it disagrees with the deployed EntryPoint, users authorise one operation and the chain executes another.',
   }),
   f('socket.p256-verifier', 'Passkey (P-256) owner verifier contract', {
     module: 'protocol',
     phase: '3P',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'SmartAccount already routes contract owners through ERC-1271; the verifier itself is not built.',
+    note: 'SmartAccount already routes contract owners through ERC-1271; the verifier itself is not built. Owner set 2026-08-07, and this is arguably the highest-value unbuilt item in the protocol suite: until a P-256 verifier exists on-chain, "passkey smart accounts" is true of the service and NOT true of the chain — the account cannot check a passkey signature itself. Named on the blockchain task board as S-A9.',
   }),
   f('socket.social-recovery', 'Guardian-based account recovery', {
     module: 'protocol',
     phase: '5P',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'Deliberately absent: a guardian is a second party who can take the account, and the platform must never be one.',
+    note: 'DOCTRINE, not a backlog item, and the blockchain task board contradicted it until 2026-08-07 (board S-A1 invited a guardian/multi-sig design; this row forbids one). RESOLVED IN FAVOUR OF THIS ROW: the platform must NEVER be a guardian, because a guardian is a second party who can take the account. What is permitted, and is the only shape worth designing: guardians the USER elects and can revoke, where no platform-controlled key is ever eligible, no platform quorum can move funds, and the recovery path is provable to the user without trusting us. If that cannot be built without the platform being a party, the honest answer is that this stays a socket.',
   }),
 
   // §13 socket CLOSED 2026-07-30 by indexer.readmodels. Kept as a `done` entry
@@ -1193,8 +1236,9 @@ export const FEATURES = [
     phase: '3P',
     plane: 'P',
     status: 'socket',
+    owner: 'shehzad002',
     dependsOn: ['indexer.readmodels'],
-    note: 'services/svc-indexer/src/chain/evm/abi.ts declares three events — BookLevel, Fill, Position — and abi.test.ts holds them to the compiled ABI of contracts/dev/DevVenue.sol. DevVenue is a DEV FIXTURE and says so in its own header: no order book, no matching, no custody, and no access control at all (anyone can publish any trade). It exists so the adapter decodes logs a real chain produced. INDEXER_VENUE_ADDRESS therefore has no honest default — it is the zero address, EvmChainSource refuses to construct on it (eth_getLogs against 0x0 returns [] forever, which would fill the read model with a confident permanent "no liquidity"), and docker-compose.apps.yml leaves INDEXER_RPC_URL empty so the shipped stack still boots NullChainSource. Blocked on there being a venue contract to read, which is a contracts decision and not an indexer one: the adapter does not depend on which events it decodes.',
+    note: 'Owner set 2026-08-07 — the CONTRACT is the chain owner\'s (board S-C1); the indexer adapter that reads it stays agent residual, and the two must not be confused. services/svc-indexer/src/chain/evm/abi.ts declares three events — BookLevel, Fill, Position — and abi.test.ts holds them to the compiled ABI of contracts/dev/DevVenue.sol. DevVenue is a DEV FIXTURE and says so in its own header: no order book, no matching, no custody, and no access control at all (anyone can publish any trade). It exists so the adapter decodes logs a real chain produced. INDEXER_VENUE_ADDRESS therefore has no honest default — it is the zero address, EvmChainSource refuses to construct on it (eth_getLogs against 0x0 returns [] forever, which would fill the read model with a confident permanent "no liquidity"), and docker-compose.apps.yml leaves INDEXER_RPC_URL empty so the shipped stack still boots NullChainSource. Blocked on there being a venue contract to read, which is a contracts decision and not an indexer one: the adapter does not depend on which events it decodes.',
   }),
   f('socket.indexer-stream', 'Live book/tape feed from the projection (§5.2 ws-gateway)', {
     module: 'indexer',
@@ -1202,7 +1246,52 @@ export const FEATURES = [
     plane: 'P',
     status: 'socket',
     dependsOn: ['indexer.readmodels'],
-    note: 'The read path is pull-only today. packages/market-data already computes the deltas; what is missing is a subject in packages/events and the transport.',
+    note: 'The read path is pull-only today. packages/market-data already computes the deltas; what is missing is a subject in packages/events and the transport. DELIBERATELY LEFT UNOWNED 2026-08-07: the TRANSPORT is ordinary agent work, while the EVENT SURFACE it carries is defined by the venue contract (socket.clob-contracts, @shehzad002). Giving one owner both would either block agents on a chain decision or let an agent freeze a chain event shape.',
+  }),
+
+  // ── §13 · PROTOCOL PLANE HOLES NAMED 2026-08-07 ──────────────────────────
+  //
+  // Four capabilities the whole registry never mentioned. They were found by
+  // auditing the blockchain task board against this file: each is either
+  // required by a row that already exists, or is a decision nobody has been
+  // asked to take. An unnamed hole is the same failure mode this file was
+  // built to prevent — work gets rebuilt, or a dependency is discovered
+  // halfway through the thing that needed it.
+  f('socket.paymaster-policy', 'Who pays gas — ERC-4337 paymaster + sponsorship policy', {
+    module: 'protocol',
+    phase: '3P',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['protocol.smart-accounts'],
+    note: "§13 — src/chain/userop.ts already carries every paymaster field of the v0.7 user operation, and NOTHING decides who pays. Without a paymaster, a user must hold the chain's native token before their passkey account can do anything at all, which quietly removes the retail half of the self-custody story: the account exists, is provably theirs, and cannot move. Not merely a contract — a sponsorship POLICY (who is sponsored, for what, up to what, and how abuse is refused) and a funded account behind it, which makes the funding half a Nitro decision. Named on the blockchain task board as S-A10.",
+  }),
+  f('socket.bundler-policy', 'Bundler dependency — public relay or self-hosted', {
+    module: 'protocol',
+    phase: '3P',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['protocol.smart-accounts'],
+    note: "§13 — PROTOCOL_BUNDLER_URL exists in env.ts and is optional, and no decision sits behind it. The service correctly still builds and verifies operations without one and lets the user submit. But a public bundler is a third party that can censor or reorder a user's operation, and a self-hosted one is infrastructure we then run: that is a sovereignty question, not a config default. State the choice and its failure mode before the first real deployment. Named as S-A11.",
+  }),
+  f('socket.price-oracle', 'Price oracle for on-chain marks and liquidations', {
+    module: 'protocol',
+    phase: '3P',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['protocol.smart-accounts'],
+    note: '§13 — protocol.lending REQUIRES oracle marks for LTV and liquidation and there has never been an oracle row anywhere in this registry; the task board carried it only as "write an ADR about it", which turns a hard dependency into a document. Nothing about this may be invented: a mark that is guessed liquidates real collateral. Needs a stated source set, a staleness bound, a disagreement rule between sources, and a fail-closed answer (refuse to liquidate) rather than a fallback price. Blocks protocol.lending and couples to protocol.amm. Named as S-A12.',
+  }),
+  f('socket.deployment-registry', 'Which contracts are deployed where, and verified against what source', {
+    module: 'protocol',
+    phase: '3P',
+    plane: 'P',
+    status: 'socket',
+    owner: 'shehzad002',
+    dependsOn: ['protocol.smart-accounts'],
+    note: '§13 — every contract address in env.ts defaults to the zero address, and there is no tracked artefact anywhere saying "these addresses, on this chain, deployed from this source hash, verified on this explorer". The suite already knows how to prove deployed bytecode matches a template with the immutable ranges masked (launch.token-factory found that the naive check is wrong and looks right), so the hard part is done and unrecorded. This is the first thing an auditor or an integrator asks for, and the first thing that is impossible to reconstruct later. Named as S-A13.',
   }),
 ];
 

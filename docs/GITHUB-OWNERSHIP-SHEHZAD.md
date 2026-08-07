@@ -26,13 +26,13 @@ He does **not** own custodial Pay OS, bank fiat money products, futures/OTC/copy
 
 ## What “ownership on GitHub” means here
 
-| Layer                                              | What it does                                                                   |
-| -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| **This file + blockchain task board + LIVE-LANES** | Law for agents: do not implement his chain mountains                           |
-| **`AGENTS.md` + START-HERE**                       | Cold chat entry chain                                                          |
-| **Tracker `owner: shehzad002`**                    | Only on protocol/chain/bridge/launch/dex self-custody rows                     |
-| **`.github/CODEOWNERS`**                           | Review request on `svc-protocol` (+ chain docs) — **not** blanket pay/bank     |
-| **Open PRs by him**                                | Live WIP — babysit only; #346 pay is **handoff residual** (not new pay expand) |
+| Layer                                              | What it does                                                                                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **This file + blockchain task board + LIVE-LANES** | Law for agents: do not implement his chain mountains                                                                                           |
+| **`AGENTS.md` + START-HERE**                       | Cold chat entry chain                                                                                                                          |
+| **Tracker `owner: shehzad002`**                    | Only on protocol/chain/bridge/launch/dex self-custody rows                                                                                     |
+| **`.github/CODEOWNERS`**                           | Review request on `svc-protocol`, `svc-dex`, `svc-indexer` and the future `svc-chain` / `svc-bridge` (+ chain docs) — **not** blanket pay/bank |
+| **Open PRs by him**                                | Live WIP — babysit only; #346 pay is **handoff residual** (not new pay expand)                                                                 |
 
 If layers disagree: **this file + LIVE-LANES win** for “who may code.”
 
@@ -65,23 +65,23 @@ If layers disagree: **this file + LIVE-LANES win** for “who may code.”
 
 ## Reclaimed (agents may implement — Class M where money)
 
-| Former M-id | Area                        | Notes                                                                      |
-| ----------- | --------------------------- | -------------------------------------------------------------------------- |
-| M1          | Pay OS / `svc-pay`          | After #346 handoff — no dual-edit his open pay branch until handoff sealed |
-| M3–M4       | Futures / OTC / copy / algo | Implement only from tip law or honest thin §13 — never invent mids/rates   |
-| M5          | Identity money graph        | Agents + leak tests                                                        |
-| M6          | Bank money / `svc-bank`     | Thin ledger-true verticals; Class X issuer keys still Nitro human          |
-| M7          | Java dual-book residual     | After path-clear vs Denon open custody PRs                                 |
+| Former M-id | Area                        | Notes                                                                           |
+| ----------- | --------------------------- | ------------------------------------------------------------------------------- |
+| M1          | Pay OS / `svc-pay`          | **Handoff complete — #346 merged 2026-08-06.** Agents own pay residual from tip |
+| M3–M4       | Futures / OTC / copy / algo | Implement only from tip law or honest thin §13 — never invent mids/rates        |
+| M5          | Identity money graph        | Agents + leak tests                                                             |
+| M6          | Bank money / `svc-bank`     | Thin ledger-true verticals; Class X issuer keys still Nitro human               |
+| M7          | Java dual-book residual     | After path-clear vs Denon open custody PRs                                      |
 
 ---
 
-## #346 disposition (pay M1 open PR)
+## #346 disposition — SETTLED 2026-08-06
 
-**Operator handoff asserted 2026-08-04 (Nitro):** residual pay implement proceeds from **tip** under Nitro agents (Class M).
+**#346 merged.** The handoff asserted on 2026-08-04 is complete; the PR's merge comment records that his source landed **unmodified** — payment service, router, schema, migrations, tests and the card sandbox e2e as written, with only board files touched. Branch `feat/pay-os-m1-gateway` is gone from the remote.
 
-- Do **not** dual-edit branch `feat/pay-os-m1-gateway` — leave as reference / his to close.
-- Shehzad **stops** pay expand; sole mountain = Protocol Plane + INTACHAIN.
-- His commits/PR body remain evidence; cherry-pick useful diffs with proof, never silent drop of honest work.
+- **Nothing is owed by Shehzad here.** Any instruction to "finish or close #346" is stale as of 2026-08-06 and must not be re-sent.
+- Shehzad **stops** pay expand; sole mountain = Protocol Plane + INTACHAIN. Unchanged.
+- Pay residual proceeds from tip under Nitro agents (Class M).
 
 ## Cold-agent checklist
 
@@ -89,7 +89,7 @@ If layers disagree: **this file + LIVE-LANES win** for “who may code.”
 1) git fetch && gh pr list --state open
 2) Read docs/LIVE-LANES.md + docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
 3) If path is protocol/chain/bridge/launch/dex self-custody → babysit only
-4) pay/bank/identity money residual → agent Class M OK after #346 handoff
+4) pay/bank/identity money residual → agent Class M OK (handoff complete, #346 merged 2026-08-06)
 5) Never mark tracker done on shehzad002 rows without his proof
 6) Never dual-edit Denon open PR file sets
 ```
