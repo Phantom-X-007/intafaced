@@ -102,6 +102,9 @@ export type PayErrorCode =
   | 'pay.rail_pending'
   | 'pay.webhook_invalid'
   | 'pay.webhook_unmatched'
+  /** Merchant outbound webhook endpoint URL refused (ADR §2.4). */
+  | 'pay.webhook_url_invalid'
+  | 'pay.webhook_endpoint_not_found'
   | 'pay.nothing_to_settle'
   | 'pay.fee_exceeds_gross'
   | 'pay.invalid_window'
@@ -272,6 +275,18 @@ export interface PayServiceOptions {
 
   /** Injectable clock. Expiry is half of this feature, so it has to be drivable. */
   readonly now?: () => Date;
+
+  /**
+   * Outbound merchant webhook notifier (pay.public-api step 3 / ADR §2.4).
+   *
+   * Called AFTER the money transaction commits. Must never move value. Failures
+   * are swallowed by the caller so a delivery journal blip cannot unwind a
+   * capture — at-least-once enqueue is best-effort after commit.
+   */
+  readonly afterPaymentEvent?: (event: {
+    type: 'payment.authorized' | 'payment.captured' | 'payment.refunded' | 'payment.failed';
+    payment: PaymentView;
+  }) => void | Promise<void>;
 }
 
 /** One entry in `checkoutRails`: which adapter, and what `payments.method` it writes. */
@@ -401,6 +416,12 @@ export class PayService {
   private readonly linkMaxTtlDays: number;
   private readonly maxOpenSessionsPerLink: number;
   private readonly now: () => Date;
+  private readonly afterPaymentEvent:
+    | ((event: {
+        type: 'payment.authorized' | 'payment.captured' | 'payment.refunded' | 'payment.failed';
+        payment: PaymentView;
+      }) => void | Promise<void>)
+    | undefined;
 
   constructor(
     private readonly sql: Sql,
@@ -417,6 +438,16 @@ export class PayService {
     this.linkMaxTtlDays = options.linkMaxTtlDays ?? 365;
     this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
     this.now = options.now ?? (() => new Date());
+    this.afterPaymentEvent = options.afterPaymentEvent;
+  }
+
+  /** Fire-and-forget outbound notify — never throws into the money path. */
+  private notifyPaymentEvent(
+    type: 'payment.authorized' | 'payment.captured' | 'payment.refunded' | 'payment.failed',
+    payment: PaymentView,
+  ): void {
+    if (!this.afterPaymentEvent) return;
+    void Promise.resolve(this.afterPaymentEvent({ type, payment })).catch(() => undefined);
   }
 
   // ── Merchants ──────────────────────────────────────────────────────────────
@@ -1223,6 +1254,11 @@ export class PayService {
         });
       }
 
+      if (outcome.view.status === 'authorized') {
+        this.notifyPaymentEvent('payment.authorized', outcome.view);
+      } else if (outcome.view.status === 'failed') {
+        this.notifyPaymentEvent('payment.failed', outcome.view);
+      }
       return outcome.view;
     });
   }
@@ -1331,7 +1367,10 @@ export class PayService {
           return this.view(tx, { ...row, status: 'captured' });
         },
         { isolation: 'read committed', maxAttempts: 5 },
-      ),
+      ).then((view) => {
+        if (view.status === 'captured') this.notifyPaymentEvent('payment.captured', view);
+        return view;
+      }),
     );
   }
 
@@ -1514,6 +1553,7 @@ export class PayService {
       });
     }
 
+    this.notifyPaymentEvent('payment.refunded', settled.view);
     return settled.view;
   }
 
@@ -1653,16 +1693,18 @@ export class PayService {
   }
 
   private async markFailed(paymentId: string, failureCode: string): Promise<void> {
-    await transaction(
+    const view = await transaction(
       this.sql,
       async (tx) => {
         const row = await lockPayment(tx, paymentId);
-        if (row.status !== 'created' && row.status !== 'authorized') return;
+        if (row.status !== 'created' && row.status !== 'authorized') return null;
         await appendEvent(tx, row.id, 'failed', { failureCode });
         await tx`UPDATE pay.payments SET status = 'failed', updated_at = now() WHERE id = ${row.id}`;
+        return this.view(tx, { ...row, status: 'failed' });
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
+    if (view) this.notifyPaymentEvent('payment.failed', view);
   }
 
   // ── Settlement (§6.1) ──────────────────────────────────────────────────────

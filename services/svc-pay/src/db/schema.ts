@@ -498,6 +498,62 @@ export const restIdempotency = pay.table(
   (t) => [primaryKey({ name: 'rest_idempotency_pkey', columns: [t.ownerId, t.idempotencyKey] })],
 );
 
+/**
+ * Outbound merchant webhook endpoints (pay.public-api step 3 / ADR §2.4).
+ * Not money — destination URL + signing secret. Permanently failing endpoints
+ * are disabled rather than silently dropped.
+ */
+export const merchantWebhookEndpoints = pay.table(
+  'merchant_webhook_endpoints',
+  {
+    id: uuid('id').primaryKey(),
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    url: text('url').notNull(),
+    secretHash: text('secret_hash').notNull(),
+    signingSecret: text('signing_secret').notNull(),
+    status: text('status').notNull().default('active'),
+    disabledReason: text('disabled_reason'),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('merchant_webhook_endpoints_merchant_idx').on(t.merchantId)],
+);
+
+/**
+ * Outbound delivery journal. Dedup key is (endpoint_id, event_id) — at-least-once
+ * to the merchant; they dedupe on the event id in the body.
+ */
+export const merchantWebhookDeliveries = pay.table(
+  'merchant_webhook_deliveries',
+  {
+    id: uuid('id').primaryKey(),
+    endpointId: uuid('endpoint_id')
+      .notNull()
+      .references(() => merchantWebhookEndpoints.id),
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    eventId: text('event_id').notNull(),
+    eventType: text('event_type').notNull(),
+    payload: jsonb('payload').notNull(),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: tstz('next_attempt_at').notNull().defaultNow(),
+    lastStatusCode: integer('last_status_code'),
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+    deliveredAt: tstz('delivered_at'),
+  },
+  (t) => [
+    uniqueIndex('merchant_webhook_deliveries_endpoint_event_uq').on(t.endpointId, t.eventId),
+    index('merchant_webhook_deliveries_due_idx').on(t.status, t.nextAttemptAt),
+    index('merchant_webhook_deliveries_merchant_idx').on(t.merchantId, t.createdAt),
+  ],
+);
+
 export const schema = {
   merchants,
   paymentProfiles,
@@ -510,4 +566,6 @@ export const schema = {
   withdrawals,
   cryptoBroadcasts,
   restIdempotency,
+  merchantWebhookEndpoints,
+  merchantWebhookDeliveries,
 };

@@ -468,8 +468,14 @@ export const FEATURES = [
     module: 'pay',
     phase: '3',
     plane: 'B',
+    status: 'wip',
+    owner: 'nitro-money-w3',
     dependsOn: ['pay.gateway', 'identity.apikeys'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: ['services/svc-pay/src/public-rest.ts', 'services/svc-pay/src/merchant-webhooks.ts'],
+    note:
+      '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M. Steps 1–2 tip (#988/#994). ' +
+      'Step 3 outbound webhooks (signing/retry/dedup/dashboard) in flight on feat/pay-residual-stage3. ' +
+      'Not Class X acquirer. Sandbox-key routing = step 4.',
   }),
   f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
     module: 'p2p',

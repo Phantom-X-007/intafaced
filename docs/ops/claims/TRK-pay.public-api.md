@@ -1,17 +1,17 @@
 # Claim TRK-pay.public-api
 
 **status:** claimed
-**owner:** cursor-swarm-pay
-**started:** 2026-08-07T09:54:08.099Z
-**heartbeat:** 2026-08-07T09:54:08.099Z
-**title:** Public REST + webhooks + sandbox (§9) — step 2 mutating paths
+**owner:** cursor-swarm-pay-w3
+**started:** 2026-08-07T11:20:00.000Z
+**heartbeat:** 2026-08-07T11:20:00.000Z
+**title:** Public REST + webhooks + sandbox (§9) — step 3 outbound webhooks
 **track:** TRACKER
 **paths:**
 
 - docs/ops/trk/pay.public-api.md
+- services/svc-pay/src/merchant-webhooks.ts
 - services/svc-pay/src/public-rest.ts
-- services/svc-pay/src/rest-idempotency.ts
-- services/svc-pay/drizzle/0007_pay_rest_idempotency.sql
+- services/svc-pay/drizzle/0008_pay_merchant_webhooks.sql
 
 ## Done bar
 
@@ -25,4 +25,4 @@
 
 - Do not hand-edit docs/LIVE-LANES.md mid-wave (inside Denon open PRs).
 - Do not invent money/depth. No Shehzad implement. No dual-edit Denon open files.
-- No Class X PSP/card go-live. Step 2 = mutating REST + Idempotency-Key only.
+- No Class X PSP/card go-live. Step 3 = signed outbound webhooks + retry + failure dashboard only.
