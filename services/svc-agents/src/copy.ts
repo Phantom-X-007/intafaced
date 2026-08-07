@@ -51,6 +51,7 @@ export const COPY_KEYS = [
   'agents.copy_intel.unavailable',
   'agents.navigator.unavailable',
   'agents.support.unavailable',
+  'agents.support.comment_refused',
 ] as const;
 
 export type CopyKey = (typeof COPY_KEYS)[number];
@@ -97,6 +98,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.copy_intel.unavailable': 'Leader stats are unavailable — samples are incomplete or the window is invalid.',
   'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
   'agents.support.unavailable': 'Support knowledge is unavailable right now — the desk will not invent an answer.',
+  'agents.support.comment_refused': 'That comment cannot be posted — missing ticket, empty body, or forbidden invent language.',
 };
 
 const KEY_SET: ReadonlySet<string> = new Set(COPY_KEYS);
