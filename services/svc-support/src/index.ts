@@ -21,7 +21,7 @@ registerProcessHooks(
 );
 
 /**
- * svc-support — tickets + KB (ops.support Stage-1).
+ * svc-support — tickets + KB + Stage-2 operator queue (ops.support).
  * In-memory store. No ledger. No balances.
  */
 const support = new SupportService();
@@ -34,7 +34,7 @@ const edgeContext = createEdgeContext({
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, stage: '1-memory' }));
+app.get('/ready', async () => ({ ready: true, stage: '2-memory-queue' }));
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',

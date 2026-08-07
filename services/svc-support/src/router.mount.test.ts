@@ -6,6 +6,7 @@ import type { SupportService } from './support-service.js';
 
 const SECRET = 'a-support-mount-test-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
+const OP = '33333333-3333-4333-8333-333333333333';
 
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-support' });
 
@@ -58,6 +59,9 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     listKb: vi.fn(async () => [
       { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
     ]),
+    listOperatorQueue: vi.fn(async () => ({ status: 'empty' as const })),
+    peekNext: vi.fn(async () => null),
+    claimForOperator: vi.fn(),
     ...overrides,
   } as unknown as SupportService;
 }
@@ -148,5 +152,73 @@ describe('svc-support mount', () => {
       createSupportRouter(support).createCaller(anonymous()).listComments({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(support.listComments).not.toHaveBeenCalled();
+  });
+
+  it('refuses listQueue / next / claim without support:ops', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.listQueue()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.next()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.claim({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(support.listOperatorQueue).not.toHaveBeenCalled();
+    expect(support.peekNext).not.toHaveBeenCalled();
+    expect(support.claimForOperator).not.toHaveBeenCalled();
+  });
+
+  it('allows listQueue / next / claim with support:ops', async () => {
+    const ticketId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const createdAt = '2026-08-07T10:00:00.000Z';
+    const support = stubSupport({
+      listOperatorQueue: vi.fn(async () => ({
+        status: 'ok' as const,
+        entries: [
+          {
+            ticketId,
+            userId: USER,
+            category: 'deposit_withdraw',
+            status: 'open' as const,
+            subject: 'S',
+            score: 70,
+            ageMs: 0,
+            createdAt,
+          },
+        ],
+      })),
+      peekNext: vi.fn(async () => ({
+        ticketId,
+        userId: USER,
+        category: 'deposit_withdraw',
+        status: 'open' as const,
+        subject: 'S',
+        score: 70,
+        ageMs: 0,
+        createdAt,
+      })),
+      claimForOperator: vi.fn(async () => ({
+        id: ticketId,
+        userId: USER,
+        category: 'deposit_withdraw' as const,
+        subject: 'S',
+        body: 'B',
+        status: 'pending' as const,
+        assigneeId: OP,
+        createdAt,
+        updatedAt: createdAt,
+      })),
+    });
+    const op = principal({
+      userId: OP,
+      sub: OP,
+      scopes: ['support:read', 'support:write', 'support:ops'],
+    });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    const q = await caller.listQueue();
+    expect(q).toMatchObject({ status: 'ok' });
+    expect(await caller.next()).toMatchObject({ ticketId });
+    const claimed = await caller.claim({ ticketId });
+    expect(claimed.assigneeId).toBe(OP);
+    expect(support.claimForOperator).toHaveBeenCalledWith({ operatorId: OP, ticketId });
   });
 });

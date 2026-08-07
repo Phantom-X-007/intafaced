@@ -1,8 +1,9 @@
 # svc-support
 
-Support desk for `ops.support` — tickets + knowledge base.
+Support desk for `ops.support` — tickets + knowledge base + Stage-2 operator queue.
 
 **Stage-1:** in-memory ticket spine. No ledger posts. No refund money path.
+**Stage-2:** prioritised operator queue (`listQueue` / `next` / `claim`). Exclusive claim; no steal invent.
 Refunds are requests only; money stays in pay/ledger recipes elsewhere.
 
 Doctrine: §0.6 no balances here; brand scan on KB copy; agent optional later.
@@ -22,12 +23,15 @@ tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
 | `support.listComments` | `support:read` / ops  | Thread for ticket           |
 | `support.setStatus`    | `support:ops`         | Operator status change      |
 | `support.listKb`       | public                | Platform i18n-keyed spine   |
+| `support.listQueue`    | `support:ops`         | Stage-2 prioritised queue   |
+| `support.next`         | `support:ops`         | Stage-2 peek next           |
+| `support.claim`        | `support:ops`         | Stage-2 exclusive claim     |
 
-HTTP: `GET /health`, `GET /ready` (`stage: 1-memory`).
+HTTP: `GET /health`, `GET /ready` (`stage: 2-memory-queue`).
 
 ## Events
 
-**None published Stage-1.** Ticket create/status stay in-process until a bus
+**None published Stage-1/2.** Ticket create/status stay in-process until a bus
 catalog subject is accepted (events PR first). No orphan subjects.
 
 ## Ledger
@@ -40,4 +44,4 @@ value movement remains pay/bank/ledger elsewhere.
 
 OpenTelemetry spans via `withSupportSpan` (`intafaced.money_path=false`,
 module `support`). SLO residual: one Grafana panel for ticket create rate —
-ops backlog, not a ship gate for Stage-1 memory store.
+ops backlog, not a ship gate for Stage-2 memory store.
