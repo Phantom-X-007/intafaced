@@ -55,10 +55,6 @@ const PARKED = new Map([
     'Merchant Stage-1 (docs/ops/trk/agents.merchant.md). Blocked at the Stage 0 dependency gate the spec itself sets: tracker pay.routing is not done.',
   ],
   [
-    'services/svc-agents/src/scanner/rank.ts',
-    'Scanner Stage-1 (docs/ops/trk/agents.scanner.md). Deps are done, but svc-agents registers agents at runtime via registerAgent() and src/index.ts states that Scanner and Merchant registration is separate work - wiring it here would invent that path.',
-  ],
-  [
     'services/svc-agents/src/support-agent/comment-draft.ts',
     'Support Stage-2 comment draft (docs/ops/trk/ops.support.md). Same runtime-registration story as the other agents: no agent module in svc-agents is reached from the service entry point yet.',
   ],
