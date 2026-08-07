@@ -109,6 +109,7 @@ export async function subscribePrivatePositions(input: {
           liquidationPrice: payload.liquidationPrice,
           marginMode: payload.marginMode,
           fundingPaid: payload.fundingPaid,
+          closingReason: payload.closingReason ?? null,
           ts: payload.ts,
         });
       },

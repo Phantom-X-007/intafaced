@@ -156,7 +156,11 @@ if (!available) {
    */
   async function settle(op: () => Promise<unknown>): Promise<string> {
     try {
-      await op();
+      const result = await op();
+      // Exit-when-dark: a successful freeze is not a payout — report the reason.
+      if (result && typeof result === 'object' && (result as { status?: string }).status === 'closing') {
+        return (result as { closingReason?: string | null }).closingReason ?? 'closing';
+      }
       return 'paid';
     } catch (err) {
       return (err as { code?: string })?.code ?? String(err);
@@ -226,8 +230,8 @@ if (!available) {
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userAfterOpen);
       expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('20000');
       expect(await svc.listOpen(ALICE)).toHaveLength(1);
-      // And the refusal arrives through machinery that already existed — no new
-      // error code, no second refusal vocabulary.
+      expect((await svc.listOpen(ALICE))[0]!.status).toBe('closing');
+      // Freeze reason reuses the mark vocabulary — no invent, no second refusal set.
       expect(outcome).toBe('trade.mark_missing');
     });
 

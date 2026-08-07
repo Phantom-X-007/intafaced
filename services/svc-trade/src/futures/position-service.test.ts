@@ -22,8 +22,9 @@ import { PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
 import { markSourceFromDepth } from './mark-from-depth.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
-import { sqlLiquidationPositionLoader } from './position-loaders.js';
-import { sqlPositionCloser } from './tick-stores.js';
+import { runFundingTick } from './funding-tick.js';
+import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
+import { sqlFundingPeriodStore, sqlPositionCloser } from './tick-stores.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
@@ -296,11 +297,11 @@ if (!available) {
   });
 
   /**
-   * DONE BAR 4, the position half: a missing mark refuses to value, and the
-   * position is still OPEN afterwards. A missing mark read as zero would have
-   * valued this long at a total loss.
+   * DONE BAR (exit-when-dark): a missing mark does not trap the trader.
+   * Close freezes to `closing` — no money moves, collateral stays locked,
+   * and the row is honest about limbo (never renders as `open`).
    */
-  it('refuses to CLOSE when the feed goes dark, and the position survives untouched', async () => {
+  it('freezes to closing when the feed goes dark on voluntary close — no 503, no payout', async () => {
     feed('50000');
     const pos = await positions.open({
       userId: ALICE,
@@ -312,16 +313,55 @@ if (!available) {
     const afterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     marks.clear(MARKET);
 
-    await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_missing' });
+    const frozen = await positions.close(ALICE, pos.id!);
+    expect(frozen.status).toBe('closing');
+    expect(frozen.closingReason).toBe('trade.mark_missing');
+    expect(frozen.id).toBe(pos.id);
 
     expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(afterOpen);
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
     const still = await positions.listOpen(ALICE);
     expect(still).toHaveLength(1);
-    expect(still[0]!.id).toBe(pos.id);
+    expect(still[0]!.status).toBe('closing');
+    expect(still[0]!.closingReason).toBe('trade.mark_missing');
   });
 
-  it('refuses a mark stale past the marking limit rather than valuing on a memory', async () => {
+  /** The specific broken case the ADR names: a LOSING close must not fail when dark. */
+  it('a losing close with no usable mark freezes rather than fails', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    // Would be a loss at 49000 — but the feed is gone entirely.
+    marks.clear(MARKET);
+    const frozen = await positions.close(ALICE, pos.id!);
+    expect(frozen.status).toBe('closing');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+  });
+
+  it('retrying close while dark is idempotent — same closing row, not an error', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    marks.clear(MARKET);
+    const first = await positions.close(ALICE, pos.id!);
+    const second = await positions.close(ALICE, pos.id!);
+    expect(second.id).toBe(first.id);
+    expect(second.status).toBe('closing');
+    expect(second.closingReason).toBe(first.closingReason);
+    expect(await positions.listOpen(ALICE)).toHaveLength(1);
+  });
+
+  it('freezes when the mark is stale past the marking limit (unusable, not invent)', async () => {
     feed('50000');
     const pos = await positions.open({
       userId: ALICE,
@@ -331,8 +371,56 @@ if (!available) {
       leverage: amt('10'),
     });
     feed('51000', 'mid', new Date(NOW.getTime() - 400_000));
-    await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_unusable' });
+    const frozen = await positions.close(ALICE, pos.id!);
+    expect(frozen.status).toBe('closing');
+    expect(frozen.closingReason).toBe('trade.mark_unusable');
     expect(await positions.listOpen(ALICE)).toHaveLength(1);
+  });
+
+  /**
+   * Settlement at mark return — through the ordinary close path, bound, and
+   * armed breaker. Asserted on BALANCES, not status codes alone.
+   */
+  it('settles a closing position when the mark returns — balances move once', async () => {
+    feed('50000');
+    await fundProfitSource('10000');
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    marks.clear(MARKET);
+    await positions.close(ALICE, pos.id!);
+    expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
+
+    feed('51000');
+    await positions.close(ALICE, pos.id!);
+    // 100000 - 5000 + 5000 + 1000 profit
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('101000');
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('9000');
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  it('settlement from closing still arms the deviation breaker against accepted_mark', async () => {
+    feed('100');
+    await fundProfitSource('10000000');
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('500'),
+      leverage: amt('1'),
+    });
+    marks.clear(MARKET);
+    await positions.close(ALICE, pos.id!);
+
+    // 100x jump — inside payout grade quality/freshness but past maxDeviationBps.
+    feed('10000');
+    await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_unusable' });
+    expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000000');
   });
 
   /**
@@ -719,12 +807,16 @@ if (!available) {
       asks: [['2201', '0.000000000000000001']],
       sequence: 2,
     };
-    await expect(svc.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_missing' });
+    await expect(svc.close(ALICE, pos.id!)).resolves.toMatchObject({
+      status: 'closing',
+      closingReason: 'trade.mark_missing',
+    });
 
     expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000');
     expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userAfterOpen);
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('20000');
     expect(await svc.listOpen(ALICE)).toHaveLength(1);
+    expect((await svc.listOpen(ALICE))[0]!.status).toBe('closing');
   });
 
   /**
@@ -874,5 +966,56 @@ if (!available) {
 
     const previous = await acceptedMarks.previous(pos.id!);
     expect(formatAmount(previous.kind === 'accepted' ? previous.price : 0n)).toBe('100');
+  });
+
+  // ── Exit-when-dark: liq + funding skip `closing` through public loaders ─────
+
+  it('liquidation tick skips a closing row that would otherwise be seized', async () => {
+    const pos = await marginal();
+    marks.clear(MARKET);
+    const frozen = await positions.close(ALICE, pos.id!);
+    expect(frozen.status).toBe('closing');
+
+    // Mark that would liquidate an open marginal long — loader must not see closing.
+    feed('95');
+    const result = await tick();
+    expect(result.scanned).toBe(0);
+    expect(result.liquidated).toBe(0);
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('100');
+    expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
+  });
+
+  it('funding tick accrues nothing on a closing position across a period', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    marks.clear(MARKET);
+    await positions.close(ALICE, pos.id!);
+
+    const result = await runFundingTick(
+      {
+        rates: {
+          async quote() {
+            return { marketId: MARKET, rate: '0.01', periodId: `${MARKET}:dark-period` };
+          },
+        },
+        positions: sqlFundingPositionLoader(sql),
+        periods: sqlFundingPeriodStore(sql),
+        ledger,
+        now: () => NOW,
+      },
+      MARKET,
+    );
+    expect(result.status).toBe('skipped');
+    if (result.status === 'skipped') expect(result.reason).toBe('no_positions');
+
+    // Collateral untouched — no funding recipe posted against this position.
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+    expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
   });
 }

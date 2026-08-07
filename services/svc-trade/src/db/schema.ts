@@ -344,11 +344,12 @@ export const spotCandles = trade.table(
 /** Futures position side (§5.2 / trade.futures F2). */
 export const positionSideEnum = trade.enum('position_side', ['long', 'short']);
 export const marginModeEnum = trade.enum('margin_mode', ['cross', 'isolated']);
-export const positionStatusEnum = trade.enum('position_status', ['open', 'closed', 'liquidated']);
+export const positionStatusEnum = trade.enum('position_status', ['open', 'closing', 'closed', 'liquidated']);
 
 /**
- * Open / closed futures positions. STATE ONLY — margin is ledger collateral
- * `position:<id>`, never a balance column that could drift.
+ * Open / closing / closed futures positions. STATE ONLY — margin is ledger
+ * collateral `position:<id>`, never a balance column that could drift.
+ * `closing` = trader asked to leave while the feed was dark (ADR 2026-08-07).
  */
 export const positions = trade.table(
   'positions',
@@ -370,6 +371,8 @@ export const positions = trade.table(
     liqPrice: amount('liq_price'),
     openedAt: tstz('opened_at').notNull().defaultNow(),
     closedAt: tstz('closed_at'),
+    /** Set only while status=closing — futures-namespaced refuse code. */
+    closingReason: text('closing_reason'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

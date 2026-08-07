@@ -46,7 +46,8 @@ export interface PrivatePositionUpdate {
   readonly userId: string;
   readonly marketId: string;
   readonly symbol: string;
-  readonly status: 'open' | 'closed' | 'liquidated';
+  /** Includes `closing` — voluntary exit waiting on a mark (ADR 2026-08-07). */
+  readonly status: 'open' | 'closing' | 'closed' | 'liquidated';
   readonly side: 'long' | 'short';
   readonly contracts: string;
   readonly entryPrice: string;
@@ -59,6 +60,7 @@ export interface PrivatePositionUpdate {
   readonly liquidationPrice: string | null;
   readonly marginMode: 'cross' | 'isolated' | null;
   readonly fundingPaid: string;
+  readonly closingReason?: string | null;
   readonly ts: string;
 }
 

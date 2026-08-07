@@ -392,23 +392,33 @@ if (!available) {
   });
 
   /**
-   * A refusal must still leave the books exactly as it found them, and the row
-   * open — the transaction must not have swallowed that guarantee. The feed goes
-   * dark between the open and the close, so every one of eight attempts refuses.
+   * Exit-when-dark (ADR 2026-08-07): a dark feed freezes rather than refuses.
+   * Eight concurrent closes must still leave the books untouched and converge
+   * on a single `closing` row — not eight errors and not a double freeze write
+   * that breaks the reason check.
    */
-  it('eight concurrent closes on a dark feed all refuse and nothing moves', async () => {
+  it('eight concurrent closes on a dark feed freeze once and nothing moves', async () => {
     const service = build(25);
     const pos = await openWinner(service);
     const beforeUser = await balance(userAvailable(ALICE, 'USDT'));
     marks.clear(MARKET);
 
     const attempts = await Promise.allSettled(Array.from({ length: 8 }, () => service.close(ALICE, pos.id!)));
-    expect(attempts.every((a) => a.status === 'rejected')).toBe(true);
+    expect(attempts.every((a) => a.status === 'fulfilled')).toBe(true);
+    for (const a of attempts) {
+      if (a.status === 'fulfilled') {
+        expect(a.value.status).toBe('closing');
+        expect(a.value.closingReason).toBe('trade.mark_missing');
+      }
+    }
 
     expect(await balance(userAvailable(ALICE, 'USDT'))).toBe(beforeUser);
     expect(await balance(profitPot())).toBe('50000');
     expect(await balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).toBe('5000');
-    const [row] = await sql<{ status: string }[]>`SELECT status FROM trade.positions WHERE id = ${pos.id}`;
-    expect(row!.status).toBe('open');
+    const [row] = await sql<{ status: string; closing_reason: string | null }[]>`
+      SELECT status, closing_reason FROM trade.positions WHERE id = ${pos.id}
+    `;
+    expect(row!.status).toBe('closing');
+    expect(row!.closing_reason).toBe('trade.mark_missing');
   });
 }
