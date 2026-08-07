@@ -197,9 +197,41 @@ const PLACEHOLDER_VALUES = [
   /^[&*][A-Za-z0-9_.-]+$/,
 ];
 
-/** Keys that look like credentials. */
+/**
+ * Keys that look like credentials.
+ *
+ * TWO HOLES WERE MEASURED HERE ON 2026-08-07, against this exact regex:
+ *
+ *     MISSED  PAY_CRYPTO_HOT_WALLET_KEY     signs every payout
+ *     MISSED  PAY_CRYPTO_DEPOSIT_MNEMONIC   derives every deposit address
+ *     MISSED  WALLET_SIGNING_KEY
+ *     MISSED  STRIPE_SECRET_KEY_LIVE
+ *     MISSED  JWT_SIGNING_KEY
+ *     CAUGHT  DATABASE_PASSWORD             (control)
+ *     CAUGHT  INTERNAL_SERVICE_SECRET       (control)
+ *     CAUGHT  API_TOKEN                     (control)
+ *
+ * Both wallet names are real and in production use — `services/svc-pay/src/env.ts`
+ * and `rails/posture.ts`. Commit either into a tracked `.env` or a compose block
+ * and this gate printed "clean". For a platform holding crypto that was the most
+ * dangerous confirmed finding in the 2026-08-07 audit.
+ *
+ * 1. `key` was only ever recognised behind a qualifier — `api_key`, `access_key`,
+ *    `secret_key`, `private_key`. A bare `_KEY` suffix was not a credential, so
+ *    every name a wallet actually uses fell straight through. `key` is now a
+ *    credential word ON ITS OWN, which flips this to deny-by-default: an unknown
+ *    `*_KEY` is a finding until somebody says otherwise. The business keys that
+ *    legitimately end in `_key` are enumerated in NOT_ACTUALLY_SECRET below,
+ *    each one narrow and each one reviewable — the same posture the rest of this
+ *    file takes. `mnemonic` and `seed`/`seed_phrase` are added for the same
+ *    reason: they are how a wallet is spelled, and neither was in the vocabulary.
+ *
+ * 2. The credential word had to END the name, so a deployment qualifier hid it —
+ *    `STRIPE_SECRET_KEY_LIVE` is a live Stripe key and did not match. A trailing
+ *    environment/version qualifier is now allowed to follow.
+ */
 const SECRET_KEY =
-  /(?:^|[._-])(?:pass(?:word|wd|phrase)?|secret|token|api[._-]?key|access[._-]?key|secret[._-]?key|private[._-]?key|credential|auth[._-]?token)s?$/i;
+  /(?:^|[._-])(?:pass(?:word|wd|phrase)?|secret|token|credential|mnemonic|seed(?:[._-]?phrase)?|key|api[._-]?key|access[._-]?key|secret[._-]?key|private[._-]?key|auth[._-]?token)s?(?:[._-](?:live|test|prod|production|staging|dev|development|sandbox|local|new|old|primary|secondary|v\d+|\d+))*$/i;
 
 /** URLs carrying inline credentials: scheme://user:password@host */
 const INLINE_URL_CREDENTIAL = /\b[a-z][a-z0-9+.-]*:\/\/([^\s:/@]+):([^\s@/]+)@/gi;
@@ -209,6 +241,26 @@ const INLINE_URL_CREDENTIAL = /\b[a-z][a-z0-9+.-]*:\/\/([^\s:/@]+):([^\s@/]+)@/g
  */
 const NOT_ACTUALLY_SECRET = [
   /(?:^|[._-])(?:keys?[._-]to[._-]sanitize)$/i,
+  /**
+   * BUSINESS KEYS, not credentials.
+   *
+   * `key` became a credential word on its own so that `*_WALLET_KEY` and
+   * `*_SIGNING_KEY` stop being invisible. The cost is every identifier that ends
+   * in `_key` and means "identity of a row" rather than "thing that signs" —
+   * `idempotencyKey` alone appears throughout the money path.
+   *
+   * Enumerated rather than pattern-guessed, and each entry requires the word
+   * IMMEDIATELY before `key`, so `IDEMPOTENCY_KEY` is exempt while
+   * `HOT_WALLET_IDEMPOTENCY_SIGNING_KEY` is not. Deny-by-default: a `_KEY` name
+   * that is not on this list is a finding, and adding one here is a reviewable
+   * decision with a name attached — which is the posture the rest of this file
+   * already takes for allowlists.
+   */
+  /(?:^|[._-])(?:idempotency|business|dedupe|dedup|cache|routing|partition|sort|primary|foreign|unique|composite|index|object|storage|bucket|record|map|lookup|translation|i18n|locale|licence|license|shortcut|hot)[._-]keys?$/i,
+  /** Public by definition — the half of a pair that is meant to be published. */
+  /(?:^|[._-])(?:public|pub|verification|verify)[._-]keys?$/i,
+  /** Seeding fixtures and RNG, not wallet seeds. */
+  /(?:^|[._-])(?:random|rng|fixture|data|market|demo|test)[._-]seeds?$/i,
   /(?:^|[._-])(?:password)[._-](?:null|length|required|invalid|mismatch|hint|label|placeholder)$/i, // i18n strings
   /^sms\.internationalPassword$/i, // always empty upstream; still checked for a value
   /(?:^|[._-])URI?L?(?:[._-]|$)/i, // see below
@@ -337,6 +389,18 @@ const SECRET_BY_CONVENTION = [
  */
 const KNOWN_DISCLOSED = [
   {
+    file: 'vendor/upstream-exchange/00_framework/admin/src/main/resources/dev/application.properties',
+    line: 58,
+    check: 'committed-credential',
+    action: 'OWNER-9 — PENDING OWNER DECISION, not accepted. docs/SECRET-ROTATION-READINESS-2026-08-03.md §5',
+    reason:
+      'The admin console password/signature factor (`spark.system.md5.key`), injected by `@Value("${spark.system.md5.key}")` into eight admin controllers — ' +
+      'including WithdrawRecordController, EmployeeController and the CTC order and acceptor controllers. ' +
+      'FOUND ON 2026-08-07 BY WIDENING THIS GATE, not by a human: `key` was not a credential word on its own, so every `*_KEY` name was invisible here. ' +
+      'It is registered rather than exempted because it is a real disclosure and the fix is a rotation inside unreviewed third-party code — an owner action, not an agent edit. ' +
+      'Recorded as PENDING so nobody reads it as reviewed-and-accepted the way the captcha pair above was.',
+  },
+  {
     file: 'vendor/upstream-exchange/00_framework/ucenter-api/src/main/java/com/bizzan/bitrade/controller/RegisterController.java',
     line: 102,
     check: 'source-credential-literal',
@@ -448,6 +512,26 @@ function exemptReason(rel) {
 const isPlaceholder = (value) => PLACEHOLDER_VALUES.some((p) => p.test(value.trim()));
 
 /**
+ * `key:` as an ATTRIBUTE-NAME field, not as a credential.
+ *
+ * OpenTelemetry and Kubernetes-style YAML express attributes as `- key: <name>`
+ * / `value: <value>` pairs, so the config key is literally `key` and its value
+ * is the name of an attribute. `tooling/infra/otel-collector.yaml` has two:
+ * `deployment.environment` and `intafaced.money_path`. This scanner does not
+ * qualify YAML keys by their parent path, so both arrive here as a bare `key`.
+ *
+ * Matched on the VALUE rather than by exempting the name, and that distinction
+ * is the whole point. Exempting a bare `key` outright would blind the scanner to
+ * `tls:\n  key: "-----BEGIN PRIVATE KEY-----…"`, which is a real shape and one
+ * this gate has no other way to catch — it is deliberately not a high-entropy
+ * scanner (see the header), so nothing else would notice. A dotted lowercase
+ * identifier cannot be PEM material, a token or a password, so this exempts the
+ * OTel idiom and nothing else.
+ */
+const ATTRIBUTE_NAME_VALUE = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
+const isAttributeNameField = (key, value) => key === 'key' && ATTRIBUTE_NAME_VALUE.test(value.trim());
+
+/**
  * The repo's dev convention: a credential whose password EQUALS its username —
  * `svc_trade:svc_trade@postgres`, `intafaced:intafaced`. It appears throughout
  * docker-compose, .env.example and the CI workflow.
@@ -553,7 +637,7 @@ for (const rel of tracked()) {
         });
       }
 
-      if (SECRET_KEY.test(key) && !NOT_ACTUALLY_SECRET.some((p) => p.test(key))) {
+      if (SECRET_KEY.test(key) && !NOT_ACTUALLY_SECRET.some((p) => p.test(key)) && !isAttributeNameField(key, value)) {
         assignmentsChecked++;
         if (declaredUsernames.has(value.toLowerCase()) && value.trim() !== '') {
           // password === a username declared in this same file: the dev convention.
