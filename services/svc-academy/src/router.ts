@@ -142,6 +142,19 @@ const standingOut = z.object({
   rank: z.number().int(),
 });
 
+const residencyStatus = z.enum(['applied', 'accepted', 'rejected', 'withdrawn']);
+const residencyOut = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  cohortSlug: z.string(),
+  statement: z.string(),
+  status: residencyStatus,
+  appliedAt: z.date(),
+  decidedAt: z.date().nullable(),
+  decidedBy: z.string().uuid().nullable(),
+  decisionNote: z.string().nullable(),
+});
+
 const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room, minStake: formatAmount(room.minStake) });
 
 /**
@@ -175,15 +188,20 @@ function toTrpcError(err: unknown): TRPCError {
 
     case 'academy.scene_invalid':
     case 'academy.ambassador_invalid':
+    case 'academy.residency_invalid':
       // Client sent a scene that fails Stage-1 schema or size gate /
-      // freeze reason that fails Stage-1 programme rules.
+      // freeze reason that fails Stage-1 programme rules /
+      // residency statement/cohort that fails Stage-1 rules.
       return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
 
     case 'academy.ambassador_not_found':
+    case 'academy.residency_not_found':
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
 
     case 'academy.ambassador_already_active':
     case 'academy.ambassador_already_frozen':
+    case 'academy.residency_already_open':
+    case 'academy.residency_not_pending':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
     case 'academy.season_not_found':
@@ -468,6 +486,57 @@ export function createAcademyRouter(academy: AcademyService) {
             userId: input.userId,
             operatorId: ctx.principal!.userId,
             reason: input.reason,
+          }),
+        ),
+      ),
+
+    // ── Residency applications Stage-1 (durable, NO PAY) ──────────────────────
+    //
+    // User applies/withdraws own rows. Operator decides open queue. Pay is Class M.
+
+    applyResidency: scopedProcedure('academy:write', { module: 'academy' })
+      .input(z.object({ cohortSlug: z.string().min(3).max(48), statement: z.string().min(20).max(2000) }))
+      .output(residencyOut)
+      .mutation(({ input, ctx }) =>
+        guard(() =>
+          academy.applyResidency({
+            userId: ctx.principal!.userId,
+            cohortSlug: input.cohortSlug,
+            statement: input.statement,
+          }),
+        ),
+      ),
+
+    withdrawResidency: scopedProcedure('academy:write', { module: 'academy' })
+      .input(z.object({ id: z.string().uuid() }))
+      .output(residencyOut)
+      .mutation(({ input, ctx }) => guard(() => academy.withdrawResidency({ id: input.id, userId: ctx.principal!.userId }))),
+
+    myResidencies: scopedProcedure('academy:read', { module: 'academy' })
+      .output(z.array(residencyOut))
+      .query(({ ctx }) => guard(() => academy.myResidencies(ctx.principal!.userId))),
+
+    openResidencies: scopedProcedure('admin:read', { module: 'academy' })
+      .input(z.object({ cohortSlug: z.string().min(3).max(48).optional() }).optional())
+      .output(z.array(residencyOut))
+      .query(({ input }) => guard(() => academy.listOpenResidencies(input?.cohortSlug))),
+
+    decideResidency: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          id: z.string().uuid(),
+          decision: z.enum(['accepted', 'rejected']),
+          note: z.string().max(500).optional(),
+        }),
+      )
+      .output(residencyOut)
+      .mutation(({ input, ctx }) =>
+        guard(() =>
+          academy.decideResidency({
+            id: input.id,
+            operatorId: ctx.principal!.userId,
+            decision: input.decision,
+            ...(input.note === undefined ? {} : { note: input.note }),
           }),
         ),
       ),

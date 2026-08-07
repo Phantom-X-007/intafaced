@@ -12,6 +12,13 @@ import {
   type AmbassadorStatus,
 } from './ambassadors/programme.js';
 import {
+  assertCohortSlug,
+  assertStatement,
+  ResidencyError,
+  type ResidencyApplication,
+  type ResidencyStatus,
+} from './ambassadors/residency.js';
+import {
   assertMayWriteScore,
   assertScore,
   assertSeasonSlug,
@@ -798,6 +805,224 @@ export class AcademyService {
        RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
     `;
     return this.toAmbassador(rows[0]!);
+  }
+
+  // ── Residency applications (Stage-1 durable — NO PAY) ─────────────────────
+  //
+  // Persistence is the whole point: MemoryResidencyDesk is for unit tests only.
+  // Routes write here so an apply survives restart.
+
+  private toResidency(row: {
+    id: string;
+    user_id: string;
+    cohort_slug: string;
+    statement: string;
+    status: ResidencyStatus;
+    applied_at: Date;
+    decided_at: Date | null;
+    decided_by: string | null;
+    decision_note: string | null;
+  }): ResidencyApplication {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      cohortSlug: row.cohort_slug,
+      statement: row.statement,
+      status: row.status,
+      appliedAt: row.applied_at,
+      decidedAt: row.decided_at,
+      decidedBy: row.decided_by,
+      decisionNote: row.decision_note,
+    };
+  }
+
+  private mapResidencyErr(err: unknown): never {
+    if (err instanceof ResidencyError) {
+      throw new AcademyError(err.message, err.code);
+    }
+    throw err;
+  }
+
+  async applyResidency(input: { userId: string; cohortSlug: string; statement: string }): Promise<ResidencyApplication> {
+    let cohortSlug: string;
+    let statement: string;
+    try {
+      cohortSlug = assertCohortSlug(input.cohortSlug);
+      statement = assertStatement(input.statement);
+    } catch (err) {
+      this.mapResidencyErr(err);
+    }
+
+    try {
+      const rows = await this.sql<
+        Array<{
+          id: string;
+          user_id: string;
+          cohort_slug: string;
+          statement: string;
+          status: ResidencyStatus;
+          applied_at: Date;
+          decided_at: Date | null;
+          decided_by: string | null;
+          decision_note: string | null;
+        }>
+      >`
+        INSERT INTO academy.residency_applications
+          (user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note, updated_at)
+        VALUES
+          (${input.userId}, ${cohortSlug}, ${statement}, 'applied', now(), NULL, NULL, NULL, now())
+        RETURNING id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
+      `;
+      return this.toResidency(rows[0]!);
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === '23505') {
+        throw new AcademyError('Open application already exists for this cohort', 'academy.residency_already_open');
+      }
+      throw err;
+    }
+  }
+
+  async withdrawResidency(input: { id: string; userId: string }): Promise<ResidencyApplication> {
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        cohort_slug: string;
+        statement: string;
+        status: ResidencyStatus;
+        applied_at: Date;
+        decided_at: Date | null;
+        decided_by: string | null;
+        decision_note: string | null;
+      }>
+    >`
+      UPDATE academy.residency_applications
+         SET status = 'withdrawn',
+             decided_at = now(),
+             decided_by = ${input.userId},
+             decision_note = 'withdrawn by applicant',
+             updated_at = now()
+       WHERE id = ${input.id}
+         AND user_id = ${input.userId}
+         AND status = 'applied'
+       RETURNING id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
+    `;
+    if (!rows[0]) {
+      const existing = await this.sql<Array<{ status: ResidencyStatus; user_id: string }>>`
+        SELECT status, user_id FROM academy.residency_applications WHERE id = ${input.id}
+      `;
+      if (!existing[0] || existing[0].user_id !== input.userId) {
+        throw new AcademyError('Application not found', 'academy.residency_not_found');
+      }
+      throw new AcademyError(`Application is ${existing[0].status}`, 'academy.residency_not_pending');
+    }
+    return this.toResidency(rows[0]);
+  }
+
+  async decideResidency(input: {
+    id: string;
+    operatorId: string;
+    decision: 'accepted' | 'rejected';
+    note?: string;
+  }): Promise<ResidencyApplication> {
+    const note = (input.note ?? '').trim().slice(0, 500) || null;
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        cohort_slug: string;
+        statement: string;
+        status: ResidencyStatus;
+        applied_at: Date;
+        decided_at: Date | null;
+        decided_by: string | null;
+        decision_note: string | null;
+      }>
+    >`
+      UPDATE academy.residency_applications
+         SET status = ${input.decision},
+             decided_at = now(),
+             decided_by = ${input.operatorId},
+             decision_note = ${note},
+             updated_at = now()
+       WHERE id = ${input.id}
+         AND status = 'applied'
+       RETURNING id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
+    `;
+    if (!rows[0]) {
+      const existing = await this.sql<Array<{ status: ResidencyStatus }>>`
+        SELECT status FROM academy.residency_applications WHERE id = ${input.id}
+      `;
+      if (!existing[0]) {
+        throw new AcademyError('Application not found', 'academy.residency_not_found');
+      }
+      throw new AcademyError(`Application is ${existing[0].status}`, 'academy.residency_not_pending');
+    }
+    return this.toResidency(rows[0]);
+  }
+
+  async myResidencies(userId: string): Promise<ResidencyApplication[]> {
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        cohort_slug: string;
+        statement: string;
+        status: ResidencyStatus;
+        applied_at: Date;
+        decided_at: Date | null;
+        decided_by: string | null;
+        decision_note: string | null;
+      }>
+    >`
+      SELECT id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
+        FROM academy.residency_applications
+       WHERE user_id = ${userId}
+       ORDER BY applied_at DESC
+    `;
+    return rows.map((r) => this.toResidency(r));
+  }
+
+  async listOpenResidencies(cohortSlug?: string): Promise<ResidencyApplication[]> {
+    const rows = cohortSlug
+      ? await this.sql<
+          Array<{
+            id: string;
+            user_id: string;
+            cohort_slug: string;
+            statement: string;
+            status: ResidencyStatus;
+            applied_at: Date;
+            decided_at: Date | null;
+            decided_by: string | null;
+            decision_note: string | null;
+          }>
+        >`
+          SELECT id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
+            FROM academy.residency_applications
+           WHERE status = 'applied' AND cohort_slug = ${cohortSlug.trim().toLowerCase()}
+           ORDER BY applied_at ASC
+        `
+      : await this.sql<
+          Array<{
+            id: string;
+            user_id: string;
+            cohort_slug: string;
+            statement: string;
+            status: ResidencyStatus;
+            applied_at: Date;
+            decided_at: Date | null;
+            decided_by: string | null;
+            decision_note: string | null;
+          }>
+        >`
+          SELECT id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
+            FROM academy.residency_applications
+           WHERE status = 'applied'
+           ORDER BY applied_at ASC
+        `;
+    return rows.map((r) => this.toResidency(r));
   }
 
   private async liveInvite(roomId: string, userId: string): Promise<{ expiresAt: Date | null } | null> {

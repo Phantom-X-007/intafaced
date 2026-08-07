@@ -38,7 +38,12 @@ export type AcademyErrorCode =
   | 'academy.season_not_found'
   | 'academy.season_not_live'
   | 'academy.season_invalid'
-  | 'academy.standing_invalid';
+  | 'academy.standing_invalid'
+  /** Residency applications Stage-1 (no pay). */
+  | 'academy.residency_invalid'
+  | 'academy.residency_not_found'
+  | 'academy.residency_already_open'
+  | 'academy.residency_not_pending';
 
 export class AcademyError extends Error {
   constructor(
@@ -74,6 +79,10 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.season_not_live',
   'academy.season_invalid',
   'academy.standing_invalid',
+  'academy.residency_invalid',
+  'academy.residency_not_found',
+  'academy.residency_already_open',
+  'academy.residency_not_pending',
 ] as const;
 
 /** L3 — catalog size. */
