@@ -1,8 +1,8 @@
 # Claim TRK-ops.affiliates
 
-**status:** claimed
+**status:** pr-open
 **owner:** cursor-swarm-affiliates
-**proof:** —
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/996
 **tip:** feat/ops-affiliates-stage
 **updated:** 2026-08-07
 
