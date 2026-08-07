@@ -101,8 +101,17 @@ copy is a silent drift trap: change the real list and the copy disagrees while C
 4. `freeProduct=0` still never authorises manufacturing work. Minting a pack that satisfies the template shape
    while reaching nothing is the stamp mill in a `feat(` wrapper.
 
-**Machine enforcement (planned, Phase 4 of `docs/MULTI-AGENT-METHOD-AUDIT-2026-08-07.md`):** a new non-test
-module that imports nothing from the repo **and** is imported by nothing outside its own test fails the build.
+**Machine enforcement — LIVE:** `tooling/ci/reachability-scan.mjs`, doctrine gate `reachability`, runs in
+`pnpm gates` / `pnpm verify` / CI. A non-test module that imports nothing from the repo **and** is imported by
+nothing outside its own test **fails the build**. Verified both ways on 2026-08-07: clean on the cleaned tree
+(387 modules), and red within one second when a single deleted copy is restored.
+
+**PARKED — built, specced, awaiting a caller.** Six real Stage-1/Stage-2 modules (~2,384 lines) pass the ban on
+manufacturing but have no caller yet: ambassador residency, paper workbook loop, copy-intel stats, merchant
+watch, scanner rank, support comment draft. They are listed by name with a reason in the scan's `PARKED` map so
+unwired work stays **visible and owed** rather than invisible. **The list may only shrink** — when a parked
+module gains a caller the gate fails until its row is deleted. Adding a row is a decision to owe the wiring, not
+a way to pass.
 
 ### Protected keep-list — these 9 `*-honesty.ts` files are real and must never be swept
 
