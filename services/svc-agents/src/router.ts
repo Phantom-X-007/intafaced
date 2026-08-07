@@ -9,7 +9,9 @@ import type { AgentRuntime } from './runtime.js';
 import { rankFixtures } from './scanner/rank.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
-import { parseGuardrail } from './fleet/guardrails.js';
+import { navigatorAgentGuardrail } from './navigator/guardrail.js';
+import { supportAgentGuardrail } from './support-agent/guardrail.js';
+import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
 
@@ -519,6 +521,35 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         }),
 
       /**
+       * Stage-1 declared toolset + ceilings. Money-write tools are not on the
+       * list (refuse as undeclared before dispatch). Spec: agents.navigator Stage 1.
+       */
+      stage1Guardrail: scopedProcedure('agents:read', { module: 'agents' })
+        .output(
+          z.object({
+            agentId: z.string(),
+            version: z.number().int(),
+            tools: z.array(
+              z.object({
+                name: z.string(),
+                module: z.string(),
+                mode: z.enum(['read', 'write']),
+                requiresApproval: z.boolean(),
+                maxCallsPerSession: z.number().int().optional(),
+              }),
+            ),
+            limits: z.object({
+              maxActionsPerSession: z.number().int(),
+              maxOutputTokensPerCall: z.number().int(),
+              maxSpendPerSession: z.string().nullable(),
+              allowedModules: z.array(z.string()),
+              allowedTasks: z.array(z.string()),
+            }),
+          }),
+        )
+        .query(() => serialiseGuardrail(navigatorAgentGuardrail())),
+
+      /**
        * Stage-2 tool_select: intersect candidates with declared read tools.
        * Dark plane / empty candidates refuse; money-write candidates refused.
        * Caller supplies the session guardrail tool grants — no invent tools.
@@ -667,6 +698,35 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
           return result;
         }),
+
+      /**
+       * Stage-1/2 declared toolset. Money tools never granted (undeclared refuse).
+       * Spec: agents.support Stage 1.
+       */
+      stage1Guardrail: scopedProcedure('agents:read', { module: 'agents' })
+        .output(
+          z.object({
+            agentId: z.string(),
+            version: z.number().int(),
+            tools: z.array(
+              z.object({
+                name: z.string(),
+                module: z.string(),
+                mode: z.enum(['read', 'write']),
+                requiresApproval: z.boolean(),
+                maxCallsPerSession: z.number().int().optional(),
+              }),
+            ),
+            limits: z.object({
+              maxActionsPerSession: z.number().int(),
+              maxOutputTokensPerCall: z.number().int(),
+              maxSpendPerSession: z.string().nullable(),
+              allowedModules: z.array(z.string()),
+              allowedTasks: z.array(z.string()),
+            }),
+          }),
+        )
+        .query(() => serialiseGuardrail(supportAgentGuardrail())),
     }),
   });
 }
