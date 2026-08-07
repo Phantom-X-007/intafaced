@@ -4,12 +4,24 @@
  * Spec: docs/ops/trk/academy.spatial.md Stage 1 — versioned scene schema,
  * reject oversized / invalid payloads. Host writes whole scene; attendees read.
  *
+ * Concurrent host writes: see `edit-policy.ts` (`decideHostSceneWrite`) —
+ * re-exported here so updateScene callers import one spatial surface.
+ *
  * Scene JSON must stay free of PII/secrets (no chat, no emails, no tokens).
  * Spans never include scene contents (tracing.ts).
  */
 
 import { z } from 'zod';
 import { AcademyError } from '../errors.js';
+
+export {
+  decideHostSceneWrite,
+  isHostSceneWriteConflict,
+  isHostSceneWriteOk,
+  sceneFingerprint,
+  type HostSceneWriteInput,
+  type HostSceneWriteResult,
+} from './edit-policy.js';
 
 /** Max UTF-8 bytes of JSON.stringify(scene). Oversized rooms DoS the host UI. */
 export const SCENE_MAX_BYTES = 64 * 1024;

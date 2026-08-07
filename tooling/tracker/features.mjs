@@ -275,8 +275,11 @@ export const FEATURES = [
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
+    status: 'wip',
+    owner: 'cursor-swarm-otc',
     dependsOn: ['trade.spot', 'token.staking'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent OTC product truth.',
+    requires: ['services/svc-trade'],
+    note: 'Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table.',
   }),
   f('trade.copy', 'Copy trading, audited leaders, profit share', {
     module: 'trade',
@@ -859,12 +862,10 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['trade.spot'],
-    status: 'wip',
-    owner: 'nitro-swarm-wave2',
     note:
       'Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). ' +
       'Stage-2 workbook wire + fill-ref attach. ' +
-      'Stage-3 2026-08-07: ACADEMY_PAPER_TRADING_ENABLED ops kill-switch (live trade unaffected).',
+      'Stage-3 2026-08-07: ACADEMY_PAPER_TRADING_ENABLED ops kill-switch (live trade unaffected) — #1001.',
   }),
   f('launch.token-factory', 'ERC-20 deploy from audited templates', {
     owner: 'shehzad002',

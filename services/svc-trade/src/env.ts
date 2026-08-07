@@ -182,6 +182,18 @@ const schema = serviceEnvSchema
        * Empty → `1m` only when markets are set.
        */
       TRADE_CANDLE_JOBS_TIMEFRAMES: z.string().default('1m'),
+
+      /**
+       * OTC RFQ desk law (trade.otc / D-S-02). JSON or empty.
+       *
+       * Empty (default) = unpublished → refuse-closed. Never invent spread bps,
+       * min stake, or principal-vs-maker — DIRECTION §8 owner-only.
+       * Published shape: {"published":true,"spreadBps":N,"minStake":"…","counterparty":"platform"|"maker","quoteTtlMs":30000}
+       */
+      TRADE_OTC_DESK_LAW: z.string().default(''),
+
+      /** svc-token — stakeOf for OTC staked-tier gate. */
+      TOKEN_URL: z.string().url().default('http://localhost:4003'),
     }),
   );
 

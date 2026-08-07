@@ -27,7 +27,6 @@ pnpm wt feat/<the-thing>
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
-| OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, profit share | `trade` | 2 | `trade.copy` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
 | TWAP / VWAP / POV execution | `trade` | 2 | `trade.algo` |
@@ -45,6 +44,7 @@ pnpm wt feat/<the-thing>
 | DERIV//DESK library import — 20 playbooks + 3 workbooks | `academy` | 5 | `academy.curriculum` |
 | Residencies, IFC pay, revenue share | `academy` | 5 | `academy.ambassadors` |
 | Seasonal ladders, IFC prize pools | `academy` | 5 | `academy.tournaments` |
+| Paper-trading market flag for workbooks | `academy` | 5 | `academy.paper-trading` |
 | ERC-20 deploy from audited templates | `launch` | 5 | `launch.token-factory` |
 | Vendor lifecycle — apply, vet, list, stake-gated slots | `market` | 5 | `market.vendors` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
@@ -73,12 +73,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Feature | Owner | Module |
 |---|---|---|
+| OTC RFQ desk, staked-tier gate | **cursor-swarm-otc** | `trade` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Nitro** | `trade` |
 | Branded gateway, hosted checkout, payment links | **Nitro** | `pay` |
 | Payment instruments — where the buyer actually pays | **nitro-agent** | `p2p` |
 | Fiat on/off ramp reusing svc-pay adapters | **cursor-swarm-bank** | `bank` |
-| Paper-trading market flag for workbooks | **nitro-swarm-wave2** | `academy` |
 | Warehouse — read replica + cube layer | **cursor-swarm-analytics** | `core-ops` |
 
 ---
@@ -130,7 +130,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining._ | F |  | `trade.convert` |
 | 🟢 | Perps: cross/isolated margin, funding, liquidation ladder <br/>_**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent._ | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
-| 🟢 | OTC RFQ desk, staked-tier gate <br/>_**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent OTC product truth._ | F |  | `trade.otc` |
+| 🔨 | OTC RFQ desk, staked-tier gate <br/>_Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table._ | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, profit share <br/>_**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent copy product._ | B |  | `trade.copy` |
 | 🟢 | Fiat pairs on the same engine <br/>_NOT started as a product. What exists: the instrument model (asset_class + schedule on trade.markets) and venue-hours enforcement on order-create — #102 added assertMarketOpen before the hold, so a weekend EUR/USD order is refused with trade.market_closed rather than funded. Hours coverage completed since: the unrecognised-schedule fail-safe (rows.ts casts the DB enum with no runtime parse, so an enum added without a TRADING_SCHEDULES entry must refuse, not throw), the cme-globex daily settlement break, Chicago DST, and an end-to-end proof that a closed venue takes no hold and writes no intent row. Still missing for the actual feature: fiat settlement rails, so no forex market is listed in production._ | F |  | `trade.forex` |
 | 🟢 | TWAP / VWAP / POV execution <br/>_**Reclaimed 2026-08-04** from Shehzad M4 — agents implement thin/§13 from tip law. Never invent algo product._ | F |  | `trade.algo` |
@@ -229,7 +229,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | Certifications → XP → real perks | F | `academy.curriculum` | `academy.certs` |
 | 🟢 | Residencies, IFC pay, revenue share | F |  | `academy.ambassadors` |
 | 🟢 | Seasonal ladders, IFC prize pools | F |  | `academy.tournaments` |
-| 🔨 | Paper-trading market flag for workbooks <br/>_Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). Stage-2 workbook wire + fill-ref attach. Stage-3 2026-08-07: ACADEMY_PAPER_TRADING_ENABLED ops kill-switch (live trade unaffected)._ | F |  | `academy.paper-trading` |
+| 🟢 | Paper-trading market flag for workbooks <br/>_Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). Stage-2 workbook wire + fill-ref attach. Stage-3 2026-08-07: ACADEMY_PAPER_TRADING_ENABLED ops kill-switch (live trade unaffected) — #1001._ | F |  | `academy.paper-trading` |
 | 🟢 | ERC-20 deploy from audited templates <br/>_HUMAN on-chain launch @shehzad002. Agents babysit only.the title says "audited templates" while nothing here has been audited. What DOES exist, on main and mounted: contracts/launch/SovereignToken.sol (fixed-supply ERC-20 — NO mint, NO owner, NO pause, NO blacklist, NO upgrade path; entire supply minted once in the constructor to a named recipient) and TokenFactory.sol (CREATE2; the salt binds the creator and every parameter binds via the init code, so "this address, these parameters, this creator" is one claim; a repeat launch REVERTS rather than returning the existing token, unlike AccountFactory, because the supply was already minted by the first call). Compiled as its own pinned suite (solc 0.8.28, paris, artefacts committed with a sourceHash the suite re-derives). Service surface on svc-protocol: launch.status / predictTokenAddress / buildTokenDeployment / tokenInfo, permissionless per §22, unsigned calldata only — the service holds no key and never originates a launch. PROVEN ON THE REAL DEV CHAIN: the TypeScript CREATE2 derivation agrees with TokenFactory.getAddress over 20 creator/salt pairs and 5 parameter sets; our init code equals the factory own initCode(); the token lands at the predicted address; the deployed runtime IS the compiled template; the full supply reaches the recipient and NOTHING reaches the creator; no mint/owner/pause/upgrade selector appears anywhere in the deployed bytecode. End to end through the router: predict, build, broadcast exactly the bytes the service returned, token is at the predicted address (router-launch-live.test.ts) — which is what rules out predicting one address while handing out calldata that deploys to another. FOUND AND FIXED: comparing a deployed contract against artifact.deployedBytecode is WRONG and looks right — Solidity immutable values are spliced in by the constructor, so SovereignToken (decimals/totalSupply/initialHolder) never matches byte for byte. deployedCodeMatches() now masks the compiler immutableReferences ranges; shipping the naive check would have meant a "verified against the template" field that was permanently false. MONEY: supply is a decimal string on the wire and a scaled bigint in memory, never a number; capped at 10^20-1 whole tokens so it stays representable in numeric(38,18); decimals 0-18 enforced in the contract AND the API. No ledger recipe, no balance, no fee — the factory is not payable, and a launch fee is a Fiat Plane recipe (§0.6) belonging to whichever module sells the launch. REFUSALS: every launch path refuses with launch.factory_not_configured on a zero factory BEFORE any arithmetic runs, because CREATE2 against 0x0 returns a real, checksummed, entirely fictional token address that a creator would publish; proven against a real closed socket, not a stub. STILL NOT DONE: no services/svc-launch (§8.4 owns launchpad/meme/NFT/RWA — this is the contract + protocol layer per §17.5 "launch factory contracts"), no product UI, no launch fee, no instant market creation in svc-trade, no seed pool (needs protocol.amm, which does not compile), and NOTHING IS AUDITED — launch.status reports audited:false deliberately. Sockets: socket.contract-audit, socket.contract-toolchain (no fuzz suite and no gas snapshots for these contracts)._ | B |  | `launch.token-factory` |
 | ⛔ | One-click meme launch + instant market + LP <br/>_HUMAN on-chain launch @shehzad002. Agents babysit only._ | P | `launch.token-factory`, `protocol.amm` | `launch.meme-factory` |
 | ⛔ | Presale / fair launch, vesting, staked allocation tiers <br/>_HUMAN on-chain launch @shehzad002. Agents babysit only. Plane corrected to P 2026-08-07 — presale, vesting and allocation are contracts, and this row rendered as Fiat Plane on the board its own owner reads._ | P | `launch.token-factory` | `launch.launchpad` |
