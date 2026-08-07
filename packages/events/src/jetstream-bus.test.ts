@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { connect } from 'nats';
 import { recordInfraProbe } from '@intafaced/db';
 import { afterAll, describe, expect, it } from 'vitest';
-import { JetStreamEventBus } from './jetstream-bus.js';
+import { JetStreamEventBus, nakBackoffMs } from './jetstream-bus.js';
 
 /**
  * `JetStreamEventBus` against a real NATS server.
@@ -85,6 +85,25 @@ afterAll(async () => {
   await Promise.all(buses.map((b) => b.close().catch(() => undefined)));
 });
 
+/** Pure — runs everywhere, including the machines with no NATS. */
+describe('nak backoff', () => {
+  it('doubles from one second and caps at eight', () => {
+    expect([1, 2, 3, 4, 5, 6].map(nakBackoffMs)).toEqual([1_000, 2_000, 4_000, 8_000, 8_000, 8_000]);
+  });
+
+  it('treats a missing or nonsense redelivery count as the first attempt', () => {
+    expect(nakBackoffMs(0)).toBe(1_000);
+    expect(nakBackoffMs(-3)).toBe(1_000);
+    expect(nakBackoffMs(Number.NaN)).toBe(1_000);
+  });
+
+  it('spans a useful window across a default budget rather than milliseconds', () => {
+    // Five attempts: 1 + 2 + 4 + 8 = 15s of waiting before the message parks.
+    const total = [1, 2, 3, 4].reduce((sum, n) => sum + nakBackoffMs(n), 0);
+    expect(total).toBe(15_000);
+  });
+});
+
 describe.skipIf(!available)('JetStreamEventBus — the at-least-once contract every handler is written against', () => {
   it('delivers a published event to a durable subscriber', async () => {
     const b = await bus();
@@ -127,6 +146,32 @@ describe.skipIf(!available)('JetStreamEventBus — the at-least-once contract ev
     // Settle: it must not keep coming back once the handler stopped throwing.
     await new Promise((r) => setTimeout(r, 500));
     expect(attempts).toBe(2);
+  });
+
+  it('spaces the retries instead of spending the whole budget at once', async () => {
+    // A bare nak() redelivers immediately, so five attempts against a gateway
+    // returning 503 were spent inside a few milliseconds and the message parked
+    // before the blip had finished. The gaps are what make it a retry.
+    const b = await bus();
+    const payload = user();
+    const at: number[] = [];
+
+    await b.subscribe(
+      'userCreated',
+      async (p) => {
+        if (p.userId !== payload.userId) return;
+        at.push(Date.now());
+        throw new Error('transient');
+      },
+      { durable: `d-${randomUUID().slice(0, 8)}`, maxDeliver: 3 },
+    );
+
+    await b.publish('userCreated', payload);
+
+    expect(await until(() => at.length >= 2, 12_000)).toBe(true);
+    // First retry waits ~1s. Allow generous slack for a loaded CI runner; the
+    // assertion is "not immediate", not a precise schedule.
+    expect(at[1]! - at[0]!).toBeGreaterThan(400);
   });
 
   it('stops redelivering at maxDeliver rather than retrying forever', async () => {
