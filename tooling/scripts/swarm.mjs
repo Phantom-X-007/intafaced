@@ -441,26 +441,136 @@ function worktreeCount() {
   return raw.split('\n').filter((l) => l.startsWith('worktree ')).length;
 }
 
-/** P1: remote feat|fix|chore|docs not on main, no open PR. */
+/** Partner-owned branch prefixes — real work, never ours to land. */
+const FOREIGN_LANE = /^feat\/spine-/;
+/** Residue of previous stamp mills. Delete, never land. */
+const JUNK_BRANCH = /(r07-cycle|keepalive|babysit|cycle\d+)/i;
+
+/**
+ * Mill meter — shape-independent.
+ *
+ * RESTORED 2026-08-07: #967 ("delete thrift") removed this as collateral while
+ * relocating checkoutStaleness out of thrift-preflight. It never depended on thrift.
+ * Found by re-deriving the board at the end of a run instead of trusting a mid-run
+ * result — the same discipline this meter exists to enforce. Every previous stamp-mill gate was written
+ * for one family and the next family evaded it:
+ *
+ *   grind loop        07-30 → 08-01   18 PRs
+ *   R0x cycle         08-03 → 08-04  135 PRs  ┐ three families at once
+ *   P-WS still        08-03 → 08-04   58 PRs  ├ value-gate landed 08-04 09:09
+ *   invent re-scan    08-03 → 08-04   68 PRs  ┘ all three dead within the hour
+ *   free-TRK wave     08-05 → 08-07   74 PRs    value-gate could not see it
+ *
+ * Per-PR title similarity is evadable by varying nouns — the wave family scored
+ * 0.63–0.77 against a 0.80 threshold, 64 times. Aggregate concentration is not:
+ * to lower it you must actually vary the work.
+ *
+ * Threshold set from this repo's own history, not taste. Across 851 windows:
+ * the highest share any LEGITIMATE family ever reached was 15% ("docs ops trk
+ * research"); mill families reach 100%. WARN at 30% is double the legitimate
+ * ceiling and fires roughly 12 PRs into a mill instead of 64.
+ *
+ * Meter only, never a block: it is a lagging indicator, and a hard gate here
+ * would also block the PRs that fix the mill.
+ */
+const MILL_WARN_PCT = Number(process.env.SWARM_MILL_WARN_PCT || 30);
+
+function millConcentration(window = 40) {
+  const raw = git(['log', 'origin/main', `-${window}`, '--format=%s']);
+  if (!raw) return null;
+  const subjects = raw.split('\n').filter(Boolean);
+  if (subjects.length < window) return null; // too little history to judge
+  const stem = (s) =>
+    s
+      .replace(/\(#\d+\)/g, '')
+      .replace(/\d+/g, '')
+      .replace(/[^a-zA-Z ]/g, ' ')
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 4)
+      .join(' ');
+  const counts = new Map();
+  for (const s of subjects) {
+    const k = stem(s);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  let stemTop = '';
+  let n = 0;
+  for (const [k, v] of counts) if (v > n) [stemTop, n] = [k, v];
+  return { stem: stemTop, n, window: subjects.length, share: Math.round((n / subjects.length) * 100) };
+}
+
+/**
+ * P1 — stranded branches, QUALIFIED.
+ *
+ * Measured 2026-08-07: the previous version returned 40 branches of which ~65% were not
+ * work. 11 had been squash-merged and DELETED on origin but survived as stale local
+ * tracking refs (`remote.origin.prune` is unset); 15 were partner-owned `feat/spine-*`.
+ * It sorted BIGGEST-FIRST while the display truncates to 15, so the cheap wins were
+ * exactly the ones hidden and a 220-file / 179-conflict branch sat at rank #1. And the
+ * `feat|fix|chore|docs` allow-list made `audit/*` and `land/*` structurally invisible —
+ * one of those was independently classified as landable work.
+ *
+ * A router's whole job is to not miss work, so the prefix gate is an EXCLUDE list now:
+ * the next new branch convention is included by default instead of dropped in silence.
+ *
+ * `git ls-remote` is the authority on existence. One network call settles the phantom
+ * problem at its root and needs no merged-PR window to page through.
+ */
 function listStrandedBranches(openPrs) {
   const openHeads = new Set((openPrs || []).map((p) => p.headRefName).filter(Boolean));
+
+  // Fail LOUD. An empty answer here would silently report "no work" — the confident-zero
+  // failure that let 12 landable branches sit for 39 hours.
+  const lsRemote = git(['ls-remote', '--heads', 'origin']);
+  if (!lsRemote) {
+    return { error: 'git ls-remote failed — cannot tell which branches still exist on origin. Refusing to report a count.' };
+  }
+  const live = new Set(
+    lsRemote
+      .split('\n')
+      .map((l) => l.split('\t')[1])
+      .filter(Boolean)
+      .map((r) => r.replace(/^refs\/heads\//, '')),
+  );
+
   const refs = git(['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin']).split('\n').filter(Boolean);
-  const out = [];
+  const ours = [];
+  const foreign = [];
+  const junk = [];
+  const phantom = [];
   for (const ref of refs) {
-    if (!/^origin\/(feat|fix|chore|docs)\//.test(ref)) continue;
+    if (ref === 'origin/main' || ref.endsWith('/HEAD')) continue;
     const b = ref.replace(/^origin\//, '');
     if (openHeads.has(b)) continue;
-    const r = spawnSync('git', ['merge-base', '--is-ancestor', ref, 'origin/main'], {
-      cwd: ROOT,
-      stdio: ['ignore', 'ignore', 'ignore'],
-    });
+    if (!live.has(b)) {
+      phantom.push(b); // merged and deleted upstream — a stale tracking ref, not work
+      continue;
+    }
+    const r = spawnSync('git', ['merge-base', '--is-ancestor', ref, 'origin/main'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'ignore'] });
     if (r.status === 0) continue; // already on main
+    const files = git(['diff', '--name-only', `origin/main...${ref}`])
+      .split('\n')
+      .filter(Boolean);
+    if (!files.length) continue; // commits ahead but no content — commit-ahead is not content-ahead
     const ahead = Number(git(['rev-list', '--count', `origin/main..${ref}`]) || 0);
-    if (!Number.isFinite(ahead) || ahead < 1) continue;
-    out.push({ branch: b, ahead });
+    const row = { branch: b, ahead, files: files.length };
+    if (JUNK_BRANCH.test(b)) junk.push(row);
+    else if (FOREIGN_LANE.test(b)) foreign.push(row);
+    else ours.push(row);
   }
-  out.sort((a, b) => b.ahead - a.ahead || a.branch.localeCompare(b.branch));
-  return out;
+  // Smallest first: the fastest proof the lane is unblocked is a branch that lands now.
+  const bySize = (a, b) => a.files - b.files || a.branch.localeCompare(b.branch);
+  ours.sort(bySize);
+  foreign.sort(bySize);
+  junk.sort(bySize);
+  return { ours, foreign, junk, phantom };
+}
+
+/** Back-compat: callers that just want the landable list. */
+function strandedOurs(res) {
+  return res && !res.error ? res.ours : [];
 }
 
 function touchClaimFile(id, patch = {}) {
@@ -505,7 +615,7 @@ function countActionsRuns24h() {
 }
 
 function buildLanes(m) {
-  const stranded = m.strandedBranches || listStrandedBranches(m.openPrs || []);
+  const stranded = m.strandedBranches || strandedOurs(listStrandedBranches(m.openPrs || []));
   // P2: partner red needing comment — needs second gh call for statusCheckRollup
   let partnerRed = [];
   try {
@@ -565,9 +675,19 @@ function printLanes(m) {
   const L = buildLanes(m);
   console.log(`swarm:lanes  tip=${m.tip}`);
   console.log(`  P0 free product: ${L.counts.p0}`);
-  console.log(`  P1 stranded branches: ${L.counts.p1}`);
-  for (const s of L.p1.slice(0, 15)) console.log(`    STRANDED ${s.branch} (+${s.ahead})`);
-  if (L.p1.length > 15) console.log(`    … +${L.p1.length - 15} more`);
+  const sr = m.strandedRes || {};
+  if (sr.error) {
+    console.log(`  P1 stranded branches: UNKNOWN — ${sr.error}`);
+  } else {
+    const extra = [
+      sr.foreign?.length ? `${sr.foreign.length} partner-lane` : null,
+      sr.junk?.length ? `${sr.junk.length} mill junk` : null,
+      sr.phantom?.length ? `${sr.phantom.length} phantom (merged+deleted upstream — run git fetch --prune)` : null,
+    ].filter(Boolean);
+    console.log(`  P1 stranded branches: ${L.counts.p1} landable${extra.length ? `  (excluded: ${extra.join(', ')})` : ''}`);
+    for (const s of L.p1.slice(0, 15)) console.log(`    STRANDED ${s.branch} (${s.files} files, +${s.ahead})`);
+    if (L.p1.length > 15) console.log(`    … +${L.p1.length - 15} more`);
+  }
   console.log(`  P2 partner NEW-red: ${L.counts.p2}`);
   for (const p of L.p2.slice(0, 10)) console.log(`    #${p.number} @${p.author} fails=${p.fails.join(',')}`);
   console.log(`  P3 thin TRK (<100 lines): ${L.counts.p3}`);
@@ -743,7 +863,8 @@ function buildModel() {
     : `anti-under-spawn OK: available=0 shell=0 implementable=0 active_spawned_locks=${activeSpawned} gap=0.`;
 
   const opsChurn = countOpsOnlyChurn(30);
-  const strandedBranches = listStrandedBranches(prs);
+  const strandedRes = listStrandedBranches(prs);
+  const strandedBranches = strandedOurs(strandedRes);
   const wtCount = worktreeCount();
   const actionsRuns24h = countActionsRuns24h();
   // F-STANDBY only when BOTH shell and implementable boards are empty.
@@ -785,6 +906,7 @@ function buildModel() {
     underSpawnNote,
     opsChurn,
     strandedBranches,
+    strandedRes,
     strandedCount: strandedBranches.length,
     worktreeCount: wtCount,
     worktreeOverCap: wtCount > 20,
@@ -969,6 +1091,12 @@ function printStatus(m) {
   console.log(
     `  ops-churn: ${churn.consecutive} consecutive docs-only tip merges${churn.consecutive >= 5 ? ' ⚠ CHURN' : ''}${churn.sample?.length ? ` (${churn.sample.slice(0, 5).join(',')})` : ''}`,
   );
+  const mill = millConcentration();
+  if (mill) {
+    console.log(
+      `  mill-meter: top family ${mill.n}/${mill.window} = ${mill.share}% "${mill.stem}" (warn ≥${MILL_WARN_PCT}%, highest legit ever 15%)${mill.share >= MILL_WARN_PCT ? ' ⚠ MILL — vary the work, not the nouns' : ''}`,
+    );
+  }
   console.log(`  stranded(P1): ${m.strandedCount ?? 0}`);
   console.log(`  worktrees: ${m.worktreeCount ?? '?'}${m.worktreeOverCap ? ' ⚠ OVER CAP 20 — pnpm wt:gc:apply' : ''}`);
   if (m.actionsRuns24h) {
@@ -1122,7 +1250,37 @@ function printNext(m, all = false) {
   if (!list.length) {
     console.log('swarm:next — no free shell or implementable claims. Board empty or only blocked/OPS/tracker.');
     console.log('swarm:next — freeShell=0 freeImplementable=0 is NOT a kill switch (docs/ops/SWARM-MANDATE.md):');
-    console.log('  P1 land stranded origin/feat/*|fix/* (path-intersect clean vs partner open PRs)');
+
+    // P1 is COMPUTED here, not described. Until 2026-08-07 this printed one line of
+    // static prose that NAMED path-intersection and computed none of it, so the branch
+    // lane was never a candidate for swarm:next at all. Twelve landable branches sat for
+    // 39 hours while the swarm minted waves — because the only lane with a defined next
+    // action was the wrong one. Work selection follows definitional clarity, so the
+    // highest-priority lane has to be the most clearly defined one.
+    const sr = m.strandedRes || {};
+    if (sr.error) {
+      console.log(`  P1 UNKNOWN — ${sr.error}`);
+      console.log('     Do NOT read this as "no work". Restore remote access and re-run.');
+    } else if (sr.ours?.length) {
+      const next = sr.ours[0];
+      console.log(`  P1 → LAND THIS: ${next.branch}  (${next.files} file(s), +${next.ahead} commit(s)) — smallest first`);
+      console.log(`     pnpm wt ${next.branch} · git rebase origin/main · pnpm verify · pnpm pr -- …`);
+      if (sr.ours.length > 1) {
+        const rest = sr.ours
+          .slice(1, 5)
+          .map((b) => `${b.branch}(${b.files})`)
+          .join(' · ');
+        console.log(`     then ${sr.ours.length - 1} more: ${rest}${sr.ours.length > 5 ? ' …' : ''}`);
+      }
+      console.log('     IDLE IS NOT VALID while this lane is non-empty (docs/ops/FINISH-ONTOLOGY.md §3).');
+    } else {
+      const why = [
+        sr.foreign?.length ? `${sr.foreign.length} partner-lane` : null,
+        sr.junk?.length ? `${sr.junk.length} mill junk (delete, do not land)` : null,
+        sr.phantom?.length ? `${sr.phantom.length} phantom (merged+deleted upstream — git fetch --prune)` : null,
+      ].filter(Boolean);
+      console.log(`  P1 → none landable${why.length ? `. Excluded: ${why.join(', ')}` : ''}`);
+    }
     console.log('  P2 partner unblock: exact CI fail extract + one NEW comment; never merge partners');
     console.log('  P3 deepen thin docs/ops/trk/* for ready non-shehzad tracker rows');
     console.log('  P4 invent re-scan only after shell code change; P-WS report only if #433/#432 changed');
