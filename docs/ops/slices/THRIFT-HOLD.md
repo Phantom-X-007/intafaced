@@ -1,7 +1,7 @@
 # Thrift hold — L3 free-TRK factory
 
 **Updated:** 2026-08-07  
-**Tip base:** #915 / d9348574  
+**Tip base:** #916 / 24673f58  
 **Open partner:** #904 only (babysit — never dual-edit / never agent-merge)
 
 ## Rule
@@ -10,12 +10,12 @@
 - Soft ≥120 / total_ref ≥220: ship **one fat** Class N PR only.
 - Never `THRIFT_ALLOW` unless Nitro emergency.
 
-## Wave 182–184 fat PR
+## Wave 185–187 fat PR
 
-One PR on `feat/l3-free-trk-wave182`:
+One PR on `feat/l3-free-trk-wave185`:
 
-- wave182 market-kind-honesty (svc-trade)
-- wave183 order-side-honesty (svc-trade)
-- wave184 reconcile-verdict-honesty (svc-matching)
+- wave185 time-in-force-honesty (svc-trade)
+- wave186 order-type-honesty (svc-trade)
+- wave187 liquidity-role-honesty (svc-trade)
 
 Class N pure catalogs + packs. No partner path intersect.
