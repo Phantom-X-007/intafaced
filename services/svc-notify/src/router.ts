@@ -282,7 +282,7 @@ export function createNotifyRouter(notify: NotifyService) {
             }),
           ),
         )
-        .query(({ ctx }) => notify.listMutePrefs(ctx.principal.userId)),
+        .query(async ({ ctx }) => notify.listMutePrefs(ctx.principal.userId)),
 
       setMute: scopedProcedure('notify:write', { module: 'notify' })
         .input(z.object({ channel: z.enum(['email', 'push', 'sms']), muted: z.boolean() }))
@@ -294,8 +294,8 @@ export function createNotifyRouter(notify: NotifyService) {
             }),
           ),
         )
-        .mutation(({ ctx, input }) => {
-          notify.setChannelMute(ctx.principal.userId, input.channel, input.muted);
+        .mutation(async ({ ctx, input }) => {
+          await notify.setChannelMute(ctx.principal.userId, input.channel, input.muted);
           return notify.listMutePrefs(ctx.principal.userId);
         }),
     }),

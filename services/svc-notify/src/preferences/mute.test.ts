@@ -60,11 +60,11 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     expect(() => applyMuteToggle(EMPTY_MUTE_PREFS, { channel: 'carrier-pigeon', muted: true })).toThrow(MuteUpdateError);
   });
 
-  it('stores per user', () => {
+  it('stores per user', async () => {
     const store = new MemoryMuteStore();
-    store.setMuted('u1', 'sms', true);
-    expect(isChannelMuted(store.get('u1'), 'sms', 'info')).toBe(true);
-    expect(isChannelMuted(store.get('u2'), 'sms', 'info')).toBe(false);
+    await store.setMuted('u1', 'sms', true);
+    expect(isChannelMuted(await store.get('u1'), 'sms', 'info')).toBe(true);
+    expect(isChannelMuted(await store.get('u2'), 'sms', 'info')).toBe(false);
   });
 
   it('L3 countMutedChannels without invent', () => {
@@ -99,14 +99,14 @@ describe('applyMuteToggle / MemoryMuteStore', () => {
     expect(isFullyUnmuted(m)).toBe(false);
   });
 
-  it('L3 wave16 isMuted + muteCount', () => {
+  it('L3 wave16 isMuted + muteCount', async () => {
     const store = new MemoryMuteStore();
-    expect(store.isMuted('u1', 'email')).toBe(false);
-    expect(store.muteCount('u1')).toBe(0);
-    store.setMuted('u1', 'email', true);
-    store.setMuted('u1', 'push', true);
-    expect(store.isMuted('u1', 'email')).toBe(true);
-    expect(store.muteCount('u1')).toBe(2);
+    expect(await store.isMuted('u1', 'email')).toBe(false);
+    expect(await store.muteCount('u1')).toBe(0);
+    await store.setMuted('u1', 'email', true);
+    await store.setMuted('u1', 'push', true);
+    expect(await store.isMuted('u1', 'email')).toBe(true);
+    expect(await store.muteCount('u1')).toBe(2);
   });
 
   it('L3 wave35 muteable list + unmuted + ratio + single', () => {

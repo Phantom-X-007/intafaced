@@ -11,6 +11,7 @@ import { EmailChannel } from './channels/adapters.js';
 import { ChannelDeliveryError, type NotificationChannel, type OutboundMessage } from './channels/channel.js';
 import { normaliseLocale, renderNotification, renderVerification } from './channels/render.js';
 import { subscribeNotificationEvents } from './events.js';
+import { MemoryMuteStore } from './preferences/mute.js';
 
 /**
  * THE HONESTY TESTS.
@@ -22,6 +23,9 @@ import { subscribeNotificationEvents } from './events.js';
  *   · a delivery row that says "accepted" when nothing accepted it
  *   · a margin call whose failure to reach anybody leaves no record
  *   · copy that ships a key nobody has translated
+ *   · a mute that vanishes on restart (prefs must be durable — MemoryMuteStore
+ *     stands in for PostgresMuteStore in this suite)
+ *   · a muted channel that still sends, or a critical that respects mute
  */
 
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -67,6 +71,7 @@ interface Harness {
   store: MemoryNotifyStore;
   targets: MemoryTargetStore;
   deliveries: MemoryDeliveryStore;
+  muteStore: MemoryMuteStore;
 }
 
 function harness(
@@ -76,16 +81,18 @@ function harness(
   const store = new MemoryNotifyStore();
   const targets = new MemoryTargetStore();
   const deliveries = new MemoryDeliveryStore();
+  const muteStore = new MemoryMuteStore();
   const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
     maxAttempts: options.maxAttempts ?? 3,
     outOfAppEnabled: options.outOfAppEnabled ?? true,
+    mutePrefsOf: (userId) => muteStore.get(userId),
   });
   const notify = new NotifyService(
     store,
     { fanoutEnabled: options.fanoutEnabled ?? true, verifyTtlMinutes: 15 },
-    { targets, deliveries, channels, dispatcher },
+    { targets, deliveries, channels, dispatcher, muteStore },
   );
-  return { notify, store, targets, deliveries };
+  return { notify, store, targets, deliveries, muteStore };
 }
 
 function marginCall(overrides: Partial<{ sequence: number }> = {}) {
@@ -579,10 +586,76 @@ describe('the margin-call consumer', () => {
   });
 });
 
+describe('mute prefs — refusal is recorded, critical is never silenced', () => {
+  it('refuses a muted out-of-app channel with channel.muted and does not call the gateway', async () => {
+    const spy = new SpyChannel('email', 'ok');
+    const h = harness(registry([spy]));
+    await confirmTarget(h, 'email', 'someone@example.com');
+    await h.muteStore.setMuted(USER, 'email', true);
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'trade.fill',
+      titleKey: 'notify.trade.fill.title',
+      bodyKey: 'notify.trade.fill.body',
+      severity: 'info',
+      sourceSubject: 'intafaced.trade.fill.settled',
+      sourceIdempotencyKey: 'fill-mute-1',
+      params: { fillId: 'f1', orderId: 'o1', marketId: 'BTC-USDT', side: 'buy', price: '1', qty: '1' },
+    });
+
+    const email = result.dispatch!.outcomes.find((o) => o.channel === 'email');
+    expect(email).toMatchObject({ status: 'refused', code: 'channel.muted', retryable: false });
+    expect(spy.sent).toHaveLength(0);
+
+    const rows = await h.deliveries.listForNotification(result.notification!.id);
+    const emailRow = rows.find((r) => r.channel === 'email')!;
+    expect(emailRow.status).toBe('refused');
+    expect(emailRow.refusalCode).toBe('channel.muted');
+    expect(emailRow.acceptedAt).toBeNull();
+    expect(emailRow.attemptedAt).toBeNull();
+  });
+
+  it('still attempts a muted channel when severity is critical', async () => {
+    const spy = new SpyChannel('email', 'ok');
+    const h = harness(registry([spy]));
+    await confirmTarget(h, 'email', 'borrower@example.com');
+    await h.muteStore.setMuted(USER, 'email', true);
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: bankMarginCalled.subject,
+      sourceIdempotencyKey: `${LOAN}:mute-critical`,
+    });
+
+    const email = result.dispatch!.outcomes.find((o) => o.channel === 'email');
+    expect(email).toMatchObject({ status: 'accepted', retryable: false });
+    expect(spy.sent).toHaveLength(1);
+  });
+
+  it('survives a store round-trip the way PostgresMuteStore would after restart', async () => {
+    const a = new MemoryMuteStore();
+    await a.setMuted(USER, 'sms', true);
+    const snapshot = await a.get(USER);
+
+    // New process = new store instance seeded from the same durable prefs.
+    const b = new MemoryMuteStore();
+    for (const channel of snapshot.muted) {
+      await b.setMuted(USER, channel, true);
+    }
+    expect([...(await b.get(USER)).muted]).toEqual(['sms']);
+  });
+});
+
 describe('consumers whose producer has not created a stream are reported, not hidden', () => {
   it('collects the failure by subject instead of failing the whole boot', async () => {
-    // One subject's stream is missing — exactly svc-bank's state until it wires
-    // a bus. The other eight consumers must still attach.
+    // One subject's stream is missing — the attach path still reports pending
+    // rather than taking the whole inbox down. (svc-bank now publishes
+    // bankMarginCalled; this test forces the attach failure to pin the report.)
     const bus = new MemoryEventBus('test');
     const real = bus.subscribe.bind(bus);
     bus.subscribe = (async (event: string, handler: never, opts: never) => {
