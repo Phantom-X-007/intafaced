@@ -1,8 +1,10 @@
 import type { Sql } from 'postgres';
+import { buildAffiliateNodeStatus, buildAffiliateTreeBoard, type AffiliateNodeStatus, type AffiliateTreeBoard } from './admin-tree-read.js';
 import { DEFAULT_MAX_REFERRAL_DEPTH, ReferralError, ancestors, chainDepth, wouldCreateCycle, type ReferralEdge } from './referral-tree.js';
 
 /**
  * Durable referral tree (Slice A) — attribution only, no commission/payout.
+ * Stage admin read: treeBoard / nodeStatus (structure + freeze overlay).
  */
 
 export class ReferralService {
@@ -17,6 +19,42 @@ export class ReferralService {
       SELECT user_id, referrer_id FROM referral_edges
     `;
     return new Map(rows.map((r) => [r.user_id, r.referrer_id]));
+  }
+
+  /** Attributed-at map for admin node cards. */
+  async loadAttributedAtMap(): Promise<Map<string, Date>> {
+    const rows = await this.sql<Array<{ user_id: string; attributed_at: Date }>>`
+      SELECT user_id, attributed_at FROM referral_edges
+    `;
+    return new Map(rows.map((r) => [r.user_id, r.attributed_at]));
+  }
+
+  /**
+   * Admin tree board — structure only (no rates / payouts).
+   * Optional frozenIds overlay from FreezeService.
+   */
+  async treeBoard(frozenIds?: ReadonlySet<string>): Promise<AffiliateTreeBoard> {
+    const parent = await this.loadParentMap();
+    return buildAffiliateTreeBoard({
+      parent,
+      frozenIds,
+      maxDepthCap: this.maxDepth,
+    });
+  }
+
+  /**
+   * Admin node status — parent, depth, ancestors, hop-0 downline, freeze flag.
+   */
+  async nodeStatus(userId: string, frozenIds?: ReadonlySet<string>): Promise<AffiliateNodeStatus> {
+    const parent = await this.loadParentMap();
+    const attributedAt = await this.loadAttributedAtMap();
+    return buildAffiliateNodeStatus({
+      userId,
+      parent,
+      attributedAt,
+      frozenIds,
+      maxDepth: this.maxDepth,
+    });
   }
 
   private async userExists(userId: string): Promise<boolean> {
