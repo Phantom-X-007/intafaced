@@ -509,6 +509,44 @@ services:
       svc-ledger:
         condition: service_healthy
 
+  # ── The AI gateway socket (docs/AI-GATEWAY-SOCKET.md) ─────────────────────
+  #
+  # svc-agents already terminates at an operator-set URL and names no provider
+  # anywhere below `providers/upstream.ts` (§0.7). This is the thing that URL is
+  # meant to point at: one proxy that owns routing, failover, per-key budgets,
+  # caching and cost accounting, so `gateway.ts` does not grow them by hand.
+  #
+  # OFF BY DEFAULT — `profiles` means it starts only under `--profile ai`. It
+  # cannot run without a config the operator supplies, and a service that
+  # crash-loops in every developer's `platform:up` is one people learn to delete.
+  #
+  # NO CONFIG IS COMMITTED, and that is doctrine rather than laziness: a LiteLLM
+  # model list names providers and models, `.yaml` is inside the brand scan's
+  # EXTENSIONS, and §0.7 forbids those names in this repo. The routing table is
+  # a deployment secret mounted from `LITELLM_CONFIG_PATH`, exactly as the
+  # provider's own key already is.
+  #
+  # Pinned by DIGEST rather than the moving `main-stable` tag — same reasoning
+  # as the Action digests in .github/workflows.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable@sha256:af806882b7a6ced41658db5b6a7e98ed7b9b51d03b935e0417bf1c8552d688af
+    container_name: intafaced-litellm
+    profiles: ['ai']
+    restart: unless-stopped
+    command: ['--config', '/etc/litellm/config.yaml', '--port', '4400', '--num_workers', '1']
+    volumes:
+      # Read-only, and REQUIRED: compose refuses to start rather than run a
+      # proxy with no routing table.
+      - ${LITELLM_CONFIG_PATH:?set LITELLM_CONFIG_PATH — see docs/AI-GATEWAY-SOCKET.md}:/etc/litellm/config.yaml:ro
+    environment:
+      # The key svc-agents presents. Not defaulted: an unauthenticated proxy
+      # holding provider credentials is the worst shape this can take.
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-}
+    # Compose network only. It holds provider credentials, so it is never
+    # published to the host and never reachable through svc-edge.
+    expose: ['4400']
+
   svc-agents:
     <<: *app
     container_name: intafaced-svc-agents
