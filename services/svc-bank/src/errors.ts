@@ -46,6 +46,13 @@ export type BankErrorCode =
    */
   | 'bank.loan_principal_mismatch'
   /**
+   * Borrower cannot fund the collateral lock at open. Distinct from
+   * `bank.loan_reserve_underfunded` (platform short) and from a raw
+   * `ledger.insufficient_funds` (which would leak past open() and mask the
+   * principal-mismatch refusal on a retried id).
+   */
+  | 'bank.loan_collateral_short'
+  /**
    * The lending reserve cannot fund this draw. An operator alarm, not a user
    * error, and deliberately distinct from `ledger.insufficient_funds`: one means
    * the borrower is short, the other means the platform is.

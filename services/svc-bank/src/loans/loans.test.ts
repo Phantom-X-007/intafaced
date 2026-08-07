@@ -1101,7 +1101,7 @@ if (!available) {
 
         await expect(
           loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('0.01'), principal: amt('1'), loanId, now }),
-        ).rejects.toThrow(/same terms/);
+        ).rejects.toMatchObject({ code: 'bank.loan_principal_mismatch' });
 
         // The reserve never moved and the borrower drew nothing.
         expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');

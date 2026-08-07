@@ -564,7 +564,25 @@ export class LoanService {
       // A crash after this and before step 2 leaves the borrower's collateral in
       // their OWN purposed ledger account with the reserve untouched. Nothing is
       // stranded in the platform's hands.
-      const collateralTxId = await this.lockCollateral(loan, collateralAmount, 0);
+      let collateralTxId: string;
+      try {
+        collateralTxId = await this.lockCollateral(loan, collateralAmount, 0);
+      } catch (err) {
+        if (isInsufficientFunds(err)) {
+          // Borrower cannot fund the lock. Loan stays `pending` with no lock
+          // committed to the ledger (or with a claimed event awaiting re-drive).
+          // Typed as BankError so callers never see a raw ledger insufficient
+          // bubble out of open() — and so a retry with DIFFERENT terms can hit
+          // the principal-mismatch gate as a BankError rather than racing the
+          // lock again under a ledger message that names nothing about terms.
+          throw new BankError(
+            `Borrower cannot lock ${formatAmount(collateralAmount)} ${loan.collateralAssetId} for loan ${loan.id}. ` +
+              `The loan is pending; fund the collateral or abandon the pending row.`,
+            'bank.loan_collateral_short',
+          );
+        }
+        throw err;
+      }
 
       // ── STEP 2: PRINCIPAL ─────────────────────────────────────────────────
       let drawTxId: string;
