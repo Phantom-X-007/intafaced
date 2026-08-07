@@ -40,6 +40,11 @@ import { EMPTY_MUTE_PREFS, isChannelMuted, type ChannelMutePrefs, type MuteableC
  * exactly the fact a borrower disputing a liquidation needs, and "we have no
  * way to contact you" has to be on the record at the moment it mattered — not
  * inferred later from an empty table.
+ *
+ * That holds whether or not `NOTIFY_OUT_OF_APP_ENABLED` is on. The operator
+ * switch changes the REASON on the row, never whether a critical message gets
+ * one — a kill-switch that also switched off the record would make the state
+ * with the highest liability the state with the least evidence.
  */
 
 export interface DispatchOptions {
@@ -96,7 +101,19 @@ export class NotificationDispatcher {
           const target = byChannel.get(channel);
 
           if (!this.options.outOfAppEnabled) {
-            if (target) outcomes.push(await this.refuse(notification, channel, 'channel.disabled'));
+            // The switch is the binding cause: a confirmed address would not have
+            // been tried either, so `channel.disabled` is the honest code even
+            // when the user registered nothing. A critical message still gets a
+            // row in that case, because "nobody was reached" is the fact a
+            // disputed liquidation turns on — and the one operator state where
+            // sending is off must not also be the one state where that goes
+            // unwritten. `detail` keeps the second fact from being collapsed
+            // into the first.
+            if (target || notification.severity === 'critical') {
+              outcomes.push(
+                await this.refuse(notification, channel, 'channel.disabled', target ? null : 'no confirmed address on this channel'),
+              );
+            }
             continue;
           }
 
@@ -133,7 +150,12 @@ export class NotificationDispatcher {
   }
 
   /** Record a refusal that the adapter never got a chance to make. */
-  private async refuse(notification: Notification, channel: ChannelId, code: RefusalCode): Promise<ChannelOutcome> {
+  private async refuse(
+    notification: Notification,
+    channel: ChannelId,
+    code: RefusalCode,
+    detail: string | null = null,
+  ): Promise<ChannelOutcome> {
     const claim = await this.deliveries.claim(notification.id, channel, this.options.maxAttempts);
     if (!claim.claimed) return fromExistingClaim(channel, claim.reason, claim.record);
 
@@ -141,8 +163,8 @@ export class NotificationDispatcher {
     // column is the difference between "the provider was down" and "we never
     // had anywhere to send it", and collapsing the two loses the answer a
     // borrower is owed.
-    await this.deliveries.settle({ id: claim.id, status: 'refused', refusalCode: code, attempted: false });
-    return { channel, status: 'refused', code, detail: null, retryable: false };
+    await this.deliveries.settle({ id: claim.id, status: 'refused', refusalCode: code, detail, attempted: false });
+    return { channel, status: 'refused', code, detail, retryable: false };
   }
 
   private async attempt(notification: Notification, channel: ChannelId, address: string, locale: string): Promise<ChannelOutcome> {

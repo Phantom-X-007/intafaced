@@ -447,6 +447,72 @@ describe('the operator switch stops sending without blinding anyone', () => {
       code: 'channel.disabled',
     });
   });
+
+  it('still writes the “reached nobody” row for a critical when the switch is off and no address exists', async () => {
+    // The switch used to be the one operator state where a margin call that
+    // reached nobody left no record at all: the disabled branch only wrote a row
+    // when a target existed, so a borrower with no confirmed address got an
+    // empty table for email/push/sms — the exact fact a disputed liquidation
+    // turns on.
+    const h = harness(registry(), { outOfAppEnabled: false });
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: bankMarginCalled.subject,
+      sourceIdempotencyKey: `${LOAN}:switch-off`,
+    });
+
+    const rows = await h.deliveries.listForNotification(result.notification!.id);
+    expect(rows.map((r) => r.channel).sort()).toEqual(['email', 'inapp', 'push', 'sms']);
+    for (const row of rows.filter((r) => r.channel !== 'inapp')) {
+      expect(row.status).toBe('refused');
+      expect(row.refusalCode).toBe('channel.disabled');
+      // Both facts survive: the switch stopped it, AND there was nowhere to send.
+      expect(row.detail).toBe('no confirmed address on this channel');
+      expect(row.attemptedAt).toBeNull();
+      expect(row.acceptedAt).toBeNull();
+    }
+  });
+
+  it('leaves an informational notification alone when the switch is off and nothing was registered', async () => {
+    const h = harness(registry(), { outOfAppEnabled: false });
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'trade.fill',
+      titleKey: 'notify.trade.fill.title',
+      bodyKey: 'notify.trade.fill.body',
+      severity: 'info',
+      sourceSubject: 'intafaced.trade.fill.settled',
+      sourceIdempotencyKey: 'fill-switch-off-no-target',
+    });
+
+    const rows = await h.deliveries.listForNotification(result.notification!.id);
+    expect(rows.map((r) => r.channel)).toEqual(['inapp']);
+  });
+
+  it('records the switch, not the missing address, when the user does have a confirmed one', async () => {
+    const h = harness(registry(), { outOfAppEnabled: false });
+    await confirmTarget(h, 'email', 'someone@example.com');
+
+    const result = await h.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: bankMarginCalled.subject,
+      sourceIdempotencyKey: `${LOAN}:switch-off-with-target`,
+    });
+
+    const rows = await h.deliveries.listForNotification(result.notification!.id);
+    const email = rows.find((r) => r.channel === 'email');
+    expect(email).toMatchObject({ status: 'refused', refusalCode: 'channel.disabled', detail: null });
+  });
 });
 
 describe('the delivery record is the user’s to read, and only their own', () => {
