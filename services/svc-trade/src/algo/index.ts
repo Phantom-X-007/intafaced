@@ -4,6 +4,7 @@
  */
 export { TwapEngine, type TwapEnginePorts, type PlaceChildRequest, type PlaceChildResult, type SliceTickResult } from './twap-engine.js';
 export { planTwapSlices, type TwapSlicePlan } from './schedule.js';
+export { SqlTwapParentStore, MemoryTwapParentStore, type TwapParentStore, type TwapParentRecord } from './parent-store.js';
 export {
   acceptableForAlgo,
   algoMarkMissing,
