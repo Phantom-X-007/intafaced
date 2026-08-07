@@ -64,6 +64,31 @@ mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'second money book', 'mu
 mustInclude('docs/INTERNET-LEVERAGE-LAW.md', 'Phase A is finished for NOW', 'leverage law home must keep operator decision');
 mustInclude('docs/INTERNET-LEVERAGE-LAW.md', 'Mandatory pre-code ritual', 'agents need an executable ritual not a vague blog');
 
+// Session finish — the definition of "done" for a RUN, not a module.
+// Until 2026-08-07 this lived only at ~/projects/OS/harvest/shared/S-CORE.md while
+// SWARM-MANDATE cited it as binding: Denon, Shehzad, CI and any other machine could
+// not read it. Module Done (AGENT_PROTOCOL §8) is satisfiable infinitely — 64 PRs and
+// 21k lines of catalog copies passed it — so an unreachable session-finish definition
+// is what let the mill run. The ontology stays in-repo and stays cited.
+mustInclude('docs/ops/FINISH-ONTOLOGY.md', 'F-STANDBY', 'session finish types must stay in the repo, readable by every teammate');
+mustInclude('docs/ops/FINISH-ONTOLOGY.md', 'never evidence of success', 'the noise bans are the anti-volume rule; do not drop them');
+mustInclude('docs/ops/SWARM-MANDATE.md', 'FINISH-ONTOLOGY', 'the mandate must cite the in-repo ontology, never a path on one machine');
+
+// Binding law may not delegate authority to a path outside the repo. Same class as the
+// four reachability failures of 2026-08-07: correct doctrine no teammate can reach is
+// doctrine that does not exist. Operational paths an agent execs (tokens, tool bins)
+// are not authority claims and are skipped.
+for (const rel of ['AGENTS.md', 'docs/ops/SWARM-MANDATE.md', 'docs/COORDINATION-TRUTH-LAYERS.md', 'docs/ops/FINISH-ONTOLOGY.md']) {
+  const body = read(rel);
+  if (!body) continue;
+  for (const line of body.match(/^.*(?:~\/projects\/|OS harvest|\/Users\/[A-Za-z0-9._-]+\/projects\/).*$/gm) || []) {
+    if (/agent-auth|\.tools\/bin|token/i.test(line)) continue;
+    problems.push(
+      `${rel}: cites law outside the repo — "${line.trim().slice(0, 80)}". Move it in-repo; teammates cannot read one machine's disk.`,
+    );
+  }
+}
+
 if (problems.length) {
   console.error('\n✖ agent-autoload-scan failed — cold agents would lose multi-dev law:\n');
   for (const p of problems) console.error(`  - ${p}`);

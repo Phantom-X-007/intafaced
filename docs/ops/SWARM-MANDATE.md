@@ -103,7 +103,7 @@ Self-test (fixtures, no network): `pnpm value-gate:self-test` · `pnpm thrift:se
 
 ### F-STANDBY (finish type when freeProduct=0) — corrected
 
-When the primary board finish is met but the session continues (AFK / “never stop”), the state is **F-STANDBY** (OS harvest `shared/S-CORE.md` §1.1).
+When the primary board finish is met but the session continues (AFK / “never stop”), the state is **F-STANDBY** ([`FINISH-ONTOLOGY.md`](./FINISH-ONTOLOGY.md) §1, §3 — in-repo home; readable by every teammate and every machine).
 
 **Idle is valid ONLY when you can name why no lane has work.** Before any “idle OK” / “board unchanged” report, state in one line each:
 
