@@ -34,10 +34,7 @@ function isCurriculumPath(value: string): value is CurriculumPath {
  * - path only → `/academy/curriculum/{path}`
  * - path + slug → `/academy/curriculum/{path}/{slug}` (slug must exist on that path)
  */
-export function resolveCurriculumDeepLink(input: {
-  readonly path: string;
-  readonly slug?: string;
-}): CurriculumDeepLink {
+export function resolveCurriculumDeepLink(input: { readonly path: string; readonly slug?: string }): CurriculumDeepLink {
   if (!isCurriculumPath(input.path)) {
     return {
       ok: false,

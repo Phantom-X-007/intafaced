@@ -53,8 +53,6 @@ describe('curriculum deep-link helpers', () => {
 
   it('deepLinkForSlug returns null for unknown, href for known', () => {
     expect(deepLinkForSlug('nope')).toBeNull();
-    expect(deepLinkForSlug('foundations-paper-workbook')).toBe(
-      `${CURRICULUM_DEEP_LINK_PREFIX}/foundations/foundations-paper-workbook`,
-    );
+    expect(deepLinkForSlug('foundations-paper-workbook')).toBe(`${CURRICULUM_DEEP_LINK_PREFIX}/foundations/foundations-paper-workbook`);
   });
 });
