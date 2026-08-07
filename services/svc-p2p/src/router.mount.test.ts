@@ -227,23 +227,51 @@ describe('svc-p2p mount — the moderator queue', () => {
     });
   }
 
-  it('refuses the queue to a user session, however much p2p it holds', async () => {
-    // `admin:compliance` is a scope no user session carries. That is the point
-    // of putting the queue behind it — and the reason the scope has to become
-    // holdable by a real moderator, which is an owner decision, not this
-    // router's.
+  it('honest-refuses the queue when no moderator auth is configured', async () => {
+    // Empty allowlist + no admin:compliance = moderation unreachable. FORBIDDEN
+    // would lie that the caller is missing a scope; the deployment is what is
+    // missing a human (D-S-08).
     const seen = { asModerator: 0 };
     const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
 
-    await expect(createP2pRouter(disputesStub(seen)).createCaller(ctx).disputes.list({})).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+    await expect(createP2pRouter(disputesStub(seen), stubInstruments()).createCaller(ctx).disputes.list({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/moderation is not configured/i),
     });
+    expect(seen.asModerator).toBe(0);
+  });
+
+  it('serves an allowlisted moderator with ordinary p2p:read', async () => {
+    const seen = { asModerator: 0 };
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const page = await createP2pRouter(disputesStub(seen), stubInstruments(), undefined, {
+      moderatorUserIds: [USER],
+    })
+      .createCaller(ctx)
+      .disputes.list({});
+
+    expect(page.disputes).toHaveLength(1);
+    expect(page.disputes[0]!.evidence.map((e) => e.submittedBy)).toEqual([BUYER, SELLER]);
+    expect(page.disputes[0]!.overdue).toBe(true);
+    expect(seen.asModerator).toBe(1);
+  });
+
+  it('forbids a configured queue to a session that is not on the allowlist', async () => {
+    const seen = { asModerator: 0 };
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    await expect(
+      createP2pRouter(disputesStub(seen), stubInstruments(), undefined, {
+        moderatorUserIds: [BUYER],
+      })
+        .createCaller(ctx)
+        .disputes.list({}),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(seen.asModerator).toBe(0);
   });
 
   it('serves a moderator the queue, with the evidence in it', async () => {
     const ctx = signed(principal({ scopes: ['p2p:read', 'admin:compliance'] }));
-    const page = await createP2pRouter(disputesStub()).createCaller(ctx).disputes.list({});
+    const page = await createP2pRouter(disputesStub(), stubInstruments()).createCaller(ctx).disputes.list({});
 
     expect(page.disputes).toHaveLength(1);
     // Evidence rides the QUEUE, not only `.get`. A triage list that cannot show
@@ -259,7 +287,7 @@ describe('svc-p2p mount — the moderator queue', () => {
     // Handing that back is a product decision with a legal shadow; it is not
     // made here by accident.
     const ctx = signed(principal({ scopes: ['p2p:read'] })); // SELLER
-    const got = await createP2pRouter(disputesStub()).createCaller(ctx).disputes.get({ tradeId: dispute.tradeId });
+    const got = await createP2pRouter(disputesStub(), stubInstruments()).createCaller(ctx).disputes.get({ tradeId: dispute.tradeId });
 
     expect(got.evidence).toHaveLength(1);
     expect(got.evidence[0]!.submittedBy).toBe(SELLER);
@@ -268,7 +296,7 @@ describe('svc-p2p mount — the moderator queue', () => {
   it('gives a MODERATOR the whole evidence set, and records that they were served it', async () => {
     const seen = { asModerator: 0 };
     const ctx = signed(principal({ scopes: ['p2p:read', 'admin:compliance'] }));
-    const got = await createP2pRouter(disputesStub(seen)).createCaller(ctx).disputes.get({ tradeId: dispute.tradeId });
+    const got = await createP2pRouter(disputesStub(seen), stubInstruments()).createCaller(ctx).disputes.get({ tradeId: dispute.tradeId });
 
     expect(got.evidence).toHaveLength(2);
     // The stamped read, not the plain one: "a human reached this dispute" is
@@ -281,9 +309,22 @@ describe('svc-p2p mount — the moderator queue', () => {
       openDispute: async () => dispute,
     });
     const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
-    const opened = await createP2pRouter(p2p).createCaller(ctx).disputes.open({ tradeId: dispute.tradeId, reason: 'x' });
+    const opened = await createP2pRouter(p2p, stubInstruments()).createCaller(ctx).disputes.open({ tradeId: dispute.tradeId, reason: 'x' });
 
     expect(opened.ifNobodyRules).toBe('escalated_and_held');
+    expect(opened.moderationReachable).toBe(false);
+  });
+
+  it('discloses when moderation IS reachable at open time', async () => {
+    const p2p = stubP2p({
+      openDispute: async () => dispute,
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    const opened = await createP2pRouter(p2p, stubInstruments(), undefined, { moderatorUserIds: [BUYER] })
+      .createCaller(ctx)
+      .disputes.open({ tradeId: dispute.tradeId, reason: 'x' });
+
+    expect(opened.moderationReachable).toBe(true);
   });
 });
 
@@ -292,6 +333,7 @@ describe('svc-p2p mount — the public surface', () => {
     await expect(routerFor(stubP2p()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,
       service: 'svc-p2p',
+      moderationReachable: false,
     });
   });
 

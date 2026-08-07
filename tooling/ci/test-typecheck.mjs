@@ -63,8 +63,11 @@
  * Dropping the line number would let a second identical error hide behind the
  * first, so each pin carries HOW MANY times it appears — the same reason
  * `wallet-rpc-mainnet-scan` freezes its constants by text *and* by count. Five
- * `Expected 2-3 arguments, but got 1` in `router.mount.test.ts` is a pin of 5;
- * a sixth is a new error and is red.
+ * `Expected 2-3 arguments, but got 1` used to pin five call sites in
+ * `router.mount.test.ts`; that pin was deleted when those sites passed the
+ * instruments stub. A pin is `file | code | message` plus HOW MANY times it
+ * appears — the same reason `wallet-rpc-mainnet-scan` freezes its constants by
+ * text *and* by count.
  *
  * Absolute paths inside a message (TS6059 and TS7016 quote them) are rewritten
  * to `<repo>` so a pin means the same thing on a laptop and on a CI runner.
@@ -97,7 +100,8 @@ import { join, dirname, resolve, sep } from 'node:path';
 
 // ── The pinned set ──────────────────────────────────────────────────────────
 //
-// 70 diagnostics, hand-frozen at the commit that switched this check on.
+// 65 diagnostics, hand-frozen at the commit that switched this check on
+// (minus five router.mount stubs fixed when createP2pRouter gained options).
 // Each row is [howManyTimes, 'file | TScode | message'].
 //
 // THIS LIST MAY ONLY SHRINK. Fix an entry and delete its row in the same commit
@@ -207,7 +211,7 @@ const PINNED = {
   // 1 — services/svc-notify
   'services/svc-notify': [[1, 'src/boot-refusal.test.ts | TS2554 | Expected 1-3 arguments, but got 4.']],
 
-  // 8 — services/svc-p2p
+  // 3 — services/svc-p2p
   'services/svc-p2p': [
     [
       1,
@@ -221,7 +225,6 @@ const PINNED = {
       1,
       "src/reputation.test.ts | TS4104 | The type 'readonly [\"escrowed\"]' is 'readonly' and cannot be assigned to the mutable type '[TradeOutcome, (number | undefined)?]'.",
     ],
-    [5, 'src/router.mount.test.ts | TS2554 | Expected 2-3 arguments, but got 1.'],
   ],
 
   // 10 — services/svc-pay

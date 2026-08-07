@@ -8,6 +8,7 @@ import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
+import { parseModeratorUserIds } from './moderation-auth.js';
 import { P2pErasure } from './erasure.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -88,7 +89,9 @@ const p2p = new P2pService(sql, ledger, bus, {
 // subscribes to no events, so there is no account-deletion signal to hear.
 const erasure = new P2pErasure(sql);
 
-export const appRouter = createP2pRouter(p2p, instruments, erasure);
+const moderatorUserIds = parseModeratorUserIds(env.P2P_MODERATOR_USER_IDS);
+
+export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds });
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -97,8 +100,16 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, tradingEnabled: env.P2P_TRADING_ENABLED }));
+app.get('/health', async () => ({
+  ok: true,
+  service: env.SERVICE_NAME,
+  moderationReachable: moderatorUserIds.length > 0,
+}));
+app.get('/ready', async () => ({
+  ready: true,
+  tradingEnabled: env.P2P_TRADING_ENABLED,
+  moderationReachable: moderatorUserIds.length > 0,
+}));
 
 /**
  * Doctrine §0.6, as an endpoint. Compares this service's view of what is in

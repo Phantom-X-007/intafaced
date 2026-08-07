@@ -496,42 +496,20 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'ready',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['p2p.escrow'],
-    requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts'],
+    requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
-      'CORRECTED 2026-08-06 from `done`, which it never was — and for a disputed trade the product on main today is ' +
-      'WORSE than before the dispute fix landed. docs/adr/2026-08-04-p2p-escrow-and-dispute-law.md (D-S-08) already ' +
-      'names this row "the clearest overclaim": the word doing the work in the title is MODERATED, and no moderator ' +
-      "can reach the system. `ready`, not `done`, against this file's own three-part bar — criterion 1 is REACHABLE, " +
-      'and mounted is not the same as reachable: a procedure no principal can authenticate into is not reachable by ' +
-      'anyone. Not `wip`: nobody is on it. The old note ("Dispute paths in svc-p2p core") and the old ' +
-      '`requires: [services/svc-p2p]` — a bare directory — asserted existence only, which this file says proves none ' +
-      'of the three criteria. ' +
-      "WHAT EXISTS, read on main rather than taken on the ADR's word. The timer is out of the adjudication business: " +
-      'services/svc-p2p/src/state.ts:269 returns `escalate_dispute` for a disputed trade — SLA breach, alert, re-arm, ' +
-      'escrow untouched — replacing the seven-day `backstop_resolve` that refunded and called the refund a ' +
-      'resolution, and `escalate_dispute` is deliberately excluded from the set of actions that move value ' +
-      '(state.ts:244). That is correct and is what the owner ruled. `disputes.list` is a real queue, most overdue ' +
-      'first, cursor-paged and status-filtered (router.ts:813). Evidence is serialised on both `list` and `get`, no ' +
-      'longer write-only. `disputes.resolve` takes release or refund only and records an attributed human ruling ' +
-      '(router.ts:850), and a moderator read is stamped so "has a human ever reached this dispute" is a question the ' +
-      'database can answer. ' +
-      'WHAT IS MISSING, and it is the whole row. NOBODY CAN CALL ANY OF IT. `list` and `resolve` are both ' +
-      "scopedProcedure('admin:compliance'), and packages/auth/src/auth.test.ts:148 asserts SESSION_SCOPES does not " +
-      'contain that scope while :168 asserts an API key cannot mint it — so the scope has no possible holder, by ' +
-      'test, on purpose. There is also no console: `grep -ri dispute apps/admin/src` returns nothing. ' +
-      'NET EFFECT, stated plainly because nothing else on the board says it: a disputed trade escalates forever with ' +
-      'escrow held and no reachable resolver. Holding value is the right answer to "a machine must not rule on a ' +
-      'dispute", but it is not a resolved dispute, and for the two people in that trade it is a worse outcome than ' +
-      'the wrong-but-terminal auto-refund it replaced. Escalating into an empty room is not moderation. ' +
-      'WHAT LIFTS IT, two independent pieces, neither blocked on the other. (1) A scope a real session can hold. ' +
-      'This is an OWNER DECISION and not agent-mergeable: it grants or widens a scope, which is a ' +
-      'docs/DIRECTION-2026-07-31.md §3 carve-out, and D-S-08 says so explicitly — designed and tested by agents, ' +
-      'signed off by the owner before merge. The `p2p:moderate` split is designed and RESERVED for that sign-off and ' +
-      'is deliberately not implemented here. (2) A dispute console in apps/admin over list/get/resolve — ordinary ' +
-      'Class M agent work, claimable today, and worth building before (1) lands so the scope grant arrives at a ' +
-      'surface instead of at nothing.',
+      'CLAIMED 2026-08-07 nitro money/ops wave 3 — feat/p2p-disputes-stage (D-S-08 residual). ' +
+      'STAGE SHIPPED in svc-p2p: moderation reachability via `P2P_MODERATOR_USER_IDS` (natural-person allowlist) so a ' +
+      'real session with `p2p:read` can call `disputes.list` / `disputes.resolve` when named; empty allowlist ' +
+      'honest-refuses with `p2p.moderation_unreachable` (PRECONDITION_FAILED) rather than sitting forever behind ' +
+      '`admin:compliance` that SESSION_SCOPES withholds. `disputes.open` and health/ready disclose `moderationReachable`. ' +
+      'admin:compliance still counts when a principal holds it (tests / future operator grant). No fake auto-ruling; ' +
+      'timer still escalate-and-hold only. ' +
+      'NOT done: apps/admin dispute console still absent; `p2p:moderate` scope split remains OWNER sign-off ' +
+      '(DIRECTION §3) and is deliberately not minted here. Prior honesty note (2026-08-06 corrected from false `done`) stands for the gap this stage closed.',
   }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', {
     module: 'p2p',

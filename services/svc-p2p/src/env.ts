@@ -105,6 +105,18 @@ const schema = serviceEnvSchema
        * it.
        */
       P2P_INSTRUMENT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3_650).default(90),
+
+      /**
+       * HUMAN MODERATORS this deployment will actually serve.
+       *
+       * Comma-separated lowercase canonical UUIDs. Empty (the default) means
+       * moderation is NOT configured: `disputes.list` / `disputes.resolve`
+       * honest-refuse with `p2p.moderation_unreachable` rather than sitting
+       * behind `admin:compliance` that no user session can hold (D-S-08).
+       * Named ids moderate with ordinary `p2p:read`. This is not the
+       * `p2p:moderate` scope split — that remains an owner sign-off.
+       */
+      P2P_MODERATOR_USER_IDS: z.string().default(''),
     }),
   );
 

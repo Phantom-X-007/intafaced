@@ -106,7 +106,12 @@ export type P2pErrorCode =
   // manifest that was wrong. See the re-assertion at the end of `eraseFor`.
   | 'p2p.erase_raced'
   // A ruling on a dispute was offered without a person's name on it.
-  | 'p2p.ruling_not_attributed';
+  | 'p2p.ruling_not_attributed'
+  // Deployment has no moderator allowlist and the caller does not hold
+  // admin:compliance — the queue exists but nobody can authenticate into it.
+  | 'p2p.moderation_unreachable'
+  // Allowlist is set; this principal is simply not on it.
+  | 'p2p.not_a_moderator';
 
 /**
  * A lowercase canonical UUID — the natural-person identifier space, and the ONE

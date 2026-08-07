@@ -14,6 +14,12 @@ import {
 } from './p2p-service.js';
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
+import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
+
+export type P2pRouterOptions = {
+  /** Natural-person ids from `P2P_MODERATOR_USER_IDS`. Empty = unconfigured. */
+  moderatorUserIds?: readonly string[];
+};
 
 /**
  * svc-p2p's API (§6.2).
@@ -177,7 +183,13 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.not_the_buyer':
       case 'p2p.self_trade':
       case 'p2p.trading_disabled':
+      case 'p2p.not_a_moderator':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      // Not a client auth mistake — the deployment has no human who can rule.
+      // PRECONDITION_FAILED so an operator dash can alarm on the code, not on
+      // a generic FORBIDDEN that looks like a missing scope on the caller.
+      case 'p2p.moderation_unreachable':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.dispute_already_open':
       case 'p2p.dispute_already_resolved':
       case 'p2p.trade_exists':
@@ -271,7 +283,10 @@ const instrumentHeaderOutput = z.object({
 /** The values. Only ever produced by a call that wrote an access-log row. */
 const instrumentDetailsOutput = z.record(z.string(), z.string());
 
-export function createP2pRouter(p2p: P2pService, instruments: InstrumentService, erasure?: P2pErasure) {
+export function createP2pRouter(p2p: P2pService, instruments: InstrumentService, erasure?: P2pErasure, options: P2pRouterOptions = {}) {
+  const moderatorUserIds = options.moderatorUserIds ?? [];
+  const moderationReachable = isModerationConfigured(moderatorUserIds);
+
   /**
    * The owner's own instruments, mapped for the wire.
    *
@@ -293,8 +308,19 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
 
   return router({
     health: publicProcedure
-      .output(z.object({ ok: z.boolean(), service: z.literal('svc-p2p') }))
-      .query(() => ({ ok: true, service: 'svc-p2p' as const })),
+      .output(
+        z.object({
+          ok: z.boolean(),
+          service: z.literal('svc-p2p'),
+          /** False until `P2P_MODERATOR_USER_IDS` names at least one person. */
+          moderationReachable: z.boolean(),
+        }),
+      )
+      .query(() => ({
+        ok: true,
+        service: 'svc-p2p' as const,
+        moderationReachable,
+      })),
 
     /**
      * §6.2: "100+ fiat currencies = config, not code."
@@ -456,9 +482,10 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
        *     place instead of being a clause inside a trade serialiser.
        *
        * `p2p:read` and not `p2p:write`, because a moderator adjudicating a
-       * dispute holds `admin:compliance` + `p2p:read` and never `p2p:write` —
-       * the same pairing `disputes.get` above already relies on. The scope is
-       * not what protects this; being a party to a live trade is.
+       * dispute holds moderator authority + `p2p:read` and never `p2p:write` —
+       * the same pairing `disputes.get` already relies on. The scope is not
+       * what protects this; being a party (or an allowlisted / compliance
+       * moderator) to a live disputed trade is.
        */
       paymentInstrument: scopedProcedure('p2p:read', { module: 'p2p' })
         .input(z.object({ tradeId: z.string().uuid() }))
@@ -478,7 +505,7 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
             const view = await instruments.revealForTrade({
               tradeId: input.tradeId,
               viewerId: ctx.principal.userId,
-              isModerator: ctx.principal.scopes.includes('admin:compliance'),
+              isModerator: isModerator(ctx.principal, moderatorUserIds),
             });
             return {
               tradeId: view.tradeId,
@@ -731,6 +758,13 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
              * configuration that could make it say anything else.
              */
             ifNobodyRules: z.literal('escalated_and_held'),
+            /**
+             * Whether this deployment has named human moderators. False means
+             * the dispute will escalate-and-hold with nobody able to resolve
+             * until an operator sets `P2P_MODERATOR_USER_IDS` — disclosed here
+             * so a client never implies a console is watching.
+             */
+            moderationReachable: z.boolean(),
           }),
         )
         .mutation(async ({ ctx, input }) =>
@@ -746,6 +780,7 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
               tradeId: dispute.tradeId,
               deadlineAt: dispute.deadlineAt.toISOString(),
               ifNobodyRules: 'escalated_and_held' as const,
+              moderationReachable,
             };
           }),
         ),
@@ -789,8 +824,8 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
           guard(async () => {
             const trade = await p2p.getTrade(input.tradeId);
             const isParty = trade.buyerId === ctx.principal.userId || trade.sellerId === ctx.principal.userId;
-            const isModerator = ctx.principal.scopes.includes('admin:compliance');
-            if (!isParty && !isModerator) {
+            const moderator = isModerator(ctx.principal, moderatorUserIds);
+            if (!isParty && !moderator) {
               throw new TRPCError({ code: 'NOT_FOUND', message: 'Dispute not found' });
             }
 
@@ -798,11 +833,11 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
             // human ever reached this dispute" a question the database can
             // answer; a party reading their own dispute is not evidence of
             // anything about moderation and must not be counted as if it were.
-            const d = isModerator
+            const d = moderator
               ? await p2p.getDisputeAsModerator(input.tradeId, ctx.principal.userId)
               : await p2p.getDispute(input.tradeId);
 
-            return toDisputeOut(d, isModerator ? null : ctx.principal.userId);
+            return toDisputeOut(d, moderator ? null : ctx.principal.userId);
           }),
         ),
 
@@ -814,11 +849,12 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
        * could reach a dispute at all, and a seven-day timer refunded every one
        * of them without a person ever seeing it.
        *
-       * `admin:compliance`, exactly like `resolve`: this reads other people's
-       * disputes, including the reasons and evidence they filed against each
-       * other.
+       * Scoped to `p2p:read` (a real session can hold it) and then gated by
+       * `assertModerator`: either `admin:compliance` or membership of
+       * `P2P_MODERATOR_USER_IDS`. An empty allowlist honest-refuses with
+       * `p2p.moderation_unreachable` — mounted is not the same as reachable.
        */
-      list: scopedProcedure('admin:compliance', { module: 'p2p' })
+      list: scopedProcedure('p2p:read', { module: 'p2p' })
         .input(
           z
             .object({
@@ -831,6 +867,7 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
         .output(z.object({ disputes: z.array(disputeOutput), nextCursor: z.string().nullable() }))
         .query(async ({ ctx, input }) =>
           guard(async () => {
+            assertModerator(ctx.principal, moderatorUserIds);
             const page = await p2p.listDisputes({
               moderatorId: ctx.principal.userId,
               ...(input?.status ? { status: input.status } : {}),
@@ -849,13 +886,14 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
        * third option in the input schema, because there is no third option in
        * the escrow: §6.2's promise is that every dispute terminates.
        *
-       * `admin:compliance`, not `p2p:write` — this moves someone else's escrow.
+       * Same gate as `list` — not `p2p:write` (that would let either party
+       * move the other's escrow) and not a fake auto-ruling.
        *
        * It is also the ONLY way a disputed escrow terminates. The timeout sweep
        * escalates and re-arms; the database refuses a terminal write on a
        * disputed trade without an attributed human ruling behind it.
        */
-      resolve: scopedProcedure('admin:compliance', { module: 'p2p' })
+      resolve: scopedProcedure('p2p:read', { module: 'p2p' })
         .input(
           z.object({
             tradeId: z.string().uuid(),
@@ -865,16 +903,17 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
         )
         .output(tradeOutput)
         .mutation(async ({ ctx, input }) =>
-          guard(async () =>
-            toTradeOut(
+          guard(async () => {
+            assertModerator(ctx.principal, moderatorUserIds);
+            return toTradeOut(
               await p2p.resolveDispute({
                 tradeId: input.tradeId,
                 moderatorId: ctx.principal.userId,
                 resolution: input.resolution,
                 ...(input.notes ? { notes: input.notes } : {}),
               }),
-            ),
-          ),
+            );
+          }),
         ),
     }),
 
