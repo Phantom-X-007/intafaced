@@ -46,6 +46,9 @@ importers:
       '@intafaced/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@intafaced/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@intafaced/ui':
         specifier: workspace:*
         version: link:../../packages/ui
