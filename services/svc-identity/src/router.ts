@@ -604,6 +604,7 @@ export function createIdentityRouter(
             userId: z.string().uuid(),
             keyId: z.string().uuid(),
             scopes: z.array(z.string()),
+            mode: z.enum(['live', 'sandbox']),
           }),
         )
         .mutation(async ({ input }) => {
@@ -615,6 +616,7 @@ export function createIdentityRouter(
               userId: result.userId,
               keyId: result.keyId,
               scopes: result.scopes,
+              mode: result.mode,
             };
           } catch (err) {
             throw toTrpcError(err);
@@ -627,9 +629,11 @@ export function createIdentityRouter(
             name: z.string().min(1).max(64),
             scopes: z.array(z.string()).min(1),
             domainWhitelist: z.array(z.string()).optional(),
+            /** pay.public-api step 4 — sandbox keys route to the sandbox rail. */
+            mode: z.enum(['live', 'sandbox']).optional(),
           }),
         )
-        .output(z.object({ id: z.string(), key: z.string(), prefix: z.string() }))
+        .output(z.object({ id: z.string(), key: z.string(), prefix: z.string(), mode: z.enum(['live', 'sandbox']) }))
         .mutation(async ({ ctx, input }) => {
           try {
             // `grantorScopes` comes from the verified principal, never from the
@@ -655,6 +659,7 @@ export function createIdentityRouter(
               scopes: z.array(z.string()),
               lastUsedAt: z.string().nullable(),
               revoked: z.boolean(),
+              mode: z.enum(['live', 'sandbox']),
             }),
           ),
         )
@@ -667,6 +672,7 @@ export function createIdentityRouter(
             scopes: k.scopes,
             lastUsedAt: k.last_used_at?.toISOString() ?? null,
             revoked: k.revoked,
+            mode: k.mode === 'sandbox' ? ('sandbox' as const) : ('live' as const),
           }));
         }),
 

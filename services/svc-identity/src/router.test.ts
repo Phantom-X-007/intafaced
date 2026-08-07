@@ -97,18 +97,20 @@ function stubServices(): Stub {
       expiresAt: new Date('2026-07-28T09:05:00.000Z'),
       scopes: ['trade:withdraw'],
     })),
-    createApiKey: record('createApiKey', () => ({ id: 'key-1', key: 'ifc_secret', prefix: 'ifc_abc' })),
+    createApiKey: record('createApiKey', () => ({ id: 'key-1', key: 'ifc_secret', prefix: 'ifc_abc', mode: 'live' as const })),
     exchangeApiKey: record('exchangeApiKey', () => ({
       accessToken: 'api.key.jwt',
       expiresAt: new Date('2026-07-28T09:15:00.000Z'),
       userId: USER,
       keyId: '55555555-5555-4555-8555-555555555555',
       scopes: ['trade:read'],
+      mode: 'live' as const,
     })),
     verifyApiKey: record('verifyApiKey', () => ({
       userId: USER,
       scopes: ['trade:read'],
       keyId: '55555555-5555-4555-8555-555555555555',
+      mode: 'live' as const,
     })),
     startWebauthnRegistration: record('startWebauthnRegistration', () => ({
       challenge: 'chal-reg',

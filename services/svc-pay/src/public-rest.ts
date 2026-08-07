@@ -8,6 +8,7 @@ import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merch
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
 import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
+import { resolveMerchantRail } from './sandbox-key-routing.js';
 
 /**
  * `pay.public-api` — the merchant REST surface.
@@ -53,9 +54,12 @@ import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencySto
  *   DELETE /api/pay/v1/webhook-endpoints/:id          pay:write
  *   GET    /api/pay/v1/webhook-deliveries             pay:read   (failure dashboard)
  *
- * Not Class X go-live. Not a live acquirer. Not sandbox-key routing (step 4).
- * Sandbox rails stay behind `assertRailMayMoveValue` — the REST layer acquires
- * no exception. Outbound webhooks do not move value.
+ * STEP 4 — sandbox keys (this residual): principal `key_env` from the API-key
+ * exchange routes createPayment onto the sandbox rail (`card-sandbox`). A live
+ * key may not name a sandbox rail. `assertRailMayMoveValue` remains the second
+ * gate for value-leaving caps — REST acquires no exception. No parallel stack.
+ *
+ * Not Class X go-live. Not a live acquirer. Outbound webhooks do not move value.
  */
 
 /** OpenAPI mount point. `/api/pay` is the edge prefix; `/v1` is ADR §2.7. */
@@ -556,13 +560,18 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         try {
           await assertMerchantOwnership(deps.pay, principal.userId, req.body.merchantId);
           const amount = requireDecimalString(req.body.amount, 'amount');
+          // ADR §2.5 step 4 — sandbox key → sandbox rail; live key may not.
+          const railAdapter = resolveMerchantRail({
+            keyEnv: principal.key_env,
+            requestedRail: req.body.railAdapter,
+          });
           const payment = await deps.pay.createPayment({
             merchantId: req.body.merchantId,
             profileId: req.body.profileId ?? null,
             amount: parseAmount(amount),
             assetId: req.body.assetId,
             method: req.body.method,
-            railAdapter: req.body.railAdapter,
+            railAdapter,
             instrument: req.body.instrument,
             customerRef: req.body.customerRef,
             metadata: req.body.metadata,

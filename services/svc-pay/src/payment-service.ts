@@ -119,7 +119,14 @@ export type PayErrorCode =
   /** A client reference already names a different withdrawal. */
   | 'pay.withdrawal_conflict'
   /** Row already terminal-failed; caller must open a new clientRef. */
-  | 'pay.withdrawal_failed';
+  | 'pay.withdrawal_failed'
+  /**
+   * Live API key named a sandbox rail (or deployment refused sandbox value
+   * movement). ADR pay.public-api §2.5 / posture assertRailMayMoveValue.
+   */
+  | 'pay.sandbox_rail_refused'
+  /** Request body failed a surface-level validation (missing railAdapter, …). */
+  | 'pay.validation_failed';
 
 export class PayError extends Error {
   constructor(

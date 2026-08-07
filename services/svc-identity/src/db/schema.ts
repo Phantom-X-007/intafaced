@@ -190,6 +190,11 @@ export const apiKeys = identity.table(
     keyPrefix: text('key_prefix').notNull(),
     scopes: text('scopes').array().notNull(),
     domainWhitelist: text('domain_whitelist').array().notNull().default([]),
+    /**
+     * `live` | `sandbox` — pay.public-api step 4 (ADR 2026-08-07 §2.5).
+     * Minted into the short access token as `key_env`. Default live.
+     */
+    mode: text('mode').notNull().default('live'),
     lastUsedAt: tstz('last_used_at'),
     expiresAt: tstz('expires_at'),
     revoked: boolean('revoked').notNull().default(false),

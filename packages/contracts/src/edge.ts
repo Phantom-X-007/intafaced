@@ -57,6 +57,7 @@ export function encodePrincipal(principal: Principal): string {
     expiresAt: principal.expiresAt.toISOString(),
     ...(principal.sub_account ? { sub_account: principal.sub_account } : {}),
     ...(principal.kid ? { kid: principal.kid } : {}),
+    ...(principal.key_env ? { key_env: principal.key_env } : {}),
   };
   return JSON.stringify(wire);
 }
