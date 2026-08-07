@@ -1,18 +1,24 @@
 /**
- * CURRICULUM IMPORT PIPELINE — Stage-1 (TRK-academy.curriculum).
+ * CURRICULUM IMPORT PIPELINE — Stage-1 + Stage-3 honesty (TRK-academy.curriculum).
  *
- * Does NOT invent the proprietary 20 playbooks + 3 workbooks. Those need a
- * licensed import or commissioned platform-native expansion (product/Class X).
+ * Does NOT invent a licensed third-party library dump. Platform-native expansion
+ * may close title counts; licensed import remains product/Class X when assets land.
  *
  * Stage-1 delivers:
  *   1. Content source decision (named, not guessed)
  *   2. Import record format + validation
  *   3. Brand-scan checklist for import bodies
  *   4. Count gate vs the tracker title promise
+ *
+ * Stage-3 extends import status:
+ *   5. Workbook bodies must not paint fake market prices as live quotes
+ *   6. Operator stage status (pipeline / catalog / polish) for honest residual
  */
 
 import type { CurriculumItem, CurriculumKind, CurriculumPath } from './catalog.js';
 import { CURRICULUM_PATHS, listCurriculum } from './catalog.js';
+import { curriculumDeepLinksVerified } from './deep-links.js';
+import { curriculumI18nStrategyHonest } from './i18n-strategy.js';
 
 /** Tracker title promise (academy.curriculum). */
 export const CURRICULUM_TITLE_PLAYBOOKS = 20;
@@ -47,13 +53,52 @@ export interface ImportValidationResult {
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
+ * Workbook honesty — refuse bodies that paint invented prices as live quotes.
+ * Outline drills may talk about books/fills in the abstract; they must not
+ * embed bid/ask/last/mid numbers as if they were a live market feed.
+ */
+export function workbookLiveQuoteChecklist(
+  record: Pick<CurriculumImportRecord, 'kind' | 'title' | 'summary' | 'body'>,
+): ImportValidationIssue[] {
+  if (record.kind !== 'workbook') return [];
+  const blob = `${record.title}\n${record.summary}\n${record.body}`;
+  const issues: ImportValidationIssue[] = [];
+
+  if (/\blive\s+quote\b/i.test(blob) || /\blive\s+ticker\b/i.test(blob)) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: 'Workbook must not claim a live quote/ticker — paper outlines only until trade paper path',
+    });
+  }
+  // bid/ask/last/mid followed by a numeric price looks like a painted feed
+  if (/\b(?:bid|ask|last|mid)\s*[:=]\s*\$?\d+(?:\.\d+)?/i.test(blob)) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: 'Workbook must not embed bid/ask/last/mid prices as live quotes',
+    });
+  }
+  if (/\bcurrent\s+price\s*[:=]\s*\$?\d+/i.test(blob) || /\bspot\s+price\s*[:=]\s*\$?\d+/i.test(blob)) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: 'Workbook must not paint a current/spot price as a live market quote',
+    });
+  }
+  return issues;
+}
+
+/**
  * Brand-scan checklist for import bodies (§0.7).
  *
  * Does NOT list forbidden vendor strings in source (brand scanner would trip on
  * the test/file). Checks structural honesty only; full brand scan remains
  * `pnpm scan:brand` / DoD gate.
  */
-export function brandChecklist(record: Pick<CurriculumImportRecord, 'title' | 'summary' | 'body'>): ImportValidationIssue[] {
+export function brandChecklist(
+  record: Pick<CurriculumImportRecord, 'title' | 'summary' | 'body'> & { kind?: CurriculumKind },
+): ImportValidationIssue[] {
   const issues: ImportValidationIssue[] = [];
   const blob = `${record.title}\n${record.summary}\n${record.body}`;
 
@@ -85,6 +130,9 @@ export function brandChecklist(record: Pick<CurriculumImportRecord, 'title' | 's
       code: 'invalid',
       message: 'Body must be real markdown (≥40 chars, starts with # heading)',
     });
+  }
+  if (record.kind === 'workbook') {
+    issues.push(...workbookLiveQuoteChecklist({ kind: 'workbook', title: record.title, summary: record.summary, body: record.body }));
   }
   return issues;
 }
@@ -122,6 +170,7 @@ export function validateImportRecord(raw: unknown): ImportValidationResult {
   if (issues.length === 0) {
     issues.push(
       ...brandChecklist({
+        kind: r.kind as CurriculumKind,
         title: r.title as string,
         summary: r.summary as string,
         body: r.body as string,
@@ -308,4 +357,56 @@ export function importAcceptedInRange(summary: ImportBatchSummary, min: number, 
 export function importRejectedAtMost(summary: ImportBatchSummary, n: number): boolean {
   if (!Number.isFinite(n)) return false;
   return summary.rejected <= n;
+}
+
+/**
+ * Stage-3 operator status for the import/catalog/polish DoD.
+ * Honest flags only — does not invent licensed library content.
+ */
+export type CurriculumImportStageStatus = {
+  readonly contentSource: CurriculumContentSource;
+  readonly titlePromiseMet: boolean;
+  readonly residualPlaybooks: number;
+  readonly residualWorkbooks: number;
+  /** Stage-1 pipeline surface present (validation + inventory). */
+  readonly stage1Pipeline: true;
+  /** Stage-2 catalog expansion closed when title counts met via platform-native set. */
+  readonly stage2CatalogExpanded: boolean;
+  /** Stage-3 polish: deep-links + i18n strategy honest. */
+  readonly stage3Polish: {
+    readonly deepLinksVerified: boolean;
+    readonly i18nStrategyHonest: boolean;
+    readonly ready: boolean;
+  };
+};
+
+export function curriculumImportStageStatus(): CurriculumImportStageStatus {
+  const inv = curriculumInventory();
+  const deepLinksVerified = curriculumDeepLinksVerified();
+  const i18nStrategyHonest = curriculumI18nStrategyHonest();
+  return {
+    contentSource: inv.contentSource,
+    titlePromiseMet: inv.titlePromiseMet,
+    residualPlaybooks: inv.residualPlaybooks,
+    residualWorkbooks: inv.residualWorkbooks,
+    stage1Pipeline: true,
+    stage2CatalogExpanded: inv.titlePromiseMet,
+    stage3Polish: {
+      deepLinksVerified,
+      i18nStrategyHonest,
+      ready: deepLinksVerified && i18nStrategyHonest,
+    },
+  };
+}
+
+/** One-line import/status for operators. */
+export function curriculumImportStageStatusLine(): string {
+  const s = curriculumImportStageStatus();
+  return [
+    `source=${s.contentSource}`,
+    `titleMet=${s.titlePromiseMet ? '1' : '0'}`,
+    `residualPb=${s.residualPlaybooks}`,
+    `residualWb=${s.residualWorkbooks}`,
+    `stage3=${s.stage3Polish.ready ? '1' : '0'}`,
+  ].join(' ');
 }

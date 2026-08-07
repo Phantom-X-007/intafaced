@@ -4,7 +4,9 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
 import { getCurriculumItem, listCurriculum } from './curriculum/catalog.js';
-import { curriculumInventory } from './curriculum/import-pipeline.js';
+import { curriculumInventory, curriculumImportStageStatus } from './curriculum/import-pipeline.js';
+import { resolveCurriculumDeepLink, listCurriculumPathDeepLinks } from './curriculum/deep-links.js';
+import { curriculumBodyForLocale, curriculumI18nStrategyLine } from './curriculum/i18n-strategy.js';
 import { startPaperDrillForCatalogItem } from './paper/workbook-loop.js';
 
 /**
@@ -92,6 +94,40 @@ const curriculumInventoryOut = z.object({
   titlePromiseMet: z.boolean(),
   residualPlaybooks: z.number().int(),
   residualWorkbooks: z.number().int(),
+});
+
+const curriculumDeepLinkOut = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    path: curriculumPath,
+    slug: z.string().nullable(),
+    href: z.string(),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.enum(['unknown_path', 'unknown_slug', 'path_mismatch']),
+    message: z.string(),
+  }),
+]);
+
+const curriculumImportStatusOut = z.object({
+  contentSource: z.enum(['platform-native-expansion', 'licensed-import-pending']),
+  titlePromiseMet: z.boolean(),
+  residualPlaybooks: z.number().int(),
+  residualWorkbooks: z.number().int(),
+  stage1Pipeline: z.literal(true),
+  stage2CatalogExpanded: z.boolean(),
+  stage3Polish: z.object({
+    deepLinksVerified: z.boolean(),
+    i18nStrategyHonest: z.boolean(),
+    ready: z.boolean(),
+  }),
+});
+
+const curriculumItemLocalizedOut = curriculumItemOut.extend({
+  locale: z.string(),
+  fellBack: z.boolean(),
+  i18nStrategy: z.string(),
 });
 
 const paperDrillOut = z.discriminatedUnion('ok', [
@@ -315,11 +351,68 @@ export function createAcademyRouter(academy: AcademyService) {
 
     /**
      * Stage-1 import pipeline inventory: content source decision + count gate.
-     * titlePromiseMet is false until 20 playbooks + 3 workbooks exist (or product renames).
+     * titlePromiseMet is true when 20 playbooks + 3 workbooks exist (platform-native
+     * expansion may close this without a licensed library dump).
      */
     curriculumInventory: scopedProcedure('academy:read', { module: 'academy' })
       .output(curriculumInventoryOut)
       .query(() => curriculumInventory()),
+
+    /**
+     * Stage-3 import/status: pipeline + catalog expansion + polish readiness.
+     * Does not invent licensed library content; workbook live-quote invent stays refused.
+     */
+    curriculumImportStatus: scopedProcedure('academy:read', { module: 'academy' })
+      .output(curriculumImportStatusOut)
+      .query(() => curriculumImportStageStatus()),
+
+    /**
+     * Stage-3 Blueprint curriculumPath deep-link resolver.
+     * Unknown path/slug or path mismatch → ok:false (no invent).
+     */
+    curriculumDeepLink: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ path: curriculumPath, slug: z.string().min(1).max(120).optional() }))
+      .output(curriculumDeepLinkOut)
+      .query(({ input }) => resolveCurriculumDeepLink(input)),
+
+    /**
+     * Stage-3 path-index deep-links for Blueprint paths that have catalog content.
+     */
+    curriculumPathDeepLinks: scopedProcedure('academy:read', { module: 'academy' })
+      .output(
+        z.array(
+          z.object({
+            path: curriculumPath,
+            href: z.string(),
+            itemCount: z.number().int(),
+          }),
+        ),
+      )
+      .query(() => [...listCurriculumPathDeepLinks()]),
+
+    /**
+     * Stage-3 localized curriculum body. Missing locales fall back to default `en`
+     * — we never invent a translation.
+     */
+    curriculumItemLocalized: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ slug: z.string().min(1).max(120), locale: z.string().min(2).max(12).optional() }))
+      .output(curriculumItemLocalizedOut)
+      .query(({ input }) =>
+        guard(async () => {
+          const item = getCurriculumItem(input.slug);
+          if (!item) {
+            throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
+          }
+          const localized = curriculumBodyForLocale(item.body, input.locale);
+          return {
+            ...item,
+            body: localized.body,
+            locale: localized.resolution.locale,
+            fellBack: localized.resolution.fellBack,
+            i18nStrategy: curriculumI18nStrategyLine(),
+          };
+        }),
+      ),
 
     /**
      * Paper drill gate for a workbook (TRK-academy.paper-trading Stage 2).

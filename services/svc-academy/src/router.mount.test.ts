@@ -116,6 +116,10 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'curriculum',
         'curriculumItem',
         'curriculumInventory',
+        'curriculumImportStatus',
+        'curriculumDeepLink',
+        'curriculumPathDeepLinks',
+        'curriculumItemLocalized',
         'paperDrill',
         'ambassadorBadge',
         'ambassadors',
@@ -183,6 +187,26 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
     await expect(createAcademyRouter(stubAcademy()).createCaller(ctx).curriculum()).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
+  });
+
+  it('Stage-3 deep-link + import status + locale fallback', async () => {
+    const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
+    const link = await caller.curriculumDeepLink({ path: 'foundations', slug: 'foundations-risk-first' });
+    expect(link).toEqual({
+      ok: true,
+      path: 'foundations',
+      slug: 'foundations-risk-first',
+      href: '/academy/curriculum/foundations/foundations-risk-first',
+    });
+    const paths = await caller.curriculumPathDeepLinks();
+    expect(paths.some((p) => p.path === 'foundations' && p.itemCount > 0)).toBe(true);
+    const status = await caller.curriculumImportStatus();
+    expect(status.stage3Polish.ready).toBe(true);
+    expect(status.titlePromiseMet).toBe(true);
+    const localized = await caller.curriculumItemLocalized({ slug: 'foundations-risk-first', locale: 'fr' });
+    expect(localized.fellBack).toBe(true);
+    expect(localized.locale).toBe('en');
+    expect(localized.body).toContain('# Risk first');
   });
 });
 

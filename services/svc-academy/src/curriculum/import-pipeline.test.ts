@@ -4,6 +4,8 @@ import {
   CURRICULUM_TITLE_PLAYBOOKS,
   CURRICULUM_TITLE_WORKBOOKS,
   curriculumInventory,
+  curriculumImportStageStatus,
+  curriculumImportStageStatusLine,
   validateImportBatch,
   validateImportRecord,
   summarizeImportBatch,
@@ -21,6 +23,7 @@ import {
   parseImportBatchExportLine,
   importAcceptedInRange,
   importRejectedAtMost,
+  workbookLiveQuoteChecklist,
 } from './import-pipeline.js';
 
 const good = {
@@ -33,6 +36,21 @@ const good = {
   body: ['# Sample drill', '', 'Body text long enough to clear the honesty floor for Stage-1 imports.'].join('\n'),
 };
 
+const goodWorkbook = {
+  slug: 'foundations-outline-workbook',
+  title: 'Outline workbook',
+  kind: 'workbook',
+  path: 'foundations',
+  order: 50,
+  summary: 'Outline drills without inventing live market quotes.',
+  body: [
+    '# Outline workbook',
+    '',
+    'Drill size from invalidation. No fills here. Empty books stay empty.',
+    'Paper only when the paper market path is on.',
+  ].join('\n'),
+};
+
 describe('curriculumInventory — honest count gate', () => {
   it('names platform-native expansion as the content source on tip', () => {
     expect(CURRICULUM_CONTENT_SOURCE).toBe('platform-native-expansion');
@@ -42,12 +60,12 @@ describe('curriculumInventory — honest count gate', () => {
     const inv = curriculumInventory();
     expect(inv.titleTarget).toEqual({ playbooks: CURRICULUM_TITLE_PLAYBOOKS, workbooks: CURRICULUM_TITLE_WORKBOOKS });
     expect(inv.spine.total).toBeGreaterThan(0);
-    // L3 platform-native expansion may close residual without licensed invent.
-    expect(inv.spine.playbooks).toBeGreaterThanOrEqual(11);
-    expect(inv.spine.playbooks).toBeLessThanOrEqual(CURRICULUM_TITLE_PLAYBOOKS);
-    expect(inv.residualPlaybooks).toBe(Math.max(0, CURRICULUM_TITLE_PLAYBOOKS - inv.spine.playbooks));
-    // Workbook outline set may already hit the title count of 3 without painting playbooks done.
-    expect(inv.spine.workbooks).toBeGreaterThanOrEqual(1);
+    // Platform-native expansion closed the title counts without licensed invent.
+    expect(inv.spine.playbooks).toBe(CURRICULUM_TITLE_PLAYBOOKS);
+    expect(inv.spine.workbooks).toBe(CURRICULUM_TITLE_WORKBOOKS);
+    expect(inv.residualPlaybooks).toBe(0);
+    expect(inv.residualWorkbooks).toBe(0);
+    expect(inv.titlePromiseMet).toBe(true);
   });
 });
 
@@ -60,6 +78,25 @@ describe('validateImportRecord', () => {
     expect(validateImportRecord({ ...good, path: 'moon' }).ok).toBe(false);
     expect(validateImportRecord({ ...good, body: 'short' }).ok).toBe(false);
     expect(validateImportRecord({ ...good, body: '# T\n\nSee https://example.com for more.' }).ok).toBe(false);
+  });
+
+  it('accepts honest outline workbooks and refuses fake live quotes', () => {
+    expect(validateImportRecord(goodWorkbook).ok).toBe(true);
+    expect(
+      validateImportRecord({
+        ...goodWorkbook,
+        body: '# Bad\n\nLive quote bid: 1.2345 ask: 1.2347 — paint as market.',
+      }).ok,
+    ).toBe(false);
+    expect(
+      workbookLiveQuoteChecklist({
+        kind: 'workbook',
+        title: 'x',
+        summary: 'enough summary text here',
+        body: '# X\n\ncurrent price: 99.5 on the tape',
+      }).length,
+    ).toBeGreaterThan(0);
+    expect(workbookLiveQuoteChecklist({ ...good, kind: 'playbook' })).toEqual([]);
   });
 });
 
@@ -124,5 +161,19 @@ describe('L3 wave47 import-pipeline status/export', () => {
     expect(importAcceptedInRange(summary, 5, 0)).toBe(false);
     expect(importRejectedAtMost(summary, 0)).toBe(true);
     expect(importRejectedAtMost(summary, Number.NaN)).toBe(false);
+  });
+});
+
+describe('Stage-3 curriculumImportStageStatus', () => {
+  it('reports pipeline + catalog + polish honestly', () => {
+    const status = curriculumImportStageStatus();
+    expect(status.stage1Pipeline).toBe(true);
+    expect(status.stage2CatalogExpanded).toBe(true);
+    expect(status.titlePromiseMet).toBe(true);
+    expect(status.stage3Polish.deepLinksVerified).toBe(true);
+    expect(status.stage3Polish.i18nStrategyHonest).toBe(true);
+    expect(status.stage3Polish.ready).toBe(true);
+    expect(curriculumImportStageStatusLine()).toContain('stage3=1');
+    expect(curriculumImportStageStatusLine()).toContain('titleMet=1');
   });
 });

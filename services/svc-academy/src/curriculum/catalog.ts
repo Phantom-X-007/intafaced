@@ -47,7 +47,9 @@ function seedBody(title: string, bullets: string[]): string {
 
 /**
  * Day-one spine + Stage-2 platform-native expansion (TRK-academy.curriculum).
- * Title promise (20 playbooks + 3 workbooks) remains residual when counts lag.
+ * Title counts (20 playbooks + 3 workbooks) are met via platform-native content.
+ * Licensed third-party library import remains residual until product assets land.
+ * Stage-3 polish: deep-links + i18n fallback — see deep-links.ts / i18n-strategy.ts.
  */
 const SPINE: readonly CurriculumItem[] = [
   {
