@@ -670,6 +670,40 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => ({ revoked: await auth.revokeApiKey(ctx.principal.userId, input.keyId) })),
     }),
 
+    /**
+     * Compliance freeze of an identity (SPEC-SUBACCOUNTS §3).
+     * Cascades: user frozen + all sessions revoked + all sub-accounts revoked.
+     */
+    compliance: router({
+      freezeIdentity: scopedProcedure('admin:compliance')
+        .input(z.object({ userId: z.string().uuid() }))
+        .output(
+          z.object({
+            userId: z.string().uuid(),
+            status: z.literal('frozen'),
+            subAccountsRevoked: z.number().int(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            return await auth.freezeIdentity(input.userId);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      unfreezeIdentity: scopedProcedure('admin:compliance')
+        .input(z.object({ userId: z.string().uuid() }))
+        .output(z.object({ userId: z.string().uuid(), status: z.literal('active') }))
+        .mutation(async ({ input }) => {
+          try {
+            return await auth.unfreezeIdentity(input.userId);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+    }),
+
     subAccounts: router({
       create: scopedProcedure('identity:write')
         .input(z.object({ label: z.string().min(1).max(64), purpose: z.string().max(200).optional() }))

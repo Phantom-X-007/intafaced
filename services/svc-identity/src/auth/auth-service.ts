@@ -1011,7 +1011,57 @@ export class AuthService {
 
   // ── Sub-accounts ───────────────────────────────────────────────────────────
 
+  /**
+   * Freeze identity + cascade revoke every sub-account (SPEC-SUBACCOUNTS §3).
+   * Sub-accounts are bookkeeping partitions, not compliance boundaries —
+   * freeze must not leave a live partition under a frozen parent.
+   */
+  async freezeIdentity(userId: string): Promise<{ userId: string; status: 'frozen'; subAccountsRevoked: number }> {
+    return transaction(this.sql, async (tx) => {
+      const users = await tx<Array<{ id: string; status: string }>>`
+        SELECT id, status FROM users WHERE id = ${userId} LIMIT 1 FOR UPDATE
+      `;
+      if (!users[0]) throw new AuthError('User not found', 'auth.not_found');
+      await tx`
+        UPDATE users SET status = 'frozen', updated_at = now() WHERE id = ${userId}
+      `;
+      // Revoke every open session so freeze is not delayed until token expiry.
+      await tx`UPDATE sessions SET revoked = true WHERE user_id = ${userId} AND revoked = false`;
+      const revokedRows = await tx<Array<{ id: string }>>`
+        UPDATE sub_accounts SET revoked = true
+         WHERE parent_user_id = ${userId} AND revoked = false
+        RETURNING id
+      `;
+      return { userId, status: 'frozen' as const, subAccountsRevoked: revokedRows.length };
+    });
+  }
+
+  /**
+   * Unfreeze identity only — does NOT un-revoke sub-accounts (explicit reopen).
+   * Closing a partition is deliberate; freeze cascade is not a soft toggle for them.
+   */
+  async unfreezeIdentity(userId: string): Promise<{ userId: string; status: 'active' }> {
+    const users = await this.sql<Array<{ id: string; status: string }>>`
+      SELECT id, status FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    if (!users[0]) throw new AuthError('User not found', 'auth.not_found');
+    if (users[0].status === 'closed') {
+      throw new AuthError('Closed accounts cannot be unfrozen', 'auth.account_frozen');
+    }
+    await this.sql`
+      UPDATE users SET status = 'active', updated_at = now() WHERE id = ${userId}
+    `;
+    return { userId, status: 'active' };
+  }
+
   async createSubAccount(userId: string, label: string, purpose?: string): Promise<{ id: string }> {
+    const users = await this.sql<Array<{ status: string }>>`
+      SELECT status FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    if (!users[0]) throw new AuthError('User not found', 'auth.not_found');
+    if (users[0].status !== 'active') {
+      throw new AuthError(`Account is ${users[0].status}`, 'auth.account_frozen');
+    }
     const rows = await this.sql<Array<{ id: string }>>`
       INSERT INTO sub_accounts (parent_user_id, label, purpose)
       VALUES (${userId}, ${label}, ${purpose ?? null})
