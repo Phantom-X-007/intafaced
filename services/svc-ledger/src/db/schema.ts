@@ -155,6 +155,16 @@ export const accounts = ledger.table(
     index('accounts_hold_purpose_idx')
       .on(t.ownerId, t.assetId, t.purpose)
       .where(sql`kind = 'hold'`),
+    /**
+     * 0006 — an account may only exist in an asset the ledger knows.
+     *
+     * The migration's comments had claimed this since 0003; nothing enforced it,
+     * so a typo opened a second book that balanced and reconciled and could
+     * never be spent. `RESTRICT` because retiring an asset that still holds
+     * balances must fail loudly — `active = false` is how one is withdrawn.
+     */
+    foreignKey({ columns: [t.assetId], foreignColumns: [assets.id], name: 'accounts_asset_id_fk' }).onDelete('restrict'),
+    index('accounts_asset_id_idx').on(t.assetId),
 
     /** Only the treasury boundary may run negative (0000). */
     check('accounts_non_negative_ck', sql`owner_type = 'treasury' OR balance >= 0`),
@@ -228,6 +238,13 @@ export const ledgerEntries = ledger.table(
      */
     foreignKey({ columns: [t.txId], foreignColumns: [ledgerTx.id], name: 'ledger_entries_tx_id_fkey' }),
     foreignKey({ columns: [t.accountId], foreignColumns: [accounts.id], name: 'ledger_entries_account_id_fkey' }),
+    /**
+     * 0006 — an entry may only name an asset the ledger knows. Denormalised
+     * from the account, but written independently, so it is constrained
+     * independently.
+     */
+    foreignKey({ columns: [t.assetId], foreignColumns: [assets.id], name: 'ledger_entries_asset_id_fk' }).onDelete('restrict'),
+    index('ledger_entries_asset_id_idx').on(t.assetId),
     /** Direction carries the sign; the amount never does (0000). */
     check('ledger_entries_positive_ck', sql`amount > 0`),
   ],
