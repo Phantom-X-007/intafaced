@@ -154,7 +154,9 @@ const pay = new PayService(sql, ledger, rails, {
   linkDefaultTtlDays: env.PAY_LINK_DEFAULT_TTL_DAYS,
   linkMaxTtlDays: env.PAY_LINK_MAX_TTL_DAYS,
   maxOpenSessionsPerLink: env.PAY_CHECKOUT_MAX_OPEN_SESSIONS,
-  afterPaymentEvent: (event) => merchantWebhooks.enqueue(event),
+  afterPaymentEvent: async (event) => {
+    await merchantWebhooks.enqueue(event);
+  },
 });
 
 /**

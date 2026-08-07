@@ -173,8 +173,33 @@ export interface MerchantWebhookStore {
   listDeliveries(merchantId: string, opts: { status?: WebhookDeliveryStatus; limit: number }): Promise<MerchantWebhookDelivery[]>;
 }
 
-type MemEndpoint = MerchantWebhookEndpoint & { secret: string; secretHash: string };
-type MemDelivery = MerchantWebhookDelivery;
+type MemEndpoint = {
+  id: string;
+  merchantId: string;
+  url: string;
+  status: WebhookEndpointStatus;
+  disabledReason: string | null;
+  consecutiveFailures: number;
+  createdAt: Date;
+  updatedAt: Date;
+  secret: string;
+  secretHash: string;
+};
+type MemDelivery = {
+  id: string;
+  endpointId: string;
+  merchantId: string;
+  eventId: string;
+  eventType: MerchantWebhookEventType;
+  payload: unknown;
+  status: WebhookDeliveryStatus;
+  attempts: number;
+  nextAttemptAt: Date;
+  lastStatusCode: number | null;
+  lastError: string | null;
+  createdAt: Date;
+  deliveredAt: Date | null;
+};
 
 /** In-memory store — unit tests / single-process local. Not multi-replica. */
 export class MemoryMerchantWebhookStore implements MerchantWebhookStore {
