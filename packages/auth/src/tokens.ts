@@ -130,6 +130,22 @@ export async function verifyAccessToken(token: string, config: TokenConfig): Pro
       issuer: config.issuer,
       audience: config.audience,
       algorithms: ['HS256'],
+      /**
+       * `exp` is REQUIRED, not merely checked when present.
+       *
+       * jose validates an expiry only if the claim is there — `if (payload.exp
+       * !== undefined)`. Without this line a validly-signed token carrying no
+       * `exp` verified, and verified forever. "Access tokens are short-lived"
+       * is the first promise this file makes.
+       *
+       * It mattered unevenly. A token arriving through the edge is re-checked
+       * against `expiresAt` in `packages/contracts/src/edge.ts`, so an absent
+       * expiry failed closed there. The two surfaces that call this function
+       * DIRECTLY do not re-check it — `svc-ledger`'s operator HTTP (freeze,
+       * unfreeze, reconcile) and `svc-edge`'s admin API (kill-switch, treasury)
+       * — which are the two highest-value doors in the platform.
+       */
+      requiredClaims: ['exp'],
     });
     payload = result.payload;
   } catch (err) {
@@ -141,10 +157,13 @@ export async function verifyAccessToken(token: string, config: TokenConfig): Pro
   const claims = accessClaimsSchema.safeParse(payload);
   if (!claims.success) throw new AuthError('Access token payload is malformed', 'token.malformed');
 
+  // No `?? 0`. `requiredClaims` above means the claim is present or we never
+  // reached this line — and the fallback was the tell: it manufactured a 1970
+  // expiry for a token it had just accepted, rather than refusing one.
   return {
     ...claims.data,
     userId: claims.data.sub,
-    expiresAt: new Date((payload.exp ?? 0) * 1000),
+    expiresAt: new Date(payload.exp! * 1000),
   };
 }
 
