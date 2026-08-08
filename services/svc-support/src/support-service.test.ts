@@ -147,3 +147,110 @@ describe('SupportService Stage-2 operator queue', () => {
     });
   });
 });
+
+/**
+ * "Somebody else's ticket" and "no such ticket" must be the SAME answer.
+ *
+ * Answering a foreign ticket with `not_found` rather than a forbidden is a
+ * deliberate choice, and it only works if the two are indistinguishable. They
+ * were not: the missing case interpolated the id and the foreign case did not,
+ * and `mapError` puts `err.message` on the wire — so a caller could ask about
+ * any id and read its existence off whether the id came back.
+ */
+describe('a foreign ticket is indistinguishable from a missing one', () => {
+  const MISSING = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  async function ownedTicket() {
+    const svc = new SupportService();
+    const ticket = await svc.createTicket({ userId: USER, category: 'other', subject: 'Q', body: 'B' });
+    return { svc, ticket };
+  }
+
+  it('refuses both with a byte-identical message and code', async () => {
+    const { svc, ticket } = await ownedTicket();
+
+    const foreign = await svc.getTicket({ userId: OTHER, ticketId: ticket.id }).catch((e: Error) => e);
+    const missing = await svc.getTicket({ userId: OTHER, ticketId: MISSING }).catch((e: Error) => e);
+
+    expect(foreign).toBeInstanceOf(Error);
+    expect(missing).toBeInstanceOf(Error);
+    // The whole property, in one line: nothing about the two refusals differs.
+    expect((foreign as Error).message).toBe((missing as Error).message);
+    expect(foreign).toMatchObject({ code: 'support.not_found' });
+    expect(missing).toMatchObject({ code: 'support.not_found' });
+  });
+
+  it('never echoes the ticket id back — an echoed id is an id confirmed to exist', async () => {
+    const { svc, ticket } = await ownedTicket();
+
+    for (const id of [ticket.id, MISSING]) {
+      const err = (await svc.getTicket({ userId: OTHER, ticketId: id }).catch((e: Error) => e)) as Error;
+      expect(err.message).not.toContain(id);
+    }
+
+    // setStatus is operator-only but reads the same table and used to echo too.
+    const status = (await svc.setStatus({ operatorId: OP, ticketId: MISSING, status: 'resolved' }).catch((e: Error) => e)) as Error;
+    expect(status.message).not.toContain(MISSING);
+  });
+
+  it('holds on the paths that reach getTicket indirectly', async () => {
+    const { svc, ticket } = await ownedTicket();
+
+    // comment and listComments both route through getTicket, so they inherit
+    // the check — asserted rather than assumed, because "it inherits it" is
+    // exactly the sentence that stops being true after a refactor.
+    for (const call of [
+      () => svc.comment({ userId: OTHER, ticketId: ticket.id, body: 'x' }),
+      () => svc.listComments({ userId: OTHER, ticketId: ticket.id }),
+    ]) {
+      const err = (await call().catch((e: Error) => e)) as Error;
+      expect(err).toMatchObject({ code: 'support.not_found' });
+      expect(err.message).not.toContain(ticket.id);
+    }
+  });
+});
+
+/**
+ * The operator bypass, executed.
+ *
+ * `asOperator` is the flag that decides whether a caller may read another
+ * user's ticket. Before this, no test invoked the router handlers that compute
+ * it, and the service-level tests covered only the refusal — so the line that
+ * grants the bypass, and the line that withholds it on the indirect paths, ran
+ * in no test at all.
+ */
+describe('the operator bypass', () => {
+  it('grants an operator every path a user is refused', async () => {
+    const svc = new SupportService();
+    const ticket = await svc.createTicket({ userId: USER, category: 'other', subject: 'Q', body: 'B' });
+
+    await expect(svc.getTicket({ userId: OP, ticketId: ticket.id, asOperator: true })).resolves.toMatchObject({
+      id: ticket.id,
+    });
+    await expect(svc.comment({ userId: OP, ticketId: ticket.id, body: 'looking into it', asOperator: true })).resolves.toMatchObject({
+      authorRole: 'operator',
+    });
+    await expect(svc.listComments({ userId: OP, ticketId: ticket.id, asOperator: true })).resolves.toHaveLength(1);
+  });
+
+  it('does not turn a missing ticket into a readable one', async () => {
+    const svc = new SupportService();
+    // The bypass skips the OWNERSHIP check, not existence. An operator asking
+    // for a ticket that is not there gets the same refusal as anyone else.
+    const err = (await svc
+      .getTicket({ userId: OP, ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', asOperator: true })
+      .catch((e: Error) => e)) as Error;
+    expect(err).toMatchObject({ code: 'support.not_found' });
+  });
+
+  it('a falsy asOperator is not a bypass', async () => {
+    const svc = new SupportService();
+    const ticket = await svc.createTicket({ userId: USER, category: 'other', subject: 'Q', body: 'B' });
+
+    for (const asOperator of [false, undefined]) {
+      await expect(svc.getTicket({ userId: OTHER, ticketId: ticket.id, asOperator })).rejects.toMatchObject({
+        code: 'support.not_found',
+      });
+    }
+  });
+});
