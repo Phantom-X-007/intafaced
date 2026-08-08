@@ -11,6 +11,7 @@ import { rankLiveFromTickers } from './scanner/rank-live.js';
 import { scannerAgentGuardrail } from './scanner/guardrail.js';
 import { invokeScannerDataTool } from './scanner/data-tools.js';
 import { scannerTierGate } from './scanner/tier-gate.js';
+import { runScannerRankSession } from './scanner/session-run.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
@@ -68,6 +69,28 @@ const actionOutput = z.object({
   messageKey: z.string(),
   messageParams: z.record(z.union([z.string(), z.number()])),
   occurredAt: z.string(),
+});
+
+/**
+ * What a metered scanner run cost, on the wire.
+ *
+ * Amounts are decimal STRINGS: they are scaled bigint in the meter and JSON has
+ * no bigint, and a money field that arrives as a `number` has already lost the
+ * argument (§0.5).
+ */
+const scannerMeteringOutput = z.object({
+  sessionId: z.string().nullable(),
+  billedAmount: z.string(),
+  assetId: z.string(),
+  sessionClosed: z.boolean(),
+  settlements: z.array(
+    z.object({
+      windowId: z.string(),
+      amount: z.string(),
+      chargeKey: z.string(),
+      settled: z.boolean(),
+    }),
+  ),
 });
 
 const sessionOutput = z.object({
@@ -824,6 +847,173 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
           return result;
         }),
+
+      /**
+       * Stage-2 `scanner.rank` as a METERED RUN on the fleet runtime.
+       *
+       * The routes above are pure: they answer "what would the scanner say"
+       * without a session, so the declared guardrail is enforced by nothing at
+       * call time and the usage is metered by nothing at all. This one runs the
+       * same pure ranker through `openSession → act → settle → closeSession`,
+       * so every ticker fetch is guardrail-checked and audited, and the run
+       * settles through `UsageMeter` → ledger — the only accounting path.
+       *
+       * A mutation, not a query: it opens a session and writes audit rows.
+       */
+      runSession: scopedProcedure('agents:execute', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z
+                    .record(
+                      z.object({
+                        maxSignals: z.number().int().min(0).max(100),
+                        tools: z.array(z.string().min(1).max(120)).max(100),
+                      }),
+                    )
+                    .default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            // Capped well under the guardrail's per-session action budget: one
+            // ticker is one audited tool call.
+            tickers: z
+              .array(
+                z.object({
+                  marketId: z.string().min(1).max(64),
+                  last: z.string().nullable(),
+                  volume24h: z.string().nullable(),
+                  change24hBps: z.number().int().nullable(),
+                  asOf: z.string().min(1),
+                  maxAgeMs: z.number().int().positive().max(86_400_000),
+                }),
+              )
+              .max(50),
+            marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              signals: z.array(
+                z.object({
+                  marketId: z.string(),
+                  score: z.string(),
+                  reasons: z.array(z.string()),
+                }),
+              ),
+              rankedAt: z.string(),
+              considered: z.number().int(),
+              skippedStale: z.number().int(),
+              skippedIncomplete: z.number().int(),
+              maxSignals: z.number().int(),
+              userTier: z.string(),
+              tickersAccepted: z.number().int(),
+              tickersRefusedByTool: z.number().int(),
+              tickersRefusedByGuardrail: z.number().int(),
+              metering: scannerMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.scanner.empty'),
+              metering: scannerMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('unavailable'),
+              userMessageKey: z.literal('agents.scanner.unavailable'),
+              reason: z.enum(['stale', 'no_quotes', 'market_plane_dark']),
+              metering: scannerMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['tier_law_blank', 'tier_not_granted', 'depth_invalid', 'market_plane_dark', 'no_live_tickers']),
+              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
+              tickersRefusedByTool: z.number().int(),
+              tickersRefusedByGuardrail: z.number().int(),
+              metering: scannerMeteringOutput,
+            }),
+          ]),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            const result = await runScannerRankSession({
+              runtime,
+              userId: ctx.principal.userId,
+              feeAssetId,
+              plane: input.plane,
+              tierLaw: input.law ?? null,
+              userTier: input.userTier,
+              tickers: input.tickers,
+              ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
+              ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            });
+
+            const metering = {
+              sessionId: result.metering.sessionId,
+              billedAmount: result.metering.billedAmount,
+              assetId: result.metering.assetId,
+              sessionClosed: result.metering.sessionClosed,
+              settlements: result.metering.settlements.map((s) => ({
+                windowId: s.windowId,
+                amount: s.amount,
+                chargeKey: s.chargeKey,
+                settled: s.settled,
+              })),
+            };
+
+            if (result.status === 'ok') {
+              return {
+                status: 'ok' as const,
+                rankedAt: result.rankedAt,
+                considered: result.considered,
+                skippedStale: result.skippedStale,
+                skippedIncomplete: result.skippedIncomplete,
+                maxSignals: result.maxSignals,
+                userTier: result.userTier,
+                tickersAccepted: result.tickersAccepted,
+                tickersRefusedByTool: result.tickersRefusedByTool,
+                tickersRefusedByGuardrail: result.tickersRefusedByGuardrail,
+                signals: result.signals.map((s) => ({
+                  marketId: s.marketId,
+                  score: s.score,
+                  reasons: [...s.reasons],
+                })),
+                metering,
+              };
+            }
+
+            if (result.status === 'refuse') {
+              return {
+                status: 'refuse' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                tickersRefusedByTool: result.tickersRefusedByTool,
+                tickersRefusedByGuardrail: result.tickersRefusedByGuardrail,
+                metering,
+              };
+            }
+
+            if (result.status === 'empty') {
+              return { status: 'empty' as const, userMessageKey: result.userMessageKey, metering };
+            }
+
+            return {
+              status: 'unavailable' as const,
+              userMessageKey: result.userMessageKey,
+              reason: result.reason,
+              metering,
+            };
+          }),
+        ),
     }),
 
     /**
