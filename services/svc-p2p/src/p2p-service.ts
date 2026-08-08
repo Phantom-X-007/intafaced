@@ -113,6 +113,12 @@ export type P2pErrorCode =
   | 'p2p.erase_raced'
   // A ruling on a dispute was offered without a person's name on it.
   | 'p2p.ruling_not_attributed'
+  /** Merchant programme (TRK-p2p.merchants Stage 1). */
+  | 'p2p.merchant_ineligible'
+  | 'p2p.merchant_exists'
+  | 'p2p.merchant_not_found'
+  | 'p2p.merchant_reason_required'
+  | 'p2p.merchant_transition_invalid'
   // Deployment has no moderator allowlist and the caller does not hold
   // admin:compliance — the queue exists but nobody can authenticate into it.
   | 'p2p.moderation_unreachable'

@@ -528,7 +528,15 @@ export const FEATURES = [
     requires: ['services/svc-p2p/src/instrument-service.ts'],
     note: "A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
   }),
-  f('p2p.merchants', 'P2P merchant programme — badges, limits, API', { module: 'p2p', phase: '3', dependsOn: ['p2p.reputation'] }),
+  f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
+    module: 'p2p',
+    phase: '3',
+    status: 'wip',
+    owner: 'nitro-agent',
+    dependsOn: ['p2p.reputation'],
+    requires: ['services/svc-p2p'],
+    note: 'Stage 1 of 3 shipped (TRK-p2p.merchants DoD): p2p_merchants + append-only p2p_merchant_events (trigger-enforced), apply/approve/reject/suspend/reinstate/withdraw state machine with actor rules, and eligibility from EARNED reputation so a fresh account cannot borrow merchant trust. tRPC: merchants.me/submitApplication/withdraw (self) + decide/history (admin:compliance). Membership only — no balance, no custody; escrow still moves value through ledger recipes (§0.6). Eligibility thresholds are a policy object with a conservative default because tier ladder + numeric limits are open product law (spec §5). STILL OPEN for done: Stage 2 limits enforced on offer create + badge on public profile; Stage 3 merchant API keys/scopes/rate limits, or an explicit cut of the API to a later row.',
+  }),
 
   // ── PHASE 3P · PROTOCOL PLANE P0 ─────────────────────────────────────────
   f('protocol.smart-accounts', 'Passkey smart accounts, session keys (§17.4)', {

@@ -1,0 +1,236 @@
+import type { Sql } from 'postgres';
+import { transaction } from '@intafaced/db';
+import {
+  canTransition,
+  checkEligibility,
+  DEFAULT_ELIGIBILITY,
+  type EligibilityPolicy,
+  type MerchantStatus,
+  type TransitionActor,
+} from './merchant-programme.js';
+import { P2pError, type P2pService } from './p2p-service.js';
+
+/**
+ * THE P2P MERCHANT PROGRAMME — the writer and the history.
+ *
+ * `TRK-p2p.merchants.md` Stage 1: schema + apply/approve. `merchant-programme.ts`
+ * holds the rules; this file is the only thing that writes them down.
+ *
+ * ── EVERY TRANSITION LEAVES A ROW ────────────────────────────────────────
+ *
+ * `p2p_merchant_events` is append-only and enforced by a trigger, for the
+ * reason svc-pay's ADR gives about its own merchants: an operator must be able
+ * to answer "why is this merchant suspended" from the database. A status column
+ * alone cannot, and a standing that changes without a record is one nobody can
+ * defend a decision about — least of all to the merchant.
+ *
+ * ── NO MONEY HERE, AND THAT IS THE POINT ─────────────────────────────────
+ *
+ * Membership is not a balance and grants no custody. Escrow still moves every
+ * coin through `ledger-client` recipes exactly as it does for an ordinary
+ * trader (§0.6). This mountain stops at "who is in the programme"; limits
+ * ENFORCEMENT is Stage 2 and reads this table.
+ */
+
+export interface MerchantRecord {
+  readonly userId: string;
+  readonly status: MerchantStatus;
+  /** Reputation as it stood when they applied — see the migration for why it is stored. */
+  readonly appliedCompletionRate: number;
+  readonly appliedTradesTotal: number;
+  readonly appliedAt: Date;
+  readonly decidedAt: Date | null;
+}
+
+export interface MerchantEvent {
+  readonly seq: string;
+  readonly fromStatus: MerchantStatus;
+  readonly toStatus: MerchantStatus;
+  readonly reason: string;
+  readonly actorId: string;
+  readonly actorScope: string;
+  readonly createdAt: Date;
+}
+
+interface MerchantRow {
+  user_id: string;
+  status: MerchantStatus;
+  applied_completion_rate: string;
+  applied_trades_total: number;
+  applied_at: Date;
+  decided_at: Date | null;
+}
+
+function toRecord(row: MerchantRow): MerchantRecord {
+  return {
+    userId: row.user_id,
+    status: row.status,
+    appliedCompletionRate: Number(row.applied_completion_rate),
+    appliedTradesTotal: Number(row.applied_trades_total),
+    appliedAt: row.applied_at,
+    decidedAt: row.decided_at,
+  };
+}
+
+export interface MerchantServiceOptions {
+  /**
+   * Thresholds. Product law is an open question in the spec (§5), so the
+   * numbers arrive from configuration rather than being frozen into the rule.
+   */
+  readonly eligibility?: EligibilityPolicy;
+}
+
+export class MerchantService {
+  private readonly eligibility: EligibilityPolicy;
+
+  constructor(
+    private readonly sql: Sql,
+    private readonly p2p: P2pService,
+    options: MerchantServiceOptions = {},
+  ) {
+    this.eligibility = options.eligibility ?? DEFAULT_ELIGIBILITY;
+  }
+
+  /**
+   * Apply, on your own behalf.
+   *
+   * Eligibility is checked against EARNED reputation — the spec's second DoD
+   * line — and the snapshot that justified the application is written onto the
+   * row, because reputation moves and a decision has to remain explicable.
+   */
+  async apply(userId: string, actorScope: string): Promise<MerchantRecord> {
+    const snapshot = await this.p2p.reputationOf(userId);
+    const verdict = checkEligibility(snapshot, this.eligibility);
+    if (!verdict.eligible) {
+      throw new P2pError(verdict.reason, 'p2p.merchant_ineligible');
+    }
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        /**
+         * A live application blocks a second one; a FINISHED one does not.
+         * Re-entry after a rejection or withdrawal is a new application by
+         * design — it re-runs eligibility against current reputation instead
+         * of restoring a standing that was taken away.
+         */
+        const [existing] = await tx<MerchantRow[]>`
+          SELECT * FROM p2p.p2p_merchants WHERE user_id = ${userId} FOR UPDATE
+        `;
+        if (existing && (existing.status === 'applied' || existing.status === 'approved' || existing.status === 'suspended')) {
+          throw new P2pError(`This account is already ${existing.status} in the merchant programme.`, 'p2p.merchant_exists');
+        }
+
+        const rate = snapshot.completionRate.toFixed(4);
+        const [row] = await tx<MerchantRow[]>`
+          INSERT INTO p2p.p2p_merchants (user_id, status, applied_completion_rate, applied_trades_total, applied_at, decided_at)
+          VALUES (${userId}, 'applied', ${rate}::numeric, ${snapshot.tradesTotal}, now(), NULL)
+          ON CONFLICT (user_id) DO UPDATE
+            SET status = 'applied',
+                applied_completion_rate = ${rate}::numeric,
+                applied_trades_total = ${snapshot.tradesTotal},
+                applied_at = now(),
+                decided_at = NULL,
+                updated_at = now()
+          RETURNING *
+        `;
+        if (!row) throw new P2pError('merchant application did not persist', 'p2p.merchant_ineligible');
+
+        await tx`
+          INSERT INTO p2p.p2p_merchant_events (user_id, from_status, to_status, reason, actor_id, actor_scope)
+          VALUES (${userId}, ${existing?.status ?? 'withdrawn'}, 'applied',
+                  ${`Applied with ${snapshot.tradesTotal} escrowed trades at ${(snapshot.completionRate * 100).toFixed(2)}% completion.`},
+                  ${userId}, ${actorScope})
+        `;
+
+        return toRecord(row);
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  /**
+   * Move a merchant, as an operator or as themselves.
+   *
+   * The actor is passed in from the authenticated principal — never from a
+   * request body, or the history records who the caller said they were.
+   */
+  async transition(input: {
+    userId: string;
+    to: MerchantStatus;
+    by: TransitionActor;
+    reason: string;
+    actorId: string;
+    actorScope: string;
+  }): Promise<MerchantRecord> {
+    const reason = input.reason.trim();
+    if (!reason) {
+      // The database refuses a blank reason too. This is the same rule said
+      // where the caller can act on it, rather than as a constraint violation.
+      throw new P2pError('A reason is required: an unexplained change of standing is not reviewable.', 'p2p.merchant_reason_required');
+    }
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const [current] = await tx<MerchantRow[]>`
+          SELECT * FROM p2p.p2p_merchants WHERE user_id = ${input.userId} FOR UPDATE
+        `;
+        if (!current) throw new P2pError('No merchant application for this account.', 'p2p.merchant_not_found');
+
+        const verdict = canTransition(current.status, input.to, input.by);
+        if (!verdict.allowed) throw new P2pError(verdict.reason, 'p2p.merchant_transition_invalid');
+
+        const [row] = await tx<MerchantRow[]>`
+          UPDATE p2p.p2p_merchants
+             SET status = ${input.to}, decided_at = now(), updated_at = now()
+           WHERE user_id = ${input.userId}
+          RETURNING *
+        `;
+        if (!row) throw new P2pError('merchant transition did not persist', 'p2p.merchant_transition_invalid');
+
+        await tx`
+          INSERT INTO p2p.p2p_merchant_events (user_id, from_status, to_status, reason, actor_id, actor_scope)
+          VALUES (${input.userId}, ${current.status}, ${input.to}, ${reason}, ${input.actorId}, ${input.actorScope})
+        `;
+
+        return toRecord(row);
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  async get(userId: string): Promise<MerchantRecord | null> {
+    const [row] = await this.sql<MerchantRow[]>`SELECT * FROM p2p.p2p_merchants WHERE user_id = ${userId}`;
+    return row ? toRecord(row) : null;
+  }
+
+  /** Newest first — the current standing is what somebody is usually asking about. */
+  async history(userId: string): Promise<MerchantEvent[]> {
+    const rows = await this.sql<
+      Array<{
+        seq: string;
+        from_status: MerchantStatus;
+        to_status: MerchantStatus;
+        reason: string;
+        actor_id: string;
+        actor_scope: string;
+        created_at: Date;
+      }>
+    >`
+      SELECT seq::text, from_status, to_status, reason, actor_id, actor_scope, created_at
+        FROM p2p.p2p_merchant_events
+       WHERE user_id = ${userId}
+       ORDER BY seq DESC
+    `;
+    return rows.map((r) => ({
+      seq: r.seq,
+      fromStatus: r.from_status,
+      toStatus: r.to_status,
+      reason: r.reason,
+      actorId: r.actor_id,
+      actorScope: r.actor_scope,
+      createdAt: r.created_at,
+    }));
+  }
+}

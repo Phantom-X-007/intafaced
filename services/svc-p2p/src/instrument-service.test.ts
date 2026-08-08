@@ -807,6 +807,21 @@ if (!available) {
         // scan of what `data.export` actually returned.
         'data.export': undefined,
         'data.erase': undefined,
+        // Considered. The merchant programme holds MEMBERSHIP — a status, the
+        // reputation numbers that justified an application, and who decided
+        // what and why. It joins no instrument table and carries no account
+        // details, by construction: `merchant-service.ts` selects from
+        // `p2p_merchants` and `p2p_merchant_events` only.
+        //
+        // `me` and `submitApplication` are self-only — neither takes a userId,
+        // so a stranger reaches their own (absent) record. `decide` and
+        // `history` need `admin:compliance`, which a stranger does not hold.
+        // Probed as a stranger anyway: the assertion is on what comes back.
+        'merchants.me': undefined,
+        'merchants.submitApplication': undefined,
+        'merchants.withdraw': { reason: 'probing' },
+        'merchants.decide': { userId: SELLER, to: 'approved', reason: 'probing' },
+        'merchants.history': { userId: SELLER },
       };
 
       const paths = Object.keys((api as unknown as { _def: { procedures: Record<string, unknown> } })._def.procedures);
