@@ -682,13 +682,12 @@ export const FEATURES = [
       '(#193) and factory honesty on predict/build (#128). ERC-4337 v0.7 user operations are built and hashed ' +
       'independently by src/chain/userop.ts, which is the whole basis on which the relay can refuse to forward ' +
       'something the user did not authorise. ' +
-      'WHAT REMAINS, and none of it is "write the contracts": (1) the adversarial AUDIT PACKAGE — threat model, ' +
-      'findings, fix-or-residual — and no external audit exists (socket.contract-audit); (2) the passkey P-256 ' +
-      'verifier contract does not exist, so a passkey cannot yet own an account ON-CHAIN — the title of this row is ' +
-      'not fully true until it does (socket.p256-verifier); (3) the user-operation hash has never been checked ' +
-      'against a live EntryPoint (socket.userop-differential-test); (4) no fuzz/invariant suite and no gas snapshots ' +
-      '(socket.contract-toolchain); (5) NOBODY OWNS GAS — socket.paymaster-policy and socket.bundler-policy; (6) no ' +
-      'deployment beyond a local dev chain and no address registry (socket.deployment-registry).',
+      'WHAT REMAINS after 2026-08-08: (1) EXTERNAL audit still open — internal adversarial package shipped ' +
+      '(docs/audits/protocol-smart-accounts-2026-08-08.md + src/accounts/adversarial-audit.test.ts); socket.contract-audit ' +
+      'stays socket until Nitro budget + firm; (2) passkey verifier ON-CHAIN is done (socket.p256-verifier closed S-A9); ' +
+      '(3) userOp hash never checked against live EntryPoint (socket.userop-differential-test); (4) no fuzz/invariant ' +
+      'suite and no gas snapshots (socket.contract-toolchain); (5) paymaster FUNDING still Nitro — policy modules exist; ' +
+      '(6) public deployment registry rows wait on Nitro RPC funding.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',
@@ -1727,7 +1726,9 @@ export const FEATURES = [
     status: 'socket',
     owner: 'shehzad002',
     dependsOn: ['socket.contract-toolchain'],
-    note: 'Owner set 2026-08-07. NOTE THE OWNER-GATED HALF: choosing and PAYING an audit firm is a Nitro decision (budget), so this row can be prepared — scope, threat model, artefact hashes, `audited:false` honesty — but cannot be closed by engineering alone.',
+    note: 'Owner set 2026-08-07. INTERNAL PACKAGE 2026-08-08: threat model + findings log + adversarial matrix ' +
+      '(services/svc-protocol/src/accounts/adversarial-audit.test.ts) live under docs/audits/protocol-smart-accounts-2026-08-08.md. ' +
+      'STATUS stays socket: choosing and PAYING an audit firm is a Nitro decision (budget). Tests pass ≠ audited:true.',
   }),
   f('socket.userop-differential-test', 'getUserOperationHash checked against a live EntryPoint', {
     module: 'protocol',
