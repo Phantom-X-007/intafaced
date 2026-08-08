@@ -1,0 +1,54 @@
+# Vendor compile probe — proves the customer Java source still compiles.
+#
+# Implements ADR docs/adr/2026-08-04-java-dual-book-residual.md "What done
+# requires" item: the compile job proves the source compiles and produces
+# nothing else. It does NOT publish jars, does NOT start services, and does
+# NOT add dependencies to make something boot.
+#
+# continue-on-error: true — the dual-book residual is still real; a red compile
+# must be visible without blocking every monorepo PR that never touches vendor.
+# Path filter: only when vendor/** changes (or this file).
+#
+# If closing a compile error would require adding, vendoring or publishing a
+# jar, STOP and record it — do not do it in this job.
+name: Vendor compile
+
+on:
+  pull_request:
+    paths:
+      - 'vendor/**'
+      - '.github/workflows/vendor-compile.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vendor-compile-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile-framework-core:
+    name: mvn compile (framework/core)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: vendor/upstream-exchange/00_framework
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '8'
+          cache: maven
+          cache-dependency-path: vendor/upstream-exchange/00_framework/**/pom.xml
+
+      - name: Compile core only (no package, no install)
+        run: |
+          set -euo pipefail
+          # -pl core -am: the module the dual-book residual named as uncompilable
+          # for years. -DskipTests: prove compile, not test suite.
+          mvn -B -pl core -am compile -DskipTests
