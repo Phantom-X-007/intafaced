@@ -283,7 +283,7 @@ if (!available) {
       expect(checkNames).toEqual(
         expect.arrayContaining([
           'accounts_non_negative_ck',
-          'accounts_hold_purposed_ck',
+          'accounts_lock_purposed_ck',
           'accounts_purpose_len_ck',
           'accounts_owner_id_space_ck',
           'ledger_entries_positive_ck',

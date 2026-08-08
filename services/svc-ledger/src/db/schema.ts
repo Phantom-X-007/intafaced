@@ -176,8 +176,11 @@ export const accounts = ledger.table(
     check('accounts_non_negative_ck', sql`owner_type = 'treasury' OR balance >= 0`),
     /** A purpose is a business key, and it participates in an index (0001). */
     check('accounts_purpose_len_ck', sql`length(purpose) <= 128`),
-    /** Every hold names its claim, in the database and not only in the service (0001). */
-    check('accounts_hold_purposed_ck', sql`kind <> 'hold' OR length(purpose) > 0`),
+    /**
+     * Every lock pot names its claim in the database, not only in TypeScript
+     * (0001 hold; 0007 escrow/stake/collateral — STOP §4.2b #1).
+     */
+    check('accounts_lock_purposed_ck', sql`kind NOT IN ('hold', 'escrow', 'stake', 'collateral') OR length(purpose) > 0`),
     /**
      * Every `owner_id` is drawn from the space its `owner_type` declares (0005).
      * Kept character-for-character identical to `isValidOwnerId` in
