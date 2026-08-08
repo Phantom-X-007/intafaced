@@ -144,23 +144,44 @@ for (const engine of ENGINES) {
       expect(other.inserted).toBe(true);
     });
 
-    it('pages newest first and hands back a cursor only while there is more', async () => {
-      await seed(USER, 5);
+    it('walks every row exactly once and then stops', async () => {
+      const made = await seed(USER, 5);
 
-      const page1 = await store.list({ userId: USER, limit: 2, unreadOnly: false });
-      expect(page1.items).toHaveLength(2);
-      expect(page1.nextCursor).toBe(page1.items[1]!.id);
+      // Asserted as a WALK rather than a fixed 2 / 2 / 1 split, because the two
+      // engines get `createdAt` from different clocks — `new Date()` and
+      // Postgres `now()`, which is the TRANSACTION timestamp and can repeat
+      // across rows written back to back. A tie is legal; the ordering falls to
+      // the id and both engines still have a total order. What must never
+      // happen either way is a row served twice or skipped, and a fixed split
+      // asserts the clock, not that.
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      let pages = 0;
 
-      const page2 = await store.list({ userId: USER, cursor: page1.nextCursor, limit: 2, unreadOnly: false });
-      expect(page2.items).toHaveLength(2);
+      do {
+        const page: { items: Array<{ id: string }>; nextCursor: string | null } = await store.list({
+          userId: USER,
+          cursor,
+          limit: 2,
+          unreadOnly: false,
+        });
+        pages += 1;
+        expect(page.items.length).toBeLessThanOrEqual(2);
+        // A cursor is the LAST row of the page it came with, or the next page
+        // starts in the wrong place.
+        if (page.nextCursor !== null) expect(page.nextCursor).toBe(page.items[page.items.length - 1]!.id);
+        seen.push(...page.items.map((r) => r.id));
+        cursor = page.nextCursor;
+        // A walk that will not terminate is the failure this bounds.
+        expect(pages).toBeLessThan(10);
+      } while (cursor !== null);
 
-      const page3 = await store.list({ userId: USER, cursor: page2.nextCursor, limit: 2, unreadOnly: false });
-      expect(page3.items).toHaveLength(1);
-      // Last page: no cursor, or a client keeps asking for a page that is not there.
-      expect(page3.nextCursor).toBeNull();
-
-      const seen = [...page1.items, ...page2.items, ...page3.items].map((r) => r.id);
+      // Every row, once. Duplicates and gaps are separately named because they
+      // are different bugs: `seen.length` catches a row served twice, the Set
+      // catches one never served at all.
+      expect(seen).toHaveLength(5);
       expect(new Set(seen).size).toBe(5);
+      expect(new Set(seen)).toEqual(new Set(made.map((r) => r.id)));
     });
 
     it('a cursor whose row is gone returns an empty page, never page one', async () => {
