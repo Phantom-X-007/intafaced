@@ -664,6 +664,16 @@ export const cards = bank.table(
     id: uuid('id').primaryKey().defaultRandom(),
     userId: text('user_id').notNull(),
     assetId: text('asset_id').notNull(),
+    /**
+     * What merchants charge this card in (§18).
+     *
+     * Equal to `asset_id` on every card issued before 0007, and on every card
+     * issued since that wants no conversion — in which case no rate is ever
+     * consulted and this column changes nothing. Where it DIFFERS, each
+     * authorisation is quoted at the authorisation moment and that rate is
+     * frozen onto `card_conversions`.
+     */
+    settlementAssetId: text('settlement_asset_id').notNull(),
     /** Programme id, which is also the ledger rail label — e.g. 'card-sim'. */
     issuer: text('issuer').notNull(),
     /**
@@ -718,7 +728,17 @@ export const cardAuthorizations = bank.table(
       .references(() => cards.id),
     /** The issuer's reference for this authorisation. The business key. */
     authorizationRef: text('authorization_ref').notNull(),
-    /** What the merchant asked for. A RECORD of one request, written once. */
+    /**
+     * WHAT MOVES, in the card's FUNDING asset. A RECORD of one request, written once.
+     *
+     * On a same-asset card this is also what the merchant asked for. On a card
+     * with a settlement asset of its own it is the merchant's amount converted
+     * at the frozen rate — because every posting against this authorisation
+     * (hold, capture, reversal) is denominated in the funding asset, and a
+     * column that sometimes meant one asset and sometimes another is how a
+     * reversal comes to return the wrong number. What the merchant asked for is
+     * on `card_conversions`, in the currency they asked for it in.
+     */
     amount: amount('amount').notNull(),
     /** A category label from the issuer, for the user's own statement. Never a merchant's brand. */
     merchantCategory: text('merchant_category'),
@@ -737,6 +757,53 @@ export const cardAuthorizations = bank.table(
     /** ONE DECISION PER AUTHORISATION, forever. */
     uniqueIndex('card_authorizations_ref_idx').on(t.cardId, t.authorizationRef),
     index('card_authorizations_card_idx').on(t.cardId, t.status),
+  ],
+);
+
+/**
+ * THE FROZEN RATE — one row per authorisation that needed a conversion (§18).
+ *
+ * Written in the SAME database transaction as the decision, by whichever caller
+ * claimed that decision. That is what makes the pair unable to disagree: a
+ * redelivered authorisation loses the insert on `card_authorizations` and never
+ * reaches this table, so there is exactly one rate per purchase and it is the
+ * rate the first decision was taken at.
+ *
+ * No row is written for a card whose settlement asset IS its funding asset. No
+ * rate is consulted there, so the absence of a row is a readable fact rather
+ * than an ambiguity, and `card_conversions_assets_differ` makes it structural.
+ *
+ * THIS IS NOT A RATE TABLE. Nothing reads it to price anything. Every row is a
+ * record of a rate a feed handed us at a named instant, and a deployment with no
+ * rate adapter cannot write one at all — it refuses `bank.mark_missing` instead,
+ * because this platform has no FX source and a rate we stored as policy would be
+ * a rate we invented.
+ */
+export const cardConversions = bank.table(
+  'card_conversions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    authorizationId: uuid('authorization_id')
+      .notNull()
+      .references(() => cardAuthorizations.id),
+    /** What the merchant charged, in the currency they charged it in. */
+    settlementAssetId: text('settlement_asset_id').notNull(),
+    settlementAmount: amount('settlement_amount').notNull(),
+    /** What the user's balance is in — and what every posting here is denominated in. */
+    fundingAssetId: text('funding_asset_id').notNull(),
+    /** Ceil of settlement / rate. The rounding unit lands on the user, as cashback's does. */
+    fundingAmount: amount('funding_amount').notNull(),
+    /** Settlement units per ONE funding unit — the direction `PriceSource` returns. */
+    rate: amount('rate').notNull(),
+    /** `MarkQuality` from `loans/prices.ts`. Recorded, so an auditor can ask what kind of number moved this. */
+    rateQuality: text('rate_quality').notNull(),
+    /** When the FEED said it was true, not when we wrote the row. */
+    rateAsOf: tstz('rate_as_of').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    /** ONE RATE PER AUTHORISATION, FOREVER. This index is the freeze. */
+    uniqueIndex('card_conversions_auth_idx').on(t.authorizationId),
   ],
 );
 
@@ -892,6 +959,7 @@ export const schema = {
   loanLiquidations,
   cards,
   cardAuthorizations,
+  cardConversions,
   cardSettlements,
   cardCashback,
   rampOnramps,

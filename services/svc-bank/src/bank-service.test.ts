@@ -1517,9 +1517,22 @@ if (!available) {
         // payment goes through at a till.
         'cards.per_authorization_limit':
           'a POLICY ceiling on ONE authorisation; it does not fall as the card is used and no money path writes it',
-        'card_authorizations.amount': 'a RECORD of one authorisation request; written once',
+        'card_authorizations.amount': 'a RECORD of one authorisation request, in the funding asset; written once',
         'card_settlements.amount': 'a RECORD of one completed capture or reversal; written once with its ledger tx id',
         'card_cashback.amount': 'a RECORD of one reward; summing the table is the lifetime figure',
+
+        // ── JIT conversion (§18) ─────────────────────────────────────────────
+        //
+        // A frozen QUOTE, not a rate table and not a second book. Note what is
+        // NOT here: no `cards.rate`, no `bank.rates`, nothing a future spend
+        // could be priced off. Every figure below is a record of what one feed
+        // said at one named instant, written once beside the decision it
+        // produced — and a deployment with no rate adapter cannot write one at
+        // all, because there is no FX source in this platform to invent one from.
+        'card_conversions.settlement_amount': 'a RECORD of what the merchant charged, in their currency; written once',
+        'card_conversions.funding_amount': 'a RECORD of what that converted to, and what the hold moved; written once',
+        'card_conversions.rate':
+          'the RATE one authorisation was quoted at, frozen so a capture cannot re-quote; written once and never revised',
 
         // ── Ramps (§8.1 / D-S-09, crypto ledger half) ────────────────────────
         //
