@@ -1,20 +1,20 @@
 # svc-academy
 
-**Live lobbies with capacity tiers (§8.3, §XIII)** plus a **thin curriculum catalog** (list + content path). Rooms gated free / staked / invite, sessions inside them, presence, a serializable 2D scene, and Blueprint-path playbooks/lessons.
+**Live lobbies with capacity tiers (§8.3, §XIII)** plus the **curriculum library** (list · body · study guide · depth). Rooms gated free / staked / invite, sessions inside them, presence, a serializable 2D scene, and Blueprint-path playbooks, lessons and workbooks.
 
 > §8.3: _"Lobbies: rooms (capacity tiers: free/staked/invite), stage + chat + shared charts via ws-gateway; streaming ingest v1 = LiveKit self-hosted (WebRTC SFU, self-hosted per sovereignty; behind `StreamProvider` interface)."_
 
-**Shipped here.** Lobbies (`academy.lobbies`) and thin curriculum READ (`curriculum` + `curriculumItem` — A-P5-2).
+**Shipped here.** Lobbies (`academy.lobbies`) and the curriculum READ surface (`curriculum` · `curriculumItem` · `curriculumStudyGuide(s)` · `curriculumDepth` — A-P5-2 and after).
 
 **Deliberately not finished here**, each for a stated reason:
 
-| Absent                                                | Why                                                                                                                                                 |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live audio/video                                      | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                        |
-| Full DERIV//DESK library (20 playbooks + 3 workbooks) | Proprietary library is **not in this monorepo**. Day-one spine is platform-native seed so the API is real; full import is residual, not invented.   |
-| Cert → **perk** surfacing                             | A cert earns XP and stops there. Rank and perks are svc-identity's SoT (§4.1); a perk read here would be a second opinion on somebody else's table. |
-| Ambassador residencies and per-session IFC pay        | **Money.** Needs ledger recipes that do not exist. A stubbed pay path that looks finished is worse than an honest gap.                              |
-| Tournaments, seasonal ladders, prize pools            | Money again, and gated on the season engine.                                                                                                        |
+| Absent                                                | Why                                                                                                                                                                                                                               |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live audio/video                                      | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                                                                                      |
+| Full DERIV//DESK library (20 playbooks + 3 workbooks) | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented. |
+| Cert → **perk** surfacing                             | A cert earns XP and stops there. Rank and perks are svc-identity's SoT (§4.1); a perk read here would be a second opinion on somebody else's table.                                                                               |
+| Ambassador residencies and per-session IFC pay        | **Money.** Needs ledger recipes that do not exist. A stubbed pay path that looks finished is worse than an honest gap.                                                                                                            |
+| Tournaments, seasonal ladders, prize pools            | Money again, and gated on the season engine.                                                                                                                                                                                      |
 
 ---
 
@@ -80,8 +80,11 @@ tRPC, mounted at `/trpc`, reached through svc-edge at `/api/academy` (port 4016)
 | Procedure                     | Scope           | Purpose                                                     |
 | ----------------------------- | --------------- | ----------------------------------------------------------- |
 | `health`                      | public          | Liveness                                                    |
-| `curriculum`                  | `academy:read`  | List day-one spine (filter by Blueprint path / kind)        |
-| `curriculumItem`              | `academy:read`  | One playbook/lesson/workbook including markdown body        |
+| `curriculum`                  | `academy:read`  | List the spine (filter by Blueprint path / kind)            |
+| `curriculumItem`              | `academy:read`  | One item: markdown body **plus** its teaching scaffolding   |
+| `curriculumStudyGuide`        | `academy:read`  | One item's objectives / key terms / self-check, no body     |
+| `curriculumStudyGuides`       | `academy:read`  | Study guides for a whole path — one call for an index       |
+| `curriculumDepth`             | `academy:read`  | Depth inventory; **names** anything under the floor         |
 | `rooms` / `room`              | `academy:read`  | Lobbies and their terms                                     |
 | `session`                     | `academy:read`  | One session and its live occupancy                          |
 | `join` / `leave`              | `academy:write` | Take or vacate a seat                                       |
@@ -92,12 +95,34 @@ tRPC, mounted at `/trpc`, reached through svc-edge at `/api/academy` (port 4016)
 | `startSession` / `endSession` | `academy:write` | Host controls                                               |
 | `updateScene`                 | `academy:write` | Write the 2D scene (host only)                              |
 
-### Curriculum (thin)
+### Curriculum
 
 - Paths are exactly Blueprint `curriculumPath`: `foundations` · `markets` · `builder` · `sovereign`.
 - Kinds: `playbook` · `workbook` · `lesson`.
-- Pure in-process catalog (`src/curriculum/catalog.ts`) — no DB table, no progress, no money.
+- Pure in-process library — no DB table, no progress, no money. **Registry** is
+  `src/curriculum/catalog.ts` (slugs, paths, ordering, queries, and no prose at
+  all); **content** is `src/curriculum/content.ts` (every body, plus objectives,
+  key terms and self-check questions per slug).
 - Unknown slug → `academy.curriculum_not_found` (NOT_FOUND).
+- A catalog row cannot ship without a body and a scaffold: both lookups throw at
+  module load, so an item that teaches nothing fails where a human sees it rather
+  than serving an empty screen.
+- `estimatedMinutes` is derived from the body at 200 words per minute, never
+  hand-typed, so it cannot drift away from what it describes.
+
+#### Depth, and why there is a surface for it
+
+`curriculumInventory` answers _are there 20 playbooks and 3 workbooks_. Its
+validation floor is 40 characters and a leading heading — which a three-bullet
+stub clears, and for a long time did: every item on the spine passed while the
+median body was 258 characters. Counting is not reading.
+
+`curriculumDepth` answers the second question against an editorial floor
+(`CURRICULUM_MIN_BODY_CHARS`), and it answers by returning `thinSlugs` — naming
+what falls short rather than asserting that nothing does. `allDeep` is true only
+when the list is empty. Bodies are English (`en`); other locales fall back and
+report `fellBack: true` via `curriculumItemLocalized` — a translation is never
+invented.
 
 ### Certifications → XP (`academy.certs`)
 
@@ -143,13 +168,13 @@ That is the answer to the question this codebase asks everywhere — _if the pro
 
 ## Testing
 
-| Suite                            | Covers                                                                                    |
-| -------------------------------- | ----------------------------------------------------------------------------------------- |
-| `src/access/room-access.test.ts` | The seating rule: every access tier, the ordering of refusals, host bypass, invite expiry |
-| `src/host-rights.test.ts`        | The §4.1 hosting perk, and that every unreadable answer refuses                           |
-| `src/stream/provider.test.ts`    | That no fabricated join credential can leave the module                                   |
-| `src/curriculum/catalog.test.ts` | Day-one spine non-empty, path/kind filters, content body, unknown slug null               |
-| `src/router.mount.test.ts`       | The mount boundary, scope enforcement, curriculum surface, real rather than 404           |
+| Suite                            | Covers                                                                                                                                                                                                                                          |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/access/room-access.test.ts` | The seating rule: every access tier, the ordering of refusals, host bypass, invite expiry                                                                                                                                                       |
+| `src/host-rights.test.ts`        | The §4.1 hosting perk, and that every unreadable answer refuses                                                                                                                                                                                 |
+| `src/stream/provider.test.ts`    | That no fabricated join credential can leave the module                                                                                                                                                                                         |
+| `src/curriculum/catalog.test.ts` | Spine non-empty, path/kind filters, unknown slug null — **plus** library integrity: unique slugs, unique order per path, every body over the depth floor, scaffolding on every item, no orphan content, every item passing the import validator |
+| `src/router.mount.test.ts`       | The mount boundary, scope enforcement, curriculum surface, real rather than 404                                                                                                                                                                 |
 
 All five are pure and need **no database** — none opens a connection, and none points at the shared `intafaced` instance.
 
@@ -195,6 +220,6 @@ Workbook paper drills consume trade's `paper` market flag. **No prices invented 
 ## Curriculum import pipeline (Stage-1)
 
 - Content source on tip: **platform-native-expansion** (licensed import pending product/Class X).
-- `curriculumInventory` reports spine counts vs title 20 playbooks + 3 workbooks — `titlePromiseMet` stays false until residual lands.
-- Import records validated by `validateImportRecord` / brand checklist (no outbound URLs, no empty stubs).
+- `curriculumInventory` reports spine counts vs title 20 playbooks + 3 workbooks. `titlePromiseMet` is **true** on tip — met by platform-native content, **not** by a licensed library dump. Read it with `curriculumDepth`: the counts were met before any of the items were worth reading.
+- Import records validated by `validateImportRecord` / brand checklist (no outbound URLs, no empty stubs). The catalog holds itself to that same bar — `catalog.test.ts` runs every spine item through the validator.
 - Do **not** invent proprietary library titles as if the import landed.
