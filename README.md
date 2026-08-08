@@ -19,7 +19,7 @@ Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 5/17 · **3P** 1/8 · **
 **🟢 22 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
-- `trade.futures` — Perps: cross/isolated margin, funding, liquidation ladder
+- `trade.futures` — Perps: isolated margin, funding, partial-liquidation ladder
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
 - `trade.mm-bot` — Internal market-maker seeding books at launch
@@ -100,7 +100,7 @@ Doctrine §0.6, made mechanical.
 - **`recipes/`** — every money path in the OS as a pure function. `deposit`, `tradeFill` (the six-entry atomic fill), `escrowLock/Release/Refund`, `stake`, `feeCharge` with the IFC discount branch, `rewardPay`, `collateralLock`, `liquidate`.
 - **`memory-ledger.ts`** — the executable specification svc-ledger must match: idempotency, hash-chained journal, replay reconciliation.
 
-84 tests, including the fill arithmetic, the hash chain's tamper detection, and the shared conformance suite both ledger implementations must pass.
+172 tests across 6 files, including the fill arithmetic, the hash chain's tamper detection, and the shared conformance suite both ledger implementations must pass.
 
 ### `packages/events`
 
@@ -112,25 +112,28 @@ Scopes (note: there is no `ledger:write` — balances never move on a user token
 
 ### `tooling/ci` — the doctrines, enforced
 
-`pnpm gates` runs all fourteen in about two seconds, from **one list — `tooling/ci/gates.mjs` — that `pnpm verify` and CI's `gates` job both consume.** One list is the point: they were previously maintained separately and drifted, so two gates ran in CI and nowhere local.
+`pnpm gates` runs all **twenty-seven** in about thirteen seconds, from **one list — `tooling/ci/gates.mjs` — that `pnpm verify` and CI's `gates` job both consume.** One list is the point: they were previously maintained separately and drifted, so two gates ran in CI and nowhere local.
 
-| Gate                             | Doctrine  | What it does                                                                                                    |
-| -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
-| `pnpm scan:brand`                | §0.7      | Fails the build if a vendor name reaches user-facing copy                                                       |
-| `pnpm scan:custody`              | §16.10    | Fails if a Protocol Plane service imports a ledger write recipe, or a contract grants platform withdrawal power |
-| `pnpm scan:secrets`              | §16       | Fails on a credential-shaped assignment that is not a declared placeholder                                      |
-| `pnpm scan:vendor-shell`         | vendor    | Mass-credit endpoints and `CORS *` inherited from the vendored shell                                            |
-| `pnpm scan:vendor-java-money`    | dual-book | A Java money mutator is a second book, and there is only one book                                               |
-| `pnpm scan:dual-book-door`       | A1        | The door-kill interceptor is registered on every vendored app                                                   |
-| `pnpm scan:dual-book-door-paths` | A1        | Proves the door-kill path fragments block what they claim, without a JVM                                        |
-| `pnpm scan:test-db`              | isolation | Every Postgres-capable suite is on a `*_test` database, never the shared one                                    |
-| `pnpm db:check`                  | §14       | Every migration has a reversal; destructive statements must be declared                                         |
-| _killswitch reachability_        | §14.6     | Every route killable, enforced at the door, failing closed, reachable from `apps/admin`                         |
-| `pnpm scan:workspace`            | fleet     | No service that builds but never reaches the image or the fleet                                                 |
-| `pnpm tracker:check`             | honesty   | `docs/TRACKER.md` matches the code; nothing claims `done` without the service existing                          |
-| `pnpm scan:agent-autoload`       | multi-dev | Coordination law stays in the files a cold agent auto-loads                                                     |
-| `pnpm scan:i18n`                 | §9        | Reports hardcoded user-facing strings. **Advisory** — runs and prints, does not fail                            |
-| `pnpm gate`                      | §14       | The full Definition of Done, per service. Runs separately, after build and test                                 |
+**`tooling/ci/gates.mjs` is the list. The table below is orientation.** Run `node tooling/ci/gates.mjs` for the live set and its per-gate output. This section claimed “fourteen” while twenty-seven were running and the table was missing twelve of them — which is exactly the drift the gates exist to catch, one level up, so it is recorded rather than quietly corrected.
+
+The twenty-seven, grouped by what they defend:
+
+| Group                 | Gates                                                                                                                                               |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **One book (§0.6)**   | `fabricated-money` · `vendor-java-money` · `dual-book-door` · `dual-book-door-paths` · `money-property-mutation`                                    |
+| **Custody & secrets** | `custody` · `secrets` · `secret-scan-mutation` · `wallet-rpc-auth` · `wallet-rpc-mainnet` · `wallet-rpc-mainnet-mutation` · `compose-secret-parity` |
+| **Honesty of claims** | `tracker` · `coverage` · `reachability` · `skip-honesty` · `event-wiring`                                                                           |
+| **Surface & brand**   | `brand` · `shell-brand` · `vendor-shell` · `i18n` · `i18n-bypass`                                                                                   |
+| **Operability**       | `migrations` · `killswitch` · `workspace` · `test-db`                                                                                               |
+| **Coordination**      | `agent-autoload`                                                                                                                                    |
+
+Three properties are worth knowing before citing any of them:
+
+- **Several are ratchets, not clean-tree checks.** `shell-brand` (8 frozen), `fabricated-money`, `vendor-java-money` (55 frozen), `wallet-rpc-mainnet` (57 frozen constants), `event-wiring` (1 Class B awaiting an owner decision) and `i18n-bypass` all pass with known findings pinned by exact text. **The queue cannot grow.** A ratchet that failed on its pre-existing set would be routed around and deleted, taking the honest part with it.
+- **Four are mutation-tested** — `secret-scan-mutation`, `money-property-mutation`, `wallet-rpc-mainnet-mutation`, `dual-book-door-paths`. A gate nobody has seen fail is not a gate.
+- **`pnpm gate` (singular) is the §14 Definition of Done**, per service. It is not one of the twenty-seven and runs separately, after build and test.
+
+Two are deliberately **not** in the list, each for a stated reason: `pnpm scan:deps` (the supply-chain ratchet — needs network, so it is its own workflow) and `pnpm scan:shell-i18n` (200+ hardcoded strings on the vendored shell; wiring it blocking would red main before the keying pass).
 
 They are verified against deliberate violations, not just against a clean tree.
 
@@ -166,7 +169,9 @@ Doctrine §0.3: **Identity, Balance, Token.** Every cross-module link runs throu
 
 ## Known dependency note
 
-`nats@2.x` is published as deprecated in favour of the split `@nats-io/*` v3 packages. The 2.x client is functional and is what `packages/events` uses today; the migration is isolated to `jetstream-bus.ts` because nothing else imports `nats` directly. Worth doing before Phase 2 puts real order flow on the bus.
+`nats@2.x` is published as deprecated in favour of the split `@nats-io/*` v3 packages. The 2.x client is functional and is what `packages/events` uses today; the migration is isolated to `jetstream-bus.ts` because nothing else imports `nats` directly.
+
+**This note used to say “worth doing before Phase 2 puts real order flow on the bus.” Phase 2 is underway, so that deadline has passed** and the migration is now owed rather than upcoming. Still a single-file change; still nothing else imports `nats`.
 
 ---
 

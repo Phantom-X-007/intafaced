@@ -26,7 +26,7 @@ pnpm wt feat/<the-thing>
 | Feature | Module | Phase | id |
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
-| Perps: cross/isolated margin, funding, liquidation ladder | `trade` | 2 | `trade.futures` |
+| Perps: isolated margin, funding, partial-liquidation ladder | `trade` | 2 | `trade.futures` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
 | CCXT-compatible public API (bots + terminals connect) | `trade` | 2 | `trade.ccxt-api` |
 | Internal market-maker seeding books at launch | `trade` | 2 | `trade.mm-bot` |
@@ -128,7 +128,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining._ | F |  | `trade.convert` |
-| 🟢 | Perps: cross/isolated margin, funding, liquidation ladder <br/>_**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent._ | F |  | `trade.futures` |
+| 🟢 | Perps: isolated margin, funding, partial-liquidation ladder <br/>_**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent. **Isolated margin ONLY.** `DIRECTION` §1 and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` done-bar item 8 forbid a cross-margin path even disabled — this row advertised cross/isolated until 2026-08-07 and was wrong. Not orderable yet: `assertTradable` refuses non-spot, so the books are empty by construction._ | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 | F | `trade.futures` | `trade.options` |
 | 🔨 | OTC RFQ desk, staked-tier gate <br/>_Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table._ | F |  | `trade.otc` |
 | 🔨 | Copy trading, audited leaders, profit share <br/>_**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 3 — D-S-03 Stage: follow/unfollow + envelope mirror refuse; blank DIRECTION §8 leader_share_bps + jurisdiction → refuse-closed; fee-share settle via ledger-client sweepFeesToRewards+rewardPay when owner publishes. Never invent rates/geo/P&L fees/ranking. Residual: owner §8 numbers, on-chain session-key caps (build order §7.1)._ | B |  | `trade.copy` |
