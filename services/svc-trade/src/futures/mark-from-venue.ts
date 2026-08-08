@@ -47,7 +47,7 @@
  */
 import { formatAmount, type Amount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter } from '@intafaced/venue-contracts';
-import { BinanceSpotMarketData } from '@intafaced/venue-adapter';
+import { BinanceSpotMarketData, BybitSpotMarketData } from '@intafaced/venue-adapter';
 import type { MarkSource, QuotedMarkSource } from './liquidation-tick.js';
 import { markSourceFromBook, midFromBook } from './mark-source.js';
 import { DEFAULT_DEPTH_QUOTE_POLICY, bestLevelIsQuotable, minBestLevelNotional, type DepthQuotePolicy } from './mark-from-depth.js';
@@ -97,7 +97,10 @@ export function midFromVenueBook(snapshot: VenueTopOfBook, policy: DepthQuotePol
 
 /**
  * MarkSource that mids an external venue public book via MarketDataAdapter.
- * Inject the adapter (real BinanceSpotMarketData or a test double).
+ * Inject the adapter — a real one (`BinanceSpotMarketData`, `BybitSpotMarketData`)
+ * or a test double. This function knows nothing about which venue it is reading,
+ * which is why the size-aware gate below applies to every venue for free and no
+ * adapter can be given a threshold of its own.
  */
 export function markSourceFromVenuePublicBook(input: {
   adapter: Pick<MarketDataAdapter, 'snapshotBook'>;
@@ -183,17 +186,35 @@ export function parseVenueMarkSymbols(raw: string | undefined): Map<string, stri
 }
 
 /**
+ * Transport and clock injection accepted by every adapter this factory can build.
+ *
+ * An INTERSECTION rather than one venue's options: both adapters are constructed
+ * through the same `HttpPort`/`StreamPort` seam, and writing it this way makes
+ * that a compile-time claim instead of a coincidence. The day one venue needs a
+ * required field the other does not have, the intersection stops being
+ * satisfiable and the divergence has to be named here rather than discovered by
+ * whichever caller happened to pass the wrong shape.
+ */
+export type VenueMarketDataOptions = ConstructorParameters<typeof BinanceSpotMarketData>[0] &
+  ConstructorParameters<typeof BybitSpotMarketData>[0];
+
+/**
  * Supported venue ids for this thin mount.
  * Unknown id → null (refuse invent of an adapter).
  * Empty / off / none → null (feature off).
+ *
+ * Two venues, both PUBLIC market data and neither holding a credential. Two is
+ * the number that matters rather than a step toward six: `latency.ts` grades
+ * adapters against each other and `cross-check.ts` medians them, and with one
+ * adapter both were mechanisms with nothing to compare — a grade with no peer and
+ * a median of one. Adding an id here is what makes an adapter REACHABLE; an
+ * adapter written and unregistered is a file, not a venue.
  */
-export function createVenueMarketDataAdapter(
-  venueId: string,
-  options?: ConstructorParameters<typeof BinanceSpotMarketData>[0],
-): MarketDataAdapter | null {
+export function createVenueMarketDataAdapter(venueId: string, options?: VenueMarketDataOptions): MarketDataAdapter | null {
   const id = venueId.trim().toLowerCase();
   if (!id || id === 'off' || id === 'none' || id === 'false') return null;
   if (id === 'binance-spot') return new BinanceSpotMarketData(options);
+  if (id === 'bybit-spot') return new BybitSpotMarketData(options);
   return null;
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter, VenueBookSnapshot } from '@intafaced/venue-contracts';
+import type { HttpPort } from '@intafaced/venue-adapter';
 import {
   bestFromVenueBook,
   createConfiguredVenueMarkSource,
@@ -156,6 +157,158 @@ describe('createVenueMarketDataAdapter', () => {
     const a = createVenueMarketDataAdapter('binance-spot');
     expect(a).not.toBeNull();
     expect(a!.venue.id).toBe('binance-spot');
+  });
+
+  /**
+   * THE REGISTRATION, REACHED BY ITS ID.
+   *
+   * An adapter that exists in `packages/venue-adapter` and is not in this switch
+   * is a file, not a venue: nothing in production can name it, so no grade, no
+   * cross-check and no mark can ever come from it. This assertion is the one that
+   * goes red if the `bybit-spot` branch is deleted.
+   */
+  it('bybit-spot → real public MarketDataAdapter, reached by its id', () => {
+    const a = createVenueMarketDataAdapter('bybit-spot');
+    expect(a).not.toBeNull();
+    expect(a!.venue.id).toBe('bybit-spot');
+    expect(a!.venue.kind).toBe('external-cex');
+    // Sequenced on BOTH its REST book and its stream — which is why the existing
+    // tracker drives it unchanged rather than needing a second book path.
+    expect(a!.venue.sequencedDepth).toBe(true);
+  });
+
+  it('the two ids resolve to DIFFERENT adapters — grading one venue against itself is not grading', () => {
+    const binance = createVenueMarketDataAdapter('binance-spot');
+    const bybit = createVenueMarketDataAdapter('bybit-spot');
+    expect(binance!.venue.id).not.toBe(bybit!.venue.id);
+  });
+
+  it('case and whitespace are tolerated; a near-miss id is still refused', () => {
+    expect(createVenueMarketDataAdapter('  BYBIT-SPOT  ')!.venue.id).toBe('bybit-spot');
+    // Not a prefix match, not a fuzzy match. A typo must not silently resolve to
+    // a venue the operator did not name.
+    expect(createVenueMarketDataAdapter('bybit')).toBeNull();
+    expect(createVenueMarketDataAdapter('bybit-futures')).toBeNull();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE SECOND VENUE, ON THE MONEY PATH
+//
+// Not a double: the REAL `BybitSpotMarketData`, built by the REAL ops factory
+// from its id, with only the HTTP transport faked — there is no live-network CI
+// (§27 residual 4) and adding one is a separate decision. Every case below
+// asserts the money path answers `null`, because a refusal that is correct inside
+// the adapter and unreachable from here would prove nothing.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A one-shot HTTP port. `null` body / non-200 are DATA to this seam, never throws. */
+function fixedHttp(body: unknown, status = 200): HttpPort {
+  return {
+    async get() {
+      return { status, body, header: () => null };
+    },
+  };
+}
+
+const bybitBook = (over: { b?: [string, string][]; a?: [string, string][] }): unknown => ({
+  retCode: 0,
+  retMsg: 'OK',
+  result: { s: 'BTCUSDT', b: over.b ?? [], a: over.a ?? [], ts: 1, u: 42, seq: 42, cts: 1 },
+  time: 1,
+});
+
+/** The production path: venue id → factory → adapter → mark source. Transport faked only. */
+function bybitMarkSource(http: HttpPort) {
+  const configured = createConfiguredVenueMarkSource({
+    venueId: 'bybit-spot',
+    symbols: 'm1:BTC/USDT',
+    adapter: createVenueMarketDataAdapter('bybit-spot', { http, restBase: 'https://rest.test' }),
+  });
+  expect(configured).not.toBeNull();
+  return configured!.source;
+}
+
+describe('bybit-spot reaches the mark path, and refuses on it', () => {
+  /**
+   * No `adapter` key at all — the ops factory has to build it from the id alone,
+   * which is exactly what `svc-trade`'s startup does with
+   * `TRADE_VENUE_MARK_VENUE`. Construction opens no socket and sends no request.
+   */
+  it('the ops factory builds the venue from its id with nothing injected', () => {
+    const configured = createConfiguredVenueMarkSource({ venueId: 'bybit-spot', symbols: 'm1:BTC/USDT' });
+    expect(configured).not.toBeNull();
+    expect(configured!.venueId).toBe('bybit-spot');
+    expect(configured!.symbolCount).toBe(1);
+  });
+
+  it('a real two-sided book with real size behind it mids normally', async () => {
+    const src = bybitMarkSource(fixedHttp(bybitBook({ b: [['99000', '1']], a: [['101000', '1']] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBe('100000');
+  });
+
+  it('EMPTY book → null', async () => {
+    const src = bybitMarkSource(fixedHttp(bybitBook({ b: [], a: [] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('ONE-SIDED book → null', async () => {
+    const src = bybitMarkSource(fixedHttp(bybitBook({ b: [['99000', '1']], a: [] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('UNKNOWN market id at the venue (non-zero retCode) → null, never an empty book', async () => {
+    const src = bybitMarkSource(fixedHttp({ retCode: 10_001, retMsg: 'Not supported symbols', result: {}, time: 1 }));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('UNMAPPED symbol → null, and the venue is never called', async () => {
+    const configured = createConfiguredVenueMarkSource({
+      venueId: 'bybit-spot',
+      // `m1` is mapped; `m-other` is not.
+      symbols: 'm1:BTC/USDT',
+      adapter: createVenueMarketDataAdapter('bybit-spot', {
+        http: {
+          async get() {
+            throw new Error('must not call the venue for an unmapped market');
+          },
+        },
+        restBase: 'https://rest.test',
+      }),
+    });
+    expect(await configured!.source.markPrice({ marketId: 'm-other', at: new Date() })).toBeNull();
+  });
+
+  it('MALFORMED payload (JSON numbers in the book) → null', async () => {
+    const src = bybitMarkSource(
+      fixedHttp({ retCode: 0, retMsg: 'OK', result: { s: 'BTCUSDT', b: [[99_000, 1]], a: [[101_000, 1]], ts: 1, u: 1 }, time: 1 }),
+    );
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('RATE LIMITED (403 access too frequent) → null', async () => {
+    const src = bybitMarkSource(fixedHttp({ retCode: 10_018, retMsg: 'access too frequent' }, 403));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('UNREACHABLE venue → null', async () => {
+    const src = bybitMarkSource(fixedHttp(null, 503));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  /**
+   * THE SHARED THRESHOLD, ON THE NEW VENUE, WITHOUT ONE LINE OF NEW POLICY.
+   *
+   * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` exists because a size-blind mid let two
+   * dust orders mint a payout-grade mark. The second venue inherits it because
+   * the gate lives in `bestFromVenueBook`, not in any adapter — and this asserts
+   * that, so nobody "fixes" the new venue by giving it a threshold of its own.
+   */
+  it('two dust orders on the NEW venue mint nothing either — same threshold, no second policy', async () => {
+    const src = bybitMarkSource(fixedHttp(bybitBook({ b: [['1000', DUST]], a: [['3000', DUST]] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+    expect(await src.quote({ marketId: 'm1', at: new Date() })).toBeNull();
+    expect(DEFAULT_MIN_BEST_LEVEL_NOTIONAL).toBe('100');
   });
 });
 

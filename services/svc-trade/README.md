@@ -157,24 +157,24 @@ Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matc
 
 #### Ops enable path (default safe)
 
-| Env                            | Default | Meaning                                                                                                                                     |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapter today: **`binance-spot`** (no keys). Unknown id → warn once, stay off (never invent). |
-| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                       |
-| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                |
+| Env                            | Default | Meaning                                                                                                                                                       |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`** — both keyless. Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                         |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                  |
 
 **Enable checklist (ops):**
 
-1. Confirm `packages/venue-adapter` Binance spot public path is acceptable for this environment (egress, rate limits).
-2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols).
-3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls).
+1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget. Both governors reserve 20% headroom, and both refuse rather than silently waiting.
+2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols). The symbol format is the unified one (`BTC/USDT`) for either venue — the venue's own spelling is produced inside the adapter and nowhere else.
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` **or** `bybit-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median.
 4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
 5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
 6. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; never invent.
 
 **Honesty bans:** invent mid, invent second venue adapter without fabric support, treat empty/one-sided book as a price, treat account observations as ledger truth, enable trading half of venue (credentials / Vault) as if public mark worked.
 
-**Second venue:** only when a real `MarketDataAdapter` exists in fabric and `createVenueMarketDataAdapter` knows the id — do not stub a name.
+**Second venue:** shipped 2026-08-08 as `bybit-spot` (public market data only; no trade or account half exists for it, and no credential is read anywhere in it). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A THIRD venue is not needed by any open residual on `venue.aggregation`.
 
 Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
