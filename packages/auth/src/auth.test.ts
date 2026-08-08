@@ -268,3 +268,52 @@ describe('bearerToken', () => {
     expect(bearerToken('Basic abc')).toBeNull();
   });
 });
+
+/**
+ * A token with no expiry is not a long-lived token. It is a token with no
+ * expiry, and it must not verify.
+ *
+ * jose validates `exp` only when the claim is present. Without `requiredClaims`
+ * a validly-signed token carrying none verified — and `expiresAt` was then
+ * manufactured as `new Date((payload.exp ?? 0) * 1000)`, i.e. 1970, for a token
+ * the function had just accepted.
+ *
+ * It mattered unevenly. Through the edge, `verifyForwardedPrincipal` re-checks
+ * `expiresAt`, so 1970 failed closed. The two callers that use this function
+ * DIRECTLY — svc-ledger's operator HTTP and svc-edge's admin API — do not, and
+ * those are the freeze, reconcile, kill-switch and treasury doors.
+ */
+describe('an access token must carry an expiry', () => {
+  /** Signed with the real secret and the real issuer/audience — only `exp` is missing. */
+  async function tokenWithoutExp(): Promise<string> {
+    const { SignJWT } = await import('jose');
+    return new SignJWT({ sid: SESSION, scopes: ['trade:write'], tier: 'basic', mfa: false })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(USER)
+      .setIssuer(config.issuer)
+      .setAudience(config.audience)
+      .setIssuedAt()
+      .setJti('00000000-0000-4000-8000-000000000000')
+      .sign(new TextEncoder().encode(config.secret));
+  }
+
+  it('refuses a validly-signed token that carries no exp', async () => {
+    await expect(verifyAccessToken(await tokenWithoutExp(), config)).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it('refuses it as a claims problem, not as a forged signature', async () => {
+    // The signature is genuine and every other claim is valid — this fixture
+    // differs from a real token in exactly one way, the missing `exp`. Reported
+    // as `token.invalid` so an operator reading the log does not go looking for
+    // a leaked secret.
+    const err = (await verifyAccessToken(await tokenWithoutExp(), config).catch((e: unknown) => e)) as AuthError;
+    expect(err.code).toBe('token.invalid');
+  });
+
+  it('still accepts a normally issued token and reports a real expiry', async () => {
+    const p = await principal();
+    expect(p.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    // Never 1970 — the value the `?? 0` fallback used to produce.
+    expect(p.expiresAt.getFullYear()).toBeGreaterThan(2000);
+  });
+});
