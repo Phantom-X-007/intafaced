@@ -23,6 +23,18 @@ export class SupportError extends Error {
 }
 
 /**
+ * The single refusal for "you may not see this ticket", whatever the reason.
+ *
+ * Carries NO ticket id. `mapError` puts `err.message` straight on the wire, so
+ * an id echoed back is an id confirmed to exist — and the point of answering a
+ * foreign ticket with `not_found` rather than a forbidden is that the caller
+ * cannot tell the two apart. One construction site, so they cannot drift again.
+ */
+function ticketNotFound(): SupportError {
+  return new SupportError('ticket not found', 'support.not_found');
+}
+
+/**
  * In-memory support desk (Stage-1 spine + Stage-2 operator queue).
  * Zero money: no ledger client, no balance fields on tickets.
  */
@@ -63,12 +75,28 @@ export class SupportService implements SupportContract {
     );
   }
 
+  /**
+   * A ticket, for its owner — or for an operator.
+   *
+   * SOMEBODY ELSE'S TICKET AND NO SUCH TICKET ARE THE SAME ANSWER.
+   *
+   * A foreign ticket is refused as `support.not_found`, not as a forbidden, and
+   * that choice is the whole point: a caller who can tell "not yours" apart
+   * from "does not exist" can ask about any id and learn whether it is real.
+   *
+   * The two refusals now come from ONE construction site, because they used to
+   * come from two and had drifted by exactly the thing that gives the game
+   * away — the missing case interpolated the id (`ticket <uuid> not found`) and
+   * the foreign case did not (`ticket not found`). `mapError` in router.ts puts
+   * `err.message` straight on the wire, so a caller could diff the two and read
+   * the existence of any ticket id off the difference. Same shape as
+   * svc-bank's `gateDestination`, which resolves both cases "from one
+   * construction site so the two cases cannot drift apart by a byte".
+   */
   async getTicket(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicket> {
     const ticket = this.tickets.get(input.ticketId);
-    if (!ticket) throw new SupportError(`ticket ${input.ticketId} not found`, 'support.not_found');
-    if (!input.asOperator && ticket.userId !== input.userId) {
-      throw new SupportError('ticket not found', 'support.not_found');
-    }
+    const visible = ticket !== undefined && (input.asOperator === true || ticket.userId === input.userId);
+    if (!visible) throw ticketNotFound();
     return ticket;
   }
 
@@ -105,7 +133,7 @@ export class SupportService implements SupportContract {
 
   async setStatus(input: { operatorId: string; ticketId: string; status: SupportTicketStatus }): Promise<SupportTicket> {
     const ticket = this.tickets.get(input.ticketId);
-    if (!ticket) throw new SupportError(`ticket ${input.ticketId} not found`, 'support.not_found');
+    if (!ticket) throw ticketNotFound();
     const updated: SupportTicket = {
       ...ticket,
       status: input.status,
