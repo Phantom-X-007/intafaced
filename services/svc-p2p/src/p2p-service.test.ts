@@ -1267,6 +1267,48 @@ if (!available) {
       await expectBooksClosed();
     });
 
+    it('does NOT refund a trade the buyer declared paid for while the sweep was working', async () => {
+      // The sweep reads (id, status) for up to 100 trades, then acts on them one
+      // at a time, several round trips apart. A trade it read as `escrowed` can
+      // be `fiat_sent` by the time its turn comes — and `escrowed → cancelled`
+      // and `fiat_sent → cancelled` are both legal edges, so the transition
+      // check cannot tell the difference. Refunding here hands the seller their
+      // asset back after the buyer has already sent the fiat off-platform, with
+      // no dispute opened — the exact thing `cancelTrade` refuses by name.
+      await fund(MAKER, '1000');
+      const offer = await sellOffer();
+      const first = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const second = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
+
+      // Both payment windows have elapsed, `first` earlier, so the sweep reaches
+      // it first and reads BOTH as `escrowed` in the same select.
+      await sql`UPDATE p2p.p2p_trades SET deadline_at = now() - interval '2 hours' WHERE id = ${first.id}`;
+      await sql`UPDATE p2p.p2p_trades SET deadline_at = now() - interval '1 hour'  WHERE id = ${second.id}`;
+
+      // The interleave: while the sweep is posting the first refund, the second
+      // trade's buyer presses "I've paid".
+      const post = ledger.post.bind(ledger);
+      let fired = false;
+      ledger.post = async (request) => {
+        if (!fired && request.idempotencyKey === `p2p.escrow.refund:${first.id}`) {
+          fired = true;
+          await p2p.markFiatSent(second.id, OTHER);
+        }
+        return post(request);
+      };
+
+      await p2p.sweepDeadlines();
+      expect(fired).toBe(true);
+
+      const after = await p2p.getTrade(second.id);
+      expect(after.status).toBe('fiat_sent');
+      expect(after.resolution).toBeNull();
+
+      // The buyer who paid still has a claim on the escrow.
+      expect(await escrowOf(MAKER)).toBe('100');
+      await expectBooksClosed();
+    });
+
     it('does NOT auto-release a trade the buyer merely claimed to have paid for', async () => {
       // It opens a dispute instead. Auto-releasing would hand the asset to
       // anyone willing to click "I paid" and wait out the clock.
