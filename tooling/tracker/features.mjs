@@ -705,9 +705,10 @@ export const FEATURES = [
       'then landed on the dev chain (#264), and mint + swapExactIn are PROVEN ON A CHAIN rather than asserted in a ' +
       'unit test (#288 — src/amm/mint-swap-onchain.test.ts, src/amm/pool-factory-onchain.test.ts). Constant-product ' +
       'maths is a pure tested module (src/amm/math.ts). ' +
-      'WHAT REMAINS: invariant/property suites (k never decreases, no free extraction, fee accrual), LP accounting ' +
-      'and fee tiers, oracle coupling (socket.price-oracle), and the `audited` flag staying false until a real audit ' +
-      'package exists. Do not re-derive the compile fix or the on-chain proof.',
+      'INVARIANTS + LP ACCOUNTING 2026-08-08 (S-A2 residual): src/amm/invariants.test.ts — k never decreases, ' +
+      'no free extraction on round-trip, MINIMUM_LIQUIDITY + pro-rata mint/burn, fee tiers, no setFee/pause. ' +
+      'STATUS stays ready: oracle coupling is deliberately NOT reading AMM for marks (S-A12); audited:false until ' +
+      'socket.contract-audit. Do not rebuild mint/swap on-chain proof (#288).',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',
