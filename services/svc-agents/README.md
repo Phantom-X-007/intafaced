@@ -49,6 +49,21 @@ Internal tRPC (§1). Every log query is scoped to `ctx.principal.userId` — an 
 
 `requestId` on `run.complete` is supplied by the caller and is the anti-double-bill handle: a client that retries after a timeout reuses it.
 
+### Metered agent runs
+
+Most agent procedures are **pure**: they answer "what would this agent say" without a session, so the declared guardrail is enforced by nothing at call time and the usage is metered by nothing at all. These two drive the real runtime instead — `openSession → act → settle → closeSession` — so every tool call is guardrail-checked and audited, and the run settles through `UsageMeter` → ledger.
+
+| Procedure              | Scope            | Input                           | Output                                               |
+| ---------------------- | ---------------- | ------------------------------- | ---------------------------------------------------- |
+| `scanner.runSession`   | `agents:execute` | plane, tier law, tier, tickers  | ranked signals + what the run cost                   |
+| `navigator.runSession` | `agents:execute` | plane, tier law, tier, `asks[]` | grounded findings, **unanswered asks**, what it cost |
+
+Both are mutations, and both report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
+
+Neither calls the engine — a rank is arithmetic and an answer is an echo of tool output — so both open no usage window and settle to `0`. That zero is reported as a zero. A synthetic charge so a run "looks metered" would be a fabricated cost, which is the same class of lie as a fabricated price.
+
+`navigator.runSession` sends **every** ask to `runtime.act`, including ones a caller-supplied tier matrix wrongly granted. The runtime decides, not the caller and not the run: `trade.order` is not on `navigatorAgentGuardrail()`, so `act` refuses it and its executor is never reached. An ask that produced no fact comes back in `unanswered` with the reason and who refused it — the answer gets shorter, never padded. When nothing at all was reachable the run refuses outright rather than shipping an empty finding list dressed as a result.
+
 Also `GET /health` and `GET /ready`.
 
 ### `/ready` — honest, not decorative
@@ -241,11 +256,13 @@ Pure layers (no database): cost arithmetic, guardrails, adapters, **readiness ho
 
 ### Residual (honest — not Done by this package alone)
 
-| Gap                                             | Why it is residual                                       |
-| ----------------------------------------------- | -------------------------------------------------------- |
-| Product agents (Navigator, Support, Scanner, …) | Register guardrails + drive the runtime; not seeded here |
-| Production inference                            | Requires `AGENTS_PROVIDER=upstream` + vault credentials  |
-| Full premium-tier product surface               | Phase 5 agent product work on top of this runtime        |
+| Gap                                    | Why it is residual                                                                                                                                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guardrail registration at boot         | `scanner.runSession` / `navigator.runSession` drive the runtime, but no guardrail is written to `agent_definitions` on startup, so `openSession` finds no agent in a real deployment. Registration is a deployment act and is still unwired |
+| Product agents (Support, Merchant, …)  | Register guardrails + drive the runtime; not seeded here                                                                                                                                                                                    |
+| Live data behind the navigator's tools | Tool inputs are caller-supplied fixtures. A real `svc-trade` / `svc-identity` call is the next slice; the refusals are already typed for it                                                                                                 |
+| Production inference                   | Requires `AGENTS_PROVIDER=upstream` + vault credentials                                                                                                                                                                                     |
+| Full premium-tier product surface      | Phase 5 agent product work on top of this runtime                                                                                                                                                                                           |
 
 The money and audit paths run against real Postgres with the ledger's in-memory reference implementation, which the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Real Postgres because every property worth testing here — append-only, the window seal, the unique request id — lives in the database, and a fake would test the fake.
 
