@@ -129,12 +129,19 @@ export function loanReserve(assetId: string): AccountRef {
   return moduleAccount('bank', 'loan-reserve', assetId);
 }
 
+/**
+ * A sub-account's spendable balance — svc-bank's "spaces" read this.
+ *
+ * There is deliberately no `subAccountHold` beside it. One existed and had no
+ * caller, because it could not have had a working one: it built `kind: 'hold'`
+ * with no purpose, and `assertPurposedLocks` refuses every such post. A hold on
+ * a space needs the same treatment as `houseHold` — a required purpose naming
+ * what the value is being held FOR — and is worth writing when something
+ * actually holds one, rather than left as a constructor whose every output the
+ * ledger rejects.
+ */
 export function subAccountAvailable(subAccountId: string, assetId: string): AccountRef {
   return { ownerType: 'subaccount', ownerId: subAccountId, assetId, kind: 'available' };
-}
-
-export function subAccountHold(subAccountId: string, assetId: string): AccountRef {
-  return { ownerType: 'subaccount', ownerId: subAccountId, assetId, kind: 'hold' };
 }
 
 /** Where a module's fee revenue lands. Staking yield is distributed from here (§4.3). */
