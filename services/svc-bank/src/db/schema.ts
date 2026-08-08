@@ -59,8 +59,20 @@ export const scheduleStatusEnum = bank.enum('schedule_status', ['active', 'pause
  * row before it posts to the ledger, so a crash between the two leaves a
  * `pending` row that the next run re-drives (the ledger post is idempotent, so
  * re-driving either finds the original transaction or makes it).
+ *
+ * `skipped` is the opposite of `pending`: nothing was ever attempted, because
+ * the standing order was paused when this occurrence came due. It is a ROW
+ * rather than an absence because `MAX(occurrence)` over this table is what
+ * `planDue` reads as `lastFired` — an occurrence with no row is one the next
+ * pass will fire, so without this value resuming a three-month pause would post
+ * three months of transfers at once.
+ *
+ * `rejected` is deliberately not reused for it. Rejected means the ledger
+ * refused a real attempt, which is the answer to "why is my space empty".
+ * Skipped means nobody asked, which is the answer to "why did nothing happen
+ * while I was away". Collapsing them leaves both unanswerable.
  */
-export const executionStatusEnum = bank.enum('execution_status', ['pending', 'settled', 'rejected']);
+export const executionStatusEnum = bank.enum('execution_status', ['pending', 'settled', 'rejected', 'skipped']);
 
 export const poolKindEnum = bank.enum('pool_kind', ['flexible', 'fixed']);
 export const poolStatusEnum = bank.enum('pool_status', ['open', 'closed']);

@@ -93,6 +93,7 @@ export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService
 export { BankError, type BankErrorCode } from './errors.js';
 export { accountForSpace, type SpaceRecord, type SpaceView } from './spaces/space-service.js';
 export { planDue, occurrenceStart, dueOccurrence, type Cadence } from './transfers/schedule.js';
+export { PAUSED_SKIP_REASON, type ResumeReport, type ScheduleRecord } from './transfers/transfer-service.js';
 export { dailyInterest, planAccrual, accrualDate } from './earn/interest.js';
 export {
   DEFAULT_LIQUIDATION_POLICY,

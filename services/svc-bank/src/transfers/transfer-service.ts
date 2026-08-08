@@ -11,8 +11,8 @@ import {
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
 import { accountForSpace, type SpaceService } from '../spaces/space-service.js';
-import { MAX_CATCH_UP_PER_PASS, planDue, occurrenceStart, type Cadence } from './schedule.js';
-import { withMoneySpan } from '../tracing.js';
+import { MAX_CATCH_UP_PER_PASS, dueOccurrence, lastOccurrenceBefore, planDue, occurrenceStart, type Cadence } from './schedule.js';
+import { withMoneySpan, withSpan } from '../tracing.js';
 
 /**
  * TRANSFERS — the rails half of §8.1.
@@ -90,11 +90,46 @@ function toSchedule(row: ScheduleRow): ScheduleRecord {
 
 export type FiringOutcome = 'settled' | 'rejected' | 'already-fired';
 
+/**
+ * What `rejection_code` says on an occurrence that was skipped.
+ *
+ * A constant rather than a `BankErrorCode`, because it is not an error and no
+ * caller ever receives it as one — it is the reason written into the record so
+ * that "nothing happened in March" has an answer a support engineer can read
+ * without reconstructing a timeline from `updated_at`. Exported so the tests and
+ * any future reporting query name the same string this file writes.
+ */
+export const PAUSED_SKIP_REASON = 'bank.schedule_paused';
+
+export interface ResumeReport {
+  readonly schedule: ScheduleRecord;
+  /**
+   * Occurrences that came due while paused and will now never fire, ascending.
+   *
+   * Returned rather than merely recorded because it is the one fact a user must
+   * be told when they resume: resuming does NOT settle up. If this list is long,
+   * the honest thing for a client to render is "these five payments were not
+   * made", not a silent success.
+   */
+  readonly skipped: readonly number[];
+}
+
 export interface RunReport {
   schedulesConsidered: number;
   settled: number;
   rejected: number;
   alreadyFired: number;
+  /**
+   * Schedules this pass looked at ONLY because they held a stranded claim —
+   * they were not otherwise due, and several of them cannot ever be due again.
+   *
+   * Reported separately because it is the number an operator wants to be zero.
+   * A steady non-zero here means processes are dying between claiming an
+   * occurrence and posting it, which is invisible in `settled` (the sweep
+   * settles them, so the totals look healthy) and invisible in `rejected` (the
+   * ledger never refused anything).
+   */
+  strandedSwept: number;
 }
 
 export class TransferService {
@@ -242,14 +277,219 @@ export class TransferService {
     if (updated.length === 0) throw new BankError(`Schedule ${scheduleId} is not cancellable`, 'bank.schedule_inactive');
   }
 
+  // ── Pause and resume ───────────────────────────────────────────────────────
+
+  /**
+   * Stop a standing order firing, without destroying it.
+   *
+   * Cancel was the only way to stop one, and cancel is not reversible: a user
+   * between jobs who wanted to hold their rent transfer for two months had to
+   * cancel and later create a new schedule. That is worse than clumsy, it is
+   * UNSAFE — the new schedule has a NEW id, and the ledger's idempotency key is
+   * `bank.transfer:<scheduleId>:<occurrence>`. Occurrence 0 of the replacement
+   * shares no key with occurrence 3 of the original, so a replacement anchored a
+   * few days early moves value on a date the original would also have moved it
+   * and nothing anywhere collapses the two. Pause keeps the id, which keeps the
+   * key, which keeps the guarantee.
+   *
+   * `paused` has been in `bank.schedule_status` since 0000 and until now no code
+   * path wrote it. `cancelSchedule` has always accepted `IN ('active','paused')`
+   * — that branch was unreachable and is now the ordinary way a paused order is
+   * given up on.
+   *
+   * NOT a money span: pausing posts nothing and decides nothing. It sets a flag
+   * that stops the runner selecting this row (`WHERE status = 'active'`), and it
+   * is completely reversible until `resumeSchedule` turns the elapsed time into
+   * a record. That call is the one the sampler must keep.
+   */
+  async pauseSchedule(scheduleId: string): Promise<ScheduleRecord> {
+    return withSpan('bank.transfer.pause', async () => {
+      const rows = await this.sql<ScheduleRow[]>`
+        UPDATE bank.scheduled_transfers SET status = 'paused', updated_at = now()
+         WHERE id = ${scheduleId} AND status = 'active'
+         RETURNING id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
+                   starts_at, ends_at, next_run_at, status
+      `;
+
+      const row = rows[0];
+      if (row) return toSchedule(row);
+
+      // Nothing updated: either there is no such schedule, or it is not active.
+      // `getSchedule` throws `bank.schedule_not_found` for the first, which is a
+      // different fact from the second and must not be flattened into it.
+      await this.getSchedule(scheduleId);
+      throw new BankError(`Schedule ${scheduleId} is not active`, 'bank.schedule_inactive');
+    });
+  }
+
+  /**
+   * Start a paused standing order again — from HERE, never from where it stopped.
+   *
+   * THE WHOLE DESIGN IS IN WHAT RESUME DOES *NOT* DO.
+   *
+   * `planDue` fires every occurrence between `lastFired` and `now`. That is
+   * exactly right after an outage — the transfers were due, the runner was down,
+   * the user still expects them. It is exactly wrong after a pause: the user
+   * stopped the order precisely so those transfers would not happen, and a
+   * resume that "caught up" would move three months of rent in one pass, on a
+   * day nobody chose, out of a space that may not hold it.
+   *
+   * So resume RECORDS the elapsed occurrences as `skipped` before it lifts the
+   * pause. That is not bookkeeping garnish — `MAX(occurrence)` over
+   * `bank.transfer_executions` IS `lastFired`, so writing the rows is what moves
+   * the schedule's floor forward, and the same unique index that makes a
+   * double-fire impossible makes a double-skip impossible. There is no second
+   * mechanism, no `resumed_at` watermark to keep in step with the executions
+   * table, and nothing that could disagree with it.
+   *
+   * The occurrence due at the instant of resume is skipped too. "Resume" means
+   * the next scheduled movement, not this one: a rule a user can predict beats a
+   * rule that depends on whether they clicked before or after 09:00.
+   *
+   * Two consequences worth stating plainly:
+   *
+   *   · resuming moves no value, ever. It posts nothing to the ledger.
+   *   · an occurrence CLAIMED before the pause (a `pending` row, a process that
+   *     died between claim and post) is protected by `ON CONFLICT DO NOTHING`
+   *     and stays pending, so the runner's stranded sweep still completes it.
+   *     A claim is a commitment already made; a pause cannot retract it.
+   */
+  async resumeSchedule(scheduleId: string, options: { now?: Date; maxCatchUp?: number } = {}): Promise<ResumeReport> {
+    const now = options.now ?? new Date();
+
+    return withMoneySpan('bank.transfer.resume', { operation: 'resume-standing-order', scheduleId }, async (span) => {
+      const report = await transaction(
+        this.sql,
+        async (tx) => {
+          // FOR UPDATE, because two resumes racing would otherwise both read the
+          // same `lastFired` and both plan the same skip window. The insert is
+          // idempotent, so the damage would be limited to a confusing report —
+          // but "limited to" is not a property to rely on in a money service.
+          const locked = await tx<ScheduleRow[]>`
+            SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
+                   starts_at, ends_at, next_run_at, status
+              FROM bank.scheduled_transfers WHERE id = ${scheduleId} FOR UPDATE
+          `;
+          const row = locked[0];
+          if (!row) throw new BankError(`Schedule ${scheduleId} not found`, 'bank.schedule_not_found');
+
+          const schedule = toSchedule(row);
+          if (schedule.status !== 'paused') {
+            throw new BankError(`Schedule ${scheduleId} is not paused`, 'bank.schedule_inactive');
+          }
+
+          const fired = await tx<Array<{ last: number | null }>>`
+            SELECT MAX(occurrence) AS last FROM bank.transfer_executions WHERE schedule_id = ${scheduleId}
+          `;
+          const lastFired = fired[0]?.last ?? null;
+
+          // The window to write off: everything due at `now`, bounded by the
+          // schedule's own end. An occurrence past `endsAt` was never going to
+          // fire, so it is not "skipped" — it does not exist, and inventing a row
+          // for it would misreport the order as having missed payments it never
+          // owed.
+          const due = dueOccurrence(schedule.startsAt, schedule.cadence, now);
+          const windowEnd = lastOccurrenceBefore(schedule.startsAt, schedule.cadence, schedule.endsAt);
+          const ceiling = due === null ? null : windowEnd === null ? due : Math.min(due, windowEnd);
+          const from = lastFired === null ? 0 : lastFired + 1;
+
+          let skipped: number[] = [];
+          if (ceiling !== null && from <= ceiling) {
+            // One statement for the whole window. Unbounded on purpose: the
+            // record has to be COMPLETE, because an occurrence with no row is an
+            // occurrence the next pass fires. `MAX_CATCH_UP_PER_PASS` bounds how
+            // many transfers may be POSTED in a pass, which is a rate limit on
+            // moving money; there is no equivalent reason to rate-limit a write
+            // that guarantees money is not moved.
+            const claimed = await tx<Array<{ occurrence: number }>>`
+              INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status, rejection_code)
+              SELECT ${scheduleId}, n, ${formatAmount(schedule.amount)}::numeric, 'skipped', ${PAUSED_SKIP_REASON}
+                FROM generate_series(${from}::int, ${ceiling}::int) AS n
+              ON CONFLICT (schedule_id, occurrence) DO NOTHING
+              RETURNING occurrence
+            `;
+            skipped = claimed.map((r) => r.occurrence).sort((a, b) => a - b);
+          }
+
+          // Re-plan with the floor the skip rows just established, using the SAME
+          // arithmetic the runner uses. Deriving `next_run_at` by hand here is
+          // how the two would drift.
+          const newLastFired = ceiling === null ? lastFired : Math.max(lastFired ?? ceiling, ceiling);
+          const plan = planDue({
+            startsAt: schedule.startsAt,
+            cadence: schedule.cadence,
+            endsAt: schedule.endsAt,
+            lastFired: newLastFired,
+            now,
+            maxCatchUp: options.maxCatchUp,
+          });
+
+          // THE INVARIANT THIS METHOD EXISTS FOR. Nothing may be due the moment a
+          // schedule resumes; if anything is, the skip window and the runner's
+          // plan disagree and the next pass would fire the backlog this call was
+          // written to prevent. Refusing rolls the whole transaction back, which
+          // leaves the order paused — the safe side of the failure.
+          if (plan.occurrences.length > 0) {
+            throw new Error(
+              `resume would leave ${plan.occurrences.length} occurrence(s) immediately due on schedule ${scheduleId} — refusing`,
+            );
+          }
+
+          const updated = await tx<ScheduleRow[]>`
+            UPDATE bank.scheduled_transfers
+               SET status = ${plan.completed ? 'completed' : 'active'},
+                   next_run_at = ${plan.nextRunAt},
+                   updated_at = now()
+             WHERE id = ${scheduleId} AND status = 'paused'
+             RETURNING id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
+                       starts_at, ends_at, next_run_at, status
+          `;
+
+          return { schedule: toSchedule(updated[0]!), skipped };
+        },
+        { isolation: 'read committed', maxAttempts: 5 },
+      );
+
+      span.setAttribute('intafaced.skipped_occurrences', report.skipped.length);
+      span.setAttribute('intafaced.outcome', report.schedule.status);
+      return report;
+    });
+  }
+
   // ── The runner ─────────────────────────────────────────────────────────────
 
   /**
-   * Fire every standing order that is due.
+   * Fire every standing order that is due, and finish every claim that was left
+   * behind.
    *
    * Safe to run twice, concurrently, or after an outage. The claim row and the
    * ledger key both key on (schedule, occurrence), so the second run finds every
    * occurrence already taken and does nothing.
+   *
+   * TWO QUERIES, AND THE SECOND ONE IS THE IMPORTANT ONE.
+   *
+   * A `pending` row is an occurrence this service CLAIMED and never posted — a
+   * process that died between the two. Sweeping it used to be a side effect of
+   * the schedule being due again, which was true enough while every schedule was
+   * either active or dead: tomorrow's pass would pick the row up.
+   *
+   * `pause` broke that, and it broke it silently. A paused schedule is never
+   * selected by the due query, so a claim stranded before the pause would sit
+   * there for as long as the user left the order paused — forever, if they never
+   * resumed it — with no error raised anywhere and no way for the user to see
+   * that a transfer they authorised had been half-performed. `resume` makes it
+   * worse rather than better: it moves `next_run_at` PAST the stranded
+   * occurrence, so even resuming does not bring the sweep back.
+   *
+   * So a stranded claim is now a reason to look at a schedule in its own right,
+   * independent of `next_run_at` and independent of `status`. That last part is
+   * deliberate: cancelling does not retract a claim either. Cancel stops FUTURE
+   * firings and is explicitly not a reversal — an occurrence already claimed is
+   * a movement this service committed to, and the honest completion of it is to
+   * post it, not to leave a `pending` row nobody will ever explain.
+   *
+   * Sweeping never plans new occurrences and never advances `next_run_at`. It
+   * finishes what was started and touches nothing else.
    */
   async runDueTransfers(options: { now?: Date; limit?: number; maxCatchUp?: number } = {}): Promise<RunReport> {
     const now = options.now ?? new Date();
@@ -264,18 +504,69 @@ export class TransferService {
        LIMIT ${limit}
     `;
 
-    const report: RunReport = { schedulesConsidered: due.length, settled: 0, rejected: 0, alreadyFired: 0 };
+    // Excluded rather than merged, so a schedule that is BOTH due and stranded
+    // is driven once — `driveSchedule` sweeps its own stranded claims first,
+    // and doing it twice would double-count the outcomes in the report.
+    const dueIds = due.map((row) => row.id);
+    const stranded = await this.sql<ScheduleRow[]>`
+      SELECT s.id, s.user_id, s.asset_id, s.from_space_id, s.to_space_id, s.amount, s.cadence,
+             s.starts_at, s.ends_at, s.next_run_at, s.status
+        FROM bank.scheduled_transfers s
+       WHERE NOT (s.id = ANY(${dueIds}::uuid[]))
+         AND EXISTS (
+           SELECT 1 FROM bank.transfer_executions e
+            WHERE e.schedule_id = s.id AND e.status = 'pending'
+         )
+       ORDER BY s.created_at ASC
+       LIMIT ${limit}
+    `;
 
-    for (const row of due) {
-      const outcomes = await this.driveSchedule(toSchedule(row), now, options.maxCatchUp ?? MAX_CATCH_UP_PER_PASS);
+    const report: RunReport = {
+      schedulesConsidered: due.length + stranded.length,
+      settled: 0,
+      rejected: 0,
+      alreadyFired: 0,
+      strandedSwept: stranded.length,
+    };
+
+    const count = (outcomes: FiringOutcome[]) => {
       for (const outcome of outcomes) {
         if (outcome === 'settled') report.settled++;
         else if (outcome === 'rejected') report.rejected++;
         else report.alreadyFired++;
       }
+    };
+
+    for (const row of due) {
+      count(await this.driveSchedule(toSchedule(row), now, options.maxCatchUp ?? MAX_CATCH_UP_PER_PASS));
+    }
+    for (const row of stranded) {
+      count(await this.sweepStrandedClaims(toSchedule(row)));
     }
 
     return report;
+  }
+
+  /**
+   * Finish the occurrences that were claimed and never posted.
+   *
+   * Re-driving is strictly safe: the ledger post is idempotent on
+   * `bank.transfer:<scheduleId>:<occurrence>`, so a claim whose post DID land
+   * before the process died finds the original transaction rather than moving
+   * value a second time.
+   */
+  private async sweepStrandedClaims(schedule: ScheduleRecord): Promise<FiringOutcome[]> {
+    const stranded = await this.sql<Array<{ occurrence: number }>>`
+      SELECT occurrence FROM bank.transfer_executions
+       WHERE schedule_id = ${schedule.id} AND status = 'pending'
+       ORDER BY occurrence ASC
+    `;
+
+    const outcomes: FiringOutcome[] = [];
+    for (const row of stranded) {
+      outcomes.push(await this.fireOccurrence(schedule, row.occurrence));
+    }
+    return outcomes;
   }
 
   private async driveSchedule(schedule: ScheduleRecord, now: Date, maxCatchUp: number): Promise<FiringOutcome[]> {
@@ -284,22 +575,6 @@ export class TransferService {
     // skips a user's transfer silently; this cannot.
     const fired = await this.sql<Array<{ last: number | null }>>`
       SELECT MAX(occurrence) AS last FROM bank.transfer_executions WHERE schedule_id = ${schedule.id}
-    `;
-
-    /**
-     * Occurrences that were CLAIMED but never finished.
-     *
-     * A committed `pending` row is a claim whose process died. It cannot happen
-     * in the current ordering — the claim and the ledger post share a
-     * transaction — but a claim nobody will ever finish is the one failure that
-     * strands a user's transfer forever with no error anywhere, so it is swept
-     * explicitly rather than assumed away. Re-driving is safe because the ledger
-     * post is idempotent on (schedule, occurrence).
-     */
-    const stranded = await this.sql<Array<{ occurrence: number }>>`
-      SELECT occurrence FROM bank.transfer_executions
-       WHERE schedule_id = ${schedule.id} AND status = 'pending'
-       ORDER BY occurrence ASC
     `;
 
     const plan = planDue({
@@ -311,10 +586,11 @@ export class TransferService {
       maxCatchUp,
     });
 
-    const outcomes: FiringOutcome[] = [];
-    for (const row of stranded) {
-      outcomes.push(await this.fireOccurrence(schedule, row.occurrence));
-    }
+    // Claims that were never finished go FIRST, in occurrence order, so a
+    // statement reads in the order the user's transfers were meant to happen.
+    // `sweepStrandedClaims` is the same code the standalone sweep uses — one
+    // definition of "finish what was started", not two that could drift.
+    const outcomes: FiringOutcome[] = await this.sweepStrandedClaims(schedule);
     for (const occurrence of plan.occurrences) {
       outcomes.push(await this.fireOccurrence(schedule, occurrence));
     }
