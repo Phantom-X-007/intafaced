@@ -644,7 +644,10 @@ export class PayService {
     /** Completed payments this link may take. Omit for unbounded. */
     maxUses?: number;
   }): Promise<{ id: string; token: string; prefix: string; label: string; expiresAt: Date; maxUses: number | null }> {
-    await this.getMerchant(input.merchantId);
+    // A suspended merchant already cannot open a public session or create a
+    // payment. Minting a fresh capability URL that only fails at pay-time is the
+    // same class of honesty hole as letting them settle after suspension.
+    this.assertMerchantActive(await this.getMerchant(input.merchantId));
     if (input.profileId) {
       const profiles = await this.sql<Array<{ id: string }>>`
         SELECT id FROM pay.payment_profiles
@@ -942,12 +945,10 @@ export class PayService {
         const link = await this.readLink(tx, input.linkToken, { forUpdate: true });
 
         const merchant = await this.getMerchant(link.merchantId);
-        if (merchant.status !== 'active') {
-          // Same code the merchant integration path uses, and deliberately the
-          // same refusal: a suspended merchant does not take money from the
-          // public either.
-          throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
-        }
+        // Same code the merchant integration path uses, and deliberately the
+        // same refusal: a suspended merchant does not take money from the
+        // public either.
+        this.assertMerchantActive(merchant);
 
         // The floor under an anonymous caller opening rows off one URL forever.
         // Not a rate limiter — a rate limiter belongs at the edge, and this is
@@ -1152,9 +1153,7 @@ export class PayService {
     if (input.amount <= 0n) throw new PayError('Payment amount must be positive', 'pay.invalid_amount');
 
     const merchant = await this.getMerchant(input.merchantId);
-    if (merchant.status !== 'active') {
-      throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
-    }
+    this.assertMerchantActive(merchant);
 
     // Resolved now so an unknown or incapable rail fails before a payment row
     // exists, rather than at authorize time with a buyer watching.
@@ -1733,6 +1732,12 @@ export class PayService {
    * back from the idempotency check. The database would then record a
    * settlement the ledger never made. Freezing first makes the retry
    * arithmetically identical.
+   *
+   * MERCHANT STATUS. Only an `active` merchant freezes a new window or posts
+   * one. `createPayment` and public checkout already refuse non-active; until
+   * this gate, a suspended merchant could still settle captured volume and take
+   * it out via `payoutSettlement` — suspension that stopped inbound only.
+   * Re-reading an already-posted settlement is still fine (no value moves).
    */
   async settleWindow(input: {
     merchantId: string;
@@ -1751,6 +1756,9 @@ export class PayService {
         if (prepared.status !== 'pending') return prepared;
 
         const merchant = await this.getMerchant(input.merchantId);
+        // About to post gross → merchant available. Suspension mid-freeze must
+        // not finish the move; captured volume stays in clearing until reopen.
+        this.assertMerchantActive(merchant);
 
         return transaction(
           this.sql,
@@ -1808,7 +1816,13 @@ export class PayService {
     );
   }
 
-  /** Phase 1: freeze the set and the numbers. No external call, no value moved. */
+  /**
+   * Phase 1: freeze the set and the numbers. No external call, no value moved.
+   *
+   * Returning an already-frozen row is allowed for a non-active merchant (the
+   * freeze already happened). Creating a NEW freeze is not — that would lock
+   * more payments into a settlement a suspended operator can then try to post.
+   */
   private async prepareSettlement(input: {
     merchantId: string;
     window: string;
@@ -1832,7 +1846,15 @@ export class PayService {
         // Lock the merchant, not the settlement row (which may not exist yet).
         // Two settlement runs for one merchant must queue, or both would select
         // the same unsettled payments and freeze them into two settlements.
-        await tx`SELECT id FROM pay.merchants WHERE id = ${input.merchantId} FOR UPDATE`;
+        // Re-read status under the lock so a suspend that races the getMerchant
+        // above cannot slip a freeze through.
+        const locked = await tx<Array<{ status: MerchantRecord['status'] }>>`
+          SELECT status FROM pay.merchants WHERE id = ${input.merchantId} FOR UPDATE
+        `;
+        const lockedStatus = locked[0]?.status;
+        if (!lockedStatus) {
+          throw new PayError(`Merchant ${input.merchantId} not found`, 'pay.merchant_not_found');
+        }
 
         const existing = await tx<SettlementRow[]>`
           SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
@@ -1840,6 +1862,10 @@ export class PayService {
            WHERE merchant_id = ${input.merchantId} AND "window" = ${input.window} AND asset_id = ${input.assetId}
         `;
         if (existing[0]) return toSettlement(existing[0]);
+
+        if (lockedStatus !== 'active') {
+          throw new PayError(`Merchant ${input.merchantId} is ${lockedStatus}`, 'pay.merchant_inactive');
+        }
 
         const candidates = await tx<Array<{ id: string; captured: string; refunded: string }>>`
           SELECT p.id,
@@ -1956,6 +1982,10 @@ export class PayService {
         }
 
         const merchant = await this.getMerchant(settlement.merchantId);
+        // Money is about to leave the book for a bank or a chain. A suspended
+        // merchant keeps their posted settlement (funds stay in available) but
+        // cannot drain it while cut off — same code as createPayment.
+        this.assertMerchantActive(merchant);
 
         // The attempt number is part of the hold's business key. A refused
         // payout releases the hold, so the next attempt must not reuse the key
@@ -2063,6 +2093,21 @@ export class PayService {
   private async view(sql: Sql, row: PaymentRow): Promise<PaymentView> {
     const totals = await totalsFor(sql, row.id);
     return { ...toPayment(row), capturedAmount: totals.captured, refundedAmount: totals.refunded };
+  }
+
+  /**
+   * One gate, one code, every money-moving surface that should refuse a
+   * non-active merchant: createPayment, openCheckout, createPaymentLink,
+   * settleWindow (post), prepareSettlement (new freeze), payoutSettlement.
+   *
+   * `status` is the operational cut-off (`suspended` / `closed` / `pending`);
+   * `kybStatus` is a separate flag and is deliberately not read here — wiring
+   * KYB into the money gates is its own residual once a real approver exists.
+   */
+  private assertMerchantActive(merchant: MerchantRecord): void {
+    if (merchant.status !== 'active') {
+      throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
+    }
   }
 }
 
