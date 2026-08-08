@@ -15,7 +15,13 @@ import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
 import type { FreezeService } from './affiliates/freeze-service.js';
-import { accrueCommission, CommissionError, DEFAULT_ACCRUAL_TIERS, type TierRate } from './affiliates/commission.js';
+import { accrueCommission, CommissionError, type TierRate } from './affiliates/commission.js';
+import {
+  AccrualRateRefuseError,
+  type AccrualTierLaw,
+  resolveAccrualTiers,
+  UNPUBLISHED_ACCRUAL_TIER_LAW,
+} from './affiliates/commission-rate-law.js';
 import { accrueWithFreezes } from './affiliates/freeze.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
 
@@ -62,6 +68,16 @@ function toTrpcError(err: unknown): TRPCError {
 
   if (err instanceof CommissionError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
+
+  if (err instanceof AccrualRateRefuseError) {
+    // PRECONDITION_FAILED: operator asked to accrue before owner rates exist.
+    // Same residual class as payout refuse — invent hole was accrual, not only payout.
+    return new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: `${err.message} [${err.residual}]`,
+      cause: err,
+    });
   }
 
   if (err instanceof AffiliatePayoutRefuseError) {
@@ -167,12 +183,19 @@ export function createIdentityRouter(
     freeze?: FreezeService;
     /** Slice B durable accrual rows (no ledger). Optional for light tests. */
     accruals?: AccrualStore;
+    /**
+     * Owner-published commission tier law (DIRECTION §8).
+     * Blank / unpublished → accrue refuses when the request omits tiers.
+     * Default unpublished — never invent 10/5/2%.
+     */
+    accrualTierLaw?: AccrualTierLaw;
   },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
   const referral = options.referral;
   const freeze = options.freeze;
   const accruals = options.accruals;
+  const accrualTierLaw = options.accrualTierLaw ?? UNPUBLISHED_ACCRUAL_TIER_LAW;
 
   function requireReferral(): ReferralService {
     if (!referral) {
@@ -1126,7 +1149,11 @@ export function createIdentityRouter(
           try {
             const parent = await requireReferral().loadParentMap();
             const frozen = await requireFreeze().frozenIds();
-            const tiers: readonly TierRate[] = input.tiers ?? DEFAULT_ACCRUAL_TIERS;
+            // No DEFAULT_ACCRUAL_TIERS — refuse when neither request nor owner law supplies rates.
+            const tiers: readonly TierRate[] = resolveAccrualTiers({
+              requestTiers: input.tiers,
+              law: accrualTierLaw,
+            });
             const fee = {
               feeEventId: input.feeEventId,
               userId: input.userId,
@@ -1164,6 +1191,7 @@ export function createIdentityRouter(
        * Slice B persist: same accrual as dry-run, written to durable store.
        * NEVER posts ledger. Idempotent on (feeEventId, beneficiary, hop).
        * Zero fee → zero rows. Payout remains refuse-closed (Slice C / §8).
+       * Rates: request tiers or owner-published law only — never invent.
        */
       accrue: scopedProcedure('admin:write')
         .input(
@@ -1208,7 +1236,10 @@ export function createIdentityRouter(
             const parent = await requireReferral().loadParentMap();
             const frozen = await requireFreeze().frozenIds();
             const store = requireAccruals();
-            const tiers: readonly TierRate[] = input.tiers ?? DEFAULT_ACCRUAL_TIERS;
+            const tiers: readonly TierRate[] = resolveAccrualTiers({
+              requestTiers: input.tiers,
+              law: accrualTierLaw,
+            });
             const fee = {
               feeEventId: input.feeEventId,
               userId: input.userId,

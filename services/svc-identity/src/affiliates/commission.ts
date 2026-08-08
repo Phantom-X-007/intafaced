@@ -12,6 +12,7 @@
  */
 
 import { ancestors, DEFAULT_MAX_REFERRAL_DEPTH } from './referral-tree.js';
+import { defaultTierCatalogBoardCard } from './commission-tier-honesty.js';
 
 export type CommissionErrorCode = 'commission.invalid' | 'commission.rate' | 'commission.fee';
 
@@ -110,6 +111,12 @@ export function accrueCommission(input: {
   if (!input.tiers.length) {
     throw new CommissionError('At least one tier rate is required', 'commission.rate');
   }
+  // Reachability: commission-tier-honesty boards the live tier list (not a stamp copy).
+  // minHop > maxHop is impossible for non-empty real tiers; catch corruption early.
+  const board = defaultTierCatalogBoardCard(input.tiers.map((t) => ({ hop: t.hop, rate: t.rate })));
+  if (board.tiers > 0 && board.minHop > board.maxHop) {
+    throw new CommissionError('tier hop catalog inverted', 'commission.invalid');
+  }
   const maxDepth = input.maxDepth ?? DEFAULT_MAX_REFERRAL_DEPTH;
   const chain = ancestors(input.parent, input.fee.userId, maxDepth);
   const rows: CommissionRow[] = [];
@@ -138,12 +145,18 @@ export function accrueCommission(input: {
   return rows;
 }
 
-/** Default demo tiers — product law may replace; tests pin exact strings. */
-export const DEFAULT_ACCRUAL_TIERS: readonly TierRate[] = [
-  { hop: 0, rate: '0.10' },
-  { hop: 1, rate: '0.05' },
-  { hop: 2, rate: '0.02' },
-];
+/**
+ * REMOVED: DEFAULT_ACCRUAL_TIERS (10% / 5% / 2%).
+ *
+ * That constant invented DIRECTION §8 fee-share rates and was the production
+ * fallback on affiliates.accrue / accrueDryRun and freeze helpers — durable
+ * commission rows were written under unpublished product law.
+ *
+ * Rates resolve only via resolveAccrualTiers (request tiers or owner-published
+ * IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON). See commission-rate-law.ts.
+ *
+ * Tests that need numbers pass an explicit fixture in the call site.
+ */
 
 /**
  * L3 — dry-run summary of accrued rows (no payout). Totals are decimal strings.

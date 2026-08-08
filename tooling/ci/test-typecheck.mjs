@@ -100,8 +100,10 @@ import { join, dirname, resolve, sep } from 'node:path';
 
 // ── The pinned set ──────────────────────────────────────────────────────────
 //
-// 65 diagnostics, hand-frozen at the commit that switched this check on
-// (minus five router.mount stubs fixed when createP2pRouter gained options).
+// 62 diagnostics, hand-frozen at the commit that switched this check on
+// (minus five router.mount stubs fixed when createP2pRouter gained options, and
+// minus three mm/mid-source doubles that turned out to be hiding a money defect —
+// see the note on `services/svc-trade` below).
 // Each row is [howManyTimes, 'file | TScode | message'].
 //
 // THIS LIST MAY ONLY SHRINK. Fix an entry and delete its row in the same commit
@@ -269,18 +271,21 @@ const PINNED = {
     ],
   ],
 
-  // 4 — services/svc-trade
-  'services/svc-trade': [
-    [
-      1,
-      "src/mm/mid-source.test.ts | TS2322 | Type '{ snapshotBook: Mock<() => Promise<{ bids: [bigint, bigint][]; asks: [bigint, bigint][]; }>>; }' is not assignable to type 'Pick<MarketDataAdapter, \"snapshotBook\">'.",
-    ],
-    [
-      2,
-      "src/mm/mid-source.test.ts | TS2322 | Type 'Mock<() => Promise<{ bids: [bigint, bigint][]; asks: [bigint, bigint][]; }>>' is not assignable to type '(symbol: string, limit?: number | undefined) => Promise<VenueBookSnapshot>'.",
-    ],
-    [1, "src/spot/matching-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"],
-  ],
+  // 1 — services/svc-trade
+  //
+  // Three `mm/mid-source.test.ts` pins are GONE rather than re-pinned, and they
+  // were all one thing: adapter doubles returning `{ bids, asks }` and nothing
+  // else, against a `snapshotBook` whose contract also requires `venueId`,
+  // `symbol`, `sequence`, `sequenced` and `observedAt`.
+  //
+  // Worth a sentence because it was not a cosmetic type complaint. A double that
+  // drops a required field cannot fail when the code under test drops it too, and
+  // the dropped field here was `observedAt` — which is precisely how the
+  // size-blind and age-blind mid in `createVenueMmMidSource` stayed invisible in
+  // this suite while the identical defect was found and fixed twice in
+  // `futures/mark-from-depth.ts` and `futures/mark-from-venue.ts`. The pins were
+  // pointing at the blind spot the whole time.
+  'services/svc-trade': [[1, "src/spot/matching-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"]],
 
   // 14 — services/svc-ws
   'services/svc-ws': [

@@ -164,8 +164,14 @@ export function midFromVenueBook(snapshot: VenueTopOfBook, requirement: DepthQuo
  * missing or unparseable one is a broken adapter, and the safe reading of a
  * broken adapter is "no mark" — substituting our clock is precisely the bug
  * being removed, re-entered through the error path.
+ *
+ * EXPORTED because `mm/mid-source.ts` had the identical discard on the identical
+ * snapshot and now reads the stamp through this function rather than growing a
+ * second one. "A snapshot that cannot say when it was read" must mean the same
+ * thing on every path that reads a venue book, or the third path drifts from the
+ * two that were fixed.
  */
-function readObservedAt(snapshot: { observedAt?: unknown }): Date | null {
+export function readObservedAt(snapshot: { observedAt?: unknown }): Date | null {
   const at = snapshot.observedAt;
   if (!(at instanceof Date)) return null;
   return Number.isFinite(at.getTime()) ? at : null;

@@ -29,7 +29,13 @@ export const BANK_NAV = [
 ];
 
 /**
- * svc-pay. Every row maps to a router in services/svc-pay/src/router.ts.
+ * svc-pay. Every row maps to one router on the pay wire surface — most of them
+ * in services/svc-pay/src/router.ts, and the last two in
+ * services/svc-pay/src/submerchant-router.ts, which `mergeRouters` folds into
+ * the same surface. The payfac half is kept as its own file there because it
+ * has a different authorization model, and it is two rows here for the same
+ * reason: `submerchant` is the tree and `submerchantPermission` is the journal
+ * over it, and one screen holding both would be a screen with two jobs.
  *
  * `deposit.credit` has NO row and never will: it is `admin:treasury`, it credits
  * a user's spendable balance, and an operator surface on a customer page is how
@@ -39,6 +45,8 @@ export const PAY_NAV = [
     { to: '/pay', labelKey: 'intafaced.pay.nav.overview', procedures: 'health · railHealth' },
     { to: '/pay/money', labelKey: 'intafaced.pay.nav.money', procedures: 'withdrawal.*' },
     { to: '/pay/merchant', labelKey: 'intafaced.pay.nav.merchant', procedures: 'merchant.me · merchant.create · merchant.submitKyb' },
+    { to: '/pay/network', labelKey: 'intafaced.pay.nav.network', procedures: 'submerchant.get · submerchant.list · submerchant.create' },
+    { to: '/pay/permissions', labelKey: 'intafaced.pay.nav.permissions', procedures: 'submerchantPermission.areas · list · history · grant · revoke' },
     { to: '/pay/links', labelKey: 'intafaced.pay.nav.links', procedures: 'merchant.listLinks · merchant.createLink' },
     { to: '/pay/payments', labelKey: 'intafaced.pay.nav.payments', procedures: 'payment.*' },
     { to: '/pay/settlements', labelKey: 'intafaced.pay.nav.settlements', procedures: 'settlement.*' },

@@ -116,6 +116,8 @@ export default [
     { path: '/pay', component: resolve=>(require(["../pages/intafaced/Pay"],resolve)) },
     { path: '/pay/money', component: resolve=>(require(["../pages/intafaced/pay/Money"],resolve)) },
     { path: '/pay/merchant', component: resolve=>(require(["../pages/intafaced/pay/Merchant"],resolve)) },
+    { path: '/pay/network', component: resolve=>(require(["../pages/intafaced/pay/Network"],resolve)) },
+    { path: '/pay/permissions', component: resolve=>(require(["../pages/intafaced/pay/Permissions"],resolve)) },
     { path: '/pay/links', component: resolve=>(require(["../pages/intafaced/pay/Links"],resolve)) },
     { path: '/pay/payments', component: resolve=>(require(["../pages/intafaced/pay/Payments"],resolve)) },
     { path: '/pay/settlements', component: resolve=>(require(["../pages/intafaced/pay/Settlements"],resolve)) },

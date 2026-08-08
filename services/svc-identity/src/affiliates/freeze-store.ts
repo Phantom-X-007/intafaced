@@ -99,8 +99,11 @@ export class MemoryFreezeStore {
     return this.byId.size > 0;
   }
 
-  /** Accrue commissions while applying this store's freeze set. */
-  accrue(input: { fee: FeeEvent; parent: ReadonlyMap<string, string>; tiers?: readonly TierRate[]; maxDepth?: number }): CommissionRow[] {
+  /**
+   * Accrue commissions while applying this store's freeze set.
+   * `tiers` is required — never invent product rates (DIRECTION §8).
+   */
+  accrue(input: { fee: FeeEvent; parent: ReadonlyMap<string, string>; tiers: readonly TierRate[]; maxDepth?: number }): CommissionRow[] {
     return accrueWithFreezes({
       fee: input.fee,
       parent: input.parent,

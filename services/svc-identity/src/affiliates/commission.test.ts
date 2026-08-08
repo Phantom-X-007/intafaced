@@ -4,7 +4,6 @@ import {
   accrueCommission,
   countCommissionRowsByHop,
   decimalMul,
-  DEFAULT_ACCRUAL_TIERS,
   listCommissionBeneficiaryIds,
   maxCommissionHop,
   summarizeCommissionRows,
@@ -18,7 +17,15 @@ import {
   commissionSummaryExportText,
   commissionRowCountInRange,
   commissionSummaryIsZero,
+  type TierRate,
 } from './commission.js';
+
+/** Test-only fixture — not a production default (DIRECTION §8). */
+const FIXTURE_TIERS: readonly TierRate[] = [
+  { hop: 0, rate: '0.10' },
+  { hop: 1, rate: '0.05' },
+  { hop: 2, rate: '0.02' },
+];
 
 describe('affiliates Slice B — commission accrual (no payout)', () => {
   it('decimalMul truncates to 18dp without float', () => {
@@ -40,7 +47,7 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
         at: new Date('2026-08-05T00:00:00.000Z'),
       },
       parent,
-      tiers: DEFAULT_ACCRUAL_TIERS,
+      tiers: FIXTURE_TIERS,
     });
     expect(rows).toEqual([]);
   });
@@ -54,7 +61,7 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
     const rows = accrueCommission({
       fee: { feeEventId: 'f1', userId: 'u3', feeAmount: '100', asset: 'USDT', at },
       parent,
-      tiers: DEFAULT_ACCRUAL_TIERS,
+      tiers: FIXTURE_TIERS,
     });
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
@@ -83,7 +90,7 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
         at: new Date(),
       },
       parent: new Map(),
-      tiers: DEFAULT_ACCRUAL_TIERS,
+      tiers: FIXTURE_TIERS,
     });
     expect(rows).toEqual([]);
   });
@@ -101,7 +108,7 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
     const rows = accrueCommission({
       fee: { feeEventId: 'f1', userId: 'u2', feeAmount: '100', asset: 'USDT', at: new Date() },
       parent,
-      tiers: DEFAULT_ACCRUAL_TIERS,
+      tiers: FIXTURE_TIERS,
     });
     const s = summarizeCommissionRows(rows);
     expect(s.rowCount).toBe(1);
@@ -132,7 +139,7 @@ describe('L3 wave53 commission summary status/export', () => {
     const rows = accrueCommission({
       fee: { feeEventId: 'f1', userId: 'u2', feeAmount: '100', asset: 'USDT', at: new Date() },
       parent,
-      tiers: DEFAULT_ACCRUAL_TIERS,
+      tiers: FIXTURE_TIERS,
     });
     const s = summarizeCommissionRows(rows);
     expect(commissionSummaryBoardCard(s).total).toBe('10');

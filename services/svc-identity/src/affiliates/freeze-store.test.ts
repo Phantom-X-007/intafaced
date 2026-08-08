@@ -36,6 +36,7 @@ describe('affiliates L3 freeze store (non-pay)', () => {
     const store = new MemoryFreezeStore();
     const parent = new Map([['payer', 'u-ref']]);
     store.freeze({ beneficiaryId: 'u-ref', frozenBy: 'op', reason: 'Policy hold' });
+    // Fixture rates for the test only — not a production default.
     const rows = store.accrue({
       fee: {
         feeEventId: 'f1',
@@ -45,6 +46,7 @@ describe('affiliates L3 freeze store (non-pay)', () => {
         at: new Date('2026-08-05T00:00:00.000Z'),
       },
       parent,
+      tiers: [{ hop: 0, rate: '0.10' }],
     });
     expect(rows.every((r) => r.beneficiaryId !== 'u-ref')).toBe(true);
   });
