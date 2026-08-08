@@ -40,8 +40,7 @@ session is merged.
 One branch is deliberately parked with **no PR**, which is not the same as left
 open:
 
-- **`fix/bank-idempotency-conflict-parked`** (also pushed as
-  `fix/claude-bank-idempotency-conflict`) — a finished, typechecked patch with
+- **`fix/bank-idempotency-conflict-parked`** — a finished, typechecked patch with
   five tests for the svc-bank finding below. It is rebased on tip and has no PR
   **because `services/svc-bank` is owner-locked and an agent must not implement
   there.** Take it or drop it; do not treat it as unfinished work.
