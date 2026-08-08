@@ -10,23 +10,23 @@
 
 <!-- tracker:start -->
 
-`█████████░░░░░░░░░░░` **45%** — 56 of 124 features shipped
+`████████░░░░░░░░░░░░` **38%** — 56 of 148 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 6/24 · **3** 5/17 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 9/36 · **5P** 1/3
+Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 9/55 · **5P** 1/4
 
 **In progress:** Perps: isolated margin, funding, partial-liquidation ladder (nitro-agent) · Moderated dispute resolution (nitro-agent) · Payment instruments — where the buyer actually pays (nitro-agent) · P2P merchant programme — badges, limits, API (nitro-agent) · Navigator — tool-calling inside user guardrails (nitro-agent) · Market Scanner — ranked signals by tier (nitro-agent) · Event-driven fan-out: in-app, push, email, SMS (nitro-agent)
 
-**🟢 28 ready to claim** — nothing blocks these:
+**🟢 31 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
+- `identity.pii-isolation` — PII isolation — KYC documents in a separate encrypted store (§10)
+- `infra.drop-flags` — Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11)
 - `trade.otc` — OTC RFQ desk, staked-tier gate
 - `trade.copy` — Copy trading, audited leaders, profit share
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
-- `trade.mm-bot` — Internal market-maker seeding books at launch
-- `venue.aggregation` — External venue adapters via CCXT (cross-venue)
-- …and 20 more
+- …and 23 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

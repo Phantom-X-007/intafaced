@@ -329,11 +329,15 @@ capabilities:
   - id: agents.v2-fleet
     capability: v2 agent fleet — Portfolio, Launch, Risk & Compliance, Coach, Growth
     law: '8:388'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #12'
-      note: >-
-        The law names ten agents. The board carries five plus the gateway. Copy-Intel exists
-        (agents.copy-intel); Portfolio, Launch, Risk & Compliance, Coach and Growth have no row.
+    tracker: [agents.portfolio, agents.launch, agents.risk-compliance, agents.coach, agents.growth]
+    note: >-
+      Gap closed 2026-08-08. The law names ten agents; the board carried five plus the gateway, with
+      Copy-Intel already rowed. One row per agent rather than one bundle row, matching the granularity
+      the five v1 agents already use — a bundle would have made "which of the five is missing" an
+      unanswerable question again. All five are blocked, each on the surface it would be grounded in
+      rather than on each other: Portfolio on ops.portfolio, Launch on launch.trust-layer, Risk &
+      Compliance on ops.compliance, Coach on academy.curriculum, Growth on ops.analytics. agents.coach
+      is also claimed by m.academy.coach, which §25:708 gives its own matrix row.
   - id: academy.service
     capability: svc-academy — lobbies, spatial layer, ambassadors, curriculum, certifications, tournaments
     law: '8:390'
@@ -375,11 +379,16 @@ capabilities:
   - id: cross.public-api-gateway
     capability: Public API — one gateway in front of trade, pay and data, with keys, scopes and sandbox
     law: '9:430'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #20'
-      note: >-
-        The law says ONE gateway. The board has pay.public-api (pay-scoped) and trade.ccxt-api
-        (trade-scoped, and itself an orphan). Nobody owns the single surface the law describes.
+    tracker: [api.gateway]
+    note: >-
+      Gap closed 2026-08-08. The law says ONE gateway; the board had pay.public-api (pay-scoped,
+      blocked) and trade.ccxt-api (trade-scoped, and the one recorded orphan), and no owner for the
+      single surface. The new row is blocked on both and carries a FLAG rather than a design: §9:430
+      and the accepted pay-public-api ADR disagree. That ADR deliberately rejects a shared error
+      taxonomy — svc-trade speaks CCXT because bots already do, and payments have no equivalent
+      lingua franca — and one gateway with two taxonomies is not one gateway. The row states the two
+      readings and picks neither; the key, scope and sandbox plane is the part that is shared either
+      way, and identity.apikeys already issues named scoped keys.
   - id: cross.notifications
     capability: Notifications — event-driven fan-out (in-app, push, email/SMS adapters)
     law: '9:431'
@@ -415,21 +424,31 @@ capabilities:
   - id: data.pii-isolation
     capability: PII isolation — KYC documents in a separate encrypted store, services get flags only
     law: '10:443'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #16'
-      note: >-
-        Compliance-load-bearing and unrowed. identity.kyc and identity.kyc-review both hold document
-        references; nothing on the board says where the documents themselves live.
+    tracker: [identity.pii-isolation]
+    note: >-
+      Gap closed 2026-08-08. Compliance-load-bearing and unrowed since the law was written. The
+      services-get-flags half already holds in code — svc-identity's kyc_records carries one opaque
+      provider_ref documented against §10:443 by name — but it holds VACUOUSLY, because no
+      verification provider is integrated and there is no document anywhere to isolate. The row says
+      so: an invariant that holds only because the feature is empty is a coincidence with a deadline,
+      and the store plus a gate asserting no service schema grows a document column have to exist
+      before the first document arrives. One of only three rows in this wave that is genuinely
+      claimable today; which provider is the owner's, and Class X.
 
   # ── §11 LAUNCH-SEQUENCE MAPPING ────────────────────────────────────────────
   - id: core.drop-flags
     capability: Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine, limited drops
     law: '11:456'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #15'
-      note: >-
-        "The drop sequence is configuration, not deployment risk" — and the configuration does not
-        exist. No row for waitlist, referral queue, founding-badge NFT mint, season engine or drops.
+    tracker: [infra.drop-flags]
+    note: >-
+      Gap closed 2026-08-08. "The drop sequence is configuration, not deployment risk" — and the
+      configuration did not exist, while drop_phases below already named this capability under four of
+      the six drop gates. The row is the SWITCH, not the features behind it: it depends only on
+      infra.config (done) and reads ready, because putting launch.nft in its dependencies for the
+      founding-badge mint would have parked a phase-1 framework behind a phase-5 row and recreated the
+      inverted-edge defect this PR removed from venue.aggregation. A flag can exist and be OFF for a
+      feature that does not — that is what dark shipping means — but the row carries the done-bar rule
+      that an OFF flag for an unbuilt feature must read as unbuilt, not as ready.
 
   # ── §13 WHAT IS DELIBERATELY NOT IN v1 ─────────────────────────────────────
   - id: socket.rust-port
@@ -1069,19 +1088,29 @@ capabilities:
     law: '25:707'
     plane: B
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #10'
-      note: A named media service in the matrix with no row and no service on disk.
+    tracker: [academy.video]
+    note: >-
+      Gap closed 2026-08-08. A named media service in the matrix with no row and no service on disk.
+      Blocked on academy.curriculum, because §25:705 puts the playbook and workbook library in the
+      curriculum spine and a video library is the media half of that same shelf. The row separates two
+      blockers that would otherwise hide behind each other: socket.stream-provider is LIVE streaming
+      (LiveKit, owner API key), while this is stored playback, whose real precondition is object
+      storage and a transcode path — neither of which exists, the same unprovisioned dependency
+      blueprint.card records for its rasterizer. Done-bar condition on the row: §25:710 gates Academy
+      access by tier and stake, so signed, expiring, tier-checked delivery or it is not done.
   - id: m.academy.coach
     capability: AI Coach
     law: '25:708'
     plane: B
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #11'
-      note: >-
-        One of the ten agents §8.2 names. The board carries five. Related to agents.v2-fleet but listed
-        separately because §25 gives it its own matrix row.
+    tracker: [agents.coach]
+    note: >-
+      Gap closed 2026-08-08. One of the ten agents §8.2 names; the board carried five. Still listed
+      separately from agents.v2-fleet because §25:708 gives the Coach its own matrix row, and both
+      capabilities now claim the same agents.coach row — which is the honest shape rather than a
+      duplicate. Blocked on academy.curriculum: a coach grounded in nothing is a chatbot. The row flags
+      the one question an agent must not answer by itself — whether the Coach may reference the user's
+      own positions, which turns education into a recommendation about live money.
   - id: m.academy.community
     capability: Community and mentorship — matched crews, boards, leader pipeline
     law: '25:709'
@@ -1105,9 +1134,16 @@ capabilities:
     capability: CRM, HR and team, Finance with live revenue fused, Project engine
     law: '25:714'
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #7'
-      note: Four named internal systems against one adjacent row (ops.support, which is tickets and KB).
+    tracker: [ops.business-systems]
+    note: >-
+      Gap closed 2026-08-08. Four named internal systems against one adjacent row (ops.support, which
+      is tickets and KB). Blocked on ops.support and ops.analytics — a CRM sits on the support desk's
+      contact and case data, and "Finance with live revenue fused" is the warehouse read rather than a
+      second aggregation. The matrix gives plane "—"; the row states F as operator-side and
+      identity-bearing and says explicitly that this is not a plane ruling. FLAGGED for scope, not
+      design: CRM and Finance sit next to revenue we already record, but HR & team and a Project engine
+      are internal business software with no customer edge, and nothing says we build rather than buy
+      those. That call is worth taking before anyone starts.
   - id: m.core.compliance
     capability: Compliance — geo KYC/AML, geo-block, VPN/Tor detect, per-jurisdiction
     law: '25:715'
@@ -1134,18 +1170,30 @@ capabilities:
     capability: Marketing engine plus Growth Agent
     law: '25:719'
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #8'
-      note: No row for the engine, and Growth is one of the five agents also missing from the board.
+    tracker: [ops.marketing, agents.growth]
+    note: >-
+      Gap closed 2026-08-08. There was no row for the engine, and Growth was one of the five agents also
+      missing — so this capability claims both halves the matrix line names. Blocked on ops.analytics,
+      ops.affiliates and agents.growth: a marketing engine with no attribution is a send button, and
+      attribution already lives in the affiliate trees. The row carries the constraint that matters
+      more than the feature set — returns-ranked leaderboards and curve-fit marketing are already
+      banned in three places, and a campaign template with a performance figure in it breaches all
+      three quietly. It also records that the outbound rail does not currently deliver: email, push and
+      SMS refuse with channel.not_configured until the owner supplies gateway credentials.
   - id: m.core.kb-workflow
     capability: Knowledge base and workflow automation
     law: '25:720'
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #9'
-      note: >-
-        ops.support carries "tickets, KB" in its title but the standalone knowledge base and the
-        workflow automation engine have no row.
+    tracker: [ops.kb-workflow]
+    note: >-
+      Gap closed 2026-08-08. ops.support carried "tickets, KB" in its TITLE, which is exactly how this
+      stayed invisible — a word in another row's title is not a row — and the workflow automation engine
+      beside it had no board presence at all. Blocked on ops.support, which is the right edge in both
+      directions. The row separates the two capabilities the matrix line fuses, because they are not the
+      same size: a versioned knowledge base is a content surface, while a workflow automation engine
+      running user-defined triggers across modules is an agent runtime with a different name, and it
+      must not become a second one beside agents.gateway or the Agentic Law has a hole in it. Worth an
+      owner ruling on whether the automation half ships at all.
   - id: m.core.mining-ops
     capability: Mining pool ops — solo and pooled, dashboards, payouts
     law: '25:721'
@@ -1167,26 +1215,51 @@ capabilities:
     law: '25:723'
     plane: B
     phase: 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #4'
-      note: Portfolio views over ledger plus indexer. No row, and no service claims it.
+    tracker: [ops.portfolio]
+    note: >-
+      Gap closed 2026-08-08. Portfolio views over ledger plus indexer — no row, and no service claimed
+      it. Blocked on indexer.readmodels, which is precisely the second half of the substrate the matrix
+      names: the ledger half is done, the on-chain half is not, and a portfolio showing only the
+      custodial side of a two-plane platform is misleading rather than partial. The row carries that as
+      its load-bearing rule — a holding the platform cannot read is ABSENT AND NAMED, never zero, the
+      same principle D-S-18 fixed for venues — and notes that a portfolio is a view under §0.6 and
+      holds no balance of its own. It also blocks agents.portfolio, which cannot rebalance against a
+      portfolio nobody can read.
   - id: m.core.site-builder
     capability: Site builder — drag-drop, live asset APIs, domains, SSL
     law: '25:724'
     phase: 5
     gap:
       audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #5'
-      note: A named svc-core-ops surface with no row.
+      note: >-
+        A named svc-core-ops surface with no row. DELIBERATELY LEFT AS A GAP on 2026-08-08, when the
+        other twenty-two on this list were boarded, and the reason is worth writing down rather than
+        leaving as an omission. Every other capability boarded that day had either a real dependency
+        edge on an existing row — so `blocked` computed and was honest — or a written decision that
+        made its state honest. This one has neither. A drag-drop website builder with live asset APIs,
+        custom domains and SSL touches nothing else on the board, so there is no edge to express; with
+        no edge it would render `ready`, which is the tracker saying "claim this now" about a product
+        nobody has decided to build. `socket` is equally wrong: it means deliberately not in v1, and no
+        such decision exists — the interface does not exist either. Domains and SSL are also a
+        registrar and ACME dependency on an external party, which is a second thing nobody has chosen.
+        NEEDS AN OWNER SCOPE RULING, and until then a gap honestly recorded says more than a row that
+        misrepresents what is decided. The ratchet keeps it visible and keeps the set from growing.
   - id: m.core.social-promotion
     capability: Social promotion — one-tap share, tracked attribution, every surface
     law: '25:725'
     plane: B
     phase: 4 / 5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #6'
-      note: >-
-        blueprint.card covers rendering the acquisition artefact. Its distribution half — the share
-        pipeline and attribution tracking on every surface — has no row.
+    tracker: [ops.social-promotion]
+    note: >-
+      Gap closed 2026-08-08. blueprint.card covers rendering the acquisition artefact and is done; its
+      distribution half — the share pipeline and attribution tracking on every surface — had no row.
+      The matrix gives phase 4/5 and the registry has no range bucket, so the row sits at 5: the phase-4
+      half IS the card, which already shipped, and phasing the remainder at 4 would have put its
+      phase-5 dependency (ops.affiliates) in front of a phase-4 row — the same inverted-edge defect this
+      PR removed from venue.aggregation and v22.alerts. Blocked on ops.affiliates, which owns the
+      multi-tier trees attribution belongs in. Flagged on the row: a share URL that outlives a deleted
+      Blueprint breaks §26 and blueprint.ownership, so the attribution token has to be revocable, and
+      that is an ADR-shaped question rather than a default.
   - id: m.core.developer-platform
     capability: Developer platform — public APIs, docs, sandbox
     law: '25:726'
@@ -1199,11 +1272,17 @@ capabilities:
     law: '25:727'
     plane: B
     phase: 2–5
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #2'
-      note: >-
-        Named twice in the matrix (:635 and :727) and phased from 2. Zero rows, zero code, no
-        React Native app in apps/.
+    tracker: [web.mobile-apps]
+    note: >-
+      Gap closed 2026-08-08. Named twice in the matrix (:635 and :727) and phased from 2, with zero rows
+      and zero code. The row sits at 2 rather than 5 — the lower bound the matrix gives, and the phase
+      being worked — because filing it at 5 would have hidden that it is already late; the registry has
+      no "2–5" bucket so the range is recorded on the row. Blocked on web.terminal, which is wip:
+      mirroring a surface that is mid-port is how two front ends become three. FLAGGED for a product
+      ruling before any code, because the law and an accepted ADR disagree — §25:727 specifies a React
+      Native app in apps/, while the retire-apps-web ADR empties apps/ and makes the served surface the
+      vendored Vue shell. Distribution under our own name is a separate owner item: an app-store listing
+      for a crypto app is reviewed on jurisdiction, not only on code.
 
   # ── §25 · TOKEN, BLUEPRINT, AGENTS ─────────────────────────────────────────
   - id: m.token.all
@@ -1405,33 +1484,58 @@ capabilities:
   - id: quant.studio
     capability: Strategy Studio — no-code visual builder with mandatory risk blocks, Blueprint-aware defaults
     law: '29:783'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #28'
-      note: The law calls this the surface no exchange ships properly. It has no row and no service.
+    tracker: [quant.studio]
+    note: >-
+      Gap closed 2026-08-08. The law calls this the surface no exchange ships properly and it had no row
+      and no service. Phase 5 comes from §30:793 verbatim, not from convenience. The blocker is not
+      inferred either: `docs/adr/2026-08-04-predict-quant-connect-law.md` (D-S-18, Accepted) rules that
+      §29 is blocked on §27's data lake, which is blocked on §27's adapters — so the row depends on
+      connect.data-lake. The row also records what the same ADR leaves open under "what still needs the
+      owner": WHETHER QUANT SHIPS TO USERS AT ALL. Boarding it stops the capability being invisible; it
+      does not assert the product is going ahead, and no svc-quant should be scaffolded off it.
   - id: quant.sdk
     capability: Code SDK — TypeScript and Python against a sandboxed strategy runtime, deterministic replay
     law: '29:784'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #28'
-      note: >-
-        Listed with the studio in the audit; separated here because the sandbox is its own security
-        surface — §30:797 adds a sandbox-escape test suite to the DoD for it.
+    tracker: [quant.sdk]
+    note: >-
+      Gap closed 2026-08-08. Listed with the studio in the audit and kept separate here because the
+      sandbox is its own security surface — §30:797 adds a sandbox-escape test suite to the DoD for it,
+      and §29:787 requires V8 isolates or WASM with no raw network, which means a runtime that can reach
+      the network is not a sandbox with a gap. Blocked on quant.studio and execution.sor, because
+      §29:784 executes "via the same OMS" and svc-execution does not exist. §30:793 phases SDK and
+      Marketplace at "5+" while §30:795 lists the SDK at 5; the row sits at 5 and records the
+      inconsistency rather than inventing a 5+ phase key the by-phase render has no bucket for. The row
+      also keeps the Venue Vault as a DONE-BAR condition for the external-venue half rather than a
+      blocking edge, and states how that differs from the inverted edge removed from venue.aggregation.
   - id: quant.backtest
     capability: Backtest engine — event-level on the data lake, walk-forward, Monte Carlo, overfitting honesty
     law: '29:785'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #29'
-      note: >-
-        Depends on the §27 data lake, which is also unrowed. The honesty regime — out-of-sample
-        verdicts, no curve-fit marketing on-platform — is a product rule with nowhere to live.
+    tracker: [quant.backtest]
+    note: >-
+      Gap closed 2026-08-08. It depends on the §27 data lake, which now has a row of its own, so the
+      edge is expressed rather than described. The honesty regime finally has somewhere to live, and the
+      row carries it verbatim from D-S-18 because this is the surface where the doctrine is under the
+      most pressure: a TRUTHFUL number computed over real history can still be the most misleading thing
+      on the screen, so the dishonesty is in the framing rather than the arithmetic. Binding from line
+      one and not re-openable by a claimant: no out-of-sample verdict means the result does not render;
+      unmodelled fees or slippage means the run is refused rather than caveated; the variant count is
+      displayed; live P&L is never shown beside a backtest unlabelled; and no leaderboard ranked by
+      historical return, in any room. §30:797 adds a backtest determinism test to the DoD.
   - id: quant.marketplace
     capability: Strategy marketplace and compute tiers — subscriptions, profit share, token-gated tiers
     law: '29:788'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #30'
-      note: >-
-        Copy-trading generalised to systems, audited by Copy-Intel, commissioned per §8.7. Neither
-        market.commerce nor trade.copy claims it.
+    tracker: [quant.marketplace]
+    note: >-
+      Gap closed 2026-08-08. Copy-trading generalised to systems, commissioned per §8.7, and neither
+      market.commerce nor trade.copy claimed it. Blocked on quant.studio and market.commerce — a second
+      commerce path would be a second answer to the same question. FLAGGED, because a contradiction the
+      board already carries once arrives here a second time: §29:788 offers publication as subscriptions
+      "or profit-share", while SPEC-SOVEREIGN-ROUTING-AND-COPY forbids any fee computed from follower
+      P&L in v1 in any form, and audit §B5 #1 records the law being stale the same way for trade.copy.
+      If leaders may not charge on P&L, a strategy marketplace that does is the same structure with a
+      different noun, and nobody has ruled that systems differ from leaders. An ADR settles it, not a
+      PR. D-S-18's ban on ranking by historical return also removes the obvious ranking signal, so it
+      has to be designed rather than defaulted. Compute-tier magnitudes are owner-only under D-S-14.
 
   # ── §30 INTEGRATION & REVENUE ADDENDA ──────────────────────────────────────
   - id: addenda.v21-matrix
@@ -1464,17 +1568,30 @@ capabilities:
   - id: v22.auto-invest
     capability: Auto-invest — DCA schedules, card round-ups, threshold sweeps, both planes
     law: '31:805'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #31'
-      note: Table stakes against every neobank, phased 5, and no row on the board.
+    tracker: [bank.auto-invest]
+    note: >-
+      Gap closed 2026-08-08. Table stakes against every neobank, phased 5 by the law, and no row on the
+      board. The row says plainly that the FIAT half is buildable today — bank.accounts, bank.cards,
+      bank.earn and trade.convert are all done, so scheduled buys, card round-ups and threshold sweeps
+      are ordinary ledger-recipe work — and that it still reads blocked because §31:805 specifies BOTH
+      planes and the sovereign half funds from a vault via standing session-key allowance, which is
+      protocol.smart-accounts and not done. A standing allowance simulated custodially would be the
+      opposite of what the law asked for. Nothing here needs an owner magnitude: round-up granularity
+      and sweep thresholds are user settings, so D-S-14 does not gate this one.
   - id: v22.tax-engine
     capability: svc-tax — per-jurisdiction reporting, lot accounting, export packs, owned not vendored
     law: '31:807'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #32'
-      note: >-
-        A new service named in the law. The advantage the law claims — nothing to re-import, it reads
-        the ledger and the data lake directly — is unavailable while neither exists.
+    tracker: [tax.engine]
+    note: >-
+      Gap closed 2026-08-08. A new service named in the law, owned not vendored. The advantage the law
+      claims — nothing to re-import, because it reads the ledger and the data lake directly — is exactly
+      what is missing: the ledger half is done, connect.data-lake does not exist, and on-chain history
+      needs indexer.readmodels, so the row is blocked on the two reads that make it worth building. It
+      also records that the load-bearing half is COUNSEL, not engineering: which lot method applies in
+      which jurisdiction, and what a spend-disposal is when a card converts crypto at the till, are legal
+      determinations of the same class as the sanctions list. An agent may build the lot-accounting
+      engine and the export format; a wrong jurisdiction mapping shipped confidently is worse than no
+      tax product, so the honest v1 boundary refuses by name outside a small mapped set.
   - id: v22.alerts
     capability: Alerts and watchlists — price, funding, liquidation proximity, whale flow, portfolio digests
     law: '31:809'
@@ -1484,26 +1601,45 @@ capabilities:
       ops.notifications is fan-out, not alerting: nothing evaluated a condition and decided to notify,
       and nothing said so. The row keeps the two halves apart (core at 2, intelligence tiers at 5) and
       carries the refusal rule: an alert compared against a price the platform cannot source refuses
-      rather than firing on a stale number. Blocked on ops.notifications, which cannot deliver
-      out-of-app until the owner supplies gateway credentials.
+      rather than firing on a stale number. DEPENDENCY CORRECTED the same day: the row had depended on
+      ops.notifications, which is phase 5, so a phase-5 prerequisite stood in front of a capability the
+      law phases at 2. §31:809 is explicit on the phase and §38:854 repeats it, so the edge was argued
+      down rather than the phase moved. What separates ops.notifications from done is out-of-app gateway
+      credentials the owner must obtain — a done-bar residual on a supplier, not a start-bar dependency
+      on the alerts core — and it now sits on this row's own done bar instead: no `done` while an alert
+      can only reach an in-app inbox.
   - id: v22.business-banking
     capability: svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll
     law: '31:811'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #34'
-      note: >-
-        Includes multi-recipient crypto payroll, for which §38:854 adds a payroll-run atomicity test to
-        the DoD. No row, no service, and the DoD addition has nothing to attach to.
+    tracker: [bank.business]
+    note: >-
+      Gap closed 2026-08-08, and this one is the clearest case on the list for why the gate exists:
+      §38:854 added a payroll-run integrity test (multi-recipient atomicity) to the DoD, and there is no
+      svc-bank-biz, so the law has carried a TEST FOR A SERVICE THAT DOES NOT EXIST since the day it was
+      written. A DoD condition with no capability under it is a condition nobody can fail. The row says
+      so on its face. Blocked on pay.gateway because §31:811 wires invoicing to Pay; bank.accounts and
+      bank.cards are done and are what it builds on. Two things are written onto the row now rather than
+      discovered later: under §0.6 a payroll run is one ledger movement or it is refused, because a run
+      that pays 40 of 50 and reports success is precisely the failure §38:854 names; and §31:811 requires
+      KYB per Lane B, which exists nowhere on the board — identity.kyc is individual KYC, and a corporate
+      account holder is not a person.
 
   # ── §32 MODULE XII · INTAFACED PREDICT ─────────────────────────────────────
   - id: v22.predict
     capability: INTAFACED PREDICT — prediction markets as a first-class INTACORE market type
     law: '32:815'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #35'
-      note: >-
-        An entire named module of the product — the twelfth room — with zero board presence. §38:853
-        records the module count moving 11 to 12; the tracker does not know the twelfth room exists.
+    tracker: [predict.markets]
+    note: >-
+      Gap closed 2026-08-08. An entire named module of the product — the twelfth room — with zero board
+      presence: §38:853 records the module count moving 11 to 12 and the tracker did not know it existed.
+      Phase 5P and plane P are the law's. The owner is the chain owner because an accepted ADR says so
+      rather than by inference: D-S-18 states "§32 Predict — Phase 5P. Not agent work, and not mine" and
+      lists every §32 decision under what needs the owner, so agents babysit only. Blocked on
+      chain.mainnet, because prediction markets are an INTACORE market type and INTACORE does not exist.
+      The row carries the two properties D-S-18 fixed so they are not decided by whoever writes the first
+      line: RESOLUTION IS THE PRODUCT and is specced before the market type is built, and every bond and
+      slashing magnitude is owner-only. §38:854's resolution-dispute game-theory test suite is the second
+      DoD addition on this list with nothing to attach to.
 
   # ── §33 CREW VAULTS ────────────────────────────────────────────────────────
   - id: v22.crew-vaults
@@ -1551,12 +1687,18 @@ capabilities:
   - id: v22.infra-b2b
     capability: INTAFACED INFRA — embeddable ramp widget and white-label tiers, the B2B line
     law: '37:845'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #40'
-      note: >-
-        The law calls this potentially the largest single revenue line in the stack, and says it is
-        packaging rather than new core. Zero rows. §38:854 adds a white-label tenant isolation audit to
-        the DoD with nothing to attach it to.
+    tracker: [ops.infra-b2b]
+    note: >-
+      Gap closed 2026-08-08. The law calls this potentially the largest single revenue line in the stack
+      and says it is packaging rather than new core, and it had zero rows — while §38:854 already added a
+      white-label tenant isolation audit to the DoD with nothing to attach it to, the third such orphaned
+      DoD clause on this list. Blocked on pay.payfac and bank.ramps, which are the existing multi-tenancy
+      §37:848 says it runs on; the white-label half additionally needs the §28:777 execution tenancy,
+      which is execution.house-tenant and behind an owner ADR of its own. §37:848 says "Phase 5+"; the
+      row sits at 5 and records the wording, because the registry has no 5+ bucket and an unknown phase
+      key drops a row out of the by-phase render. FLAGGED, and the flag is not technical: licensing the
+      OS to an operator under their brand means our engine moving their customers' money under someone
+      else's compliance posture. "Packaging, not new core" is true of the code and false of the risk.
 
   # ── §38 ADDENDA ────────────────────────────────────────────────────────────
   - id: addenda.v22-matrix
@@ -1846,32 +1988,38 @@ baseline:
   #   +1  Audit item #28 is "Strategy Studio + Code SDK". §29 gives them
   #       separate lines and §30:797 puts the sandbox-escape suite only on the
   #       SDK, so they are split — the sandbox is its own security surface. → 41
+  #
+  # 2026-08-08: this list went from twenty-three entries to one, across two PRs
+  # that overlapped by accident and are worth distinguishing here.
+  #
+  #   · #1167 closed dod.slo-dashboards by BUILDING it — /metrics on svc-edge, a
+  #     scrape target verified UP against real prom/prometheus, a provisioned
+  #     Grafana dashboard whose panels return live series. `infra.slo-dashboards`
+  #     is `done` on that evidence, and its own note records the honest residual:
+  #     1 of 19 services instrumented, 18 to go.
+  #   · This PR closed the remaining twenty-one by BOARDING them — a tracker row
+  #     each, expressing the real dependency edge and letting `blocked` compute.
+  #     Twenty-one rows for twenty-one capabilities is not the row count, because
+  #     the v2 agent fleet is five rows and two capabilities share one row.
+  #
+  # Both directions of the ratchet did their job during that overlap: this branch
+  # had also written a `ready` row for dod.slo-dashboards, and rebasing surfaced it
+  # as a duplicate id against #1167's `done` one. The `ready` row was dropped — a
+  # capability that has shipped must not be re-boarded as claimable, which is the
+  # same failure mode as a baseline sitting above the truth, arriving from the
+  # opposite side.
+  #
+  # m.core.site-builder stays a gap DELIBERATELY, and its capability note says why
+  # at length. Short version: every other capability boarded that day had either a
+  # real dependency edge on an existing row, so `blocked` computed honestly, or a
+  # written decision that made its status honest. The site builder has neither — no
+  # edge to express, so it would render `ready` and invite a claim on a product
+  # nobody decided to build, and `socket` would assert a not-in-v1 decision that
+  # does not exist. It needs an owner scope ruling. A gap honestly recorded says
+  # more than a row that misrepresents what is decided, and this list is where that
+  # stays visible.
   gaps:
-    - agents.v2-fleet
-    - cross.public-api-gateway
-    - data.pii-isolation
-    - core.drop-flags
-    # dod.slo-dashboards CLOSED 2026-08-08 — boarded to infra.slo-dashboards.
-    # Removed here because the ratchet fails in both directions: a baseline left
-    # sitting above the truth is blanket cover for something nobody looked at.
-    - m.academy.video
-    - m.academy.coach
-    - m.core.business-systems
-    - m.core.marketing
-    - m.core.kb-workflow
-    - m.core.portfolio
     - m.core.site-builder
-    - m.core.social-promotion
-    - core.mobile-apps
-    - quant.studio
-    - quant.sdk
-    - quant.backtest
-    - quant.marketplace
-    - v22.auto-invest
-    - v22.tax-engine
-    - v22.business-banking
-    - v22.predict
-    - v22.infra-b2b
   # Tracker rows with no law basis and no written decision anywhere.
   # The audit's headline says 18 extra-legal rows; its own class breakdown
   # (1 orphan · 1 contradiction · 13 §13-extensions · 3 decided evolutions)
