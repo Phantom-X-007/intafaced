@@ -6,6 +6,7 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { checkAccess } from '@intafaced/config';
 import type { Address } from 'viem';
 import { env } from './env.js';
+import { protocolGasPosture } from './chain/policy-surface.js';
 import * as schema from './db/schema.js';
 import { PostgresAccountStore } from './db/postgres-store.js';
 import { AccountRegistry } from './accounts/registry.js';
@@ -72,6 +73,9 @@ const chain = new ProtocolChain({
   tokenFactory: env.PROTOCOL_TOKEN_FACTORY_ADDRESS as Address,
   ...(env.PROTOCOL_BUNDLER_URL ? { bundlerUrl: env.PROTOCOL_BUNDLER_URL } : {}),
 });
+
+/** S-A10/A11 — stated at boot; sponsorship refuses until Nitro funds a deposit. */
+const gasPosture = protocolGasPosture({ bundlerUrl: env.PROTOCOL_BUNDLER_URL });
 
 const registry = new AccountRegistry(new PostgresAccountStore(db.drizzle), {
   chainId: env.PROTOCOL_CHAIN_ID,
@@ -156,7 +160,14 @@ observer.start();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
-  { port: env.HTTP_PORT, chainId: env.PROTOCOL_CHAIN_ID, factory: env.PROTOCOL_FACTORY_ADDRESS, trpc: true },
+  {
+    port: env.HTTP_PORT,
+    chainId: env.PROTOCOL_CHAIN_ID,
+    factory: env.PROTOCOL_FACTORY_ADDRESS,
+    trpc: true,
+    bundlerSubmitVia: gasPosture.bundler.submitVia,
+    sponsorship: gasPosture.sponsorshipSample.allow ? 'open' : gasPosture.sponsorshipSample.reason,
+  },
   'svc-protocol ready — non-custodial, permissionless',
 );
 

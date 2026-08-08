@@ -650,9 +650,15 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
+    status: 'ready',
     owner: 'shehzad002',
-    dependsOn: ['protocol.amm'],
-    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
+    dependsOn: ['protocol.amm', 'socket.price-oracle'],
+    requires: ['services/svc-protocol/contracts/lending/IsolatedLendingMarket.sol'],
+    note:
+      'S-A4 P0 2026-08-08: IsolatedLendingMarket — over-collateral, no rehypothecation, fail-closed oracle marks, ' +
+      'permissionless liquidate + close factor, immutable kink rates. On-chain suite lending-oracle.onchain.test.ts. ' +
+      'STATUS stays ready (not done): SPEC-LENDING done-bar still wants cascade suite, flash-loan adversarial pack, ' +
+      'and persistent public testnet with verified source (Nitro RPC). Do not invent rates or AMM marks.',
   }),
   f('protocol.escrow', 'Non-custodial P2P escrow contracts', {
     module: 'protocol',
@@ -668,17 +674,25 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.amm'],
-    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
+    requires: ['services/svc-protocol/contracts/router/SovereignRouter.sol', 'services/svc-protocol/src/router/sovereign-quote.ts'],
+    note:
+      'S-A5 2026-08-08: on-chain SovereignRouter executes pool swaps with minOut fail-closed; TypeScript pickBestRoute ' +
+      'compares caller-supplied book quotes vs pool maths without inventing a mid. Split routes / MEV notes residual.',
   }),
   f('protocol.merchant', 'Lane A merchant contracts — zero KYB (§24)', {
     module: 'protocol',
     phase: '3P',
     plane: 'P',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
+    requires: ['services/svc-protocol/contracts/merchant/MerchantAccept.sol'],
+    note:
+      'S-A6 2026-08-08: MerchantAccept — merchant-owned receive + optional merchant-chosen fee recipient; platform never ' +
+      'hardcoded. On-chain merchant-accept.onchain.test.ts. Sub-merchant trees / invoice metadata residual.',
   }),
   f('indexer.readmodels', 'Chain → Postgres read models', {
     module: 'indexer',
@@ -1024,10 +1038,13 @@ export const FEATURES = [
     module: 'launch',
     phase: '5',
     plane: 'P',
-    status: 'socket',
+    status: 'ready',
     owner: 'shehzad002',
     dependsOn: ['launch.token-factory'],
-    note: 'Law §35:834, gap-closed 2026-08-07. THE LAW CALLS TRUST THE MOAT IN MEME SEASON and nothing on the board carried it, which meant the anti-rug architecture was missing without being recorded as missing. launch.token-factory already removes the crudest rug — the deployed token has no mint, no owner, no pause and no upgrade selector, proven against the deployed bytecode — but the pool is the other half: liquidity that can be pulled, a team allocation that can dump, and a deployer with no history. LP locks and vesting must be ENFORCED BY CONTRACT rather than promised in a listing, or the badge is worse than no badge.',
+    requires: ['services/svc-protocol/contracts/trust/LaunchLpLock.sol'],
+    note:
+      'S-L4 LP leg 2026-08-08: LaunchLpLock — immutable unlockTime, no admin early exit. STATUS ready (not done): ' +
+      'vesting proofs + deployer reputation badge still residual; badge-false must stay unissuable.',
   }),
   f('launch.treasury-yield', 'Tokenized T-bill vaults — stable balances opt into RWA yield (§36)', {
     module: 'launch',
@@ -1372,10 +1389,13 @@ export const FEATURES = [
     module: 'protocol',
     phase: '5P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts', 'blueprint.crews'],
-    note: 'Gap-closed 2026-08-07. Crews already exist and are `done` on the custodial side (blueprint.crews — matching, capacity, membership). A shared TREASURY for one is a contract problem: member shares, an M-of-N spend threshold, and a defined split when someone leaves. The exit split is the part that must be designed before anyone deposits, not after — a vault that cannot fairly release a departing member is worse than no vault.',
+    requires: ['services/svc-protocol/contracts/vaults/CrewVault.sol'],
+    note:
+      'S-L1 2026-08-08: CrewVault — immutable share bps summing to 10_000, M-of-N spend, exit pays construction share of ' +
+      'current balance (split designed before deposit). Residual: multi-asset vaults, share rebalance after exit.',
   }),
   f('protocol.legacy-vaults', 'Legacy vaults — time-locked inheritance, staged heir release (§34)', {
     module: 'protocol',
@@ -1384,7 +1404,10 @@ export const FEATURES = [
     status: 'socket',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'Gap-closed 2026-08-07, AND IT ARRIVES WITH A CONTRADICTION THAT MUST BE SETTLED BEFORE ANY CODE. §34:829 describes guardian M-of-N recovery; socket.social-recovery states the platform must never be a guardian, because a guardian is a second party who can take the account. Both cannot stand. The shape that satisfies both, and the only one to build without an explicit owner ruling: heirs and time locks the USER sets and can revoke, with no platform-controlled key ever eligible and no platform quorum able to move funds. If inheritance cannot be built without the platform being a party, the honest outcome is that this stays a socket — say so rather than shipping it. An ADR settles this, not a PR.',
+    note:
+      'S-K7 ADR accepted 2026-08-08 (docs/adr/2026-08-08-inheritance-never-platform-guardian.md): platform never a guardian. ' +
+      'S-L2 contract code deliberately NOT started until an heir/time-lock design matches that ADR without a platform key. ' +
+      'Stays socket — honest.',
   }),
 
   // ── §13 · DELIBERATELY NOT IN v1 ─────────────────────────────────────────
@@ -1553,37 +1576,51 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: "§13 — src/chain/userop.ts already carries every paymaster field of the v0.7 user operation, and NOTHING decides who pays. Without a paymaster, a user must hold the chain's native token before their passkey account can do anything at all, which quietly removes the retail half of the self-custody story: the account exists, is provably theirs, and cannot move. Not merely a contract — a sponsorship POLICY (who is sponsored, for what, up to what, and how abuse is refused) and a funded account behind it, which makes the funding half a Nitro decision. Named on the blockchain task board as S-A10.",
+    requires: ['services/svc-protocol/src/chain/paymaster-policy.ts', 'docs/adr/2026-08-08-paymaster-and-bundler-policy.md'],
+    note:
+      'S-A10 2026-08-08: sponsorship decision module — allowlist, selectors, gas cap; refuses when funding_unconfigured. ' +
+      'ADR states Nitro Class X owns the deposit account. Live paymaster contract + funded path still need that deposit.',
   }),
   f('socket.bundler-policy', 'Bundler dependency — public relay or self-hosted', {
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: "§13 — PROTOCOL_BUNDLER_URL exists in env.ts and is optional, and no decision sits behind it. The service correctly still builds and verifies operations without one and lets the user submit. But a public bundler is a third party that can censor or reorder a user's operation, and a self-hosted one is infrastructure we then run: that is a sovereignty question, not a config default. State the choice and its failure mode before the first real deployment. Named as S-A11.",
+    requires: ['services/svc-protocol/src/chain/bundler-policy.ts', 'docs/adr/2026-08-08-paymaster-and-bundler-policy.md'],
+    note:
+      'S-A11 2026-08-08: modes user_submits | public_bundler | self_hosted with stated censor/reorder failure mode and ' +
+      'fallbackToUserSubmit. Live EntryPoint differential (socket.userop-differential-test) remains residual.',
   }),
   f('socket.price-oracle', 'Price oracle for on-chain marks and liquidations', {
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: '§13 — protocol.lending REQUIRES oracle marks for LTV and liquidation and there has never been an oracle row anywhere in this registry; the task board carried it only as "write an ADR about it", which turns a hard dependency into a document. Nothing about this may be invented: a mark that is guessed liquidates real collateral. Needs a stated source set, a staleness bound, a disagreement rule between sources, and a fail-closed answer (refuse to liquidate) rather than a fallback price. Blocks protocol.lending and couples to protocol.amm. Named as S-A12.',
+    requires: ['services/svc-protocol/contracts/oracle/FailClosedOracle.sol', 'docs/adr/2026-08-08-price-oracle-fail-closed.md'],
+    note:
+      'S-A12 2026-08-08: FailClosedOracle — dual reporters, staleness + disagreement refuse, min mark, never AMM. ' +
+      'Hermetic + on-chain with lending. TWAP / own-pool oracles residual and must not replace this path.',
   }),
   f('socket.deployment-registry', 'Which contracts are deployed where, and verified against what source', {
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: '§13 — every contract address in env.ts defaults to the zero address, and there is no tracked artefact anywhere saying "these addresses, on this chain, deployed from this source hash, verified on this explorer". The suite already knows how to prove deployed bytecode matches a template with the immutable ranges masked (launch.token-factory found that the naive check is wrong and looks right), so the hard part is done and unrecorded. This is the first thing an auditor or an integrator asks for, and the first thing that is impossible to reconstruct later. Named as S-A13.',
+    requires: [
+      'services/svc-protocol/src/deployments/registry.ts',
+      'services/svc-protocol/deployments/dev-anvil.example.json',
+      'docs/adr/2026-08-08-deployment-registry.md',
+    ],
+    note: 'S-A13 2026-08-08: zod schema + example artefact. Real chain rows + explorer verified:true wait on Nitro RPC funding.',
   }),
 ];
 
