@@ -1,9 +1,9 @@
 # Stop note — agent lane C (svc-bank · svc-blueprint · svc-token), 2026-08-08
 
-New tip at stop: **`1ea064c4`** — `fix(token): retuning the emission curve could
-mint past max supply (#1083)`.
+New tip at stop: **`5bf658ef`** — `test(token): three refusals the service
+declares and nothing ever executed (#1094)`.
 
-Session window: 02:25 → 03:55 UTC. Nitro AFK throughout. Three other agent
+Session window: 02:25 → 04:35 UTC. Nitro AFK throughout. Three other agent
 sessions were live in disjoint lanes.
 
 ---
@@ -14,6 +14,8 @@ sessions were live in disjoint lanes.
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **#1076** | A settled yield window paid a staker who joined **after** it settled — out of the rewards engine, which means out of another window's undistributed revenue, and the operator was told nothing because the run counted the ledger's no-ops as fresh payouts. Class M, red-first, merged green.                                                                                           |
 | **#1083** | Retuning the emission curve could **mint past max supply**. The ceiling compared the CURVE's cumulative against `maxSupply`, and both live in `token_params` — editable by design. Lower the curve after minting under a generous one and it mints again on top of what is already circulating. `token.supply_exhausted` had no test naming it at all. Class M, red-first, merged green. |
+| **#1094** | Three refusals svc-token declares and no test ever executed — `token.params_missing` (the refusal that stops a deployment charging a discount, or minting against a curve, its own database does not hold) and `token.proposal_not_found`. Coverage only.                                                                                                                                |
+| **#1092** | The svc-token README warned that a money path was unsafe. It was fixed months of merges ago (#767 / migration 0002), and the constraints table still listed an index that migration drops. A README that says a safe path is unsafe invites the next reader to fix it twice.                                                                                                             |
 | **#1073** | Every worktree cut on this machine started **296 commits behind main**, because `pnpm wt` looked only for a _local_ `main` and, finding none, silently branched off whatever the main checkout was parked on. Class N, merged green.                                                                                                                                                     |
 | **#1069** | (Not mine — lane A's, merged as closer duty.) A completed P2P trade could pay out and then tell nobody, losing the release event and both parties' XP. Green and stalled 25 minutes; diff reviewed personally before merging.                                                                                                                                                            |
 
@@ -133,4 +135,4 @@ Attacked and failed to falsify. Detail in the two audit files.
    `token.yield`, and closing it needs the §4.3 aggregation job — a number and a
    schedule that are the owner's, not an agent's.
 
-tip: `1ea064c4`
+tip: `5bf658ef`
