@@ -450,7 +450,13 @@ describe('a caller can tell the failures apart', () => {
   });
 
   it('maps an over-refund and a double-spend guard to CONFLICT', async () => {
-    for (const code of ['pay.refund_exceeds_captured', 'pay.refund_in_flight', 'pay.invalid_transition'] as const) {
+    for (const code of [
+      'pay.refund_exceeds_captured',
+      'pay.refund_in_flight',
+      'pay.settlement_in_flight',
+      'pay.settlement_desynced',
+      'pay.invalid_transition',
+    ] as const) {
       stub.fail(new PayError('nope', code));
       const api = await caller(['pay:refund']);
       const err = await api.payment.refund({ paymentId: PAYMENT, amount: '1' }).catch((e: unknown) => e);

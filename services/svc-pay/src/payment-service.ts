@@ -96,6 +96,19 @@ export type PayErrorCode =
   | 'pay.partial_capture_unsupported'
   | 'pay.refund_exceeds_captured'
   | 'pay.refund_in_flight'
+  /**
+   * A pending settlement window has already frozen this payment into its set.
+   * Pre-settlement refunds would drain clearing under the frozen gross and let
+   * a later post take another payment's funds (or stick forever). Wait for the
+   * window to post, then refund from the merchant's available balance.
+   */
+  | 'pay.settlement_in_flight'
+  /**
+   * Frozen settlement numbers no longer match live captured−refunded totals.
+   * Refusing to post is the only honest answer — inventing a new gross under the
+   * same settlement key would disagree with the ledger idempotency key.
+   */
+  | 'pay.settlement_desynced'
   | 'pay.rail_declined'
   | 'pay.rail_failed'
   | 'pay.rail_amount_mismatch'
@@ -1427,6 +1440,30 @@ export class PayService {
           );
         }
 
+        // Pre-settlement only: a pending settlement freeze has claimed this
+        // payment's clearing. Refunding from clearing under a frozen gross is
+        // how another payment's capture funds the window (or the post sticks
+        // forever on insufficient clearing). After the window posts the status
+        // is `settled` and the refund draws on available instead — allowed.
+        if (row.status === 'captured') {
+          const pendingSettlement = await tx<Array<{ settlement_id: string }>>`
+            SELECT e.payload->>'settlementId' AS settlement_id
+              FROM pay.payment_events e
+              JOIN pay.settlements s ON s.id = (e.payload->>'settlementId')::uuid
+             WHERE e.payment_id = ${row.id}
+               AND e.event = 'settlement.included'
+               AND s.status = 'pending'
+             LIMIT 1
+          `;
+          if (pendingSettlement[0]) {
+            throw new PayError(
+              `Payment ${row.id} is frozen in pending settlement ${pendingSettlement[0].settlement_id} — wait for the window to post, then refund from the merchant balance`,
+              'pay.settlement_in_flight',
+              { settlementId: pendingSettlement[0].settlement_id, paymentId: row.id },
+            );
+          }
+        }
+
         const totals = await totalsFor(tx, row.id);
         const refundable = totals.captured - totals.refunded;
         if (amount > refundable) {
@@ -1773,6 +1810,35 @@ export class PayService {
             const gross = parseAmount(row.gross);
             const fees = parseAmount(row.fees);
 
+            const included = await tx<Array<{ payment_id: string }>>`
+              SELECT payment_id FROM pay.payment_events
+               WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
+               ORDER BY payment_id
+            `;
+
+            // Re-check live nets under payment row locks before the ledger
+            // moves. The freeze promised these numbers; if a concurrent path
+            // (or an operator) changed captured/refunded, posting the frozen
+            // gross would take someone else's clearing.
+            let liveGross = 0n;
+            for (const { payment_id } of included) {
+              await lockPayment(tx, payment_id);
+              const totals = await totalsFor(tx, payment_id);
+              const net = totals.captured - totals.refunded;
+              if (net > 0n) liveGross += net;
+            }
+            if (liveGross !== gross) {
+              throw new PayError(
+                `Settlement ${row.id} frozen gross ${formatAmount(gross)} no longer matches live captured−refunded ${formatAmount(liveGross)} — refusing to post`,
+                'pay.settlement_desynced',
+                {
+                  settlementId: row.id,
+                  frozenGross: formatAmount(gross),
+                  liveGross: formatAmount(liveGross),
+                },
+              );
+            }
+
             await this.ledger.post(
               recipes.merchantSettlement({
                 merchantId: row.merchant_id,
@@ -1787,11 +1853,6 @@ export class PayService {
             await tx`
               UPDATE pay.settlements SET status = 'posted', payout_method = 'ledger', updated_at = now()
                WHERE id = ${row.id}
-            `;
-
-            const included = await tx<Array<{ payment_id: string }>>`
-              SELECT payment_id FROM pay.payment_events
-               WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
             `;
 
             for (const { payment_id } of included) {
@@ -1867,12 +1928,12 @@ export class PayService {
           throw new PayError(`Merchant ${input.merchantId} is ${lockedStatus}`, 'pay.merchant_inactive');
         }
 
-        const candidates = await tx<Array<{ id: string; captured: string; refunded: string }>>`
-          SELECT p.id,
-                 COALESCE(SUM(CASE WHEN e.event = 'captured' THEN (e.payload->>'amount')::numeric END), 0) AS captured,
-                 COALESCE(SUM(CASE WHEN e.event = 'refunded' THEN (e.payload->>'amount')::numeric END), 0) AS refunded
+        // Candidate ids only first — lock each payment FOR UPDATE before reading
+        // totals so a concurrent pre-settlement refund cannot drain clearing
+        // after we freeze a gross that still included that payment.
+        const candidateIds = await tx<Array<{ id: string }>>`
+          SELECT p.id
             FROM pay.payments p
-            JOIN pay.payment_events e ON e.payment_id = p.id
            WHERE p.merchant_id = ${input.merchantId}
              AND p.currency = ${input.assetId}
              AND p.status = 'captured'
@@ -1884,17 +1945,35 @@ export class PayService {
                SELECT 1 FROM pay.payment_events c
                 WHERE c.payment_id = p.id AND c.event = 'captured' AND c.ts >= ${from} AND c.ts < ${to}
              )
-           GROUP BY p.id
            ORDER BY p.id
+           FOR UPDATE OF p
         `;
 
         let gross = 0n;
         const included: string[] = [];
-        for (const candidate of candidates) {
-          const net = parseAmount(candidate.captured) - parseAmount(candidate.refunded);
+        for (const { id: paymentId } of candidateIds) {
+          // Skip payments with an open refund.posted — their clearing is already
+          // leaving (or about to leave). Including them freezes a gross the
+          // pool no longer holds.
+          const openRefund = await tx<Array<{ refund_id: string }>>`
+            SELECT p.payload->>'refundId' AS refund_id
+              FROM pay.payment_events p
+             WHERE p.payment_id = ${paymentId} AND p.event = 'refund.posted'
+               AND NOT EXISTS (
+                 SELECT 1 FROM pay.payment_events d
+                  WHERE d.payment_id = p.payment_id
+                    AND d.event IN ('refunded', 'refund.reversed')
+                    AND d.payload->>'refundId' = p.payload->>'refundId'
+               )
+             LIMIT 1
+          `;
+          if (openRefund.length > 0) continue;
+
+          const totals = await totalsFor(tx, paymentId);
+          const net = totals.captured - totals.refunded;
           if (net <= 0n) continue; // Fully refunded inside the window — nothing to settle.
           gross += net;
-          included.push(candidate.id);
+          included.push(paymentId);
         }
 
         if (gross <= 0n) {

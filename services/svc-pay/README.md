@@ -174,7 +174,9 @@ So this ships the **mechanism**, and `PERMISSION_AREAS` in `src/submerchants.ts`
 
 Also: `pay.submerchant_grant_lateral`, `pay.submerchant_grant_self`, `pay.submerchant_grant_redundant`, `pay.submerchant_revoke_redundant`, `pay.submerchant_area_unknown`, `pay.submerchant_too_deep`, `pay.submerchant_reason_required`, `pay.submerchant_pricing_invalid`, `pay.submerchant_settling_party_unsupported`, `pay.submerchant_not_onboarded`.
 
-`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`, `pay.rail_not_live`.
+`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.settlement_in_flight`, `pay.settlement_desynced`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`, `pay.rail_not_live`.
+
+`pay.settlement_in_flight` and `pay.settlement_desynced` map to **CONFLICT**. The first refuses a pre-settlement refund while a pending window has frozen the payment (clearing must not be drained under a frozen gross). The second refuses to post a settlement whose live captured−refunded totals no longer match the freeze — better a stuck pending row than a ledger entry funded by someone else's capture.
 
 `pay.deposit_conflict` and `pay.withdrawal_conflict` map to **CONFLICT**, never BAD_REQUEST: the caller reused a business key for different numbers, and nothing they resend fixes it.
 
