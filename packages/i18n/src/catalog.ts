@@ -130,6 +130,13 @@ export const en = {
   // ── notify · in-app inbox (title + body per kind; keys stored on the row) ──
   'notify.trade.fill.title': 'Order filled',
   'notify.trade.fill.body': '{side} {qty} on {marketId} at {price}.',
+  // Liquidation copy names only fields the payload guarantees are present.
+  // Realised loss, mark price and liquidation price are all nullable on
+  // `trade.position.updated`, so none of them appears here: a notification that
+  // interpolated a missing number would print an empty gap on the one message
+  // where a number is what the reader came for.
+  'notify.trade.position.liquidated.title': 'Position liquidated',
+  'notify.trade.position.liquidated.body': 'Your {side} position on {symbol} was liquidated. Size {contracts}, entry {entryPrice}.',
   'notify.p2p.escrow.locked.title': 'Escrow locked',
   'notify.p2p.escrow.locked.body': '{amount} {asset} locked for {fiatAmount} {fiatCurrency}.',
   'notify.p2p.escrow.released.title': 'Trade completed',

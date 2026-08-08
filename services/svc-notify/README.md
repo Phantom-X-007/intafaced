@@ -200,6 +200,7 @@ _None._
 | Subject                              | Consumer (durable)           | Effect                                                     |
 | ------------------------------------ | ---------------------------- | ---------------------------------------------------------- |
 | `intafaced.trade.fill.settled`       | `notify-fill-settled`        | Inbox row for the fill owner                               |
+| `intafaced.trade.position.updated`   | `notify-position-updated`    | **Critical** inbox row + fan-out on liquidation only       |
 | `intafaced.p2p.escrow.locked`        | `notify-p2p-escrow-locked`   | Inbox rows for seller and buyer                            |
 | `intafaced.p2p.escrow.released`      | `notify-p2p-escrow-released` | Inbox rows when escrow releases to buyer                   |
 | `intafaced.p2p.escrow.refunded`      | `notify-p2p-escrow-refunded` | Inbox rows when escrow returns to seller                   |
@@ -235,6 +236,30 @@ an acceptance — and never touches a row whose claim lease is still live.
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
 `<loanId>` — a loan can be called, cured and called again, and the second call is
 a different fact.
+
+### `trade.position.updated` — one transition of four
+
+That subject is published on **every** futures position transition, and again
+when a moving mark price liquidates one. Fanning all of them out would put an
+inbox row, and for anyone with a confirmed address an email, behind every open
+and every close a trader makes. An inbox nobody reads is the same outage as an
+inbox nothing writes to, so the consumer notifies on `liquidated` **only**:
+opening, closing and closed are things the trader just did, and a liquidation is
+the one that happened to them while they were not looking.
+
+Which other transitions deserve a message is product law and has not been
+decided. It lives in `DEFAULT_POSITION_NOTIFY_POLICY` (`src/events.ts`) as a
+policy object with the conservative default, rather than as an `if` — widening
+it is a change to `statuses` plus two i18n keys per new state. It is
+deliberately **not** an environment variable: which notifications exist is a
+product fact that should read the same in every deployment.
+
+The row is `critical` for the same reason the margin call is: refusals get
+recorded on every out-of-app channel even when the trader registered none, and a
+channel mute does not silence it. The key is `<positionId>:<status>`, so a
+widened policy cannot collapse two transitions of one position into one row —
+and `ts` is deliberately not part of it, so a producer re-publishing with a
+fresh timestamp cannot turn a duplicate into a second liquidation notice.
 
 A `critical` notification records a refusal on **every** out-of-app channel even
 when the user registered none, so "we had no way to reach you" is a row written
