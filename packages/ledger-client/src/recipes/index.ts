@@ -630,14 +630,26 @@ export function escrowLock(input: EscrowInput): PostRequest {
 /** Seller confirms fiat received — escrow releases to the buyer. */
 export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostRequest {
   requirePositive('escrow amount', input.amount);
-  const fee = mulBps(input.amount, input.feeBps ?? 0);
+  const feeBps = input.feeBps ?? 0;
+  // Same class as tradeFill: an unbound feeBps at 10000 gives the buyer nothing;
+  // above that the buyer leg goes negative and is refused four layers down with a
+  // message that says nothing about fees (STOP §4.2b #2). Refuse here, clearly.
+  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+    throw new InvalidEntryError(`escrow feeBps must be an integer in 0..9999, got ${feeBps}`);
+  }
+  const fee = mulBps(input.amount, feeBps);
   const toBuyer = sub(input.amount, fee);
+  // `<= 0n` — fee equal to amount is unreachable under 9999 bps ceil for amount>0
+  // except pathological rounding; still refuse zero/negative buyer leg.
+  if (toBuyer <= 0n) {
+    throw new InvalidEntryError('Fee exceeds escrow value — check fee bps configuration');
+  }
 
   return {
     idempotencyKey: `p2p.escrow.release:${input.tradeId}`,
     module: 'p2p',
     reason: 'p2p.escrow.release',
-    meta: { tradeId: input.tradeId, feeBps: input.feeBps ?? 0 },
+    meta: { tradeId: input.tradeId, feeBps },
     entries: [
       credit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
       debit(userAvailable(input.buyerId, input.assetId), toBuyer),
