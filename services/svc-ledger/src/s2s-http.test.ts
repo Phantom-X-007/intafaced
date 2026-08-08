@@ -9,7 +9,8 @@ import {
 } from '@intafaced/ledger-client';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
-import { handleS2sBalance, handleS2sPost, httpError, registerS2sHttp } from './s2s-http.js';
+import { handleS2sBalance, handleS2sHistory, handleS2sPost, httpError, registerS2sHttp } from './s2s-http.js';
+import { HISTORY_MAX_ENTRIES, HistoryTooLargeError, type HistoryEntry } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 
 const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -23,9 +24,27 @@ function stubService(overrides: Partial<Record<string, unknown>> = {}) {
       amount: amt('42'),
     }),
     balances: async () => [],
+    history: async () => [] as HistoryEntry[],
     ...overrides,
   } as unknown as LedgerService;
 }
+
+/** The window svc-bank's spend view actually sends — `Date.toISOString()`. */
+const validHistory = {
+  account: userAvailable(USER, 'USDT'),
+  from: '2026-07-09T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+};
+
+const historyEntry: HistoryEntry = {
+  txId: 'tx-hist-1',
+  module: 'trade',
+  reason: 'trade.fill',
+  direction: 'credit',
+  // 18 decimal places — the full precision the book carries.
+  amount: amt('12.345678901234567891'),
+  postedAt: new Date('2026-07-27T12:00:00.000Z'),
+};
 
 const validPost = {
   idempotencyKey: 's2s-test-key',
@@ -66,13 +85,115 @@ describe('s2s-http (graph W1-C money surface)', () => {
   });
 });
 
+/**
+ * THE 404 THIS CHANGE CLOSES.
+ *
+ * `/bank/analytics` returned 500 because svc-bank's spend view called
+ * `POST /trpc/history`, this file registered three routes, and Fastify answered
+ * `{"message":"Route POST:/trpc/history not found","statusCode":404}`. Its client
+ * refused to substitute an empty result — deliberately, since "you spent
+ * nothing" and "we could not ask" must not look the same to a user — so the
+ * refusal travelled all the way to the browser.
+ *
+ * These tests are written against what `createLedgerHistory` in
+ * `services/svc-bank/src/ledger-client.ts` sends and parses. They fail if this
+ * side drifts from it in either direction.
+ */
+describe('s2s history — the shape svc-bank already parses', () => {
+  it('answers a bare ARRAY, because the caller does `result.map(...)`', async () => {
+    const out = await handleS2sHistory(stubService({ history: async () => [historyEntry] }), validHistory);
+    expect(Array.isArray(out)).toBe(true);
+  });
+
+  it('names exactly the six fields the caller reads, and no others', async () => {
+    const out = await handleS2sHistory(stubService({ history: async () => [historyEntry] }), validHistory);
+
+    // Rename one of these and svc-bank's `parseAmount(undefined)` throws
+    // MoneyError instead of a 404 — a different failure, not a fixed one.
+    expect(Object.keys(out[0]!).sort()).toEqual(['amount', 'direction', 'module', 'postedAt', 'reason', 'txId']);
+  });
+
+  it('sends `amount` as a DECIMAL STRING at full precision, never a number', async () => {
+    const out = await handleS2sHistory(stubService({ history: async () => [historyEntry] }), validHistory);
+
+    expect(typeof out[0]!.amount).toBe('string');
+    expect(out[0]!.amount).toBe('12.345678901234567891');
+    // JSON cannot carry this value as a number; asserting it survives the actual
+    // serialisation is the only version of this check that means anything.
+    expect(JSON.parse(JSON.stringify(out))[0].amount).toBe('12.345678901234567891');
+  });
+
+  it('sends `postedAt` as an ISO string the caller can hand to `new Date(...)`', async () => {
+    const out = await handleS2sHistory(stubService({ history: async () => [historyEntry] }), validHistory);
+    expect(out[0]!.postedAt).toBe('2026-07-27T12:00:00.000Z');
+    expect(new Date(out[0]!.postedAt).getTime()).toBe(historyEntry.postedAt.getTime());
+  });
+
+  it('passes `direction` through as the book recorded it', async () => {
+    const out = await handleS2sHistory(stubService({ history: async () => [historyEntry] }), validHistory);
+    expect(out[0]!.direction).toBe('credit');
+  });
+
+  it('answers an account with no movements with an honest empty array, not an error', async () => {
+    const out = await handleS2sHistory(stubService({ history: async () => [] }), validHistory);
+    expect(out).toEqual([]);
+  });
+
+  it('hands the handler’s parsed window to the ledger as real Dates', async () => {
+    const seen: Array<{ from: Date; to: Date }> = [];
+    await handleS2sHistory(
+      stubService({
+        history: async (_ref: unknown, range: { from: Date; to: Date }) => {
+          seen.push(range);
+          return [];
+        },
+      }),
+      validHistory,
+    );
+
+    expect(seen[0]!.from.toISOString()).toBe('2026-07-09T00:00:00.000Z');
+    expect(seen[0]!.to.toISOString()).toBe('2026-08-08T00:00:00.000Z');
+  });
+
+  it('refuses an inverted window rather than answering it empty', async () => {
+    await expect(handleS2sHistory(stubService(), { ...validHistory, from: validHistory.to, to: validHistory.from })).rejects.toMatchObject({
+      code: 'ledger.history_range_invalid',
+    });
+  });
+
+  it('refuses a malformed timestamp instead of coercing it to Invalid Date', async () => {
+    await expect(handleS2sHistory(stubService(), { ...validHistory, from: 'yesterday' })).rejects.toThrow();
+  });
+
+  it('maps both history refusals to 400 with a code the caller can rehydrate', () => {
+    const tooLarge = httpError(
+      new HistoryTooLargeError(
+        'acct-1',
+        { from: new Date('2026-07-09T00:00:00Z'), to: new Date('2026-08-08T00:00:00Z') },
+        HISTORY_MAX_ENTRIES,
+      ),
+    );
+
+    // 400, not 500: nothing is broken here, and retrying the same window never
+    // helps. `rehydrateLedgerHttpError` rebuilds a typed LedgerError only when
+    // the body names a code — without one svc-bank records `bank.post_failed`.
+    expect(tooLarge.status).toBe(400);
+    expect(tooLarge.body.code).toBe('ledger.history_range_too_large');
+    expect(String(tooLarge.body.message)).toContain(String(HISTORY_MAX_ENTRIES));
+
+    const inverted = httpError(new LedgerError('backwards', 'ledger.history_range_invalid'));
+    expect(inverted.status).toBe(400);
+    expect(inverted.body.code).toBe('ledger.history_range_invalid');
+  });
+});
+
 // ── Authentication on the surface that is actually served ────────────────────
 //
 // These tests exist because a previous revision of this change secured
 // `createLedgerRouter`'s `post` procedure and stopped there. That router is
 // built in `index.ts` and exported for its TYPE — nothing registers
-// `fastifyTRPCPlugin`, so no guard on it is reachable from the port. The three
-// routes below are what a caller actually hits.
+// `fastifyTRPCPlugin`, so no guard on it is reachable from the port. The routes
+// below are what a caller actually hits.
 //
 // The lesson, written down: a guard is worth exactly as much as the route that
 // runs it. Test the mounted path, not the one you edited.
@@ -256,10 +377,102 @@ describe('s2s HTTP — service credentials', () => {
   it('refuses unauthenticated reads on every route, not just the write', async () => {
     const app = await mount();
 
-    for (const path of ['/trpc/balance', '/trpc/balances']) {
+    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history']) {
       const res = await send(app, path, {}, wire({ ownerType: 'treasury', ownerId: 'rail:crypto-native' }));
       expect(res.statusCode).toBe(401);
     }
+    await app.close();
+  });
+
+  // ── /trpc/history, on the port ─────────────────────────────────────────────
+  //
+  // The handler tests above prove the shape. These prove the route exists and is
+  // behind the same door — which is the half that was actually missing: every
+  // guard in this file was already written, and Fastify still answered 404.
+
+  it('ANSWERS a signed history call — the 404 that 500-ed /bank/analytics is gone', async () => {
+    const app = await mount(stubService({ history: async () => [historyEntry] }));
+    const payload = wire(validHistory);
+
+    const res = await send(app, '/trpc/history', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      {
+        txId: 'tx-hist-1',
+        module: 'trade',
+        reason: 'trade.fill',
+        direction: 'credit',
+        amount: '12.345678901234567891',
+        postedAt: '2026-07-27T12:00:00.000Z',
+      },
+    ]);
+    await app.close();
+  });
+
+  it('never reaches the ledger for an unauthenticated history read', async () => {
+    let asked = false;
+    const app = await mount(
+      stubService({
+        history: async () => {
+          asked = true;
+          return [];
+        },
+      }),
+    );
+
+    const res = await send(app, '/trpc/history', {}, wire(validHistory));
+
+    // An entry history is a record of what someone did with their money — at
+    // least as sensitive as the balance it sums to.
+    expect(res.statusCode).toBe(401);
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('binds the history body too — credentials for one window do not travel to another', async () => {
+    const app = await mount();
+    const honest = wire(validHistory);
+    const headers = serviceAuthHeadersForBody('svc-bank', SECRET, honest);
+
+    const other = wire({ ...validHistory, account: { ownerType: 'treasury', ownerId: 'mint', assetId: 'IFC', kind: 'available' } });
+    expect(other).not.toBe(honest);
+
+    const res = await send(app, '/trpc/history', headers, other);
+
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('surfaces the cap refusal as 400 on the wire, carrying its code', async () => {
+    const app = await mount(
+      stubService({
+        history: async () => {
+          throw new HistoryTooLargeError(
+            'acct-1',
+            { from: new Date('2026-07-09T00:00:00Z'), to: new Date('2026-08-08T00:00:00Z') },
+            HISTORY_MAX_ENTRIES,
+          );
+        },
+      }),
+    );
+    const payload = wire(validHistory);
+
+    const res = await send(app, '/trpc/history', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('ledger.history_range_too_large');
+    await app.close();
+  });
+
+  it('refuses an owner id from the wrong identifier space on this route as well', async () => {
+    const app = await mount();
+    // A vendored bigint member id where a user UUID belongs — the dual-book door.
+    const payload = wire({ ...validHistory, account: { ...validHistory.account, ownerId: '1042' } });
+
+    const res = await send(app, '/trpc/history', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(400);
     await app.close();
   });
 
