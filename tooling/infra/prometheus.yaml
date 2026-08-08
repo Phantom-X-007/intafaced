@@ -14,3 +14,48 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ['nats:8222']
+
+  # ── THE FRONT DOOR (§14.5) ─────────────────────────────────────────────────
+  #
+  # The first application target this file has ever had. Until this landed,
+  # Prometheus scraped itself and NATS, so Grafana pointed at a store holding no
+  # series whose name did not begin with `go_`, `net_`, `nats_` or `prometheus_`
+  # — and §14's "at least one SLO dashboard panel" had nothing it could plot.
+  #
+  # Why the edge and not each service: §20 calls its numbers "engineering SLOs,
+  # not slogans", and an SLO is a promise to a USER. It is therefore measured
+  # where the user is — the front door, with every hop behind it included.
+  # `svc-trade` timing its own handler cannot see the queue in front of it, and
+  # would report health during exactly the incident an SLO exists to catch.
+  #
+  # ── Why this address resolves ──────────────────────────────────────────────
+  #
+  # `svc-edge` is started by `docker-compose.apps.yml`, which `include:`s the
+  # compose file this config belongs to, so both containers land on the same
+  # project network and Prometheus reaches the service by its compose name.
+  # `HTTP_PORT: '4000'` is set on that service, and it is the CONTAINER port —
+  # never the published host port, which is not what a sibling container talks
+  # to. `/metrics` is `METRICS_PATH` in `services/svc-edge/src/metrics.ts`.
+  #
+  # All three are asserted, not hoped: `observability-wiring.test.ts` parses THIS
+  # FILE and `docker-compose.apps.yml`, and fails if the host, the port or the
+  # path drifts from what the service actually serves. A scrape config pointing
+  # at a port nothing listens on is the classic version of a change that looks
+  # complete in a diff and reports nothing.
+  #
+  # ── No `labels:` block, on purpose ─────────────────────────────────────────
+  #
+  # The exposition already carries `service="svc-edge"`. A `labels: {service: …}`
+  # here would NOT overwrite it — Prometheus renames the scraped one to
+  # `exported_service` and keeps both, so every dashboard query matching on
+  # `service` would silently match nothing. One label, one owner; the wiring test
+  # asserts this file adds none of the names the payload already emits.
+  - job_name: svc-edge
+    metrics_path: /metrics
+    # 10s, against a per-client rate limit of 300/min. Six requests a minute is
+    # 2% of the budget, and the scraper reaches the container directly so it holds
+    # its own bucket rather than sharing a user's. The wiring test asserts that
+    # headroom instead of leaving it as an assertion in a comment.
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['svc-edge:4000']

@@ -1,0 +1,42 @@
+# DASHBOARDS AS CODE (§14.5 — "at least one SLO dashboard panel").
+#
+# ── Why this file is the difference between done and a green diff ────────────
+#
+# Before this landed, `provisioning/` held datasources and nothing else. A
+# dashboard JSON committed under `tooling/infra/grafana/dashboards/` would have
+# been read by nobody: Grafana loads file-provisioned dashboards only through a
+# PROVIDER declared here, and with no provider the directory is just files on a
+# disk. That is the exact shape of failure this repo has shipped seven times — a
+# correct artefact in an unreachable place, and a diff that looks complete.
+#
+# The mount is the other half. `options.path` below is a path INSIDE the
+# container, and `docker-compose.yml` binds the repo directory onto it. Without
+# that bind the provider finds an empty directory and Grafana starts with no
+# dashboards and no error — which is indistinguishable, from the UI, from a
+# dashboard that loaded and has no data.
+#
+# ── Why provisioned and not clicked in ──────────────────────────────────────
+#
+# A dashboard built in a running Grafana lives in the `grafanadata` volume, and
+# `docker compose down -v` deletes it. The DoD item is that a panel EXISTS; a
+# panel that exists until the next volume prune is not evidence of anything.
+#
+# `allowUiUpdates: false` on purpose. An operator can still explore and can
+# still save a copy; they cannot silently overwrite the committed definition, so
+# the file in the repo stays the truth about what the SLO is.
+apiVersion: 1
+
+providers:
+  - name: intafaced
+    orgId: 1
+    folder: INTAFACED
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      # Bound to ./tooling/infra/grafana/dashboards by docker-compose.yml.
+      # `observability-wiring.test.ts` asserts this path and that mount agree —
+      # a provider pointing at a directory nothing is mounted onto is silent.
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false
