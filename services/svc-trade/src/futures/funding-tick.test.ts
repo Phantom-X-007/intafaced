@@ -220,6 +220,12 @@ describe('runFundingTick', () => {
     const oneFullPeriod = (amt('0.0001') * ((amt('2') * amt('50000')) / 10n ** 18n)) / 10n ** 18n;
     expect(charged).toBe(oneFullPeriod);
 
+    // And the OTHER half of the defect class: #1034 and #1047 were both about
+    // the ledger and `margin_current` disagreeing. Asserting only the ledger
+    // watches one side of the divergence.
+    expect(margins.paidByPosition('plong')).toBe(oneFullPeriod);
+    expect(margins.paidByPosition('pshortX') + margins.paidByPosition('pshortY')).toBe(-oneFullPeriod);
+
     // The tick genuinely tried again — this is a replay, not a no-op.
     expect(attempts.length).toBeGreaterThan(seen.size);
   });

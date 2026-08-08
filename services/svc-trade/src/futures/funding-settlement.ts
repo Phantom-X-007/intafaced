@@ -30,10 +30,20 @@
  *
  * KNOWN RESIDUAL, deliberately not fixed here: the loader returns positions
  * open *now*, not positions open as of the period. A position OPENED between a
- * failed attempt and its replay is a genuinely new pair, gets a genuinely new
- * key, and is charged for a period it was not open for. Closing that needs a
- * decision about what a period's membership IS — whether a position opened
- * mid-period pays the full period — which is product law, not a refactor.
+ * failed attempt and its replay is a genuinely new pair with a genuinely new
+ * key, so the replay posts an extra leg.
+ *
+ * The victim is NOT the new position — it is consistent, charged once in both
+ * the ledger and its margin. The victim is the PAYER, whose collateral the
+ * ledger drains for both the original legs and the new one while
+ * `applyFundingNets` (idempotent on (position, period)) records only the first.
+ * That is the same ledger-vs-`margin_current` divergence as #1034 and #1047,
+ * which is the thing to say out loud: this residual is in the same family as
+ * the bug above it, not a fairness question about period membership.
+ *
+ * It is unchanged by this fix — measured identical under the old and new keys —
+ * so nothing was traded away. Closing it needs a decision about what a period's
+ * membership IS, which is product law, not a refactor.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
 
@@ -153,6 +163,26 @@ export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
       });
     }
   }
+
+  // The invariant the ledger keys rest on, asserted where it lives.
+  //
+  // Uniqueness holds because payers and payees are disjoint by side and each
+  // pair is visited once — but only as long as `positions` carries no duplicate
+  // position id. Today that is guaranteed by a PRIMARY KEY two files away, in
+  // another module, with nothing here that would notice if it stopped being
+  // true. And the failure would be silent in the worst direction: the ledger
+  // would dedupe the colliding leg away and take LESS than `applyFundingNets`
+  // decrements from margin, so the row and the money disagree with no error.
+  //
+  // Cheaper to refuse the plan than to discover that in a reconcile.
+  const keys = new Set(legs.map((l) => l.recipe.idempotencyKey));
+  if (keys.size !== legs.length) {
+    throw new Error(
+      `funding plan for ${input.periodId} produced ${legs.length} legs under ${keys.size} distinct ledger keys — ` +
+        `refusing to post a plan whose legs would silently dedupe against each other`,
+    );
+  }
+
   return legs;
 }
 
