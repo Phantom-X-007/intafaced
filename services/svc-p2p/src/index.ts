@@ -6,7 +6,10 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
+import { parseAmount } from '@intafaced/ledger-client';
 import { createLedgerClient } from './ledger-client.js';
+import { describeLimits } from './merchant-limits.js';
+import type { MerchantStatus } from './merchant-programme.js';
 import { MerchantService } from './merchant-service.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
 import { parseModeratorUserIds } from './moderation-auth.js';
@@ -69,10 +72,36 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 // escrow against a payment nobody could make.
 const instruments = new InstrumentService(sql, { retentionDays: env.P2P_INSTRUMENT_RETENTION_DAYS });
 
-const p2p = new P2pService(sql, ledger, bus, {
+/**
+ * Offer ceilings by merchant standing (TRK-p2p.merchants Stage 2).
+ *
+ * Unset means unlimited, which is the behaviour before Stage 2 — the numbers
+ * are open product law and `merchant-limits.ts` argues why they are not
+ * invented here. `limitPosture` below says which posture this deployment is in,
+ * rather than leaving an operator to infer it from an offer that did or did
+ * not refuse.
+ */
+const offerLimits = {
+  standardMaxAmount: env.P2P_OFFER_MAX_STANDARD ? parseAmount(env.P2P_OFFER_MAX_STANDARD) : null,
+  merchantMaxAmount: env.P2P_OFFER_MAX_MERCHANT ? parseAmount(env.P2P_OFFER_MAX_MERCHANT) : null,
+};
+const limitPosture = describeLimits(offerLimits);
+
+const p2p: P2pService = new P2pService(sql, ledger, bus, {
   instruments,
   feeBps: env.P2P_FEE_BPS,
   tradingEnabled: env.P2P_TRADING_ENABLED,
+  offerLimits,
+  /**
+   * Resolved per call, not at construction. `merchants` is built FROM `p2p`
+   * below, so the two cannot both exist at the same instant; this closure only
+   * runs when an offer is created, by which point both do.
+   *
+   * Reading standing fresh each time is required anyway: a suspension has to
+   * take the higher ceiling away from the very next offer, not from the next
+   * time this process boots.
+   */
+  merchantStatusOf: async (userId: string): Promise<MerchantStatus | null> => (await merchants.get(userId))?.status ?? null,
   deadlines: {
     escrowSeconds: env.P2P_ESCROW_DEADLINE_SECONDS,
     paymentSeconds: env.P2P_PAYMENT_DEADLINE_SECONDS,
@@ -99,7 +128,7 @@ const moderatorUserIds = parseModeratorUserIds(env.P2P_MODERATOR_USER_IDS);
  * table. Nothing here holds a balance: escrow still moves every coin through
  * ledger recipes, for merchants exactly as for anyone else (§0.6).
  */
-const merchants = new MerchantService(sql, p2p);
+const merchants: MerchantService = new MerchantService(sql, p2p);
 
 export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds }, merchants);
 export type AppRouter = typeof appRouter;
@@ -227,6 +256,12 @@ await app.register(fastifyTRPCPlugin, {
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT, tradingEnabled: env.P2P_TRADING_ENABLED, feeBps: env.P2P_FEE_BPS }, 'svc-p2p ready');
+
+// Said out loud at boot, at `warn` when nothing is configured. A deployment
+// where the merchant badge buys nothing is a legitimate posture — it is the
+// default — but it must not be one an operator has to discover by watching an
+// offer fail to refuse.
+app.log[limitPosture.level]({ offerLimits: limitPosture.summary }, limitPosture.summary);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {

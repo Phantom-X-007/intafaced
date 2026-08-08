@@ -15,6 +15,7 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
+import { isActiveMerchant } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
 export type P2pRouterOptions = {
@@ -129,6 +130,16 @@ const reputationOutput = z.object({
   completionRate: z.number(),
   avgReleaseSecs: z.number().int(),
   badges: z.array(z.string()),
+  /**
+   * Merchant standing, as a counterparty may see it (TRK-p2p.merchants Stage 2).
+   *
+   * ONLY `true` for an APPROVED merchant. An application under review, a
+   * suspension and a withdrawal all read `false` — the badge is a claim made to
+   * a stranger about to send money, so "in progress" must never look like
+   * "vouched for". `null` means the programme is not enabled in this
+   * deployment, which is a different fact from "this trader is not a merchant".
+   */
+  merchant: z.boolean().nullable(),
 });
 
 type OfferOut = z.infer<typeof offerOutput>;
@@ -1115,7 +1126,10 @@ export function createP2pRouter(
         .query(async ({ input }) =>
           guard(async () => {
             const r = await p2p.reputationOf(input.userId);
+            // Absent programme → null, not false. See `merchant` in the schema.
+            const standing = merchants ? isActiveMerchant((await merchants.get(input.userId))?.status ?? 'withdrawn') : null;
             return {
+              merchant: standing,
               tradesTotal: r.tradesTotal,
               completed: r.completed,
               cancelled: r.cancelled,
