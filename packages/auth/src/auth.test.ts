@@ -317,3 +317,33 @@ describe('an access token must carry an expiry', () => {
     expect(p.expiresAt.getFullYear()).toBeGreaterThan(2000);
   });
 });
+
+/**
+ * `token.malformed` — emitted in source, mapped downstream, produced by no test.
+ *
+ * It is the version-skew branch: a token that VERIFIES against our own secret
+ * and then fails the claims schema. That is a different fact from a forged
+ * token, which is why it has its own code — an operator seeing this one should
+ * be looking at a deploy, not at a leaked secret. Worth executing, because a
+ * refusal nothing produces is a refusal nobody has checked reaches the client
+ * with the right meaning.
+ */
+describe('a validly-signed token with the wrong claims shape', () => {
+  it('is malformed, not invalid', async () => {
+    const { SignJWT } = await import('jose');
+    // Everything a real token has, except `sid` — which became required after
+    // tokens minted without it were already in circulation.
+    const token = await new SignJWT({ scopes: ['trade:write'], tier: 'basic', mfa: false })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(USER)
+      .setIssuer(config.issuer)
+      .setAudience(config.audience)
+      .setIssuedAt()
+      .setExpirationTime('15m')
+      .sign(new TextEncoder().encode(config.secret));
+
+    const err = (await verifyAccessToken(token, config).catch((e: unknown) => e)) as AuthError;
+    expect(err).toBeInstanceOf(AuthError);
+    expect(err.code).toBe('token.malformed');
+  });
+});

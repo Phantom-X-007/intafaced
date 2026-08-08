@@ -24,10 +24,6 @@ export function requireScope(principal: Principal, scope: Scope): void {
   }
 }
 
-export function requireAllScopes(principal: Principal, scopes: readonly Scope[]): void {
-  for (const scope of scopes) requireScope(principal, scope);
-}
-
 export function requireMfa(principal: Principal): void {
   if (!principal.mfa) throw new AuthError('This action requires two-factor authentication', 'mfa.required');
 }
