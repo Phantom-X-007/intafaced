@@ -49,9 +49,13 @@ import { CARD_ISSUER_SETTINGS, cardIssuerFor, noCardIssuer } from './issuer.js';
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS = ['0000_bank_init.sql', '0001_position_pending.sql', '0002_bank_loans.sql', '0003_bank_cards.sql'].map((f) =>
-  readFileSync(join(here, '..', '..', 'drizzle', f), 'utf8'),
-);
+const MIGRATIONS = [
+  '0000_bank_init.sql',
+  '0001_position_pending.sql',
+  '0002_bank_loans.sql',
+  '0003_bank_cards.sql',
+  '0007_card_jit_conversion.sql',
+].map((f) => readFileSync(join(here, '..', '..', 'drizzle', f), 'utf8'));
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
@@ -136,7 +140,7 @@ if (!available) {
     let bank: ReturnType<typeof createBankServices>;
 
     beforeEach(async () => {
-      await sql`TRUNCATE bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards RESTART IDENTITY CASCADE`;
+      await sql`TRUNCATE bank.card_cashback, bank.card_settlements, bank.card_conversions, bank.card_authorizations, bank.cards RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
       // Exactly what index.ts now builds, for the operator who chose the
       // simulator. Nothing in this file constructs a CardService.
@@ -224,6 +228,46 @@ if (!available) {
       expect(history[0]?.declineCode).toBe('ledger.insufficient_funds');
     });
 
+    /**
+     * §18 OVER THE WIRE, INCLUDING THE PART THAT REFUSES.
+     *
+     * `createBankServices` is built above exactly as `index.ts` builds it for an
+     * operator who chose the simulator — and with NO `rates`, which is the
+     * shipping default and the honest state of every deployment, because this
+     * platform has no FX source.
+     *
+     * So a card charged in an asset it does not draw on can be ISSUED, and the
+     * settlement asset comes back as its own field rather than being inferred by
+     * a screen. The authorisation then refuses by name, with a code the router
+     * maps to PRECONDITION_FAILED — the PLATFORM is missing something, not the
+     * caller. A 400 would tell an operator to fix their request, which is not
+     * the problem and never becomes one by retrying.
+     */
+    it('issues a converted card and refuses its authorisation by name, because no rate exists', async () => {
+      await fund(HOLDER, 'BTC', '1');
+
+      const user = caller(bank, ['bank:read', 'bank:write']);
+      const card = await user.cards.issue({
+        cardId: randomUUID(),
+        assetId: 'BTC',
+        settlementAssetId: 'USDT',
+        perAuthorizationLimit: '1',
+      });
+
+      expect(card.assetId).toBe('BTC');
+      expect(card.settlementAssetId).toBe('USDT');
+      expect(card.simulated).toBe(true);
+
+      const ops = caller(bank, ['admin:treasury'], OPERATOR);
+      await expect(
+        ops.ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '100' }),
+      ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+
+      // NOT a decline, because nobody decided anything — there is no row at all.
+      expect(await user.cards.authorizations({ cardId: card.id })).toEqual([]);
+      expect((await ledger.balance(userAvailable(HOLDER, 'BTC'))).amount).toBe(amt('1'));
+    });
+
     /** Cashback pays from a pot funded by real bank fees, and it reaches the caller. */
     it('pays a reward the operator really funded, through the same door', async () => {
       await fund(HOLDER, 'USDT', '500');
@@ -293,7 +337,7 @@ if (!available) {
     let bank: ReturnType<typeof createBankServices>;
 
     beforeEach(async () => {
-      await sql`TRUNCATE bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards RESTART IDENTITY CASCADE`;
+      await sql`TRUNCATE bank.card_cashback, bank.card_settlements, bank.card_conversions, bank.card_authorizations, bank.cards RESTART IDENTITY CASCADE`;
       const ledger = new MemoryLedger();
       // No `cards` option at all — index.ts on `BANK_CARD_ISSUER=none` resolves
       // to exactly this adapter.

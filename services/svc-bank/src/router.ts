@@ -1023,7 +1023,17 @@ export function createBankRouter(bank: BankServices) {
    */
   const cardOutput = z.object({
     id: z.string(),
+    /** Which balance the card draws on. Every posting against it is in this asset. */
     assetId: z.string(),
+    /**
+     * What merchants charge this card in (§18).
+     *
+     * Equal to `assetId` means no conversion happens and no rate is consulted.
+     * Different means every authorisation is quoted at the authorisation moment
+     * — and refuses by name where no rate can be got, which on a fiat settlement
+     * asset is every time, because this platform has no FX source.
+     */
+    settlementAssetId: z.string(),
     /** The programme id, which is also the ledger rail label. */
     issuer: z.string(),
     /** TRUE MEANS THERE IS NO CARD. Never omitted, never defaulted. */
@@ -1049,6 +1059,7 @@ export function createBankRouter(bank: BankServices) {
           return rows.map((c) => ({
             id: c.id,
             assetId: c.assetId,
+            settlementAssetId: c.settlementAssetId,
             issuer: c.issuer,
             simulated: c.simulated,
             panTail: c.panTail,
@@ -1068,6 +1079,16 @@ export function createBankRouter(bank: BankServices) {
         z.object({
           cardId: z.string().uuid(),
           assetId: z.string().min(1).max(16),
+          /**
+           * What merchants charge this card in. Omitted means the funding asset,
+           * which is no conversion — the shape every card had before §18.
+           *
+           * A card may be issued with a settlement asset nothing can quote; the
+           * refusal belongs on the authorisation, where the rate is needed, not
+           * on a path that moves no money and could be refused by one transient
+           * feed outage.
+           */
+          settlementAssetId: z.string().min(1).max(16).optional(),
           cashbackBps: z.number().int().min(0).max(10_000).optional(),
           perAuthorizationLimit: amountString,
         }),
@@ -1079,12 +1100,14 @@ export function createBankRouter(bank: BankServices) {
             cardId: input.cardId,
             userId: ctx.principal.userId,
             assetId: input.assetId,
+            ...(input.settlementAssetId === undefined ? {} : { settlementAssetId: input.settlementAssetId }),
             ...(input.cashbackBps === undefined ? {} : { cashbackBps: input.cashbackBps }),
             perAuthorizationLimit: parseAmount(input.perAuthorizationLimit),
           });
           return {
             id: card.id,
             assetId: card.assetId,
+            settlementAssetId: card.settlementAssetId,
             issuer: card.issuer,
             simulated: card.simulated,
             panTail: card.panTail,
@@ -1125,12 +1148,33 @@ export function createBankRouter(bank: BankServices) {
           z.object({
             id: z.string(),
             authorizationRef: z.string(),
+            /** WHAT MOVED, in the card's funding asset. */
             amount: amountString,
             merchantCategory: z.string().nullable(),
             decision: z.enum(['approved', 'declined']),
             declineCode: z.string().nullable(),
             status: z.string(),
             decidedAt: z.string(),
+            /**
+             * WHAT THE MERCHANT CHARGED, and the rate it converted at (§18).
+             *
+             * NULL where the card is charged in the asset it draws on — nothing
+             * was converted, and rendering a rate of 1 would invent a
+             * conversion that did not happen. Where it is present, the statement
+             * can show the user the price they agreed at the till alongside the
+             * units that actually left their balance, which is the pair a
+             * converted spend is unreadable without.
+             */
+            conversion: z
+              .object({
+                settlementAssetId: z.string(),
+                settlementAmount: amountString,
+                rate: amountString,
+                /** How the rate was derived — `MarkQuality` from the loan book. */
+                rateQuality: z.string(),
+                rateAsOf: z.string(),
+              })
+              .nullable(),
           }),
         ),
       )
@@ -1150,6 +1194,15 @@ export function createBankRouter(bank: BankServices) {
             declineCode: a.declineCode,
             status: a.status,
             decidedAt: a.decidedAt.toISOString(),
+            conversion: a.conversion
+              ? {
+                  settlementAssetId: a.conversion.settlementAssetId,
+                  settlementAmount: formatAmount(a.conversion.settlementAmount),
+                  rate: formatAmount(a.conversion.rate),
+                  rateQuality: a.conversion.quality,
+                  rateAsOf: a.conversion.rateAsOf.toISOString(),
+                }
+              : null,
           }));
         }),
       ),
@@ -1296,6 +1349,14 @@ export function createBankRouter(bank: BankServices) {
         z.object({
           cardId: z.string().uuid(),
           authorizationRef: z.string().min(4).max(128),
+          /**
+           * THE MERCHANT'S NUMBER, in the card's SETTLEMENT asset.
+           *
+           * The same asset the card draws on unless the card was issued with a
+           * settlement asset of its own — in which case this is converted at a
+           * rate quoted now and frozen, and refuses `bank.mark_missing` if no
+           * rate can be got rather than guessing one.
+           */
           amount: amountString,
           merchantCategory: z.string().min(1).max(64).optional(),
         }),
@@ -1305,7 +1366,18 @@ export function createBankRouter(bank: BankServices) {
           authorizationId: z.string(),
           decision: z.enum(['approved', 'declined']),
           declineCode: z.string().nullable(),
+          /** WHAT WAS HELD, in the funding asset. The converted figure on a converted card. */
           amount: amountString,
+          /** The frozen quote, or null because this card converts nothing. */
+          conversion: z
+            .object({
+              settlementAssetId: z.string(),
+              settlementAmount: amountString,
+              rate: amountString,
+              rateQuality: z.string(),
+              rateAsOf: z.string(),
+            })
+            .nullable(),
         }),
       )
       .mutation(async ({ input }) =>
@@ -1321,6 +1393,15 @@ export function createBankRouter(bank: BankServices) {
             decision: authorization.decision,
             declineCode: authorization.declineCode,
             amount: formatAmount(authorization.amount),
+            conversion: authorization.conversion
+              ? {
+                  settlementAssetId: authorization.conversion.settlementAssetId,
+                  settlementAmount: formatAmount(authorization.conversion.settlementAmount),
+                  rate: formatAmount(authorization.conversion.rate),
+                  rateQuality: authorization.conversion.quality,
+                  rateAsOf: authorization.conversion.rateAsOf.toISOString(),
+                }
+              : null,
           };
         }),
       ),
@@ -1329,10 +1410,17 @@ export function createBankRouter(bank: BankServices) {
       .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128), amount: amountString }))
       .output(
         z.object({
+          /** WHAT LEFT THE BOOK, in the funding asset. */
           captured: amountString,
           returned: amountString,
           captureLedgerTxId: z.string(),
           reversalLedgerTxId: z.string().nullable(),
+          /**
+           * What the merchant cleared and the FROZEN rate it converted at — the
+           * rate the authorisation was decided on, re-read and never re-quoted.
+           * Null on a card that converts nothing.
+           */
+          settlement: z.object({ assetId: z.string(), amount: amountString, rate: amountString }).nullable(),
           // Surfaced rather than swallowed. A reward the rewards pot could not
           // pay is a fact an operator needs on the day it happens — the same
           // reasoning as `runRiskSweep.refused`.
@@ -1355,6 +1443,13 @@ export function createBankRouter(bank: BankServices) {
             returned: formatAmount(result.returned),
             captureLedgerTxId: result.captureLedgerTxId,
             reversalLedgerTxId: result.reversalLedgerTxId,
+            settlement: result.settlement
+              ? {
+                  assetId: result.settlement.assetId,
+                  amount: formatAmount(result.settlement.amount),
+                  rate: formatAmount(result.settlement.rate),
+                }
+              : null,
             cashback: {
               status: result.cashback.status,
               amount: formatAmount(result.cashback.amount),
