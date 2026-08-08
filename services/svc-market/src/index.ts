@@ -23,8 +23,8 @@ registerProcessHooks(
 );
 
 /**
- * svc-market — vendor lifecycle Stage 2: apply, vet, and stake-gated listing
- * slots (§8.7).
+ * svc-market — vendor lifecycle Stage 3: apply, vet, stake-gated listing slots,
+ * and the public read that decides who is listed (§8.7).
  *
  * NO LEDGER CLIENT and no LEDGER_URL. `market.vendors` moves no value: purchases,
  * subscriptions and house commission are `market.commerce`, a different mountain
@@ -76,11 +76,12 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 /**
- * Readiness names the stage out loud. The public vendor profile is Stage 3; a
- * client that reads `stage` knows the listing half of the marketplace is not
- * there yet, rather than discovering it from a 404.
+ * Readiness names the stage out loud, and Stage 3 is the last of them: apply →
+ * vet → slot → list eligibility. What is still absent is `market.commerce`, so a
+ * client reading `stage` knows this service will tell it whether a vendor may
+ * list and will never take a payment.
  */
-app.get('/ready', async () => ({ ready: true, stage: '2-stake-gated-slots' }));
+app.get('/ready', async () => ({ ready: true, stage: '3-list-eligibility' }));
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
@@ -95,7 +96,7 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, stage: '2-stake-gated-slots', trpc: true }, 'svc-market ready');
+app.log.info({ port: env.HTTP_PORT, stage: '3-list-eligibility', trpc: true }, 'svc-market ready');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
