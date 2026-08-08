@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
-import { MemoryEventBus } from '@intafaced/events';
+import { MemoryEventBus, type Envelope, type EventName, type Payload, type PublishOptions } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
 import { P2pService, P2pError } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
@@ -25,6 +25,33 @@ import type { ReferencePriceSource } from './pricing.js';
  * Escrow is the one place where value sits between two owners, and a book that
  * does not close is a book where some of it went somewhere nobody asked for.
  */
+
+/**
+ * A bus that refuses one subject exactly once, then behaves normally.
+ *
+ * Not a crash — a bus outage, which from `settle()`'s point of view is the same
+ * event and is far more common. It is the cheapest way to ask the question that
+ * matters about settlement ordering: when a publish fails, is the trade still on
+ * the sweep's work list, or has it already been stamped as finished?
+ */
+class BusFailingOnce extends MemoryEventBus {
+  private armed = true;
+
+  constructor(
+    producer: string,
+    private readonly refuse: EventName,
+  ) {
+    super(producer);
+  }
+
+  override async publish<K extends EventName>(name: K, payload: Payload<K>, opts: PublishOptions = {}): Promise<Envelope<Payload<K>>> {
+    if (this.armed && name === this.refuse) {
+      this.armed = false;
+      throw new Error('bus unavailable');
+    }
+    return super.publish(name, payload, opts);
+  }
+}
 
 const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -1562,6 +1589,29 @@ if (!available) {
 
       await p2p.sweepSettlements();
       expect(await availableOf(MAKER)).toBe('1000');
+      await expectBooksClosed();
+    });
+
+    it('keeps a settlement on the work list until its events have actually gone out', async () => {
+      // The stamp is what removes a trade from the sweep's work list, so a
+      // publish that fails after it is a release event and two XP awards that
+      // nothing will ever emit again — while the value has already moved.
+      const trade = await escrowedTrade('100');
+      const flaky = new BusFailingOnce('svc-p2p', 'p2pEscrowReleased');
+      const service = new P2pService(sql, ledger, flaky, options);
+
+      await expect(service.confirmFiatReceived(trade.id, MAKER)).rejects.toThrow('bus unavailable');
+
+      // The ledger post is ahead of the publish and stays there: the buyer has
+      // their asset, minus the 1% fee, either way.
+      expect(await availableOf(TAKER)).toBe('99');
+
+      // The decision is late, not lost — the sweep can still finish it.
+      expect((await service.sweepSettlements()).settled).toBe(1);
+
+      expect(flaky.emitted('p2pEscrowReleased')).toHaveLength(1);
+      expect(flaky.emitted('xpEarned')).toHaveLength(2);
+      expect((await service.getTrade(trade.id)).settledAt).not.toBeNull();
       await expectBooksClosed();
     });
 
