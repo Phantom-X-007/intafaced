@@ -9,14 +9,14 @@
 
 ## 1 · Threat model (what we claim the code forbids)
 
-| Adversary                   | Goal                                     | Architectural refusal                                                                              | Internal proof |
-| --------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------- |
-| Platform / operator         | Move user funds without a user signature | No admin, pause, upgrade, or guardian on `SmartAccount`; EIP-1167 clone → immutable implementation | ABI + source refuse `pause`/`onlyAdmin`/`guardian` control surface |
-| Malicious bundler / relayer | Swap callData after signature            | ERC-4337 userOpHash binds callData; session keys cannot target the account or widen scope          | `getUserOperationHash` changes when `callData` changes |
+| Adversary                   | Goal                                     | Architectural refusal                                                                              | Internal proof                                                                                 |
+| --------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Platform / operator         | Move user funds without a user signature | No admin, pause, upgrade, or guardian on `SmartAccount`; EIP-1167 clone → immutable implementation | ABI + source refuse `pause`/`onlyAdmin`/`guardian` control surface                             |
+| Malicious bundler / relayer | Swap callData after signature            | ERC-4337 userOpHash binds callData; session keys cannot target the account or widen scope          | `getUserOperationHash` changes when `callData` changes                                         |
 | Session key thief           | Drain beyond grant                       | Selectors/targets/spend limit enforced; epoch panic button                                         | `createSessionSpec` / `evaluateSessionCall` refuse forbidden selectors, self-target, overspend |
-| Passkey assertion reuse     | Authorise a different userOp             | `PasskeyOwner` binds WebAuthn `challenge` to the digest under check                                | Covered by S-A9 hermetic + on-chain suites (not re-proven here) |
-| Signature malleability      | Replay alternate (r,s)                   | secp256k1 half-n in SmartAccount; P-256 half-n in `P256.sol`                                       | Covered by existing account / PasskeyOwner suites |
-| Missing P-256 precompile    | Silent accept                            | `P256.verify` reverts / ERC-1271 returns fail — never invents success                              | Covered by S-A9 on-chain suite |
+| Passkey assertion reuse     | Authorise a different userOp             | `PasskeyOwner` binds WebAuthn `challenge` to the digest under check                                | Covered by S-A9 hermetic + on-chain suites (not re-proven here)                                |
+| Signature malleability      | Replay alternate (r,s)                   | secp256k1 half-n in SmartAccount; P-256 half-n in `P256.sol`                                       | Covered by existing account / PasskeyOwner suites                                              |
+| Missing P-256 precompile    | Silent accept                            | `P256.verify` reverts / ERC-1271 returns fail — never invents success                              | Covered by S-A9 on-chain suite                                                                 |
 
 **Out of scope for this package (named sockets):** social recovery (`socket.social-recovery` / S-K7 before S-L2), paymaster funding (S-A10), bundler policy (S-A11), EntryPoint differential (S-A11 / `socket.userop-differential-test`), deployment registry (S-A13).
 
@@ -24,8 +24,8 @@
 
 ## 2 · Findings log
 
-| ID  | Severity | Status | Summary                                                                     |
-| --- | -------- | ------ | --------------------------------------------------------------------------- |
+| ID  | Severity | Status | Summary                                                                                                 |
+| --- | -------- | ------ | ------------------------------------------------------------------------------------------------------- |
 | —   | —        | —      | No external audit yet. Unit + on-chain + this adversarial matrix exist; they are not an external audit. |
 
 When a finding lands: add a row, link the PR that fixed it or the residual that owns it, never delete history.

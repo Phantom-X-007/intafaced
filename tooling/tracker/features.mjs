@@ -1726,7 +1726,8 @@ export const FEATURES = [
     status: 'socket',
     owner: 'shehzad002',
     dependsOn: ['socket.contract-toolchain'],
-    note: 'Owner set 2026-08-07. INTERNAL PACKAGE 2026-08-08: threat model + findings log + adversarial matrix ' +
+    note:
+      'Owner set 2026-08-07. INTERNAL PACKAGE 2026-08-08: threat model + findings log + adversarial matrix ' +
       '(services/svc-protocol/src/accounts/adversarial-audit.test.ts) live under docs/audits/protocol-smart-accounts-2026-08-08.md. ' +
       'STATUS stays socket: choosing and PAYING an audit firm is a Nitro decision (budget). Tests pass ≠ audited:true.',
   }),
