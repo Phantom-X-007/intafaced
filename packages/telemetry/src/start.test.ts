@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
-import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { trace, SpanStatusCode, diag } from '@opentelemetry/api';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startTelemetry, isTelemetryActive } from './start.js';
 
@@ -85,5 +85,79 @@ describe('startTelemetry', () => {
     const handle = startTelemetry({ serviceName: 'svc-test', endpoint, enabled: false });
     await expect(handle.shutdown()).resolves.toBeUndefined();
     await expect(handle.shutdown()).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * The failure channel has to exist in production, not only under `debug`.
+ *
+ * `diag` is a proxy: with no logger registered it does
+ * `const logger = getGlobal('diag'); if (!logger) return;` — every call is a
+ * silent no-op. `setLogger` used to run only under `options.debug`, and no
+ * service passes it (checked: `startTelemetry({` appears in all eighteen
+ * service entrypoints, `debug` in none). So a down collector, a DNS failure and
+ * a full export queue were all invisible on every deployment — as was this
+ * module's own `diag.warn('telemetry shutdown failed')`.
+ *
+ * That is the failure this package exists to end, one layer out: the provider
+ * is real, but a broken EXPORT was as undetectable as the no-op tracer was.
+ */
+describe('the diag failure channel', () => {
+  /**
+   * A capturing logger, because the default one cannot be observed:
+   * `DiagConsoleLogger` saves the original `console` methods at module load,
+   * on purpose, so neither a spy nor a stream capture sees its output.
+   */
+  function capturing() {
+    const lines: string[] = [];
+    const record =
+      (level: string) =>
+      (message: string, ...args: unknown[]) =>
+        void lines.push(`${level} ${message} ${args.map(String).join(' ')}`.trim());
+    return {
+      lines,
+      logger: {
+        error: record('error'),
+        warn: record('warn'),
+        info: record('info'),
+        debug: record('debug'),
+        verbose: record('verbose'),
+      },
+    };
+  }
+
+  it('carries a warning with telemetry enabled and debug OFF', async () => {
+    // The whole finding: this used to be registered only under `debug`, and no
+    // service passes it — so on all eighteen deployments a down collector, a
+    // DNS failure and a full export queue were silent.
+    const cap = capturing();
+    const handle = startTelemetry({ serviceName: 'svc-test', endpoint, enabled: true, diagLogger: cap.logger });
+
+    diag.warn('collector unreachable');
+    diag.error('export failed');
+
+    expect(cap.lines.join('\n')).toContain('collector unreachable');
+    expect(cap.lines.join('\n')).toContain('export failed');
+    await handle.shutdown();
+  });
+
+  it('stays quiet at debug level when debug is off', async () => {
+    const cap = capturing();
+    const handle = startTelemetry({ serviceName: 'svc-test', endpoint, enabled: true, diagLogger: cap.logger });
+
+    diag.debug('per-span noise');
+
+    // WARN by default: a real failure is heard, the per-span chatter is not.
+    expect(cap.lines.join('\n')).not.toContain('per-span noise');
+    await handle.shutdown();
+  });
+
+  it('registers no logger at all when telemetry is disabled', async () => {
+    const cap = capturing();
+    startTelemetry({ serviceName: 'svc-test', endpoint, enabled: false, diagLogger: cap.logger });
+
+    diag.warn('should not be routed to this logger');
+
+    expect(cap.lines.join('\n')).not.toContain('should not be routed to this logger');
   });
 });

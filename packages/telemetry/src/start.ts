@@ -1,4 +1,4 @@
-import { diag, DiagConsoleLogger, DiagLogLevel, trace } from '@opentelemetry/api';
+import { diag, DiagConsoleLogger, DiagLogLevel, trace, type DiagLogger } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -59,6 +59,17 @@ export interface TelemetryOptions {
   version?: string;
   /** Emit SDK-internal diagnostics. Off unless something is being debugged. */
   debug?: boolean;
+  /**
+   * Where SDK diagnostics go. Defaults to the console.
+   *
+   * A seam, and it exists because the alternative is unprovable:
+   * `DiagConsoleLogger` captures the original `console` methods at MODULE LOAD
+   * — deliberately, "before any instrumentation can wrap them" — so no spy and
+   * no stream capture can ever observe what it writes. The promise that a down
+   * collector "is reported through the diag channel" was therefore untestable,
+   * and it was also false. One of those is worth fixing without the other.
+   */
+  diagLogger?: DiagLogger;
 }
 
 export interface TelemetryHandle {
@@ -81,7 +92,30 @@ const NOOP: TelemetryHandle = { enabled: false, async shutdown() {} };
 export function startTelemetry(options: TelemetryOptions): TelemetryHandle {
   if (!options.enabled) return NOOP;
 
-  if (options.debug) diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
+  /**
+   * REGISTER THE FAILURE CHANNEL UNCONDITIONALLY.
+   *
+   * The docstring above promises that a down collector, a DNS failure or a full
+   * export queue "is reported through the diag channel". It was not. `diag` is
+   * a proxy: with no logger registered, `_logProxy` does
+   * `const logger = getGlobal('diag'); if (!logger) return;` — every call is a
+   * silent no-op. And this line used to run only under `options.debug`, which
+   * NO service passes. Checked, not assumed: `startTelemetry({` appears in all
+   * eighteen service entrypoints and `debug` in none of them.
+   *
+   * So on every deployment, every export failure was invisible — including this
+   * module's own `diag.warn('telemetry shutdown failed')` below, which called a
+   * channel that could not carry it.
+   *
+   * That is the same failure this package was written to end. Its test file
+   * opens with it: eighteen services wrote spans into a no-op tracer and every
+   * one of them looked healthy. The provider is real now; a broken EXPORT was
+   * still as undetectable as the no-op tracer had been.
+   *
+   * WARN by default so a real failure is heard, INFO under `debug` for the
+   * per-span noise nobody wants in production.
+   */
+  diag.setLogger(options.diagLogger ?? new DiagConsoleLogger(), options.debug ? DiagLogLevel.INFO : DiagLogLevel.WARN);
 
   const exporter = new OTLPTraceExporter({
     // The collector's OTLP/HTTP receiver listens on 4318 and expects the signal
