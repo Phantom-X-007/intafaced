@@ -37,8 +37,54 @@ export const isoDatetime = z.string().datetime({ offset: true });
 export const marketTypeSchema = z.enum(['spot', 'swap', 'future', 'option']);
 
 /**
+ * Stable schedule keys — same set as `@intafaced/contracts` TRADING_SCHEDULES.
+ * Duplicated on the wire schema so exchange-contract stays free of a contracts
+ * dependency; the two lists must stay aligned.
+ */
+export const marketScheduleKeySchema = z.enum(['crypto-24x7', 'fx-global', 'cme-globex']);
+export type MarketScheduleKey = z.infer<typeof marketScheduleKeySchema>;
+
+/** One open window on the venue's local week (day 0 = Sunday). */
+export const marketSessionBoundarySchema = z.object({
+  day: z.number().int().min(0).max(6),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+});
+
+/**
+ * When the venue trades. `continuous` is crypto (no close). `sessions` is
+ * forex / commodity calendars — the same windows `assertMarketOpen` evaluates.
+ *
+ * OPERATOR NOTE on `holidays: []`: an empty list is NOT "no holidays ever". It
+ * means none are configured, and the gate fails OPEN for those calendar days.
+ * That is the wrong fail direction once FX/CME are live money; refresh from the
+ * venue calendar before going live.
+ */
+export const marketHoursSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('continuous') }),
+  z.object({
+    kind: z.literal('sessions'),
+    timezone: z.string().min(3),
+    windows: z
+      .array(
+        z.object({
+          open: marketSessionBoundarySchema,
+          close: marketSessionBoundarySchema,
+        }),
+      )
+      .min(1),
+    holidays: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+  }),
+]);
+export type MarketHours = z.infer<typeof marketHoursSchema>;
+
+/**
  * CCXT market. `symbol` is the unified form — 'BTC/USDT', 'BTC/USDT:USDT' for
  * a linear perp. `id` is our internal market id.
+ *
+ * Extensions beyond stock CCXT (kept top-level so bots do not need a second
+ * map): `paper`, `schedule`, `sessionOpen`, `nextSessionChange`, `hours`.
+ * A client that ignores unknown keys is no worse off; one that reads them can
+ * refuse simulated markets and "venue shut" without guessing from empty books.
  */
 export const marketSchema = z.object({
   id: z.string(),
@@ -57,7 +103,40 @@ export const marketSchema = z.object({
   contract: z.boolean(),
   linear: z.boolean().nullable(),
   inverse: z.boolean().nullable(),
+  /**
+   * Listing status (`trade.markets.status === 'active'`). NOT session hours —
+   * a permanently listed FX pair is `active: true` every weekend.
+   */
   active: z.boolean(),
+  /**
+   * TRUE = simulated / paper market. Orders take no hold and never post to the
+   * ledger. Not stock CCXT; emitted so a bot can refuse sim markets in one
+   * line rather than booking a position that does not exist.
+   */
+  paper: z.boolean(),
+  /** Stable key into the hours table the order path evaluates. */
+  schedule: marketScheduleKeySchema,
+  /**
+   * Whether the venue SESSION is open at response time (schedule only).
+   * Distinct from `active`. Order path refuses closed sessions with
+   * `trade.market_closed` — bots should not treat empty books as "exchange down"
+   * when `sessionOpen` is false.
+   */
+  sessionOpen: z.boolean(),
+  /**
+   * Next schedule flip from response time. Null for continuous markets (never
+   * flip) or when the key is unknown (sessionOpen is then false).
+   */
+  nextSessionChange: z
+    .object({
+      /** True = session becomes open at `timestamp`; false = becomes closed. */
+      open: z.boolean(),
+      timestamp: timestampMs,
+      datetime: isoDatetime,
+    })
+    .nullable(),
+  /** Full hours payload — continuous or sessions + timezone + windows. */
+  hours: marketHoursSchema,
   /** Taker/maker as a decimal rate (0.001 = 10 bps), per CCXT convention. */
   taker: decimal,
   maker: decimal,

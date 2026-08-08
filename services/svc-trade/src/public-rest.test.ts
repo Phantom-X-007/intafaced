@@ -81,6 +81,62 @@ describe('presenters', () => {
   });
 
   /**
+   * A bot must tell "venue shut" from "exchange down" / empty book.
+   *
+   * `active` is listing status (operator halted / not launched). Session hours
+   * are a different question: EUR/USD is permanently listed and shut every
+   * weekend. Without `sessionOpen` + `hours` on the wire, a bot only sees an
+   * empty book or a `trade.market_closed` after it already tried to order.
+   * Same predicates as `assertMarketOpen` — never invent a second calendar.
+   */
+  it('publishes schedule hours and sessionOpen from the same table as the order path', () => {
+    // Crypto is continuous — always open, no next flip.
+    const btc = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT' }), Date.parse('2026-01-10T12:00:00Z'));
+    expect(btc.schedule).toBe('crypto-24x7');
+    expect(btc.sessionOpen).toBe(true);
+    expect(btc.nextSessionChange).toBeNull();
+    expect(btc.hours).toEqual({ kind: 'continuous' });
+    expect(marketSchema.safeParse(btc).success).toBe(true);
+
+    // FX: Saturday UTC is closed on the interbank week (America/New_York).
+    const eurusdSat = presentCcxtMarket(
+      fakeMarket({
+        symbol: 'EUR/USD',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        schedule: 'fx-global',
+      }),
+      Date.parse('2026-01-10T12:00:00Z'), // Saturday
+    );
+    expect(eurusdSat.active).toBe(true); // listed
+    expect(eurusdSat.sessionOpen).toBe(false); // venue shut
+    expect(eurusdSat.schedule).toBe('fx-global');
+    expect(eurusdSat.hours.kind).toBe('sessions');
+    if (eurusdSat.hours.kind === 'sessions') {
+      expect(eurusdSat.hours.timezone).toBe('America/New_York');
+      expect(eurusdSat.hours.windows.length).toBeGreaterThan(0);
+      // Empty holidays fail OPEN on the order path — surface that, never invent days.
+      expect(eurusdSat.hours.holidays).toEqual([]);
+    }
+    expect(eurusdSat.nextSessionChange).not.toBeNull();
+    expect(eurusdSat.nextSessionChange?.open).toBe(true);
+    expect(marketSchema.safeParse(eurusdSat).success).toBe(true);
+
+    // FX mid-week session open (Wednesday 12:00 UTC = still open NY).
+    const eurusdWed = presentCcxtMarket(
+      fakeMarket({
+        symbol: 'EUR/USD',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        schedule: 'fx-global',
+      }),
+      Date.parse('2026-01-14T12:00:00Z'),
+    );
+    expect(eurusdWed.sessionOpen).toBe(true);
+    expect(marketSchema.safeParse(eurusdWed).success).toBe(true);
+  });
+
+  /**
    * The regression this shape exists to stop. Seven of the sixteen live
    * listings have a lot size that is not a power of ten — the six forex majors
    * at 1000 units and NATGAS/USD at 10 — and the previous decimal-places

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
 import { TIMEFRAMES, timeframeSchema, type Timeframe } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
@@ -119,6 +120,87 @@ export function decimalPlaces(amount: string): number {
 }
 
 /**
+ * Wire hours for a market — same table the order path evaluates.
+ *
+ * Unknown key → continuous-shaped refusal cannot be honest, so we emit a
+ * sessions payload that is never open (empty windows forbidden by schema).
+ * Callers pass through TRADING_SCHEDULES; unknown keys are handled by
+ * `sessionStateForMarket` returning sessionOpen false.
+ */
+function presentMarketHours(schedule: TradingSchedule):
+  | {
+      kind: 'continuous';
+    }
+  | {
+      kind: 'sessions';
+      timezone: string;
+      windows: ReadonlyArray<{ open: { day: number; time: string }; close: { day: number; time: string } }>;
+      holidays: readonly string[];
+    } {
+  if (schedule.kind === 'continuous') return { kind: 'continuous' };
+  return {
+    kind: 'sessions',
+    timezone: schedule.timezone,
+    windows: schedule.windows.map((w) => ({
+      open: { day: w.open.day, time: w.open.time },
+      close: { day: w.close.day, time: w.close.time },
+    })),
+    // Empty holidays fail OPEN on the order path — surface that fact, never invent days.
+    holidays: [...schedule.holidays],
+  };
+}
+
+/**
+ * Session open + next flip at `atMs`, from the same predicates as
+ * `assertMarketOpen` (risk.ts). Unknown schedule key → closed, no transition
+ * guess (fail closed on the public wire for the open flag).
+ */
+export function sessionStateForMarket(
+  market: Pick<Market, 'schedule'>,
+  atMs: number,
+): {
+  sessionOpen: boolean;
+  nextSessionChange: { open: boolean; timestamp: number; datetime: string } | null;
+  hours: ReturnType<typeof presentMarketHours>;
+  schedule: Market['schedule'];
+} {
+  const scheduleKey = market.schedule;
+  const schedule = TRADING_SCHEDULES[scheduleKey];
+  if (!schedule) {
+    // Unknown key: order path refuses (`trade.market_closed`). Public wire
+    // says closed and publishes a zero-width window so `hours.kind` never
+    // claims continuous (always open) when we cannot evaluate hours.
+    return {
+      schedule: scheduleKey,
+      sessionOpen: false,
+      nextSessionChange: null,
+      hours: {
+        kind: 'sessions',
+        timezone: 'UTC',
+        windows: [{ open: { day: 0, time: '00:00' }, close: { day: 0, time: '00:00' } }],
+        holidays: [],
+      },
+    };
+  }
+
+  const at = new Date(atMs);
+  const sessionOpen = isScheduleOpen(schedule, at);
+  const next = nextScheduleTransition(schedule, at);
+  return {
+    schedule: scheduleKey,
+    sessionOpen,
+    nextSessionChange: next
+      ? {
+          open: next.open,
+          timestamp: next.at.getTime(),
+          datetime: next.at.toISOString(),
+        }
+      : null,
+    hours: presentMarketHours(schedule),
+  };
+}
+
+/**
  * Present a listing in the CCXT market shape.
  *
  * PRECISION IS REPORTED AS TICK SIZE, NOT DECIMAL PLACES.
@@ -139,12 +221,19 @@ export function decimalPlaces(amount: string): number {
  * `precisionMode: 'TICK_SIZE'` with the tick and lot themselves is what our
  * engine actually enforces (`snapToTick`, and the lot check in risk.ts), so it
  * is the only report a client can build a fillable order from.
+ *
+ * HOURS / SESSION — published so a bot can tell "venue shut" from "exchange
+ * down" or "empty book". `active` stays listing status; `sessionOpen` is the
+ * schedule gate the order path already enforces via `assertMarketOpen`.
+ *
+ * @param nowMs response clock — injectable so sessionOpen is testable at a boundary.
  */
-export function presentCcxtMarket(market: Market) {
+export function presentCcxtMarket(market: Market, nowMs: number = Date.now()) {
   const tick = formatAmount(market.tickSize);
   const lot = formatAmount(market.lotSize);
   const isSpot = market.kind === 'spot';
   const type = market.kind === 'futures' ? ('swap' as const) : market.kind === 'options' ? ('option' as const) : ('spot' as const);
+  const session = sessionStateForMarket(market, nowMs);
 
   return {
     id: market.id,
@@ -185,6 +274,10 @@ export function presentCcxtMarket(market: Market) {
      * being silently untrue while it is open.
      */
     paper: market.paper === true,
+    schedule: session.schedule,
+    sessionOpen: session.sessionOpen,
+    nextSessionChange: session.nextSessionChange,
+    hours: session.hours,
     taker: bpsToRate(market.takerBps),
     maker: bpsToRate(market.makerBps),
     contractSize: null as string | null,
@@ -328,7 +421,8 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
 
   app.get('/api/v1/markets', async (_req, reply) => {
     const markets = await deps.markets();
-    return reply.code(200).send(markets.map(presentCcxtMarket));
+    const ts = now();
+    return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts)));
   });
 
   app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>('/api/v1/orderbook/:symbol', async (req, reply) => {
@@ -515,6 +609,8 @@ export function fakeMarket(partial: {
   makerBps?: number;
   takerBps?: number;
   paper?: boolean;
+  schedule?: Market['schedule'];
+  assetClass?: Market['assetClass'];
 }): Market {
   return {
     id: partial.id ?? '00000000-0000-4000-8000-000000000001',
@@ -531,8 +627,8 @@ export function fakeMarket(partial: {
     makerBps: partial.makerBps ?? 10,
     takerBps: partial.takerBps ?? 20,
     listedAt: null,
-    assetClass: 'crypto',
-    schedule: 'crypto-24x7',
+    assetClass: partial.assetClass ?? 'crypto',
+    schedule: partial.schedule ?? 'crypto-24x7',
     paper: partial.paper ?? false,
   };
 }
