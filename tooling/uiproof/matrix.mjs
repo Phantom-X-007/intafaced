@@ -66,6 +66,16 @@ export const ROUTES = [
   { id: 'pay', path: '/pay', note: 'pay vertical — overview: health, railHealth, merchant.me' },
   { id: 'pay-money', path: '/pay/money', note: 'withdrawal.balance / mine / create — interactive-only scope refuses by name' },
   { id: 'pay-merchant', path: '/pay/merchant', note: 'merchant.me / create / submitKyb / decideKybStub / profile / balances' },
+  {
+    id: 'pay-network',
+    path: '/pay/network',
+    note: 'submerchant.get / list / create — the sub-merchant tree, walked a node at a time',
+  },
+  {
+    id: 'pay-permissions',
+    path: '/pay/permissions',
+    note: 'submerchantPermission.areas / list / history / grant / revoke — the permission journal',
+  },
   { id: 'pay-links', path: '/pay/links', note: 'merchant.listLinks / createLink / deactivateLink' },
   { id: 'pay-payments', path: '/pay/payments', note: 'payment.list / create / authorize / capture / refund / history' },
   { id: 'pay-settlements', path: '/pay/settlements', note: 'settlement.run / get / payout — no list procedure exists, screen says so' },
