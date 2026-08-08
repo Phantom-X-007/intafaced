@@ -54,10 +54,30 @@ export function registerInternalFundingRate(app: FastifyInstance, deps: Internal
       return reply.code(400).send({ error: 'trade.funding_rate_publish_invalid', message: 'asOfMs invalid' });
     }
 
-    let periodId = req.body?.periodId?.trim();
+    // The period must be NAMED by the publisher. It is never derived from the
+    // clock, and that is the same "never invent" rule as the rate itself.
+    //
+    // A funding period is a product fact — a window with a start, a length and
+    // an anchor — and its identity is the only thing standing between a trader
+    // and repeat settlement: `runFundingTick` skips a period it has already
+    // settled, and it does so by id. Deriving that id from `asOfMs` defeated it
+    // completely, because `toISOString()` is MILLISECOND resolution. An oracle
+    // republishing the same rate every 60s minted a brand-new unsettled period
+    // on every publish, so every trader was charged a full period again on
+    // every tick. No crash required — that is ordinary polling behaviour.
+    //
+    // Bucketing the clock to 8h would swap one invention for another: doctrine
+    // says funding is every 8h but names no anchor, so the service would be
+    // choosing where the boundary falls. Refusing is the honest answer.
+    const periodStartIso = req.body?.periodStartIso?.trim();
+    const periodId = req.body?.periodId?.trim() || (periodStartIso ? periodIdFor(marketId, periodStartIso) : '');
     if (!periodId) {
-      const start = req.body?.periodStartIso?.trim() || new Date(asOfMs).toISOString();
-      periodId = periodIdFor(marketId, start);
+      return reply.code(400).send({
+        error: 'trade.funding_rate_publish_invalid',
+        message:
+          'periodId or periodStartIso is required — a funding period is a product fact and is never derived from the clock. ' +
+          'A publisher that does not name its period cannot be settled idempotently, and every republish would charge a full period again.',
+      });
     }
 
     const entry: FundingRateEntry = { marketId, rate, periodId, asOfMs };
