@@ -10,7 +10,7 @@ import {
   midFromVenueBook,
   parseVenueMarkSymbols,
 } from './mark-from-venue.js';
-import { DEFAULT_MIN_BEST_LEVEL_NOTIONAL } from './mark-from-depth.js';
+import { DEFAULT_MIN_BEST_LEVEL_NOTIONAL, depthRequirement } from './mark-from-depth.js';
 import type { MarkSource } from './liquidation-tick.js';
 
 /** One wei. The smallest order the ledger's 18-decimal scale can express. */
@@ -38,12 +38,12 @@ function fakeAdapter(impl: MarketDataAdapter['snapshotBook']): Pick<MarketDataAd
 
 describe('midFromVenueBook', () => {
   it('mids two-sided top of book', () => {
-    expect(midFromVenueBook({ bids: [lvl('100', '10')], asks: [lvl('102', '10')] })).toBe('101');
+    expect(midFromVenueBook({ bids: [lvl('100', '10')], asks: [lvl('102', '10')] }, depthRequirement(null))).toBe('101');
   });
 
   it('empty or one-sided → null (never invent)', () => {
-    expect(midFromVenueBook({ bids: [], asks: [] })).toBeNull();
-    expect(midFromVenueBook({ bids: [lvl('100', '10')], asks: [] })).toBeNull();
+    expect(midFromVenueBook({ bids: [], asks: [] }, depthRequirement(null))).toBeNull();
+    expect(midFromVenueBook({ bids: [lvl('100', '10')], asks: [] }, depthRequirement(null))).toBeNull();
   });
 
   /**
@@ -55,29 +55,29 @@ describe('midFromVenueBook', () => {
    * payout-grade mid of 2000.
    */
   it('a best level carrying dust is not a level (it used to answer 2000)', () => {
-    expect(midFromVenueBook({ bids: [lvl('1000', DUST)], asks: [lvl('3000', DUST)] })).toBeNull();
+    expect(midFromVenueBook({ bids: [lvl('1000', DUST)], asks: [lvl('3000', DUST)] }, depthRequirement(null))).toBeNull();
   });
 
   it('reads the QUANTITY, not just the price — same prices, different sizes, different answer', () => {
-    expect(midFromVenueBook({ bids: [lvl('1000', '0.001')], asks: [lvl('3000', '0.001')] })).toBeNull();
-    expect(midFromVenueBook({ bids: [lvl('1000', '1')], asks: [lvl('3000', '1')] })).toBe('2000');
+    expect(midFromVenueBook({ bids: [lvl('1000', '0.001')], asks: [lvl('3000', '0.001')] }, depthRequirement(null))).toBeNull();
+    expect(midFromVenueBook({ bids: [lvl('1000', '1')], asks: [lvl('3000', '1')] }, depthRequirement(null))).toBe('2000');
   });
 });
 
 describe('bestFromVenueBook', () => {
   it('reads top of book when the best levels carry real size', () => {
-    expect(bestFromVenueBook({ bids: [lvl('99', '10')], asks: [lvl('101', '20')] })).toEqual({
+    expect(bestFromVenueBook({ bids: [lvl('99', '10')], asks: [lvl('101', '20')] }, depthRequirement(null))).toEqual({
       bestBid: '99',
       bestAsk: '101',
     });
   });
 
   it('empty book → null sides', () => {
-    expect(bestFromVenueBook({ bids: [], asks: [] })).toEqual({ bestBid: null, bestAsk: null });
+    expect(bestFromVenueBook({ bids: [], asks: [] }, depthRequirement(null))).toEqual({ bestBid: null, bestAsk: null });
   });
 
   it('one thin side is enough to make the book one-sided', () => {
-    expect(bestFromVenueBook({ bids: [lvl('1000', '10')], asks: [lvl('3000', DUST)] })).toEqual({
+    expect(bestFromVenueBook({ bids: [lvl('1000', '10')], asks: [lvl('3000', DUST)] }, depthRequirement(null))).toEqual({
       bestBid: '1000',
       bestAsk: null,
     });
@@ -93,9 +93,9 @@ describe('bestFromVenueBook', () => {
     expect(DEFAULT_MIN_BEST_LEVEL_NOTIONAL).toBe('100');
     // 99.999… quote units a side: one wei under the floor, and refused.
     const justUnder = { bids: [lvl('99.999999999999999999', '1')], asks: [lvl('101', '0.99')] };
-    expect(bestFromVenueBook(justUnder)).toEqual({ bestBid: null, bestAsk: null });
+    expect(bestFromVenueBook(justUnder, depthRequirement(null))).toEqual({ bestBid: null, bestAsk: null });
     // Exactly the floor is enough — the level is worth the minimum.
-    expect(bestFromVenueBook({ bids: [lvl('100', '1')], asks: [lvl('100', '1')] })).toEqual({
+    expect(bestFromVenueBook({ bids: [lvl('100', '1')], asks: [lvl('100', '1')] }, depthRequirement(null))).toEqual({
       bestBid: '100',
       bestAsk: '100',
     });
@@ -104,20 +104,25 @@ describe('bestFromVenueBook', () => {
   it('honours a configured threshold in both directions', () => {
     const book = { bids: [lvl('100', '0.5')], asks: [lvl('102', '0.5')] };
     // 50 / 51 quote units a side: under the default 100, over a configured 10.
-    expect(bestFromVenueBook(book)).toEqual({ bestBid: null, bestAsk: null });
-    expect(bestFromVenueBook(book, { minBestLevelNotional: '10' })).toEqual({ bestBid: '100', bestAsk: '102' });
-    expect(bestFromVenueBook(book, { minBestLevelNotional: '1000' })).toEqual({ bestBid: null, bestAsk: null });
+    expect(bestFromVenueBook(book, depthRequirement(null))).toEqual({ bestBid: null, bestAsk: null });
+    expect(bestFromVenueBook(book, depthRequirement(null, { minBestLevelNotional: '10' }))).toEqual({ bestBid: '100', bestAsk: '102' });
+    expect(bestFromVenueBook(book, depthRequirement(null, { minBestLevelNotional: '1000' }))).toEqual({ bestBid: null, bestAsk: null });
   });
 
   it('an unreadable threshold falls back to the default rather than to no check', () => {
-    expect(bestFromVenueBook({ bids: [lvl('1000', DUST)], asks: [lvl('3000', DUST)] }, { minBestLevelNotional: 'not-a-number' })).toEqual({
+    expect(
+      bestFromVenueBook(
+        { bids: [lvl('1000', DUST)], asks: [lvl('3000', DUST)] },
+        depthRequirement(null, { minBestLevelNotional: 'not-a-number' }),
+      ),
+    ).toEqual({
       bestBid: null,
       bestAsk: null,
     });
   });
 
   it('a non-positive quantity is no size at all', () => {
-    expect(bestFromVenueBook({ bids: [lvl('1000', '0')], asks: [lvl('3000', '99')] }).bestBid).toBeNull();
+    expect(bestFromVenueBook({ bids: [lvl('1000', '0')], asks: [lvl('3000', '99')] }, depthRequirement(null)).bestBid).toBeNull();
   });
 });
 
@@ -238,6 +243,24 @@ describe('markSourceFromVenuePublicBook', () => {
       resolveSymbol: () => 'BTC/USDT',
     });
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBe('2000');
+  });
+
+  /**
+   * THE RELATIVE REQUIREMENT REACHES SOMEBODY ELSE'S BOOK TOO.
+   *
+   * Same venue, same snapshot, same instant — only the position the mark would
+   * price differs. A venue mid is not exempt from the rule that a mark must be
+   * backed by depth proportional to what it pays out on; if anything the case is
+   * stronger, because nothing here is under this platform's control.
+   */
+  it('refuses a venue mid that is real but thin for the position it would price', async () => {
+    const src = markSourceFromVenuePublicBook({
+      adapter: fakeAdapter(async () => snap({ bids: [['1000', '1']], asks: [['3000', '1']] })),
+      resolveSymbol: () => 'BTC/USDT',
+    });
+    const at = new Date();
+    expect(await src.markPrice({ marketId: 'm1', at, authorisesSize: parseAmount('50') })).toBe('2000');
+    expect(await src.markPrice({ marketId: 'm1', at, authorisesSize: parseAmount('500') })).toBeNull();
   });
 
   it('honours an injected depthPolicy without any call site changing', async () => {

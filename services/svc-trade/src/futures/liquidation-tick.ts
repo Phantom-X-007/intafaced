@@ -37,9 +37,39 @@ import {
 } from './mark-policy.js';
 import { breakerBasis, type AcceptedMarkStore } from './accepted-mark.js';
 
+/**
+ * WHAT A CALLER ASKS A MARK SOURCE FOR — AND WHAT THE ANSWER IS FOR.
+ *
+ * `marketId`, `symbol` and `at` are the question. `authorisesSize` is the STAKE:
+ * the position, in base units, whose payout this mark would price. A
+ * depth-backed source uses it to decide whether the book standing behind the
+ * price is deep enough to stand behind that much money — see
+ * `mark-from-depth.ts`, "AN ABSOLUTE FLOOR CANNOT GATE AN UNBOUNDED PAYOUT". A
+ * source with no book behind it ignores it.
+ *
+ * OPTIONAL, AND ITS ABSENCE IS AN HONEST ANSWER rather than a weaker one: a
+ * public ticker, a screen, a `markPrice()` for a chart authorises no payout at
+ * all, so there is no stake to state and nothing to size a requirement against.
+ * What must not happen is a payout-authorising read that omits it, and that is
+ * enforced where the payout is: `PositionService` takes the size off the
+ * position row it holds under `FOR UPDATE`.
+ *
+ * NEVER FROM A REQUEST BODY on the close path.
+ * `docs/adr/2026-08-05-futures-risk-and-mark-law.md` — a price that moves money
+ * is never supplied by the party it pays, and a parameter that decides which
+ * prices are ACCEPTED is part of the price.
+ */
+export interface MarkRequest {
+  marketId: string;
+  symbol?: string;
+  at: Date;
+  /** Base units of the position whose payout this mark would authorise. */
+  authorisesSize?: Amount;
+}
+
 /** External mark for one market. Null → skip that position (never invent). */
 export interface MarkSource {
-  markPrice(input: { marketId: string; symbol?: string; at: Date }): Promise<string | null>;
+  markPrice(input: MarkRequest): Promise<string | null>;
   /**
    * The same mark, LABELLED — price, observation time, and how it was derived.
    *
@@ -48,12 +78,12 @@ export interface MarkSource {
    * stated reason instead of a bare null; a source that does not is limited to
    * whatever gating it does internally.
    */
-  quote?(input: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null>;
+  quote?(input: MarkRequest): Promise<FuturesQuotedMark | null>;
 }
 
 /** A MarkSource that can say what kind of price it is handing you. */
 export interface QuotedMarkSource extends MarkSource {
-  quote(input: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null>;
+  quote(input: MarkRequest): Promise<FuturesQuotedMark | null>;
 }
 
 export interface LiquidationPositionRow extends LiquidationPosition {
