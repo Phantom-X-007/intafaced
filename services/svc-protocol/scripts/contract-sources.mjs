@@ -116,6 +116,15 @@ export const SUITES = [
     sources: ['AccountFactory.sol', 'SessionKeyLib.sol', 'SmartAccount.sol', 'interfaces/IAccount.sol'],
   },
   {
+    name: 'escrow',
+    expect: 'compiles',
+    /**
+     * S-A3 / `protocol.escrow` — sovereign (non-custodial) P2P escrow.
+     * Not the ledger escrow in svc-p2p. MockERC20 is suite-local for tests.
+     */
+    sources: ['escrow/SovereignEscrow.sol', 'escrow/MockERC20.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
     name: 'launch',
     expect: 'compiles',
     /**

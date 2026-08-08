@@ -655,9 +655,11 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'HUMAN Protocol Plane @shehzad002. Agents babysit only.',
+    requires: ['services/svc-protocol/contracts/escrow'],
+    note: 'CLOSED 2026-08-08 (S-A3). SovereignEscrow.sol — open/lock/release/refund/dispute + keeper settleTimeout with immutable TimeoutDisposition; optional user-elected arbiter; no platform key. Distinct from custodial svc-p2p escrow (ADR 2026-08-04). On-chain suite: release, refund, timeout refund, early-timeout refusal. Residuals: multi-asset, richer fee splits, svc wiring, indexer events. Law: docs/adr/2026-08-08-sovereign-p2p-escrow.md.',
   }),
   f('protocol.router', 'Sovereign router — book vs pool best execution', {
     module: 'protocol',
