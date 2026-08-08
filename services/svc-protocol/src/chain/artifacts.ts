@@ -42,6 +42,8 @@ export type ArtifactName =
   | 'TokenFactory'
   | 'ConstantProductPool'
   | 'PoolFactory'
+  | 'SovereignEscrow'
+  | 'MockERC20'
   | 'PasskeyOwner'
   | 'P256';
 
