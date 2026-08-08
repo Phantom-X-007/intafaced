@@ -1198,6 +1198,12 @@ export class TokenService {
     return transaction(
       this.sql,
       async (tx) => {
+        // Mints are rare — a cron tick or an operator — and the ceiling below
+        // has to read every epoch row, so serialise them rather than reason
+        // about two concurrent mints each reading a total that excludes the
+        // other. Released by commit or rollback alike.
+        await tx`SELECT pg_advisory_xact_lock(hashtext(${`token.mint:${this.assetId}`})::bigint)`;
+
         const rows = await tx<Array<{ epoch: number; closed: boolean }>>`
           SELECT epoch, closed FROM token.emission_epochs WHERE epoch = ${epoch} FOR UPDATE
         `;
@@ -1211,6 +1217,41 @@ export class TokenService {
         const cumulative = cumulativeEmission(epoch, emission);
         if (cumulative > emission.maxSupply) {
           throw new TokenError('Emission would exceed max supply', 'token.supply_exhausted');
+        }
+
+        /**
+         * THE CEILING HAS TO BE MEASURED AGAINST THE BOOK, NOT AGAINST THE PLAN.
+         *
+         * The guard above asks the CURVE what should have been emitted by this
+         * epoch. The curve lives in `token_params.emission_curve` and
+         * `token_params.total_supply`, both of which are editable — §4.3 hands
+         * parameter control to governance on purpose, and the README's whole
+         * argument for the kill-switch is that a curve can be MIS-TUNED and
+         * retuned.
+         *
+         * So the plan can be rewritten under an already-minted supply. Mint
+         * epochs 0..k under a generous curve, then lower `initialEpochReward`
+         * (or lower `total_supply`) — and `cumulativeEmission(k+1)` recomputes
+         * small, passes the cap, and mints again. What was already emitted is
+         * nowhere in that comparison. Nothing else catches it either:
+         * `emission_epochs_mined_within_scheduled_ck` bounds one ROW against its
+         * own schedule, never the total against the cap.
+         *
+         * The book cannot be retuned. `SUM(mined_amount)` is what this service
+         * actually told the ledger to create, and it is the only figure the
+         * ceiling can honestly be measured against — "inflation cannot be
+         * un-minted" is precisely why this must refuse BEFORE the post.
+         */
+        const [emitted] = await tx<Array<{ total: string }>>`
+          SELECT COALESCE(SUM(mined_amount), 0) AS total FROM token.emission_epochs
+        `;
+        const alreadyEmitted = parseAmount(emitted?.total ?? '0');
+        if (alreadyEmitted + reward > emission.maxSupply) {
+          throw new TokenError(
+            `Minting epoch ${epoch} would take emitted supply to ${formatAmount(alreadyEmitted + reward)} ${this.assetId}, ` +
+              `past the ${formatAmount(emission.maxSupply)} cap — ${formatAmount(alreadyEmitted)} is already emitted`,
+            'token.supply_exhausted',
+          );
         }
 
         await this.ledger.post(recipes.mintEmission({ epoch, assetId: this.assetId, amount: reward, destination }));
