@@ -43,7 +43,14 @@ if (!available) {
     it('skipped', () => undefined);
   });
 } else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade_fundidem', url: URL, migrations });
+  /**
+   * `service: 'trade'` — the schema must be named `trade`, because every
+   * statement in this service is schema-qualified (`trade.positions`) by §2
+   * design. Isolation is at the DATABASE level: `createTestDatabase` mints a
+   * uniquely named database per run and creates the schema under its real name
+   * inside it, so two suites both asking for `trade` never meet.
+   */
+  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
   const sql = db.sql;
   const applier = sqlFundingMarginApplier(sql);
 
