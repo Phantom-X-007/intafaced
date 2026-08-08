@@ -120,6 +120,40 @@ export const FEATURES = [
     status: 'done',
     requires: ['CONTRIBUTING.md', 'package.json'],
   }),
+  f('infra.slo-dashboards', '§14.5 metrics — /metrics on the edge, scraped, one live SLO dashboard', {
+    module: 'core-ops',
+    phase: '0',
+    status: 'done',
+    requires: [
+      'packages/telemetry/src/metrics.ts',
+      'tooling/infra/grafana/dashboards/edge-slo.json',
+      'tooling/infra/grafana/provisioning/dashboards/dashboards.yaml',
+    ],
+    dependsOn: ['infra.compose'],
+    note:
+      'LANDED 2026-08-08. The METRICS half of §14.5; traces landed separately in packages/telemetry/src/start.ts and are not ' +
+      'restated here. Verified absent first: prom-client / "text/plain; version=0.0.4" / http_request_duration matched NOTHING ' +
+      'under services/ or packages/, prometheus.yaml was 16 lines scraping only itself and nats:8222, and grafana/ held a ' +
+      'datasource file with no dashboard and NO PROVIDER that could have loaded one. ' +
+      'DONE-BAR EVIDENCE. (1) REACHABLE — proved three ways, not asserted. metrics.boot.e2e.test.ts SPAWNS THE REAL index.ts, ' +
+      'binds a real socket and scrapes it, so deleting the registerMetrics call from index.ts turns 5 tests red (it turned none ' +
+      'red before that file existed, which is why it exists). Out of band, the committed prometheus.yaml was loaded by real ' +
+      'prom/prometheus:v3.0.1 and reported job=svc-edge health=up url=http://svc-edge:4000/metrics; real grafana/grafana:11.4.0 ' +
+      'loaded the committed JSON with provisioned=true provisionedFile=edge-slo.json, all 5 panels, and every panel query ' +
+      'returned live series through Grafana own datasource proxy (availability 0.9596, p99 pay 2.39s). (2) TESTED — 45 ' +
+      'assertions across 4 suites, all parsing the ENDPOINT OUTPUT rather than calling render(); mutation-checked, see the PR for ' +
+      'the 9-mutation table. promtool check metrics accepts 934 lines of real output; promtool check config accepts the scrape ' +
+      'file. (3) NOT PROPPED UP — no stub, no mock, and NO NEW DEPENDENCY (prom-client rejected; the 0.0.4 format is frozen and ' +
+      'a library would not have answered either hard question, which were "does anything scrape it" and "does the panel name ' +
+      'what we emit"). ' +
+      'WHAT IS NOT COVERED, PLAINLY. ONE of 19 services emits metrics — svc-edge. The panel is an EDGE-MEASURED SLO: 15 modules ' +
+      'appear as `module` label values when traffic crosses the edge (academy agents bank blueprint dex identity indexer market ' +
+      'notify p2p pay protocol support token trade), and svc-ws, svc-ledger and svc-matching are NOT covered at all because they ' +
+      'do not sit behind the edge (routes.ts OUTSIDE_THE_DOOR). No service instruments its own internals; a module with no ' +
+      'traffic has no series. So §14.5 read as "at least one SLO dashboard panel" is met and proven; read as per-service ' +
+      'instrumentation it is 1/19 and the remaining 18 are residual. The series names, label set and buckets live in ' +
+      'packages/telemetry so the next adopter needs no dashboard edit — it appears as another `service` value.',
+  }),
   f('infra.i18n', '100+ languages — keyed from day one (§9)', {
     module: 'core-ops',
     phase: '0',

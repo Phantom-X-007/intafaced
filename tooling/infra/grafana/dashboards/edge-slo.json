@@ -1,0 +1,227 @@
+{
+  "uid": "intafaced-edge-slo",
+  "title": "INTAFACED — Front Door SLO",
+  "description": "§14.5 — traces plus at least one SLO dashboard panel. Availability and latency as the CALLER experiences them, measured at svc-edge where the promise to the user is made. Series come from packages/telemetry/src/metrics.ts; the scrape target is the svc-edge job in tooling/infra/prometheus.yaml. Metric names in these queries are asserted against the endpoint's real output by services/svc-edge/src/observability-wiring.test.ts.",
+  "tags": ["intafaced", "slo", "section-14"],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+        "definition": "label_values(intafaced_http_requests_total, service)",
+        "query": { "query": "label_values(intafaced_http_requests_total, service)", "refId": "service-values" },
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 1,
+        "sort": 1,
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Availability — non-5xx share of all requests (SLO 99.9%)",
+      "description": "THE SLO PANEL. Denominator is every reply the edge sent, including the ones that never reached a handler — 429s from the limiter, 503s from the kill-switch, 400s from the path resolver, 502s from a dead upstream. An availability ratio computed only over requests that reached a handler is 100% by construction and reports green through an outage.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "range": true,
+          "instant": false,
+          "legendFormat": "availability",
+          "expr": "sum(rate(intafaced_http_requests_total{service=~\"$service\", status!=\"5xx\"}[5m])) / clamp_min(sum(rate(intafaced_http_requests_total{service=~\"$service\"}[5m])), 0.0001)"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 3,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.99 },
+              { "color": "green", "value": 0.999 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Latency — p99 and p50 per module (§20: card auth < 2s)",
+      "description": "Buckets are cut around the numbers §20 actually names, so these quantiles land between boundaries that exist rather than being reportable only as 'somewhere between 0.5s and 5s'. Per module, because a fleet-wide p99 hides one slow upstream behind nineteen fast ones.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "range": true,
+          "legendFormat": "p99 {{module}}",
+          "expr": "histogram_quantile(0.99, sum by (module, le) (rate(intafaced_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "range": true,
+          "legendFormat": "p50 {{module}}",
+          "expr": "histogram_quantile(0.50, sum by (module, le) (rate(intafaced_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"], "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Request rate by status class",
+      "description": "Status CLASS, never the code — the label set is bounded by construction so a caller cannot turn a URL into a permanent series.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "range": true,
+          "legendFormat": "{{status}}",
+          "expr": "sum by (status) (rate(intafaced_http_requests_total{service=~\"$service\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "stacking": { "mode": "normal", "group": "A" },
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "5xx" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "4xx" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "2xx" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Auth outcome — refused vs anonymous vs authenticated",
+      "description": "Three values rather than a boolean, because the incidents differ: a spike in `refused` after a deploy is a signing-key mismatch, and a spike in `anonymous` is a front-end that stopped attaching the header. A panel that merged them would show neither.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "range": true,
+          "legendFormat": "{{outcome}}",
+          "expr": "sum by (outcome) (rate(intafaced_http_requests_total{service=~\"$service\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Traffic by module — coverage of the §14 \"per module\" requirement",
+      "description": "HONEST SCOPE PANEL. Every module with a series here is a module the SLO covers. A module absent from this panel is NOT covered — it either sits behind the edge and has had no traffic, or it is one of the services that does not sit behind the edge at all (svc-ws, svc-matching, svc-market, svc-support, svc-ledger). This panel is the answer to \"how many modules\", and it is deliberately readable as a gap list rather than a success chart.",
+      "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 13 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
+          "editorMode": "code",
+          "range": true,
+          "legendFormat": "{{module}}",
+          "expr": "sum by (module) (rate(intafaced_http_requests_total{service=~\"$service\"}[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"], "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}

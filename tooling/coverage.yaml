@@ -457,11 +457,20 @@ capabilities:
   - id: dod.slo-dashboards
     capability: Observability — traces plus at least one SLO dashboard panel, per module
     law: '14:483'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #17'
-      note: >-
-        This is a DoD CONDITION, not a nice-to-have — no module can honestly pass §14 while no module
-        has a dashboard panel. infra.compose stops at the OTel and Grafana containers.
+    # BOARDED 2026-08-08. Was a gap ("infra.compose stops at the OTel and Grafana
+    # containers", audit BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.a #17) and is no
+    # longer: traces land via packages/telemetry/src/start.ts, and the metrics
+    # half now exists — a /metrics endpoint on svc-edge, a scrape target that was
+    # verified UP against real prom/prometheus:v3.0.1, and a provisioned Grafana
+    # dashboard real grafana:11.4.0 loaded with all five panels returning series.
+    #
+    # THE "per module" HALF OF THIS CAPABILITY IS NOT CLOSED, and the row is
+    # mapped rather than exempt so it stays visible. One of nineteen services
+    # emits metrics. The panel is an edge-measured SLO covering 15 modules as
+    # label values; svc-ws, svc-ledger and svc-matching sit outside the edge and
+    # are not covered at all. `infra.slo-dashboards`'s note carries the full
+    # scope statement, including what a reader must NOT infer from `done`.
+    tracker: [infra.slo-dashboards]
   - id: dod.gate
     capability: The Definition of Done itself — enforced per module, never half done
     law: '14:479'
@@ -1842,7 +1851,9 @@ baseline:
     - cross.public-api-gateway
     - data.pii-isolation
     - core.drop-flags
-    - dod.slo-dashboards
+    # dod.slo-dashboards CLOSED 2026-08-08 — boarded to infra.slo-dashboards.
+    # Removed here because the ratchet fails in both directions: a baseline left
+    # sitting above the truth is blanket cover for something nobody looked at.
     - m.academy.video
     - m.academy.coach
     - m.core.business-systems

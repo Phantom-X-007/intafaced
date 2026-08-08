@@ -6,6 +6,7 @@ import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js
 import { env } from './env.js';
 import { rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
+import { markAuthOutcome, registerMetrics } from './metrics.js';
 import { exchangePrincipal } from './principal-exchange.js';
 import { resolve, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
@@ -154,6 +155,22 @@ const admin = createAdminApi(killSwitches, {
   ledger: env.LEDGER_URL ? httpLedgerOperator(env.LEDGER_URL, env.UPSTREAM_TIMEOUT_MS) : null,
 });
 
+/**
+ * §14.5 — the scrape surface, and the numbers the SLO panel is drawn from.
+ *
+ * Registered HERE, before the kill-switch guard and the proxy, for a reason that
+ * is entirely about what ends up in the denominator. The `onResponse` hook it
+ * installs counts every reply this process sends — a 429 from the limiter above,
+ * a 503 from the guard below, a 400 from the path resolver, a 502 from a dead
+ * upstream. An availability SLO that only sees requests which reached a handler
+ * is an SLO that reports green through an outage.
+ *
+ * `tooling/infra/prometheus.yaml` scrapes this at `svc-edge:4000/metrics`, and
+ * `observability-wiring.test.ts` asserts that host, port and path against the
+ * real config and the real compose file rather than trusting this comment.
+ */
+registerMetrics(app, { service: env.SERVICE_NAME });
+
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async () => ({
@@ -239,6 +256,13 @@ app.all('/api/*', async (req, reply) => {
   if (exchanged.rejected) {
     req.log.info({ reason: exchanged.rejected, path: url.pathname }, 'edge: token refused, forwarding anonymous');
   }
+
+  // Recorded for the metric, not for the response. Kept as three values rather
+  // than a boolean because "presented nothing" and "presented something we
+  // refused" are different incidents: a spike in `refused` after a deploy is a
+  // signing-key mismatch, and a spike in `anonymous` is a front-end that stopped
+  // attaching the header. An availability panel that merges them shows neither.
+  markAuthOutcome(req, exchanged.rejected ? 'refused' : exchanged.principal ? 'authenticated' : 'anonymous');
 
   const base = upstreamUrl(target.upstream.envVar, target.upstream.devUrl);
   const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : (req.body as unknown);

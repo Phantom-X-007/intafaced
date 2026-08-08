@@ -252,6 +252,18 @@ services:
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
     volumes:
       - ./tooling/infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      # THE OTHER HALF OF THE DASHBOARD PROVIDER (§14.5).
+      #
+      # `provisioning/dashboards/dashboards.yaml` declares a file provider whose
+      # `options.path` is this container path. Without this bind the provider
+      # finds an empty directory, and Grafana starts with no dashboards and NO
+      # ERROR — which from the UI is indistinguishable from a dashboard that
+      # loaded and has no data. A committed panel JSON with no provider and no
+      # mount is a file nobody reads.
+      #
+      # `observability-wiring.test.ts` asserts this mount, that provider path and
+      # the on-disk dashboard directory all agree.
+      - ./tooling/infra/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafanadata:/var/lib/grafana
     ports:
       - '3001:3000'
