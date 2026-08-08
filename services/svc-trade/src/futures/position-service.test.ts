@@ -24,7 +24,7 @@ import { markSourceFromDepth } from './mark-from-depth.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
 import { runFundingTick } from './funding-tick.js';
 import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
-import { sqlFundingPeriodStore, sqlPositionCloser } from './tick-stores.js';
+import { sqlFundingMarginApplier, sqlFundingPeriodStore, sqlPositionCloser } from './tick-stores.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
@@ -1006,6 +1006,7 @@ if (!available) {
         },
         positions: sqlFundingPositionLoader(sql),
         periods: sqlFundingPeriodStore(sql),
+        margins: sqlFundingMarginApplier(sql),
         ledger,
         now: () => NOW,
       },

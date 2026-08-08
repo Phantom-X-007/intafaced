@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fixedFundingRateSource, isRateFresh, memoryFundingRateBook, periodIdFor } from './funding-rate-source.js';
-import { memoryFundingPeriodStore, runFundingTick } from './funding-tick.js';
+import { memoryFundingMarginApplier, memoryFundingPeriodStore, runFundingTick } from './funding-tick.js';
 import { parseAmount as amt, type PostRequest } from '@intafaced/ledger-client';
 import type { FundingOpenPosition } from './funding-settlement.js';
 
@@ -122,6 +122,7 @@ describe('integration: rate book → funding tick', () => {
           },
         },
         periods: memoryFundingPeriodStore(),
+        margins: memoryFundingMarginApplier(),
         ledger: {
           async post(req) {
             posts.push(req);
@@ -159,6 +160,7 @@ describe('integration: rate book → funding tick', () => {
           },
         },
         periods: memoryFundingPeriodStore(),
+        margins: memoryFundingMarginApplier(),
         ledger: {
           async post(req) {
             posts.push(req);

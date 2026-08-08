@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt, formatAmount } from '@intafaced/ledger-client';
-import { netFundingPaid, runFundingTick, memoryFundingPeriodStore, type FundingMarginApplier } from './funding-tick.js';
+import {
+  memoryFundingMarginApplier,
+  memoryFundingPeriodStore,
+  netFundingPaid,
+  runFundingTick,
+  type FundingMarginApplier,
+  type FundingTickDeps,
+} from './funding-tick.js';
 import type { FundingLeg } from './funding-settlement.js';
 import type { PostRequest } from '@intafaced/ledger-client';
 
@@ -50,6 +57,73 @@ describe('netFundingPaid', () => {
         { positionId: 'pshort', paid: -amt('5') },
       ]),
     );
+  });
+});
+
+/**
+ * THE OMISSION IS THE DEFECT (STOP §4.1, second half).
+ *
+ * #1047 made `applyFundingNets` idempotent on `(position, period)` and closed the
+ * double-debit. It closed it for a wire that PASSES an applier. `margins` was
+ * `margins?` and the call was `if (deps.margins)`, so a wire that omitted it
+ * settled funding in the ledger and moved no margin at all — and then close and
+ * liquidation read open-time margin and over-released collateral, which is the
+ * Tier-1 defect #1034 existed to close, back through a hole the compiler
+ * approved of.
+ *
+ * The guarantee is now a compile-time one, so the test for it has to be too. A
+ * runtime assertion cannot express "this cannot be built"; `@ts-expect-error`
+ * can, and it fails the typecheck gate the moment `margins` becomes optional
+ * again — which is the only way this regresses.
+ */
+describe('a funding wire cannot forget the margin move', () => {
+  const enough = {
+    rates: {
+      async quote({ marketId }: { marketId: string }) {
+        return { rate: '0.0001', periodId: 'm1:period-required', marketId };
+      },
+    },
+    positions: {
+      async listOpenForMarket() {
+        return longShort();
+      },
+    },
+    periods: memoryFundingPeriodStore(),
+    ledger: {
+      async post(req: PostRequest) {
+        return { id: 'tx', idempotencyKey: req.idempotencyKey } as never;
+      },
+    },
+  };
+
+  it('does not typecheck without a margin applier', () => {
+    // @ts-expect-error — `margins` is required. If this line ever stops being an
+    // error, the silent-skip defect is reachable again and this test fails.
+    const incomplete: FundingTickDeps = { ...enough };
+    expect(incomplete).toBeDefined();
+  });
+
+  it('moves margin on every settled tick, with no branch to skip it', async () => {
+    const margins = memoryFundingMarginApplier();
+    const result = await runFundingTick({ ...enough, margins }, 'm1');
+
+    expect(result.status).toBe('settled');
+    expect(margins.applied()).toHaveLength(2);
+    expect(formatAmount(margins.paidByPosition('plong'))).toBe('5');
+    expect(formatAmount(margins.paidByPosition('pshort'))).toBe('-5');
+  });
+
+  it('and the memory applier models the production claim, so a replay is a no-op', async () => {
+    // Guards the helper the tests above lean on: if `memoryFundingMarginApplier`
+    // were a plain accumulator, every test using it would assert the opposite of
+    // what 0014's claim table does.
+    const margins = memoryFundingMarginApplier();
+    await margins.applyFundingNets([{ positionId: 'plong', paid: amt('5') }], 'p1');
+    await margins.applyFundingNets([{ positionId: 'plong', paid: amt('5') }], 'p1');
+    expect(formatAmount(margins.paidByPosition('plong'))).toBe('5');
+
+    await margins.applyFundingNets([{ positionId: 'plong', paid: amt('5') }], 'p2');
+    expect(formatAmount(margins.paidByPosition('plong'))).toBe('10');
   });
 });
 
