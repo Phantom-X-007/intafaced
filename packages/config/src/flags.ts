@@ -206,7 +206,15 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   def('matching.engine', 'matching', null, 'Order matching engine accepts orders', serviceEnv('svc-matching', 'MATCHING_ENGINE_ENABLED')),
 
   // Not on the drop clock — gated by build phase / licensing (§13 sockets)
-  def('trade.futures', 'trade', null, 'Perp futures markets', NOT_ENFORCED),
+  // `trade.futures` HAS A REAL SWITCH NOW, and this row is how the console stops
+  // lying about it. It was `NOT_ENFORCED` for an honest reason — nothing read it,
+  // and `assertTradable` refused every futures order unconditionally, so the
+  // capability was not off by decision, it was absent. `TRADE_FUTURES_ENABLED`
+  // makes it a decision: off refuses orders with `trade.futures_disabled`, on
+  // takes them. Same mechanism and same caveat as `trade.spot` — a boot-time
+  // variable that ignores this registry and the drop clock, so flipping the flag
+  // here still changes nothing without a restart.
+  def('trade.futures', 'trade', null, 'Perp futures markets', serviceEnv('svc-trade', 'TRADE_FUTURES_ENABLED')),
   def('trade.options', 'trade', null, 'Options markets (v1: full-collateral)', NOT_ENFORCED),
   def('trade.copyTrading', 'trade', null, 'Copy trading + profit share', NOT_ENFORCED),
   def('trade.otc', 'trade', null, 'OTC RFQ desk (staked gate)', NOT_ENFORCED),

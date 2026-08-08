@@ -329,3 +329,74 @@ describe('svc-trade boots on shipped configuration', () => {
     }
   });
 });
+
+/**
+ * FUTURES ORDERABILITY IS OFF IN THE CONFIGURATION THIS REPOSITORY SHIPS.
+ *
+ * Its own describe block because the question is the mirror of the one above. The
+ * rest of this file asks "does everything the service NEEDS actually arrive"; this
+ * asks "does something it must NOT have arrive anyway". Both are answered from the
+ * same rebuilt clean-clone environment, and this is the only place a
+ * `TRADE_FUTURES_ENABLED=true` slipped into compose or `.env.example` would be
+ * caught — `futures/orderable-path.test.ts` proves the BEHAVIOUR on both settings
+ * and cannot see which one is shipped.
+ */
+describe('the shipped configuration does not turn futures on', () => {
+  it('hands the container futures OFF on a clean clone', () => {
+    // Present, so an operator can see the switch exists without reading env.ts…
+    expect(shipped.has('TRADE_FUTURES_ENABLED')).toBe(true);
+    // …and off, which is the whole point of the change that introduced it.
+    expect(shipped.get('TRADE_FUTURES_ENABLED')).toBe('false');
+  });
+
+  /**
+   * The zod default, asserted from the SOURCE.
+   *
+   * Weaker than a behavioural test, and chosen anyway for the reason this file's
+   * header gives about the requirement list: `env.ts` calls `loadEnv(process.env)`
+   * at module scope, so importing it answers a question about this machine rather
+   * than about the shipped schema. `.default(true)` here, with the compose line
+   * deleted, would turn futures on for every deployment that never mentions the
+   * variable — precisely the accident the flag exists to prevent.
+   */
+  it('declares the env default as false, so a deployment that never mentions it gets nothing', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_FUTURES_ENABLED:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_FUTURES_ENABLED is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).toContain('.default(false)');
+    expect(decl![1]).not.toContain('.default(true)');
+  });
+
+  it('leaves TRADE_FUTURES_ENABLED commented out in .env.example, and documents it', () => {
+    // `parseEnvFile` only sees live lines, so this is "no uncommented assignment".
+    expect(envExample.has('TRADE_FUTURES_ENABLED')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_FUTURES_ENABLED/);
+  });
+
+  /**
+   * Compose's own default must be the restrictive one. `${VAR:-true}` would ship
+   * futures ON to every clean clone while every other file in the change still read
+   * as though it were off — the same shape as the profit-source defect this file is
+   * named for, where three individually defensible files combined into an outage.
+   */
+  it('compose defaults the flag to false rather than passing it through blank or on', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_ENABLED:\s*\$\{TRADE_FUTURES_ENABLED:-false\}/);
+  });
+
+  /**
+   * The service-level default, which is a THIRD place the answer lives and the one
+   * a revert probe found unguarded: with `TradeServiceOptions.futuresEnabled`
+   * flipped to `?? true`, every test in the change still passed, because every one
+   * of them passes the option explicitly. Read from source for the same reason as
+   * the zod default — the behavioural half is in `futures/orderable-path.test.ts`,
+   * which now constructs a service without the option and asserts the refusal.
+   */
+  it('defaults TradeServiceOptions.futuresEnabled to false in the constructor', () => {
+    const src = read('services/svc-trade/src/spot/trade-service.ts');
+    expect(src).toMatch(/this\.futuresEnabled\s*=\s*options\.futuresEnabled\s*\?\?\s*false;/);
+  });
+
+  it('passes the env flag into the service rather than leaving it at the default', () => {
+    expect(read('services/svc-trade/src/index.ts')).toMatch(/futuresEnabled:\s*env\.TRADE_FUTURES_ENABLED/);
+  });
+});

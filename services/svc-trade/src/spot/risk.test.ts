@@ -5,6 +5,7 @@ import {
   assertNotional,
   assertPrice,
   assertQty,
+  assertSpotSurface,
   assertTradable,
   holdFor,
   protectionPriceFor,
@@ -69,13 +70,89 @@ describe('market status', () => {
     expect(() => assertTradable(withMarket({ status: 'pending' }))).toThrow(TradeError);
   });
 
-  it('refuses a non-spot market — this PR is trade.spot only', () => {
+  /**
+   * THE DEFAULT IS THE REFUSAL.
+   *
+   * `assertTradable(market)` with no second argument is the shape every call site
+   * had before futures became orderable, and it must keep refusing — a permissive
+   * reading that arrives by leaving an argument off is the failure mode the option
+   * doc comment names. So this asserts the OLD behaviour survives the new
+   * parameter, with the new code.
+   */
+  it('refuses a futures market by default — omitting the option must not grant it', () => {
     try {
       assertTradable(withMarket({ kind: 'futures' }));
       throw new Error('should have thrown');
     } catch (err) {
-      expect((err as TradeError).code).toBe('trade.market_kind_unsupported');
+      expect((err as TradeError).code).toBe('trade.futures_disabled');
     }
+  });
+
+  it('refuses a futures market when the flag is explicitly off, and names the switch', () => {
+    try {
+      assertTradable(withMarket({ kind: 'futures', symbol: 'BTC/USDT-PERP' }), { futuresEnabled: false });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.futures_disabled');
+      // Not `market_kind_unsupported`: that code tells a CCXT client to drop the
+      // symbol, and an operator can turn this one on.
+      expect((err as TradeError).code).not.toBe('trade.market_kind_unsupported');
+      expect((err as Error).message).toContain('TRADE_FUTURES_ENABLED');
+    }
+  });
+
+  it('accepts a futures market when the flag is on', () => {
+    expect(() => assertTradable(withMarket({ kind: 'futures' }), { futuresEnabled: true })).not.toThrow();
+  });
+
+  it('still refuses a HALTED futures market with the flag on — orderability is not a status override', () => {
+    try {
+      assertTradable(withMarket({ kind: 'futures', status: 'halted' }), { futuresEnabled: true });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.market_not_tradable');
+    }
+  });
+
+  /**
+   * Options has no engine, no collateral model and no flag. It is refused by KIND,
+   * and the futures flag must not be mistaken for a general non-spot switch.
+   */
+  it('refuses an options market on both settings of the futures flag', () => {
+    for (const futuresEnabled of [false, true]) {
+      try {
+        assertTradable(withMarket({ kind: 'options' }), { futuresEnabled });
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect((err as TradeError).code).toBe('trade.market_kind_unsupported');
+      }
+    }
+  });
+});
+
+describe('spot-shaped surfaces refuse non-spot on their own account', () => {
+  /**
+   * Convert and TWAP used to be spot-only for free, by inheriting
+   * `assertTradable`'s flat kind refusal. That refusal is now a deployment flag,
+   * so an inherited guard would have turned both surfaces on for futures the
+   * moment an operator enabled orderability — neither has been designed, priced
+   * or tested against a futures market. These assertions are what stops that
+   * happening silently.
+   */
+  it('refuses futures for convert regardless of the futures flag', () => {
+    for (const surface of ['convert', 'TWAP']) {
+      try {
+        assertSpotSurface(withMarket({ kind: 'futures' }), surface);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect((err as TradeError).code).toBe('trade.market_kind_unsupported');
+        expect((err as Error).message).toContain(`${surface} serves spot only`);
+      }
+    }
+  });
+
+  it('lets spot through', () => {
+    expect(() => assertSpotSurface(BTCUSDT, 'convert')).not.toThrow();
   });
 });
 

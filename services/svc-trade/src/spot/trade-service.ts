@@ -24,6 +24,7 @@ import {
   assertNotional,
   assertPrice,
   assertQty,
+  assertSpotSurface,
   assertTradable,
   holdFor,
   protectionPriceFor,
@@ -51,6 +52,7 @@ import {
   type Candle,
   type FillRecord,
   type Market,
+  type MarketKind,
   type OrderRecord,
   type OrderSide,
   type OrderStatus,
@@ -91,6 +93,19 @@ import {
 export interface TradeServiceOptions {
   /** Mirror of the `trade.spot` flag. OFF refuses new orders; cancels still work. */
   spotEnabled?: boolean;
+  /**
+   * Mirror of `TRADE_FUTURES_ENABLED` (`trade.futures` / D-S-01).
+   *
+   * DEFAULT FALSE — the one option in this interface whose default is the
+   * restrictive reading and which nothing in the repo sets to `true` except an
+   * operator's environment and the tests that prove both directions. OFF refuses
+   * new orders on a futures market with `trade.futures_disabled`; cancels still
+   * work, because a switch that traps funds is not a safety control.
+   *
+   * Orderability is all it grants. It does not open a margin position, does not
+   * enable funding, and does not pick a leverage — see `assertTradable`.
+   */
+  futuresEnabled?: boolean;
   /**
    * Seed/mm bot place path (SD-4 kill-switch). OFF refuses `seeded: true` places.
    * Default false — seed must be deliberately enabled.
@@ -201,10 +216,26 @@ export interface ListMarketInput {
   displayName?: string;
   /** Paper market — drills only; placeOrder never posts ledger holds. */
   paper?: boolean;
+  /**
+   * `spot` (default) or `futures`. The column and its enum have existed since
+   * `0000_trade_init.sql`, whose own comment says "the kind enum already carries
+   * their values, so listing a futures market later is" additive — and this method
+   * hardcoded `'spot'` anyway, so the only way a futures row reached
+   * `trade.markets` was raw SQL in a test.
+   *
+   * LISTING IS NOT ENABLING, and the ADR is explicit that the two are different
+   * acts: "modelling an instrument is always honest; listing one you cannot settle
+   * never is" (`2026-08-04-instrument-enum-authority.md`). A futures row created
+   * here is quotable and readable and takes no order at all unless
+   * `TRADE_FUTURES_ENABLED` is on. `options` is accepted by the column and refused
+   * by `assertTradable` on every path; nothing here changes that.
+   */
+  kind?: MarketKind;
 }
 
 export class TradeService {
   private readonly spotEnabled: boolean;
+  private readonly futuresEnabled: boolean;
   private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
   private readonly convertEnabled: boolean;
@@ -227,6 +258,9 @@ export class TradeService {
     options: TradeServiceOptions = {},
   ) {
     this.spotEnabled = options.spotEnabled ?? true;
+    // `?? false`, and the asymmetry with the line above is the whole point: a
+    // deploy that forgets to mention futures does not get futures.
+    this.futuresEnabled = options.futuresEnabled ?? false;
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
     this.convertEnabled = options.convertEnabled ?? true;
@@ -340,7 +374,7 @@ export class TradeService {
         min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
         asset_class, schedule, display_name, paper
       ) VALUES (
-        ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, 'spot',
+        ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, ${input.kind ?? 'spot'},
         ${formatAmount(input.tickSize)}::numeric, ${formatAmount(input.lotSize)}::numeric,
         ${formatAmount(input.minQty)}::numeric,
         ${input.maxQty == null ? null : formatAmount(input.maxQty)}::numeric,
@@ -470,6 +504,10 @@ export class TradeService {
     }
 
     const market = await this.requireMarket(input);
+    // Convert is a spot-shaped RFQ and says so itself, rather than inheriting the
+    // order path's kind refusal — which is about to become a flag. See
+    // `assertSpotSurface`.
+    assertSpotSurface(market, 'convert');
     assertTradable(market);
     assertQty(market, input.qty);
 
@@ -534,7 +572,20 @@ export class TradeService {
     requireScope(principal, 'trade:write');
     const userId = principal.userId;
 
-    if (!this.spotEnabled) {
+    // NO ORDERABLE PLANE AT ALL — refused before the registry is touched.
+    //
+    // This check used to be `if (!this.spotEnabled)`, and it runs BEFORE
+    // `requireMarket` on purpose: an operator who has halted the venue should be
+    // told the venue is halted, not sent on a symbol lookup that answers
+    // `market_not_found` for a market that exists. Keeping it here preserves that
+    // ordering exactly.
+    //
+    // With futures orderable there are two planes, so the pre-resolution refusal
+    // can only fire when NEITHER can take an order; the per-kind answer needs the
+    // market and comes straight after it is loaded. With `TRADE_FUTURES_ENABLED`
+    // off — the shipped default — `!spotEnabled && !futuresEnabled` reduces to
+    // `!spotEnabled` and this line behaves identically to the one it replaced.
+    if (!this.spotEnabled && !this.futuresEnabled) {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
 
@@ -552,7 +603,16 @@ export class TradeService {
 
     // ── 2 · RISK CHECKS ─────────────────────────────────────────────────────
     const market = await this.requireMarket(input);
-    assertTradable(market);
+
+    // The per-kind half of the kill-switch. `TRADE_SPOT_ENABLED` is the spot
+    // plane's switch and stays exactly that — it does not halt futures, and
+    // `TRADE_FUTURES_ENABLED` does not halt spot. Two planes, two switches; a
+    // single boolean standing for both would make an operator stopping one stop
+    // the other, and there is no version of that which is the honest answer.
+    if (market.kind === 'spot' && !this.spotEnabled) {
+      throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
+    }
+    assertTradable(market, { futuresEnabled: this.futuresEnabled });
 
     // Stage-1 paper isolation (academy.paper-trading): a paper market must never
     // post orderHold / tradeFill against real available balances. Live markets
@@ -1930,6 +1990,9 @@ export class TradeService {
     }
 
     const market = await this.requireMarket(input);
+    // TWAP is spot-only by name (see `assertSpotSurface`), not because
+    // `assertTradable` happens to refuse the kind.
+    assertSpotSurface(market, 'TWAP');
     assertTradable(market);
     assertMarketOpen(market, this.now());
     assertQty(market, input.totalQty);

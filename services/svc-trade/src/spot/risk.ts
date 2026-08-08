@@ -26,8 +26,71 @@ import { TradeError, type Market, type OrderSide, type OrderType } from './types
 /** Order types this PR accepts. */
 const SUPPORTED_TYPES: ReadonlySet<string> = new Set<OrderType>(['market', 'limit']);
 
-export function assertTradable(market: Market): void {
-  if (market.kind !== 'spot') {
+export interface TradableOptions {
+  /**
+   * MAY THIS CALL SITE PUT AN ORDER ON A FUTURES BOOK?
+   *
+   * Mirrors `TRADE_FUTURES_ENABLED`, and defaults to `false` so the permissive
+   * reading is never the one you get by leaving an argument off — the same
+   * property `bestFromDepth`'s policy argument has, for the same reason.
+   */
+  readonly futuresEnabled?: boolean;
+}
+
+/**
+ * MAY THIS MARKET TAKE AN ORDER AT ALL?
+ *
+ * ── The futures arm, and why it used to be a flat refusal ────────────────────
+ *
+ * This function refused every non-spot market outright, and that refusal was
+ * load-bearing far outside its own file. `futures/mark-from-depth.ts` said so in
+ * its own header: the size-blind mid "is not exploitable on `main` today only
+ * because `assertTradable` refuses non-spot on the order path, so futures books
+ * are always empty. That is a different file's accident, not a control."
+ *
+ * It is no longer the only thing standing there. `c7dfb5e4` and `cc90c2f4` made
+ * both the internal-depth mid and the venue mid size-aware
+ * (`bestLevelIsQuotable` / `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`), and `c7dfb5e4`
+ * armed the deviation breaker against a stored `accepted_mark`. So a futures book
+ * that can be filled with two dust orders no longer mints a payout-grade mark,
+ * and the accident this refusal was standing in for has a real control behind it.
+ *
+ * ── Off is an answer, not an outage ─────────────────────────────────────────
+ *
+ * `futuresEnabled` false refuses with `trade.futures_disabled` — its own code, a
+ * 403, and a message that names the market and the switch. It is deliberately
+ * NOT `trade.market_kind_unsupported`: that code means "this service will never
+ * serve that kind", which was true and is now a deployment setting, and a CCXT
+ * client that drops the symbol on a `BadSymbol` would go on dropping it after an
+ * operator turns futures on.
+ *
+ * `#883`/`#950` drew the line this sits on: a refusal with exactly one legal
+ * answer is an outage rather than a decision gate. This one has a legal answer on
+ * both settings — off, the market is listed, quotable, readable and closed to new
+ * orders; on, it trades. Nothing about the flag being off stops the service
+ * booting, stops spot, or stops a cancellation.
+ *
+ * ── What permitting an order does NOT unlock ────────────────────────────────
+ *
+ * It says nothing about leverage. A futures order is funded by the same `holdFor`
+ * as a spot order — quote for buys, base for sells, in full — so this arm creates
+ * no margin position and picks no risk parameter. Leverage and margin defaults
+ * beyond `DIRECTION` §1's are owner-only (`DIRECTION` §8 item 8), and the margin
+ * path stays where it is, in `futures/position-service.ts`, behind its own
+ * already-named profit source.
+ *
+ * `options` markets remain refused by kind. There is no options engine, no options
+ * collateral model, and nothing to gate.
+ */
+export function assertTradable(market: Market, options: TradableOptions = {}): void {
+  if (market.kind === 'futures') {
+    if (options.futuresEnabled !== true) {
+      throw new TradeError(
+        `${market.symbol} is a futures market and futures trading is not enabled on this deployment (TRADE_FUTURES_ENABLED)`,
+        'trade.futures_disabled',
+      );
+    }
+  } else if (market.kind !== 'spot') {
     throw new TradeError(
       `${market.symbol} is a ${market.kind} market — this service serves trade.spot only`,
       'trade.market_kind_unsupported',
@@ -35,6 +98,28 @@ export function assertTradable(market: Market): void {
   }
   if (market.status !== 'active') {
     throw new TradeError(`${market.symbol} is ${market.status}, not accepting orders`, 'trade.market_not_tradable');
+  }
+}
+
+/**
+ * SPOT-SHAPED SURFACES REFUSE NON-SPOT BY NAME, NOT BY OMISSION.
+ *
+ * Convert and TWAP are not the order path with a different button on it. Convert
+ * walks book depth and calls the result a price the user can take; TWAP slices a
+ * parent over a duration and re-prices each child. Neither has been reasoned
+ * about, let alone tested, against a market whose position is a margin row rather
+ * than a base-asset balance.
+ *
+ * Before `assertTradable` grew its futures arm, those two were spot-only for free
+ * — they inherited the flat kind refusal. Turning futures on for the order path
+ * would have silently turned it on for them too, which is exactly the shape of
+ * accident this subsystem keeps producing: a control that was really a side effect
+ * of somebody else's guard. So they now say it themselves, and their refusal
+ * survives whatever the deployment flag says.
+ */
+export function assertSpotSurface(market: Market, surface: string): void {
+  if (market.kind !== 'spot') {
+    throw new TradeError(`${market.symbol} is a ${market.kind} market — ${surface} serves spot only`, 'trade.market_kind_unsupported');
   }
 }
 

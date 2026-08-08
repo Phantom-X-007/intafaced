@@ -19,11 +19,27 @@
  * holding two orders worth about four femto-cents between them
  * (`position-service.test.ts`, "two dust orders mint a payout-grade mark").
  *
- * This is not exploitable on `main` today only because `assertTradable` refuses
- * non-spot on the order path, so futures books are always empty. That is a
- * different file's accident, not a control: the change that makes futures
- * markets orderable turns this into self-dealing with two dust orders, no
- * capital at risk, and no further code needed.
+ * WHAT USED TO STAND HERE, AND WHY THIS PARAGRAPH CHANGED. Until
+ * `feat/futures-orderable-path` this file said the defect "is not exploitable on
+ * `main` today only because `assertTradable` refuses non-spot on the order path,
+ * so futures books are always empty" — "a different file's accident, not a
+ * control" — and named the change that would make it exploitable.
+ *
+ * That change has landed. `assertTradable` takes a futures order whenever
+ * `TRADE_FUTURES_ENABLED` is on, so a futures book now holds whatever anyone rests
+ * in it, two dust orders included. The old sentence is rewritten rather than
+ * deleted because it is the argument for the check below: this file, and no longer
+ * that one, is what stands between a dust book and a payout. Done-bar item 8 of
+ * `docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md` is why it could not
+ * simply be left standing — "a comment that claims a property the code lacks is
+ * worse than no comment, and this one cost us the finding."
+ *
+ * The order path does not quietly become a second line of defence either. A
+ * market's `min_notional` refuses an order too small to matter, but it is a
+ * per-listing value chosen when the market is created, so it bounds one order and
+ * says nothing about the mark. `futures/orderable-path.test.ts` therefore rests its
+ * dust through the real order path of a market whose floor permits it, so that the
+ * refusal being tested is this one and not a listing parameter standing in for it.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * SO: A BOOK TOO THIN TO BE WORTH ANYTHING IS NOT A QUOTE

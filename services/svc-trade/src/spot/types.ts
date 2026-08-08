@@ -173,6 +173,13 @@ export type TradeErrorCode =
   | 'trade.below_min_notional'
   | 'trade.no_reference_price'
   | 'trade.spot_disabled'
+  /**
+   * A futures market exists and this deployment does not take orders on it
+   * (`TRADE_FUTURES_ENABLED` off). Distinct from `market_kind_unsupported`,
+   * which claims the service will NEVER serve the kind: this one is an operator
+   * setting, so a client must keep the symbol and stop placing, not drop it.
+   */
+  | 'trade.futures_disabled'
   | 'trade.seed_disabled'
   | 'trade.seed_must_make'
   | 'trade.order_not_found'

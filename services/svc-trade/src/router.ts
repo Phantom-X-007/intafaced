@@ -178,6 +178,11 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.spot_disabled':
       case 'trade.market_not_tradable':
       case 'trade.market_kind_unsupported':
+      // `TRADE_FUTURES_ENABLED` off. FORBIDDEN, next to the other refusals that
+      // are decisions rather than faults — explicitly not
+      // INTERNAL_SERVER_ERROR, because the shipped default of a flag is not a
+      // server error and must never page anybody.
+      case 'trade.futures_disabled':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
       case 'trade.perks_unavailable':
         return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
