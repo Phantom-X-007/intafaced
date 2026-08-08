@@ -12,6 +12,8 @@ import {
   parseAmount as amt,
   railBoundary,
   userAvailable,
+  type LedgerClient,
+  type PostRequest,
 } from '@intafaced/ledger-client';
 import { PayService, PayError, type PaymentView } from './payment-service.js';
 import { RailRegistry } from './rails/registry.js';
@@ -824,6 +826,164 @@ if (!available) {
       const settlement = await settle(m.id, 'w-refunded');
       expect(formatAmount(settlement.gross)).toBe('30');
       expect(await availableOf(MERCHANT_USER)).toBe('30');
+    });
+
+    it('REFUSES a pre-settlement refund once the payment is frozen in a pending window', async () => {
+      // prepareSettlement commits independently of the ledger post. A freeze
+      // that has not yet posted must not allow clearing to be drained under the
+      // frozen gross — that is how another payment's capture funds the window.
+      const base = new MemoryLedger();
+      const gate = { blockSettle: true };
+      const ledgerProxy: LedgerClient = {
+        post: async (request: PostRequest) => {
+          if (gate.blockSettle && request.reason === 'pay.settled') {
+            throw new Error('simulated ledger outage during settlement post');
+          }
+          return base.post(request);
+        },
+        balance: (ref) => base.balance(ref),
+        balances: (ownerType, ownerId) => base.balances(ownerType, ownerId),
+        getTx: (txId) => base.getTx(txId),
+        getTxByKey: (key) => base.getTxByKey(key),
+      };
+      const gated = new PayService(sql, ledgerProxy, rails);
+
+      const m = await gated.createMerchant({ userId: MERCHANT_USER, pricing: { feeBps: 0 } });
+      const payment = await gated.createPayment({
+        merchantId: m.id,
+        amount: amt('100'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+      await gated.authorize(payment.id);
+      await gated.capture(payment.id);
+
+      await expect(
+        gated.settleWindow({
+          merchantId: m.id,
+          window: 'w-freeze',
+          assetId: 'USDT',
+          from: new Date(Date.now() - 24 * 3600_000),
+          to: new Date(Date.now() + 24 * 3600_000),
+        }),
+      ).rejects.toThrow(/simulated ledger outage/);
+
+      // Freeze landed; payment still captured; refund must wait for post.
+      expect((await gated.getPayment(payment.id)).status).toBe('captured');
+      await expect(gated.refund(payment.id, amt('40'))).rejects.toMatchObject({
+        code: 'pay.settlement_in_flight',
+      });
+      expect(formatAmount((await base.balance(merchantClearing(m.id, 'USDT'))).amount)).toBe('100');
+
+      // After the outage clears, the same window posts and a post-settlement
+      // refund draws on available — the path that was always safe.
+      gate.blockSettle = false;
+      const settlement = await gated.settleWindow({
+        merchantId: m.id,
+        window: 'w-freeze',
+        assetId: 'USDT',
+        from: new Date(Date.now() - 24 * 3600_000),
+        to: new Date(Date.now() + 24 * 3600_000),
+      });
+      expect(settlement.status).toBe('posted');
+      expect((await gated.getPayment(payment.id)).status).toBe('settled');
+      await gated.refund(payment.id, amt('40'));
+      expect(formatAmount((await base.balance(userAvailable(MERCHANT_USER, 'USDT'))).amount)).toBe('60');
+      expect(base.reconcile()).toEqual({ ok: true });
+    });
+
+    it('excludes a payment with an open refund.posted from the freeze set', async () => {
+      const m = await merchant(0);
+      const keep = await cardPayment(m.id, '30');
+      await pay.capture(keep.id);
+      const inflight = await cardPayment(m.id, '70');
+      await pay.capture(inflight.id);
+
+      // Operator-visible half-state: ledger refund posted, rail not finished.
+      // Simulate with a refund.posted event and no sibling — prepare must not
+      // freeze this payment into a window the pool no longer fully holds.
+      await sql`
+        INSERT INTO pay.payment_events (payment_id, event, payload)
+        VALUES (
+          ${inflight.id},
+          'refund.posted',
+          ${sql.json({ refundId: `${inflight.id}:1`, amount: '70', source: 'clearing' } as never)}
+        )
+      `;
+
+      const settlement = await settle(m.id, 'w-open-refund');
+      expect(formatAmount(settlement.gross)).toBe('30');
+      expect(await availableOf(MERCHANT_USER)).toBe('30');
+      // Still captured — not swallowed by a window it did not join.
+      expect((await pay.getPayment(inflight.id)).status).toBe('captured');
+    });
+
+    it('REFUSES to post when frozen gross no longer matches live nets', async () => {
+      const base = new MemoryLedger();
+      const gate = { blockSettle: true };
+      const ledgerProxy: LedgerClient = {
+        post: async (request: PostRequest) => {
+          if (gate.blockSettle && request.reason === 'pay.settled') {
+            throw new Error('simulated ledger outage during settlement post');
+          }
+          return base.post(request);
+        },
+        balance: (ref) => base.balance(ref),
+        balances: (ownerType, ownerId) => base.balances(ownerType, ownerId),
+        getTx: (txId) => base.getTx(txId),
+        getTxByKey: (key) => base.getTxByKey(key),
+      };
+      const gated = new PayService(sql, ledgerProxy, rails);
+
+      const m = await gated.createMerchant({ userId: MERCHANT_USER, pricing: { feeBps: 0 } });
+      const payment = await gated.createPayment({
+        merchantId: m.id,
+        amount: amt('100'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+      await gated.authorize(payment.id);
+      await gated.capture(payment.id);
+
+      await expect(
+        gated.settleWindow({
+          merchantId: m.id,
+          window: 'w-desync',
+          assetId: 'USDT',
+          from: new Date(Date.now() - 24 * 3600_000),
+          to: new Date(Date.now() + 24 * 3600_000),
+        }),
+      ).rejects.toThrow(/simulated ledger outage/);
+
+      // Adversarial: force a refunded total the freeze did not account for
+      // (service path now blocks this; the re-check is the last line of defence).
+      await sql`
+        INSERT INTO pay.payment_events (payment_id, event, payload)
+        VALUES (
+          ${payment.id},
+          'refunded',
+          ${sql.json({ refundId: 'forced', amount: '25', source: 'clearing' } as never)}
+        )
+      `;
+
+      gate.blockSettle = false;
+      await expect(
+        gated.settleWindow({
+          merchantId: m.id,
+          window: 'w-desync',
+          assetId: 'USDT',
+          from: new Date(Date.now() - 24 * 3600_000),
+          to: new Date(Date.now() + 24 * 3600_000),
+        }),
+      ).rejects.toMatchObject({ code: 'pay.settlement_desynced' });
+
+      // Nothing moved to the merchant — clearing still holds the capture.
+      expect(formatAmount((await base.balance(merchantClearing(m.id, 'USDT'))).amount)).toBe('100');
+      expect(formatAmount((await base.balance(userAvailable(MERCHANT_USER, 'USDT'))).amount)).toBe('0');
     });
 
     it('refuses to settle a merchant with no fee rate and no configured default', async () => {

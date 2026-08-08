@@ -503,6 +503,7 @@ export class UserMoneyService {
           existing.assetId !== input.assetId ||
           existing.amount !== input.amount ||
           existing.rail !== input.rail ||
+          existing.destination.kind !== input.destination.kind ||
           existing.destination.ref !== input.destination.ref;
         if (mismatch) {
           throw new PayError(

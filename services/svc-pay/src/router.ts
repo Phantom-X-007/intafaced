@@ -980,6 +980,8 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.capture_exceeds_authorized':
       case 'pay.refund_exceeds_captured':
       case 'pay.refund_in_flight':
+      case 'pay.settlement_in_flight':
+      case 'pay.settlement_desynced':
         return 'CONFLICT' as const;
       case 'pay.withdrawal_not_found':
         return 'NOT_FOUND' as const;

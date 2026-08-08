@@ -233,6 +233,8 @@ function statusFor(code: string): number {
     case 'pay.capture_exceeds_authorized':
     case 'pay.refund_exceeds_captured':
     case 'pay.refund_in_flight':
+    case 'pay.settlement_in_flight':
+    case 'pay.settlement_desynced':
     case 'pay.idempotency_conflict':
     case 'pay.partial_capture_unsupported':
       return 409;
