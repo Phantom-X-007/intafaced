@@ -22,13 +22,24 @@ So the lane's work became **finish, mount, repair** rather than build. Two of th
 | **#1098** | The **third funding double-charge** in one file (after #1034 and #1047). The ledger key ended in a loop counter, so a replay whose book had changed — or merely whose row order flipped — reached the ledger under unseen keys and posted again, while the idempotent margin applier recorded one charge. Ledger and `margin_current` diverged, which is the inverse of #1034.                                                                                                                         |
 | **#1101** | The harvest doc — nine money defects, eighteen owner decisions, eleven wrong doc lines.                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-## 3 · In flight
+## 3 · Also shipped
 
-| PR        | State                                                                                                                                                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **#1105** | An oracle that polls charged every trader a full funding period, **every poll** — the period id was derived from a millisecond clock, so each republish minted a fresh unsettled period. CI green; adversarial pass running. |
-| **#1107** | A restart silently destroyed every in-flight TWAP (see §4).                                                                                                                                                                  |
-| **#1110** | Copy-trading exposure only ever went up, so a follower locked themselves out of their own envelope while holding nothing.                                                                                                    |
+| PR        | What changed for a trader                                                                                                                                                                                                                                                                                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **#1105** | An oracle that polls charged every trader a **full funding period, every poll** — the period id was derived from a millisecond clock, so each republish minted a fresh unsettled period and `runFundingTick`'s already-settled check was void. The publisher must now name its period, and the name is canonicalised, scoped to its own market, and stamped no further ahead than a minute. |
+| **#1107** | A restart silently destroyed every in-flight TWAP — no principal meant a refused child, a refused child was recorded as a _miss_, and a miss advances the schedule. Every surviving algo burned its whole plan and reported `completed` having placed nothing. It halts now, keeps its plan, and says why.                                                                                  |
+| **#1110** | Copy-trading exposure was computed in two places that could disagree. It is computed once and the approved value rides on the plan. **Rewritten after review** — see below.                                                                                                                                                                                                                 |
+| **#1112** | A bot could not tell a **simulated** market from a real one: paper markets appear in `fetchMarkets` identical to real listings, and orders on them take no hold and post nothing. `paper` is now on the public wire.                                                                                                                                                                        |
+
+**Nothing of this lane's is left open.** All eight PRs merged.
+
+### A correction worth carrying, not just recording
+
+**#1110 shipped the opposite of what I first wrote.** I read exposure's monotonic growth as a bug and made it a signed net position. The adversarial pass went to `SessionKeyLib.sol` and found the cap this code exists to mirror is `uint128 spendLimitWei` — _"cumulative cap on native value this session may ever move"_ — unsigned, monotonic, and enforced on-chain precisely because a service-side cap is "a promise, not a fact".
+
+So the old arithmetic was correct and I had diagnosed a design property as a defect. Measured against my own branch, the signed version let a follower alternate buy-BTC / sell-ETH and mirror **1000 of position under a cap of 100**, and a negative exposure could not even persist — `0011_copy_follows.sql:24` carries `CHECK (exposure >= 0)`, and my test passed only because the memory store has no constraint and `SqlCopyFollowStore` has no coverage at all.
+
+The real bug underneath was the one that survived: the check and the write were two expressions that happened to agree with nothing making them.
 
 ---
 
