@@ -30,11 +30,11 @@ This document is that handshake. It does **not** invent a mainnet date, does **n
 
 ## Mental model (so we don't build the wrong product)
 
-| Plane | Custody | This ADR |
-| --- | --- | --- |
-| Fiat / custodial | Platform holds value via ledger | Out of scope except adapter boundaries |
-| Protocol / self-custody | User (or contract the user alone controls) holds value | **In scope** |
-| Shell | UI | Consumes APIs/events after contracts prove |
+| Plane                   | Custody                                                | This ADR                                   |
+| ----------------------- | ------------------------------------------------------ | ------------------------------------------ |
+| Fiat / custodial        | Platform holds value via ledger                        | Out of scope except adapter boundaries     |
+| Protocol / self-custody | User (or contract the user alone controls) holds value | **In scope**                               |
+| Shell                   | UI                                                     | Consumes APIs/events after contracts prove |
 
 **Custodial P2P escrow is a different product** from **sovereign on-chain escrow** (`docs/adr/2026-08-04-p2p-escrow-and-dispute-law.md`). S-A3 is the sovereign product. No "handoff" of ledger escrow to chain.
 
@@ -46,29 +46,29 @@ Doctrine §17 sequencing stays: **P0 contracts on proven EVM rails → P1 own ch
 
 PR DAG for Protocol Plane P0, in dependency order. Parallel worktrees are fine **only** inside `services/svc-protocol/contracts` (and matching tests), one concern per PR.
 
-| Step | IDs | Outcome | Gate |
-| --- | --- | --- | --- |
-| 0 | **S-D0 + S-D1** | This ADR merged; Nitro has ruled (or deferred) deploy-chain naming | This PR |
-| 1 | **S-A1 audit package** + **S-A9** P-256 verifier | Passkey can own an account **on-chain**; adversarial package exists or is an honest §13 socket with owner | No `audited:true` without package |
-| 2 | **S-A3** escrow + **S-A6** merchant contracts | Lock → release → refund → dispute timer; merchant acceptance without platform custody | Keeper-safe + no-stranded-funds tests |
-| 3 | **S-A12** price oracle → **S-A4** lending + **S-A5** router | Marks/liquidations fail closed; lending unblocked | **S-A4 does not start before S-A12** |
-| 4 | **S-C1** real venue contracts | Indexer/DEX stop lying about DevVenue | Pair with indexer owners; Solidity is ours |
-| 5 | **S-A10 / S-A11** gas + bundler + **S-A13** deployment registry | Who pays gas is named; addresses are registry-backed | Nitro funds sponsorship if any; Class X for live keys |
-| 6 | Residuals | S-A2 invariants/LP · S-A7 audit residual · S-G\* oxygen | No vapor Done |
-| 7 | **S-E\*** | Sovereign card contract half | After SA + verifier are honest |
-| 8 | **S-D2–D4** | INTACHAIN P1 path (spec-heavy) | Separate ADRs; no `chain.mainnet` Done without milestones |
-| ∥ | **S-J\*** | Audit factory continuous from step 1 | Always |
+| Step | IDs                                                             | Outcome                                                                                                   | Gate                                                      |
+| ---- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 0    | **S-D0 + S-D1**                                                 | This ADR merged; Nitro has ruled (or deferred) deploy-chain naming                                        | This PR                                                   |
+| 1    | **S-A1 audit package** + **S-A9** P-256 verifier                | Passkey can own an account **on-chain**; adversarial package exists or is an honest §13 socket with owner | No `audited:true` without package                         |
+| 2    | **S-A3** escrow + **S-A6** merchant contracts                   | Lock → release → refund → dispute timer; merchant acceptance without platform custody                     | Keeper-safe + no-stranded-funds tests                     |
+| 3    | **S-A12** price oracle → **S-A4** lending + **S-A5** router     | Marks/liquidations fail closed; lending unblocked                                                         | **S-A4 does not start before S-A12**                      |
+| 4    | **S-C1** real venue contracts                                   | Indexer/DEX stop lying about DevVenue                                                                     | Pair with indexer owners; Solidity is ours                |
+| 5    | **S-A10 / S-A11** gas + bundler + **S-A13** deployment registry | Who pays gas is named; addresses are registry-backed                                                      | Nitro funds sponsorship if any; Class X for live keys     |
+| 6    | Residuals                                                       | S-A2 invariants/LP · S-A7 audit residual · S-G\* oxygen                                                   | No vapor Done                                             |
+| 7    | **S-E\***                                                       | Sovereign card contract half                                                                              | After SA + verifier are honest                            |
+| 8    | **S-D2–D4**                                                     | INTACHAIN P1 path (spec-heavy)                                                                            | Separate ADRs; no `chain.mainnet` Done without milestones |
+| ∥    | **S-J\***                                                       | Audit factory continuous from step 1                                                                      | Always                                                    |
 
 **Tier L (new 2026-08-07) — scheduled, not ignored:**
 
-| ID | First move |
-| --- | --- |
-| S-L1 crew vaults | Spec after S-A1 solid (multi-sig user keys only) |
-| **S-L2 legacy vaults** | **S-K7 ADR first** — user-elected heirs + time locks only; platform key never eligible; else stay socket |
-| S-L3 stealth handles | Spec after S-A9 (account crypto) |
-| S-L4 launch trust | After S-A7 residual + AMM honesty |
-| S-L5 treasury-yield vaults | After S-A12 + S-A4 |
-| **S-L6 Venue Vault** | Hard blocker under **S-I4**; needs Nitro venue decision (§0.5) — do not fake OMS |
+| ID                         | First move                                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| S-L1 crew vaults           | Spec after S-A1 solid (multi-sig user keys only)                                                         |
+| **S-L2 legacy vaults**     | **S-K7 ADR first** — user-elected heirs + time locks only; platform key never eligible; else stay socket |
+| S-L3 stealth handles       | Spec after S-A9 (account crypto)                                                                         |
+| S-L4 launch trust          | After S-A7 residual + AMM honesty                                                                        |
+| S-L5 treasury-yield vaults | After S-A12 + S-A4                                                                                       |
+| **S-L6 Venue Vault**       | Hard blocker under **S-I4**; needs Nitro venue decision (§0.5) — do not fake OMS                         |
 
 **S-I3 / S-I4** stay on the board: authoritative fees before real quotes; execution stays loud-refuse until Venue Vault + `svc-execution` exist.
 
@@ -83,12 +83,12 @@ PR DAG for Protocol Plane P0, in dependency order. Parallel worktrees are fine *
 
 ### Proposal for Nitro to rule
 
-| Layer | Choice | Why |
-| --- | --- | --- |
-| **Local / CI** | Keep **anvil** (current docker `evm`) | Already gates CI; no funding; deterministic |
-| **P0 public testnet (proposed)** | **Base Sepolia** (OP-stack L2 testnet) as default integration target | Cheap, standard tooling, ERC-4337 ecosystem density for S-A9/S-A10/S-A11, same family as a likely mainnet L2 |
-| **P0 optional liquidity tap (proposed, later)** | Evaluate **HyperEVM test/main** only after Base-path contracts are green and Nitro funds RPC | Doctrine §17.2 explicitly allows HyperEVM for liquidity; it is **not** the first place we debug CREATE2 |
-| **P0 mainnet (Class X — not this ADR)** | Prefer **Base** mainnet for the first live contract suite; HyperEVM as optional second deploy | Nitro Class X + funding; this ADR only names the preference |
+| Layer                                           | Choice                                                                                        | Why                                                                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Local / CI**                                  | Keep **anvil** (current docker `evm`)                                                         | Already gates CI; no funding; deterministic                                                                  |
+| **P0 public testnet (proposed)**                | **Base Sepolia** (OP-stack L2 testnet) as default integration target                          | Cheap, standard tooling, ERC-4337 ecosystem density for S-A9/S-A10/S-A11, same family as a likely mainnet L2 |
+| **P0 optional liquidity tap (proposed, later)** | Evaluate **HyperEVM test/main** only after Base-path contracts are green and Nitro funds RPC  | Doctrine §17.2 explicitly allows HyperEVM for liquidity; it is **not** the first place we debug CREATE2      |
+| **P0 mainnet (Class X — not this ADR)**         | Prefer **Base** mainnet for the first live contract suite; HyperEVM as optional second deploy | Nitro Class X + funding; this ADR only names the preference                                                  |
 
 **Explicit non-choices for P0:**
 
@@ -108,25 +108,25 @@ Until **S-A13** (deployment + verification registry) exists:
 
 ## Decision C — Stack boundaries (so PRs stay surgical)
 
-| Concern | Lives in | Does not |
-| --- | --- | --- |
-| Solidity suite + compile/test | `services/svc-protocol/contracts` | Fiat services |
-| Chain client / userop / factory honesty | `services/svc-protocol/src/chain` | Invent EntryPoint behaviour |
-| Indexer read models | `svc-indexer` (coordinate) | Invent mid prices |
-| Custodial pay/bank/trade | Nitro/Denon residual | Dual-edit their open PRs |
-| INTACHAIN node | `svc-chain` — **P1+** | Fake Done on `chain.mainnet` |
+| Concern                                 | Lives in                          | Does not                     |
+| --------------------------------------- | --------------------------------- | ---------------------------- |
+| Solidity suite + compile/test           | `services/svc-protocol/contracts` | Fiat services                |
+| Chain client / userop / factory honesty | `services/svc-protocol/src/chain` | Invent EntryPoint behaviour  |
+| Indexer read models                     | `svc-indexer` (coordinate)        | Invent mid prices            |
+| Custodial pay/bank/trade                | Nitro/Denon residual              | Dual-edit their open PRs     |
+| INTACHAIN node                          | `svc-chain` — **P1+**             | Fake Done on `chain.mainnet` |
 
 ---
 
 ## Risks (named, not papered over)
 
-| Risk | Mitigation |
-| --- | --- |
-| Rebuild merged AMM/SA/factory | §1.5 checklist in every Protocol PR body |
-| Lending without oracle | S-A4 blocked on S-A12 by this ADR |
-| Platform as recovery guardian | S-K7 before S-L2; doctrine over §34 copy |
-| Fake venue execution | S-I4 stays refuse-loud until S-L6 + OMS |
-| Premature mainnet | Class X only; S-D1 proposes, Nitro rules |
+| Risk                           | Mitigation                                               |
+| ------------------------------ | -------------------------------------------------------- |
+| Rebuild merged AMM/SA/factory  | §1.5 checklist in every Protocol PR body                 |
+| Lending without oracle         | S-A4 blocked on S-A12 by this ADR                        |
+| Platform as recovery guardian  | S-K7 before S-L2; doctrine over §34 copy                 |
+| Fake venue execution           | S-I4 stays refuse-loud until S-L6 + OMS                  |
+| Premature mainnet              | Class X only; S-D1 proposes, Nitro rules                 |
 | Gas sponsorship without budget | S-A10 contract can land; funded paymaster waits on Nitro |
 
 ---
