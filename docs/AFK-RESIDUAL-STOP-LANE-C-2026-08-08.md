@@ -1,20 +1,21 @@
 # Stop note — agent lane C (svc-bank · svc-blueprint · svc-token), 2026-08-08
 
-New tip at stop: **`ff6b50c2`** — `fix(token): a settled yield window paid a
-staker who joined after it settled (#1076)`.
+New tip at stop: **`1ea064c4`** — `fix(token): retuning the emission curve could
+mint past max supply (#1083)`.
 
-Session window: 02:25 → 03:30 UTC. Nitro AFK throughout. Three other agent
+Session window: 02:25 → 03:55 UTC. Nitro AFK throughout. Three other agent
 sessions were live in disjoint lanes.
 
 ---
 
 ## Landed
 
-| PR        | What broke, for a person                                                                                                                                                                                                                                                                       |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **#1076** | A settled yield window paid a staker who joined **after** it settled — out of the rewards engine, which means out of another window's undistributed revenue, and the operator was told nothing because the run counted the ledger's no-ops as fresh payouts. Class M, red-first, merged green. |
-| **#1073** | Every worktree cut on this machine started **296 commits behind main**, because `pnpm wt` looked only for a _local_ `main` and, finding none, silently branched off whatever the main checkout was parked on. Class N, merged green.                                                           |
-| **#1069** | (Not mine — lane A's, merged as closer duty.) A completed P2P trade could pay out and then tell nobody, losing the release event and both parties' XP. Green and stalled 25 minutes; diff reviewed personally before merging.                                                                  |
+| PR        | What broke, for a person                                                                                                                                                                                                                                                                                                                                                                 |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **#1076** | A settled yield window paid a staker who joined **after** it settled — out of the rewards engine, which means out of another window's undistributed revenue, and the operator was told nothing because the run counted the ledger's no-ops as fresh payouts. Class M, red-first, merged green.                                                                                           |
+| **#1083** | Retuning the emission curve could **mint past max supply**. The ceiling compared the CURVE's cumulative against `maxSupply`, and both live in `token_params` — editable by design. Lower the curve after minting under a generous one and it mints again on top of what is already circulating. `token.supply_exhausted` had no test naming it at all. Class M, red-first, merged green. |
+| **#1073** | Every worktree cut on this machine started **296 commits behind main**, because `pnpm wt` looked only for a _local_ `main` and, finding none, silently branched off whatever the main checkout was parked on. Class N, merged green.                                                                                                                                                     |
+| **#1069** | (Not mine — lane A's, merged as closer duty.) A completed P2P trade could pay out and then tell nobody, losing the release event and both parties' XP. Green and stalled 25 minutes; diff reviewed personally before merging.                                                                                                                                                            |
 
 ## In flight
 
@@ -45,6 +46,10 @@ left alone. Full detail: `docs/audit/2026-08-08-svc-bank.md`.
 4. **One underfunded pool stops every other pool's interest.** Same shape in
    `accrueAll`. The README is right that an underfunded pool must be loud; being
    loud is not the same as being allowed to withhold everyone else's yield.
+
+**Two refusals in svc-token that no test names** — `token.params_missing` and
+`token.proposal_not_found`. Neither moves money, which is the only reason they
+are parked; both are the shape that hid #1083.
 
 Plus one docs correction, in svc-token and therefore actually free to take:
 `services/svc-token/README.md` still carries a _"Known ordering gap … flagged,
@@ -128,4 +133,4 @@ Attacked and failed to falsify. Detail in the two audit files.
    `token.yield`, and closing it needs the §4.3 aggregation job — a number and a
    schedule that are the owner's, not an agent's.
 
-tip: `ff6b50c2`
+tip: `1ea064c4`
