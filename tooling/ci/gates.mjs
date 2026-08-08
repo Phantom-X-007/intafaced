@@ -183,6 +183,18 @@ export const GATES = [
     why: 'mass-credit endpoints and CORS * inherited from the vendored shell',
   },
   {
+    id: 'lang-duplicate-key',
+    script: 'tooling/ci/lang-duplicate-key-scan.mjs',
+    doctrine: '§9',
+    why:
+      'a repeated key in the shell language literal is not an error and not a warning — the later block simply wins ' +
+      'and every key only the earlier one defined is gone. `intafaced.socket` was declared twice; the first block ' +
+      'defined `needs` alone, the second replaced it wholesale, and `IxSocketPage.vue` asks for exactly that key, so ' +
+      'it resolved to undefined and would render its own raw key to a user. `packages/i18n` makes a missing key a ' +
+      'COMPILE error; the vendored shell has no such type, and a 2,200-key literal edited by several agents at once ' +
+      'gets this instead.',
+  },
+  {
     id: 'vendor-java-money',
     script: 'tooling/ci/vendor-java-money-scan.mjs',
     doctrine: 'dual-book Option B',
