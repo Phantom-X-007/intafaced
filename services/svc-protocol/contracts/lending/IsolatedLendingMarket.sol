@@ -142,7 +142,9 @@ contract IsolatedLendingMarket {
         if (amount == 0) revert BadAmount();
         accrue();
         if (totalCash < amount) revert InsufficientLiquidity();
+        // Ceil shares so rounding never lets a borrower owe less than they took.
         uint256 shares = _debtToShares(amount);
+        if (_sharesToDebt(shares) < amount) shares += 1;
         debtSharesOf[msg.sender] += shares;
         totalDebtShares += shares;
         totalCash -= amount;
