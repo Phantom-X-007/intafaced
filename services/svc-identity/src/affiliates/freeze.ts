@@ -4,23 +4,24 @@
  * Frozen beneficiaries are skipped at accrual time. No ledger payout here.
  */
 
-import { accrueCommission, type CommissionRow, type FeeEvent, type TierRate, DEFAULT_ACCRUAL_TIERS } from './commission.js';
+import { accrueCommission, type CommissionRow, type FeeEvent, type TierRate } from './commission.js';
 
 /**
  * Accrue commissions skipping frozen beneficiary ids.
  * Freeze is operator control — not a money invent.
+ * `tiers` is required — never default invented rates (see commission-rate-law.ts).
  */
 export function accrueWithFreezes(input: {
   fee: FeeEvent;
   parent: ReadonlyMap<string, string>;
-  tiers?: readonly TierRate[];
+  tiers: readonly TierRate[];
   frozenBeneficiaryIds: ReadonlySet<string>;
   maxDepth?: number;
 }): CommissionRow[] {
   const rows = accrueCommission({
     fee: input.fee,
     parent: input.parent,
-    tiers: input.tiers ?? DEFAULT_ACCRUAL_TIERS,
+    tiers: input.tiers,
     maxDepth: input.maxDepth,
   });
   return rows.filter((r) => !input.frozenBeneficiaryIds.has(r.beneficiaryId));
@@ -30,7 +31,7 @@ export function accrueWithFreezes(input: {
 export function freezeFilterBoardCard(input: {
   fee: FeeEvent;
   parent: ReadonlyMap<string, string>;
-  tiers?: readonly TierRate[];
+  tiers: readonly TierRate[];
   frozenBeneficiaryIds: ReadonlySet<string>;
   maxDepth?: number;
 }): {
@@ -42,7 +43,7 @@ export function freezeFilterBoardCard(input: {
   const without = accrueCommission({
     fee: input.fee,
     parent: input.parent,
-    tiers: input.tiers ?? DEFAULT_ACCRUAL_TIERS,
+    tiers: input.tiers,
     maxDepth: input.maxDepth,
   });
   const withF = accrueWithFreezes(input);
@@ -58,7 +59,7 @@ export function freezeFilterBoardCard(input: {
 export function freezeFilterStatusLine(input: {
   fee: FeeEvent;
   parent: ReadonlyMap<string, string>;
-  tiers?: readonly TierRate[];
+  tiers: readonly TierRate[];
   frozenBeneficiaryIds: ReadonlySet<string>;
   maxDepth?: number;
 }): string {
@@ -79,7 +80,7 @@ export function parseFreezeFilterStatusLine(
 export function freezeFilterStatusLineMatches(input: {
   fee: FeeEvent;
   parent: ReadonlyMap<string, string>;
-  tiers?: readonly TierRate[];
+  tiers: readonly TierRate[];
   frozenBeneficiaryIds: ReadonlySet<string>;
   maxDepth?: number;
 }): boolean {
@@ -105,7 +106,7 @@ export function freezeFilterExportHeader(): string {
 export function freezeFilterExportLine(input: {
   fee: FeeEvent;
   parent: ReadonlyMap<string, string>;
-  tiers?: readonly TierRate[];
+  tiers: readonly TierRate[];
   frozenBeneficiaryIds: ReadonlySet<string>;
   maxDepth?: number;
 }): string {
@@ -117,7 +118,7 @@ export function freezeFilterExportLine(input: {
 export function freezeFilterExportText(input: {
   fee: FeeEvent;
   parent: ReadonlyMap<string, string>;
-  tiers?: readonly TierRate[];
+  tiers: readonly TierRate[];
   frozenBeneficiaryIds: ReadonlySet<string>;
   maxDepth?: number;
 }): string {
@@ -129,7 +130,7 @@ export function freezeSkippedAtLeast(
   input: {
     fee: FeeEvent;
     parent: ReadonlyMap<string, string>;
-    tiers?: readonly TierRate[];
+    tiers: readonly TierRate[];
     frozenBeneficiaryIds: ReadonlySet<string>;
     maxDepth?: number;
   },

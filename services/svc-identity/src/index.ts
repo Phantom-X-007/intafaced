@@ -9,6 +9,7 @@ import { RankService } from './rank/rank-service.js';
 import { ReferralService } from './affiliates/referral-service.js';
 import { FreezeService } from './affiliates/freeze-service.js';
 import { SqlAccrualStore } from './affiliates/accrual-store.js';
+import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
@@ -98,6 +99,8 @@ const auth = new AuthService(
 const referral = new ReferralService(sql);
 const freeze = new FreezeService(sql);
 const accruals = new SqlAccrualStore(sql);
+/** Fail boot on malformed owner rates — never invent commission percentages. */
+const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON);
 
 export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
@@ -105,6 +108,7 @@ export const appRouter = createIdentityRouter(auth, rank, {
   referral,
   freeze,
   accruals,
+  accrualTierLaw,
 });
 export type AppRouter = typeof appRouter;
 

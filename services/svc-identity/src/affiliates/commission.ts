@@ -138,12 +138,18 @@ export function accrueCommission(input: {
   return rows;
 }
 
-/** Default demo tiers — product law may replace; tests pin exact strings. */
-export const DEFAULT_ACCRUAL_TIERS: readonly TierRate[] = [
-  { hop: 0, rate: '0.10' },
-  { hop: 1, rate: '0.05' },
-  { hop: 2, rate: '0.02' },
-];
+/**
+ * REMOVED: DEFAULT_ACCRUAL_TIERS (10% / 5% / 2%).
+ *
+ * That constant invented DIRECTION §8 fee-share rates and was the production
+ * fallback on affiliates.accrue / accrueDryRun and freeze helpers — durable
+ * commission rows were written under unpublished product law.
+ *
+ * Rates resolve only via resolveAccrualTiers (request tiers or owner-published
+ * IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON). See commission-rate-law.ts.
+ *
+ * Tests that need numbers pass an explicit fixture in the call site.
+ */
 
 /**
  * L3 — dry-run summary of accrued rows (no payout). Totals are decimal strings.
