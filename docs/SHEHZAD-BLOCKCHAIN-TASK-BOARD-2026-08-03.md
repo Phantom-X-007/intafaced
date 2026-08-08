@@ -140,8 +140,8 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 | ID       | Outcome                                  | Done bar                                                                                    |
 | -------- | ---------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **S-D0** | **Plan-first handshake**                 | ADR/plan PR: attack order, stack choice, risks, what is P0 vs P1 — **before** large P1 code |
-| **S-D1** | **P0 rails ADR**                         | Which EVM L2 / HyperEVM / anvil for contract suite v1 · no fantasy “mainnet next week”      |
+| **S-D0** | **Plan-first handshake**                 | ADR/plan PR: attack order, stack choice, risks, what is P0 vs P1 — **before** large P1 code · **Proposed 2026-08-08:** [`docs/adr/2026-08-08-protocol-plane-p0-handshake-and-rails.md`](adr/2026-08-08-protocol-plane-p0-handshake-and-rails.md) |
+| **S-D1** | **P0 rails ADR**                         | Which EVM L2 / HyperEVM / anvil for contract suite v1 · no fantasy “mainnet next week” · **Proposed same ADR:** anvil CI kept; Base Sepolia → Base mainnet proposed; HyperEVM optional later; **Nitro rules** (§0.5) |
 | **S-D2** | **INTACORE module map**                  | Spec: on-chain CLOB, margin, one-block finality SLOs (§20) until P0 contracts live          |
 | **S-D3** | **Validator / staking architecture**     | IFC staking secures validators · honest vs ledger `stakeOf`                                 |
 | **S-D4** | **P1 own chain (CometBFT / Cosmos SDK)** | `chain.mainnet` phased milestones · native CLOB module (dYdX v4-class) · not vapor `done`   |
