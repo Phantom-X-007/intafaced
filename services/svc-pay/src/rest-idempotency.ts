@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 /**
  * HTTP Idempotency-Key journal for the merchant REST surface (ADR §2.2).
@@ -27,7 +27,13 @@ export interface RestIdempotencyRecord {
 }
 
 export type RestIdempotencyClaim =
-  { readonly kind: 'mine' } | { readonly kind: 'replay'; readonly record: RestIdempotencyRecord } | { readonly kind: 'conflict' };
+  /**
+   * This caller owns the claim and must run the handler. `token` identifies
+   * THIS ownership — see `STALE_PENDING_MS` for why a claim needs identity.
+   */
+  | { readonly kind: 'mine'; readonly token: string }
+  | { readonly kind: 'replay'; readonly record: RestIdempotencyRecord }
+  | { readonly kind: 'conflict' };
 
 export interface RestIdempotencyStore {
   /**
@@ -35,13 +41,16 @@ export interface RestIdempotencyStore {
    * `conflict` means the key was already used for a different request.
    */
   claim(ownerId: string, key: string, fingerprint: string): Promise<RestIdempotencyClaim>;
-  /** Persist a completed response. Never overwrites a different settled body. */
-  put(ownerId: string, key: string, record: RestIdempotencyRecord): Promise<void>;
+  /**
+   * Persist a completed response. Never overwrites a settled body, and never a
+   * claim that is no longer ours — pass the `token` `claim` handed back.
+   */
+  put(ownerId: string, key: string, record: RestIdempotencyRecord, token: string): Promise<void>;
   /**
    * Drop a pending claim after a 5xx so a retry with the same key may execute.
-   * Settled rows are left alone.
+   * Settled rows are left alone, and so is a claim now held by someone else.
    */
-  abandon(ownerId: string, key: string): Promise<void>;
+  abandon(ownerId: string, key: string, token: string): Promise<void>;
 }
 
 /** Canonical request fingerprint — method + path + body bytes, SHA-256 hex. */
@@ -66,7 +75,7 @@ function sortKeys(value: unknown): unknown {
   return value;
 }
 
-type PendingSlot = { fingerprint: string; waiters: Array<() => void> };
+type PendingSlot = { fingerprint: string; waiters: Array<() => void>; token: string };
 type SettledSlot = { fingerprint: string; record: RestIdempotencyRecord };
 
 /** In-memory journal — unit tests and single-process local runners. */
@@ -92,24 +101,27 @@ export class MemoryRestIdempotencyStore implements RestIdempotencyStore {
       if (settled.fingerprint !== fingerprint) return { kind: 'conflict' };
       return { kind: 'replay', record: settled.record };
     }
-    this.map.set(id, { fingerprint, waiters: [] });
-    return { kind: 'mine' };
+    const token = randomUUID();
+    this.map.set(id, { fingerprint, waiters: [], token });
+    return { kind: 'mine', token };
   }
 
-  async put(ownerId: string, key: string, record: RestIdempotencyRecord): Promise<void> {
+  /** Token-gated for the same reason the Postgres store is — see its `put`. */
+  async put(ownerId: string, key: string, record: RestIdempotencyRecord, token: string): Promise<void> {
     const id = slotId(ownerId, key);
     const existing = this.map.get(id);
-    if (existing && 'record' in existing) return;
-    const fingerprint = existing && !('record' in existing) ? existing.fingerprint : '';
-    const waiters = existing && !('record' in existing) ? existing.waiters : [];
+    if (!existing || 'record' in existing) return;
+    if (existing.token !== token) return;
+    const { fingerprint, waiters } = existing;
     this.map.set(id, { fingerprint, record });
     for (const wake of waiters) wake();
   }
 
-  async abandon(ownerId: string, key: string): Promise<void> {
+  async abandon(ownerId: string, key: string, token: string): Promise<void> {
     const id = slotId(ownerId, key);
     const existing = this.map.get(id);
     if (!existing || 'record' in existing) return;
+    if (existing.token !== token) return;
     this.map.delete(id);
     for (const wake of existing.waiters) wake();
   }
@@ -119,6 +131,30 @@ export type RestIdempotencySql = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (strings: TemplateStringsArray, ...values: any[]): Promise<readonly any[]>;
 };
+
+/**
+ * How long a pending claim may sit before another caller may take it over.
+ *
+ * Deliberately far longer than any handler that is still alive. A mutating
+ * request here talks to a rail and is bounded by the edge's upstream timeout,
+ * measured in seconds; fifteen minutes is not a tuning knob, it is a margin so
+ * wide that reclaiming a LIVE handler is not a scenario anyone has to reason
+ * about. If a request really has been running fifteen minutes, every proxy
+ * between the merchant and us abandoned it long ago.
+ *
+ * The cost of being wrong in each direction is asymmetric, which is why the
+ * margin is lopsided:
+ *
+ *   · too SHORT — two callers run the same money handler concurrently. The
+ *     service layer would mostly catch it (a state transition refuses, a refund
+ *     carries its own business key) but "mostly" is not a thing to rely on.
+ *   · too LONG  — a merchant waits longer before a wedged key frees itself.
+ *
+ * So: minutes, not seconds. And the token on `put`/`abandon` means even a
+ * mistaken reclaim cannot let the dead handler's response overwrite the live
+ * one's row.
+ */
+const STALE_PENDING_MS = 15 * 60 * 1000;
 
 const DEFAULT_POLL_MS = 50;
 const DEFAULT_MAX_WAITS = 200;
@@ -138,9 +174,43 @@ export class PostgresRestIdempotencyStore implements RestIdempotencyStore {
       INSERT INTO pay.rest_idempotency (owner_id, idempotency_key, request_fingerprint, status_code, response_body)
       VALUES (${ownerId}, ${key}, ${fingerprint}, 0, ${null})
       ON CONFLICT (owner_id, idempotency_key) DO NOTHING
-      RETURNING owner_id
-    `) as ReadonlyArray<{ owner_id: string }>;
-    if (inserted.length > 0) return { kind: 'mine' };
+      RETURNING updated_at::text AS token
+    `) as ReadonlyArray<{ token: string }>;
+    if (inserted[0]) return { kind: 'mine', token: inserted[0].token };
+
+    /**
+     * RECLAIM A CLAIM WHOSE OWNER DIED.
+     *
+     * `abandon` covers a 5xx and a thrown handler. It does not cover the process
+     * simply ceasing to exist — an OOM kill, a pod eviction, a deploy landing
+     * mid-request. Then the pending row survives with nobody to settle it, and
+     * every later retry of that key polls its whole budget and throws. The key
+     * is wedged permanently, and retrying with the same key is the entire
+     * purpose of an idempotency key. An ordinary deploy could do this.
+     *
+     * The index on `updated_at` in migration 0007 was put there for this and
+     * nothing else; the reclaim was never written.
+     *
+     * FINGERPRINT FIRST, ALWAYS. A different request on the same key is a
+     * conflict whether or not the row is stale, so reclaiming only ever hands
+     * over a claim for the SAME request — which is what makes it safe to let a
+     * second caller run the handler.
+     *
+     * The UPDATE re-checks `updated_at` after taking the row lock, so two
+     * simultaneous reclaimers cannot both win: the loser's predicate is false
+     * once the winner commits.
+     */
+    const reclaimed = (await this.sql`
+      UPDATE pay.rest_idempotency
+         SET updated_at = now()
+       WHERE owner_id = ${ownerId}
+         AND idempotency_key = ${key}
+         AND request_fingerprint = ${fingerprint}
+         AND status_code = 0
+         AND updated_at < now() - ${`${STALE_PENDING_MS} milliseconds`}::interval
+      RETURNING updated_at::text AS token
+    `) as ReadonlyArray<{ token: string }>;
+    if (reclaimed[0]) return { kind: 'mine', token: reclaimed[0].token };
 
     const pollMs = this.opts.pollMs ?? DEFAULT_POLL_MS;
     const maxWaits = this.opts.maxWaits ?? DEFAULT_MAX_WAITS;
@@ -171,7 +241,16 @@ export class PostgresRestIdempotencyStore implements RestIdempotencyStore {
     throw new Error(`rest idempotency claim for ${ownerId}/${key} stalled while pending`);
   }
 
-  async put(ownerId: string, key: string, record: RestIdempotencyRecord): Promise<void> {
+  /**
+   * `AND updated_at::text = token` is the load-bearing clause.
+   *
+   * A handler that was declared dead and had its claim reclaimed can still be
+   * alive — hung on a socket, about to return. Without the token it would
+   * settle the row the NEW owner is holding, and the second caller would be
+   * handed a response produced by an execution it knows nothing about. The
+   * token makes the late write a no-op instead.
+   */
+  async put(ownerId: string, key: string, record: RestIdempotencyRecord, token: string): Promise<void> {
     // postgres.js serialises plain objects into jsonb. Only replace pending.
     await this.sql`
       UPDATE pay.rest_idempotency
@@ -181,15 +260,17 @@ export class PostgresRestIdempotencyStore implements RestIdempotencyStore {
       WHERE owner_id = ${ownerId}
         AND idempotency_key = ${key}
         AND status_code = 0
+        AND updated_at::text = ${token}
     `;
   }
 
-  async abandon(ownerId: string, key: string): Promise<void> {
+  async abandon(ownerId: string, key: string, token: string): Promise<void> {
     await this.sql`
       DELETE FROM pay.rest_idempotency
       WHERE owner_id = ${ownerId}
         AND idempotency_key = ${key}
         AND status_code = 0
+        AND updated_at::text = ${token}
     `;
   }
 }

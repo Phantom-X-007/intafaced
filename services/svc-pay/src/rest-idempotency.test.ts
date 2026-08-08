@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { fingerprintRequest, MemoryRestIdempotencyStore } from './rest-idempotency.js';
+import {
+  fingerprintRequest,
+  MemoryRestIdempotencyStore,
+  PostgresRestIdempotencyStore,
+  type RestIdempotencyClaim,
+} from './rest-idempotency.js';
+
+/** The claim token, or a failure that says which kind came back instead. */
+function tokenOf(claim: RestIdempotencyClaim): string {
+  if (claim.kind !== 'mine') throw new Error(`expected an owned claim, got "${claim.kind}"`);
+  return claim.token;
+}
 
 describe('fingerprintRequest', () => {
   it('is stable under key reordering', () => {
@@ -20,8 +31,9 @@ describe('MemoryRestIdempotencyStore', () => {
     const store = new MemoryRestIdempotencyStore();
     const fp = fingerprintRequest('POST', '/p', { a: 1 });
 
-    expect(await store.claim('owner', 'key-1', fp)).toEqual({ kind: 'mine' });
-    await store.put('owner', 'key-1', { statusCode: 200, body: { ok: true } });
+    const c1 = await store.claim('owner', 'key-1', fp);
+    expect(c1.kind).toBe('mine');
+    await store.put('owner', 'key-1', { statusCode: 200, body: { ok: true } }, tokenOf(c1));
 
     expect(await store.claim('owner', 'key-1', fp)).toEqual({
       kind: 'replay',
@@ -34,8 +46,9 @@ describe('MemoryRestIdempotencyStore', () => {
     const fp1 = fingerprintRequest('POST', '/p', { a: 1 });
     const fp2 = fingerprintRequest('POST', '/p', { a: 2 });
 
-    expect(await store.claim('owner', 'key-2', fp1)).toEqual({ kind: 'mine' });
-    await store.put('owner', 'key-2', { statusCode: 200, body: { ok: true } });
+    const c2 = await store.claim('owner', 'key-2', fp1);
+    expect(c2.kind).toBe('mine');
+    await store.put('owner', 'key-2', { statusCode: 200, body: { ok: true } }, tokenOf(c2));
 
     expect(await store.claim('owner', 'key-2', fp2)).toEqual({ kind: 'conflict' });
   });
@@ -44,8 +57,99 @@ describe('MemoryRestIdempotencyStore', () => {
     const store = new MemoryRestIdempotencyStore();
     const fp = fingerprintRequest('POST', '/p', {});
 
-    expect(await store.claim('owner', 'key-3', fp)).toEqual({ kind: 'mine' });
-    await store.abandon('owner', 'key-3');
-    expect(await store.claim('owner', 'key-3', fp)).toEqual({ kind: 'mine' });
+    const c = await store.claim('owner', 'key-3', fp);
+    expect(c.kind).toBe('mine');
+    await store.abandon('owner', 'key-3', tokenOf(c));
+    expect((await store.claim('owner', 'key-3', fp)).kind).toBe('mine');
+  });
+
+  /**
+   * THE HANDLER THAT CAME BACK FROM THE DEAD.
+   *
+   * A claim can be taken over once its owner is presumed dead (see
+   * STALE_PENDING_MS). The owner may not actually be dead — it may be hung on a
+   * socket and about to return. If its late `put` could still settle the row,
+   * the NEW owner would be handed a response produced by an execution it knows
+   * nothing about, on a money path. The token is what makes that a no-op.
+   */
+  it('IGNORES a settle from a claim that has been taken over', async () => {
+    const store = new MemoryRestIdempotencyStore();
+    const fp = fingerprintRequest('POST', '/p', { a: 1 });
+
+    const dead = await store.claim('owner', 'key-4', fp);
+    await store.abandon('owner', 'key-4', tokenOf(dead)); // presumed dead, reclaimed
+    const live = await store.claim('owner', 'key-4', fp);
+    expect(live.kind).toBe('mine');
+    expect(tokenOf(live)).not.toBe(tokenOf(dead));
+
+    // The corpse returns and tries to settle.
+    await store.put('owner', 'key-4', { statusCode: 200, body: { from: 'dead' } }, tokenOf(dead));
+
+    // It did not win: the live owner still holds a pending claim.
+    await store.put('owner', 'key-4', { statusCode: 201, body: { from: 'live' } }, tokenOf(live));
+    expect(await store.claim('owner', 'key-4', fp)).toEqual({
+      kind: 'replay',
+      record: { statusCode: 201, body: { from: 'live' } },
+    });
+  });
+
+  it('IGNORES an abandon from a claim that has been taken over', async () => {
+    const store = new MemoryRestIdempotencyStore();
+    const fp = fingerprintRequest('POST', '/p', { a: 1 });
+
+    const dead = await store.claim('owner', 'key-5', fp);
+    await store.abandon('owner', 'key-5', tokenOf(dead));
+    const live = await store.claim('owner', 'key-5', fp);
+
+    // A late abandon from the corpse must not free the live owner's claim.
+    await store.abandon('owner', 'key-5', tokenOf(dead));
+    await store.put('owner', 'key-5', { statusCode: 200, body: { ok: true } }, tokenOf(live));
+
+    expect((await store.claim('owner', 'key-5', fp)).kind).toBe('replay');
+  });
+});
+
+describe('PostgresRestIdempotencyStore — a claim whose owner died', () => {
+  /**
+   * `abandon` covers a 5xx and a thrown handler. It cannot cover the process
+   * ceasing to exist — an OOM kill, an eviction, a deploy landing mid-request.
+   * The pending row then survives with nobody to settle it, and before this the
+   * key was wedged FOREVER: every retry polled its whole budget and threw.
+   * Retrying with the same key is the entire purpose of an idempotency key.
+   */
+  it('takes over a pending row that is older than the stale window', async () => {
+    const calls: string[] = [];
+    // Insert loses the race (row exists); the reclaim UPDATE wins.
+    const sql = ((strings: TemplateStringsArray) => {
+      const text = strings.join('?');
+      calls.push(text.trim().split(/\s+/).slice(0, 2).join(' '));
+      if (text.includes('INSERT INTO pay.rest_idempotency')) return Promise.resolve([]);
+      if (text.includes('UPDATE pay.rest_idempotency')) return Promise.resolve([{ token: '2026-08-08 10:00:00+00' }]);
+      return Promise.resolve([]);
+    }) as never;
+
+    const store = new PostgresRestIdempotencyStore(sql);
+    const claim = await store.claim('owner', 'key-dead', 'fp');
+
+    expect(claim.kind).toBe('mine');
+    expect(tokenOf(claim)).toBe('2026-08-08 10:00:00+00');
+    // It reclaimed rather than polling: no SELECT was needed.
+    expect(calls).toEqual(['INSERT INTO', 'UPDATE pay.rest_idempotency']);
+  });
+
+  it('does NOT take over while the row is still fresh — it waits for the owner', async () => {
+    // The reclaim UPDATE matches nothing (row is young), so the caller falls
+    // through to polling and sees the owner's settled response.
+    const sql = ((strings: TemplateStringsArray) => {
+      const text = strings.join('?');
+      if (text.includes('INSERT INTO pay.rest_idempotency')) return Promise.resolve([]);
+      if (text.includes('UPDATE pay.rest_idempotency')) return Promise.resolve([]);
+      return Promise.resolve([{ request_fingerprint: 'fp', status_code: 200, response_body: { ok: true } }]);
+    }) as never;
+
+    const store = new PostgresRestIdempotencyStore(sql);
+    const claim = await store.claim('owner', 'key-live', 'fp');
+
+    expect(claim).toEqual({ kind: 'replay', record: { statusCode: 200, body: { ok: true } } });
   });
 });
