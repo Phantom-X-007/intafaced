@@ -272,63 +272,73 @@ export class PostgresNotifyStore implements NotifyStore {
 
   async list(query: ListQuery): Promise<ListResult> {
     const limit = query.limit;
-    let rows: PgRow[];
 
-    if (query.cursor) {
-      const cursorRows = await this.sql<PgRow[]>`
-        SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-               read_at, source_subject, source_idempotency_key, created_at
-        FROM notify.notifications
-        WHERE id = ${query.cursor} AND user_id = ${query.userId}
-        LIMIT 1
-      `;
-      const cursor = cursorRows[0];
-      if (!cursor) {
-        return { items: [], nextCursor: null };
-      }
-
-      if (query.unreadOnly) {
-        rows = await this.sql<PgRow[]>`
-          SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-                 read_at, source_subject, source_idempotency_key, created_at
-          FROM notify.notifications
-          WHERE user_id = ${query.userId}
-            AND read_at IS NULL
-            AND (created_at, id) < (${cursor.created_at}, ${cursor.id})
-          ORDER BY created_at DESC, id DESC
-          LIMIT ${limit + 1}
-        `;
-      } else {
-        rows = await this.sql<PgRow[]>`
-          SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-                 read_at, source_subject, source_idempotency_key, created_at
-          FROM notify.notifications
-          WHERE user_id = ${query.userId}
-            AND (created_at, id) < (${cursor.created_at}, ${cursor.id})
-          ORDER BY created_at DESC, id DESC
-          LIMIT ${limit + 1}
-        `;
-      }
-    } else if (query.unreadOnly) {
-      rows = await this.sql<PgRow[]>`
-        SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-               read_at, source_subject, source_idempotency_key, created_at
-        FROM notify.notifications
-        WHERE user_id = ${query.userId}
-          AND read_at IS NULL
-        ORDER BY created_at DESC, id DESC
-        LIMIT ${limit + 1}
-      `;
-    } else {
-      rows = await this.sql<PgRow[]>`
-        SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-               read_at, source_subject, source_idempotency_key, created_at
-        FROM notify.notifications
-        WHERE user_id = ${query.userId}
-        ORDER BY created_at DESC, id DESC
-        LIMIT ${limit + 1}
-      `;
-    }
+    /**
+     * THE CURSOR IS COMPARED INSIDE POSTGRES, AND THAT IS THE WHOLE POINT.
+     *
+     * This used to SELECT the cursor row, read its `created_at` into JS, and
+     * send it back as a parameter. `timestamptz` keeps MICROseconds; a JS `Date`
+     * keeps milliseconds. So the value that came back was truncated, and the
+     * keyset step `(created_at, id) < (truncated, id)` excluded every row whose
+     * real timestamp sat inside that millisecond — including the ones the next
+     * page was supposed to return.
+     *
+     * With rows spread over time the gaps hide it. It bites exactly where the
+     * inbox is busiest: a fan-out writes many rows in one transaction, they all
+     * share `now()` to the microsecond, and the second page came back EMPTY. A
+     * user whose margin call was in that burst pages once and never sees the
+     * rest of their inbox.
+     *
+     * A scalar subquery keeps the value in the database, at full precision, and
+     * removes the extra round trip. A cursor naming a row this user does not
+     * own (or no row at all) makes the subquery empty, the comparison NULL, and
+     * the page empty — which is the same refusal the explicit lookup gave.
+     */
+    const rows = query.cursor
+      ? query.unreadOnly
+        ? await this.sql<PgRow[]>`
+            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+                   read_at, source_subject, source_idempotency_key, created_at
+            FROM notify.notifications
+            WHERE user_id = ${query.userId}
+              AND read_at IS NULL
+              AND (created_at, id) < (
+                SELECT created_at, id FROM notify.notifications
+                 WHERE id = ${query.cursor} AND user_id = ${query.userId}
+              )
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit + 1}
+          `
+        : await this.sql<PgRow[]>`
+            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+                   read_at, source_subject, source_idempotency_key, created_at
+            FROM notify.notifications
+            WHERE user_id = ${query.userId}
+              AND (created_at, id) < (
+                SELECT created_at, id FROM notify.notifications
+                 WHERE id = ${query.cursor} AND user_id = ${query.userId}
+              )
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit + 1}
+          `
+      : query.unreadOnly
+        ? await this.sql<PgRow[]>`
+            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+                   read_at, source_subject, source_idempotency_key, created_at
+            FROM notify.notifications
+            WHERE user_id = ${query.userId}
+              AND read_at IS NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit + 1}
+          `
+        : await this.sql<PgRow[]>`
+            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+                   read_at, source_subject, source_idempotency_key, created_at
+            FROM notify.notifications
+            WHERE user_id = ${query.userId}
+            ORDER BY created_at DESC, id DESC
+            LIMIT ${limit + 1}
+          `;
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit).map(fromPg);
