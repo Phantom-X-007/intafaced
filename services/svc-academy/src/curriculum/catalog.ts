@@ -17,7 +17,26 @@
  * is not in this monorepo. Do not invent those titles as if the import landed.
  *
  * User-facing copy uses platform brand vocabulary only (Doctrine §0.7).
+ *
+ * ── Where the content lives ─────────────────────────────────────────────────
+ *
+ * The instructional material is `content.ts` — all of it, for every slug. This
+ * file stays the registry: slugs, paths, ordering and the query surface, and no
+ * prose at all. The split happened when the spine met the tracker's count
+ * promise (20 playbooks + 3 workbooks) while nineteen of those items carried a
+ * three-bullet stub of ~250 characters and the other six ran 427–634 — the count
+ * gate could not see the difference, and a reviewer could not read a registry
+ * and a library in one file.
+ *
+ * A row here declares metadata and nothing else. Bodies and teaching scaffolding
+ * are looked up by slug and both lookups throw, so an entry that has no lesson
+ * behind it fails at module load rather than serving an empty screen.
  */
+
+import { CURRICULUM_BODIES, CURRICULUM_TEACHING, readingMinutes } from './content.js';
+import type { CurriculumKeyTerm, CurriculumTeaching } from './content.js';
+
+export type { CurriculumKeyTerm, CurriculumTeaching } from './content.js';
 
 export type CurriculumPath = 'foundations' | 'markets' | 'builder' | 'sovereign';
 export type CurriculumKind = 'playbook' | 'workbook' | 'lesson';
@@ -30,28 +49,46 @@ export interface CurriculumItemSummary {
   /** Stable sort order within a path (ascending). */
   order: number;
   summary: string;
+  /** Editorial reading estimate derived from the body — see `readingMinutes` in content.ts. */
+  estimatedMinutes: number;
 }
 
-export interface CurriculumItem extends CurriculumItemSummary {
-  /** Markdown body. Lessons and playbooks carry content; workbooks may be outline-only until paper trading lands. */
+export interface CurriculumItem extends CurriculumItemSummary, CurriculumTeaching {
+  /** Markdown body. Every item carries real instructional content — see content.ts. */
   body: string;
 }
 
 /**
- * Shared short body for Stage-2 platform-native expansion.
- * Not a licensed third-party library import — residual title counts still apply.
+ * What a spine row declares by hand. Teaching scaffolding and the reading
+ * estimate are derived, so neither can drift away from the body it describes.
  */
-function seedBody(title: string, bullets: string[]): string {
-  return ['# ' + title, '', ...bullets.map((b) => '- ' + b), '', 'No money moves in this item. No partner brand names.'].join('\n');
+type CurriculumSeed = Omit<CurriculumItem, keyof CurriculumTeaching | 'estimatedMinutes'>;
+
+/** Deep body lookup. A missing slug is a build-time bug, never an empty screen. */
+function deepBody(slug: string): string {
+  const body = CURRICULUM_BODIES[slug];
+  if (!body) throw new Error(`curriculum: no body in content.ts for "${slug}"`);
+  return body;
 }
 
 /**
- * Day-one spine + Stage-2 platform-native expansion (TRK-academy.curriculum).
+ * Teaching scaffolding lookup. A catalog entry cannot ship without objectives,
+ * key terms and self-check questions — this throws rather than serve an item
+ * that looks complete and teaches nothing.
+ */
+function teachingFor(slug: string): CurriculumTeaching {
+  const teaching = CURRICULUM_TEACHING[slug];
+  if (!teaching) throw new Error(`curriculum: no teaching structure in content.ts for "${slug}"`);
+  return teaching;
+}
+
+/**
+ * Day-one spine + platform-native expansion (TRK-academy.curriculum).
  * Title counts (20 playbooks + 3 workbooks) are met via platform-native content.
  * Licensed third-party library import remains residual until product assets land.
  * Stage-3 polish: deep-links + i18n fallback — see deep-links.ts / i18n-strategy.ts.
  */
-const SPINE: readonly CurriculumItem[] = [
+const SPINE_SEED: readonly CurriculumSeed[] = [
   {
     slug: 'foundations-risk-first',
     title: 'Risk first',
@@ -59,52 +96,16 @@ const SPINE: readonly CurriculumItem[] = [
     path: 'foundations',
     order: 10,
     summary: 'Position size, drawdown, and why capital preservation is the first skill.',
-    body: [
-      '# Risk first',
-      '',
-      'Every path in the Academy starts here. Before charts, before setups, before',
-      'an agent is allowed near a live order — know what you can lose.',
-      '',
-      '## Position size',
-      '',
-      'Size from risk, not conviction. Pick the amount of capital you are willing',
-      'to lose on the idea; work the size backward from the invalidation level.',
-      '',
-      '## Drawdown',
-      '',
-      'A daily loss prompt is a brake, not a challenge. Identity Blueprint guardrails',
-      'seed a default; you may raise it, never ignore it quietly.',
-      '',
-      '## What this is not',
-      '',
-      'This playbook does not move money. Paper practice lands with the workbook',
-      'flag on the trade service. Live size is your call, on your rails.',
-    ].join('\n'),
+    body: deepBody('foundations-risk-first'),
   },
   {
     slug: 'foundations-order-types',
     title: 'Order types you will actually use',
     kind: 'lesson',
     path: 'foundations',
-    order: 20,
+    order: 40,
     summary: 'Market, limit, and stop — plain language, no vendor names.',
-    body: [
-      '# Order types you will actually use',
-      '',
-      '## Market',
-      '',
-      'Fill now at whatever the book offers. Use when waiting costs more than the',
-      'spread. Confirm before send if your guardrails say so.',
-      '',
-      '## Limit',
-      '',
-      'Fill only at your price or better. Use when the level matters more than speed.',
-      '',
-      '## Stop',
-      '',
-      'Exit (or enter) when price crosses a level you already chose. Write the level',
-      'before you enter; rewriting it mid-trade is how small losses become large ones.',
-    ].join('\n'),
+    body: deepBody('foundations-order-types'),
   },
   {
     slug: 'markets-reading-the-book',
@@ -113,22 +114,7 @@ const SPINE: readonly CurriculumItem[] = [
     path: 'markets',
     order: 10,
     summary: 'Depth, spreads, and when a quote is not a promise.',
-    body: [
-      '# Reading the book',
-      '',
-      'A quote is a moment, not a guarantee. Thin books gap; wide spreads are a tax',
-      'you pay whether you notice or not.',
-      '',
-      '## Depth',
-      '',
-      'Look past the top of book. A size that looks fine at the top can wipe the next',
-      'three levels on a market order.',
-      '',
-      '## Venue choice',
-      '',
-      'Route on evidence — fees, depth, and settlement posture — not brand loyalty.',
-      'When a venue cannot answer, the platform refuses rather than inventing a fill.',
-    ].join('\n'),
+    body: deepBody('markets-reading-the-book'),
   },
   {
     slug: 'builder-first-automation',
@@ -137,22 +123,7 @@ const SPINE: readonly CurriculumItem[] = [
     path: 'builder',
     order: 10,
     summary: 'Agent guardrails and paper runs before any live rail.',
-    body: [
-      '# First automation, no live capital',
-      '',
-      'An agent without a kill-switch is not an agent you run. Start paper-only.',
-      '',
-      '## Guardrails',
-      '',
-      'Identity Blueprint writes default limits (leverage ceiling, daily loss prompt,',
-      'confirm-before-market). Treat them as the starting posture, not a ceiling to',
-      'race past on day one.',
-      '',
-      '## Kill-switch',
-      '',
-      'You must be able to stop the strategy from a surface you control. If you cannot',
-      'name that surface, do not start the run.',
-    ].join('\n'),
+    body: deepBody('builder-first-automation'),
   },
   {
     slug: 'sovereign-self-custody-posture',
@@ -161,47 +132,16 @@ const SPINE: readonly CurriculumItem[] = [
     path: 'sovereign',
     order: 10,
     summary: 'What you hold, what the platform holds, and how to check which is which.',
-    body: [
-      '# Self-custody posture',
-      '',
-      'The platform is multi-rail. Some balances sit in house custody under the ledger;',
-      'some never leave a wallet you control. Confusing the two is how people mis-size risk.',
-      '',
-      '## Ask one question',
-      '',
-      'If this process dies right now, whose money is stranded and how does it come back?',
-      'If you cannot answer, do not move the size.',
-      '',
-      '## No partner names',
-      '',
-      'Your rails, your labels. Third-party brand names do not appear in Academy copy.',
-    ].join('\n'),
+    body: deepBody('sovereign-self-custody-posture'),
   },
   {
     slug: 'foundations-paper-workbook',
-    title: 'Paper practice (outline)',
+    title: 'Paper practice drills',
     kind: 'workbook',
     path: 'foundations',
-    order: 30,
-    summary: 'Workbook shell for paper trading — body is outline until the paper market flag lands.',
-    body: [
-      '# Paper practice (outline)',
-      '',
-      'This workbook is the shell for simulated drills against a paper-trading market',
-      'flag. The flag is owned by the trade service (`academy.paper-trading` on the',
-      'tracker) and is not wired from this service.',
-      '',
-      '## Planned drills',
-      '',
-      '1. Size a risk-first entry from an invalidation level.',
-      '2. Place a limit that does not fill; cancel cleanly.',
-      '3. Hit a stop you wrote before entry.',
-      '',
-      '## What is missing on purpose',
-      '',
-      'No simulated fills here. No balances. No XP. Completing those needs the paper',
-      'market and the certification path — both named elsewhere on the tracker.',
-    ].join('\n'),
+    order: 70,
+    summary: 'Drills for sizing, cancelling and honouring an exit — paper only, nothing moves value.',
+    body: deepBody('foundations-paper-workbook'),
   },
   // ── Stage-2 platform-native expansion (not licensed library invent) ───────
   {
@@ -209,125 +149,90 @@ const SPINE: readonly CurriculumItem[] = [
     title: 'Position sizing without invent',
     kind: 'playbook',
     path: 'foundations',
-    order: 20,
+    order: 30,
     summary: 'Size from invalidation distance and account risk — never from a green candle.',
-    body: seedBody('Position sizing without invent', [
-      'Write the invalidation first; size is a consequence of distance and risk budget.',
-      'If you cannot name the loss if wrong, do not place the order.',
-      'Paper first when the paper market flag is on.',
-    ]),
+    body: deepBody('foundations-position-sizing'),
   },
   {
     slug: 'foundations-journal-discipline',
     title: 'Trade journal discipline',
     kind: 'playbook',
     path: 'foundations',
-    order: 25,
+    order: 60,
     summary: 'What you write before and after a trade so the next one is not amnesia.',
-    body: seedBody('Trade journal discipline', [
-      'Thesis, invalidation, size, and why this time — before the order.',
-      'After: what the book did, not what you hoped it would do.',
-      'No retroactive thesis edits that invent skill.',
-    ]),
+    body: deepBody('foundations-journal-discipline'),
   },
   {
     slug: 'markets-spread-and-slippage',
     title: 'Spread and slippage honesty',
     kind: 'playbook',
     path: 'markets',
-    order: 20,
+    order: 30,
     summary: 'When the book is thin, the fill is not the mid you stared at.',
-    body: seedBody('Spread and slippage honesty', [
-      'Mid is not a promise; the next tradeable level is.',
-      'Market orders pay for urgency — name the urgency or use a limit.',
-      'Empty books are a true state, not a UI failure.',
-    ]),
+    body: deepBody('markets-spread-and-slippage'),
   },
   {
     slug: 'markets-session-structure',
     title: 'Session structure',
     kind: 'playbook',
     path: 'markets',
-    order: 25,
+    order: 40,
     summary: 'Open, mid, and close behaviours without inventing a regime label.',
-    body: seedBody('Session structure', [
-      'Liquidity and noise change by session — observe before you name a pattern.',
-      'Do not paste a vendor calendar as if it were platform law.',
-    ]),
+    body: deepBody('markets-session-structure'),
   },
   {
     slug: 'builder-kill-switch-drill',
     title: 'Kill-switch drill',
     kind: 'playbook',
     path: 'builder',
-    order: 20,
+    order: 30,
     summary: 'Prove you can stop a run from a surface you control.',
-    body: seedBody('Kill-switch drill', [
-      'Name the button or command that stops the strategy before you start it.',
-      'Paper run that stop once on purpose; a stop never tested is decoration.',
-    ]),
+    body: deepBody('builder-kill-switch-drill'),
   },
   {
     slug: 'builder-logs-not-vibes',
     title: 'Logs not vibes',
     kind: 'playbook',
     path: 'builder',
-    order: 25,
+    order: 50,
     summary: 'What an automation must record so a human can audit it later.',
-    body: seedBody('Logs not vibes', [
-      'Every decision needs a timestamp, inputs, and the rule that fired.',
-      'Missing logs are not privacy — they are unprovable behaviour.',
-    ]),
+    body: deepBody('builder-logs-not-vibes'),
   },
   {
     slug: 'sovereign-rail-map',
     title: 'Rail map',
     kind: 'playbook',
     path: 'sovereign',
-    order: 20,
+    order: 30,
     summary: 'Custodial ledger vs self-custody rails — ask who holds the keys.',
-    body: seedBody('Rail map', [
-      'For each balance: house custody under the ledger, or a wallet you control?',
-      'If the process dies, whose money is stranded and how does it return?',
-    ]),
+    body: deepBody('sovereign-rail-map'),
   },
   {
     slug: 'sovereign-withdrawal-hygiene',
     title: 'Withdrawal hygiene',
     kind: 'playbook',
     path: 'sovereign',
-    order: 25,
+    order: 50,
     summary: 'Address check, small test send, no urgency theatre.',
-    body: seedBody('Withdrawal hygiene', [
-      'Verify the address offline; urgency is how people send to the wrong rail.',
-      'Test size first when the rail is new to you.',
-    ]),
+    body: deepBody('sovereign-withdrawal-hygiene'),
   },
   {
     slug: 'markets-tape-reading-workbook',
-    title: 'Tape reading (outline workbook)',
+    title: 'Tape reading workbook',
     kind: 'workbook',
     path: 'markets',
-    order: 30,
-    summary: 'Outline drills for reading public prints without inventing volume.',
-    body: seedBody('Tape reading (outline workbook)', [
-      'Drill: mark aggressor side only when the print carries it.',
-      'Drill: empty tape is empty — do not paint green for silence.',
-      'Fills stay paper until the paper market path is on.',
-    ]),
+    order: 60,
+    summary: 'Drills for reading public prints without inventing volume or an aggressor side.',
+    body: deepBody('markets-tape-reading-workbook'),
   },
   {
     slug: 'builder-automation-workbook',
-    title: 'Automation checklist (outline workbook)',
+    title: 'Automation checklist workbook',
     kind: 'workbook',
     path: 'builder',
-    order: 30,
-    summary: 'Outline workbook for pre-flight of a paper automation.',
-    body: seedBody('Automation checklist (outline workbook)', [
-      'Kill-switch named and tested.',
-      'Max loss and max size written before arming.',
-      'No live keys in paper mode.',
-    ]),
+    order: 60,
+    summary: 'Drills that must each produce a written artifact before an automation is armed.',
+    body: deepBody('builder-automation-workbook'),
   },
   // ── Stage-2 L3 platform-native expansion toward title promise (not licensed invent) ──
   {
@@ -335,78 +240,54 @@ const SPINE: readonly CurriculumItem[] = [
     title: 'Invalidation before entry',
     kind: 'playbook',
     path: 'foundations',
-    order: 30,
+    order: 20,
     summary: 'Name the level that proves you wrong before you name the target.',
-    body: seedBody('Invalidation before entry', [
-      'If invalidation is vague, size is guesswork.',
-      'Write it; size from distance; only then consider entry.',
-      'Paper first when the paper market path is on.',
-    ]),
+    body: deepBody('foundations-invalidation-first'),
   },
   {
     slug: 'foundations-fees-are-real',
     title: 'Fees are real cost',
     kind: 'playbook',
     path: 'foundations',
-    order: 35,
+    order: 50,
     summary: 'Fee drag is not optional flavour — it is part of the edge math.',
-    body: seedBody('Fees are real cost', [
-      'Round-trip fees shrink the gap you need the market to give you.',
-      'Do not invent a zero-fee world in the journal.',
-      'Empty fee field is unknown, not free.',
-    ]),
+    body: deepBody('foundations-fees-are-real'),
   },
   {
     slug: 'markets-order-types-honest',
     title: 'Order types without magic',
     kind: 'playbook',
     path: 'markets',
-    order: 30,
+    order: 20,
     summary: 'Limit, market, and cancel behaviour without inventing fills.',
-    body: seedBody('Order types without magic', [
-      'A limit that never trades is not a failed UI — it is the book refusing your price.',
-      'Cancel is a first-class action; practice it on paper.',
-      'Never paint a working order as filled.',
-    ]),
+    body: deepBody('markets-order-types-honest'),
   },
   {
     slug: 'markets-correlation-caution',
     title: 'Correlation caution',
     kind: 'playbook',
     path: 'markets',
-    order: 35,
+    order: 50,
     summary: 'Two books can move together without becoming one idea.',
-    body: seedBody('Correlation caution', [
-      'Stacking the same risk under different symbols is still one bet.',
-      'If you cannot name the shared driver, you cannot size the stack.',
-      'No invented hedge that the book does not prove.',
-    ]),
+    body: deepBody('markets-correlation-caution'),
   },
   {
     slug: 'builder-preflight-checklist',
     title: 'Automation preflight',
     kind: 'playbook',
     path: 'builder',
-    order: 30,
+    order: 20,
     summary: 'What must be true before a paper automation is armed.',
-    body: seedBody('Automation preflight', [
-      'Kill-switch, max loss, max size, and paper-only gate — written before arm.',
-      'If any line is missing, the run does not start.',
-      'Live keys never ride along in paper mode.',
-    ]),
+    body: deepBody('builder-preflight-checklist'),
   },
   {
     slug: 'builder-failure-modes',
     title: 'Failure modes of agents',
     kind: 'playbook',
     path: 'builder',
-    order: 35,
+    order: 40,
     summary: 'How an agent fails closed when tools or data are dark.',
-    body: seedBody('Failure modes of agents', [
-      'Dark data plane → refuse invent quotes; say unavailable.',
-      'Undeclared tool → refuse before dispatch.',
-      'Silence is not success — log the refuse.',
-    ]),
+    body: deepBody('builder-failure-modes'),
   },
   {
     slug: 'sovereign-custody-posture',
@@ -415,39 +296,39 @@ const SPINE: readonly CurriculumItem[] = [
     path: 'sovereign',
     order: 20,
     summary: 'What the platform holds vs what never leaves your control surface.',
-    body: seedBody('Custody posture in one page', [
-      'Know which assets sit in platform custody and which never do.',
-      'Withdraw paths are product law, not a chat promise.',
-      'Support cannot invent balances.',
-    ]),
+    body: deepBody('sovereign-custody-posture'),
   },
   {
     slug: 'sovereign-limits-and-tiers',
     title: 'Limits and verification tiers',
     kind: 'playbook',
     path: 'sovereign',
-    order: 25,
+    order: 40,
     summary: 'Why a limit refuses — and why inventing a bypass is forbidden.',
-    body: seedBody('Limits and verification tiers', [
-      'A limit is a fail-closed gate, not a suggestion.',
-      'Raising limits requires the verification path the product owns.',
-      'No support chat can mint a higher limit without that path.',
-    ]),
+    body: deepBody('sovereign-limits-and-tiers'),
   },
   {
     slug: 'sovereign-incident-hygiene',
     title: 'Incident hygiene for operators',
     kind: 'playbook',
     path: 'sovereign',
-    order: 30,
+    order: 60,
     summary: 'What to freeze, what to write, and what never to invent under load.',
-    body: seedBody('Incident hygiene for operators', [
-      'Freeze first when money path is unclear; invent never.',
-      'Write both sides of a reconcile finding — not a single “fixed” claim.',
-      'User-facing copy stays brand-clean under pressure.',
-    ]),
+    body: deepBody('sovereign-incident-hygiene'),
   },
 ] as const;
+
+/**
+ * The spine as served: every seed row joined to its teaching scaffolding, with
+ * the reading estimate derived from the body. `teachingFor` throws on a slug
+ * that has no scaffolding, so an item that teaches nothing cannot reach a
+ * caller — it fails at module load, where a human sees it.
+ */
+const SPINE: readonly CurriculumItem[] = SPINE_SEED.map((seed) => ({
+  ...seed,
+  ...teachingFor(seed.slug),
+  estimatedMinutes: readingMinutes(seed.body),
+}));
 
 const BY_SLUG = new Map(SPINE.map((item) => [item.slug, item]));
 
@@ -455,7 +336,7 @@ export function listCurriculum(filter: { path?: CurriculumPath; kind?: Curriculu
   return SPINE.filter((item) => (filter.path ? item.path === filter.path : true) && (filter.kind ? item.kind === filter.kind : true))
     .slice()
     .sort((a, b) => (a.path === b.path ? a.order - b.order : a.path.localeCompare(b.path)))
-    .map(({ body: _body, ...summary }) => summary);
+    .map(({ body: _body, objectives: _objectives, keyTerms: _keyTerms, selfCheck: _selfCheck, ...summary }) => summary);
 }
 
 export function getCurriculumItem(slug: string): CurriculumItem | null {
@@ -1216,4 +1097,108 @@ export function clampCurriculumPageSize(pageSize: number): number {
 export function emptyPathCountAtMost(n: number): boolean {
   if (!Number.isFinite(n)) return false;
   return emptyPathCount() <= n;
+}
+
+// ── Depth surface (TRK-academy.curriculum) ──────────────────────────────────
+//
+// The count gate in import-pipeline.ts answers "are there 20 playbooks and 3
+// workbooks". It cannot answer "is any of it worth reading" — its body rule is
+// 40 characters and a leading heading, which a three-bullet stub satisfies.
+// These two surfaces answer the second question, and they answer it by naming
+// the items that fall short rather than by asserting that none do.
+
+/**
+ * The body length below which an item is reported thin.
+ *
+ * An editorial floor, not a quality measurement: a body under this is too short
+ * to carry mechanics, an example and the mistakes, so it is worth a reviewer's
+ * attention. Passing it proves nothing on its own.
+ */
+export const CURRICULUM_MIN_BODY_CHARS = 900;
+
+/**
+ * What a reader needs around the body: what they should be able to do, the
+ * vocabulary assumed, and the questions that reveal whether they got it.
+ *
+ * Nothing here is graded — grading and XP belong to `academy.certs`. This is
+ * the structure a screen lays out, so `/academy` can be a page rather than one
+ * undifferentiated wall of markdown.
+ */
+export interface CurriculumStudyGuide {
+  readonly slug: string;
+  readonly title: string;
+  readonly kind: CurriculumKind;
+  readonly path: CurriculumPath;
+  readonly estimatedMinutes: number;
+  readonly objectives: readonly string[];
+  readonly keyTerms: readonly CurriculumKeyTerm[];
+  readonly selfCheck: readonly string[];
+  /** Characters of markdown behind the guide — lets a caller show depth honestly. */
+  readonly bodyChars: number;
+}
+
+/** Study guide for one slug. Unknown slug → null; we never invent a guide. */
+export function curriculumStudyGuide(slug: string): CurriculumStudyGuide | null {
+  const item = BY_SLUG.get(slug.trim());
+  if (!item) return null;
+  return {
+    slug: item.slug,
+    title: item.title,
+    kind: item.kind,
+    path: item.path,
+    estimatedMinutes: item.estimatedMinutes,
+    objectives: item.objectives,
+    keyTerms: item.keyTerms,
+    selfCheck: item.selfCheck,
+    bodyChars: item.body.length,
+  };
+}
+
+/** Study guides for every item on a path, in the path's display order. */
+export function listCurriculumStudyGuides(path?: CurriculumPath): readonly CurriculumStudyGuide[] {
+  return listCurriculum(path ? { path } : {})
+    .map((summary) => curriculumStudyGuide(summary.slug))
+    .filter((guide): guide is CurriculumStudyGuide => guide !== null);
+}
+
+export interface CurriculumDepthReport {
+  readonly total: number;
+  /** Items whose body clears CURRICULUM_MIN_BODY_CHARS. */
+  readonly deep: number;
+  /** Items below the floor — named, not hidden. */
+  readonly thin: number;
+  readonly thinSlugs: readonly string[];
+  readonly minBodyChars: number;
+  /** Shortest body on the spine, so the floor can be checked against reality. */
+  readonly shortestBodyChars: number;
+  readonly totalBodyChars: number;
+  /** True only when no item is below the floor. */
+  readonly allDeep: boolean;
+}
+
+/**
+ * Honest depth inventory. Reports what is thin instead of asserting that
+ * nothing is — the same reason `curriculumInventory` reports residual counts.
+ */
+export function curriculumDepthReport(): CurriculumDepthReport {
+  const thinSlugs = SPINE.filter((item) => item.body.length < CURRICULUM_MIN_BODY_CHARS)
+    .map((item) => item.slug)
+    .sort();
+  const lengths = SPINE.map((item) => item.body.length);
+  return {
+    total: SPINE.length,
+    deep: SPINE.length - thinSlugs.length,
+    thin: thinSlugs.length,
+    thinSlugs,
+    minBodyChars: CURRICULUM_MIN_BODY_CHARS,
+    shortestBodyChars: lengths.length ? Math.min(...lengths) : 0,
+    totalBodyChars: lengths.reduce((sum, n) => sum + n, 0),
+    allDeep: thinSlugs.length === 0,
+  };
+}
+
+/** One-line depth status for operators. */
+export function curriculumDepthLine(): string {
+  const d = curriculumDepthReport();
+  return `total=${d.total} deep=${d.deep} thin=${d.thin} floor=${d.minBodyChars} shortest=${d.shortestBodyChars}`;
 }

@@ -131,6 +131,9 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'curriculumDeepLink',
         'curriculumPathDeepLinks',
         'curriculumItemLocalized',
+        'curriculumStudyGuide',
+        'curriculumStudyGuides',
+        'curriculumDepth',
         'paperDrill',
         'paperOpsStatus',
         'ambassadorBadge',
@@ -223,6 +226,53 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
     expect(localized.fellBack).toBe(true);
     expect(localized.locale).toBe('en');
     expect(localized.body).toContain('# Risk first');
+  });
+
+  it('serves the teaching scaffolding on the item, not only the markdown', async () => {
+    const item = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculumItem({ slug: 'foundations-risk-first' });
+    expect(item.objectives.length).toBeGreaterThan(0);
+    expect(item.keyTerms.length).toBeGreaterThan(0);
+    expect(item.selfCheck.length).toBeGreaterThan(0);
+    expect(item.estimatedMinutes).toBeGreaterThan(0);
+  });
+
+  it('serves a study guide for one slug and NOT_FOUND for an unknown one', async () => {
+    const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
+    const guide = await caller.curriculumStudyGuide({ slug: 'markets-reading-the-book' });
+    expect(guide.slug).toBe('markets-reading-the-book');
+    expect(guide.path).toBe('markets');
+    // The guide is the card payload — scaffolding and size, never the prose.
+    expect(guide).not.toHaveProperty('body');
+    expect(guide.bodyChars).toBeGreaterThan(900);
+    expect(guide.objectives.length).toBeGreaterThan(0);
+
+    await expect(caller.curriculumStudyGuide({ slug: 'no-such-playbook' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('serves study guides for a whole path, in display order', async () => {
+    const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
+    const guides = await caller.curriculumStudyGuides({ path: 'sovereign' });
+    expect(guides.length).toBeGreaterThan(0);
+    expect(guides.every((g) => g.path === 'sovereign')).toBe(true);
+
+    const whole = await caller.curriculumStudyGuides();
+    expect(whole.length).toBeGreaterThan(guides.length);
+  });
+
+  it('reports depth honestly — every item clears the editorial floor', async () => {
+    const depth = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculumDepth();
+    expect(depth.total).toBeGreaterThan(0);
+    expect(depth.thinSlugs).toEqual([]);
+    expect(depth.thin).toBe(0);
+    expect(depth.allDeep).toBe(true);
+    expect(depth.shortestBodyChars).toBeGreaterThanOrEqual(depth.minBodyChars);
+  });
+
+  it('refuses the depth surface without academy:read', async () => {
+    const ctx = signed(principal({ scopes: [] }));
+    await expect(createAcademyRouter(stubAcademy()).createCaller(ctx).curriculumDepth()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 });
 

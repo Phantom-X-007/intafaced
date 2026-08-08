@@ -591,6 +591,55 @@ export function createBankRouter(bank: BankServices) {
           return { cancelled: true as const };
         }),
       ),
+
+    /**
+     * Hold a standing order. The reversible half of `cancel`.
+     *
+     * Same ownership ordering as `cancel`, for the same reason written there.
+     */
+    pause: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ scheduleId: z.string().uuid() }))
+      .output(z.object({ status: z.string(), nextRunAt: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const schedule = await bank.transfers.getSchedule(input.scheduleId);
+          assertSelf(ctx.principal.userId, schedule.userId);
+          const paused = await bank.transfers.pauseSchedule(input.scheduleId);
+          return { status: paused.status, nextRunAt: paused.nextRunAt.toISOString() };
+        }),
+      ),
+
+    /**
+     * Start a paused standing order again.
+     *
+     * `skipped` is in the OUTPUT, not just the record, because resuming does not
+     * settle up. A client that renders `status: 'active'` and nothing else lets a
+     * user believe the missed months are still coming; they are not, and the
+     * moment to say so is the moment they ask for it. See `resumeSchedule` for
+     * why skipping is the safe direction.
+     */
+    resume: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ scheduleId: z.string().uuid() }))
+      .output(
+        z.object({
+          status: z.string(),
+          nextRunAt: z.string(),
+          /** Occurrences that came due while paused and will never fire. */
+          skipped: z.array(z.number().int()),
+        }),
+      )
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const schedule = await bank.transfers.getSchedule(input.scheduleId);
+          assertSelf(ctx.principal.userId, schedule.userId);
+          const report = await bank.transfers.resumeSchedule(input.scheduleId);
+          return {
+            status: report.schedule.status,
+            nextRunAt: report.schedule.nextRunAt.toISOString(),
+            skipped: [...report.skipped],
+          };
+        }),
+      ),
   });
 
   const earn = router({
@@ -1119,6 +1168,8 @@ export function createBankRouter(bank: BankServices) {
           settled: z.number().int(),
           rejected: z.number().int(),
           alreadyFired: z.number().int(),
+          /** Schedules looked at only because a claim was left behind. An operator wants zero. */
+          strandedSwept: z.number().int(),
         }),
       )
       .mutation(async ({ input }) =>
