@@ -260,12 +260,12 @@ export const FEATURES = [
     requires: ['services/svc-trade'],
     note: 'Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining.',
   }),
-  f('trade.futures', 'Perps: cross/isolated margin, funding, liquidation ladder', {
+  f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
     status: 'ready',
     dependsOn: ['trade.spot'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent.',
+    note: '**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent. **Isolated margin ONLY.** `DIRECTION` §1 and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` done-bar item 8 forbid a cross-margin path even disabled — this row advertised cross/isolated until 2026-08-07 and was wrong. Not orderable yet: `assertTradable` refuses non-spot, so the books are empty by construction.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
