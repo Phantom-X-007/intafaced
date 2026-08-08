@@ -317,6 +317,42 @@ describe('the spec is served, and describes what the routes actually do', () => 
     expect(res.json().info.title).toBe('Payments API');
   });
 
+  /**
+   * The test above is named 'without shipping a static file server' and, until
+   * this one existed, asserted only that the spec returns 200. The absent half
+   * of its own title was unchecked — which is how `@fastify/swagger-ui` could be
+   * re-added, pull `@fastify/static` back in, and leave every test green.
+   *
+   * `@fastify/swagger-ui` was refused because `@fastify/static` carried two
+   * authorization-bypass advisories (GHSA-83w8-p2f5-377r high, route guard
+   * bypass via path traversal; GHSA-8pvw-jcv7-9cmj medium, non-canonical URL
+   * paths) with no patched version reachable from the pinned line — on a PUBLIC
+   * payment surface. The spec is the deliverable; a browsable console is not.
+   *
+   * Asserted by route, not by dependency, deliberately: a lockfile check would
+   * pass the day someone vendored the UI or mounted it from another package.
+   */
+  it('mounts no browsable API console — the refusal is asserted, not just commented', async () => {
+    app = await build();
+
+    // Every path @fastify/swagger-ui serves by default or by common config.
+    const consoleRoutes = [
+      '/documentation',
+      '/documentation/',
+      '/documentation/index.html',
+      '/documentation/static/index.html',
+      '/api/pay/v1/documentation',
+      '/api/pay/v1/docs',
+      '/docs',
+      '/swagger',
+    ];
+
+    for (const url of consoleRoutes) {
+      const res = await app.inject({ method: 'GET', url });
+      expect(res.statusCode, `${url} must not serve a console`).toBe(404);
+    }
+  });
+
   it('OpenAPI description matches sandbox-key + quickstart behaviour (step 5)', async () => {
     app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/pay/v1/openapi.json' });
