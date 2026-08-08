@@ -416,16 +416,13 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
     try {
       await run();
       if (captured && captured.statusCode < 500) {
-        await idempotency.put(ownerId, key, {
-          statusCode: captured.statusCode,
-          body: captured.body,
-        });
+        await idempotency.put(ownerId, key, { statusCode: captured.statusCode, body: captured.body }, claim.token);
       } else {
-        await idempotency.abandon(ownerId, key);
+        await idempotency.abandon(ownerId, key, claim.token);
       }
       return reply;
     } catch (err) {
-      await idempotency.abandon(ownerId, key);
+      await idempotency.abandon(ownerId, key, claim.token);
       throw err;
     }
   }
