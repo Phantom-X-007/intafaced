@@ -869,6 +869,46 @@ describe('recipes — the money paths', () => {
     expect(ledger.totalsByAsset().USDT).toBe('0');
   });
 
+  it('p2p escrowRelease refuses feeBps 10000 (buyer would receive nothing)', () => {
+    expect(() =>
+      recipes.escrowRelease({
+        tradeId: 't-fee-100',
+        sellerId: USER_A,
+        buyerId: USER_B,
+        assetId: 'USDT',
+        amount: amt('500'),
+        feeBps: 10_000,
+      }),
+    ).toThrow(/feeBps must be an integer in 0\.\.9999/);
+  });
+
+  it('p2p escrowRelease refuses feeBps 20000 (buyer leg would go negative)', () => {
+    expect(() =>
+      recipes.escrowRelease({
+        tradeId: 't-fee-200',
+        sellerId: USER_A,
+        buyerId: USER_B,
+        assetId: 'USDT',
+        amount: amt('500'),
+        feeBps: 20_000,
+      }),
+    ).toThrow(/feeBps must be an integer in 0\.\.9999/);
+  });
+
+  it('p2p escrowRelease refuses zero buyer leg at rounding floor even under 9999 bps', () => {
+    // 1 wei amount + any positive fee ceil → fee == amount → buyer 0.
+    expect(() =>
+      recipes.escrowRelease({
+        tradeId: 't-dust',
+        sellerId: USER_A,
+        buyerId: USER_B,
+        assetId: 'USDT',
+        amount: 1n,
+        feeBps: 1,
+      }),
+    ).toThrow(/Fee exceeds escrow value/);
+  });
+
   it('p2p escrow: refund returns the seller to whole', async () => {
     await fund(USER_A, 'USDT', '500');
     await ledger.post(recipes.escrowLock({ tradeId: 't2', sellerId: USER_A, buyerId: USER_B, assetId: 'USDT', amount: amt('500') }));
