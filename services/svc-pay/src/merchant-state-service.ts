@@ -14,10 +14,12 @@ import { transaction } from '@intafaced/db';
  *    explained, dated, or undone, and an operator cannot answer 'why is this
  *    merchant suspended' from the database."
  *
- * Every word of that was true. `payment-service.ts` refuses a payment for a
- * merchant whose status is not `active`, and the hosted checkout refuses one
- * too, with the same code, on purpose. The only thing in the repository that
- * ever set that column to `suspended` was a line of raw SQL inside a test.
+ * Every word of that was true at write time. `payment-service.ts` now refuses a
+ * payment, a public checkout, a new payment link, a new settlement freeze, a
+ * settlement post, and a settlement payout for a merchant whose status is not
+ * `active` — one code (`pay.merchant_inactive`) on every money-moving surface
+ * that should cut off. The writer for `status` still lives only here (and the
+ * tests that drop raw SQL); nothing else invents a suspension policy.
  *
  * ── WHAT THIS FILE IS NOT ──────────────────────────────────────────────────
  *

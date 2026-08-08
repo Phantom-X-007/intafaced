@@ -852,6 +852,63 @@ if (!available) {
       expect(await clearingOf(m.id)).toBe('100');
     });
 
+    /**
+     * THE OUTBOUND HOLE the inbound gates left open.
+     *
+     * `createPayment` and public checkout already refuse non-active merchants.
+     * Settlement did not. A merchant could take payments while active, get
+     * suspended, and still freeze + post a window — money leaving clearing into
+     * their available balance after the cut-off. Same code as inbound, same
+     * refusal. Captured volume stays in clearing until the merchant is active
+     * again (or an owner process decides otherwise).
+     */
+    it('refuses to settle a window for a suspended merchant', async () => {
+      const m = await merchant(0);
+      const payment = await cardPayment(m.id, '40');
+      await pay.capture(payment.id);
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+
+      await expect(settle(m.id, 'w-suspended')).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+
+      // Nothing froze, nothing posted. Clearing still holds the capture; the
+      // merchant's spendable balance never grew after the cut-off.
+      expect(await clearingOf(m.id)).toBe('40');
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+      expect(await sql`SELECT id FROM pay.settlements WHERE merchant_id = ${m.id}`).toHaveLength(0);
+      expect((await pay.getPayment(payment.id)).status).toBe('captured');
+    });
+
+    it('refuses to settle for closed and pending merchants the same way', async () => {
+      const cases: Array<{ status: 'closed' | 'pending'; userId: string }> = [
+        { status: 'closed', userId: OTHER_USER },
+        { status: 'pending', userId: '44444444-4444-4444-8444-444444444444' },
+      ];
+      for (const { status, userId } of cases) {
+        const row = await pay.createMerchant({ userId, pricing: { feeBps: 0 } });
+        const payment = await cardPayment(row.id, '10');
+        await pay.capture(payment.id);
+        await sql`UPDATE pay.merchants SET status = ${status} WHERE id = ${row.id}`;
+        await expect(settle(row.id, `w-${status}`)).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+        expect(await clearingOf(row.id)).toBe('10');
+      }
+    });
+
+    it('still returns an already-posted settlement when the merchant is later suspended', async () => {
+      const m = await merchant(0);
+      const payment = await cardPayment(m.id, '15');
+      await pay.capture(payment.id);
+      const posted = await settle(m.id, 'w-then-suspend');
+      expect(posted.status).toBe('posted');
+
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+      // Idempotent re-read: no value moves, so suspension does not invent a new
+      // refusal for a window that already finished.
+      const again = await settle(m.id, 'w-then-suspend');
+      expect(again.id).toBe(posted.id);
+      expect(again.status).toBe('posted');
+      expect(await availableOf(MERCHANT_USER)).toBe('15');
+    });
+
     it('rounds the fee in the house’s favour by at most one unit of precision', async () => {
       const m = await merchant(1); // 0.01%
       const payment = await cardPayment(m.id, '0.000000000000000101');
@@ -951,6 +1008,64 @@ if (!available) {
       await expect(
         pay.payoutSettlement({ settlementId: settlement.id, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'X' } }),
       ).rejects.toMatchObject({ code: 'pay.invalid_transition' });
+    });
+
+    /**
+     * Suspension stops money LEAVING, not only money arriving.
+     *
+     * Posted settlement funds sit in the merchant's available balance. Without
+     * this gate they could still call payout onto a chain/bank after cut-off —
+     * the exact hole the PAY lane harvest named. Funds stay available; only the
+     * rail drain is refused. An already-paid-out settlement remains paid_out
+     * (idempotent early return, no second rail call).
+     */
+    it('refuses to pay out a posted settlement for a suspended merchant', async () => {
+      const m = await merchant(0);
+      const payment = await cryptoPayment(m.id, '25');
+      await pay.capture(payment.id);
+      const settlement = await settle(m.id, 'w-payout-suspended');
+      expect(settlement.status).toBe('posted');
+      expect(await availableOf(MERCHANT_USER)).toBe('25');
+
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+
+      await expect(
+        pay.payoutSettlement({
+          settlementId: settlement.id,
+          railId: 'crypto-native',
+          destination: { kind: 'crypto', ref: '0xshouldnotreceive' },
+        }),
+      ).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+
+      // No hold, no rail send, settlement still posted, balance still theirs.
+      expect(await availableOf(MERCHANT_USER)).toBe('25');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
+      expect((await pay.getSettlement(settlement.id)).status).toBe('posted');
+      expect(chain.totalSent('USDT')).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('still returns paid_out idempotently after the merchant is suspended', async () => {
+      const m = await merchant(0);
+      const payment = await cryptoPayment(m.id, '8');
+      await pay.capture(payment.id);
+      const settlement = await settle(m.id, 'w-payout-then-suspend');
+      const paid = await pay.payoutSettlement({
+        settlementId: settlement.id,
+        railId: 'crypto-native',
+        destination: { kind: 'crypto', ref: '0xdone' },
+      });
+      expect(paid.status).toBe('paid_out');
+      expect(chain.totalSent('USDT')).toBe('8');
+
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+      const again = await pay.payoutSettlement({
+        settlementId: settlement.id,
+        railId: 'crypto-native',
+        destination: { kind: 'crypto', ref: '0xdone' },
+      });
+      expect(again.status).toBe('paid_out');
+      expect(chain.outboundTransfers()).toHaveLength(1);
     });
   });
 
@@ -1079,6 +1194,15 @@ if (!available) {
       await expect(
         pay.createPayment({ merchantId: m.id, amount: amt('1'), assetId: 'USDT', method: 'card', railAdapter: 'card-sandbox' }),
       ).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+    });
+
+    it('refuses a new payment link for a suspended merchant', async () => {
+      const m = await merchant();
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+      await expect(
+        pay.createPaymentLink({ merchantId: m.id, label: 'After cut-off', amount: amt('10'), currency: 'USDT' }),
+      ).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      expect(await sql`SELECT id FROM pay.payment_links WHERE merchant_id = ${m.id}`).toHaveLength(0);
     });
 
     it('refuses a zero or negative payment', async () => {
