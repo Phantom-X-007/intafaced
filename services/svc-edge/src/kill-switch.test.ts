@@ -3,7 +3,7 @@ import { isModuleId } from '@intafaced/config';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ALWAYS_ALLOWED_REST, KillSwitchState, MODULE_BY_PREFIX, procedureLeaf, procedureOf } from './kill-switch.js';
+import { ALWAYS_ALLOWED_REST, KillSwitchState, MODULE_BY_PREFIX, procedureLeaf, procedureOf, resolvedPathname } from './kill-switch.js';
 import { UPSTREAMS } from './routes.js';
 
 const OPERATOR = '11111111-1111-4111-8111-111111111111';
@@ -238,5 +238,112 @@ describe('optional restart durability (EDGE_KILL_STATE_PATH)', () => {
     const b = new KillSwitchState({ statePath: path });
     expect(b.isKilled('trade')).toBe(true);
     expect(b.decide('/api/v1/orders', 'POST')).toMatchObject({ refused: true, reason: 'module-killed' });
+  });
+});
+
+/**
+ * TWO PARSERS, TWO ANSWERS — the shape that walked through a halted module.
+ *
+ * The guard prefix-matched the raw target; the proxy re-read the same request
+ * with `new URL`, which removes dot segments. So `/api/trade/../identity/...`
+ * was "trade" to the guard and "identity" to the upstream, and an operator who
+ * had halted identity kept serving it — with the console still reporting it
+ * disabled and no 503 anywhere in the log.
+ */
+describe('resolvedPathname — the guard and the proxy must agree', () => {
+  it('resolves a dot segment the way the proxy does, rather than matching the raw target', () => {
+    // `new URL` collapses these, so the guard must too or it is answering a
+    // question about a path nobody will be served.
+    expect(resolvedPathname('/api/trade/../identity/trpc/auth.login')).toBe('/api/identity/trpc/auth.login');
+    expect(resolvedPathname('/api/v1/../identity/trpc/auth.login')).toBe('/api/identity/trpc/auth.login');
+    expect(resolvedPathname('/api/trade/./orders')).toBe('/api/trade/orders');
+  });
+
+  it('collapses a percent-encoded dot segment too, rather than refusing it', () => {
+    // Checked against this Node rather than assumed: `new URL` decodes %2e and
+    // resolves these exactly like `..`, so the resolved path is already the one
+    // the proxy will use and there is nothing to refuse.
+    expect(resolvedPathname('/api/trade/%2e%2e/identity/trpc/auth.login')).toBe('/api/identity/trpc/auth.login');
+    expect(resolvedPathname('/api/trade/%2E%2E/identity/trpc/auth.login')).toBe('/api/identity/trpc/auth.login');
+    expect(resolvedPathname('/api/trade/%2e/orders')).toBe('/api/trade/orders');
+  });
+
+  it('refuses a dot segment hidden behind an encoded slash — the one URL leaves alone', () => {
+    // `%2f` hides the segment boundary from the parser, so these survive
+    // verbatim and whether they become a separator is the UPSTREAM's decision.
+    // That is the same disagreement, one layer down.
+    expect(resolvedPathname('/api/trade/..%2fidentity/trpc/auth.login')).toBeNull();
+    expect(resolvedPathname('/api/trade/%2f../identity/trpc/auth.login')).toBeNull();
+  });
+
+  it('does NOT refuse an ordinary encoded slash — the cancel path must keep working', () => {
+    // A CCXT symbol is not a traversal, and `/api/v1/orders/...` is a release
+    // route that lets users out during an incident.
+    expect(resolvedPathname('/api/v1/orders/BTC%2FUSDT')).toBe('/api/v1/orders/BTC%2FUSDT');
+  });
+
+  it('refuses a malformed escape rather than throwing', () => {
+    expect(resolvedPathname('/api/trade/%zz/orders')).toBeNull();
+  });
+
+  it('leaves an ordinary path alone, including tRPC dots and a query string', () => {
+    expect(resolvedPathname('/api/trade/trpc/orders.create')).toBe('/api/trade/trpc/orders.create');
+    expect(resolvedPathname('/api/v1/orders?symbol=BTC/USDT')).toBe('/api/v1/orders');
+    expect(resolvedPathname('/health')).toBe('/health');
+    expect(resolvedPathname('/admin/status')).toBe('/admin/status');
+  });
+
+  it('a traversal cannot reach a killed module through a live prefix', () => {
+    const state = new KillSwitchState();
+    state.set('identity', true, OPERATOR, WHY);
+
+    // What the guard now decides on is the resolved path, so the answer is the
+    // same one the upstream would give.
+    const resolved = resolvedPathname('/api/trade/../identity/trpc/auth.login');
+    expect(resolved).not.toBeNull();
+    expect(state.decide(resolved!, 'POST')).toMatchObject({ module: 'identity', refused: true });
+
+    // And the raw target — what the old guard matched — is what made it look safe.
+    expect(state.decide('/api/trade/../identity/trpc/auth.login', 'POST')).toMatchObject({ refused: false });
+  });
+});
+
+/**
+ * A tRPC batch is ONE request carrying several calls, and the rule read only
+ * the last of them — so the attacker chose the order.
+ */
+describe('a batch is allowed only if every call in it is allowed', () => {
+  function halted() {
+    const state = new KillSwitchState();
+    state.set('trade', true, OPERATOR, WHY);
+    return state;
+  }
+
+  it('refuses a batch that hides a create behind a trailing cancel', () => {
+    // This is the exact pair that used to pass: leaf of the raw capture was
+    // `cancel`, so the create rode in with it.
+    expect(halted().decide('/api/trade/trpc/orders.create,orders.cancel', 'POST')).toMatchObject({
+      refused: true,
+      reason: 'module-killed',
+    });
+  });
+
+  it('refuses it in the other order too — the answer must not depend on ordering', () => {
+    expect(halted().decide('/api/trade/trpc/orders.cancel,orders.create', 'POST')).toMatchObject({ refused: true });
+  });
+
+  it('still lets a pure cancel out, batched or not — the release path is the point', () => {
+    expect(halted().decide('/api/trade/trpc/orders.cancel', 'POST')).toMatchObject({
+      refused: false,
+      reason: 'lets-the-user-out',
+    });
+    expect(halted().decide('/api/trade/trpc/orders.cancel,positions.cancel', 'POST')).toMatchObject({
+      refused: false,
+      reason: 'lets-the-user-out',
+    });
+  });
+
+  it('refuses an encoded comma the same way — encoding is not an argument', () => {
+    expect(halted().decide('/api/trade/trpc/orders.create%2Corders.cancel', 'POST')).toMatchObject({ refused: true });
   });
 });

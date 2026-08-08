@@ -150,10 +150,108 @@ export function procedureOf(pathname: string): string | null {
   return match?.[1] ?? null;
 }
 
+/**
+ * EVERY procedure a request names — because tRPC batches, and a batch is one
+ * request carrying several calls.
+ *
+ * `/api/trade/trpc/orders.create,orders.cancel?batch=1` names TWO. The rule
+ * used to read only the last one, so the attacker chose the order:
+ *
+ *   orders.create,orders.cancel  →  leaf is `cancel`  →  allowed through
+ *   orders.cancel,orders.create  →  leaf is `create`  →  refused
+ *
+ * Same two calls, opposite answers, and the permissive one executed the create
+ * against a module the operator had halted. `@trpc/server` has batching ON by
+ * default and neither svc-trade nor svc-identity disables it.
+ *
+ * Returns null when the request is not tRPC at all, which the caller treats as
+ * a commitment unless `ALWAYS_ALLOWED_REST` names it.
+ */
+export function proceduresOf(pathname: string): readonly string[] | null {
+  const raw = procedureOf(pathname);
+  if (raw === null) return null;
+
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    // A malformed escape is not a procedure anybody can name. Treated as an
+    // unknown shape, which is a commitment, which is refused.
+    return [raw];
+  }
+
+  return decoded
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+}
+
 /** The leaf of a procedure path: `orders.cancel` → `cancel`. */
 export function procedureLeaf(procedure: string): string {
   const parts = procedure.split('.');
   return parts[parts.length - 1] ?? procedure;
+}
+
+/**
+ * The path this request will actually reach an upstream on — or null when there
+ * is no single answer, which is itself a refusal.
+ *
+ * THE BUG THIS CLOSES: TWO PARSERS, TWO ANSWERS
+ *
+ * The guard used to prefix-match the RAW target (`req.url.split('?')[0]`). The
+ * proxy handler then re-read the same request with `new URL(req.url, …)`, and
+ * the WHATWG parser removes dot segments. So the two disagreed about which
+ * module a request was for, and the disagreement was exploitable:
+ *
+ *   POST /api/trade/../identity/trpc/auth.login
+ *
+ * The guard saw `/api/trade` — not killed — and waved it through. The proxy
+ * resolved `/api/identity/...` and forwarded it to the halted service. The
+ * console kept reporting identity as disabled and no 503 was ever logged: the
+ * exact failure the fail-closed comment in control-plane.ts describes, arrived
+ * at from the other direction.
+ *
+ * So the path is resolved ONCE, here, with the same parser the proxy uses, and
+ * both read the result.
+ *
+ * `new URL` collapses `.` and `..` INCLUDING their percent-encoded forms —
+ * `%2e%2e` and `%2E%2E` resolve exactly like `..` (checked against this Node,
+ * not assumed). So for those the resolved path is already the one the proxy
+ * will use, and there is nothing to refuse.
+ *
+ * What it does NOT collapse is a dot segment hidden behind an ENCODED SLASH.
+ * `/api/trade/..%2fidentity/x` and `/api/trade/%2f../identity/x` survive
+ * verbatim, because `%2f` hides the segment boundary from the parser. Whether
+ * that becomes a path separator is then the upstream's decision and not ours —
+ * the same disagreement as before, moved one layer down. So the path is decoded
+ * once more and re-inspected: a dot segment that appears only after decoding
+ * means the edge and the upstream cannot be made to agree, and a request nobody
+ * can route to one place does not get to pick.
+ *
+ * Deliberately NOT refused: a segment that merely decodes to contain a slash,
+ * such as `/api/v1/orders/BTC%2FUSDT`. That is an ordinary CCXT symbol, and the
+ * cancel paths in `ALWAYS_ALLOWED_REST` are the release routes that let users
+ * out during an incident — breaking those would be worse than the bug this
+ * closes. Only a decoded DOT SEGMENT is refused.
+ */
+export function resolvedPathname(rawUrl: string): string | null {
+  let pathname: string;
+  try {
+    pathname = new URL(rawUrl, 'http://edge.invalid').pathname;
+  } catch {
+    return null;
+  }
+
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    // A malformed escape is not a path anybody can agree on either.
+    return null;
+  }
+  if (decoded.split('/').some((segment) => segment === '.' || segment === '..')) return null;
+
+  return pathname;
 }
 
 /**
@@ -334,8 +432,11 @@ export class KillSwitchState {
     const verb = method.toUpperCase();
     if (verb === 'GET' || verb === 'HEAD') return { module, refused: false, reason: 'read-only' };
 
-    const procedure = procedureOf(pathname);
-    if (procedure && ALWAYS_ALLOWED_PROCEDURES.includes(procedureLeaf(procedure))) {
+    // EVERY procedure in the batch must be allowed, not just one of them. A
+    // batch is a single request carrying several calls, and reading only the
+    // last let `orders.create,orders.cancel` through a halted module.
+    const procedures = proceduresOf(pathname);
+    if (procedures !== null && procedures.length > 0 && procedures.every((p) => ALWAYS_ALLOWED_PROCEDURES.includes(procedureLeaf(p)))) {
       return { module, refused: false, reason: 'lets-the-user-out' };
     }
 
