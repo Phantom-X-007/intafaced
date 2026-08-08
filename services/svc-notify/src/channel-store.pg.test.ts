@@ -191,13 +191,18 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
 
   describe('reapExhausted — the row nothing was ever going to come back for', () => {
     it('retires a pending row whose attempts are spent and whose lease is dead', async () => {
-      // A one-millisecond lease reproduces the parked state without waiting for
-      // one: attempts at the ceiling, no owner, and — because the bus has spent
-      // `max_deliver` — no further redelivery to run the retire branch in `claim`.
-      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1 });
+      // The parked state: attempts at the ceiling, no owner, and — because the
+      // bus has spent `max_deliver` — no further redelivery to run the retire
+      // branch in `claim`.
+      //
+      // The lease is waited out rather than faked, because the statement builds
+      // its interval in SQL and rounds UP to whole seconds (`leaseSeconds`), so
+      // a sub-second lease is still a one-second lease in the database. Asking
+      // for less and waiting milliseconds tests nothing but the local clock.
+      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1_000 });
       for (let i = 0; i < 2; i += 1) {
         expect((await s.claim(NOTIFICATION, 'email', 2)).claimed).toBe(true);
-        await new Promise((r) => setTimeout(r, 5));
+        await new Promise((r) => setTimeout(r, 1_200));
       }
 
       const [before] = await s.listForNotification(NOTIFICATION);
@@ -226,9 +231,11 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
     });
 
     it('leaves a row that still has an attempt left', async () => {
-      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1 });
+      // Same one-second floor as above: the lease has to be genuinely dead, or
+      // this passes for the wrong reason — a live lease would also skip the row.
+      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1_000 });
       expect((await s.claim(NOTIFICATION, 'sms', 3)).claimed).toBe(true);
-      await new Promise((r) => setTimeout(r, 5));
+      await new Promise((r) => setTimeout(r, 1_200));
 
       // Dead lease, but the bus may still redeliver and that send may work.
       // Abandoning here throws away a retry the user is owed.
