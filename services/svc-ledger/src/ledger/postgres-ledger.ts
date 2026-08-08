@@ -4,6 +4,7 @@ import { transaction } from '@intafaced/db';
 import {
   accountKey,
   accountPurpose,
+  assertIdempotencyKey,
   assertValidPost,
   formatAmount,
   parseAmount,
@@ -47,13 +48,31 @@ export class PostgresLedger implements LedgerClient {
   constructor(private readonly sql: Sql) {}
 
   async post(request: PostRequest): Promise<LedgerTx> {
-    // Pure validation first: sum-to-zero, funded locks, key length. No point
-    // opening a transaction for a request that can never be legal.
-    assertValidPost(request);
+    // The shared order, documented at `assertIdempotencyKey`: key, then
+    // idempotency, then body (STOP §4.2b #4).
+    //
+    // This used to validate the whole request first — "no point opening a
+    // transaction for a request that can never be legal", which is true as a
+    // cost argument and wrong as a correctness one. It made this engine throw
+    // where `MemoryLedger` returned the committed transaction, for the one input
+    // that matters: a retry of a body that was legal when it posted and is not
+    // legal now. Every tightened validation rule creates that input, and the
+    // conformance suite could not see the divergence because it only ever
+    // replayed a VALID request.
+    //
+    // The order below is also the order this engine already uses inside the
+    // lock, where idempotency deliberately precedes the freeze check for exactly
+    // the same reason. It was inconsistent with itself, not just with memory.
+    //
+    // Cost of the change: one indexed single-row lookup before refusing a
+    // malformed request. The lock is still never taken for one.
+    assertIdempotencyKey(request.idempotencyKey);
 
     // Fast path — a retry that has already committed needs no lock at all.
     const existing = await this.getTxByKey(request.idempotencyKey);
     if (existing) return existing;
+
+    assertValidPost(request);
 
     return transaction(
       this.sql,

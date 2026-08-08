@@ -229,6 +229,72 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
         expect(await balanceOf(USER_A, 'USDT')).toBe('50');
       });
 
+      /**
+       * THE REPLAY THIS SUITE NEVER TRIED (STOP §4.2b #4).
+       *
+       * Every other idempotency case above replays a request that is still
+       * VALID, and both engines agree on those. The divergence lived entirely in
+       * the one case nobody sent: a key that has already committed, replayed
+       * with a body that validation now refuses.
+       *
+       * `MemoryLedger` checked idempotency first and returned the original.
+       * `PostgresLedger` validated first and threw. So the two engines gave
+       * opposite answers about whether money had moved, and the suite whose
+       * whole job is forbidding that could not see it — which made it worth
+       * fixing before the divergence had a cost, rather than after.
+       *
+       * The correct answer is the transaction. The value moved; a caller told
+       * "invalid" about a completed movement either retries forever or
+       * compensates for a loss that never happened. It is also the answer this
+       * engine already gives when the ledger is FROZEN, for the same reason,
+       * written out in `postgres-ledger.ts`.
+       *
+       * An unbalanced body stands in for "a rule that was tightened later",
+       * because it is refused by every version of `assertValidPost` there has
+       * ever been — the test does not need a rule change to exercise the path.
+       */
+      it('replaying a committed key with a now-invalid body returns the transaction, not an error', async () => {
+        const request = recipes.deposit({
+          userId: USER_A,
+          assetId: 'USDT',
+          amount: amt('50'),
+          rail: 'crypto-native',
+          railRef: '0xidem-invalid-replay',
+        });
+        const first = await ledger.post(request);
+
+        // Same key. A body that cannot pass validation: one leg, sums to 50.
+        const replay = await ledger.post({
+          idempotencyKey: request.idempotencyKey,
+          module: 'test',
+          reason: 'a retry whose body no longer validates',
+          entries: [{ account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('50') }],
+        });
+
+        expect(replay.id).toBe(first.id);
+        // And the book is untouched by the replay — the original deposit, once.
+        expect(await balanceOf(USER_A, 'USDT')).toBe('50');
+      });
+
+      /**
+       * The other half of the same order: a key that is not a key is refused
+       * BEFORE anything is looked up by it, in both engines. Without this,
+       * "validate the key first" is an unasserted comment.
+       */
+      it('refuses an unusable key even when no transaction could match it', async () => {
+        await expect(
+          ledger.post({
+            idempotencyKey: '',
+            module: 'test',
+            reason: 'no key at all',
+            entries: [
+              { account: userAvailable(USER_A, 'USDT'), direction: 'debit', amount: amt('1') },
+              { account: railBoundary('test', 'USDT'), direction: 'credit', amount: amt('1') },
+            ],
+          }),
+        ).rejects.toThrow(InvalidEntryError);
+      });
+
       it('requires a meaningful idempotency key', async () => {
         await expect(
           ledger.post({

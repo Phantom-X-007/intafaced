@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { formatAmount, type Amount } from './money.js';
-import { accountKey, assertValidPost, signedDelta, type LedgerClient } from './client.js';
+import { accountKey, assertIdempotencyKey, assertValidPost, signedDelta, type LedgerClient } from './client.js';
 import {
   InsufficientFundsError,
   LedgerError,
@@ -46,8 +46,16 @@ export class MemoryLedger implements LedgerClient {
   private static readonly NEGATIVE_ALLOWED = new Set(['treasury']);
 
   async post(request: PostRequest): Promise<LedgerTx> {
-    // Idempotency first: a retry must never re-run the invariant checks against
-    // a book that already contains its effects.
+    // The shared order, documented at `assertIdempotencyKey` (STOP §4.2b #4):
+    // key, then idempotency, then body. This engine already checked idempotency
+    // before the body; what it did not do was validate the KEY first, so a post
+    // with no key at all reached a `Map.get(undefined)` before being refused.
+    // Same outcome, different route — and "different route" is how two engines
+    // drift while every test passes.
+    assertIdempotencyKey(request.idempotencyKey);
+
+    // Idempotency before validation: a retry must never re-run the invariant
+    // checks against a book that already contains its effects.
     const existingId = this.txByKey.get(request.idempotencyKey);
     if (existingId) {
       const existing = this.txs.get(existingId);

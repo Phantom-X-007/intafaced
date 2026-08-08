@@ -234,10 +234,37 @@ export function assertOwnerIdentifierSpace(entries: readonly EntryInput[]): void
   }
 }
 
-export function assertValidPost(request: PostRequest): void {
-  if (!request.idempotencyKey || request.idempotencyKey.length < 8) {
+/**
+ * The idempotency key alone, checked before anything looks a request up by it.
+ *
+ * Split out from `assertValidPost` because the two engines have to agree on ONE
+ * order, and the only order that is defensible has this check first
+ * (STOP §4.2b #4):
+ *
+ *   1. the key is a key — a lookup keyed on nothing is not a lookup
+ *   2. idempotency — a key that already committed returns its transaction
+ *   3. the body — validated only for a request that is actually going to post
+ *
+ * Step 2 must precede step 3, and the reason is written in `postgres-ledger.ts`
+ * about the freeze check, where the same question was already settled: "a retry
+ * of a transaction that ALREADY COMMITTED returns the original even while
+ * frozen: the value moved, and telling a caller otherwise would have it retry a
+ * movement that already happened."
+ *
+ * Validation is the same case. The first time a validation rule is tightened,
+ * every uncommitted retry of an older body starts failing — and a caller told
+ * "invalid" about money that has already moved will either retry forever or
+ * compensate for a movement that was never lost. Returning the committed
+ * transaction is the honest answer, and it is what the book actually contains.
+ */
+export function assertIdempotencyKey(idempotencyKey: string | undefined): void {
+  if (!idempotencyKey || idempotencyKey.length < 8) {
     throw new InvalidEntryError('An idempotency key of at least 8 characters is required on every post');
   }
+}
+
+export function assertValidPost(request: PostRequest): void {
+  assertIdempotencyKey(request.idempotencyKey);
   // FIRST. If the owner is the wrong one, everything below is a well-formed
   // answer to the wrong question — the entries balance perfectly, into the
   // wrong human's account.
