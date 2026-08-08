@@ -29,6 +29,13 @@ const schema = serviceEnvSchema
       WEBAUTHN_ORIGIN: z.string().min(1).default('http://localhost:3000'),
       /** Kill-switch for the WebAuthn procedures without a redeploy of TOTP. */
       WEBAUTHN_ENABLED: boolish,
+      /**
+       * Owner-published affiliate commission accrual tiers (DIRECTION §8).
+       * Blank / unset → unpublished; accrue refuses unless the request supplies
+       * tiers. JSON shape: { "published": true, "tiers": [{ "hop": 0, "rate": "0.10" }] }.
+       * Malformed → fail boot (parseAccrualTierLawJson throws). Never invent rates.
+       */
+      IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: z.string().optional().default(''),
     }),
   );
 

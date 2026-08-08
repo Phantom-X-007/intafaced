@@ -1,19 +1,17 @@
 /**
- * Identity L3 — pure commission default-tier catalog honesty (no payout).
+ * Identity L3 — commission tier catalog honesty (no payout).
  *
- * Mirrors commission.ts DEFAULT_ACCRUAL_TIERS hop structure only.
- * Rates stay tip decimal strings — not invented product law.
+ * Boards over an explicit tier list only. There is no production default
+ * rate catalog (DEFAULT_ACCRUAL_TIERS was removed — DIRECTION §8).
  */
-
-import { DEFAULT_ACCRUAL_TIERS } from './commission.js';
 
 export type TierBoardInput = {
   readonly hop: number;
   readonly rate: string;
 };
 
-/** L3 — board over tip default tiers. */
-export function defaultTierCatalogBoardCard(tiers: readonly TierBoardInput[] = DEFAULT_ACCRUAL_TIERS): {
+/** L3 — board over supplied tiers (never invents a default list). */
+export function defaultTierCatalogBoardCard(tiers: readonly TierBoardInput[]): {
   readonly tiers: number;
   readonly minHop: number;
   readonly maxHop: number;
@@ -34,7 +32,7 @@ export function defaultTierCatalogBoardCard(tiers: readonly TierBoardInput[] = D
 }
 
 /** L3 — status line. */
-export function defaultTierCatalogStatusLine(tiers: readonly TierBoardInput[] = DEFAULT_ACCRUAL_TIERS): string {
+export function defaultTierCatalogStatusLine(tiers: readonly TierBoardInput[]): string {
   const c = defaultTierCatalogBoardCard(tiers);
   return `tiers=${c.tiers} min_hop=${c.minHop} max_hop=${c.maxHop} hop0=${c.hasHop0}`;
 }
@@ -57,7 +55,7 @@ export function parseDefaultTierCatalogStatusLine(line: string): {
 }
 
 /** L3 — true when status matches. */
-export function defaultTierCatalogStatusLineMatches(tiers: readonly TierBoardInput[] = DEFAULT_ACCRUAL_TIERS): boolean {
+export function defaultTierCatalogStatusLineMatches(tiers: readonly TierBoardInput[]): boolean {
   const p = parseDefaultTierCatalogStatusLine(defaultTierCatalogStatusLine(tiers));
   if (!p) return false;
   const c = defaultTierCatalogBoardCard(tiers);
@@ -78,12 +76,12 @@ export function defaultTierCatalogExportHeader(): string {
 }
 
 /** L3 — export lines. */
-export function defaultTierCatalogExportLines(tiers: readonly TierBoardInput[] = DEFAULT_ACCRUAL_TIERS): readonly string[] {
+export function defaultTierCatalogExportLines(tiers: readonly TierBoardInput[]): readonly string[] {
   return tiers.map((t) => `${t.hop},${t.rate}`);
 }
 
 /** L3 — full export. */
-export function defaultTierCatalogExportText(tiers: readonly TierBoardInput[] = DEFAULT_ACCRUAL_TIERS): string {
+export function defaultTierCatalogExportText(tiers: readonly TierBoardInput[]): string {
   return [defaultTierCatalogExportHeader(), ...defaultTierCatalogExportLines(tiers)].join('\n');
 }
 
@@ -92,7 +90,7 @@ export function isDecimalRateString(rate: string): boolean {
   return /^(0(\.\d{1,18})?|1(\.0{1,18})?)$/.test(rate);
 }
 
-/** L3 — all default rates are decimal strings. */
-export function defaultTierRatesAreDecimalStrings(tiers: readonly TierBoardInput[] = DEFAULT_ACCRUAL_TIERS): boolean {
+/** L3 — all rates are decimal strings. */
+export function defaultTierRatesAreDecimalStrings(tiers: readonly TierBoardInput[]): boolean {
   return tiers.every((t) => isDecimalRateString(t.rate));
 }

@@ -13,6 +13,13 @@ import {
   freezeSkippedAtLeast,
 } from './freeze.js';
 
+/** Test fixture only — not a production default (DIRECTION §8). */
+const FIXTURE_TIERS = [
+  { hop: 0, rate: '0.10' },
+  { hop: 1, rate: '0.05' },
+  { hop: 2, rate: '0.02' },
+] as const;
+
 describe('affiliates freeze at accrual (no payout)', () => {
   it('skips frozen beneficiary rows', () => {
     const tree = new MemoryReferralTree();
@@ -28,6 +35,7 @@ describe('affiliates freeze at accrual (no payout)', () => {
         at: new Date('2026-08-05T00:00:00.000Z'),
       },
       parent,
+      tiers: FIXTURE_TIERS,
       frozenBeneficiaryIds: new Set(),
     });
     expect(all.length).toBeGreaterThan(0);
@@ -40,6 +48,7 @@ describe('affiliates freeze at accrual (no payout)', () => {
         at: new Date('2026-08-05T00:00:00.000Z'),
       },
       parent,
+      tiers: FIXTURE_TIERS,
       frozenBeneficiaryIds: new Set(['u2']),
     });
     expect(frozen.every((r) => r.beneficiaryId !== 'u2')).toBe(true);
@@ -62,6 +71,7 @@ describe('L3 wave53 freeze filter status/export', () => {
         at: new Date('2026-08-05T00:00:00.000Z'),
       },
       parent,
+      tiers: FIXTURE_TIERS,
       frozenBeneficiaryIds: new Set(['u2']),
     };
     const card = freezeFilterBoardCard(input);
