@@ -11,30 +11,61 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 
 /**
  * Move margin_current / funding_paid with the ledger after funding posts.
+ *
+ * ONCE PER (POSITION, PERIOD), and that is the whole design.
+ *
+ * `runFundingTick` posts to the ledger, calls this, and only then marks the
+ * period settled. A restart in the gap leaves the period unsettled, so the next
+ * tick re-runs it: the ledger dedupes on its own key and moves nothing twice,
+ * and before 0014 this decremented `margin_current` a second time anyway. The
+ * trader's residual margin then read lower than the ledger said they had paid
+ * for — liquidating early, releasing short, and clamped at zero by GREATEST so
+ * nothing raised.
+ *
+ * The claim and the update are ONE statement. Two statements would only move
+ * the crash window rather than close it.
+ *
  * paid > 0: position paid (margin_current down). paid < 0: received to available only.
  */
 export function sqlFundingMarginApplier(sql: Sql): FundingMarginApplier {
   return {
-    async applyFundingNets(nets) {
+    async applyFundingNets(nets, periodId) {
       for (const { positionId, paid } of nets) {
         if (paid === 0n) continue;
         const paidStr = formatAmount(paid < 0n ? -paid : paid);
+        const signedStr = formatAmount(paid);
         if (paid > 0n) {
           // Payer: reduce residual margin (floor at 0), accumulate funding_paid.
           await sql`
+            WITH claim AS (
+              INSERT INTO trade.position_funding_applied (position_id, period_id, paid)
+              VALUES (${positionId}, ${periodId}, ${signedStr}::numeric)
+              ON CONFLICT (position_id, period_id) DO NOTHING
+              RETURNING position_id
+            )
             UPDATE trade.positions
                SET margin_current = GREATEST(margin_current - ${paidStr}::numeric, 0),
                    funding_paid = funding_paid + ${paidStr}::numeric,
                    updated_at = now()
-             WHERE id = ${positionId} AND status = 'open'
+             WHERE id = ${positionId}
+               AND status = 'open'
+               AND EXISTS (SELECT 1 FROM claim)
           `;
         } else {
           // Payee: funding lands in available, not re-margin; track net only.
           await sql`
+            WITH claim AS (
+              INSERT INTO trade.position_funding_applied (position_id, period_id, paid)
+              VALUES (${positionId}, ${periodId}, ${signedStr}::numeric)
+              ON CONFLICT (position_id, period_id) DO NOTHING
+              RETURNING position_id
+            )
             UPDATE trade.positions
                SET funding_paid = funding_paid - ${paidStr}::numeric,
                    updated_at = now()
-             WHERE id = ${positionId} AND status = 'open'
+             WHERE id = ${positionId}
+               AND status = 'open'
+               AND EXISTS (SELECT 1 FROM claim)
           `;
         }
       }
