@@ -58,14 +58,20 @@ if (!available) {
     await db.drop();
   });
 
-  /** One open position with 100 margin, and nothing else. */
-  async function openPosition(): Promise<string> {
+  /**
+   * One open position with 100 margin, and nothing else.
+   *
+   * `side` is a parameter because `positions_open_unique_idx` allows a user only
+   * one open position per (market, side, margin_mode) — which is also the real
+   * shape of a funding period: a long pays and a short receives.
+   */
+  async function openPosition(side: 'long' | 'short' = 'long'): Promise<string> {
     const [row] = await sql<{ id: string }[]>`
       INSERT INTO trade.positions (
         user_id, market_id, side, status, margin_mode, size, entry_price, leverage,
         margin_initial, margin_current, margin_asset, funding_paid
       ) VALUES (
-        ${ALICE}, ${MARKET}, 'long', 'open', 'isolated', '1', '50000', '5',
+        ${ALICE}, ${MARKET}, ${side}, 'open', 'isolated', '1', '50000', '5',
         '100', '100', 'USDT', '0'
       )
       RETURNING id
@@ -167,8 +173,8 @@ if (!available) {
     });
 
     it('two positions in one period are independent', async () => {
-      const a = await openPosition();
-      const b = await openPosition();
+      const a = await openPosition('long');
+      const b = await openPosition('short');
 
       await applier.applyFundingNets(
         [
