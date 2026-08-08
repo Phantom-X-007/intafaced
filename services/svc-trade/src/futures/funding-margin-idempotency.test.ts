@@ -88,7 +88,7 @@ if (!available) {
         maker_bps, taker_bps, status, display_name, listed_at
       ) VALUES (
         ${MARKET}, 'BTC/USDT-PERP', 'BTC', 'USDT', 'futures',
-        '0.01', '0.0001', '0.0001', '1', 10, 20, 'listed', 'BTC Perpetual', now()
+        '0.01', '0.0001', '0.0001', '1', 10, 20, 'active', 'BTC Perpetual', now()
       )
     `;
   });
