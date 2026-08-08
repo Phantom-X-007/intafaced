@@ -48,7 +48,25 @@ function inMainCheckout() {
 }
 
 function baseBranch() {
-  // Prefer main; fall back to whatever HEAD is on a fresh repo.
+  // THE REMOTE IS THE AUTHORITY, and it is asked FIRST.
+  //
+  // This used to look only for a LOCAL `main`, and fall through to "whatever
+  // HEAD is on" when it found none. That fallback reads as a fresh-clone
+  // safety net; on the machine this repo is actually driven from it is the
+  // normal case, because a checkout that only ever works in worktrees never
+  // creates a local `main` at all. `git branch --list main` returns nothing,
+  // and the start point silently becomes the stale topic branch the main
+  // checkout happens to be parked on.
+  //
+  // Measured on 2026-08-08: the main checkout sat on a docs branch while
+  // `origin/main` was 8 hours and ~300 merges ahead. Every worktree cut that
+  // day started from the docs branch — so agents re-found bugs that were
+  // already fixed on main, wrote patches against files that had since been
+  // rewritten, and only discovered it at rebase. `create()` below already
+  // fetches this branch and prefers `origin/<base>` as the start point, which
+  // is the intent this function was failing to feed.
+  if (refExists('origin/main')) return 'main';
+  if (refExists('origin/master')) return 'master';
   const branches = git(['branch', '--list', 'main', 'master']);
   if (branches.includes('main')) return 'main';
   if (branches.includes('master')) return 'master';
@@ -172,6 +190,17 @@ function remove(branch) {
   }
 }
 
+/** The start point `create` resolves, plus how far HEAD is from it. */
+function printBase() {
+  const base = baseBranch();
+  const startPoint = refExists(`origin/${base}`) ? `origin/${base}` : base;
+  const sha = git(['rev-parse', '--short', startPoint]);
+  const head = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const behind = git(['rev-list', '--count', `HEAD..${startPoint}`]);
+  console.log(`\n  new worktrees cut from  ${startPoint} (${sha})`);
+  console.log(`  this checkout is on     ${head}, ${behind} commit(s) behind that\n`);
+}
+
 function fail(message) {
   console.error(`\n✖ ${message}\n`);
   process.exit(1);
@@ -185,6 +214,12 @@ switch (command) {
   case 'create':
     create(argument);
     break;
+  case 'base':
+    // What `create` would cut from, without cutting anything. One command, so
+    // "am I about to branch from a stale base" is answerable before the fact
+    // rather than at the first rebase.
+    printBase();
+    break;
   case 'list':
     list();
     break;
@@ -196,6 +231,7 @@ switch (command) {
 Worktree manager — CONTRIBUTING.md §2
 
   pnpm wt <branch>       create a worktree (+ install, + .env)
+  pnpm wt:base           what a new worktree would be cut from, and how stale this checkout is
   pnpm wt:list           list worktrees and how stale they are
   pnpm wt:rm <branch>    remove a worktree (refuses if work is uncommitted)
 

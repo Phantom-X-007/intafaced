@@ -26,6 +26,7 @@
     "platform:ps": "docker compose -f docker-compose.apps.yml ps",
     "platform:reset": "docker compose -f docker-compose.apps.yml down -v && docker compose -f docker-compose.apps.yml up -d --build",
     "wt": "node tooling/scripts/worktree.mjs create",
+    "wt:base": "node tooling/scripts/worktree.mjs base",
     "wt:list": "node tooling/scripts/worktree.mjs list",
     "wt:rm": "node tooling/scripts/worktree.mjs remove",
     "tracker": "node tooling/scripts/tracker.mjs",
