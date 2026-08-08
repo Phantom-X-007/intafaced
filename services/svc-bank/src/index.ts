@@ -97,7 +97,28 @@ const bank = createBankServices(sql, ledger, history, {
    * what a deployment gets by saying nothing. It just is no longer what a
    * deployment gets by SAYING ANYTHING.
    */
-  cards: { issuer: cardIssuerFor(env.BANK_CARD_ISSUER) },
+  cards: {
+    issuer: cardIssuerFor(env.BANK_CARD_ISSUER),
+    /**
+     * THE JIT CONVERSION RATE (§18), and what this wiring does NOT claim.
+     *
+     * The same read of svc-trade's public ticker the loan book marks against —
+     * reused rather than rebuilt, because a second rate interface meaning the
+     * same thing is how two subsystems come to disagree about what a stale price
+     * is. It is a CRYPTO BOOK. It can quote one listed asset in another, and it
+     * has nothing at all to say about a fiat settlement currency, because this
+     * platform has no FX source and never had one — the shell deleted the rate
+     * it had invented for exactly this reason.
+     *
+     * So a card whose settlement asset is fiat refuses every authorisation with
+     * `bank.mark_missing`, in production, today. That is the honest state and it
+     * is not a bug to be papered over with a hardcoded number: the missing piece
+     * is a rate counterparty, which lands on `socket.psp-partners` alongside the
+     * fiat ramp leg. Cards charged in the asset they draw on are unaffected —
+     * they consult no rate at all.
+     */
+    rates: tickerPriceSource({ baseUrl: env.TRADE_URL }),
+  },
   /**
    * RAMPS — same missing-wiring shape as cards.
    *
