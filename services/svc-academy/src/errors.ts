@@ -41,6 +41,19 @@ export type AcademyErrorCode =
   | 'academy.standing_invalid'
   /** Paper trading Stage-3 ops kill-switch. */
   | 'academy.paper_trading_disabled'
+  /**
+   * A paper drill could not be valued because trade published no price for it.
+   * An `_unavailable` on purpose: "we could not find out" is the honest answer,
+   * and the dishonest one — picking a plausible number — is a fabricated price
+   * told on this service's behalf. Refusing is the whole point.
+   */
+  | 'academy.paper_price_unavailable'
+  /**
+   * A simulated result reached the wire without its seal. This is OUR bug, not
+   * the caller's: an unlabelled paper figure is indistinguishable from a real
+   * one, which is the single failure this row exists to prevent.
+   */
+  | 'academy.paper_result_unlabelled'
   /** Residency applications Stage-1 (no pay). */
   | 'academy.residency_invalid'
   | 'academy.residency_not_found'
@@ -87,6 +100,8 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.season_invalid',
   'academy.standing_invalid',
   'academy.paper_trading_disabled',
+  'academy.paper_price_unavailable',
+  'academy.paper_result_unlabelled',
   'academy.residency_invalid',
   'academy.residency_not_found',
   'academy.residency_already_open',

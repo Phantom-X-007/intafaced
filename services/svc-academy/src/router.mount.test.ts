@@ -135,6 +135,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'curriculumStudyGuides',
         'curriculumDepth',
         'paperDrill',
+        'paperDrillResult',
         'paperOpsStatus',
         'ambassadorBadge',
         'ambassadors',
@@ -513,12 +514,170 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
     });
   });
 
-  // ── Certifications Stage-2: the XP outcome crosses the mount ───────────────
-  //
-  // The router is where a client learns whether its certification's award went
-  // out. A grant that reported nothing would leave "did my rank move?" to be
-  // answered by refreshing a page, so the shape is asserted here and not only
-  // in certs/xp-publish.test.ts.
+  it('a started drill arrives sealed — the client has something to badge', async () => {
+    const result = await caller().paperDrill({ slug: 'foundations-paper-workbook', market: paperMarket });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected a paper drill');
+    expect(result.simulated).toBe(true);
+    expect(result.venue).toBe('paper');
+    expect(result.realLedger).toBe(false);
+    expect(result.withdrawable).toBe(false);
+    expect(result.disclaimer).toMatch(/no value moved/i);
+  });
+});
+
+/**
+ * THE DRILL, FINISHED. `paperDrill` says "you may"; this says "here is what it
+ * came to", and every figure in it is a figure trade published.
+ *
+ * The tests that matter here are the negative ones. A drill result that could
+ * be read as real money, or a fill valued at a price nobody quoted, is the
+ * incident TRK-academy.paper-trading exists to prevent — so each is asserted as
+ * a refusal, not as an absence.
+ */
+describe('svc-academy mount — a paper drill produces a labelled simulated result', () => {
+  const caller = () => createAcademyRouter(stubAcademy()).createCaller(signed());
+  const paperMarket = { marketId: 'mkt-paper-1', paper: true, symbol: 'BTC-USDT' };
+  const drill = (over: Record<string, unknown> = {}) => ({
+    slug: 'foundations-paper-workbook',
+    market: paperMarket,
+    completedStepIds: [] as string[],
+    fills: [] as unknown[],
+    markPrice: null as string | null,
+    ...over,
+  });
+
+  it('completes the workbook and values the round trip from published prices', async () => {
+    const result = await caller().paperDrillResult(
+      drill({
+        completedStepIds: ['size-from-invalidation', 'limit-cancel', 'prewritten-stop'],
+        fills: [
+          { fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', price: '100', size: '2' },
+          { fillId: 'f-2', marketId: 'mkt-paper-1', side: 'sell', price: '110', size: '2' },
+        ],
+      }) as never,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected a drill result');
+    expect(result.result.status).toBe('complete');
+    expect(result.result.complete).toBe(true);
+    expect(result.result.completedCount).toBe(3);
+    expect(result.result.remainingStepIds).toEqual([]);
+    expect(result.result.valuation.realisedPnl).toBe('20');
+    expect(result.result.valuation.totalPnl).toBe('20');
+  });
+
+  it('LABELS the result — nothing here could be read as a real position', async () => {
+    const result = await caller().paperDrillResult(
+      drill({
+        fills: [{ fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', price: '100', size: '2' }],
+        markPrice: '115',
+      }) as never,
+    );
+
+    if (!result.ok) throw new Error('expected a drill result');
+    expect(result.simulated).toBe(true);
+    expect(result.venue).toBe('paper');
+    expect(result.realLedger).toBe(false);
+    expect(result.withdrawable).toBe(false);
+    expect(result.disclaimer).toMatch(/withdrawable/i);
+
+    // Belt and braces: no key anywhere in the payload claims a real book.
+    const flat = JSON.stringify(result);
+    expect(flat).toContain('"simulated":true');
+    expect(flat).toContain('"withdrawable":false');
+    expect(flat).not.toContain('ledgerTxId');
+    expect(flat).not.toContain('idempotencyKey');
+  });
+
+  it('REFUSES a live market — a result is never produced off a real book', async () => {
+    const result = await caller().paperDrillResult(drill({ market: { ...paperMarket, paper: false } }) as never);
+    expect(result).toMatchObject({ ok: false, reason: 'not_paper' });
+  });
+
+  it('refuses with no market rather than picking one', async () => {
+    const result = await caller().paperDrillResult(drill({ market: null }) as never);
+    expect(result).toMatchObject({ ok: false, reason: 'no_market' });
+  });
+
+  it('refuses a step the workbook does not have — no invented progress', async () => {
+    const result = await caller().paperDrillResult(drill({ completedStepIds: ['step-i-made-up'] }) as never);
+    expect(result).toMatchObject({ ok: false, reason: 'unknown_step' });
+  });
+
+  it('refuses a fill from another market', async () => {
+    const result = await caller().paperDrillResult(
+      drill({ fills: [{ fillId: 'f-1', marketId: 'mkt-somewhere-else', side: 'buy', price: '1', size: '1' }] }) as never,
+    );
+    expect(result).toMatchObject({ ok: false, reason: 'bad_fill' });
+  });
+
+  it('REJECTS a price sent as a JSON number — a float never enters, simulated or not', async () => {
+    await expect(
+      caller().paperDrillResult(
+        drill({ fills: [{ fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', price: 100, size: '1' }] }) as never,
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('REJECTS a fill with no price at all rather than valuing it at zero', async () => {
+    await expect(
+      caller().paperDrillResult(drill({ fills: [{ fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', size: '1' }] }) as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('reports an unmarked open position as unmarked instead of inventing the mark', async () => {
+    const result = await caller().paperDrillResult(
+      drill({ fills: [{ fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', price: '100', size: '2' }] }) as never,
+    );
+
+    if (!result.ok) throw new Error('expected a drill result');
+    expect(result.result.valuation.openSize).toBe('2');
+    expect(result.result.valuation.unrealisedPnl).toBeNull();
+    expect(result.result.valuation.totalPnl).toBeNull();
+    expect(result.result.valuation.markUnavailable).toBe(true);
+  });
+
+  it('rejects a slug that is not in the spine', async () => {
+    await expect(caller().paperDrillResult(drill({ slug: 'no-such-workbook' }) as never)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('the Stage-3 ops kill refuses the result surface too — live trade untouched', async () => {
+    const academy = stubAcademy({
+      assertPaperTradingEnabled: vi.fn(() => {
+        throw new AcademyError('Paper trading drills are disabled by ops — live trade unchanged.', 'academy.paper_trading_disabled');
+      }),
+    });
+
+    await expect(
+      createAcademyRouter(academy)
+        .createCaller(signed())
+        .paperDrillResult(drill() as never),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('is refused outright without the academy:read scope', async () => {
+    const noScope = principal({ scopes: [] });
+    await expect(
+      createAcademyRouter(stubAcademy())
+        .createCaller(signed(noScope))
+        .paperDrillResult(drill() as never),
+    ).rejects.toBeTruthy();
+  });
+});
+
+// ── Certifications Stage-2: the XP outcome crosses the mount ────────────────
+//
+// The router is where a client learns whether its certification's award went
+// out. A grant that reported nothing would leave "did my rank move?" to be
+// answered by refreshing a page, so the shape is asserted here and not only
+// in certs/xp-publish.test.ts.
+describe('svc-academy mount — a cert grant reports its XP award', () => {
+  const caller = () => createAcademyRouter(stubAcademy()).createCaller(signed());
 
   it('grantCert reports the XP award alongside the grant', async () => {
     const academy = stubAcademy({
