@@ -193,6 +193,114 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
           }),
         ).rejects.toThrow(InvalidEntryError);
       });
+
+      /**
+       * ONE CLAIM CANNOT SPEND ANOTHER CLAIM'S RESERVATION.
+       *
+       * This is the bug purposed holds exist to prevent, and until now the suite
+       * only asserted half of it. `two purposes in one asset are two distinct
+       * accounts` proves the two pots READ separately. Nothing proved you cannot
+       * DRAW ONE DOWN PAST ITS OWN BALANCE — which is the half where the money
+       * goes.
+       *
+       * `client.ts` states the consequence: "`withdrawSettle` could draw down value
+       * an open order was relying on: both postings balance, the journal
+       * reconciles, and the order is quietly unfunded. Nothing in the books could
+       * tell you it had happened."
+       *
+       * An implementation that stored `purpose` as a label beside one shared row
+       * per (user, asset) passes every existing case in this file — the reads look
+       * right because the label round-trips — and fails here on the first
+       * over-release. That is the whole point of putting it in the conformance
+       * suite rather than in one engine's tests.
+       */
+      it('refuses to release more from one purpose than that purpose holds', async () => {
+        await fund(USER_A, 'USDT', '200');
+        await ledger.post(recipes.orderHold({ orderId: 'x-one', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+        await ledger.post(recipes.orderHold({ orderId: 'x-two', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+
+        // 200 is available across the two pots combined, and 100 in this one.
+        await expect(
+          ledger.post(recipes.orderHoldRelease({ orderId: 'x-one', userId: USER_A, assetId: 'USDT', amount: amt('200') })),
+        ).rejects.toThrow(InsufficientFundsError);
+
+        // Both reservations intact, and nothing landed in available.
+        expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:x-one')).toBe('100');
+        expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:x-two')).toBe('100');
+        expect(await balanceOf(USER_A, 'USDT')).toBe('0');
+      });
+
+      /**
+       * A LOCK RELEASED TWICE.
+       *
+       * `assertPairedLocks` constrains locks on the way IN and deliberately leaves
+       * release unconstrained, on the stated grounds that sum-to-zero already
+       * governs where released value lands. That is true and it is not sufficient
+       * on its own: a second release of the same lock balances perfectly and
+       * would hand the user their reservation a second time. What stops it is the
+       * non-negative rule on the lock pot, one layer down.
+       *
+       * So the invariant holds by composition, across two guards that live in
+       * different functions — which is exactly the kind of property that survives
+       * a refactor by luck. Two distinct `sequence` values, so the idempotency key
+       * differs and this is a genuine second post rather than a deduplicated retry.
+       */
+      it('refuses a second release of a lock already returned', async () => {
+        await fund(USER_A, 'USDT', '100');
+        await ledger.post(recipes.orderHold({ orderId: 'twice', userId: USER_A, assetId: 'USDT', amount: amt('100') }));
+        await ledger.post(recipes.orderHoldRelease({ orderId: 'twice', userId: USER_A, assetId: 'USDT', amount: amt('100'), sequence: 0 }));
+
+        await expect(
+          ledger.post(recipes.orderHoldRelease({ orderId: 'twice', userId: USER_A, assetId: 'USDT', amount: amt('100'), sequence: 1 })),
+        ).rejects.toThrow(InsufficientFundsError);
+
+        // Released once, not twice — and the pot is empty rather than negative.
+        expect(await balanceOf(USER_A, 'USDT')).toBe('100');
+        expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:twice')).toBe('0');
+      });
+
+      /**
+       * A PARTIAL FAILURE LEAVES NOTHING APPLIED.
+       *
+       * `leaves the book untouched when a post is rejected` already exists, and it
+       * rejects on a TWO-entry recipe whose only debit is the one that fails —
+       * which an implementation that applied entries one at a time would also
+       * pass, because there is nothing to have applied first.
+       *
+       * This one fails on the THIRD of four entries, after two that are
+       * individually legal and would have moved value. `MemoryLedger` stages into
+       * a map and commits at the end; `PostgresLedger` relies on the transaction.
+       * Those are different mechanisms for one contract, and this is the case that
+       * tells them apart.
+       */
+      it('applies nothing when a later entry in the same post is refused', async () => {
+        await fund(USER_A, 'USDT', '100');
+
+        await expect(
+          ledger.post({
+            idempotencyKey: 'partial-failure-test',
+            module: 'test',
+            reason: 'third entry overdraws an empty account',
+            entries: [
+              // Legal on its own: A has 100.
+              { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('50') },
+              { account: houseFees('test', 'USDT'), direction: 'debit', amount: amt('50') },
+              // B has nothing. This is the one that must refuse the whole post.
+              { account: userAvailable(USER_B, 'USDT'), direction: 'credit', amount: amt('50') },
+              { account: houseFees('test', 'USDT'), direction: 'debit', amount: amt('50') },
+            ],
+          }),
+        ).rejects.toThrow(InsufficientFundsError);
+
+        // Every account exactly as it was, including the two the earlier entries
+        // would have moved.
+        expect(await balanceOf(USER_A, 'USDT')).toBe('100');
+        expect(await balanceOf(USER_B, 'USDT')).toBe('0');
+        expect(formatAmount((await ledger.balance(houseFees('test', 'USDT'))).amount)).toBe('0');
+
+        // And the failed key is not recorded, so a corrected retry can reuse it.
+        expect(await ledger.getTxByKey('partial-failure-test')).toBeNull();
+      });
     });
 
     // ── INVARIANT 4 · idempotency ─────────────────────────────────────────────
