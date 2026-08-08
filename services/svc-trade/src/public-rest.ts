@@ -163,6 +163,28 @@ export function presentCcxtMarket(market: Market) {
     linear: isSpot ? null : true,
     inverse: isSpot ? null : false,
     active: market.status === 'active',
+    /**
+     * TRUE = orders here are SIMULATED. No hold is taken, nothing posts to the
+     * ledger, and the position a fill implies does not exist.
+     *
+     * This is not a CCXT field, and it is emitted anyway because the honest
+     * alternatives were worse. `trade.markets()` returns every row with no
+     * filter, so a paper market already appears in `fetchMarkets` as an
+     * ordinary `active: true` spot market; `placeOrder` then routes it to
+     * `placePaperOrderIsolated` and returns a 201 that looks like any other
+     * order. A bot books a position it does not have, and nothing in the
+     * response tells it otherwise.
+     *
+     * A client that does not know the field ignores it and is no worse off
+     * than today. One that reads it can refuse to trade simulated markets in
+     * one line at startup, instead of guessing from every response.
+     *
+     * Whether paper markets belong in the PUBLIC listing at all is a separate
+     * and larger question — it is a product call with a compliance edge, and
+     * it is Nitro's. This change does not answer it; it stops the listing
+     * being silently untrue while it is open.
+     */
+    paper: market.paper === true,
     taker: bpsToRate(market.takerBps),
     maker: bpsToRate(market.makerBps),
     contractSize: null as string | null,
@@ -492,6 +514,7 @@ export function fakeMarket(partial: {
   minNotional?: Amount;
   makerBps?: number;
   takerBps?: number;
+  paper?: boolean;
 }): Market {
   return {
     id: partial.id ?? '00000000-0000-4000-8000-000000000001',
@@ -510,7 +533,7 @@ export function fakeMarket(partial: {
     listedAt: null,
     assetClass: 'crypto',
     schedule: 'crypto-24x7',
-    paper: false,
+    paper: partial.paper ?? false,
   };
 }
 
