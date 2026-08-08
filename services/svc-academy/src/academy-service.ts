@@ -32,6 +32,13 @@ import {
   type ItemCompletionRecord,
   type ProgressReport,
 } from './certs/progress.js';
+import {
+  certXpPlaneStatus,
+  NullCertXpPublisher,
+  type CertXpEmitResult,
+  type CertXpPlaneStatus,
+  type CertXpPublisher,
+} from './certs/xp-publish.js';
 import { hasCurriculumSlug } from './curriculum/catalog.js';
 import {
   assertMayWriteScore,
@@ -67,7 +74,10 @@ import { withAcademySpan } from './tracing.js';
  *   · FULL DERIV//DESK library (20 playbooks + 3 workbooks) is residual —
  *     proprietary content is not in this monorepo; the thin spine is platform-
  *     native so the list + content path is real rather than empty.
- *   · CERTIFICATIONS need progress tracking against that curriculum.
+ *   · CERTIFICATIONS now track progress against that curriculum and publish the
+ *     XP a grant is worth (`certs/xp-publish.ts`). What is still NOT here is the
+ *     ladder: svc-identity is the only writer to `rank_state` and the only place
+ *     a perk is decided, so a cert earns XP and nothing else (§4.1).
  *   · AMBASSADOR PAY and lobby subscriptions MOVE VALUE. They need ledger
  *     recipes that do not exist, and a half-built pay path is worse than an
  *     absent one.
@@ -171,6 +181,12 @@ export class AcademyService {
     private readonly hostRights: HostRightsSource,
     private readonly stream: StreamProvider,
     private readonly options: AcademyServiceOptions,
+    /**
+     * Stage-2 cert XP emit (TRK-academy.certs). Defaults to the null publisher
+     * so every existing construction of this service keeps working and keeps
+     * being honest: no bus, no award, and `grantCert` says which.
+     */
+    private readonly certXp: CertXpPublisher = new NullCertXpPublisher(),
   ) {}
 
   // ── Rooms ──────────────────────────────────────────────────────────────────
@@ -1148,7 +1164,35 @@ export class AcademyService {
     };
   }
 
-  async grantCert(input: { userId: string; certId: string }): Promise<{ grant: CertGrantRecord; alreadyGranted: boolean }> {
+  /**
+   * Stage-2 — what the XP plane is doing, for the ops surface and /ready.
+   * Reads the publisher; writes nothing, awards nothing.
+   */
+  certXpPlane(): CertXpPlaneStatus {
+    return certXpPlaneStatus(this.certXp);
+  }
+
+  /**
+   * Grant a certification, then publish the XP it is worth.
+   *
+   * TWO THINGS ABOUT THE ORDER, both deliberate:
+   *
+   * The grant is written FIRST and the award published after. A certification
+   * the user earned is the durable fact; the XP is a consequence of it. If the
+   * bus is down we keep the fact and report the missing consequence, rather
+   * than refusing a cert somebody completed seven curriculum items for.
+   *
+   * The award is published on the already-granted path TOO. That is not a
+   * double award — `xp-publish.ts` keys it on `academy.cert:cert:<user>:<cert>`,
+   * a business key, and identity's `xp_events ON CONFLICT (idempotency_key) DO
+   * NOTHING` drops the repeat. It is instead the recovery path: a grant whose
+   * emit failed heals the next time anyone asks for that cert, with no outbox
+   * table and no sweep.
+   */
+  async grantCert(input: {
+    userId: string;
+    certId: string;
+  }): Promise<{ grant: CertGrantRecord; alreadyGranted: boolean; xp: CertXpEmitResult }> {
     const cert = certById(input.certId);
     const completed = await this.completedSlugs(input.userId);
     const existing = await this.existingGrant(input.userId, input.certId);
@@ -1163,22 +1207,22 @@ export class AcademyService {
     } catch (err) {
       this.mapCertErr(err);
     }
-    if (decision.alreadyGranted) return decision;
+    if (decision.alreadyGranted) {
+      return { ...decision, xp: await this.certXp.publishCertXp(decision.grant) };
+    }
     const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
       INSERT INTO academy.cert_grants (user_id, cert_id, granted_at, idempotency_key)
       VALUES (${decision.grant.userId}, ${decision.grant.certId}, ${decision.grant.grantedAt}, ${decision.grant.idempotencyKey})
       ON CONFLICT (user_id, cert_id) DO UPDATE SET cert_id = EXCLUDED.cert_id
       RETURNING user_id, cert_id, granted_at, idempotency_key
     `;
-    return {
-      alreadyGranted: false,
-      grant: {
-        userId: rows[0]!.user_id,
-        certId: rows[0]!.cert_id,
-        grantedAt: rows[0]!.granted_at,
-        idempotencyKey: rows[0]!.idempotency_key,
-      },
+    const grant: CertGrantRecord = {
+      userId: rows[0]!.user_id,
+      certId: rows[0]!.cert_id,
+      grantedAt: rows[0]!.granted_at,
+      idempotencyKey: rows[0]!.idempotency_key,
     };
+    return { alreadyGranted: false, grant, xp: await this.certXp.publishCertXp(grant) };
   }
 
   async myCertGrants(userId: string): Promise<CertGrantRecord[]> {

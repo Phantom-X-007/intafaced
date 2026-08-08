@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
 import { createAcademyRouter } from './router.js';
+import { certXpPlaneStatus, NullCertXpPublisher } from './certs/xp-publish.js';
 import type { AcademyService } from './academy-service.js';
 
 /**
@@ -102,6 +103,9 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
       envKey: 'ACADEMY_PAPER_TRADING_ENABLED' as const,
       liveTradeUnaffected: true as const,
     })),
+    // The real plane over the real null publisher — a hand-written literal here
+    // would pass while the shape drifted underneath it.
+    certXpPlane: vi.fn(() => certXpPlaneStatus(new NullCertXpPublisher())),
     ...overrides,
   } as unknown as AcademyService;
 }
@@ -147,6 +151,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'grantCert',
         'myCerts',
         'certProgress',
+        'certXpPlane',
         'seasons',
         'season',
         'standings',
@@ -455,6 +460,55 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
       flagId: 'academy.paper-trading',
       envKey: 'ACADEMY_PAPER_TRADING_ENABLED',
       liveTradeUnaffected: true,
+    });
+  });
+
+  // ── Certifications Stage-2: the XP outcome crosses the mount ───────────────
+  //
+  // The router is where a client learns whether its certification's award went
+  // out. A grant that reported nothing would leave "did my rank move?" to be
+  // answered by refreshing a page, so the shape is asserted here and not only
+  // in certs/xp-publish.test.ts.
+
+  it('grantCert reports the XP award alongside the grant', async () => {
+    const academy = stubAcademy({
+      grantCert: vi.fn(async () => ({
+        alreadyGranted: false,
+        grant: { userId: USER, certId: 'foundations-v1', grantedAt: new Date(), idempotencyKey: `cert:${USER}:foundations-v1` },
+        xp: { emitted: true as const, idempotencyKey: `academy.cert:cert:${USER}:foundations-v1`, xpDelta: 100 },
+      })),
+    });
+
+    const result = await createAcademyRouter(academy).createCaller(signed()).grantCert({ certId: 'foundations-v1' });
+
+    expect(result.xp).toEqual({ emitted: true, idempotencyKey: `academy.cert:cert:${USER}:foundations-v1`, xpDelta: 100 });
+  });
+
+  it('grantCert still returns the grant when the award could not be published', async () => {
+    const academy = stubAcademy({
+      grantCert: vi.fn(async () => ({
+        alreadyGranted: true,
+        grant: { userId: USER, certId: 'foundations-v1', grantedAt: new Date(), idempotencyKey: `cert:${USER}:foundations-v1` },
+        xp: { emitted: false as const, reason: 'publisher_unavailable' as const },
+      })),
+    });
+
+    const result = await createAcademyRouter(academy).createCaller(signed()).grantCert({ certId: 'foundations-v1' });
+
+    expect(result.grant.certId).toBe('foundations-v1');
+    expect(result.xp).toEqual({ emitted: false, reason: 'publisher_unavailable' });
+  });
+
+  it('certXpPlane names svc-identity as the rank writer, never academy', async () => {
+    const plane = await caller().certXpPlane();
+
+    expect(plane.rankWriter).toBe('svc-identity');
+    expect(plane).toMatchObject({ publisherId: 'none', emitEnabled: false, sourceModule: 'academy', action: 'cert.granted' });
+  });
+
+  it('certXpPlane is not readable without academy:read', async () => {
+    await expect(createAcademyRouter(stubAcademy()).createCaller(anonymous()).certXpPlane()).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
     });
   });
 });

@@ -688,7 +688,12 @@ services:
     expose: ['4016']
     healthcheck: *healthcheck
     depends_on:
-      <<: *needs-schema
+      # *needs-bus since certification publishes `intafaced.identity.xp.earned`
+      # (services/svc-academy/src/certs/xp-publish.ts). NATS_URL already arrives
+      # on *service-env; what was missing was the ordering. Academy degrades
+      # rather than dies without the bus, so this is about not starting into a
+      # known-absent dependency — not about making the lobby need one.
+      <<: [*needs-schema, *needs-bus]
       svc-identity:
         condition: service_healthy
       svc-token:

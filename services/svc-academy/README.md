@@ -8,13 +8,13 @@
 
 **Deliberately not finished here**, each for a stated reason:
 
-| Absent                                                | Why                                                                                                                                               |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live audio/video                                      | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                      |
-| Full DERIV//DESK library (20 playbooks + 3 workbooks) | Proprietary library is **not in this monorepo**. Day-one spine is platform-native seed so the API is real; full import is residual, not invented. |
-| Progress, certifications, XP                          | Need `academy.certs` + identity rank. Catalog is read-only — no completion write.                                                                 |
-| Ambassador residencies and per-session IFC pay        | **Money.** Needs ledger recipes that do not exist. A stubbed pay path that looks finished is worse than an honest gap.                            |
-| Tournaments, seasonal ladders, prize pools            | Money again, and gated on the season engine.                                                                                                      |
+| Absent                                                | Why                                                                                                                                                 |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live audio/video                                      | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                        |
+| Full DERIV//DESK library (20 playbooks + 3 workbooks) | Proprietary library is **not in this monorepo**. Day-one spine is platform-native seed so the API is real; full import is residual, not invented.   |
+| Cert → **perk** surfacing                             | A cert earns XP and stops there. Rank and perks are svc-identity's SoT (§4.1); a perk read here would be a second opinion on somebody else's table. |
+| Ambassador residencies and per-session IFC pay        | **Money.** Needs ledger recipes that do not exist. A stubbed pay path that looks finished is worse than an honest gap.                              |
+| Tournaments, seasonal ladders, prize pools            | Money again, and gated on the season engine.                                                                                                        |
 
 ---
 
@@ -99,13 +99,32 @@ tRPC, mounted at `/trpc`, reached through svc-edge at `/api/academy` (port 4016)
 - Pure in-process catalog (`src/curriculum/catalog.ts`) — no DB table, no progress, no money.
 - Unknown slug → `academy.curriculum_not_found` (NOT_FOUND).
 
+### Certifications → XP (`academy.certs`)
+
+| Procedure                  | Scope           | Purpose                                                                     |
+| -------------------------- | --------------- | --------------------------------------------------------------------------- |
+| `certDefinitions`          | `academy:read`  | Code-seeded certs and the curriculum slugs each requires                    |
+| `enrollCertPath`           | `academy:write` | Enrol the caller on a path                                                  |
+| `markCurriculumComplete`   | `academy:write` | Mark one curriculum item complete (idempotent)                              |
+| `grantCert`                | `academy:write` | Grant the caller's cert when complete, **and publish the XP it is worth**   |
+| `myCerts` / `certProgress` | `academy:read`  | What the caller has earned, and what is missing                             |
+| `certXpPlane`              | `academy:read`  | Is this process publishing awards, under which module/action, at what value |
+
+`grantCert` is safe to call twice. The grant is idempotent on `(user, cert)` and the award carries the same business key, so a repeat is dropped by identity rather than paid twice — that is also how an award missed during a bus outage is recovered. XP amounts are a v0 policy in `src/certs/xp-policy.ts` with a conservative default; product may retune them, and a cert with no policy publishes **nothing** rather than an invented amount.
+
 A seat belongs to `ctx.principal.userId`. **No procedure takes a userId from the input except `invite`**, where naming somebody else _is_ the operation — and that one is host-only, so the caller must already own the room. The scene is written **whole** by the host, not merged per attendee: merging would need a conflict model this does not have, and half a merge is a room that renders differently for different people.
 
 ---
 
 ## Events
 
-**Publishes:** none. **Consumes:** none. **No NATS connection at all**, which is worth stating because most services here have one — the §8.3 event this service will eventually emit is `intafaced.identity.xp.earned` on certification, and certification ships with the curriculum. Connecting to the bus to publish nothing would add a boot dependency that can fail, in exchange for no capability.
+**Publishes:** `intafaced.identity.xp.earned`, on certification grant and nowhere else. **Consumes:** none.
+
+This section used to read "**No NATS connection at all**", and the reason it gave was that the §8.3 event this service would eventually emit is exactly that one — "and certification ships with the curriculum. Connecting to the bus to publish nothing would add a boot dependency that can fail, in exchange for no capability." Certification has now shipped, so the capability is real and the connection buys it.
+
+The boot-dependency objection is answered rather than dropped. The connect is attempted and a failure **degrades**: lobbies, seats, scenes, curriculum and paper drills never needed the bus, so svc-academy stays in the fleet and says what it lost — `/ready` reports `xp.usable: false` and `grantCert` returns `xp: { emitted: false, reason: 'publisher_unavailable' }`. Nothing is silently dropped, because the award is keyed on the grant (`academy.cert:cert:<userId>:<certId>`): granting again re-publishes it, and identity's `xp_events ON CONFLICT (idempotency_key) DO NOTHING` makes the repeat a no-op. That is the whole recovery story — no outbox, no sweep.
+
+svc-identity remains the only writer to `rank_state` and the only place a perk is decided (§4.1). Academy awards XP; it does not rank anybody.
 
 **Reads over HTTP** (both authenticated with the shared internal service secret):
 

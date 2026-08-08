@@ -15,6 +15,7 @@ import { resolveCurriculumDeepLink, listCurriculumPathDeepLinks } from './curric
 import { curriculumBodyForLocale, curriculumI18nStrategyLine } from './curriculum/i18n-strategy.js';
 import { startPaperDrillForCatalogItem } from './paper/workbook-loop.js';
 import { PAPER_OPS_ENV_KEY, PAPER_OPS_FLAG_ID } from './paper/ops-gate.js';
+import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -34,7 +35,9 @@ import { PAPER_OPS_ENV_KEY, PAPER_OPS_FLAG_ID } from './paper/ops-gate.js';
  * host-rights.ts for why the scope could not carry that.
  *
  * Curriculum procedures are read-only catalog lookups. They take no userId and
- * write no progress — certification and XP are a later feature.
+ * write no progress. Progress, certification and the XP a certification is
+ * worth are the `cert*` procedures at the bottom of this file, and they are
+ * scoped the same way: the caller's own progress, never a userId from input.
  *
  * `academy` is `minTier: 'none'` in the jurisdiction matrix (nothing custodial
  * happens here), so `{ module: 'academy' }` is doing region work, not
@@ -218,6 +221,29 @@ const certGrantOut = z.object({
   certId: z.string(),
   grantedAt: z.date(),
   idempotencyKey: z.string(),
+});
+/**
+ * Stage-2 XP outcome on a grant.
+ *
+ * Reported rather than thrown: a certification that was earned is granted even
+ * when its award could not be published, and a client that cannot tell those
+ * apart cannot tell the user whether to expect their rank to move. `reason` is
+ * a machine id — the shell owns the sentence and its i18n key (§9).
+ */
+const certXpOut = z.discriminatedUnion('emitted', [
+  z.object({ emitted: z.literal(true), idempotencyKey: z.string(), xpDelta: z.number().int() }),
+  z.object({
+    emitted: z.literal(false),
+    reason: z.enum(['no_policy', 'not_publishable', 'delta_unrepresentable', 'publisher_unavailable', 'publish_failed']),
+  }),
+]);
+const certXpPlaneOut = z.object({
+  publisherId: z.string(),
+  emitEnabled: z.boolean(),
+  sourceModule: z.literal(CERT_XP_SOURCE_MODULE),
+  action: z.literal(CERT_XP_ACTION),
+  rankWriter: z.literal('svc-identity'),
+  policies: z.array(z.object({ certId: z.string(), xpDelta: z.number().int() })),
 });
 const certProgressOut = z.object({
   userId: z.string().uuid(),
@@ -810,10 +836,12 @@ export function createAcademyRouter(academy: AcademyService) {
       .output(standingOut.omit({ rank: true }))
       .mutation(({ input }) => guard(() => academy.setStanding(input))),
 
-    // ── Certifications Stage-1 (progress + grants — NO XP / NO PAY) ───────────
+    // ── Certifications (progress + grants + XP emit — NO PAY) ─────────────────
     //
-    // Definitions are code-seeded. Completions and grants are durable. XP emit
-    // and rank perks remain Stage-2 residual.
+    // Definitions are code-seeded. Completions and grants are durable. Stage-2
+    // publishes `intafaced.identity.xp.earned` on grant, keyed on the grant, and
+    // stops there: svc-identity is the only writer to rank_state and the only
+    // place a perk is decided (§4.1). Nothing here posts to the ledger.
 
     certDefinitions: scopedProcedure('academy:read', { module: 'academy' })
       .output(z.array(certDefinitionOut))
@@ -837,12 +865,21 @@ export function createAcademyRouter(academy: AcademyService) {
         guard(() => academy.markCurriculumComplete({ userId: ctx.principal!.userId, itemSlug: input.itemSlug })),
       ),
 
+    /**
+     * Grant the caller's own certification, and publish the XP it is worth.
+     *
+     * Safe to call twice: the grant is idempotent on (user, cert) and the award
+     * carries that same business key, which identity drops on conflict. Calling
+     * it again after a bus outage is the documented way to recover a missing
+     * award — see academy-service.grantCert.
+     */
     grantCert: scopedProcedure('academy:write', { module: 'academy' })
       .input(z.object({ certId: z.string().min(1).max(64) }))
       .output(
         z.object({
           grant: certGrantOut,
           alreadyGranted: z.boolean(),
+          xp: certXpOut,
         }),
       )
       .mutation(({ input, ctx }) =>
@@ -856,9 +893,23 @@ export function createAcademyRouter(academy: AcademyService) {
               grantedAt: result.grant.grantedAt,
               idempotencyKey: result.grant.idempotencyKey,
             },
+            xp: result.xp,
           };
         }),
       ),
+
+    /**
+     * Stage-2 XP plane status: is this process publishing awards at all, under
+     * which module/action, and what each cert is worth. Answers "my cert did not
+     * move my rank" without guessing — `emitEnabled: false` is a deployment
+     * fact, not a ladder disagreement.
+     */
+    certXpPlane: scopedProcedure('academy:read', { module: 'academy' })
+      .output(certXpPlaneOut)
+      .query(() => {
+        const plane = academy.certXpPlane();
+        return { ...plane, policies: [...plane.policies] };
+      }),
 
     myCerts: scopedProcedure('academy:read', { module: 'academy' })
       .output(z.array(certGrantOut))
