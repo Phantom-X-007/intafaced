@@ -14,19 +14,19 @@
 
 Phases: **0** 10/11 · **1** ✅ · **2** 6/24 · **3** 5/17 · **3P** 7/12 · **4** 4/5 · **4P** 0/3 · **5** 9/36 · **5P** 1/3
 
-**In progress:** Moderated dispute resolution (nitro-agent) · Payment instruments — where the buyer actually pays (nitro-agent) · P2P merchant programme — badges, limits, API (nitro-agent)
+**In progress:** Perps: isolated margin, funding, partial-liquidation ladder (nitro-agent) · Moderated dispute resolution (nitro-agent) · Payment instruments — where the buyer actually pays (nitro-agent) · P2P merchant programme — badges, limits, API (nitro-agent) · Navigator — tool-calling inside user guardrails (nitro-agent) · Market Scanner — ranked signals by tier (nitro-agent) · Event-driven fan-out: in-app, push, email, SMS (nitro-agent)
 
-**🟢 32 ready to claim** — nothing blocks these:
+**🟢 28 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
-- `trade.futures` — Perps: isolated margin, funding, partial-liquidation ladder
 - `trade.otc` — OTC RFQ desk, staked-tier gate
 - `trade.copy` — Copy trading, audited leaders, profit share
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
 - `trade.mm-bot` — Internal market-maker seeding books at launch
-- …and 24 more
+- `venue.aggregation` — External venue adapters via CCXT (cross-venue)
+- …and 20 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
@@ -112,11 +112,11 @@ Scopes (note: there is no `ledger:write` — balances never move on a user token
 
 ### `tooling/ci` — the doctrines, enforced
 
-`pnpm gates` runs all **twenty-seven** in about thirteen seconds, from **one list — `tooling/ci/gates.mjs` — that `pnpm verify` and CI's `gates` job both consume.** One list is the point: they were previously maintained separately and drifted, so two gates ran in CI and nowhere local.
+`pnpm gates` runs all **twenty-eight** in about seventeen seconds, from **one list — `tooling/ci/gates.mjs` — that `pnpm verify` and CI's `gates` job both consume.** One list is the point: they were previously maintained separately and drifted, so two gates ran in CI and nowhere local.
 
-**`tooling/ci/gates.mjs` is the list. The table below is orientation.** Run `node tooling/ci/gates.mjs` for the live set and its per-gate output. This section claimed “fourteen” while twenty-seven were running and the table was missing twelve of them — which is exactly the drift the gates exist to catch, one level up, so it is recorded rather than quietly corrected.
+**`tooling/ci/gates.mjs` is the list. The table below is orientation.** Run `node tooling/ci/gates.mjs` for the live set and its per-gate output. This section once claimed “fourteen” while twenty-seven were running and the table was missing twelve of them — which is exactly the drift the gates exist to catch, one level up, so it is recorded rather than quietly corrected. (Twenty-eight since `worktree-gc-selftest` landed.)
 
-The twenty-seven, grouped by what they defend:
+The twenty-eight, grouped by what they defend:
 
 | Group                 | Gates                                                                                                                                               |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -125,13 +125,14 @@ The twenty-seven, grouped by what they defend:
 | **Honesty of claims** | `tracker` · `coverage` · `reachability` · `skip-honesty` · `event-wiring`                                                                           |
 | **Surface & brand**   | `brand` · `shell-brand` · `vendor-shell` · `i18n` · `i18n-bypass`                                                                                   |
 | **Operability**       | `migrations` · `killswitch` · `workspace` · `test-db`                                                                                               |
-| **Coordination**      | `agent-autoload`                                                                                                                                    |
+| **Coordination**      | `agent-autoload` · `worktree-gc-selftest`                                                                                                           |
 
 Three properties are worth knowing before citing any of them:
 
 - **Several are ratchets, not clean-tree checks.** `shell-brand` (8 frozen), `fabricated-money`, `vendor-java-money` (55 frozen), `wallet-rpc-mainnet` (57 frozen constants), `event-wiring` (1 Class B awaiting an owner decision) and `i18n-bypass` all pass with known findings pinned by exact text. **The queue cannot grow.** A ratchet that failed on its pre-existing set would be routed around and deleted, taking the honest part with it.
 - **Four are mutation-tested** — `secret-scan-mutation`, `money-property-mutation`, `wallet-rpc-mainnet-mutation`, `dual-book-door-paths`. A gate nobody has seen fail is not a gate.
-- **`pnpm gate` (singular) is the §14 Definition of Done**, per service. It is not one of the twenty-seven and runs separately, after build and test.
+- **One guards a tool rather than the product.** `worktree-gc-selftest` runs the 15 classifier fixtures of `tooling/scripts/worktree-gc.mjs`, the only script here that can delete another agent's working state — and which has done so (`docs/LANE-CLOSEOUT-OPS-2026-08-08.md`), and could once have run `git branch -D main`. #1151 fixed it and shipped the fixtures; they were wired to nothing, so reverting the fix broke no check. Now it is red instead: verified by reverting the `LIVE-LANES` board read and watching 2 of 15 fail the gate list.
+- **`pnpm gate` (singular) is the §14 Definition of Done**, per service. It is not one of the twenty-eight and runs separately, after build and test.
 
 Two are deliberately **not** in the list, each for a stated reason: `pnpm scan:deps` (the supply-chain ratchet — needs network, so it is its own workflow) and `pnpm scan:shell-i18n` (200+ hardcoded strings on the vendored shell; wiring it blocking would red main before the keying pass).
 

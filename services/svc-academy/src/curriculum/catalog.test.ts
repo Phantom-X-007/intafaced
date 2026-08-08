@@ -105,7 +105,14 @@ import {
   lessonCountAtLeast,
   clampCurriculumPageSize,
   emptyPathCountAtMost,
+  CURRICULUM_MIN_BODY_CHARS,
+  curriculumDepthLine,
+  curriculumDepthReport,
+  curriculumStudyGuide,
+  listCurriculumStudyGuides,
 } from './catalog.js';
+import { CURRICULUM_BODIES, CURRICULUM_TEACHING, readingMinutes } from './content.js';
+import { validateImportRecord } from './import-pipeline.js';
 
 /**
  * Curriculum catalog — pure, no database.
@@ -448,5 +455,136 @@ describe('curriculum catalog', () => {
     expect(lessonCountAtLeast(0)).toBe(true);
     expect(clampCurriculumPageSize(1)).toBe(1);
     expect(emptyPathCountAtMost(10)).toBe(true);
+  });
+});
+
+/**
+ * THE LIBRARY IS REAL — the assertions that break if the catalog breaks.
+ *
+ * The suite above pins the query surface: counts, filters, paging, labels. All
+ * of it stayed green for the whole period in which nineteen items carried a
+ * three-bullet stub and the other six a page of headings, because none of it
+ * ever looks INSIDE an item. These do.
+ *
+ * They are deliberately structural rather than editorial. No test can decide
+ * whether a lesson teaches; a test can refuse to let an item claim to be one
+ * while carrying nothing, and can refuse to let the registry and the library
+ * drift apart.
+ */
+describe('curriculum library integrity', () => {
+  const items = listCurriculum().map((summary) => getCurriculumItem(summary.slug)!);
+
+  it('gives every item the full field set — nothing half-declared', () => {
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.slug).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+      expect(item.title.trim().length).toBeGreaterThan(0);
+      expect(item.summary.trim().length).toBeGreaterThanOrEqual(12);
+      expect(['playbook', 'workbook', 'lesson']).toContain(item.kind);
+      expect(CURRICULUM_PATHS).toContain(item.path);
+      expect(Number.isInteger(item.order)).toBe(true);
+      expect(item.estimatedMinutes).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps slugs unique, and order unique within a path', () => {
+    const slugs = items.map((i) => i.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+
+    for (const path of CURRICULUM_PATHS) {
+      const orders = items.filter((i) => i.path === path).map((i) => i.order);
+      expect(new Set(orders).size).toBe(orders.length);
+    }
+  });
+
+  it('carries a body that is real content, not a stub, on every single item', () => {
+    for (const item of items) {
+      expect(item.body.trimStart().startsWith('# ')).toBe(true);
+      // The floor the count gate could not see. An item under it is named by
+      // curriculumDepthReport rather than quietly shipped.
+      expect(item.body.length).toBeGreaterThanOrEqual(CURRICULUM_MIN_BODY_CHARS);
+      // Headings alone are an outline. Prose paragraphs are what a reader reads.
+      const prose = item.body.split('\n').filter((line) => line.trim() && !line.trimStart().startsWith('#'));
+      expect(prose.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('carries objectives, key terms and self-check questions on every item', () => {
+    for (const item of items) {
+      expect(item.objectives.length).toBeGreaterThanOrEqual(2);
+      expect(item.keyTerms.length).toBeGreaterThanOrEqual(2);
+      expect(item.selfCheck.length).toBeGreaterThanOrEqual(2);
+      for (const objective of item.objectives) expect(objective.trim().length).toBeGreaterThan(20);
+      for (const term of item.keyTerms) {
+        expect(term.term.trim().length).toBeGreaterThan(0);
+        expect(term.definition.trim().length).toBeGreaterThan(20);
+      }
+      for (const question of item.selfCheck) expect(question.trim().length).toBeGreaterThan(20);
+    }
+  });
+
+  it('derives the reading estimate from the body, so it cannot drift', () => {
+    for (const item of items) {
+      expect(item.estimatedMinutes).toBe(readingMinutes(item.body));
+    }
+  });
+
+  it('leaves no orphan content — every body and every scaffold has an owner', () => {
+    const slugs = new Set(items.map((i) => i.slug));
+    for (const slug of Object.keys(CURRICULUM_BODIES)) {
+      expect(slugs.has(slug), `content.ts body "${slug}" is on no catalog row`).toBe(true);
+    }
+    for (const slug of Object.keys(CURRICULUM_TEACHING)) {
+      expect(slugs.has(slug), `content.ts teaching "${slug}" is on no catalog row`).toBe(true);
+    }
+    expect(Object.keys(CURRICULUM_BODIES).length).toBe(items.length);
+    expect(Object.keys(CURRICULUM_TEACHING).length).toBe(items.length);
+  });
+
+  it('passes its own import validator — the catalog holds itself to the import bar', () => {
+    // Same gate an external import must clear: slug shape, markdown body, no
+    // outbound URLs, no placeholder residue, and for workbooks no painted quote.
+    for (const item of items) {
+      const result = validateImportRecord({
+        slug: item.slug,
+        title: item.title,
+        kind: item.kind,
+        path: item.path,
+        order: item.order,
+        summary: item.summary,
+        body: item.body,
+      });
+      expect(result.issues, `${item.slug}: ${result.issues.map((i) => i.message).join('; ')}`).toEqual([]);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('reports depth honestly, and nothing is currently thin', () => {
+    const depth = curriculumDepthReport();
+    expect(depth.total).toBe(items.length);
+    expect(depth.deep + depth.thin).toBe(depth.total);
+    expect(depth.thinSlugs).toEqual([]);
+    expect(depth.allDeep).toBe(true);
+    expect(depth.shortestBodyChars).toBeGreaterThanOrEqual(CURRICULUM_MIN_BODY_CHARS);
+    expect(depth.totalBodyChars).toBe(items.reduce((sum, i) => sum + i.body.length, 0));
+    expect(curriculumDepthLine()).toContain(`thin=${depth.thin}`);
+  });
+
+  it('builds a study guide for every item, and none for an unknown slug', () => {
+    expect(curriculumStudyGuide('no-such-slug')).toBeNull();
+    expect(listCurriculumStudyGuides().length).toBe(items.length);
+
+    for (const item of items) {
+      const guide = curriculumStudyGuide(item.slug)!;
+      expect(guide).not.toBeNull();
+      expect(guide.bodyChars).toBe(item.body.length);
+      expect(guide.objectives).toEqual(item.objectives);
+      // A guide is the card payload — the prose stays behind getCurriculumItem.
+      expect(guide).not.toHaveProperty('body');
+    }
+
+    const sovereign = listCurriculumStudyGuides('sovereign');
+    expect(sovereign.length).toBe(countCurriculumByPath('sovereign'));
+    expect(sovereign.every((g) => g.path === 'sovereign')).toBe(true);
   });
 });

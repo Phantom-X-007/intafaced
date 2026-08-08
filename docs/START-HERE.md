@@ -10,7 +10,7 @@
 [`ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md`](ALIGNMENT-RESEARCH-VERDICT-2026-08-03.md) ·  
 [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md) ·  
 [`DENON-CALL-EXTRACT-2026-08-03.md`](DENON-CALL-EXTRACT-2026-08-03.md).  
-**Local tip hygiene (agents, not Nitro):** `node tooling/scripts/worktree-gc.mjs` dry-run · `--apply` removes clean cherry-empty ghosts · never code on main checkout · after merge `pnpm wt:rm`.
+**Local tip hygiene (agents, not Nitro):** `pnpm wt:gc` is the dry run — it lists every worktree and **why each one is kept**. Removal is attended-only and needs the explicit `pnpm wt:gc:apply -- --yes`; `--apply` on its own prints the plan and refuses. Read that plan before you pass `--yes` — this tool has deleted live work ([`LANE-CLOSEOUT-OPS-2026-08-08.md`](LANE-CLOSEOUT-OPS-2026-08-08.md)). It never deletes branches, only checkouts, and `pnpm wt <branch>` restores one. Never code on main checkout · after merge `pnpm wt:rm`.
 Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURRENT.md).
 
 ---

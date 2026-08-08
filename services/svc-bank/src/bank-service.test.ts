@@ -21,6 +21,7 @@ import { createBankRouter } from './router.js';
 import { accountForSpace } from './spaces/space-service.js';
 import { memoryLedgerHistory } from './analytics/ledger-history.js';
 import { occurrenceStart, planDue, dueOccurrence } from './transfers/schedule.js';
+import { PAUSED_SKIP_REASON } from './transfers/transfer-service.js';
 import { dailyInterest, planAccrual } from './earn/interest.js';
 import { categorise } from './analytics/spend.js';
 import { BankError } from './errors.js';
@@ -490,6 +491,440 @@ if (!available) {
       await bank.transfers.runDueTransfers({ now: new Date('2026-01-10T01:00:00Z') });
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
+    });
+  });
+
+  // ══ Pause / resume ════════════════════════════════════════════════════════
+
+  /**
+   * The one thing resume must never do is settle up.
+   *
+   * `planDue` fires everything between `lastFired` and `now`, which is right
+   * after an outage and catastrophic after a pause: the user stopped the order
+   * so those transfers would NOT happen. Every test below is an angle on that
+   * single sentence, and the first one fails loudly — by a factor of ten — if
+   * the skip window is ever removed.
+   */
+  describe('a paused standing order does not fire, and resuming does not settle up', () => {
+    /** 10/day from 1 Jan, occurrence 0 already fired, then paused. */
+    async function pausedAfterFirstFiring() {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
+      await fund(USER_A, 'USDT', '10000');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('10'),
+        cadence: 'daily',
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T01:00:00Z') });
+      await bank.transfers.pauseSchedule(schedule.id);
+      return { primary, rent, schedule };
+    }
+
+    it('fires nothing at all while paused, however long the runner keeps looking', async () => {
+      const { rent, schedule } = await pausedAfterFirstFiring();
+
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-10T01:00:00Z') });
+      await bank.transfers.runDueTransfers({ now: new Date('2026-03-01T01:00:00Z') });
+
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
+      expect(await bank.transfers.executions(schedule.id)).toHaveLength(1);
+    });
+
+    /**
+     * THE TEST THIS SLICE EXISTS FOR.
+     *
+     * Nine days paused, ten a day. Without the skip window the runner's first
+     * pass after resume would move 90 — nine payments, on one afternoon, that the
+     * user paused the order specifically to stop. `toBe('10')` is a factor of ten
+     * away from that failure, so it cannot pass by accident.
+     */
+    it('does not fire the occurrences that came due while it was paused', async () => {
+      const { rent, schedule } = await pausedAfterFirstFiring();
+
+      await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-10T00:00:00Z') });
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-10T23:00:00Z') });
+
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
+
+      // And it is genuinely resumed, not quietly dead: the NEXT occurrence fires.
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-11T00:00:00Z') });
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
+    });
+
+    it('moves no value itself — pausing and resuming post nothing to the ledger', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+      const before = ledger.journal().length;
+
+      await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-02-01T00:00:00Z') });
+      await bank.transfers.pauseSchedule(schedule.id);
+      await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-03-01T00:00:00Z') });
+
+      expect(ledger.journal().length).toBe(before);
+    });
+
+    it('records every skipped occurrence with a reason, not as an absence', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+
+      const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
+      expect(report.skipped).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions).toHaveLength(10);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
+
+      // A record, because `MAX(occurrence)` is what stops the backlog — and a
+      // REASON, because "nothing happened in March" otherwise has no answer.
+      for (const e of executions.slice(1)) {
+        expect(e.status).toBe('skipped');
+        expect(e.rejectionCode).toBe(PAUSED_SKIP_REASON);
+        expect(e.ledgerTxId).toBeNull();
+      }
+    });
+
+    /**
+     * THE DATABASE, NOT THIS SERVICE, IS WHAT MAKES "RESUME MOVES NO VALUE" TRUE.
+     *
+     * `resumeSchedule` posts nothing — that is asserted directly above by
+     * counting the journal. But "the code does not do it" is the weakest
+     * guarantee available for a money table, and a skipped row carrying a
+     * `ledger_tx_id` would be indistinguishable from a firing that really
+     * happened, in the record a support engineer reads.
+     *
+     * Written as raw SQL on purpose: no method in this service can produce this
+     * row, which is exactly why the constraint has to be tested from outside the
+     * service. If `0006` is ever dropped, this fails.
+     */
+    it('cannot record a skipped occurrence that claims value moved', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+
+      const withTx = await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status, rejection_code, ledger_tx_id)
+        VALUES (${schedule.id}, 41, 10, 'skipped', ${PAUSED_SKIP_REASON}, 'some-ledger-tx')
+      `.catch((e: unknown) => e);
+      expect(withTx).toBeInstanceOf(Error);
+
+      const withSettledAt = await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status, rejection_code, settled_at)
+        VALUES (${schedule.id}, 42, 10, 'skipped', ${PAUSED_SKIP_REASON}, now())
+      `.catch((e: unknown) => e);
+      expect(withSettledAt).toBeInstanceOf(Error);
+
+      // And a skip with no reason at all: "nothing happened in March" with no
+      // "because" is the same unanswerable row `rejected` is protected from.
+      const withoutReason = await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+        VALUES (${schedule.id}, 43, 10, 'skipped')
+      `.catch((e: unknown) => e);
+      expect(withoutReason).toBeInstanceOf(Error);
+
+      // The honest shape is accepted, so the constraint is not simply banning
+      // the value outright.
+      await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status, rejection_code)
+        VALUES (${schedule.id}, 44, 10, 'skipped', ${PAUSED_SKIP_REASON})
+      `;
+    });
+
+    it('never overwrites an occurrence that already settled', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+      const settled = (await bank.transfers.executions(schedule.id))[0];
+
+      await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
+
+      const after = (await bank.transfers.executions(schedule.id))[0];
+      expect(after).toEqual(settled);
+      expect(after?.ledgerTxId).not.toBeNull();
+    });
+
+    /**
+     * A claim is a commitment already made. A pause cannot retract it.
+     *
+     * A `pending` row is an occurrence whose process died between claiming and
+     * posting. `ON CONFLICT DO NOTHING` leaves it pending rather than writing it
+     * off as skipped, so the runner's stranded sweep still completes it after the
+     * resume — money the user authorised, that the system already claimed.
+     */
+    it('leaves an occurrence claimed before the pause alive for the stranded sweep', async () => {
+      const { rent, schedule } = await pausedAfterFirstFiring();
+
+      await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+        VALUES (${schedule.id}, 1, 10, 'pending')
+      `;
+
+      const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
+      expect(report.skipped).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
+
+      const stillPending = await bank.transfers.executions(schedule.id);
+      expect(stillPending.find((e) => e.occurrence === 1)?.status).toBe('pending');
+
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-10T00:00:00Z') });
+      expect((await bank.transfers.executions(schedule.id)).find((e) => e.occurrence === 1)?.status).toBe('settled');
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
+    });
+
+    /**
+     * THE HOLE PAUSE OPENS, AND THE ONLY THING THAT CLOSES IT.
+     *
+     * The runner's due query is `status = 'active' AND next_run_at <= now`, so a
+     * paused schedule is never selected. Before the sweep was made independent
+     * of that query, a claim stranded before the pause sat `pending` for exactly
+     * as long as the user left the order paused — forever, if they never resumed
+     * — with nothing raised anywhere. Resuming did not rescue it either:
+     * `resumeSchedule` moves `next_run_at` PAST the stranded occurrence.
+     *
+     * The user authorised this transfer and the service claimed it. Never
+     * posting it is not a safe failure, it is a transfer that silently did not
+     * happen.
+     */
+    it('finishes a claim stranded before the pause even if the order is never resumed', async () => {
+      const { rent, schedule } = await pausedAfterFirstFiring();
+
+      await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+        VALUES (${schedule.id}, 1, 10, 'pending')
+      `;
+
+      // Still paused. Months pass. Nothing else about this schedule is due, and
+      // by the due query alone this pass would consider nothing at all.
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-06-01T00:00:00Z') });
+
+      expect(report.strandedSwept).toBe(1);
+      expect(report.settled).toBe(1);
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('paused');
+
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions.find((e) => e.occurrence === 1)?.status).toBe('settled');
+      expect(executions.find((e) => e.occurrence === 1)?.ledgerTxId).not.toBeNull();
+
+      // Exactly one occurrence's worth, on top of the one that fired before the
+      // pause. The sweep finishes what was claimed; it plans nothing new.
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
+      expect(executions).toHaveLength(2);
+    });
+
+    /**
+     * The sweep is a money path, so running it twice must move value once.
+     *
+     * Both guards are exercised here at the same time: the second pass finds no
+     * `pending` row at all (the claim is `settled`), and even a pass that DID
+     * re-drive the occurrence would hit the ledger key
+     * `bank.transfer:<scheduleId>:<occurrence>` and be handed the first
+     * transaction back. `toBe('20')` is one whole transfer away from a failure.
+     */
+    it('sweeps idempotently — three passes over one stranded claim move value once', async () => {
+      const { rent, schedule } = await pausedAfterFirstFiring();
+
+      await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+        VALUES (${schedule.id}, 1, 10, 'pending')
+      `;
+
+      const first = await bank.transfers.runDueTransfers({ now: new Date('2026-06-01T00:00:00Z') });
+      const second = await bank.transfers.runDueTransfers({ now: new Date('2026-06-01T00:00:00Z') });
+      const third = await bank.transfers.runDueTransfers({ now: new Date('2026-06-02T00:00:00Z') });
+
+      expect(first.settled).toBe(1);
+      expect(second.strandedSwept).toBe(0);
+      expect(second.settled).toBe(0);
+      expect(third.settled).toBe(0);
+
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
+      expect(await bank.transfers.executions(schedule.id)).toHaveLength(2);
+    });
+
+    /**
+     * Cancelling does not retract a claim either — for the reason `cancelSchedule`
+     * already states: cancel stops FUTURE firings and is explicitly not a
+     * reversal. An occurrence already claimed is a movement this service
+     * committed to.
+     */
+    it('finishes a claim stranded on a cancelled order', async () => {
+      const { rent, schedule } = await pausedAfterFirstFiring();
+
+      await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+        VALUES (${schedule.id}, 1, 10, 'pending')
+      `;
+      await bank.transfers.cancelSchedule(schedule.id);
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-06-01T00:00:00Z') });
+
+      expect(report.settled).toBe(1);
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
+      // Cancelled it stays. Finishing a claim is not reactivation.
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('cancelled');
+      expect(await bank.transfers.executions(schedule.id)).toHaveLength(2);
+    });
+
+    /**
+     * A schedule that is both due AND stranded is driven ONCE.
+     *
+     * The two queries would otherwise overlap, and the overlap is not merely a
+     * double-counted report: the sweep and the drive would each fire the same
+     * pending occurrence in the same pass.
+     */
+    it('does not consider a schedule twice when it is both due and stranded', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
+      await fund(USER_A, 'USDT', '10000');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('10'),
+        cadence: 'daily',
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      await sql`
+        INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+        VALUES (${schedule.id}, 0, 10, 'pending')
+      `;
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-02T00:00:00Z') });
+
+      expect(report.schedulesConsidered).toBe(1);
+      expect(report.strandedSwept).toBe(0);
+      // Occurrence 0 swept, occurrence 1 planned. Two movements, not three.
+      expect(report.settled).toBe(2);
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
+    });
+
+    /**
+     * Concurrency, the same way the firing path is tested: six callers, one
+     * outcome. Two resumes reading the same `lastFired` would each plan the same
+     * skip window; the unique index on (schedule, occurrence) is what makes the
+     * loser's insert a no-op rather than a second set of rows.
+     */
+    it('is safe to call twice at once — one resume wins and the record is written once', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') }).catch((e: unknown) => e),
+        ),
+      );
+
+      expect(results.filter((r) => !(r instanceof Error))).toHaveLength(1);
+      expect(await bank.transfers.executions(schedule.id)).toHaveLength(10);
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('active');
+    });
+
+    it('refuses a second resume, because the first one already ran', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+      await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
+
+      const err = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BankError);
+      expect((err as BankError).code).toBe('bank.schedule_inactive');
+    });
+
+    it('refuses to pause an order that is not running', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+
+      const twice = await bank.transfers.pauseSchedule(schedule.id).catch((e: unknown) => e);
+      expect((twice as BankError).code).toBe('bank.schedule_inactive');
+
+      await bank.transfers.cancelSchedule(schedule.id);
+      const cancelled = await bank.transfers.pauseSchedule(schedule.id).catch((e: unknown) => e);
+      expect((cancelled as BankError).code).toBe('bank.schedule_inactive');
+    });
+
+    it('distinguishes a schedule that is not paused from one that does not exist', async () => {
+      const missing = await bank.transfers
+        .resumeSchedule('00000000-0000-4000-8000-000000000000', { now: new Date('2026-01-10T00:00:00Z') })
+        .catch((e: unknown) => e);
+      expect((missing as BankError).code).toBe('bank.schedule_not_found');
+    });
+
+    /** The `IN ('active','paused')` branch of `cancelSchedule` — unreachable until now. */
+    it('can be given up on while paused', async () => {
+      const { rent, schedule } = await pausedAfterFirstFiring();
+
+      await bank.transfers.cancelSchedule(schedule.id);
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('cancelled');
+
+      await bank.transfers.runDueTransfers({ now: new Date('2026-03-01T00:00:00Z') });
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
+    });
+
+    /**
+     * Resuming after the window closed does not reanimate the order.
+     *
+     * The alternative — status `active` with a `next_run_at` in the past — is the
+     * shape that produces a fire the moment anything reconsiders the row.
+     */
+    it('completes rather than reactivates when the schedule window has already closed', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
+      await fund(USER_A, 'USDT', '10000');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('10'),
+        cadence: 'daily',
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+        endsAt: new Date('2026-01-04T00:00:00Z'),
+      });
+
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T01:00:00Z') });
+      await bank.transfers.pauseSchedule(schedule.id);
+
+      const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-06-01T00:00:00Z') });
+
+      // `endsAt` is EXCLUSIVE, which `lastOccurrenceBefore` implements by asking
+      // what was due one millisecond before it. So the window holds occurrences
+      // 0, 1 and 2 — 1 and 2 were missed — and occurrence 3, due at exactly
+      // 2026-01-04T00:00:00Z, never existed. Reporting it as missed would tell
+      // the user a payment they never owed had been skipped.
+      expect(report.skipped).toEqual([1, 2]);
+      expect(report.schedule.status).toBe('completed');
+
+      await bank.transfers.runDueTransfers({ now: new Date('2026-06-01T00:00:00Z') });
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
+    });
+
+    it('reports nothing skipped when the pause was shorter than one period', async () => {
+      const { schedule } = await pausedAfterFirstFiring();
+
+      const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-01T12:00:00Z') });
+      expect(report.skipped).toEqual([]);
+      expect(report.schedule.status).toBe('active');
+      expect(await bank.transfers.executions(schedule.id)).toHaveLength(1);
+    });
+
+    it('can be paused before it has ever fired, and starts cleanly from the next occurrence', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
+      await fund(USER_A, 'USDT', '10000');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('10'),
+        cadence: 'daily',
+        startsAt: new Date('2026-06-01T00:00:00Z'),
+      });
+
+      await bank.transfers.pauseSchedule(schedule.id);
+      const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-01T00:00:00Z') });
+
+      // Paused before it started: nothing was ever due, so nothing was missed.
+      expect(report.skipped).toEqual([]);
+      expect(report.schedule.nextRunAt.toISOString()).toBe('2026-06-01T00:00:00.000Z');
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('0');
     });
   });
 
@@ -1492,6 +1927,53 @@ if (!available) {
 
       await expect(api.transfers.cancel({ scheduleId: schedule.id })).resolves.toEqual({ cancelled: true });
       expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('cancelled');
+    });
+  });
+
+  /**
+   * Pause and resume are `cancel`'s neighbours and carry the same risk: both are
+   * writes that name somebody's standing order by id, and `bank:write` answers
+   * "may this principal write bank data", never "whose". Without `assertSelf` a
+   * stranger holding the scope and a schedule id could stop another user's rent
+   * transfer — or restart one they had deliberately stopped, which moves value
+   * on every subsequent pass.
+   */
+  describe('transfers.pause and transfers.resume are not callable by another user', () => {
+    it('refuses user B, and leaves user A’s standing order running', async () => {
+      const schedule = await firedStandingOrder(USER_A);
+      const api = await caller(USER_B, ['bank:write']);
+
+      const err = await api.transfers.pause({ scheduleId: schedule.id }).catch((e: unknown) => e);
+      expect(codeOf(err)).toBe('FORBIDDEN');
+
+      // Before the UPDATE, not after it — same ordering as `cancel`.
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('active');
+    });
+
+    it('refuses user B a resume, and writes no skip rows on the way to refusing', async () => {
+      const schedule = await firedStandingOrder(USER_A);
+      await bank.transfers.pauseSchedule(schedule.id);
+      const before = await bank.transfers.executions(schedule.id);
+
+      const err = await (await caller(USER_B, ['bank:write'])).transfers.resume({ scheduleId: schedule.id }).catch((e: unknown) => e);
+      expect(codeOf(err)).toBe('FORBIDDEN');
+
+      expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('paused');
+      expect(await bank.transfers.executions(schedule.id)).toEqual(before);
+    });
+
+    it('lets the owner pause and resume, and tells them what will never be made up', async () => {
+      const schedule = await firedStandingOrder(USER_A);
+      const api = await caller(USER_A, ['bank:write']);
+
+      await expect(api.transfers.pause({ scheduleId: schedule.id })).resolves.toMatchObject({ status: 'paused' });
+
+      const resumed = await api.transfers.resume({ scheduleId: schedule.id });
+      expect(resumed.status).toBe('active');
+      // The wire says which occurrences were written off. A client rendering
+      // only `status: 'active'` lets a user believe the missed ones are still
+      // coming; they are not.
+      expect(Array.isArray(resumed.skipped)).toBe(true);
     });
   });
 
