@@ -254,6 +254,14 @@ export function buildEnvelope<K extends EventName>(
 export interface SeenStore {
   /** Returns true if this key was already processed; marks it otherwise. */
   checkAndSet(key: string): Promise<boolean>;
+  /**
+   * Un-mark a key whose handler threw, so a redelivery genuinely re-runs it.
+   *
+   * Optional so an existing store keeps compiling — but a store without it
+   * turns `idempotent()` back into at-most-once for that subscription, which is
+   * the defect documented on `idempotent` below.
+   */
+  release?(key: string): Promise<void>;
 }
 
 export class MemorySeenStore implements SeenStore {
@@ -270,12 +278,42 @@ export class MemorySeenStore implements SeenStore {
     this.seen.add(key);
     return false;
   }
+
+  async release(key: string): Promise<void> {
+    this.seen.delete(key);
+  }
 }
 
+/**
+ * MARK ON SUCCESS, NOT ON ARRIVAL.
+ *
+ * `checkAndSet` marks the key before the handler runs, so a handler that threw
+ * had already been recorded as processed. JetStream redelivers, the wrapper
+ * sees the mark, returns early — and the message is ACKED without the handler
+ * ever having succeeded. `idempotent()` was at-MOST-once, and silently so.
+ *
+ * That defeated behaviour every caller had written down as deliberate. The
+ * clearest is `svc-identity/src/events.ts`, whose header explains that an XP
+ * award for an unknown user raises an FK violation "which throws, which NAKs,
+ * which parks the message after `max_deliver`", and calls that "the whole point
+ * of this consumer" — the alternative being that "XP silently vanishes, which
+ * is precisely the failure this wiring exists to end". The first redelivery was
+ * swallowed here, so nothing ever parked and the XP did vanish.
+ *
+ * Releasing on failure restores it: the key is held only while the handler is
+ * in flight and for the life of a success, so a redelivery after a throw
+ * genuinely re-runs and can fail its way to the dead-letter as designed. The
+ * in-flight window is the point of the mark and stays; nothing else changes.
+ */
 export function idempotent<K extends EventName>(handler: Handler<K>, store: SeenStore, scope: string): Handler<K> {
   return async (payload, envelope) => {
     const key = `${scope}:${envelope.subject}:${envelope.idempotencyKey}`;
     if (await store.checkAndSet(key)) return;
-    await handler(payload, envelope);
+    try {
+      await handler(payload, envelope);
+    } catch (err) {
+      await store.release?.(key);
+      throw err;
+    }
   };
 }
