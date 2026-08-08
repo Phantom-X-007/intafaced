@@ -5,7 +5,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { PostgresNotifyStore } from './store.js';
-import { PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
+import { DELIVERY_REAP_INTERVAL_MS, PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
 import { PostgresMuteStore } from './preferences/mute-store.js';
@@ -138,6 +138,36 @@ await app.register(fastifyTRPCPlugin, {
   } satisfies FastifyTRPCPluginOptions<NotifyRouter>['trpcOptions'],
 });
 
+/**
+ * The delivery sweep — see `DeliveryStore.reapExhausted`.
+ *
+ * The only writer of `abandoned` used to be `claim`, which needs a bus
+ * redelivery to run. When the attempt ceiling and `max_deliver` are reached by
+ * the same message, no redelivery follows and the row keeps saying `pending` on
+ * a screen the user reads to find out whether their margin call went out.
+ *
+ * FAIL-SAFE, DELIBERATELY. A sweep that cannot run must never take the inbox
+ * down with it: a database blip here costs a stale status line, and refusing to
+ * serve notifications over it would be the larger outage. So it logs and waits
+ * for the next tick. `unref` keeps it out of the way of shutdown.
+ */
+const reaper = setInterval(() => {
+  void deliveries
+    .reapExhausted(env.NOTIFY_MAX_DELIVERY_ATTEMPTS)
+    .then((retired) => {
+      if (retired > 0) {
+        app.log.info(
+          { retired, maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS },
+          'svc-notify retired delivery rows that had run out of attempts — they now read as abandoned rather than pending',
+        );
+      }
+    })
+    .catch((err) => {
+      app.log.error({ err }, 'svc-notify delivery sweep failed — finished rows may still read as pending until the next tick');
+    });
+}, DELIVERY_REAP_INTERVAL_MS);
+reaper.unref();
+
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
 app.log.info(
@@ -182,6 +212,7 @@ for (const channel of channels.status()) {
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
+      clearInterval(reaper);
       for (const sub of subscriptions) await sub.unsubscribe().catch(() => undefined);
       await app.close();
       await bus.close();

@@ -188,6 +188,82 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
     expect((await s.claim(NOTIFICATION, 'email', 3)).claimed).toBe(true);
     expect((await s.claim(OTHER_NOTIFICATION, 'email', 3)).claimed).toBe(true);
   });
+
+  describe('reapExhausted — the row nothing was ever going to come back for', () => {
+    it('retires a pending row whose attempts are spent and whose lease is dead', async () => {
+      // A one-millisecond lease reproduces the parked state without waiting for
+      // one: attempts at the ceiling, no owner, and — because the bus has spent
+      // `max_deliver` — no further redelivery to run the retire branch in `claim`.
+      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1 });
+      for (let i = 0; i < 2; i += 1) {
+        expect((await s.claim(NOTIFICATION, 'email', 2)).claimed).toBe(true);
+        await new Promise((r) => setTimeout(r, 5));
+      }
+
+      const [before] = await s.listForNotification(NOTIFICATION);
+      expect(before).toMatchObject({ status: 'pending', attempts: 2 });
+
+      expect(await s.reapExhausted(2)).toBeGreaterThanOrEqual(1);
+
+      const [after] = await s.listForNotification(NOTIFICATION);
+      expect(after).toMatchObject({ status: 'abandoned', refusalCode: 'channel.attempts_exhausted' });
+      expect(after?.leaseUntil).toBeNull();
+      // The sweep records a failure. The CHECK from 0002 would refuse the row if
+      // it ever wrote an accepted time, and it must never try.
+      expect(after?.acceptedAt).toBeNull();
+    });
+
+    it('does not touch a row whose lease is still live', async () => {
+      const s = new PostgresDeliveryStore(sql!, { leaseMs: 60_000 });
+      const first = await s.claim(NOTIFICATION, 'push', 1);
+      expect(first.claimed).toBe(true);
+
+      // At the attempt ceiling, but someone is mid-send and may yet accept it.
+      // Asserted on the row rather than the returned count: the sweep is
+      // table-wide by design, so a count is not this test's to own.
+      await s.reapExhausted(1);
+      expect((await s.listForNotification(NOTIFICATION))[0]?.status).toBe('pending');
+    });
+
+    it('leaves a row that still has an attempt left', async () => {
+      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1 });
+      expect((await s.claim(NOTIFICATION, 'sms', 3)).claimed).toBe(true);
+      await new Promise((r) => setTimeout(r, 5));
+
+      // Dead lease, but the bus may still redeliver and that send may work.
+      // Abandoning here throws away a retry the user is owed.
+      await s.reapExhausted(3);
+      expect((await s.listForNotification(NOTIFICATION))[0]?.status).toBe('pending');
+    });
+
+    it('never rewrites an accepted row', async () => {
+      const s = store();
+      const claim = await s.claim(NOTIFICATION, 'email', 1);
+      expect(claim.claimed).toBe(true);
+      if (!claim.claimed) return;
+      await s.settle({ id: claim.id, status: 'accepted', attempted: true, reference: 'gw-1' });
+
+      await s.reapExhausted(1);
+      expect((await s.listForNotification(NOTIFICATION))[0]?.status).toBe('accepted');
+    });
+
+    it('is idempotent — a second sweep retires nothing', async () => {
+      const s = store();
+      const claim = await s.claim(NOTIFICATION, 'email', 1);
+      expect(claim.claimed).toBe(true);
+      if (!claim.claimed) return;
+      await s.settle({ id: claim.id, status: 'failed', attempted: true, detail: '503' });
+
+      expect(await s.reapExhausted(1)).toBeGreaterThanOrEqual(1);
+      // Second pass: this row is already terminal, so it is not retired twice.
+      // Counted on the row, because the table is shared with the other cases.
+      await s.reapExhausted(1);
+      expect((await s.listForNotification(NOTIFICATION))[0]).toMatchObject({
+        status: 'abandoned',
+        attempts: 1,
+      });
+    });
+  });
 });
 
 describe.skipIf(!available)('PostgresTargetStore — verified and unverified are different questions', () => {
