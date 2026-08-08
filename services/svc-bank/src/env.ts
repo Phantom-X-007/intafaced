@@ -19,11 +19,18 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
       /**
-       * The native asset. svc-bank refuses it in earn pools: native staking lives
-       * in svc-token (§8.1), and both would otherwise write to the same
-       * `userStake(user, IFC)` ledger account — at which point neither service's
-       * table could be reconciled against it. Configurable only so a testnet can
-       * run its own symbol.
+       * The native asset. svc-bank refuses it in earn pools because native
+       * staking lives in svc-token (§8.1) — one asset, one owner.
+       *
+       * This used to give a second reason: that both services would otherwise
+       * write to the same `userStake(user, IFC)` ledger account. That has not
+       * been true since `purpose` became part of account identity. svc-token
+       * posts to `token:stake:<id>` and svc-bank to `bank:earn:<id>`, which are
+       * different accounts by the unique index, so the guard is a product rule
+       * now and not a reconciliation backstop. Worth knowing before anyone
+       * relaxes it for the wrong reason — or keeps it for one.
+       *
+       * Configurable only so a testnet can run its own symbol.
        */
       TOKEN_ASSET_ID: z.string().default('IFC'),
 

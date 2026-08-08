@@ -14,14 +14,14 @@ Also here: **loans** (§8.1), the **ledger half of cards**, and the **crypto led
 
 In svc-ledger. Nowhere else. Concretely:
 
-| Question                             | Answered by                                                      |
-| ------------------------------------ | ---------------------------------------------------------------- |
-| How much is in my "Rent" space?      | `ledger.balance(subAccountAvailable(spaceId, asset))`            |
-| How much is in my main account?      | `ledger.balance(userAvailable(userId, asset))`                   |
-| How much have I got earning?         | `ledger.balance(userStake(userId, asset))`                       |
-| How big is a pool?                   | `SUM(principal)` over open positions — a derived aggregate query |
-| What can a pool still afford to pay? | `ledger.balance(earnPoolReserve(poolId, asset))`                 |
-| What did I spend last month?         | a fold over ledger entries in the window                         |
+| Question                             | Answered by                                                                                           |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| How much is in my "Rent" space?      | `ledger.balance(subAccountAvailable(spaceId, asset))`                                                 |
+| How much is in my main account?      | `ledger.balance(userAvailable(userId, asset))`                                                        |
+| How much have I got earning?         | a sum of `ledger.balance(earnStakeAccount(userId, asset, positionId))` over the user's open positions |
+| How big is a pool?                   | `SUM(principal)` over open positions — a derived aggregate query                                      |
+| What can a pool still afford to pay? | `ledger.balance(earnPoolReserve(poolId, asset))`                                                      |
+| What did I spend last month?         | a fold over ledger entries in the window                                                              |
 
 **A space is a label over a ledger account.** The mapping is one function, `accountForSpace()`:
 
@@ -199,9 +199,31 @@ bank.interest:<poolId>:<date>               one day of one pool
 
 §8.1: _"flexible/fixed pools as stake-kind ledger accounts; native staking already lives in svc-token."_
 
-Both services move value into `userStake(userId, assetId)` — the **same ledger account** for a given user and asset. That is fine while they never share an asset and catastrophic the moment they do: svc-token's `stakeOf()` sums its own table and asserts the result equals that ledger account, and svc-bank does the same with `principalOf()`. If both wrote to `userStake(user, IFC)`, **neither** service's table could be reconciled against the ledger and both invariants would break at once.
+Both services move value into stake accounts for the same user, and there was a
+time when that meant the **same ledger account**: `userStake(userId, assetId)`
+was one pot per (user, asset), so the two services sharing an asset would have
+left neither able to reconcile its own table against the ledger.
 
-So svc-bank refuses the native asset in earn pools (`bank.native_asset_not_earnable`) and points the caller at svc-token. One asset, one owner. The refusal is tested, because the failure it prevents is silent.
+**That collision is now structurally impossible, and this section used to say
+otherwise.** `purpose` is part of an account's identity — enforced by the unique
+index `accounts_identity_purpose_idx` — and `userStake` requires one, throwing
+without it. The two services reach it through different constructors:
+
+| Constructor                                 | Purpose            |
+| ------------------------------------------- | ------------------ |
+| `tokenStakeAccount(user, asset, stakeId)`   | `token:stake:<id>` |
+| `earnStakeAccount(user, asset, positionId)` | `bank:earn:<id>`   |
+
+Different purpose, different account — not merely per service but per position,
+so two earn positions do not share a pot either. Nothing in this repo can build
+an unpurposed stake account: the sweep in `packages/ledger-client/src/accounts.purposed.test.ts`
+calls every exported builder and fails on any that returns a lock kind without a
+purpose.
+
+svc-bank still refuses the native asset in earn pools
+(`bank.native_asset_not_earnable`), and should: the reason is §8.1 — native
+staking belongs to svc-token — and not the account collision, which no longer
+needs preventing. One asset, one owner. The refusal is tested.
 
 ---
 
