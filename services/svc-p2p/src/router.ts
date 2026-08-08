@@ -15,6 +15,7 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
+import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
 export type P2pRouterOptions = {
   /** Natural-person ids from `P2P_MODERATOR_USER_IDS`. Empty = unconfigured. */
@@ -190,6 +191,19 @@ function toTrpcError(err: unknown): TRPCError {
       // a generic FORBIDDEN that looks like a missing scope on the caller.
       case 'p2p.moderation_unreachable':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      case 'p2p.merchant_not_found':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      // The caller can fix these: earn the record, or supply a reason. Not a
+      // permission problem, so not FORBIDDEN — that would send an applicant
+      // looking for a scope they already have.
+      case 'p2p.merchant_ineligible':
+      case 'p2p.merchant_reason_required':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      // State, not permission and not a typo: the row is real and the move is
+      // wrong for where it currently stands.
+      case 'p2p.merchant_exists':
+      case 'p2p.merchant_transition_invalid':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.dispute_already_open':
       case 'p2p.dispute_already_resolved':
       case 'p2p.trade_exists':
@@ -288,8 +302,67 @@ const instrumentHeaderOutput = z.object({
 /** The values. Only ever produced by a call that wrote an access-log row. */
 const instrumentDetailsOutput = z.record(z.string(), z.string());
 
-export function createP2pRouter(p2p: P2pService, instruments: InstrumentService, erasure?: P2pErasure, options: P2pRouterOptions = {}) {
+const merchantOutput = z.object({
+  userId: z.string(),
+  status: z.enum(['applied', 'approved', 'rejected', 'suspended', 'withdrawn']),
+  /** Reputation as it stood at application — stored, so a decision stays explicable. */
+  appliedCompletionRate: z.number(),
+  appliedTradesTotal: z.number().int(),
+  appliedAt: z.string(),
+  decidedAt: z.string().nullable(),
+});
+
+const merchantEventOutput = z.object({
+  seq: z.string(),
+  fromStatus: z.string(),
+  toStatus: z.string(),
+  reason: z.string(),
+  actorId: z.string(),
+  actorScope: z.string(),
+  createdAt: z.string(),
+});
+
+export function createP2pRouter(
+  p2p: P2pService,
+  instruments: InstrumentService,
+  erasure?: P2pErasure,
+  options: P2pRouterOptions = {},
+  merchants?: MerchantService,
+) {
   const moderatorUserIds = options.moderatorUserIds ?? [];
+
+  /**
+   * The programme, or an honest refusal.
+   *
+   * Not wired is not the same as empty. A deployment without the merchant
+   * service returns PRECONDITION_FAILED — an operator dashboard can alarm on
+   * that, where an empty list would look like "nobody has applied yet".
+   */
+  const requireMerchants = (): MerchantService => {
+    if (!merchants) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'The P2P merchant programme is not enabled in this deployment.',
+      });
+    }
+    return merchants;
+  };
+
+  /** The caller's own id, from the verified principal. Never from an input. */
+  const requireUser = (ctx: { principal?: { userId?: string } | null }): string => {
+    const userId = ctx.principal?.userId;
+    if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'This action is about your own account, so it needs one.' });
+    return userId;
+  };
+
+  const toMerchantOut = (r: MerchantRecord) => ({
+    userId: r.userId,
+    status: r.status,
+    appliedCompletionRate: r.appliedCompletionRate,
+    appliedTradesTotal: r.appliedTradesTotal,
+    appliedAt: r.appliedAt.toISOString(),
+    decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+  });
   const moderationReachable = isModerationConfigured(moderatorUserIds);
 
   /**
@@ -1053,6 +1126,109 @@ export function createP2pRouter(p2p: P2pService, instruments: InstrumentService,
               badges: [...r.badges],
             };
           }),
+        ),
+    }),
+
+    /**
+     * THE MERCHANT PROGRAMME (TRK-p2p.merchants Stage 1).
+     *
+     * Membership only. Badges and limit ENFORCEMENT are Stage 2 and read this;
+     * escrow still moves every coin through ledger recipes, so nothing here is
+     * a balance or a custody grant.
+     *
+     * `merchants` is undefined when the service was not wired, and every
+     * procedure then refuses honestly rather than pretending the programme is
+     * empty — the same shape `moderationReachable` uses above.
+     */
+    merchants: router({
+      /** Your own standing. Null means never applied — not "rejected". */
+      me: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(merchantOutput.nullable())
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            const record = await requireMerchants().get(requireUser(ctx));
+            return record ? toMerchantOut(record) : null;
+          }),
+        ),
+
+      /**
+       * Apply on your own behalf. The user id comes from the PRINCIPAL, never
+       * from the input — an applicant who could name the account would be
+       * applying for somebody else's.
+       */
+      // `submitApplication`, not `apply` — tRPC reserves that name because it
+      // collides with Function.prototype.apply on the router object.
+      submitApplication: scopedProcedure('p2p:write', { module: 'p2p' })
+        .output(merchantOutput)
+        .mutation(async ({ ctx }) => guard(async () => toMerchantOut(await requireMerchants().apply(requireUser(ctx), 'p2p:write')))),
+
+      /** Leave the programme. Self-service, and terminal — re-entry is a new application. */
+      withdraw: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(z.object({ reason: z.string().min(1) }))
+        .output(merchantOutput)
+        .mutation(async ({ ctx, input }) =>
+          guard(async () => {
+            const userId = requireUser(ctx);
+            return toMerchantOut(
+              await requireMerchants().transition({
+                userId,
+                to: 'withdrawn',
+                by: 'self',
+                reason: input.reason,
+                actorId: userId,
+                actorScope: 'p2p:write',
+              }),
+            );
+          }),
+        ),
+
+      /**
+       * Operator decision. `admin:compliance` rather than `p2p:write`: granting
+       * or revoking a badge a stranger relies on is not a trading action, and a
+       * merchant holding `p2p:write` must not be able to reach it.
+       */
+      decide: scopedProcedure('admin:compliance', { module: 'p2p' })
+        .input(
+          z.object({
+            userId: z.string().uuid(),
+            to: z.enum(['approved', 'rejected', 'suspended']),
+            reason: z.string().min(1),
+          }),
+        )
+        .output(merchantOutput)
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            toMerchantOut(
+              await requireMerchants().transition({
+                userId: input.userId,
+                to: input.to,
+                by: 'operator',
+                reason: input.reason,
+                // From the principal, never the body: otherwise the history
+                // records who the caller said they were.
+                actorId: requireUser(ctx),
+                actorScope: 'admin:compliance',
+              }),
+            ),
+          ),
+        ),
+
+      /** Why this merchant stands where they do. Newest first. */
+      history: scopedProcedure('admin:compliance', { module: 'p2p' })
+        .input(z.object({ userId: z.string().uuid() }))
+        .output(z.array(merchantEventOutput))
+        .query(async ({ input }) =>
+          guard(async () =>
+            (await requireMerchants().history(input.userId)).map((e: MerchantEvent) => ({
+              seq: e.seq,
+              fromStatus: e.fromStatus,
+              toStatus: e.toStatus,
+              reason: e.reason,
+              actorId: e.actorId,
+              actorScope: e.actorScope,
+              createdAt: e.createdAt.toISOString(),
+            })),
+          ),
         ),
     }),
   });

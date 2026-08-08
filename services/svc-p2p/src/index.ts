@@ -7,6 +7,7 @@ import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { createLedgerClient } from './ledger-client.js';
+import { MerchantService } from './merchant-service.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
 import { parseModeratorUserIds } from './moderation-auth.js';
 import { P2pErasure } from './erasure.js';
@@ -91,7 +92,16 @@ const erasure = new P2pErasure(sql);
 
 const moderatorUserIds = parseModeratorUserIds(env.P2P_MODERATOR_USER_IDS);
 
-export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds });
+/**
+ * The merchant programme (TRK-p2p.merchants Stage 1).
+ *
+ * Membership only — badges and limit enforcement are Stage 2 and read this
+ * table. Nothing here holds a balance: escrow still moves every coin through
+ * ledger recipes, for merchants exactly as for anyone else (§0.6).
+ */
+const merchants = new MerchantService(sql, p2p);
+
+export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds }, merchants);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
