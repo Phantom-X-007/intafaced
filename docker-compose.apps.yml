@@ -675,16 +675,30 @@ services:
     container_name: intafaced-svc-market
     command: ['node', 'services/svc-market/dist/index.js']
     environment:
-      <<: [*service-env, *edge-secret]
+      # *internal-secret became required at Stage 2. src/env.ts merges
+      # `internalServiceEnvSchema` for exactly one callee — svc-token's
+      # /internal/stake/:userId, which is how a listing slot knows how many slots
+      # the caller's stake tier entitles them to — and INTERNAL_SERVICE_SECRET has
+      # no default, so without this line the process dies at import with
+      # `EnvError: INTERNAL_SERVICE_SECRET: Required` and the container is never
+      # created at all. The svc-academy block below records why that failure is
+      # SILENT rather than loud, and why compose-secret-parity exists.
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-market
       # 4018: every port from 4000 to 4017 is already claimed above.
       HTTP_PORT: '4018'
       DATABASE_URL: postgres://svc_market:svc_market@postgres:5432/intafaced
+      TOKEN_URL: http://svc-token:4003
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4018']
     healthcheck: *healthcheck
     depends_on:
       <<: *needs-schema
+      # The stake gate fails closed, so starting before svc-token would refuse
+      # every slot claim with market.stake_unavailable rather than oversell —
+      # correct, but pointlessly noisy on a cold start.
+      svc-token:
+        condition: service_healthy
 
   # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
   # LEDGER_URL, and nothing in this process could reach anything that moves
