@@ -79,7 +79,7 @@
  */
 import { parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { EngineDepth } from '../spot/matching-client.js';
-import type { QuotedMarkSource } from './liquidation-tick.js';
+import type { DepthNotionalSource, QuotedMarkSource } from './liquidation-tick.js';
 import { markSourceFromBook } from './mark-source.js';
 import type { MarkPolicy } from './mark-policy.js';
 
@@ -206,6 +206,48 @@ export function bestFromDepth(
 }
 
 /**
+ * QUOTE-ASSET DEPTH ON THE SIDE A POSITION WOULD BE CLOSED INTO.
+ *
+ * A long is closed by SELLING, which hits the bids; a short is closed by BUYING,
+ * which lifts the asks. Those two numbers are routinely very different, and the
+ * one that matters is the one you have to trade against — so this is deliberately
+ * NOT a symmetric "book depth" figure. `maintenance-ladder.ts` rates a position
+ * against it, and rating a long against a wall of asks it will never touch is the
+ * same class of mistake as pricing it off a one-sided book.
+ *
+ * DUST IS NOT DEPTH. Every level is filtered through the same
+ * `bestLevelIsQuotable` floor that decides whether a best level may mint a mid —
+ * one threshold, one ruling, not a second definition of "too thin to matter" that
+ * could drift away from the first. A side made entirely of dust returns null.
+ *
+ * NULL, NOT ZERO, when the side is unreadable. Zero depth would flow into
+ * `depthRatioBps` as a division by zero; null makes the caller skip the position
+ * and an operator look at it, which is what this codebase already does with a
+ * missing mark.
+ */
+export function sideDepthNotional(
+  depth: EngineDepth | null | undefined,
+  side: 'long' | 'short',
+  policy: DepthQuotePolicy = DEFAULT_DEPTH_QUOTE_POLICY,
+): Amount | null {
+  if (!depth) return null;
+  const levels = side === 'long' ? depth.bids : depth.asks;
+  const minimum = minBestLevelNotional(policy);
+
+  let total = 0n;
+  for (const level of levels) {
+    const parsed = parseLevel(level);
+    if (parsed == null) continue;
+    const [price, quantity] = parsed;
+    if (!bestLevelIsQuotable(price, quantity, minimum)) continue;
+    // Both operands are 1e18-scaled, so the product is 1e36-scaled.
+    total += (price * quantity) / SCALE;
+  }
+
+  return total > 0n ? total : null;
+}
+
+/**
  * QuotedMarkSource that mids the injected book. Never invents when empty, and
  * never mints a mid from a book too thin to support one.
  * `last` is always null here — last print is a separate feed.
@@ -220,4 +262,20 @@ export function markSourceFromDepth(readDepth: DepthReader, policy?: MarkPolicy,
       return { bestBid, bestAsk, last: null };
     },
   });
+}
+
+/**
+ * `DepthNotionalSource` over the same book the mark comes from.
+ *
+ * The SAME book, deliberately. Rating a position's size against one venue's depth
+ * while marking it against another's would produce a maintenance requirement that
+ * describes no market that exists.
+ */
+export function depthNotionalSourceFromDepth(readDepth: DepthReader, depthPolicy?: DepthQuotePolicy): DepthNotionalSource {
+  return {
+    async depthNotional({ marketId, side }) {
+      const depth = await readDepth(marketId);
+      return sideDepthNotional(depth, side, depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY);
+    },
+  };
 }

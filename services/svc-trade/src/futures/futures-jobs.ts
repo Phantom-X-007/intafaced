@@ -15,11 +15,18 @@ import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from './job-host.js';
 import { runFundingTick } from './funding-tick.js';
 import { runLiquidationTick, type MarkSource } from './liquidation-tick.js';
-import { markSourceFromDepth } from './mark-from-depth.js';
+import { depthNotionalSourceFromDepth, markSourceFromDepth } from './mark-from-depth.js';
 import { markSourcePrefer } from './mark-from-venue.js';
 import { memoryFundingRateBook, type FundingRateEntry } from './funding-rate-source.js';
 import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
-import { sqlFundingMarginApplier, sqlFundingPeriodStore, sqlLiquidationAttemptStore, sqlPositionCloser } from './tick-stores.js';
+import {
+  sqlFundingMarginApplier,
+  sqlFundingPeriodStore,
+  sqlLiquidationAttemptStore,
+  sqlPositionCloser,
+  sqlPositionReducer,
+} from './tick-stores.js';
+import type { FuturesLadderPolicy } from './maintenance-ladder.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 
 export interface FuturesJobsConfig {
@@ -54,6 +61,14 @@ export interface FuturesJobsDeps {
   seedFundingRate?: (entry: FundingRateEntry) => void;
   now?: () => Date;
   onError?: (name: string, err: unknown) => void;
+  /**
+   * Maintenance ladder parameters. Omitted → `DEFAULT_FUTURES_LADDER_POLICY`.
+   *
+   * A hook for the owner's `DIRECTION` §8 item 8 ruling to land in without any
+   * call site moving. The DEFAULT is a placeholder, not a risk opinion — see
+   * `maintenance-ladder.ts`.
+   */
+  ladderPolicy?: FuturesLadderPolicy;
 }
 
 export interface FuturesJobsHandle {
@@ -129,6 +144,24 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
    */
   const acceptedMarks = sqlAcceptedMarkStore(deps.sql);
 
+  /**
+   * THE LADDER, WIRED — AND WIRED TO THE MATCHING BOOK, NOT THE VENUE'S.
+   *
+   * `marks` prefers an external venue mid when one is configured, and that is
+   * right for VALUING a position: the venue's book is deeper and harder to push.
+   * It is wrong for SIZING a rung. A rung is a fill on OUR book, so "how much can
+   * be closed without moving the price" is a question about `deps.matching` and
+   * nothing else. Rating a position against a venue's depth would authorise a
+   * tranche this venue cannot absorb — which is the exact failure `DIRECTION` §1
+   * warns about when it says "liquidating positions against a book that cannot
+   * absorb them".
+   */
+  const ladder = {
+    depth: depthNotionalSourceFromDepth((marketId) => deps.matching.depth(marketId)),
+    reducer: sqlPositionReducer(deps.sql),
+    policy: deps.ladderPolicy,
+  };
+
   host.every('futures.liquidation', deps.config.liqIntervalMs, async () => {
     await runLiquidationTick({
       marks,
@@ -136,6 +169,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       closer,
       attempts,
       acceptedMarks,
+      ladder,
       ledger: deps.ledger,
       now: deps.now,
     });

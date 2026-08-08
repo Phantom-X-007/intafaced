@@ -7,10 +7,27 @@
  *  3. plans via planLiquidation
  *  4. posts ledger recipes + marks position liquidated (via PositionCloser)
  *
- * Out of scope: mark oracle product, matching engine, partial ladder, funding.
+ * Out of scope: mark oracle product, matching engine, funding.
+ *
+ * THE LADDER IS NO LONGER OUT OF SCOPE. This header used to list "partial
+ * ladder" among the things this tick does not do, and it was accurate: every
+ * trigger produced a FULL close, which `DIRECTION` §1 calls "a failure mode, not
+ * a policy". Supply `deps.ladder` and the tick plans through
+ * `maintenance-ladder.ts` instead — a depth-referenced maintenance requirement,
+ * the smallest close that restores it, and a partial rung that REDUCES the
+ * position rather than closing it. Leave `deps.ladder` off and the old
+ * full-close planner runs unchanged, so nothing that already works moves.
  */
 import { formatAmount, parseAmount, type Amount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
 import { planLiquidation, summarizeLiquidation, type LiquidationPosition, type LiquidationDecision } from './liquidation-planner.js';
+import {
+  DEFAULT_FUTURES_LADDER_POLICY,
+  DEPTH_UNKNOWN,
+  FuturesLadderError,
+  planLadderLiquidation,
+  summarizeLadder,
+  type FuturesLadderPolicy,
+} from './maintenance-ladder.js';
 import {
   DEFAULT_FUTURES_MARK_POLICY,
   MARK_INVALID,
@@ -56,6 +73,44 @@ export interface PositionCloser {
   markLiquidated(positionId: string, meta: { liquidationId: string; reason: string }): Promise<void>;
 }
 
+/**
+ * Shrink a position after a PARTIAL rung, once its recipes have posted.
+ *
+ * `sizeClosed` leaves the position and `marginRemaining` is what the ledger left
+ * in the collateral pot after the tranche's realised loss — passed as an absolute
+ * figure rather than a delta so the row cannot drift from the pot through a
+ * missed or replayed call.
+ *
+ * THE ENTRY PRICE DOES NOT MOVE. The tranche was realised at the mark; the
+ * remainder still carries the position the trader actually opened, and re-basing
+ * it would silently rewrite their cost basis on the one day they are least able
+ * to argue about it.
+ */
+export interface PositionReducer {
+  reduce(positionId: string, input: { liquidationId: string; sizeClosed: Amount; marginRemaining: Amount; reason: string }): Promise<void>;
+}
+
+/** The book this position would have to be closed INTO. Null → skip (never invent depth). */
+export interface DepthNotionalSource {
+  depthNotional(input: { marketId: string; side: 'long' | 'short'; symbol?: string }): Promise<Amount | null>;
+}
+
+/**
+ * Everything the partial ladder needs, and nothing optional inside it.
+ *
+ * Grouped rather than spread across `LiquidationTickDeps` so the ladder cannot be
+ * half-wired: a caller either supplies a depth source AND a reducer, or does not
+ * use the ladder at all. A partial rung with no reducer would post a realised
+ * loss and leave the position row at its original size — the ledger and the book
+ * disagreeing about how big someone's position is, which is the worst available
+ * outcome and precisely what an optional port would permit.
+ */
+export interface LiquidationLadderDeps {
+  depth: DepthNotionalSource;
+  reducer: PositionReducer;
+  policy?: FuturesLadderPolicy;
+}
+
 /** Prevent double-liquidation attempts for the same position+attempt key. */
 export interface LiquidationAttemptStore {
   isDone(liquidationId: string): Promise<boolean>;
@@ -86,11 +141,25 @@ export interface LiquidationTickDeps {
    * `sqlAcceptedMarkStore(sql)` for production.
    */
   acceptedMarks: AcceptedMarkStore;
+  /**
+   * Present → plan through the partial-liquidation ladder. Absent → the legacy
+   * full-close planner, unchanged. See the file header.
+   */
+  ladder?: LiquidationLadderDeps;
 }
 
 export interface LiquidationTickItemResult {
   positionId: string;
-  outcome: 'skipped_no_mark' | 'skipped_mark_unusable' | 'skipped_healthy' | 'skipped_already' | 'liquidated' | 'invalid';
+  outcome:
+    | 'skipped_no_mark'
+    | 'skipped_mark_unusable'
+    | 'skipped_no_depth'
+    | 'skipped_healthy'
+    | 'skipped_already'
+    | 'margin_call'
+    | 'partially_liquidated'
+    | 'liquidated'
+    | 'invalid';
   reason: string;
   summary?: string;
 }
@@ -98,6 +167,10 @@ export interface LiquidationTickItemResult {
 export interface LiquidationTickResult {
   scanned: number;
   liquidated: number;
+  /** Rungs that shrank a position without closing it. Not counted in `liquidated`. */
+  partial: number;
+  /** Positions under the margin-call threshold but not yet liquidatable. */
+  marginCalls: number;
   items: LiquidationTickItemResult[];
 }
 
@@ -142,6 +215,8 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
   const open = await deps.positions.listOpen();
   const items: LiquidationTickItemResult[] = [];
   let liquidated = 0;
+  let partial = 0;
+  let marginCalls = 0;
 
   for (const row of open) {
     const liquidationId = deps.liquidationIdFor?.(row, at) ?? `liq:${row.positionId}:${at.toISOString().slice(0, 16)}`;
@@ -218,6 +293,15 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
     await deps.acceptedMarks.record(row.positionId, { price: quoted.price, at });
     const mark = formatAmount(quoted.price);
 
+    if (deps.ladder) {
+      const outcomeItem = await runLadderRung(deps, deps.ladder, row, quoted.price, liquidationId);
+      items.push(outcomeItem);
+      if (outcomeItem.outcome === 'liquidated') liquidated += 1;
+      else if (outcomeItem.outcome === 'partially_liquidated') partial += 1;
+      else if (outcomeItem.outcome === 'margin_call') marginCalls += 1;
+      continue;
+    }
+
     const decision: LiquidationDecision = planLiquidation({
       liquidationId,
       position: row,
@@ -253,7 +337,109 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
     });
   }
 
-  return { scanned: open.length, liquidated, items };
+  return { scanned: open.length, liquidated, partial, marginCalls, items };
+}
+
+/**
+ * ONE POSITION, THROUGH THE LADDER.
+ *
+ * Split out rather than inlined because the ORDER of the four steps below is the
+ * whole safety property, and it is easier to check when it is not buried in the
+ * scan loop.
+ *
+ *   1. Read the depth this position would be closed into. No depth → skip.
+ *   2. Plan. A refusal or a healthy rung → skip, and nothing posts.
+ *   3. Post the recipes. The ledger dedupes on `liquidationId`.
+ *   4. THEN move the row — reduce on a partial rung, close on a closing one.
+ *
+ * Step 4 last, and the attempt only marked done after it, so a crash between 3
+ * and 4 re-runs the whole rung: the ledger moves nothing twice on the replay, and
+ * the row catches up. The reverse order would shrink a position whose loss never
+ * posted.
+ */
+async function runLadderRung(
+  deps: LiquidationTickDeps,
+  ladder: LiquidationLadderDeps,
+  row: LiquidationPositionRow,
+  markPrice: Amount,
+  liquidationId: string,
+): Promise<LiquidationTickItemResult> {
+  let depthNotional: Amount | null;
+  try {
+    depthNotional = await ladder.depth.depthNotional({ marketId: row.marketId, side: row.side, symbol: row.symbol });
+  } catch {
+    depthNotional = null;
+  }
+
+  if (depthNotional == null || depthNotional <= 0n) {
+    /**
+     * A BOOK WE COULD NOT READ IS NOT A DEEP BOOK.
+     *
+     * The maintenance requirement is keyed on depth, so an unreadable side has no
+     * requirement — and the only honest answers are "assume the worst tier" or
+     * "do not act". Assuming the worst tier would liquidate every position on the
+     * venue the moment a depth call failed, which is the missing-mark mistake
+     * wearing a different hat. The position sits and an operator looks at it.
+     */
+    return {
+      positionId: row.positionId,
+      outcome: 'skipped_no_depth',
+      reason: DEPTH_UNKNOWN,
+      summary: `${row.marketId}: no readable ${row.side === 'long' ? 'bid' : 'ask'} depth to rate this position against`,
+    };
+  }
+
+  let decision;
+  try {
+    decision = planLadderLiquidation({
+      liquidationId,
+      position: row,
+      markPrice,
+      depthNotional,
+      policy: ladder.policy ?? DEFAULT_FUTURES_LADDER_POLICY,
+    });
+  } catch (err) {
+    // An incoherent policy is an operator problem on every position, not a market
+    // event on this one — surfaced per position so it cannot be scrolled past.
+    const code = err instanceof FuturesLadderError ? err.code : 'trade.ladder_failed';
+    return { positionId: row.positionId, outcome: 'invalid', reason: code, summary: (err as Error).message };
+  }
+
+  if (!decision.liquidate) {
+    const outcome =
+      decision.rung.action === 'margin-call'
+        ? 'margin_call'
+        : decision.rung.action === 'refuse' &&
+            (decision.reason === 'invalid_mark' || decision.reason === 'empty_position' || decision.reason === 'invalid_margin')
+          ? 'invalid'
+          : decision.rung.action === 'refuse'
+            ? 'invalid'
+            : 'skipped_healthy';
+    return { positionId: row.positionId, outcome, reason: decision.reason, summary: summarizeLadder(decision) };
+  }
+
+  for (const recipe of decision.recipes) {
+    await deps.ledger.post(recipe as PostRequest);
+  }
+
+  if (decision.closesPosition) {
+    await deps.closer.markLiquidated(row.positionId, { liquidationId, reason: decision.reason });
+  } else {
+    await ladder.reducer.reduce(row.positionId, {
+      liquidationId,
+      sizeClosed: decision.sizeClosed,
+      marginRemaining: decision.marginRemaining,
+      reason: decision.reason,
+    });
+  }
+  await deps.attempts.markDone(liquidationId);
+
+  return {
+    positionId: row.positionId,
+    outcome: decision.closesPosition ? 'liquidated' : 'partially_liquidated',
+    reason: decision.reason,
+    summary: summarizeLadder(decision),
+  };
 }
 
 export function memoryLiquidationAttemptStore(): LiquidationAttemptStore {
