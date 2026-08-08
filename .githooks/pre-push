@@ -8,14 +8,29 @@
 
 TOP=$(git rev-parse --show-toplevel)
 
+# Resolve the MAIN checkout from --git-common-dir, whose parent is the main
+# working tree. Two spellings have to be handled, and getting this wrong is why
+# every push from a worktree used to print
+#   cd: .../plug-x-inta-worktrees/<wt>/C:/Users/User/PLUG X INTA: No such file
+#
+#   main checkout   → ".git"                       (relative to $TOP)
+#   linked worktree → "C:/Users/User/repo/.git"    (absolute, Git Bash on Windows)
+#
+# The old code tested only `/*` for "already absolute". A Windows absolute path
+# starts with a drive letter, not a slash, so it fell through to the relative
+# branch and concatenated an absolute path onto $TOP. Non-fatal — REPO_ROOT just
+# came out empty and prettier was found via $TOP — but it cried wolf on every
+# push. `git rev-parse --show-toplevel` always returns forward slashes; other
+# rev-parse outputs do not normalise, hence matching both forms below.
+# (`--path-format=absolute` would do this in one call but needs git >= 2.31.)
 COMMON_GIT=$(git rev-parse --git-common-dir)
-# git-common-dir is e.g. /repo/.git or /repo/.git/worktrees/x → parent of .git is main checkout
-REPO_ROOT=$(CDPATH= cd -- "$(dirname "$COMMON_GIT")" && pwd)
-# when common-dir is /repo/.git, dirname is /repo; when relative .git, resolve
 case "$COMMON_GIT" in
-  /*) ;;
-  *) REPO_ROOT=$(CDPATH= cd -- "$TOP/$(dirname "$COMMON_GIT")" && pwd) ;;
+  /*) ;;                                       # POSIX absolute
+  [A-Za-z]:*) ;;                               # Windows absolute, e.g. C:/repo/.git
+  *) COMMON_GIT="$TOP/$COMMON_GIT" ;;          # relative — hooks run from $TOP
 esac
+REPO_ROOT=$(CDPATH= cd -- "$COMMON_GIT/.." 2>/dev/null && pwd) || REPO_ROOT=""
+[ -n "$REPO_ROOT" ] || REPO_ROOT="$TOP"
 
 PRETTIER=""
 if [ -x "$TOP/node_modules/.bin/prettier" ]; then
