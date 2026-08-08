@@ -67,9 +67,15 @@ export interface FundingPeriodStore {
  * Payers: margin_current -= paid, funding_paid += paid.
  * Payees: funding_paid -= received (receipt goes to available, not re-margin).
  * Optional on older wires — production must set it or close over-releases.
+ *
+ * `periodId` is not decoration. This runs between an idempotent ledger post and
+ * the settle marker that stops the tick re-running, so a restart in that gap
+ * replays it — and a decrement replayed is a trader's margin charged twice for
+ * one funding period. The implementation must be idempotent on
+ * (position, period), which is why it is given the period. See 0014.
  */
 export interface FundingMarginApplier {
-  applyFundingNets(nets: readonly { positionId: string; paid: Amount }[]): Promise<void>;
+  applyFundingNets(nets: readonly { positionId: string; paid: Amount }[], periodId: string): Promise<void>;
 }
 
 export interface FundingTickDeps {
@@ -142,10 +148,13 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
 
   await postLegs(deps.ledger, legs);
 
-  // Ledger first, then row — same period cannot re-post (idempotent keys + period store).
-  // Without this, close/liquidation still read open-time margin and over-release.
+  // Ledger first, then row. The ledger dedupes on its own key, and the applier
+  // is idempotent on (position, period) — both matter, because markSettled below
+  // is written last, so a restart in this gap replays everything above it.
+  // Without this step at all, close/liquidation read open-time margin and
+  // over-release; without its idempotency, a replay charges margin twice.
   if (deps.margins) {
-    await deps.margins.applyFundingNets(netFundingPaid(legs));
+    await deps.margins.applyFundingNets(netFundingPaid(legs), quote.periodId);
   }
 
   await deps.periods.markSettled(quote.periodId, {

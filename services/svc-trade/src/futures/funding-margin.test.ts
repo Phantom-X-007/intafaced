@@ -98,6 +98,41 @@ describe('runFundingTick applies margin nets after ledger post', () => {
     expect(formatAmount(longNet.paid)).toBe('5');
   });
 
+  it('hands the applier the period id — the key its idempotency turns on', async () => {
+    // The applier runs between an idempotent ledger post and the settle marker,
+    // so a restart in that gap replays it. It cannot be idempotent on a key it
+    // was never given.
+    const seen: string[] = [];
+    const margins: FundingMarginApplier = {
+      async applyFundingNets(_nets, periodId) {
+        seen.push(periodId);
+      },
+    };
+    await runFundingTick(
+      {
+        rates: {
+          async quote({ marketId }) {
+            return { rate: '0.0001', periodId: 'm1:period-key', marketId };
+          },
+        },
+        positions: {
+          async listOpenForMarket() {
+            return longShort();
+          },
+        },
+        periods: memoryFundingPeriodStore(),
+        ledger: {
+          async post() {
+            return undefined as never;
+          },
+        },
+        margins,
+      },
+      'm1',
+    );
+    expect(seen).toEqual(['m1:period-key']);
+  });
+
   it('skips margin apply when no legs (zero rate)', async () => {
     let called = 0;
     const margins: FundingMarginApplier = {

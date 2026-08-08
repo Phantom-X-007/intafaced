@@ -381,4 +381,30 @@ export const positions = trade.table(
   (t) => [index('positions_user_status_idx').on(t.userId, t.status), index('positions_market_idx').on(t.marketId)],
 );
 
-export const schema = { markets, orders, fills, positions };
+/**
+ * Which funding periods have already moved a position's margin (0014).
+ *
+ * The applier runs between an idempotent ledger post and the settle marker that
+ * stops the tick re-running, so a restart in that gap replays it. Without this
+ * key a replayed decrement charges a trader's margin twice for one funding
+ * period — liquidating early and releasing short, clamped at zero so nothing
+ * raises. The claim and the margin update are one statement.
+ *
+ * Also the per-position funding audit trail: which periods this position has
+ * actually paid, recorded rather than inferred from a running total.
+ */
+export const positionFundingApplied = trade.table(
+  'position_funding_applied',
+  {
+    positionId: uuid('position_id')
+      .notNull()
+      .references(() => positions.id, { onDelete: 'cascade' }),
+    periodId: text('period_id').notNull(),
+    /** Signed: positive is margin paid out of this position, negative is received. */
+    paid: amount('paid').notNull(),
+    appliedAt: tstz('applied_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.positionId, t.periodId] }), index('position_funding_applied_period_idx').on(t.periodId)],
+);
+
+export const schema = { markets, orders, fills, positions, positionFundingApplied };
