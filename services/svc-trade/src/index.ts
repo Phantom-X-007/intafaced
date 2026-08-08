@@ -26,6 +26,7 @@ import { checkEngineSequences, describeRegressions } from './spot/sequence-guard
 import { parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { parseOtcDeskLawJson } from './otc/desk-law.js';
+import { createConfigOtcMidSource } from './otc/mid-source.js';
 import { OtcDeskService } from './otc/otc-service.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
 
@@ -90,9 +91,12 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
 // trade.otc — D-S-02 Stage. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
+// Empty TRADE_OTC_MIDS → the desk can source no price and refuses every quote,
+// which is the correct posture: a dark feed is a refusal, not a fallback.
 const otcDeskLaw = parseOtcDeskLawJson(env.TRADE_OTC_DESK_LAW);
 const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET);
-const otc = new OtcDeskService(ledger, otcStakes, { law: otcDeskLaw });
+const otcMids = createConfigOtcMidSource(env.TRADE_OTC_MIDS);
+const otc = new OtcDeskService(ledger, otcStakes, { law: otcDeskLaw, midSource: otcMids });
 
 export const appRouter = createTradeRouter(trade, otc);
 export type AppRouter = typeof appRouter;

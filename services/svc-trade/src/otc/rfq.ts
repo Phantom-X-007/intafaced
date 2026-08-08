@@ -2,7 +2,8 @@
  * OTC RFQ quote math + accept (SPEC-OTC-RFQ-AND-EARN Part A).
  *
  * - Quote discloses counterparty, size, expiry, and house spread.
- * - Mid must be caller-supplied — never invented.
+ * - Mid is server-sourced (`mid-source.ts`) — never invented, and never taken
+ *   from the caller: see that file for why those are the same rule.
  * - Accept binds the quoted price; requote / last-look is forbidden.
  */
 
@@ -19,7 +20,7 @@ export interface OtcQuoteInput {
   readonly baseAsset: string;
   readonly quoteAsset: string;
   readonly qty: Amount;
-  /** External mid (maker or desk reference) — required; never invent. */
+  /** Desk reference mid, resolved server-side. Never the caller's number. */
   readonly midPrice: Amount;
   readonly spreadBps: number;
   readonly counterparty: OtcCounterpartyMode;

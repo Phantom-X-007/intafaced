@@ -10,8 +10,10 @@
 import { randomUUID } from 'node:crypto';
 import { parseAmount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
+import { otcSettleIdsFor } from '../spot/ids.js';
 import { otcDeskLawStatusLine, requirePublishedOtcDeskLaw, type OtcDeskLaw, UNPUBLISHED_OTC_DESK_LAW } from './desk-law.js';
 import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
+import { NO_OTC_MIDS, otcPairKey, type OtcMidSource } from './mid-source.js';
 import {
   acceptOtcQuote,
   buildOtcQuote,
@@ -30,6 +32,8 @@ export interface OtcDeskServiceOptions {
   law?: OtcDeskLaw;
   /** Platform counterparty id disclosed when law.counterparty === 'platform'. */
   platformCounterpartyId?: string;
+  /** Server-side reference mid. Absent → every quote refuses (never the caller's number). */
+  midSource?: OtcMidSource;
   now?: () => Date;
 }
 
@@ -38,6 +42,7 @@ export class OtcDeskService {
   private readonly bounds = new Map<string, BoundOtcFill>();
   private readonly law: OtcDeskLaw;
   private readonly platformCounterpartyId: string;
+  private readonly midSource: OtcMidSource;
   private readonly now: () => Date;
 
   constructor(
@@ -47,6 +52,7 @@ export class OtcDeskService {
   ) {
     this.law = options.law ?? UNPUBLISHED_OTC_DESK_LAW;
     this.platformCounterpartyId = options.platformCounterpartyId ?? 'platform:otc-desk';
+    this.midSource = options.midSource ?? NO_OTC_MIDS;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -65,18 +71,32 @@ export class OtcDeskService {
       baseAsset: string;
       quoteAsset: string;
       qty: string;
-      /** Required mid — refuse if blank. */
-      midPrice: string;
       /** Maker id when counterparty mode is maker. */
       makerId?: string;
     },
   ) {
     const law = requirePublishedOtcDeskLaw(this.law);
     const qty = parseAmount(input.qty);
-    const midPrice = parseOtcMidPrice(input.midPrice);
 
+    // Access gate before price lookup: an unstaked caller learns nothing about
+    // what the desk can price, and a mid source that costs a round trip is not
+    // spent on a caller who was never eligible.
     const stake = await this.stakes.stakeOf(principal.userId);
     assertOtcStakeGate(otcStakeGate({ stake, minStake: law.minStake }));
+
+    // The desk's own mid. There is deliberately no caller-supplied fallback:
+    // a taker who can name the price can name it at 1 and take the inventory.
+    const baseAsset = input.baseAsset.trim();
+    const quoteAsset = input.quoteAsset.trim();
+    const pair = otcPairKey(baseAsset, quoteAsset);
+    const sourced = await this.midSource(pair);
+    if (sourced == null || String(sourced).trim() === '') {
+      throw new OtcError(
+        `No reference mid for ${pair} — the desk refuses rather than quote off a price it cannot source`,
+        'trade.otc_no_reference_price',
+      );
+    }
+    const midPrice = parseOtcMidPrice(String(sourced));
 
     let counterpartyId: string;
     if (law.counterparty === 'platform') {
@@ -93,8 +113,8 @@ export class OtcDeskService {
       quoteId: randomUUID(),
       userId: principal.userId,
       side: input.side,
-      baseAsset: input.baseAsset.trim(),
-      quoteAsset: input.quoteAsset.trim(),
+      baseAsset,
+      quoteAsset,
       qty,
       midPrice,
       spreadBps: law.spreadBps,
@@ -146,9 +166,9 @@ export class OtcDeskService {
       throw new OtcError('OTC fill belongs to another user', 'trade.otc_not_owner');
     }
 
-    const takerOrderId = randomUUID();
-    const makerOrderId = randomUUID();
-    const fillId = randomUUID();
+    // Derived from the quote, never minted: a retry after a partial post must
+    // compute the same keys and find the ledger's original transaction.
+    const { takerOrderId, makerOrderId, fillId } = otcSettleIdsFor(bound.quoteId);
     const plan = planOtcSettle({
       law,
       bound,

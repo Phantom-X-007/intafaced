@@ -201,6 +201,16 @@ const schema = serviceEnvSchema
        */
       TRADE_OTC_DESK_LAW: z.string().default(''),
 
+      /**
+       * OTC reference mids, ops-published: `BASE/QUOTE:mid,BASE/QUOTE:mid`.
+       *
+       * Empty (default) = the desk can source no price and every quote refuses
+       * `trade.otc_no_reference_price`. This is the ONLY place an OTC mid comes
+       * from — it is deliberately not a caller input, because a taker who names
+       * the price can name it at 1 and take the house inventory.
+       */
+      TRADE_OTC_MIDS: z.string().default(''),
+
       /** svc-token — stakeOf for OTC staked-tier gate. */
       TOKEN_URL: z.string().url().default('http://localhost:4003'),
     }),
