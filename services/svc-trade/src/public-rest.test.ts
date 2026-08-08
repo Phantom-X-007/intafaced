@@ -58,6 +58,29 @@ describe('presenters', () => {
   });
 
   /**
+   * A bot must be able to tell a simulated market from a real one.
+   *
+   * `trade.markets()` returns every row with no filter, so a paper market
+   * already appears in `fetchMarkets` as an ordinary `active: true` spot
+   * market — and `placeOrder` then routes it to the paper path, taking no hold
+   * and posting nothing to the ledger, while returning a 201 that looks like
+   * any other order. Without this field a bot books a position it does not
+   * have and has no way to find out.
+   */
+  it('says out loud when a market is simulated', () => {
+    const real = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT' }));
+    expect(real.paper).toBe(false);
+    // Still a valid CCXT market — the extra field must not break the schema.
+    expect(marketSchema.safeParse(real).success).toBe(true);
+
+    const sim = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT', paper: true }));
+    expect(sim.paper).toBe(true);
+    expect(marketSchema.safeParse(sim).success).toBe(true);
+    // Not disguised as inactive — it IS tradable, just not for real money.
+    expect(sim.active).toBe(true);
+  });
+
+  /**
    * The regression this shape exists to stop. Seven of the sixteen live
    * listings have a lot size that is not a power of ten — the six forex majors
    * at 1000 units and NATGAS/USD at 10 — and the previous decimal-places
