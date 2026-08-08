@@ -1,9 +1,12 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { withMarketSpan } from './tracing.js';
+import { decideVendorSlot, usableSlots } from './slot-access.js';
+import type { SlotEntitlementSource } from './stake-source.js';
 
 /**
- * THE VENDOR LIFECYCLE — APPLY, THEN VET (§8.7, `market.vendors` Stage 1).
+ * THE VENDOR LIFECYCLE — APPLY, THEN VET (Stage 1), AND THE STAKE-GATED LISTING
+ * SLOTS THAT SIT ON TOP OF IT (Stage 2) — §8.7, `market.vendors`.
  *
  * A user applies to be a marketplace vendor; an operator decides. Every decision
  * is recorded next to the state it produced, in one transaction, so "why was
@@ -22,15 +25,24 @@ import { withMarketSpan } from './tracing.js';
  * `services/svc-pay/src/merchant-state-service.ts` — which exists because
  * merchant state was enforced by a column nothing ever wrote.
  *
- * IT DOES NOT KNOW WHAT A STAKE IS. Stake-gated listing slots are Stage 2 and
- * the numbers behind them belong to svc-token (`economics/staking.ts`,
- * `vendorSlots`). No threshold, count or tier name appears in this service, and
- * `docs/ops/trk/market.vendors.md:76` is why: "market must not invent parallel
- * stake numbers".
+ * IT DOES NOT DECIDE WHEN TO SUSPEND EITHER, and Stage 2 does not change that.
+ * A slot is released when a vendor stops being approved, but the TRANSITION is
+ * still something an operator recorded through `vet`. Reacting to a state
+ * somebody else wrote is not the same thing as deciding it, and nothing here
+ * suspends a vendor on a timer, a threshold or an offence count.
+ *
+ * IT STILL RESTATES NO STAKE NUMBER. Stage 2 reads slot capacity from svc-token
+ * at claim time (`stake-source.ts`); the tier schedule itself stays in
+ * `economics/staking.ts`. No threshold, slot count or tier name is written down
+ * in this service or its schema, and `docs/ops/trk/market.vendors.md:76` is why:
+ * "market must not invent parallel stake numbers".
  *
  * IT MOVES NO VALUE. There is no import of `@intafaced/ledger-client` in this
  * service and no column in its schema could hold an amount (§0.6). Purchases,
- * subscriptions and house commission are `market.commerce`.
+ * subscriptions and house commission are `market.commerce`. Stage 2 deliberately
+ * reads only `tier.vendorSlots` off svc-token and ignores the `staked` and
+ * `minStake` amounts it also returns, so no money crosses into this process at
+ * all.
  *
  * ── WHY THE TWO WRITES ARE ONE TRANSACTION ─────────────────────────────────
  *
@@ -122,6 +134,55 @@ interface StatusEventRow {
   created_at: Date;
 }
 
+/** One listing slot a vendor has taken up. Holds no amount and no capacity. */
+export interface VendorSlotRecord {
+  id: string;
+  vendorId: string;
+  ref: string;
+  claimedAt: string;
+  releasedAt: string | null;
+}
+
+/**
+ * What a vendor's slot position actually is, right now.
+ *
+ * `capacity` and `tier` are re-read from svc-token on every call rather than
+ * stored — see `slot-access.ts` `usableSlots` for why that re-derivation is the
+ * mechanism behind "under-staked vendors cannot present as listed" (DoD clause
+ * 5) rather than a subscription to an unstake event that does not exist.
+ */
+export interface VendorSlotStatus {
+  vendorId: string;
+  status: VendorStatus;
+  /** svc-token's tier name, for display. Never computed here. */
+  tier: string;
+  /** `AccessTier.vendorSlots` as svc-token reported it this second. */
+  capacity: number;
+  /** Slots held and not released. */
+  held: number;
+  /** Of those, how many the CURRENT tier and status actually cover. */
+  usable: number;
+  slots: VendorSlotRecord[];
+}
+
+interface SlotRow {
+  id: string;
+  vendor_id: string;
+  ref: string;
+  claimed_at: Date;
+  released_at: Date | null;
+}
+
+function toSlot(row: SlotRow): VendorSlotRecord {
+  return {
+    id: row.id,
+    vendorId: row.vendor_id,
+    ref: row.ref,
+    claimedAt: row.claimed_at.toISOString(),
+    releasedAt: row.released_at ? row.released_at.toISOString() : null,
+  };
+}
+
 function toVendor(row: VendorRow): VendorRecord {
   return {
     id: row.id,
@@ -171,7 +232,17 @@ export interface VetInput {
 }
 
 export class VendorService {
-  constructor(private readonly sql: Sql) {}
+  /**
+   * `stakes` is REQUIRED, not optional with a permissive default. An optional
+   * entitlement source is a production fallback by another name: the day
+   * somebody constructs this service without one, every slot claim would be
+   * decided by whatever the default said, and the default would be wrong in the
+   * generous direction. Tests pass `FixedEntitlement` explicitly (stake-source.ts).
+   */
+  constructor(
+    private readonly sql: Sql,
+    private readonly stakes: SlotEntitlementSource,
+  ) {}
 
   /**
    * Create the caller's own application, in `applied`.
@@ -325,6 +396,33 @@ export class VendorService {
              RETURNING id, user_id, display_name, description, status, created_at, updated_at
           `;
 
+          /**
+           * RELEASE ON SUSPENSION — DoD "release on unstake / offence /
+           * suspension", in the SAME TRANSACTION as the transition that caused it.
+           *
+           * Not a separate call, and the reason is the one three paragraphs of
+           * this file's header already make about status and history: two writes
+           * that must both happen, split across two transactions, means a crash
+           * in between leaves a suspended vendor still holding every slot they
+           * had. That is the exact failure clause 5 exists to prevent, and it
+           * would be invisible — the vendor row would read `suspended` and look
+           * correct.
+           *
+           * `!== 'approved'` rather than `=== 'suspended'`: a REJECTED vendor
+           * must not keep slots either, and a status added later should default
+           * to releasing rather than to keeping. Fail closed on the enum too.
+           *
+           * This is not a suspension POLICY. Nothing here decides that a vendor
+           * should be suspended; an operator already did, and this reacts to what
+           * they recorded.
+           */
+          if (input.decision !== 'approved') {
+            await tx`
+              UPDATE market.vendor_slots SET released_at = now()
+               WHERE vendor_id = ${input.vendorId} AND released_at IS NULL
+            `;
+          }
+
           const [row] = await tx<StatusEventRow[]>`
             INSERT INTO market.vendor_status_events (vendor_id, from_status, to_status, reason, actor_id, actor_scope)
             VALUES (
@@ -372,5 +470,192 @@ export class VendorService {
        LIMIT ${Math.min(Math.max(limit, 1), 200)}
     `;
     return rows.map(toEvent);
+  }
+
+  // ── Stage 2: stake-gated listing slots ─────────────────────────────────────
+
+  /** Slots held and not released. A COUNT, never a maintained counter. */
+  async openSlotCount(vendorId: string, tx: Sql = this.sql): Promise<number> {
+    const rows = await tx<Array<{ count: string }>>`
+      SELECT COUNT(*)::text AS count FROM market.vendor_slots WHERE vendor_id = ${vendorId} AND released_at IS NULL
+    `;
+    return Number(rows[0]?.count ?? '0');
+  }
+
+  /**
+   * Take a listing slot.
+   *
+   * ── WHY THE SLOT IS CLAIMED UNDER A LOCK ───────────────────────────────────
+   *
+   * A capacity is only a capacity if two requests racing for the last slot
+   * cannot both get it. The insert runs inside a transaction that locks the
+   * VENDOR row first, so the occupancy count and the insert cannot interleave —
+   * which is what makes `read committed` correct here (packages/db/src/
+   * connection.ts explains when it is and when it is not). Same pattern, and
+   * mostly the same words, as `svc-academy`'s seat claim.
+   *
+   * ── WHY THE STAKE READ HAPPENS BEFORE THE LOCK ─────────────────────────────
+   *
+   * Deliberately, and it is the subtle half. A stake lookup is a network call to
+   * svc-token. Holding the vendor's row across one would serialise every claim
+   * that vendor makes behind svc-token's latency, and under an outage it would
+   * hold the lock for the full fetch timeout. The capacity read a few
+   * milliseconds early is not a correctness problem: the number it produces is
+   * an ENTITLEMENT, and a stale entitlement can only ever admit a claim the
+   * vendor was entitled to moments ago. What must not be stale is the OCCUPANCY,
+   * and that is counted inside the lock.
+   *
+   * ── AND WHY IT IS IDEMPOTENT ───────────────────────────────────────────────
+   *
+   * A retried request must not consume a second slot for the same listing. The
+   * already-held check runs inside the lock, so two simultaneous retries of one
+   * claim resolve to one slot rather than racing each other — which is the same
+   * oversell this method exists to prevent, arriving by the back door.
+   */
+  async claimSlot(input: { userId: string; ref: string }): Promise<{ claimed: boolean; slot: VendorSlotRecord }> {
+    const ref = input.ref.trim();
+    if (ref.length === 0) {
+      throw new MarketError('A slot claim needs a reference naming what the slot is for', 'market.slot_ref_required');
+    }
+
+    const vendor = await this.myVendor(input.userId);
+    if (!vendor) {
+      throw new MarketError('You have not applied to be a vendor', 'market.vendor_not_found');
+    }
+
+    // Before the lock. See the header above — this is a network call.
+    const entitlement = await this.stakes.entitlementOf(input.userId);
+
+    return withMarketSpan('market.slot.claim', { op: 'slot.claim', vendorId: vendor.id }, async (span) => {
+      span.setAttribute('intafaced.market.slot_capacity', entitlement.vendorSlots);
+
+      const outcome = await transaction(
+        this.sql,
+        async (tx) => {
+          /**
+           * The status comes from THIS row read, not from `myVendor` above. An
+           * operator suspending the vendor between those two reads must win, and
+           * a status read outside the lock would let a suspended vendor take a
+           * slot the same instant their suspension was recorded.
+           */
+          const [locked] = await tx<Array<{ id: string; status: VendorStatus }>>`
+            SELECT id, status FROM market.vendors WHERE id = ${vendor.id} FOR UPDATE
+          `;
+          if (!locked) throw new MarketError(`No vendor application ${vendor.id}`, 'market.vendor_not_found');
+
+          const [existing] = await tx<SlotRow[]>`
+            SELECT id, vendor_id, ref, claimed_at, released_at
+              FROM market.vendor_slots
+             WHERE vendor_id = ${vendor.id} AND ref = ${ref} AND released_at IS NULL
+          `;
+          if (existing) return { decision: { allowed: true } as const, claimed: false, slot: toSlot(existing), open: -1 };
+
+          const open = await this.openSlotCount(vendor.id, tx);
+          const decision = decideVendorSlot({ status: locked.status, capacity: entitlement.vendorSlots }, { open });
+          if (!decision.allowed) return { decision, claimed: false, slot: null, open };
+
+          const [row] = await tx<SlotRow[]>`
+            INSERT INTO market.vendor_slots (vendor_id, ref)
+            VALUES (${vendor.id}, ${ref})
+            RETURNING id, vendor_id, ref, claimed_at, released_at
+          `;
+          if (!row) {
+            // Unreachable: the insert either returns a row or throws. Stated
+            // rather than asserted away, because a silent undefined here would
+            // report a claim that did not happen.
+            throw new MarketError('The slot was claimed but not returned. The claim has been rolled back.', 'market.slot_not_written');
+          }
+          return { decision, claimed: true, slot: toSlot(row), open };
+        },
+        { isolation: 'read committed', maxAttempts: 5 },
+      );
+
+      if (outcome.open >= 0) span.setAttribute('intafaced.market.slots_open', outcome.open);
+      // A refusal is invisible from the outside — nobody files a ticket for a
+      // slot they could not take. This attribute is the only place "how many
+      // bounced off the stake gate" is a number.
+      span.setAttribute('intafaced.decision', outcome.decision.allowed ? 'allowed' : outcome.decision.code);
+
+      if (!outcome.decision.allowed) throw new MarketError(outcome.decision.reason, outcome.decision.code);
+      return { claimed: outcome.claimed, slot: outcome.slot! };
+    });
+  }
+
+  /**
+   * Give a slot back.
+   *
+   * NO LOCK, and that is not an oversight: releasing only ever FREES capacity.
+   * Two concurrent releases of the same slot both land on the same row and the
+   * second updates nothing, because the `released_at IS NULL` predicate has
+   * already stopped matching. There is no interleaving here that could oversell
+   * anything, and taking the vendor's row would put every release in the queue
+   * behind every claim for no gain.
+   *
+   * No stake read either. A vendor who has lost their stake must still be able
+   * to tidy up, and refusing a release because svc-token is unreachable would
+   * fail closed in the direction that helps nobody.
+   */
+  async releaseSlot(input: { userId: string; ref: string }): Promise<{ released: boolean }> {
+    const vendor = await this.myVendor(input.userId);
+    if (!vendor) throw new MarketError('You have not applied to be a vendor', 'market.vendor_not_found');
+
+    return withMarketSpan('market.slot.release', { op: 'slot.release', vendorId: vendor.id }, async () => {
+      const rows = await this.sql<SlotRow[]>`
+        UPDATE market.vendor_slots SET released_at = now()
+         WHERE vendor_id = ${vendor.id} AND ref = ${input.ref.trim()} AND released_at IS NULL
+         RETURNING id, vendor_id, ref, claimed_at, released_at
+      `;
+      // `false` rather than a 404: "that slot is not held" is an answer, and it
+      // is the same answer a retried release should get.
+      return { released: rows.length > 0 };
+    });
+  }
+
+  /**
+   * A vendor's slot position, with entitlement re-read from svc-token.
+   *
+   * ── THIS READ IS WHERE DoD CLAUSE 5 IS ENFORCED ────────────────────────────
+   *
+   * "Suspended / under-staked vendors cannot present as listed." A suspended
+   * vendor's slots were released by `vet` in the same transaction as the
+   * suspension — but an under-staked one's were not, because svc-market never
+   * learns that somebody unstaked. There is no bus subject for it, and inventing
+   * one with no publisher is what `tooling/ci/event-wiring.mjs` correctly reds
+   * on; polling svc-token on a timer would be a second source of truth that is
+   * wrong between ticks.
+   *
+   * So entitlement is re-derived HERE, on every read, against the tier svc-token
+   * reports this second. `usable` is what Stage 3's public profile consumes; a
+   * vendor who has dropped to Base reads `usable: 0` immediately, whether or not
+   * any release ever happened.
+   *
+   * FAILS CLOSED. If svc-token cannot be reached this throws
+   * `market.stake_unavailable` rather than returning the held count with a
+   * guessed capacity — a read that cannot verify entitlement must not report a
+   * vendor as listable.
+   */
+  async slotStatus(userId: string): Promise<VendorSlotStatus> {
+    const vendor = await this.myVendor(userId);
+    if (!vendor) throw new MarketError('You have not applied to be a vendor', 'market.vendor_not_found');
+
+    const entitlement = await this.stakes.entitlementOf(userId);
+
+    const rows = await this.sql<SlotRow[]>`
+      SELECT id, vendor_id, ref, claimed_at, released_at
+        FROM market.vendor_slots
+       WHERE vendor_id = ${vendor.id} AND released_at IS NULL
+       ORDER BY claimed_at ASC
+    `;
+
+    const facts = { status: vendor.status, capacity: entitlement.vendorSlots };
+    return {
+      vendorId: vendor.id,
+      status: vendor.status,
+      tier: entitlement.tierName,
+      capacity: entitlement.vendorSlots,
+      held: rows.length,
+      usable: usableSlots(facts, { open: rows.length }),
+      slots: rows.map(toSlot),
+    };
   }
 }

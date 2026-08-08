@@ -981,7 +981,39 @@ export const FEATURES = [
     phase: '5',
     dependsOn: ['token.staking'],
     requires: ['services/svc-market'],
-    note: 'STAGE 1 ON MAIN (apply → vet) — NOT done. services/svc-market now exists: market.vendors (one row per user) plus append-only market.vendor_status_events enforced by a database trigger; applyAsVendor/mine on market:read/write, listApplications/vet/history on a new market:ops operator scope. market:read and market:write are UNSTUBBED in packages/auth — they read "svc-market not built" until this PR. /api/market is in svc-edge UPSTREAMS, so the module is kill-switchable at the door. NO money path: no @intafaced/ledger-client import and no amount column anywhere. NO vetting criterion — an operator supplies the decision and a required non-blank reason; VendorService.vet refuses any caller not holding market:ops with market.vet_operator_required, so a future policy engine cannot approve anything silently. NO stake numbers restated: vendorSlots stays in svc-token. Still open: Stage 2 stake-gated slots under a lock (reads token.stakeOf), Stage 3 public list eligibility, and the org-vs-user question — per-user chosen as the reversible answer (adding org_id later is a nullable column plus a backfill).',
+    note:
+      'STAGE 2 (apply → vet → stake-gated slots) — NOT done; Stage 3 public read is still missing. ' +
+      'STAGE 1: services/svc-market exists — market.vendors (one row per user) plus append-only market.vendor_status_events ' +
+      'enforced by a database trigger; applyAsVendor/mine on market:read/write, listApplications/vet/history on a market:ops ' +
+      'operator scope. market:read and market:write UNSTUBBED in packages/auth. /api/market is in svc-edge UPSTREAMS, so the ' +
+      'module is kill-switchable at the door. NO vetting criterion — an operator supplies the decision and a required non-blank ' +
+      'reason; VendorService.vet refuses any caller not holding market:ops with market.vet_operator_required, so a future policy ' +
+      'engine cannot approve anything silently. ' +
+      'STAGE 2 ADDS market.vendor_slots (one row per claimed slot, released via released_at so occupancy stays a COUNT and never ' +
+      'a maintained counter) and claimSlot/releaseSlot/slots — none of which takes a vendorId, so a slot is always spent against ' +
+      'the caller own row. CAPACITY IS NOT STORED: it is AccessTier.vendorSlots read live from svc-token GET ' +
+      '/internal/stake/:userId (NOT the tRPC token.stakeOf, which is scopedProcedure self-only and unreachable from market), and ' +
+      'no threshold, tier or slot-count column exists in the market schema. Fails closed on all four paths — network throw, ' +
+      'non-2xx, unusable payload, non-integer vendorSlots — with market.stake_unavailable; the `slots` read fails closed too, so ' +
+      'a read that cannot verify entitlement never reports a vendor as listable. NO AMOUNT crosses the boundary: `staked` and ' +
+      '`tier.minStake` arrive as decimal strings and this service reads neither, which is also why it cannot re-scale an ' +
+      'already-scaled value (the fail-OPEN bug PR #1100 fixed). ' +
+      'OVERSELL PROOF: claimSlot locks the vendor row FOR UPDATE, counts, decides, then inserts inside one read-committed ' +
+      'transaction (the academy join() pattern). src/vendor-slots.test.ts fires 8 simultaneous claims at a tier of 3 and asserts ' +
+      'exactly 3 succeed and 5 refuse BY NAME, plus a capacity-of-1 variant and a 6x same-ref retry proving idempotency consumes ' +
+      'one slot and not six. The stake read is deliberately BEFORE the lock — a network call held under the busiest row would ' +
+      'serialise every claim behind svc-token latency. That suite is DB-backed and skips without Postgres. ' +
+      'RELEASE: vet() releases every open slot in the SAME transaction as any transition out of `approved` (suspended AND ' +
+      'rejected) — split across two transactions, a crash leaves a suspended vendor holding every slot. NO unstake subscriber ' +
+      'and none wanted: no accepted bus subject exists, event-wiring reds on an orphan, and polling would be a second source of ' +
+      'truth. Instead `slots` reports usable = min(held, capacity) and 0 for anyone not approved, so an unstaked vendor reads ' +
+      'usable:0 instantly — that is how DoD clause 5 holds with no event. NO suspension POLICY was added: releasing on a ' +
+      'transition an operator recorded is not deciding it. ' +
+      'DEPENDS ON PR #1100 (CI green, unmerged): until it merges /internal/stake/:userId returns 500 to every caller because ' +
+      'AccessTier.minStake is a bigint, so no slot can be claimed in an environment built from main — the fail-closed path makes ' +
+      'that a refusal rather than a free-for-all. Stage 2 stacks on PR #1109 (Stage 1, CI green, unmerged). ' +
+      'Still open: Stage 3 public list eligibility feeding market.commerce, and the org-vs-user question — per-user chosen as ' +
+      'the reversible answer (adding org_id later is a nullable column plus a backfill).',
   }),
   f('market.commerce', 'Listings, subscriptions, purchases, house commission', {
     module: 'market',
