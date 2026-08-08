@@ -167,6 +167,38 @@ describe('BybitSpotMarketData.snapshotBook — public data, no credentials', () 
     expect(http.requests[0]).toContain('limit=1000');
   });
 
+  /**
+   * NOT the venue's own default, which is `1`. A caller that omits the argument
+   * would otherwise get one level a side: enough to mid, useless for depth, and
+   * wrong in a way that looks like a thin market rather than a missing argument.
+   */
+  it('defaults to a real book, not the venue’s one-level default', async () => {
+    const http = new FakeHttp().queue(orderbook(1));
+    await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
+    expect(http.requests[0]).toContain('limit=200');
+  });
+
+  /**
+   * THE ONE THING EVERY OTHER TEST HERE HIDES.
+   *
+   * Every case above injects `restBase`/`wsBase`, so a typo in the adapter's own
+   * default host would be invisible in all of them — and invisible in production
+   * too until the first request 404s or DNS fails. These two fake only the
+   * transport and let the adapter choose the address.
+   */
+  it('addresses the venue’s real REST host when none is injected', async () => {
+    const http = new FakeHttp().queue(orderbook(1));
+    await new BybitSpotMarketData({ http, heartbeatMs: 0 }).snapshotBook('BTC/USDT', 1);
+    expect(http.requests[0]).toBe('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=BTCUSDT&limit=1');
+  });
+
+  it('opens the venue’s real spot websocket when none is injected', async () => {
+    const stream = new FakeStream();
+    const subscription = await new BybitSpotMarketData({ http: new FakeHttp(), stream, heartbeatMs: 0 }).streamBook('BTC/USDT');
+    expect(stream.opened).toEqual(['wss://stream.bybit.com/v5/public/spot']);
+    await subscription.close();
+  });
+
   it('sorts levels away from the spread even when the venue sends them jumbled', async () => {
     const http = new FakeHttp().queue(
       orderbook(1, {
