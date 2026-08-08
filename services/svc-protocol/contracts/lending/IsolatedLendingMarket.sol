@@ -15,7 +15,9 @@ import {IPriceOracle} from "../oracle/IPriceOracle.sol";
  * Rates are construction params, not invented mid-flight.
  *
  * Permissionless keepers. Partial liquidation via closeFactorBps.
- * P0 — not the full SPEC-LENDING done-bar (testnet + cascade suite residual).
+ * Engineering done-bar (cascade + flash/reentrancy adversarial) lives in
+ * `src/lending/lending-cascade-flash.onchain.test.ts` + `lending-honesty.test.ts`.
+ * Persistent public testnet deploy remains Nitro RPC residual — not this file.
  */
 contract IsolatedLendingMarket {
     uint256 private constant WAD = 1e18;
@@ -140,7 +142,9 @@ contract IsolatedLendingMarket {
         if (amount == 0) revert BadAmount();
         accrue();
         if (totalCash < amount) revert InsufficientLiquidity();
+        // Ceil shares so rounding never lets a borrower owe less than they took.
         uint256 shares = _debtToShares(amount);
+        if (_sharesToDebt(shares) < amount) shares += 1;
         debtSharesOf[msg.sender] += shares;
         totalDebtShares += shares;
         totalCash -= amount;
@@ -155,7 +159,8 @@ contract IsolatedLendingMarket {
         uint256 debt = _sharesToDebt(debtSharesOf[msg.sender]);
         if (debt == 0) revert NothingToRepay();
         uint256 pay = amount > debt ? debt : amount;
-        uint256 shares = _debtToShares(pay);
+        // Full repay clears shares exactly — `_debtToShares(debt)` can round down and leave dust.
+        uint256 shares = pay == debt ? debtSharesOf[msg.sender] : _debtToShares(pay);
         if (shares > debtSharesOf[msg.sender]) shares = debtSharesOf[msg.sender];
         debtSharesOf[msg.sender] -= shares;
         totalDebtShares -= shares;

@@ -10,9 +10,9 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **38%** — 56 of 148 features shipped
+`████████░░░░░░░░░░░░` **39%** — 57 of 148 features shipped
 
-Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 9/55 · **5P** 1/4
+Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 10/13 · **4** 4/5 · **4P** 0/3 · **5** 9/55 · **5P** 1/4
 
 **In progress:** Perps: isolated margin, funding, partial-liquidation ladder (nitro-agent) · Moderated dispute resolution (nitro-agent) · Payment instruments — where the buyer actually pays (nitro-agent) · P2P merchant programme — badges, limits, API (nitro-agent) · Navigator — tool-calling inside user guardrails (nitro-agent) · Market Scanner — ranked signals by tier (nitro-agent) · Event-driven fan-out: in-app, push, email, SMS (nitro-agent)
 
