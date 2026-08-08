@@ -988,6 +988,8 @@ export const FEATURES = [
     module: 'market',
     phase: '5',
     dependsOn: ['token.staking'],
+    requires: ['services/svc-market'],
+    note: 'STAGE 1 ON MAIN (apply → vet) — NOT done. services/svc-market now exists: market.vendors (one row per user) plus append-only market.vendor_status_events enforced by a database trigger; applyAsVendor/mine on market:read/write, listApplications/vet/history on a new market:ops operator scope. market:read and market:write are UNSTUBBED in packages/auth — they read "svc-market not built" until this PR. /api/market is in svc-edge UPSTREAMS, so the module is kill-switchable at the door. NO money path: no @intafaced/ledger-client import and no amount column anywhere. NO vetting criterion — an operator supplies the decision and a required non-blank reason; VendorService.vet refuses any caller not holding market:ops with market.vet_operator_required, so a future policy engine cannot approve anything silently. NO stake numbers restated: vendorSlots stays in svc-token. Still open: Stage 2 stake-gated slots under a lock (reads token.stakeOf), Stage 3 public list eligibility, and the org-vs-user question — per-user chosen as the reversible answer (adding org_id later is a nullable column plus a backfill).',
   }),
   f('market.commerce', 'Listings, subscriptions, purchases, house commission', {
     module: 'market',

@@ -223,6 +223,7 @@ services:
       NOTIFY_URL: http://svc-notify:4015
       ACADEMY_URL: http://svc-academy:4016
       SUPPORT_URL: http://svc-support:4017
+      MARKET_URL: http://svc-market:4018
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are
@@ -642,6 +643,33 @@ services:
       HTTP_PORT: '4017'
     expose: ['4017']
     healthcheck: *healthcheck
+
+  # Vendor lifecycle Stage 1 — apply, then vet (§8.7 `market.vendors`).
+  #
+  # No LEDGER_URL and no *internal-secret, and both absences are the design:
+  # this mountain moves no value (purchases and house commission are
+  # `market.commerce`), and Stage 1 calls no other service. TOKEN_URL arrives
+  # with Stage 2, when stake-gated slots need `token.stakeOf` — adding it now
+  # would be a boot dependency that can fail in exchange for no capability.
+  #
+  # No `ports:`. This is an S2S service reached only through svc-edge, which is
+  # what makes `/api/market` kill-switchable from the operator control plane; a
+  # published host port would put it outside the door.
+  svc-market:
+    <<: *app
+    container_name: intafaced-svc-market
+    command: ['node', 'services/svc-market/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-market
+      # 4018: every port from 4000 to 4017 is already claimed above.
+      HTTP_PORT: '4018'
+      DATABASE_URL: postgres://svc_market:svc_market@postgres:5432/intafaced
+    # L5-7: S2S — not published on host (compose network only)
+    expose: ['4018']
+    healthcheck: *healthcheck
+    depends_on:
+      <<: *needs-schema
 
   # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
   # LEDGER_URL, and nothing in this process could reach anything that moves

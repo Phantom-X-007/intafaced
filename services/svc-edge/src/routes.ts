@@ -85,6 +85,7 @@ export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/notify', module: 'notify', envVar: 'NOTIFY_URL', devUrl: 'http://localhost:4015' },
   { prefix: '/api/academy', module: 'academy', envVar: 'ACADEMY_URL', devUrl: 'http://localhost:4016' },
   { prefix: '/api/support', module: 'support', envVar: 'SUPPORT_URL', devUrl: 'http://localhost:4017' },
+  { prefix: '/api/market', module: 'market', envVar: 'MARKET_URL', devUrl: 'http://localhost:4018' },
 ] as const;
 
 /**
