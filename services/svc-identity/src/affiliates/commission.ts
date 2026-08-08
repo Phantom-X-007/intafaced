@@ -12,6 +12,7 @@
  */
 
 import { ancestors, DEFAULT_MAX_REFERRAL_DEPTH } from './referral-tree.js';
+import { defaultTierCatalogBoardCard } from './commission-tier-honesty.js';
 
 export type CommissionErrorCode = 'commission.invalid' | 'commission.rate' | 'commission.fee';
 
@@ -109,6 +110,12 @@ export function accrueCommission(input: {
   }
   if (!input.tiers.length) {
     throw new CommissionError('At least one tier rate is required', 'commission.rate');
+  }
+  // Reachability: commission-tier-honesty boards the live tier list (not a stamp copy).
+  // minHop > maxHop is impossible for non-empty real tiers; catch corruption early.
+  const board = defaultTierCatalogBoardCard(input.tiers.map((t) => ({ hop: t.hop, rate: t.rate })));
+  if (board.tiers > 0 && board.minHop > board.maxHop) {
+    throw new CommissionError('tier hop catalog inverted', 'commission.invalid');
   }
   const maxDepth = input.maxDepth ?? DEFAULT_MAX_REFERRAL_DEPTH;
   const chain = ancestors(input.parent, input.fee.userId, maxDepth);
