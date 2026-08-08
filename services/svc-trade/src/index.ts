@@ -118,7 +118,7 @@ const venueMarkConfigured = createConfiguredVenueMarkSource({
 if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
   // Typo / unsupported venue — say so once; do not invent a mid adapter.
   console.warn(
-    `[svc-trade] TRADE_VENUE_MARK_VENUE=${env.TRADE_VENUE_MARK_VENUE.trim()} is not a known public MarketDataAdapter; venue mark off (never invent). Supported: binance-spot`,
+    `[svc-trade] TRADE_VENUE_MARK_VENUE=${env.TRADE_VENUE_MARK_VENUE.trim()} is not a known public MarketDataAdapter; venue mark off (never invent). Supported: binance-spot, bybit-spot`,
   );
 }
 
