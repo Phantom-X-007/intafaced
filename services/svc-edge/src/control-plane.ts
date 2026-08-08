@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { AuthError } from '@intafaced/auth';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
-import type { KillSwitchState } from './kill-switch.js';
+import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
 
 /**
  * THE OPERATOR CONTROL PLANE, AS SOMETHING A TEST CAN DRIVE (§14.6).
@@ -40,7 +40,28 @@ import type { KillSwitchState } from './kill-switch.js';
  */
 export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: KillSwitchState): void {
   app.addHook('onRequest', async (req, reply) => {
-    const pathname = req.url.split('?')[0] ?? req.url;
+    /**
+     * Resolved with the SAME parser the proxy uses — see `resolvedPathname`.
+     *
+     * Splitting the raw target here and letting `index.ts` re-parse it with
+     * `new URL` gave the guard and the handler two different answers about
+     * which module a request was for, and `/api/trade/../identity/...` walked
+     * through a halted identity service on the difference.
+     *
+     * Null means no single answer exists (a dot segment we cannot resolve on
+     * the upstream's behalf, or a malformed escape). Refused for EVERY path,
+     * not just `/api/`, because a request nobody can route is not one the
+     * control plane should be answering either.
+     */
+    const pathname = resolvedPathname(req.url);
+    if (pathname === null) {
+      req.log.warn({ rawUrl: req.url }, 'edge: refused — the path cannot be resolved to one upstream');
+      return reply.code(400).send({
+        error: 'the request path could not be resolved to a single upstream',
+        code: 'edge.unresolvable_path',
+      });
+    }
+
     if (!pathname.startsWith('/api/')) return;
 
     /**
