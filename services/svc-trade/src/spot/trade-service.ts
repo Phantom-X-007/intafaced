@@ -17,7 +17,7 @@ import {
 } from '@intafaced/ledger-client';
 import { withMoneySpan } from '../tracing.js';
 import { queryCandlesFromFills } from './candles.js';
-import { ratesForFill } from './fees.js';
+import { fillPayAmounts, fillReceivablesSurviveFees, ratesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
 import {
   assertMarketOpen,
@@ -1179,6 +1179,10 @@ export class TradeService {
     if (makerIsHouseMm || makerIsHouseMmRow) {
       const rates = ratesForFill(market, 0, taker.feeDiscountBps);
       const takerBuys = fill.takerSide === 'buy';
+      // BEFORE any fill row: fee-equal-to-receivable is permanently unpostable
+      // (recipe throws; re-run throws). Inserting first left remainingHold
+      // overstated forever — README recovery claim was false for this class.
+      this.assertFillFeesPostable(fill.sequence, market.symbol, fill.takerSide, qty, quoteAmount, rates);
       const takerFee = mulBps(takerBuys ? qty : quoteAmount, rates.takerFeeBps);
       const makerFee = mulBps(takerBuys ? quoteAmount : qty, rates.makerFeeBps);
       const makerSide = takerBuys ? ('sell' as const) : ('buy' as const);
@@ -1297,6 +1301,10 @@ export class TradeService {
     const rates = ratesForFill(market, maker.feeDiscountBps, taker.feeDiscountBps);
 
     const takerBuys = fill.takerSide === 'buy';
+    // BEFORE fill rows: same fee-exhaust guard as the MM path above. Recipe
+    // layer already refuses; without this the fills table permanently outruns
+    // the ledger and release understates remainder.
+    this.assertFillFeesPostable(fill.sequence, market.symbol, fill.takerSide, qty, quoteAmount, rates);
     // Each side's fee comes out of what that side RECEIVES (see `tradeFill`).
     const takerFee = mulBps(takerBuys ? qty : quoteAmount, rates.takerFeeBps);
     const makerFee = mulBps(takerBuys ? quoteAmount : qty, rates.makerFeeBps);
@@ -1402,6 +1410,39 @@ export class TradeService {
   }
 
   // ── Holds: the only two things that can happen to one ─────────────────────
+
+  /**
+   * Refuse a match whose fees leave a side with nothing — BEFORE fill rows.
+   *
+   * `tradeFill` already throws `InvalidEntryError` for this class, but it runs
+   * after the insert. Re-running then re-throws forever while `remainingHold`
+   * treats the unposted fill as consumed. Checking here keeps the fills table
+   * from outrunning the ledger when the post cannot heal.
+   */
+  private assertFillFeesPostable(
+    sequence: number,
+    symbol: string,
+    takerSide: 'buy' | 'sell',
+    qty: Amount,
+    quoteAmount: Amount,
+    rates: { makerFeeBps: number; takerFeeBps: number },
+  ): void {
+    const pays = fillPayAmounts({ takerSide, qty, quoteAmount });
+    if (
+      fillReceivablesSurviveFees({
+        ...pays,
+        makerFeeBps: rates.makerFeeBps,
+        takerFeeBps: rates.takerFeeBps,
+      })
+    ) {
+      return;
+    }
+    throw new TradeError(
+      `fill ${sequence} on ${symbol} would leave a side with nothing after fees ` +
+        `(maker ${rates.makerFeeBps} bps / taker ${rates.takerFeeBps} bps) — refuse before recording the fill`,
+      'trade.fee_exceeds_fill',
+    );
+  }
 
   /**
    * How much of an order's hold has NOT been spent by its fills.
