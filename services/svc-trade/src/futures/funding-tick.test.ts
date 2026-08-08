@@ -145,6 +145,85 @@ describe('runFundingTick', () => {
     expect(posts).toHaveLength(1);
   });
 
+  /**
+   * The third funding double-charge — a replay whose BOOK has changed.
+   *
+   * Every other test here replays against a fixed array, so none of them can
+   * see this: the tick posts legs before it writes the settle marker, and if it
+   * dies in that gap the retry re-plans against whatever the book is by then. A
+   * short closing in between needs no job enabled — it is a plain
+   * `DELETE /api/v1/positions/:id`.
+   *
+   * With `:${seq}` in the funding id, the surviving pair was renumbered on the
+   * replay, reached the ledger under a key it had never seen, and posted a
+   * second time. The ledger below dedupes the way the real one does, so if the
+   * key stops being stable this test fails on the payer's total.
+   */
+  it('replaying a crashed tick against a CHANGED book charges no one twice', async () => {
+    const long = {
+      positionId: 'plong',
+      userId: A,
+      side: 'long' as const,
+      size: amt('2'),
+      entryPrice: amt('50000'),
+      marginAsset: 'USDT',
+    };
+    const shortX = { ...long, positionId: 'pshortX', userId: B, side: 'short' as const, size: amt('1') };
+    const shortY = { ...long, positionId: 'pshortY', userId: B, side: 'short' as const, size: amt('1') };
+
+    // A ledger that dedupes on idempotencyKey, as PostgresLedger does.
+    const seen = new Map<string, PostRequest>();
+    const attempts: PostRequest[] = [];
+    const ledger = {
+      async post(req: PostRequest) {
+        attempts.push(req);
+        if (!seen.has(req.idempotencyKey)) seen.set(req.idempotencyKey, req);
+        return { id: req.idempotencyKey, idempotencyKey: req.idempotencyKey } as never;
+      },
+    };
+
+    // A period store that never records the settle — the crash gap.
+    const neverSettles = {
+      ...memoryFundingPeriodStore(),
+      async isSettled() {
+        return false;
+      },
+      async markSettled() {
+        throw new Error('crashed before the settle marker was written');
+      },
+    };
+    const margins = memoryFundingMarginApplier();
+    const rates = fixedRate('0.0001', 'm1:period-crash');
+
+    // Attempt 1: full book, dies writing the marker — after the legs posted.
+    await expect(
+      runFundingTick({ rates, positions: positionsOf([long, shortX, shortY]), periods: neverSettles, margins, ledger }, 'm1'),
+    ).rejects.toThrow(/crashed/);
+    const afterFirst = new Set(seen.keys());
+    expect(afterFirst.size).toBe(2); // long→X and long→Y
+
+    // Short X closes. Attempt 2 re-plans against the book that is left.
+    await expect(
+      runFundingTick({ rates, positions: positionsOf([long, shortY]), periods: neverSettles, margins, ledger }, 'm1'),
+    ).rejects.toThrow(/crashed/);
+
+    // The replay must not have invented a key the ledger had not already seen.
+    const newKeys = [...seen.keys()].filter((k) => !afterFirst.has(k));
+    expect(newKeys).toEqual([]);
+
+    // And the money: the long is charged for one period, not two. Sum what the
+    // ledger actually kept, not what the tick tried to post.
+    const charged = [...seen.values()]
+      .filter((req) => (req.meta as { payerPositionId?: string }).payerPositionId === 'plong')
+      .reduce((a, req) => a + (req.entries[0]!.amount as bigint), 0n);
+    // |rate| × matchable notional, matchable = min(long 2×50000, shorts 2×50000).
+    const oneFullPeriod = (amt('0.0001') * ((amt('2') * amt('50000')) / 10n ** 18n)) / 10n ** 18n;
+    expect(charged).toBe(oneFullPeriod);
+
+    // The tick genuinely tried again — this is a replay, not a no-op.
+    expect(attempts.length).toBeGreaterThan(seen.size);
+  });
+
   it('zero rate: no legs, marks settled so cron does not invent retry money', async () => {
     const periods = memoryFundingPeriodStore();
     const { ledger, posts } = recordingLedger();

@@ -7,6 +7,33 @@
  *
  * Convention: positive rate → longs pay shorts (amount = |rate| * notional).
  * Rate is a decimal string in ABSOLUTE terms for the period (e.g. "0.0001" = 1bp).
+ *
+ * ── The ledger key is `(period, payer, payee)`, and it must stay that way ────
+ *
+ * `runFundingTick` posts these legs BEFORE it writes the settle marker, so a
+ * crash in that gap replays the whole plan. The replay is only safe because the
+ * ledger dedupes on the recipe key — which means the key has to identify the
+ * WORK, not where the work happened to land in a loop.
+ *
+ * This previously appended `:${seq}`, a counter running across the nested
+ * payer×payee loop. Nothing needed it — each (payer, payee) pair is emitted at
+ * most once per plan, so the three ids were already unique — and it broke the
+ * only property that mattered: a replay whose book has changed (one short
+ * closed their position in between, which needs no job enabled and is a plain
+ * `DELETE /api/v1/positions/:id`) renumbers every downstream leg. The surviving
+ * pairs then arrive at the ledger under keys it has never seen, and post a
+ * SECOND time. Meanwhile `applyFundingNets` is idempotent on (position, period)
+ * and correctly does nothing, so `margin_current` records one charge while the
+ * ledger has taken two — the inverse of #1034, reached through the gap #1047
+ * left open. That is the third funding double-charge in this file's history;
+ * the first two are #1034 and #1047.
+ *
+ * KNOWN RESIDUAL, deliberately not fixed here: the loader returns positions
+ * open *now*, not positions open as of the period. A position OPENED between a
+ * failed attempt and its replay is a genuinely new pair, gets a genuinely new
+ * key, and is charged for a period it was not open for. Closing that needs a
+ * decision about what a period's membership IS — whether a position opened
+ * mid-period pays the full period — which is product law, not a refactor.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
 
@@ -96,7 +123,6 @@ export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
   const payeePool = rate > 0n ? S : L;
 
   const legs: FundingLeg[] = [];
-  let seq = 0;
   for (const { p: payer, n: pn } of payers) {
     const payerShare = (total * pn) / payerPool;
     if (payerShare <= 0n) continue;
@@ -107,8 +133,10 @@ export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
       const piece = isLast ? remaining : (payerShare * sn) / payeePool;
       if (piece <= 0n) continue;
       remaining -= piece;
-      seq += 1;
-      const fundingId = `${input.periodId}:${payer.positionId}:${payee.positionId}:${seq}`;
+      // (period, payer, payee) and nothing else. Each pair is emitted at most
+      // once per plan, so this is already unique — and unlike a loop counter it
+      // is the SAME key when the tick replays. See the header note.
+      const fundingId = `${input.periodId}:${payer.positionId}:${payee.positionId}`;
       legs.push({
         payerPositionId: payer.positionId,
         payeePositionId: payee.positionId,
