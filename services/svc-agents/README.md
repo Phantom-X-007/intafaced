@@ -51,18 +51,21 @@ Internal tRPC (§1). Every log query is scoped to `ctx.principal.userId` — an 
 
 ### Metered agent runs
 
-Most agent procedures are **pure**: they answer "what would this agent say" without a session, so the declared guardrail is enforced by nothing at call time and the usage is metered by nothing at all. These two drive the real runtime instead — `openSession → act → settle → closeSession` — so every tool call is guardrail-checked and audited, and the run settles through `UsageMeter` → ledger.
+Most agent procedures are **pure**: they answer "what would this agent say" without a session, so the declared guardrail is enforced by nothing at call time and the usage is metered by nothing at all. These three drive the real runtime instead — `openSession → act → settle → closeSession` — so every tool call is guardrail-checked and audited, and the run settles through `UsageMeter` → ledger.
 
-| Procedure              | Scope            | Input                           | Output                                               |
-| ---------------------- | ---------------- | ------------------------------- | ---------------------------------------------------- |
-| `scanner.runSession`   | `agents:execute` | plane, tier law, tier, tickers  | ranked signals + what the run cost                   |
-| `navigator.runSession` | `agents:execute` | plane, tier law, tier, `asks[]` | grounded findings, **unanswered asks**, what it cost |
+| Procedure              | Scope            | Input                           | Output                                                 |
+| ---------------------- | ---------------- | ------------------------------- | ------------------------------------------------------ |
+| `scanner.runSession`   | `agents:execute` | plane, tier law, tier, tickers  | ranked signals + what the run cost                     |
+| `navigator.runSession` | `agents:execute` | plane, tier law, tier, `asks[]` | grounded findings, **unanswered asks**, what it cost   |
+| `support.runSession`   | `agents:execute` | plane, tier law, tier, `asks[]` | cited article keys, **escalation**, gaps, what it cost |
 
-Both are mutations, and both report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
+All three are mutations, and all three report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
 
-Neither calls the engine — a rank is arithmetic and an answer is an echo of tool output — so both open no usage window and settle to `0`. That zero is reported as a zero. A synthetic charge so a run "looks metered" would be a fabricated cost, which is the same class of lie as a fabricated price.
+None of them calls the engine — a rank is arithmetic, and an answer is an echo of tool output — so each opens no usage window and settles to `0`. That zero is reported as a zero. A synthetic charge so a run "looks metered" would be a fabricated cost, which is the same class of lie as a fabricated price.
 
 `navigator.runSession` sends **every** ask to `runtime.act`, including ones a caller-supplied tier matrix wrongly granted. The runtime decides, not the caller and not the run: `trade.order` is not on `navigatorAgentGuardrail()`, so `act` refuses it and its executor is never reached. An ask that produced no fact comes back in `unanswered` with the reason and who refused it — the answer gets shorter, never padded. When nothing at all was reachable the run refuses outright rather than shipping an empty finding list dressed as a result.
+
+`support.runSession` is the same spine with the desk's own honesty rules, because this is the agent whose wrong answer a user acts on. A reply cites only the article keys `support.kb.search` actually returned. A KB that refused, missed, or was never asked for **escalates to a person** (`agents.support.escalated`) — a first-class product outcome, not an error, and never a hedged sentence. A run where no source at all was reachable **refuses** (`no_grounded_read`), because an `ok` carrying an empty finding list would read like an answer. A request to move money escalates before a session opens: refunds are `ops.support` plus a `packages/ledger-client` recipe, and reading the KB to discover that would bill a user for a lookup that cannot change the outcome. The requester is always `ctx.principal.userId`, so a ticket or account projection belonging to someone else refuses rather than reads, and the account projection is status + KYC tier with no balance field to leak (§0.6). Money tools are undeclared on `supportAgentGuardrail()`, so a tier matrix that granted `pay.refund` still never reaches its executor — `session-run.test.ts` asserts that over the whole `SUPPORT_MONEY_TOOLS` denylist.
 
 Also `GET /health` and `GET /ready`.
 
