@@ -212,6 +212,32 @@ if (!available) {
     });
   });
 
+  describe('freeze attribution is sticky (STOP §4.2b #3)', () => {
+    it('refuses a second freeze with different reason/actor at the writeFreeze layer', async () => {
+      const { writeFreeze: write } = await import('./ledger/freeze.js');
+      await write(connect(), { frozen: true, reason: 'operator halt', actor: OPERATOR });
+      await expect(write(connect(), { frozen: true, reason: 'reconciliation mismatch', actor: 'reconciliation' })).rejects.toMatchObject({
+        code: 'ledger.freeze_attributed',
+      });
+
+      const state = await a.freezeState();
+      expect(state).toMatchObject({ frozen: true, reason: 'operator halt', actor: OPERATOR });
+    });
+
+    it('service.freeze leaves the first attribution standing when recon tries to clobber', async () => {
+      await a.freeze('operator: suspected drift', OPERATOR);
+      // Recon path: freeze() must not throw and must not overwrite.
+      const after = await a.freeze('reconciliation mismatch', 'reconciliation');
+      expect(after).toMatchObject({ frozen: true, reason: 'operator: suspected drift', actor: OPERATOR });
+    });
+
+    it('same attribution re-freeze is a no-op, not a fight', async () => {
+      await a.freeze('drift', OPERATOR);
+      const again = await a.freeze('drift', OPERATOR);
+      expect(again).toMatchObject({ frozen: true, reason: 'drift', actor: OPERATOR });
+    });
+  });
+
   describe('the rest of the OS is told', () => {
     it('emits ledgerFreezeUpdated in both directions, with who and why', async () => {
       await a.freeze('drift', OPERATOR);
@@ -234,6 +260,25 @@ if (!available) {
       const [emitted] = busA.emitted('ledgerFreezeUpdated');
       expect(emitted!.payload.changedAt).toBe(row!.changed_at.toISOString());
       expect(row!.changed_at.getTime()).toBeGreaterThanOrEqual(before[0]!.now.getTime());
+    });
+
+    it('keys the envelope on the column precision, so a same-millisecond thaw survives', async () => {
+      // STOP §4.2b #7. `freeze-event-key.test.ts` proves the arithmetic without a
+      // database; this proves the value actually reaching the bus is the one the
+      // DATABASE produced, not a Date round-trip that has already dropped the
+      // microseconds. Those are two different claims and both have to hold.
+      await a.freeze('drift', OPERATOR);
+      const [row] = await db.sql<Array<{ precise: string }>>`
+        SELECT changed_at::text AS precise FROM posting_freeze WHERE id = true
+      `;
+
+      const [emitted] = busA.emitted('ledgerFreezeUpdated');
+      expect(emitted!.idempotencyKey).toBe(`ledger.freeze:${row!.precise}`);
+
+      // And the freeze/thaw pair never share an identity, however fast it is.
+      await a.unfreeze(OPERATOR);
+      const keys = busA.emitted('ledgerFreezeUpdated').map((e) => e.idempotencyKey);
+      expect(new Set(keys).size).toBe(keys.length);
     });
   });
 
