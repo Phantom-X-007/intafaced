@@ -20,6 +20,35 @@
  * reason this file is not three assertions in `trade-service.test.ts`.
  *
  * ─────────────────────────────────────────────────────────────────────────────
+ * AND THEN BLOCK 3 TURNED OUT TO BE MEASURING THE WRONG VARIABLE
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Block 3 proves a book of FEMTO-CENTS mints no payout, and its control proved
+ * that a book of 22,000 USDT does. Both were true. Neither asked the question
+ * that mattered, which is not "is this book worth something" but **"is it worth
+ * something NEXT TO THE POSITION IT IS PRICING"** — and between those two
+ * numbers sat a working extraction: 240 USDT of resting quotes and 10 USDT of
+ * margin, out with **190,000 USDT** of the profit pot.
+ *
+ * The control was the worse half of the pair. Titled "THE CONTROL, and it is not
+ * optional", it rested two makers, let a third party take 2,000 USDT out of the
+ * pot, and asserted that as CORRECT — with nothing in it establishing why that
+ * book was good enough, nothing asking whether the three parties were the same
+ * person, and no variable it varied. It would have passed identically had the
+ * gate been checking nothing at all, which is precisely what a control must not
+ * do. It is rewritten below to state the ratio that makes it legitimate, and
+ * blocks 4 and 5 are the two properties nothing in this file was measuring:
+ *
+ *   · **4** — a mark must be backed by depth PROPORTIONAL to the position it
+ *     pays out on. Same prices, same parties, same move; the resting size is the
+ *     only thing that varies, once below the requirement and once above.
+ *   · **5** — leverage has a ceiling. There was none: `grep -rn "MAX_LEVERAGE"`
+ *     returned nothing and `numeric(8, 2)` was the only limit at 999,999.99x.
+ *
+ * Neither half is sufficient alone, and the two revert proofs in those blocks
+ * are separate for that reason.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
  * WHY THE BOOK IS DERIVED FROM `trade.orders` AND NOT SET BY HAND
  * ─────────────────────────────────────────────────────────────────────────────
  *
@@ -57,7 +86,15 @@ import { TradeService, type ListMarketInput } from '../spot/trade-service.js';
 import { StubMatching, StubPerks, principalFor } from '../spot/testing.js';
 import { TradeError, type Market } from '../spot/types.js';
 import { PositionService } from './position-service.js';
-import { bestFromDepth, markSourceFromDepth } from './mark-from-depth.js';
+import {
+  DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL,
+  DEFAULT_MIN_BEST_LEVEL_NOTIONAL,
+  bestFromDepth,
+  depthRequirement,
+  markSourceFromDepth,
+  requiredBestLevelSize,
+} from './mark-from-depth.js';
+import { DEFAULT_MAX_LEVERAGE } from './initial-margin.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 
@@ -525,7 +562,7 @@ if (!available) {
       // A real two-sided book, built by real orders: mid 2000.
       const fatBid = await rest(tradeOn, BOB, perp, 'buy', '10', '1999');
       const fatAsk = await rest(tradeOn, CAROL, perp, 'sell', '10', '2001');
-      expect(bestFromDepth(await bookFromOrders(perp.id))).toEqual({ bestBid: '1999', bestAsk: '2001' });
+      expect(bestFromDepth(await bookFromOrders(perp.id), depthRequirement(amt('10')))).toEqual({ bestBid: '1999', bestAsk: '2001' });
 
       const pos = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('10'), leverage: amt('1') });
       expect(pos.entryPrice).toBe('2000');
@@ -582,19 +619,34 @@ if (!available) {
       // refusing to release — and the reason it had no mark is that both sides of a
       // two-sided book were worth ~2e-13 quote units.
       expect(closed).toMatchObject({ status: 'closing', closingReason: 'trade.mark_missing' });
-      expect(bestFromDepth(await bookFromOrders(perp.id))).toEqual({ bestBid: null, bestAsk: null });
+      expect(bestFromDepth(await bookFromOrders(perp.id), depthRequirement(amt('10')))).toEqual({ bestBid: null, bestAsk: null });
     });
 
     /**
-     * THE CONTROL, and it is not optional.
+     * THE OLD CONTROL, KEPT: an ordinary position on an ordinary book still pays.
      *
-     * Identical prices, real size behind them, and it pays. Without this the test
-     * above is satisfied by a rule against profitable closes, and a mark gate that
-     * refuses everything is not a gate — it is the outage `#883` warned about
-     * wearing a safety control's clothes.
+     * Identical prices to the dust test, real size behind them, and it pays. A
+     * mark gate that refuses everything is not a gate — it is the outage `#883`
+     * warned about wearing a safety control's clothes.
+     *
+     * WHAT WAS ADDED TO IT, AND WHY. It used to assert only that money moved. It
+     * asserted nothing about WHY the book was good enough, so it would have
+     * passed identically had the gate been checking nothing at all, and it read
+     * as this repository certifying "two makers rest, a third party takes money
+     * from the pot" as correct in general. It is not correct in general — it is
+     * correct HERE, because 10 contracts resting behind a 10-contract position is
+     * a hundred times the requirement. The ratio is now stated, so the test
+     * carries its own reason and the pair below can vary it.
      */
-    it('the same two prices with real size behind them DO pay out', async () => {
+    it('an ordinary position on a book that is deep for it DOES pay out', async () => {
       const { positions, pos } = await positionThenDust('2199', '2201', '10');
+
+      // THE REASON THIS ONE IS ALLOWED TO PAY, ASSERTED RATHER THAN ASSUMED.
+      const need = requiredBestLevelSize(depthRequirement(amt('10')))!;
+      expect(formatAmount(need)).toBe('0.1');
+      const book = await bookFromOrders(perp.id);
+      expect(amt(book.bids[0]![1])).toBeGreaterThanOrEqual(need);
+      expect(amt(book.asks[0]![1])).toBeGreaterThanOrEqual(need);
 
       await positions.close(ALICE, pos.id!);
 
@@ -622,6 +674,322 @@ if (!available) {
       await expect(
         positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('10'), leverage: amt('1') }),
       ).rejects.toMatchObject({ code: 'trade.mark_missing' });
+
+      expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+      expect(await positions.listOpen(ALICE)).toEqual([]);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 4 · THE SAME ATTACK WITH THE NUMBERS ROUNDED UP INSTEAD OF DOWN
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * WHAT BLOCK 3 PROVED, AND THE HOLE IT LEFT.
+   *
+   * Block 3 proves a book of FEMTO-CENTS cannot mint a payout, and its control
+   * proved that a book of 22,000 USDT can. Between those two numbers is every
+   * book that is real money and still nothing next to the position it is being
+   * asked to price — and that gap was worth **190,000 USDT**, measured end to
+   * end: two quotes of about 120 USDT each, both over
+   * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` by twenty percent, priced a close on a
+   * position of one million of notional. Every existing assertion in this file
+   * passed while that was true, because none of them varied the one quantity
+   * that mattered: the resting size RELATIVE TO the position.
+   *
+   * So this block varies exactly that and holds everything else still. Same
+   * prices, same 1,000 bps move (inside `maxDeviationBps: 2_000`, so the breaker
+   * is not what is being measured), same three parties, same position, same
+   * everything — and one difference: whether the book at the close bears the
+   * required relationship to the 500 contracts it is pricing.
+   */
+  describe('a mark must be backed by depth proportional to the position it pays out on', () => {
+    /** 500 contracts at an entry of 2000 — a million of notional, the exploit's size. */
+    const SIZE = '500';
+    /** 1% of 500. Stated once here and asserted against the real rule below. */
+    const NEED = '5';
+
+    /**
+     * Open a 500-contract long against a book deep enough for it, then requote at
+     * +10% with `closeQty` a side. Nothing here is hand-set: every order goes
+     * through the real `placeOrder`, every cancel through the real cancel path.
+     */
+    async function largePositionThenRequote(closeQty: string) {
+      await fundProfitSource('1000000');
+      await fund(ALICE, 'USDT', '100000');
+      await fund(BOB, 'USDT', '200000');
+      await fund(CAROL, 'BTC', '100');
+
+      const positions = positionsOnOrderBook(perp.id);
+
+      // Deep enough to OPEN on: 10 contracts a side against a 5-contract
+      // requirement. The open gate is not what this block is measuring.
+      const openBid = await rest(tradeOn, BOB, perp, 'buy', '10', '1999');
+      const openAsk = await rest(tradeOn, CAROL, perp, 'sell', '10', '2001');
+
+      const pos = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt(SIZE), leverage: amt('10') });
+      expect(pos.entryPrice).toBe('2000');
+      expect(pos.notional).toBe('1000000');
+      expect(pos.initialMargin).toBe('100000');
+
+      await tradeOn.cancelOrder(principalFor(BOB), openBid.id);
+      await tradeOn.cancelOrder(principalFor(CAROL), openAsk.id);
+
+      const bid = await rest(tradeOn, BOB, perp, 'buy', closeQty, '2199');
+      const ask = await rest(tradeOn, CAROL, perp, 'sell', closeQty, '2201');
+      // REACHABILITY, ASSERTED. Both quotes are on the book through the real path.
+      expect([bid.status, ask.status]).toEqual(['open', 'open']);
+
+      return { positions, pos };
+    }
+
+    /** What the rule itself says, so the fixtures below cannot drift away from it. */
+    it('the requirement is one percent of the position, in contracts', () => {
+      expect(DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL).toBe(100);
+      expect(formatAmount(requiredBestLevelSize(depthRequirement(amt(SIZE)))!)).toBe(NEED);
+    });
+
+    /**
+     * THE EXPLOIT, ROUNDED OFF — AND REFUSED.
+     *
+     * One contract a side at 2199/2201 is **2,199 USDT of resting quotes**: not
+     * dust, not femto-cents, twenty-two times `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`,
+     * and more real money than most orders on most books. Against the 500
+     * contracts it would be pricing it is 0.2% — a fifth of the requirement — and
+     * the mark it would mint is worth 100,000 USDT of somebody else's money.
+     *
+     * REVERT PROOF FOR HALF A, and it is this test specifically: delete the
+     * `requiredBestLevelSize` clause from `bestLevelIsQuotable`, or pass
+     * `depthRequirement(null, …)` instead of the row's size in
+     * `PositionService.closeAtomically`, and the FIRST assertion below goes red —
+     * the pot reads 900000 instead of 1000000, because 1 contract a side minted a
+     * mid of 2200 and paid 100,000 out of it. The leverage cap does not catch
+     * this one: 10x is inside the cap.
+     *
+     * THE BALANCE ASSERTIONS COME FIRST, for the reason block 3 already gives:
+     * ordered any other way a revert goes red on a diagnostic and the money lines
+     * never run, leaving the file claiming coverage of a payout it never measured.
+     */
+    it('real money resting — 2,199 USDT a side — does not mint a payout on a 1,000,000 position', async () => {
+      const { positions, pos } = await largePositionThenRequote('1');
+      const aliceAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+      const closed = await positions.close(ALICE, pos.id!);
+
+      // THE MONEY, WHICH IS THE ONLY THING THIS TEST IS ABOUT.
+      expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('1000000');
+      expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(aliceAfterOpen);
+      expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('100000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+
+      // The mechanism. Not "the book is empty" — the book is 2,199 USDT a side
+      // and clears the absolute floor by a factor of 22. It is thin FOR THIS
+      // POSITION, and there is nothing else different about it.
+      expect(closed).toMatchObject({ status: 'closing', closingReason: 'trade.mark_missing' });
+      const book = await bookFromOrders(perp.id);
+      expect(book.bids[0]).toEqual(['2199', '1']);
+      expect(book.asks[0]).toEqual(['2201', '1']);
+      const level = (amt('2199') * amt('1')) / 10n ** 18n;
+      expect(level).toBeGreaterThan(amt(DEFAULT_MIN_BEST_LEVEL_NOTIONAL));
+      expect(amt('1')).toBeLessThan(requiredBestLevelSize(depthRequirement(amt(SIZE)))!);
+      // Same book, same instant: quotable for a position it IS deep enough for.
+      expect(bestFromDepth(book, depthRequirement(amt('50')))).toEqual({ bestBid: '2199', bestAsk: '2201' });
+      expect(bestFromDepth(book, depthRequirement(amt(SIZE)))).toEqual({ bestBid: null, bestAsk: null });
+    });
+
+    /**
+     * THE COUNTER-TEST, and it is not optional.
+     *
+     * A gate that refuses everything is as useless as one that refuses nothing,
+     * and this repository has now produced both. Identical prices, identical
+     * position, identical parties, identical 1,000 bps move — the resting size is
+     * the only thing that changed, and it pays in full.
+     *
+     * "GENUINELY INDEPENDENT" IS ASSERTED AS FAR AS IT HONESTLY CAN BE, and no
+     * further. Three distinct principals; two makers whose capital was really
+     * held by the order path while their quotes rested, so the offers were
+     * fundable and hittable rather than free; a taker who is neither of them.
+     *
+     * WHAT IS **NOT** PROVEN, said plainly rather than implied: nothing in this
+     * test — and nothing in the gate it exercises — establishes that BOB, CAROL
+     * and ALICE are three PEOPLE. The depth requirement does not detect
+     * collusion and is not claimed to. What it changes is the price of pretending:
+     * the quotes here are 21,990 USDT a side, at a price 10% off the market, live
+     * for anyone to take. That is a bound on the attack, not an impossibility
+     * proof, and the honest statement of this test is the bound.
+     */
+    it('the same prices with size proportional to the position DO pay out in full', async () => {
+      const { positions, pos } = await largePositionThenRequote('10');
+
+      // GENUINELY DEEP — against the rule, not against a remembered number.
+      const need = requiredBestLevelSize(depthRequirement(amt(SIZE)))!;
+      const book = await bookFromOrders(perp.id);
+      expect(amt(book.bids[0]![1])).toBeGreaterThanOrEqual(need);
+      expect(amt(book.asks[0]![1])).toBeGreaterThanOrEqual(need);
+
+      // GENUINELY INDEPENDENT, to the extent that is checkable. Three principals,
+      // and both makers' quotes are funded out of their own balances right now.
+      expect(new Set([ALICE, BOB, CAROL]).size).toBe(3);
+      expect(await avail(BOB, 'USDT')).toBe('178010'); // 200000 - 10 x 2199
+      expect(await avail(CAROL, 'BTC')).toBe('90'); // 100 - 10
+
+      await positions.close(ALICE, pos.id!);
+
+      // 100000 margin back + 500 x (2200 - 2000) = 200000.
+      expect(await avail(ALICE, 'USDT')).toBe('200000');
+      expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('900000');
+      expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+
+      // And the makers are still whole and still holding their own risk — the
+      // gate did not charge them for standing behind the price.
+      await tradeOn.cancelAllOrders(principalFor(BOB), perp.id);
+      await tradeOn.cancelAllOrders(principalFor(CAROL), perp.id);
+      expect(await avail(BOB, 'USDT')).toBe('200000');
+      expect(await avail(CAROL, 'BTC')).toBe('100');
+    });
+
+    /**
+     * THE OPEN PATH IS GATED TOO, and it has to be.
+     *
+     * Gate only the close and the attack moves one step earlier: manufacture a
+     * cheap ENTRY on a book too thin to argue with, then close later against a
+     * book that has become genuinely deep at the true price, and the payout is
+     * paid on a basis nobody ever quoted. The size here is the caller's, and that
+     * is safe in the only direction that matters — the requirement RISES with it,
+     * so understating it opens the smaller position that was claimed.
+     *
+     * `trade.mark_missing`, and nothing locked: a refusal that took the margin
+     * first would be a worse bug than the one it refuses.
+     */
+    it('will not OPEN 500 contracts against a book that is real money but thin for them', async () => {
+      await fundProfitSource('1000000');
+      await fund(ALICE, 'USDT', '100000');
+      await fund(BOB, 'USDT', '200000');
+      await fund(CAROL, 'BTC', '100');
+      const positions = positionsOnOrderBook(perp.id);
+
+      const bid = await rest(tradeOn, BOB, perp, 'buy', '1', '1999');
+      const ask = await rest(tradeOn, CAROL, perp, 'sell', '1', '2001');
+      expect([bid.status, ask.status]).toEqual(['open', 'open']);
+
+      const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+      await expect(
+        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt(SIZE), leverage: amt('10') }),
+      ).rejects.toMatchObject({ code: 'trade.mark_missing' });
+
+      // The identical book opens the position it IS deep enough for.
+      const small = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('50'), leverage: amt('10') });
+      expect(small.entryPrice).toBe('2000');
+
+      expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before - amt('10000'));
+      expect(await positions.listOpen(ALICE)).toHaveLength(1);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 5 · LEVERAGE HAS A CEILING
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * THE OTHER HALF, AND IT IS INDEPENDENT OF THE FIRST.
+   *
+   * `grep -rn "MAX_LEVERAGE\|maxLeverage"` returned nothing on this repository.
+   * `leverage` came off the request body, `initial-margin.ts` checked `> 0`, and
+   * the only ceiling in the path was `numeric(8, 2)` — **999,999.99x**. Ten USDT
+   * of margin bought a million of notional, and that multiplier is what turned a
+   * manufactured mark into 190,000 USDT rather than into pocket change.
+   *
+   * It is tested here rather than only in `initial-margin.test.ts` because the
+   * unit test proves the predicate and this one proves the PATH: refused before
+   * anything is locked, on the real service, measured on balances.
+   */
+  describe('leverage is capped, and the refusal costs nothing', () => {
+    async function bookedPositions() {
+      await fundProfitSource('1000000');
+      await fund(ALICE, 'USDT', '100000');
+      await fund(BOB, 'USDT', '200000');
+      await fund(CAROL, 'BTC', '100');
+      const positions = positionsOnOrderBook(perp.id);
+      await rest(tradeOn, BOB, perp, 'buy', '10', '1999');
+      await rest(tradeOn, CAROL, perp, 'sell', '10', '2001');
+      return positions;
+    }
+
+    /**
+     * REVERT PROOF FOR HALF B, and it is this test specifically: remove the
+     * `checkLeverage` call from `PositionService.open` and the first assertion
+     * goes red — the open succeeds at 100,000x and locks 10 USDT against a
+     * 1,000,000 notional. The depth requirement does not catch it: this book is
+     * ten contracts a side and the position is five hundred contracts of
+     * NOTIONAL bought with almost no margin, so it is only the RATIO that is
+     * absurd, and only this half looks at the ratio.
+     */
+    it('refuses 100,000x on the real path, and locks nothing', async () => {
+      const positions = await bookedPositions();
+      const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+      await expect(
+        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('100000') }),
+      ).rejects.toMatchObject({ code: 'trade.leverage_too_high' });
+
+      expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+      expect(await positions.listOpen(ALICE)).toEqual([]);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    /**
+     * THE `numeric(8, 2)` OVERFLOW, WHICH USED TO BE A 500.
+     *
+     * `leverage: '1000000'` reached the INSERT and raised Postgres `22003`. The
+     * compensating `futuresMarginRelease` fired so no money was stranded — but a
+     * request that is simply out of range is not the platform breaking, and it
+     * must not be reported as though it were. It is refused before the margin
+     * lock now, so there is nothing to compensate: `ledger.reconcile()` is clean
+     * because nothing was ever posted, not because a rollback tidied up.
+     */
+    it('refuses the value that used to overflow the column, before any ledger post', async () => {
+      const positions = await bookedPositions();
+      const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+      await expect(
+        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('1000000') }),
+      ).rejects.toMatchObject({ code: 'trade.leverage_too_high', status: 400 });
+
+      expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+      expect(await positions.listOpen(ALICE)).toEqual([]);
+      const rows = await sql<Array<{ n: string }>>`SELECT count(*)::text AS n FROM trade.positions`;
+      expect(rows[0]!.n).toBe('0');
+    });
+
+    /** The cap is a number, it is at the top of the range this repo trades, and it opens. */
+    it('opens at exactly the cap and refuses one step past it', async () => {
+      const positions = await bookedPositions();
+      expect(DEFAULT_MAX_LEVERAGE).toBe('10');
+
+      const atCap = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('10') });
+      expect(atCap.leverage).toBe('10');
+      // 5 x 2000 / 10
+      expect(atCap.initialMargin).toBe('1000');
+
+      await expect(
+        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('10.01') }),
+      ).rejects.toMatchObject({ code: 'trade.leverage_too_high' });
+    });
+
+    /**
+     * THE SAME 500, ON THE OTHER PARAMETER. A non-positive size reached
+     * `initialMargin`, which threw a bare `Error` — a 500 for a request that was
+     * simply not a request. It is also the denominator of the depth requirement
+     * now, so it has to be a real number before anything reads a mark.
+     */
+    it('refuses a non-positive size by name rather than throwing out of the arithmetic', async () => {
+      const positions = await bookedPositions();
+      const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+      await expect(
+        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: 0n, leverage: amt('10') }),
+      ).rejects.toMatchObject({ code: 'trade.size_invalid', status: 400 });
 
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
       expect(await positions.listOpen(ALICE)).toEqual([]);

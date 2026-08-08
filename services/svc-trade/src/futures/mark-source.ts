@@ -20,7 +20,7 @@
  * A wrong mark becomes someone else's liquidation. Prefer null over guess.
  */
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import type { MarkSource, QuotedMarkSource } from './liquidation-tick.js';
+import type { MarkRequest, MarkSource, QuotedMarkSource } from './liquidation-tick.js';
 import {
   DEFAULT_FUTURES_MARK_POLICY,
   acceptableForLiquidation,
@@ -121,10 +121,7 @@ function formatScaled(v: bigint, scale: bigint): string {
  * anything is seized or paid. What reaches a screen through `markPrice()` is
  * still gated on quality, staleness and sign.
  */
-function markPriceFromQuote(
-  quote: (input: { marketId: string; symbol?: string; at: Date }) => Promise<FuturesQuotedMark | null>,
-  policy: MarkPolicy,
-): MarkSource['markPrice'] {
+function markPriceFromQuote(quote: (input: MarkRequest) => Promise<FuturesQuotedMark | null>, policy: MarkPolicy): MarkSource['markPrice'] {
   return async (input) => {
     const q = await quote(input);
     if (!q) return null;
@@ -170,8 +167,11 @@ export function memoryMarkBook(): {
     },
     source(policy) {
       const p = policy ?? DEFAULT_FUTURES_MARK_POLICY;
-      const quote = async (args: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null> =>
-        raw(args.marketId, args.symbol);
+      // `authorisesSize` is ignored here, and honestly so: an in-memory book
+      // holds one fed price and no depth, so there is nothing for a size
+      // requirement to be checked against. A source that cannot answer the
+      // question must not pretend it did.
+      const quote = async (args: MarkRequest): Promise<FuturesQuotedMark | null> => raw(args.marketId, args.symbol);
       return {
         quote,
         markPrice: markPriceFromQuote(quote, p),
@@ -191,8 +191,20 @@ export function memoryMarkBook(): {
  * Empty book → null (never invent).
  */
 export function markSourceFromBook(input: {
-  /** Return best bid/ask/last for a market. Any field may be null. */
-  readBook: (marketId: string) => Promise<{
+  /**
+   * Return best bid/ask/last for a market. Any field may be null.
+   *
+   * `authorisesSize` is the position, in base units, whose payout the resulting
+   * mark would price — `null` when the read authorises nothing. A depth-backed
+   * reader uses it to decide how much book has to be standing behind the level
+   * before its price counts as one (`mark-from-depth.ts`); a reader with no
+   * book behind it ignores it. It is a POSITIONAL, non-optional parameter so a
+   * reader cannot silently be the size-blind one.
+   */
+  readBook: (
+    marketId: string,
+    authorisesSize: Amount | null,
+  ) => Promise<{
     bestBid: string | null;
     bestAsk: string | null;
     last: string | null;
@@ -229,8 +241,8 @@ export function markSourceFromBook(input: {
 }): QuotedMarkSource {
   const policy = input.policy ?? DEFAULT_FUTURES_MARK_POLICY;
 
-  const quote = async (args: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null> => {
-    const book = await input.readBook(args.marketId);
+  const quote = async (args: MarkRequest): Promise<FuturesQuotedMark | null> => {
+    const book = await input.readBook(args.marketId, args.authorisesSize ?? null);
     if (!book) return null;
     const observed = book.observedAt ?? (input.now ? input.now() : args.at);
     const asOfMs = observed.getTime();

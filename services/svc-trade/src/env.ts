@@ -91,12 +91,20 @@ const schema = serviceEnvSchema
        *     `TRADE_FUTURES_FUNDING_MARKET_IDS`.
        *   · It does not name the profit source. `TRADE_FUTURES_PROFIT_SOURCE`
        *     has no default on purpose (`#950`) and this does not supply one.
-       *   · It does not pick a leverage or margin parameter. Orders on a
-       *     futures book are funded by the same hold as spot — see
-       *     `holdFor` and `assertTradable` in `spot/risk.ts`.
+       *   · It does not RAISE a leverage or margin parameter, and it does not
+       *     remove the one ceiling there is. Orders on a futures book are funded
+       *     by the same hold as spot (`holdFor` / `assertTradable` in
+       *     `spot/risk.ts`), and a MARGIN position opened through
+       *     `futures/position-service.ts` is refused above
+       *     `DEFAULT_MAX_LEVERAGE` however this flag is set. There used to be no
+       *     ceiling at all; see `futures/initial-margin.ts` for what that cost
+       *     and for whose ruling the number is awaiting.
        *   · It does not lower the mark bar. `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`
        *     still refuses a dust book, which is the whole reason this flag
-       *     could be added at all (`c7dfb5e4`, `cc90c2f4`).
+       *     could be added at all (`c7dfb5e4`, `cc90c2f4`) — and
+       *     `DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL` now additionally refuses a
+       *     book that is real money but thin for the position it would price,
+       *     which is what the dust floor alone did not cover.
        *
        * Kill-switch direction, same as spot: OFF stops NEW orders and never
        * stops cancellations. A switch that traps funds is not a safety control.

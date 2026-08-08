@@ -34,9 +34,9 @@ import { randomUUID } from 'node:crypto';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
-import { initialMargin } from './initial-margin.js';
+import { checkLeverage, initialMargin, maxLeverage } from './initial-margin.js';
 import { planClose } from './close-planner.js';
-import type { MarkSource } from './liquidation-tick.js';
+import type { MarkRequest, MarkSource } from './liquidation-tick.js';
 import {
   DEFAULT_FUTURES_MARK_POLICY,
   acceptableForLiquidation,
@@ -138,6 +138,18 @@ export interface PositionServiceDeps {
   /** Optional: tests may omit; production passes JetStream bus. */
   bus?: EventBus | null;
   markPolicy?: MarkPolicy;
+  /**
+   * THE LEVERAGE CEILING FOR THIS DEPLOYMENT.
+   *
+   * Omitted → `DEFAULT_MAX_LEVERAGE`. There is deliberately no way to express
+   * "no ceiling": the unbounded reading is what the repository had, and it was
+   * worth 190,000 USDT. An operator who wants more says how much more.
+   *
+   * Present so `DIRECTION` §8 item 8's ruling has one place to land — see
+   * `initial-margin.ts` for the number and for the argument that it is not an
+   * agent's to pick.
+   */
+  maxLeverage?: Amount;
   now?: () => Date;
 }
 
@@ -182,6 +194,7 @@ export interface PositionRow {
 export class PositionService {
   private readonly bus: EventBus | null;
   private readonly markPolicy: MarkPolicy;
+  private readonly maxLeverage: Amount;
   private readonly now: () => Date;
 
   constructor(
@@ -191,6 +204,7 @@ export class PositionService {
   ) {
     this.bus = deps.bus ?? null;
     this.markPolicy = deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY;
+    this.maxLeverage = maxLeverage(deps.maxLeverage ?? null);
     this.now = deps.now ?? (() => new Date());
   }
 
@@ -205,15 +219,30 @@ export class PositionService {
    * `open()` throws on either. `close()` freezes to `closing` instead — see
    * `docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md`. A quote good
    * enough to value but not to PAY on is a later gate (`requirePayoutGrade`).
+   *
+   * ── `authorisesSize` IS NOT A HINT, IT IS THE STAKE ─────────────────────────
+   *
+   * The size, in base units, of the position this mark is about to price. A
+   * depth-backed source uses it to require that the book standing behind the
+   * best level is deep enough to stand behind THAT MUCH MONEY, instead of
+   * clearing a fixed 100-unit floor that had no relationship to the payout at
+   * all — the defect measured at 190,000 USDT
+   * (`mark-from-depth.ts`, "AN ABSOLUTE FLOOR CANNOT GATE AN UNBOUNDED PAYOUT").
+   *
+   * IT IS A REQUIRED PARAMETER WITH NO DEFAULT. Every caller states the stake or
+   * states `null`, because a defaulted `null` here is exactly the size-blind
+   * behaviour being removed, arrived at by forgetting rather than by deciding.
+   * On the close path it comes off the row held under `FOR UPDATE`; it is never
+   * anything a request body can reach.
    */
   private async tryMarkForMarking(
     marketId: string,
     symbol: string,
     at: Date,
+    authorisesSize: Amount | null,
   ): Promise<{ ok: true; mark: FuturesQuotedMark } | { ok: false; reason: ClosingReason; detail: string }> {
-    const quoted = this.deps.marks.quote
-      ? await this.deps.marks.quote({ marketId, symbol, at })
-      : await this.legacyQuote(marketId, symbol, at);
+    const request: MarkRequest = { marketId, symbol, at, ...(authorisesSize != null ? { authorisesSize } : {}) };
+    const quoted = this.deps.marks.quote ? await this.deps.marks.quote(request) : await this.legacyQuote(request);
 
     if (!quoted) {
       return { ok: false, reason: 'trade.mark_missing', detail: markMissing(marketId).reason! };
@@ -230,8 +259,8 @@ export class PositionService {
   }
 
   /** Open path: darkness refuses. Close path uses `tryMarkForMarking` + freeze. */
-  private async markFor(marketId: string, symbol: string, at: Date): Promise<FuturesQuotedMark> {
-    const got = await this.tryMarkForMarking(marketId, symbol, at);
+  private async markFor(marketId: string, symbol: string, at: Date, authorisesSize: Amount | null): Promise<FuturesQuotedMark> {
+    const got = await this.tryMarkForMarking(marketId, symbol, at, authorisesSize);
     if (!got.ok) {
       throw new FuturesError(
         got.reason === 'trade.mark_missing' ? got.detail : `Refusing to value this position — ${got.detail}`,
@@ -247,8 +276,8 @@ export class PositionService {
    * it as `mid` observed now — which is exactly what `markPrice` has always
    * implied — rather than inventing a quality it never claimed.
    */
-  private async legacyQuote(marketId: string, symbol: string, at: Date): Promise<FuturesQuotedMark | null> {
-    const price = await this.deps.marks.markPrice({ marketId, symbol, at });
+  private async legacyQuote(request: MarkRequest): Promise<FuturesQuotedMark | null> {
+    const price = await this.deps.marks.markPrice(request);
     if (price == null || price.trim() === '') return null;
     let parsed: Amount;
     try {
@@ -256,7 +285,7 @@ export class PositionService {
     } catch {
       return null;
     }
-    return { marketId, symbol, price: parsed, asOf: at, quality: 'mid' };
+    return { marketId: request.marketId, symbol: request.symbol, price: parsed, asOf: request.at, quality: 'mid' };
   }
 
   /**
@@ -357,10 +386,50 @@ export class PositionService {
       throw new FuturesError(`market ${input.symbol} is ${m.status}`, 'trade.market_not_tradable', 400);
     }
 
-    // THE ENTRY PRICE IS READ, NOT RECEIVED. It sizes the margin lock and it is
-    // the basis of every later PnL, so it is a price that moves money.
+    /**
+     * LEVERAGE IS REFUSED BEFORE ANYTHING IS READ, LOCKED OR WRITTEN.
+     *
+     * First, because it is the cheapest refusal available and needs no mark, no
+     * ledger post and no row. Second, and the reason it is here rather than
+     * further down: `positions.leverage` is `numeric(8, 2)`, so a leverage of
+     * `1000000` used to reach the INSERT and raise Postgres `22003`. The
+     * compensating `futuresMarginRelease` fired and no money was stranded, but
+     * the caller got a **500** for a request that was simply out of range, and a
+     * 500 is the platform saying it broke when in fact it was asked for
+     * something it does not offer. Validating here makes it a named 400 that
+     * never locked anything, so there is nothing to compensate.
+     *
+     * The cap itself, and why 10x, is argued in `initial-margin.ts`.
+     */
+    const leverageCheck = checkLeverage(input.leverage, this.maxLeverage);
+    if (!leverageCheck.ok) {
+      throw new FuturesError(leverageCheck.reason ?? 'leverage refused', leverageCheck.code ?? 'trade.leverage_invalid', 400);
+    }
+
+    /**
+     * THE SIZE MUST ALSO BE A SIZE. Non-positive size reached `initialMargin`,
+     * which threw a bare `Error` and surfaced as a 500 for the same reason
+     * leverage did. It is also the denominator of the depth requirement below.
+     */
+    if (input.size <= 0n) {
+      throw new FuturesError(`size must be greater than zero, got ${formatAmount(input.size)}`, 'trade.size_invalid', 400);
+    }
+
+    /**
+     * THE ENTRY PRICE IS READ, NOT RECEIVED. It sizes the margin lock and it is
+     * the basis of every later PnL, so it is a price that moves money.
+     *
+     * AND IT IS READ AGAINST THIS POSITION'S SIZE. The book behind the mark must
+     * be deep enough for the position the mark is about to open, not merely
+     * non-dust — `mark-from-depth.ts` argues the relationship. There is no
+     * stored row to read the size from yet, and using the caller's is safe in
+     * the only direction that matters: the requirement rises with it, and the
+     * same number is written verbatim into the row four statements below. A
+     * caller who understates it to slip past the gate opens the smaller position
+     * they claimed, which is not an attack, it is a smaller trade.
+     */
     const at = this.now();
-    const mark = await this.markFor(m.id, m.symbol, at);
+    const mark = await this.markFor(m.id, m.symbol, at, input.size);
     const entryPrice = mark.price;
 
     // Second door. `assertPolicyCoherent`'s habit: the boundary refuses cross
@@ -558,8 +627,25 @@ export class PositionService {
           throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
         }
 
+        /**
+         * THE STAKE, TAKEN OFF THE LOCKED ROW.
+         *
+         * `row.size` — the position as the platform wrote it, read inside the
+         * same `FOR UPDATE` as the close it is about to gate. Not the request:
+         * the DELETE that reaches this method carries a position id and nothing
+         * else, and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` would
+         * forbid it if it did. *A price that moves money is never supplied by
+         * the party it pays* — and the size that decides which prices are
+         * ACCEPTED is part of that price.
+         *
+         * This is the number the depth requirement is a fraction of. A close of
+         * 500 contracts must find a book that can absorb a defined slice of 500
+         * contracts, not a book that clears a fixed floor set for a book that
+         * might have been pricing anything at all.
+         */
         const at = this.now();
-        const markOrDark = await this.tryMarkForMarking(row.market_id, row.symbol, at);
+        const authorisesSize = parseAmount(row.size);
+        const markOrDark = await this.tryMarkForMarking(row.market_id, row.symbol, at, authorisesSize);
 
         /**
          * EXIT WHEN THE FEED IS DARK.

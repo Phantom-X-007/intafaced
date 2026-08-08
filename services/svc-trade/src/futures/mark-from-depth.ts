@@ -67,15 +67,99 @@
  * problem.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE NUMBER IS A RISK PARAMETER AND IT IS THE OWNER'S
+ * AN ABSOLUTE FLOOR CANNOT GATE AN UNBOUNDED PAYOUT
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Every paragraph above is still true and all of them together were still
+ * insufficient, and the gap was measured: **190,000 USDT out of the profit pot
+ * for ten USDT of margin plus about 240 USDT of resting quotes that were
+ * refunded in full.** Two orders worth roughly 120 quote units each cleared
+ * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` by twenty percent, and the mid they minted
+ * was then used to price the close of a position of ONE MILLION of notional.
+ *
+ * The defect is not the number. It is that the number is ABSOLUTE while the
+ * thing it authorises is not. `bestLevelIsQuotable` was handed a price and a
+ * quantity and asked "is this level worth more than 100 units of the quote
+ * asset" — a question with no reference to the position whose payout the answer
+ * funds. One threshold therefore had to be simultaneously high enough to gate a
+ * million-unit position and low enough not to strand a hundred-unit one, and no
+ * single number is both. Raising the 100 does not fix it; it moves the size at
+ * which the same arithmetic works, and makes ordinary markets unquotable on the
+ * way past.
+ *
+ * ── THE RELATIONSHIP, AND THE ARGUMENT FOR IT ───────────────────────────────
+ *
+ * **A best level may back a mark that authorises a payout on a position of size
+ * S only if that level carries at least `minBestLevelBpsOfNotional` of S.**
+ *
+ * Stated in BASE units, deliberately rather than for convenience. At the level's
+ * own price the two readings are the same statement — `qty >= f*S` is exactly
+ * `price*qty >= f*(S*price)`, i.e. the level is worth at least the fraction `f`
+ * of the position notional THIS MARK IS MINTING — so nothing is given up, and
+ * two bad denominators are avoided. Sizing the requirement off a notional
+ * computed at the mark you are deciding whether to trust is not a check, it is a
+ * fixed point. Sizing it off the stored entry price instead would rate today's
+ * liquidity against a number set when the position opened, which on exactly the
+ * market move the breaker exists to catch is the stalest denominator available.
+ *
+ * WHY A FRACTION IS THE RIGHT SHAPE OF CLAIM. A mark asserts "this position
+ * could be closed here". Requiring the whole position to rest at one level would
+ * assert something no real venue satisfies — top of book is a fraction of any
+ * serious position — and would refuse every honest market and strand every
+ * trader in it. A fixed fraction asserts the weaker true thing: whoever is
+ * putting this price up must be willing to transact a defined slice of the
+ * position AT IT, right now.
+ *
+ * AND THAT IS WHAT COSTS THE ATTACKER SOMETHING. A resting order is not a
+ * signature on a form, it is a live offer that anyone may hit. Dust is free to
+ * post precisely because nobody bothers to take four femto-cents, and 120 units
+ * against a million of notional is very nearly as free. A level sized as a
+ * fraction of the position, resting at a price pushed nineteen percent off the
+ * market, is an arbitrage anyone watching can take — and it is required on BOTH
+ * sides, so it cannot be hedged against itself. This does not make manipulation
+ * impossible. It makes it PROPORTIONAL, which an absolute floor by construction
+ * cannot.
+ *
+ * IT IS NOT SUFFICIENT ALONE, AND IS NOT CLAIMED TO BE. Quotes are refundable —
+ * cancel and the maker is whole — so no depth rule makes the attack cost
+ * anything that is not actually taken. What bounds the size of the prize is the
+ * leverage cap in `initial-margin.ts`: margin genuinely at risk, in a fixed
+ * ratio to the notional any mark is allowed to pay out on. Each half leaves the
+ * other's hole open, and each is caught by its own test — see
+ * `orderable-path.test.ts`.
+ *
+ * WHERE THE SIZE COMES FROM, WHICH IS THE WHOLE OF THE ADR.
+ * `docs/adr/2026-08-05-futures-risk-and-mark-law.md`: *a price that moves money
+ * is never supplied by the party it pays.* On the CLOSE path the size is read
+ * from `trade.positions` under the same `FOR UPDATE` as the close it is judging,
+ * never from the request. On the OPEN path no stored row exists yet and the size
+ * is the caller's — safe in the only direction that matters, because the
+ * requirement is monotonically INCREASING in it and the number is written
+ * verbatim into the row by the same statement. Understating it to weaken this
+ * gate also opens the smaller position that was claimed; overstating it tightens
+ * the gate against the caller. Neither is a price, and neither names a payout.
+ *
+ * NOT WIRED INTO THE LIQUIDATION TICK, deliberately, and said out loud rather
+ * than left to be discovered. A liquidation pays the HOUSE, not the trader, and
+ * refusing one leaves the platform holding risk it has already judged to be past
+ * its margin. Widening the conditions under which a liquidation refuses is a
+ * liquidation parameter, squarely `DIRECTION` §8 item 8 — so it waits for the
+ * same ruling the numbers below are waiting for, instead of arriving as a side
+ * effect of a payout fix. `sideDepthNotional` is on the same boundary and for
+ * the same reason: it MEASURES depth for the ladder, it does not authorise a
+ * payout, so it runs the absolute floor only.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE NUMBERS ARE RISK PARAMETERS AND THEY ARE THE OWNER'S
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * `docs/adr/2026-08-05-futures-risk-and-mark-law.md` reserves "any leverage or
  * margin parameter beyond §1's stated defaults" to the owner (`DIRECTION` §8
- * item 8). A minimum book depth is one of those. What is implemented here is the
- * MECHANISM and its refusal; the number is a conservative placeholder, it lives
- * in exactly one named constant, and it is per-deployment configuration rather
- * than something scattered through the call sites.
+ * item 8). A minimum book depth is one of those, and so is the fraction of a
+ * position that must rest behind its mark. What is implemented here is the
+ * MECHANISM and its refusal; both numbers are conservative placeholders, each
+ * lives in exactly one named constant, and both are per-deployment configuration
+ * on one policy object rather than something scattered through the call sites.
  */
 import { parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { EngineDepth } from '../spot/matching-client.js';
@@ -116,17 +200,94 @@ import type { MarkPolicy } from './mark-policy.js';
  */
 export const DEFAULT_MIN_BEST_LEVEL_NOTIONAL = '100';
 
+/**
+ * HOW MUCH OF THE POSITION MUST REST BEHIND THE MARK THAT PRICES IT, IN BPS.
+ *
+ * `100` bps = one percent. For a long of 500 contracts, the best bid must carry
+ * at least 5 contracts before its price may be half of a mid that authorises a
+ * payout on that position; for a long of 10 contracts, 0.1. The requirement
+ * scales with what it is being asked to authorise, which is the entire point —
+ * see the header section "AN ABSOLUTE FLOOR CANNOT GATE AN UNBOUNDED PAYOUT".
+ *
+ * ONE PERCENT IS DELIBERATELY A WEAK CLAIM, and it is chosen to be weak. It says
+ * a real market's top level can absorb a hundredth of the position being priced
+ * off it — far less than any liquid book actually shows, and far more than an
+ * attacker can post for free at a price nineteen percent off the market on both
+ * sides at once. Against the measured exploit it is not close: 0.06 BTC rested
+ * against a 500-contract position is 0.012% of it, under the requirement by two
+ * orders of magnitude. Against the honest book in the same test file — 10
+ * contracts resting behind a 10-contract position, 10,000 bps — it is not close
+ * in the other direction either. The gap between those two is where the number
+ * is allowed to be wrong without either stranding traders or paying attackers.
+ *
+ * IT IS A PLACEHOLDER FOR AN OWNER RULING, NOT A CONSIDERED RISK LIMIT
+ * (`DIRECTION` §8 item 8). What the mechanism guarantees is that the ruling has
+ * exactly one place to land, and that the number cannot be zero by accident: a
+ * policy that omits it gets this one, and a policy whose value is unreadable
+ * gets this one too. Zero is reachable only by an operator writing zero, which
+ * is a decision and reads like one.
+ *
+ * KNOWN LIMITATION, stated rather than papered over: like the absolute floor, it
+ * is one number applied to every futures market. A market whose honest top of
+ * book is genuinely thinner than 1% of the positions traded on it would freeze
+ * closes rather than pay them — the ADR's chosen failure direction (the position
+ * sits and an operator looks at it), but a real cost, and the reason
+ * per-market risk parameters are a table the owner owns.
+ */
+export const DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL = 100;
+
+/** Basis-point denominator. Integer arithmetic only — no floats in this path. */
+const BPS = 10_000n;
+
 export interface DepthQuotePolicy {
   /**
    * Decimal string, quote-asset units. A best level worth less than this is
-   * read as no level at all. See `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`.
+   * read as no level at all, whatever it is being asked to price. See
+   * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`.
+   *
+   * KEPT, and not replaced by the relative requirement below. It is what catches
+   * the femto-cent book when NO position is in scope — a public ticker read, a
+   * ladder depth measurement — and it is the floor under a position so small
+   * that a percentage of it is also dust.
    */
   readonly minBestLevelNotional: string;
+  /**
+   * Basis points of the POSITION SIZE that the best level must carry before its
+   * price may authorise a payout on that position. Optional; omitted means
+   * `DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL`, never means "no requirement".
+   */
+  readonly minBestLevelBpsOfNotional?: number;
 }
 
 export const DEFAULT_DEPTH_QUOTE_POLICY: DepthQuotePolicy = {
   minBestLevelNotional: DEFAULT_MIN_BEST_LEVEL_NOTIONAL,
+  minBestLevelBpsOfNotional: DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL,
 };
+
+/**
+ * WHAT A BEST LEVEL MUST CARRY, AND WHAT IT IS BEING ASKED TO AUTHORISE.
+ *
+ * A resolved policy plus the one fact the policy cannot know: the position this
+ * mark is about to price. It exists as a TYPE, rather than the two loose
+ * arguments it replaces, so that the question "authorising a payout on what?"
+ * has to be answered at every call site — `depthRequirement(null, …)` is a
+ * caller saying out loud that no position is in scope, which is a different
+ * statement from a caller who forgot.
+ */
+export interface DepthQuoteRequirement {
+  /** Absolute floor in quote-asset units. Always applies. */
+  readonly minNotional: Amount;
+  /**
+   * The position size, in base units, whose payout this mark would authorise —
+   * or null when the read authorises nothing (public quote, ladder depth).
+   *
+   * NEVER a caller-supplied figure on the close path: it is read from
+   * `trade.positions` under the close's own row lock. See the file header.
+   */
+  readonly authorisedSize: Amount | null;
+  /** Basis points of `authorisedSize` the level must carry. */
+  readonly bpsOfNotional: number;
+}
 
 export type DepthReader = (marketId: string) => Promise<EngineDepth | null>;
 
@@ -153,16 +314,97 @@ export function minBestLevelNotional(policy: DepthQuotePolicy = DEFAULT_DEPTH_QU
 }
 
 /**
- * Is a best level worth quoting? `price` and `quantity` are 1e18-scaled
- * bigints; `minimum` is whatever `minBestLevelNotional` returned.
+ * The policy's relative requirement in bps, through the same fallback.
+ *
+ * An unreadable, negative or non-integer value is NOT permission to skip the
+ * relative check — it falls back to the default, exactly as the absolute floor
+ * does. Zero is honoured, because zero is a value an operator can only get by
+ * typing it.
+ */
+export function minBestLevelBpsOfNotional(policy: DepthQuotePolicy = DEFAULT_DEPTH_QUOTE_POLICY): number {
+  const raw = policy.minBestLevelBpsOfNotional;
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 0) return DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL;
+  return raw;
+}
+
+/**
+ * Resolve a policy and a position size into the requirement a best level faces.
+ *
+ * `authorisedSize` is the position, in base units, whose payout the resulting
+ * mark would authorise — `null` for a read that authorises nothing. It is a
+ * REQUIRED argument with no default on purpose: the header's rule is that the
+ * unsafe reading must not be the one you get by leaving an argument off, and
+ * here the unsafe reading is "no position in scope, absolute floor only". A
+ * caller may still choose it; a caller may not fall into it.
+ */
+export function depthRequirement(
+  authorisedSize: Amount | null,
+  policy: DepthQuotePolicy = DEFAULT_DEPTH_QUOTE_POLICY,
+): DepthQuoteRequirement {
+  return {
+    minNotional: minBestLevelNotional(policy),
+    authorisedSize: authorisedSize != null && authorisedSize > 0n ? authorisedSize : null,
+    bpsOfNotional: minBestLevelBpsOfNotional(policy),
+  };
+}
+
+/**
+ * The minimum QUANTITY a best level must carry under this requirement, in base
+ * units — or null when no position is in scope, or the policy asks for none.
+ *
+ * ROUNDS UP, for the reason `mark-policy.ts` gives for the deviation breaker
+ * rounding up: a requirement that rounds down is a requirement a small enough
+ * position escapes entirely, and the absolute floor is not there to cover for
+ * an off-by-one in this one.
+ */
+export function requiredBestLevelSize(requirement: DepthQuoteRequirement): Amount | null {
+  const { authorisedSize, bpsOfNotional } = requirement;
+  if (authorisedSize == null || authorisedSize <= 0n || bpsOfNotional <= 0) return null;
+  const bps = BigInt(bpsOfNotional);
+  const product = authorisedSize * bps;
+  // Ceiling division on non-negative integers.
+  return product % BPS === 0n ? product / BPS : product / BPS + 1n;
+}
+
+/**
+ * Is a best level good enough to stand behind this mark? `price` and `quantity`
+ * are 1e18-scaled bigints.
  *
  * THE WHOLE RULE, IN ONE FUNCTION, so "too thin to be a quote" cannot come to
- * mean one thing on our matching book and another on a venue's.
+ * mean one thing on our matching book and another on a venue's — and so that
+ * the ABSOLUTE and RELATIVE halves cannot drift apart into two rules either.
+ * Both must pass: the relative requirement is added ON TOP of the floor, not in
+ * place of it, because a position small enough that 1% of it is dust still may
+ * not be priced off a dust book.
  */
-export function bestLevelIsQuotable(price: Amount, quantity: Amount, minimum: Amount): boolean {
+export function bestLevelIsQuotable(price: Amount, quantity: Amount, requirement: DepthQuoteRequirement): boolean {
+  /**
+   * A MALFORMED REQUIREMENT IS A THROW, NOT A PASS — and this is not defensive
+   * clutter, it is the specific hole this parameter used to be.
+   *
+   * The third argument was a bare `Amount` (the absolute floor). Hand that
+   * bigint to the new signature from any call site TypeScript is not watching —
+   * a JS consumer, a test, a `dist` built before this change — and every read
+   * off it is `undefined`: `notional < undefined` is `false` under
+   * BigInt/Number relational coercion, `authorisedSize` is `undefined` so the
+   * relative check is skipped, and the function cheerfully returns TRUE. The
+   * old, exploited behaviour, restored silently, by a caller that looks correct.
+   *
+   * That is precisely the failure this file has now been bitten by twice —
+   * a size-blind reading reachable by accident. So it is made unreachable:
+   * a caller either passes something `depthRequirement()` built or finds out.
+   */
+  if (typeof requirement !== 'object' || requirement === null || typeof (requirement as DepthQuoteRequirement).minNotional !== 'bigint') {
+    throw new TypeError(
+      'bestLevelIsQuotable: third argument must be a DepthQuoteRequirement — build one with depthRequirement(size, policy)',
+    );
+  }
   if (price <= 0n || quantity <= 0n) return false;
   // Both operands are 1e18-scaled, so the product is 1e36-scaled. No floats.
-  return (price * quantity) / SCALE >= minimum;
+  if ((price * quantity) / SCALE < requirement.minNotional) return false;
+  const needed = requiredBestLevelSize(requirement);
+  if (needed != null && quantity < needed) return false;
+  return true;
 }
 
 /** One depth level as scaled bigints, or null when it is not readable as money. */
@@ -181,24 +423,25 @@ function parseLevel(level: readonly [string, string] | undefined): readonly [Amo
  * Best bid/ask price strings from depth levels, or null if the side is empty —
  * or too thin to be worth quoting, which this file treats as the same thing.
  *
- * The policy argument defaults rather than being required, because the unsafe
- * reading must not be the one you get by leaving an argument off. There is no
- * way to call this function and be handed a dust mid.
+ * `requirement` is REQUIRED and carries the position, because the unsafe reading
+ * must not be the one you get by leaving an argument off. It used to be an
+ * optional policy, which meant the size-aware reading was the one you had to
+ * remember and the size-BLIND one was free — the shape of the defect this file
+ * has now had twice. Build it with `depthRequirement(size)`, or
+ * `depthRequirement(null)` where the read genuinely authorises nothing.
  */
 export function bestFromDepth(
   depth: EngineDepth | null | undefined,
-  policy: DepthQuotePolicy = DEFAULT_DEPTH_QUOTE_POLICY,
+  requirement: DepthQuoteRequirement,
 ): {
   bestBid: string | null;
   bestAsk: string | null;
 } {
   if (!depth) return { bestBid: null, bestAsk: null };
 
-  const minimum = minBestLevelNotional(policy);
-
   const side = (level: readonly [string, string] | undefined): string | null => {
     const parsed = parseLevel(level);
-    if (parsed == null || !bestLevelIsQuotable(parsed[0], parsed[1], minimum)) return null;
+    if (parsed == null || !bestLevelIsQuotable(parsed[0], parsed[1], requirement)) return null;
     return level![0]!;
   };
 
@@ -220,6 +463,13 @@ export function bestFromDepth(
  * one threshold, one ruling, not a second definition of "too thin to matter" that
  * could drift away from the first. A side made entirely of dust returns null.
  *
+ * THE ABSOLUTE FLOOR ONLY, AND THAT IS THE BOUNDARY. This function MEASURES how
+ * much book there is; it does not authorise a payout on anything. Running the
+ * relative requirement here would mean the ladder rated a position against depth
+ * filtered by a fraction of that same position, which is circular, and it would
+ * widen the conditions under which a LIQUIDATION refuses — a liquidation
+ * parameter, and `DIRECTION` §8 item 8's, not this change's. See the header.
+ *
  * NULL, NOT ZERO, when the side is unreadable. Zero depth would flow into
  * `depthRatioBps` as a division by zero; null makes the caller skip the position
  * and an operator look at it, which is what this codebase already does with a
@@ -232,14 +482,14 @@ export function sideDepthNotional(
 ): Amount | null {
   if (!depth) return null;
   const levels = side === 'long' ? depth.bids : depth.asks;
-  const minimum = minBestLevelNotional(policy);
+  const measuring = depthRequirement(null, policy);
 
   let total = 0n;
   for (const level of levels) {
     const parsed = parseLevel(level);
     if (parsed == null) continue;
     const [price, quantity] = parsed;
-    if (!bestLevelIsQuotable(price, quantity, minimum)) continue;
+    if (!bestLevelIsQuotable(price, quantity, measuring)) continue;
     // Both operands are 1e18-scaled, so the product is 1e36-scaled.
     total += (price * quantity) / SCALE;
   }
@@ -248,17 +498,25 @@ export function sideDepthNotional(
 }
 
 /**
- * QuotedMarkSource that mids the injected book. Never invents when empty, and
- * never mints a mid from a book too thin to support one.
+ * QuotedMarkSource that mids the injected book. Never invents when empty, never
+ * mints a mid from a book too thin to support one, and never mints a mid too
+ * thin to support THE POSITION IT IS BEING ASKED ABOUT.
+ *
+ * `authorisesSize` reaches here from `MarkRequest` — the caller states the
+ * position, in base units, whose payout this mark would authorise. A caller with
+ * no position in scope (public ticker, `markPrice` for a screen) states nothing
+ * and gets the absolute floor, which is exactly what those reads should get:
+ * they authorise nothing, so there is nothing to size against.
+ *
  * `last` is always null here — last print is a separate feed.
  */
 export function markSourceFromDepth(readDepth: DepthReader, policy?: MarkPolicy, depthPolicy?: DepthQuotePolicy): QuotedMarkSource {
   return markSourceFromBook({
     policy,
-    async readBook(marketId) {
+    async readBook(marketId, authorisesSize) {
       const depth = await readDepth(marketId);
       if (!depth) return null;
-      const { bestBid, bestAsk } = bestFromDepth(depth, depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY);
+      const { bestBid, bestAsk } = bestFromDepth(depth, depthRequirement(authorisesSize, depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY));
       return { bestBid, bestAsk, last: null };
     },
   });

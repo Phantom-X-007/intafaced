@@ -32,7 +32,14 @@ export interface TradableOptions {
    *
    * Mirrors `TRADE_FUTURES_ENABLED`, and defaults to `false` so the permissive
    * reading is never the one you get by leaving an argument off — the same
-   * property `bestFromDepth`'s policy argument has, for the same reason.
+   * property `bestFromDepth`'s depth requirement has, for the same reason.
+   *
+   * That one has since gone further, and the reason is worth carrying here: its
+   * argument is now MANDATORY rather than safely defaulted, because a safe
+   * default was not enough once the question changed from "is this level worth
+   * anything" to "is it worth anything next to the position it is pricing". A
+   * default cannot answer the second question, and defaulting it to "no position
+   * in scope" was worth 190,000 USDT.
    */
   readonly futuresEnabled?: boolean;
 }
