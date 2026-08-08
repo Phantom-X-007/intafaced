@@ -126,6 +126,19 @@ export class CopyService {
     if (follow.followerId !== principal.userId) {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
+    // The churn counters deliberately SURVIVE this.
+    //
+    // They are keyed `leader:follower`, not on `followId`, and that is correct:
+    // SPEC-SOVEREIGN caps leader earnings "per follower per period" and decays
+    // the rate with turnover, so the unit is the pair and the period — not the
+    // envelope. Clearing them here would make `unfollow` — which is unilateral,
+    // needs no law, and is always allowed — a free reset of the abuse brake:
+    // farm to the cap, unfollow, re-follow, farm again, unbounded, for the cost
+    // of two API calls. That is precisely what the cap exists to stop.
+    //
+    // (The counters are in fact LIFETIME rather than per-period today, because
+    // `copy_period_stats` has no period column. That is a real gap and the fix
+    // is a period key, not a user-triggered delete.)
     await this.store.deleteFollow(follow.followId);
     return { followId: follow.followId, revoked: true as const };
   }
@@ -182,13 +195,37 @@ export class CopyService {
       currentExposure: current,
       now: this.now(),
     });
-    await this.store.setExposure(follow.followId, current + plan.notional);
+    // The plan carries the exposure the cap check approved. Recomputing it here
+    // is what let the write ignore the side while the check did not.
+    await this.store.setExposure(follow.followId, plan.nextExposure);
     return presentMirrorPlan(plan);
   }
 
   /**
    * Attribute + settle leader fee-share for a follower fill via ledger-client.
    * Blank §8 rates → refuse. Cap / kill → typed skip or refuse.
+   *
+   * ── KNOWN RACE, and it is why this module is not mounted yet ───────────────
+   *
+   * The earnings cap does not hold under concurrency. This method reads the
+   * period stats, posts, re-reads, and writes — four separate awaits with no
+   * row lock and no atomic increment. Two fills settling at once both read the
+   * old `earningsPaid`, both pass the cap inside `attributeCopyFeeShare`, and
+   * both pay. The cap is the churn brake the spec designs against (§ earnings
+   * cap per follower per period), so breaching it is precisely the abuse it
+   * exists to stop.
+   *
+   * The ledger side is safe — `windowId` and `rewardId` are business keys on
+   * `fillId`, so a redelivery re-posts the same key and moves nothing twice.
+   * It is the COUNTER that loses updates, which means the ledger faithfully
+   * records an over-payment rather than preventing it.
+   *
+   * Fixing it properly is a reserve-then-post restructure — atomically claim
+   * the intended share, post, and release on failure — plus an atomic
+   * increment primitive on the store. That is its own change with its own
+   * adversarial pass, and it must land BEFORE any route reaches this class.
+   * The exposure counter in `planMirrorForFollow` has the same read-modify-write
+   * shape and needs the same treatment.
    */
   async settleFeeShare(
     principal: Principal,
