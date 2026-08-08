@@ -66,6 +66,47 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
+       * MAY A FUTURES MARKET ACCEPT AN ORDER? (`trade.futures` / D-S-01.)
+       *
+       * DEFAULT OFF, and off is a product state rather than an outage. With this
+       * unset svc-trade boots normally and serves everything it serves today;
+       * a futures market is listed, visible, quotable and readable, and an
+       * ORDER into one is refused by name with `trade.futures_disabled` — a
+       * 403, not a 500 and not a crash-loop. `#883`/`#950` established the
+       * distinction: a refusal whose only legal answer is one value is an
+       * outage, and this one has a legal answer on both settings.
+       *
+       * It follows `TRADE_SPOT_ENABLED`'s shape and inverts its DEFAULT, for
+       * the reason `TRADE_FUTURES_JOBS_ENABLED` and `TRADE_MM_SEED_ENABLED`
+       * already default off: a capability that moves money in a way nobody has
+       * yet run in anger must be switched on deliberately, by an operator, and
+       * never arrive as a side effect of a deploy.
+       *
+       * WHAT IT DOES NOT DO, stated because a flag named `FUTURES_ENABLED`
+       * invites the assumption that it turns futures on:
+       *
+       *   · It does not enable FUNDING for any market. That is reserved to the
+       *     owner (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`), and
+       *     funding still needs `TRADE_FUTURES_JOBS_ENABLED` plus an explicit
+       *     `TRADE_FUTURES_FUNDING_MARKET_IDS`.
+       *   · It does not name the profit source. `TRADE_FUTURES_PROFIT_SOURCE`
+       *     has no default on purpose (`#950`) and this does not supply one.
+       *   · It does not pick a leverage or margin parameter. Orders on a
+       *     futures book are funded by the same hold as spot — see
+       *     `holdFor` and `assertTradable` in `spot/risk.ts`.
+       *   · It does not lower the mark bar. `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`
+       *     still refuses a dust book, which is the whole reason this flag
+       *     could be added at all (`c7dfb5e4`, `cc90c2f4`).
+       *
+       * Kill-switch direction, same as spot: OFF stops NEW orders and never
+       * stops cancellations. A switch that traps funds is not a safety control.
+       */
+      TRADE_FUTURES_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /**
        * Futures residual jobs (liquidation scan + funding ticks).
        * Default OFF — must be explicitly enabled. Never invents markets/rates.
        */

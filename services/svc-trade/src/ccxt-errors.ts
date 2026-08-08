@@ -71,6 +71,24 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.market_not_tradable': { ccxt: 'BadSymbol', status: 403 },
   /** Spot service cannot serve this market kind (futures/options listing). */
   'trade.market_kind_unsupported': { ccxt: 'BadSymbol', status: 403 },
+  /**
+   * A futures listing this deployment does not take orders on
+   * (`TRADE_FUTURES_ENABLED` off).
+   *
+   * `NotSupported` and not `BadSymbol`: the symbol is real, the ticker and the
+   * orderbook answer for it, and `fetchMarkets` should keep returning it. What is
+   * unavailable is the METHOD on this market — which is precisely what
+   * `NotSupported` means in the header above ("stop calling this method
+   * entirely"), and what a `BadSymbol` would get wrong by telling the bot to drop
+   * a market it can still watch.
+   *
+   * 403 and not 501, for the reason stated at the top of this table: CCXT
+   * transport wrappers retry 5xx before anything parses the body, and this is not
+   * retryable — an operator has to change a variable and restart. Nor is it
+   * `OnMaintenance`/503 like `spot_disabled`: nothing here is degraded or coming
+   * back on its own. Futures being off is the shipped default, not an incident.
+   */
+  'trade.futures_disabled': { ccxt: 'NotSupported', status: 403 },
 
   // ── Temporarily closed: retry later, do not drop the symbol ───────────────
   /**

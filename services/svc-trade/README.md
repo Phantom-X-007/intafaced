@@ -342,6 +342,45 @@ reads and listings keep working, and `/ready` returns 503 so the load balancer t
 order-placement rotation. Halting an individual market (`setMarketStatus`) is the finer-grained version and
 behaves the same way: it stops new risk, it does not confiscate positions.
 
+**One switch per plane.** `TRADE_SPOT_ENABLED` governs spot, `TRADE_FUTURES_ENABLED` governs futures, and neither
+halts the other — an operator stopping spot has not stopped futures, and there is no version of a single boolean
+standing for both that is the honest answer. Both refuse only NEW orders; a cancel is never refused by either,
+because a switch that traps funds is not a safety control.
+
+---
+
+## Futures orderability (`TRADE_FUTURES_ENABLED`)
+
+**Default off, and off is a product state rather than an outage.** With the flag off a futures market may be
+listed, appears in `fetchMarkets`, answers its ticker and orderbook, and refuses an ORDER with
+`trade.futures_disabled` — CCXT `NotSupported`, HTTP 403. Not `BadSymbol`, because the symbol is real and an
+operator can turn the switch on; not `OnMaintenance`, because nothing is degraded or coming back on its own.
+
+With it on, futures orders match on the **same** svc-matching book as spot, under the futures market's own id
+(D-S-06 is Accepted — there is no second book), and settle through `packages/ledger-client` like any other fill.
+
+**What the flag does not do**, because a name like `FUTURES_ENABLED` invites all three assumptions:
+
+- **No leverage.** A futures order is funded by the same `holdFor` as a spot order — quote for buys, base for
+  sells, in full. Orderability creates no margin position and picks no risk parameter; leverage and margin defaults
+  beyond `DIRECTION` §1's are owner-only (§8 item 8). Leveraged entry remains `PositionService`'s path, behind its
+  own gate and its own named profit source.
+- **No funding.** Turning funding on for a market at all is reserved to the owner
+  (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`), and it still needs `TRADE_FUTURES_JOBS_ENABLED` plus an
+  explicit `TRADE_FUTURES_FUNDING_MARKET_IDS`.
+- **No payout source.** `TRADE_FUTURES_PROFIT_SOURCE` still has no default, on purpose.
+
+**Convert and TWAP stay spot-only on both settings** (`assertSpotSurface`). They were spot-only for free while
+`assertTradable` refused every non-spot market; now that it does not, they refuse by name, because neither has been
+designed or tested against a market whose position is a margin row rather than a base-asset balance.
+
+**Why this could not land before 2026-08-08.** The mark was size-blind, so two dust orders on a futures book minted
+a payout-grade mid — `assertTradable`'s flat refusal was the only thing making that unreachable, and
+`futures/mark-from-depth.ts` said so in its own header: "a different file's accident, not a control". `c7dfb5e4`
+and `cc90c2f4` made both the internal-depth and venue mids size-aware and armed the deviation breaker against a
+stored `accepted_mark`. `futures/orderable-path.test.ts` rests the dust through the real order path and asserts the
+profit pot does not move.
+
 ---
 
 ## Running it

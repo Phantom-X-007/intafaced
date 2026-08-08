@@ -81,6 +81,7 @@ const bus = await JetStreamEventBus.connect({
 
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
   spotEnabled: env.TRADE_SPOT_ENABLED,
+  futuresEnabled: env.TRADE_FUTURES_ENABLED,
   marketSlippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
   convertEnabled: env.TRADE_CONVERT_ENABLED,
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
@@ -361,6 +362,10 @@ app.log.info(
   {
     port: env.HTTP_PORT,
     spotEnabled: env.TRADE_SPOT_ENABLED,
+    // Logged next to `spotEnabled` because an operator asking "is futures on
+    // here" must be able to answer it from the boot line rather than by reading
+    // a refusal off a user's failed order.
+    futuresEnabled: env.TRADE_FUTURES_ENABLED,
     futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     futuresJobs: futuresJobs.host.list(),
     venueMark: venueMarkConfigured ? { venueId: venueMarkConfigured.venueId, symbols: venueMarkConfigured.symbolCount } : null,
