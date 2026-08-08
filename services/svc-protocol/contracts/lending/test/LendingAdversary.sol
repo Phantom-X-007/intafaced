@@ -29,13 +29,15 @@ contract LendingSameTxRoundTrip {
         market.depositCollateral(collateralAmount);
         market.borrow(borrowAmount);
 
+        // Repay with max so share rounding cannot leave dust that blocks withdraw.
         uint256 debt = market.debtOf(address(this));
         uint256 have = IERC20Minimal(borrowToken).balanceOf(address(this));
         if (have < debt) {
             require(IERC20Minimal(borrowToken).transferFrom(msg.sender, address(this), debt - have), "bor topup");
         }
-        require(IERC20Minimal(borrowToken).approve(address(market), debt), "bor approve");
-        market.repay(debt);
+        require(IERC20Minimal(borrowToken).approve(address(market), type(uint256).max), "bor approve");
+        market.repay(type(uint256).max);
+        require(market.debtOf(address(this)) == 0, "dust debt");
 
         uint256 leftCol = market.collateralOf(address(this));
         if (leftCol > 0) {

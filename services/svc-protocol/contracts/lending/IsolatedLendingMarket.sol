@@ -157,7 +157,8 @@ contract IsolatedLendingMarket {
         uint256 debt = _sharesToDebt(debtSharesOf[msg.sender]);
         if (debt == 0) revert NothingToRepay();
         uint256 pay = amount > debt ? debt : amount;
-        uint256 shares = _debtToShares(pay);
+        // Full repay clears shares exactly — `_debtToShares(debt)` can round down and leave dust.
+        uint256 shares = pay == debt ? debtSharesOf[msg.sender] : _debtToShares(pay);
         if (shares > debtSharesOf[msg.sender]) shares = debtSharesOf[msg.sender];
         debtSharesOf[msg.sender] -= shares;
         totalDebtShares -= shares;

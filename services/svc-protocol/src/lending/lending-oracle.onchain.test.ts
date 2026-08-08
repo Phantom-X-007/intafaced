@@ -201,6 +201,8 @@ describeOnChain('oracle + isolated lending on chain (S-A12/S-A4)', () => {
         args: [col],
       }),
     ).rejects.toThrow();
+    // Restore agreement so later tests in this file never inherit Disagreement.
+    await reportBoth(100n * WAD, 100n * WAD);
   });
 
   it('borrow works with agreeing marks; unhealthy borrow reverts', async () => {

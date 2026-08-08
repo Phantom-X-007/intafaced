@@ -319,7 +319,17 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
         chain: a.walletClient.chain,
       }),
     );
-    // healthy marks again for this borrower path
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: bor,
+        abi: tokenAbi,
+        functionName: 'mint',
+        args: [attacker.deployer, 50n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
+    // healthy marks again for this borrower path (cascade left a crash mark)
     await reportBoth(100n * WAD, 100n * WAD);
 
     const borBefore = (await a.publicClient.readContract({
