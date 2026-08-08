@@ -17,23 +17,9 @@
           <img style="height: 100%;" src="../../assets/images/bannerbg.png"></img>
           <p style="text-align:center;font-size:40px;color:#fff;position:absolute;top: 70px;width:100%;letter-spacing:5px;text-shadow: 0px 0px 10px #000000;">{{$t("common.slogan")}}</p>
           <p style="text-align:center;font-size:20px;color:#8a8a8a;position:absolute;top: 130px;width:100%;letter-spacing:2px;">{{$t("common.subslogan")}}</p>
-          <div class="activity-list" v-show="picShow">
-            <div class="swiper-container" id="swiper_container">
-              <div class="swiper-wrapper">
-                <div class="swiper-slide" v-for="(item,index) in picList">
-                  <a v-if="item.linkUrl&&item.linkUrl!=' '&&item.linkUrl!='1'" :href="item.linkUrl" target="_blank">
-                    <div class="activity-item">
-                      <img :src="item.url"></img>
-                    </div>
-                  </a>
-                  <div v-else class="activity-item">
-                    <img :src="item.url"></img>
-                  </div>
-                </div>
-              </div>
-              <div class="swiper-pagination"></div>
-            </div>
-          </div>
+          <!-- REMOVED: the promo swiper. Its slides came from `picList`, which was
+               only ever filled by loadPicData() against the retired Java `/uc`
+               service — see the removal note on that method below. -->
         </div>
       </div>
       <div id="pagetips" style="background: #1a1a1a;">
@@ -189,7 +175,6 @@ import ixTrade from "@js/ix-trade.js";
 import $ from "@js/jquery.min.js";
 import IxNoSurface from "../../components/intafaced/IxNoSurface.vue";
 
-import Swiper from 'swiper';
 
 /* A figure the venue did not publish prints an em dash — the same mark the
    desk uses (Exchange.vue marketNum/marketStat). Never a blank cell, which
@@ -662,9 +647,7 @@ export default {
       usdtData: [],
       usdtList: [],
       btcList: [],
-      ethList: [],
-      picList: [],
-      picShow: false
+      ethList: []
     };
   },
   created: function() {
@@ -716,7 +699,6 @@ export default {
   mounted: function() {
     this.loadFavorites();
     this.getSymbol();
-    //this.initSwiper();
   },
   methods: {
     seachInputChange(){
@@ -733,25 +715,9 @@ export default {
         ? source.filter(function (item) { return item.symbol.indexOf(key) === 0; })
         : source;
     },
-    initSwiper(){
-      var ss = new Swiper ('.swiper-container', {
-        loop: true,
-        autoplay: true,
-        pagination: {
-          el: '.swiper-pagination',
-          clickable: true,
-        },
-        slidesPerView:4,
-        spaceBetween: 25
-      });
-      var comtainer = document.getElementById('swiper_container');
-      comtainer.onmouseenter = function () {
-        ss.autoplay.stop();
-      };
-      comtainer.onmouseleave = function () {
-        ss.autoplay.start();
-      }
-    },
+    /* REMOVED: initSwiper(). It bound the promo swiper that loadPicData() fed;
+       with no slide source and no markup left, it had nothing to bind to and
+       would have thrown on the missing `#swiper_container`. */
     strde(str) {
       str = str.trim();
       if(this.langPram == "EN"){
@@ -785,7 +751,6 @@ export default {
     init() {
       this.$store.commit("navigate", "nav-index");
       this.$store.state.HeaderActiveName = "1-1";
-      this.loadPicData();
       this.addClass(1);
       // this.getmoneyData();
       /* Announcement strip: IxNoSurface cms.announcements (no /uc fetch/toast). */
@@ -812,26 +777,16 @@ export default {
         closable: true
       });
     },
-    loadPicData() {
-      let param = {};
-      param["sysAdvertiseLocation"] = 1;
-      param["lang"] = this.langPram;
-      this.$http
-.post(this.host + "/uc/ancillary/system/advertise", param)
-.then(response => {
-          var result = response.body;
-          if (result.code == 0 && result.data.length > 2) {
-            this.picList = result.data;
-            this.picShow = true;
-            var _this = this;
-            setTimeout(function(){
-              _this.initSwiper();
-            },1000);
-          }else{
-            this.picShow = false;
-          }
-        });
-    },
+    /* REMOVED: loadPicData(). It POSTed `/uc/ancillary/system/advertise` on the
+       retired Java `uc` service to fetch homepage promo banners. That route now
+       answers 405, and the call had no rejection handler — so every visit to the
+       landing page raised an uncaught rejection before it had rendered anything.
+       That is what this removal is actually for: the banners were already
+       invisible (`picShow` never flipped true), so the only thing the call still
+       produced was the error.
+       This platform publishes no banner CMS, so there is nothing to repoint it
+       at. `picList`/`picShow` went with it — nothing else read them — as did the
+       swiper markup they fed. */
     getCoin(symbol) {
       return this.coins._map[symbol];
     },
