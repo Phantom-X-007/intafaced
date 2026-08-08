@@ -66,6 +66,31 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
+       * TWAP slice scheduler (D-S-04 / trade.algo). Default OFF.
+       *
+       * Distinct from TRADE_ALGO_ENABLED: that one decides whether a user may
+       * CREATE a schedule, this one decides whether anything ever executes it.
+       * Off, a TWAP is accepted, persisted, and never places a child — which is
+       * exactly the state tip shipped in, so this defaults off to keep that
+       * behaviour until an operator turns it on deliberately.
+       */
+      TRADE_ALGO_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /**
+       * Scheduler cadence. Capped at 1s, and the cap is load-bearing.
+       *
+       * One tick emits at most one slice per parent, so an interval longer than
+       * a parent's `sliceIntervalMs` silently STRETCHES the schedule and never
+       * catches up — with no miss recorded, because nothing was missed. The
+       * engine's floor for `sliceIntervalMs` is 1s, so anything above 1s here
+       * can under-run a legal schedule. Refuse at boot rather than run late.
+       */
+      TRADE_ALGO_JOBS_INTERVAL_MS: z.coerce.number().int().min(250).max(1_000).default(1_000),
+
+      /**
        * Futures residual jobs (liquidation scan + funding ticks).
        * Default OFF — must be explicitly enabled. Never invents markets/rates.
        */

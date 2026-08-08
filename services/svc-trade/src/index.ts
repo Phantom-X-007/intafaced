@@ -21,6 +21,7 @@ import { registerInternalFundingRate } from './futures/internal-funding-rate.js'
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
+import { startAlgoJobs } from './algo/algo-jobs.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
 import { checkEngineSequences, describeRegressions } from './spot/sequence-guard.js';
 import { parseAmount } from '@intafaced/ledger-client';
@@ -199,6 +200,17 @@ const candleJobs = startCandleJobs({
   },
 });
 
+// TWAP scheduler — default OFF. Until this runs, a created schedule persists
+// and never places a child; `tickAllAlgos` had no caller at all before it.
+const algoJobs = startAlgoJobs({
+  trade,
+  config: {
+    enabled: env.TRADE_ALGO_JOBS_ENABLED,
+    intervalMs: env.TRADE_ALGO_JOBS_INTERVAL_MS,
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'algo job tick failed'),
+});
+
 // MM seed job — default OFF. Empty markets or missing mids → no invent.
 // Mid port (A-TRADE-MM-3): env map first; optional venue public mid when enabled.
 const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
@@ -364,6 +376,8 @@ app.log.info(
     candleJobs: candleJobs.host.list(),
     mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
     mmSeedJobs: mmSeedJobs.host.list(),
+    algoJobsEnabled: env.TRADE_ALGO_JOBS_ENABLED,
+    algoJobs: algoJobs.host.list(),
     trpc: true,
     publicRest: [
       '/api/v1/markets',
@@ -400,6 +414,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       futuresJobs.stop();
       candleJobs.stop();
       mmSeedJobs.stop();
+      algoJobs.stop();
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
       await bus.close();
