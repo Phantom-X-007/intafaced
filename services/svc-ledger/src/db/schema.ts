@@ -11,6 +11,7 @@ import {
   pgSchema,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -192,6 +193,16 @@ export const accounts = ledger.table(
      */
     foreignKey({ columns: [t.assetId], foreignColumns: [assets.id], name: 'accounts_asset_id_fk' }).onDelete('restrict'),
     /**
+     * 0010 — the target of `ledger_entries_account_asset_fk`, and nothing more.
+     *
+     * `id` is already the primary key, so this pair is trivially unique and this
+     * constraint adds no invariant. Postgres simply requires a declared unique
+     * constraint on the exact column list a composite foreign key references, so
+     * for the entries table to be able to say "your asset must be this account's
+     * asset", the pair has to be referenceable.
+     */
+    unique('accounts_id_asset_uq').on(t.id, t.assetId),
+    /**
      * Not for the key — its check reads `assets.id`, already a primary key.
      * This serves the reconciliation job's GROUP BY asset_id and the RESTRICT
      * check. `ledger_entries` deliberately has no counterpart: nothing queries
@@ -302,6 +313,28 @@ export const ledgerEntries = ledger.table(
      * independently.
      */
     foreignKey({ columns: [t.assetId], foreignColumns: [assets.id], name: 'ledger_entries_asset_id_fk' }).onDelete('restrict'),
+    /**
+     * 0010 — and it must be the account's OWN asset.
+     *
+     * "Written independently" above was the whole gap: each column was
+     * individually valid while the pair could disagree, so raw SQL could record a
+     * `USDT` entry against a `BTC` account. The entry then lands in one asset's
+     * book while `balance_after` describes a balance in another, and every guard
+     * passes — the amount is positive, both assets are registered, and
+     * reconciliation replays per asset so it re-derives the same wrong answer and
+     * reports green.
+     *
+     * `postgres-ledger.ts` writes `entry.account.assetId` into both columns and
+     * cannot produce a mismatch. Same argument as #1044, #1050 and #1067: that is
+     * not the only insert path the README says will exist.
+     */
+    foreignKey({
+      columns: [t.accountId, t.assetId],
+      foreignColumns: [accounts.id, accounts.assetId],
+      name: 'ledger_entries_account_asset_fk',
+    })
+      .onUpdate('restrict')
+      .onDelete('restrict'),
     /** Direction carries the sign; the amount never does (0000). */
     check('ledger_entries_positive_ck', sql`amount > 0`),
   ],
