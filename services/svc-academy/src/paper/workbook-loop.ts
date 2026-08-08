@@ -20,13 +20,22 @@ export type DrillStep = {
 };
 
 /**
- * Opaque fill reference supplied by trade — academy never invents price/size.
- * amount/price fields are intentionally absent here (money truth stays on trade).
+ * Fill reference supplied by trade — academy never invents one.
+ *
+ * `side`/`price`/`size` are optional and, when present, are decimal strings
+ * exactly as trade published them. Optional, because a fill this loop merely
+ * counts needs none of the three; decimal strings, because the alternative is a
+ * float in a book, and a simulated book is still a book. A drill that is VALUED
+ * needs all three — `valueSimulatedDrill` refuses rather than filling a gap in
+ * from anywhere (see simulated-result.ts).
  */
 export type PaperFillRef = {
   readonly fillId: string;
   readonly marketId: string;
   readonly recordedAt: Date;
+  readonly side?: 'buy' | 'sell';
+  readonly price?: string;
+  readonly size?: string;
 };
 
 export type DrillRun = {
@@ -39,6 +48,14 @@ export type DrillRun = {
   readonly refuseReason?: 'not_paper' | 'no_market' | 'unknown_step' | 'bad_fill';
   /** Trade-supplied fill ids only — never academy-invented fills. */
   readonly fillRefs: readonly PaperFillRef[];
+  /**
+   * Carried on the RUN, not bolted on at the edge. Every projection below
+   * (`drillBoardCard`, the status lines, the export) reads from the run, so a
+   * drill cannot be rendered anywhere without the fact that it is simulated
+   * travelling with it. `startPaperDrill` is the only producer and it is a
+   * literal `true` — there is no path that constructs a live-looking run.
+   */
+  readonly simulated: true;
 };
 
 export type DrillResult =
@@ -82,6 +99,7 @@ export function startPaperDrill(input: { workbookSlug: string; market: PaperMark
       completedStepIds: [],
       status: 'active',
       fillRefs: [],
+      simulated: true,
     },
   };
 }
@@ -106,11 +124,34 @@ export function completeDrillStep(run: DrillRun, stepId: string): DrillResult {
 }
 
 /**
- * Attach a trade-supplied fill id to the drill run.
- * Refuses empty fillId, market mismatch, and invent of amount/price (not in type).
- * Idempotent on fillId.
+ * A published decimal string, or a refusal.
+ *
+ * `typeof raw !== 'string'` is the load-bearing half. A JSON body carrying
+ * `"price": 68412.5` deserialises to a `number`, and coercing it here would put
+ * a float into a book — the fact that the book is a practice one changes
+ * nothing about what a float does to 0.1. So it is refused at the boundary
+ * rather than stringified.
  */
-export function attachPaperFillRef(run: DrillRun, input: { fillId: string; marketId: string; recordedAt?: Date }): DrillResult {
+function publishedDecimal(raw: unknown): { ok: true; value: string } | { ok: false; why: string } {
+  if (typeof raw !== 'string') return { ok: false, why: `must be a decimal string, got ${typeof raw}` };
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: false, why: 'must not be blank' };
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return { ok: false, why: `"${trimmed}" is not a non-negative decimal string` };
+  return { ok: true, value: trimmed };
+}
+
+/**
+ * Attach a trade-supplied fill to the drill run. Idempotent on fillId.
+ *
+ * Refuses an empty fillId, a market mismatch, and — when the caller supplies
+ * them — a side/price/size that trade could not have published in that shape.
+ * The figures stay optional: what is refused is a WRONG one, never an absent
+ * one, because the absence is answered honestly at valuation time instead.
+ */
+export function attachPaperFillRef(
+  run: DrillRun,
+  input: { fillId: string; marketId: string; recordedAt?: Date; side?: unknown; price?: unknown; size?: unknown },
+): DrillResult {
   if (run.status === 'refused') {
     return { ok: false, reason: run.refuseReason ?? 'not_paper', message: 'Run already refused.' };
   }
@@ -128,6 +169,29 @@ export function attachPaperFillRef(run: DrillRun, input: { fillId: string; marke
       message: `Fill market ${input.marketId} does not match drill market ${run.marketId}`,
     };
   }
+
+  let side: 'buy' | 'sell' | undefined;
+  if (input.side !== undefined) {
+    if (input.side !== 'buy' && input.side !== 'sell') {
+      return { ok: false, reason: 'bad_fill', message: `Fill ${fillId}: side must be "buy" or "sell".` };
+    }
+    side = input.side;
+  }
+
+  let price: string | undefined;
+  if (input.price !== undefined) {
+    const parsed = publishedDecimal(input.price);
+    if (!parsed.ok) return { ok: false, reason: 'bad_fill', message: `Fill ${fillId}: price ${parsed.why}.` };
+    price = parsed.value;
+  }
+
+  let size: string | undefined;
+  if (input.size !== undefined) {
+    const parsed = publishedDecimal(input.size);
+    if (!parsed.ok) return { ok: false, reason: 'bad_fill', message: `Fill ${fillId}: size ${parsed.why}.` };
+    size = parsed.value;
+  }
+
   if (run.fillRefs.some((f) => f.fillId === fillId)) {
     return { ok: true, run }; // idempotent
   }
@@ -135,11 +199,59 @@ export function attachPaperFillRef(run: DrillRun, input: { fillId: string; marke
     fillId,
     marketId: input.marketId,
     recordedAt: input.recordedAt ?? new Date(),
+    ...(side ? { side } : {}),
+    ...(price ? { price } : {}),
+    ...(size ? { size } : {}),
   };
   return {
     ok: true,
     run: { ...run, fillRefs: [...run.fillRefs, ref] },
   };
+}
+
+/**
+ * Replay a whole drill from the caller's record of it, in one call.
+ *
+ * Academy holds no run state — that is deliberate and unchanged. What was
+ * missing is that the loop's later halves (`completeDrillStep`,
+ * `attachPaperFillRef`) had no way to be reached at all, so a workbook could be
+ * STARTED over the wire and never finished. A stateless replay closes that
+ * without inventing a store: the caller holds the events, academy holds the
+ * RULES, and every refusal the step-by-step path would have raised is raised
+ * here in the same order.
+ *
+ * It is not a shortcut past the gate. The market check, the workbook-kind
+ * check, unknown steps and bad fills all still refuse, and a refusal anywhere
+ * in the replay is the result of the whole replay.
+ */
+export function replayPaperDrill(input: {
+  slug: string;
+  kind: string | null | undefined;
+  market: PaperMarketRef | null;
+  completedStepIds?: readonly string[];
+  fills?: readonly { fillId: string; marketId: string; recordedAt?: Date; side?: unknown; price?: unknown; size?: unknown }[];
+  steps?: readonly DrillStep[];
+}): DrillResult {
+  const started = startPaperDrillForCatalogItem({
+    slug: input.slug,
+    kind: input.kind,
+    market: input.market,
+    ...(input.steps ? { steps: input.steps } : {}),
+  });
+  if (!started.ok) return started;
+
+  let run = started.run;
+  for (const stepId of input.completedStepIds ?? []) {
+    const stepped = completeDrillStep(run, stepId);
+    if (!stepped.ok) return stepped;
+    run = stepped.run;
+  }
+  for (const fill of input.fills ?? []) {
+    const attached = attachPaperFillRef(run, fill);
+    if (!attached.ok) return attached;
+    run = attached.run;
+  }
+  return { ok: true, run };
 }
 
 /** Read-only fill history — ids only, no PnL invent. */
@@ -466,8 +578,15 @@ export function isFreshActiveDrill(run: DrillRun): boolean {
   return run.status === 'active' && completedStepCount(run) === 0;
 }
 
-/** L3 — drill board card. */
+/**
+ * L3 — drill board card.
+ *
+ * `simulated` is first and is a literal `true`. Every other projection in this
+ * file is built from this card, so there is no card, bar, status line or export
+ * that can be rendered without it.
+ */
 export function drillBoardCard(run: DrillRun): {
+  readonly simulated: true;
   readonly status: DrillRun['status'];
   readonly workbookSlug: string;
   readonly marketId: string;
@@ -484,6 +603,7 @@ export function drillBoardCard(run: DrillRun): {
 } {
   const snap = drillProgressSnapshot(run);
   return {
+    simulated: run.simulated,
     status: snap.status,
     workbookSlug: run.workbookSlug,
     marketId: run.marketId,
@@ -645,9 +765,22 @@ export function drillStepsExportHeader(): string {
   return 'stepId,state';
 }
 
-/** L3 — full drill steps export (completed then remaining). */
+/**
+ * L3 — the label a drill export leads with.
+ *
+ * A `#` comment so it is not a data row, but ahead of the header so it is the
+ * first thing a human opening the file reads. An export outlives the screen it
+ * was downloaded from; the label has to outlive it too.
+ */
+export function drillStepsExportLabelLine(): string {
+  return '# simulated=1 venue=paper — paper trading drill, no value moved';
+}
+
+/** L3 — full drill steps export (label, header, completed then remaining). */
 export function drillStepsExportText(run: DrillRun): string {
-  return [drillStepsExportHeader(), ...completedStepsExportLines(run), ...remainingStepsExportLines(run)].join('\n');
+  return [drillStepsExportLabelLine(), drillStepsExportHeader(), ...completedStepsExportLines(run), ...remainingStepsExportLines(run)].join(
+    '\n',
+  );
 }
 
 /**
@@ -655,7 +788,7 @@ export function drillStepsExportText(run: DrillRun): string {
  */
 export function parseDrillStepsExportLine(line: string): { readonly stepId: string; readonly state: 'remaining' | 'completed' } | null {
   const t = line.trim();
-  if (!t || t === drillStepsExportHeader()) return null;
+  if (!t || t.startsWith('#') || t === drillStepsExportHeader()) return null;
   const parts = t.split(',');
   if (parts.length !== 2) return null;
   const stepId = parts[0]!.trim();
@@ -673,10 +806,19 @@ export function countDrillStepsExportDataLines(text: string): number {
     .filter((r) => r !== null).length;
 }
 
-/** L3 — true when drill steps export has header. */
+/** L3 — true when drill steps export has header (past any leading `#` label). */
 export function drillStepsExportHasHeader(text: string): boolean {
-  const first = text.split('\n')[0]?.trim() ?? '';
+  const first =
+    text
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l && !l.startsWith('#')) ?? '';
   return first === drillStepsExportHeader();
+}
+
+/** L3 — true when the export still carries its simulated label. */
+export function drillStepsExportIsLabelled(text: string): boolean {
+  return text.split('\n')[0]?.trim() === drillStepsExportLabelLine();
 }
 
 /** L3 — round-trip drill steps export (completed+remaining+header). */
@@ -685,10 +827,16 @@ export function drillStepsExportRoundTripOk(run: DrillRun): boolean {
   return expected === 1 + countDrillStepsExportDataLines(drillStepsExportText(run));
 }
 
-/** L3 — one-line drill status. */
+/**
+ * L3 — one-line drill status.
+ *
+ * Leads with `simulated=1`. A status line is the thing that gets pasted into a
+ * ticket, and a pasted line arrives with no surrounding screen to explain it —
+ * so the label has to survive the copy, or it was never a label.
+ */
 export function drillStatusLine(run: DrillRun): string {
   const c = drillBoardCard(run);
-  return `status=${c.status} done=${c.completed}/${c.total} percent=${c.percent}`;
+  return `simulated=1 status=${c.status} done=${c.completed}/${c.total} percent=${c.percent}`;
 }
 
 /** L3 — true when drill is fresh (0%). */
@@ -699,7 +847,7 @@ export function drillStatusLineIsFresh(run: DrillRun): boolean {
 /** L3 — detailed drill status. */
 export function drillStatusLineDetailed(run: DrillRun): string {
   const c = drillBoardCard(run);
-  return `status=${c.status} workbook=${c.workbookSlug} market=${c.marketId} done=${c.completed}/${c.total} fills=${c.fills} refused=${c.refused ? '1' : '0'}`;
+  return `simulated=1 status=${c.status} workbook=${c.workbookSlug} market=${c.marketId} done=${c.completed}/${c.total} fills=${c.fills} refused=${c.refused ? '1' : '0'}`;
 }
 
 /** L3 — token count on detailed drill status. */
@@ -707,13 +855,23 @@ export function drillStatusLineTokenCount(run: DrillRun): number {
   return drillStatusLineDetailed(run).split(/\s+/).filter(Boolean).length;
 }
 
-/** L3 — parse "status=S done=C/T percent=P". Invalid → null. */
-export function parseDrillStatusLine(
-  line: string,
-): { readonly status: string; readonly completed: number; readonly total: number; readonly percent: number } | null {
-  const m = line.trim().match(/^status=(\S+) done=(\d+)\/(\d+) percent=(\d+)$/);
+/**
+ * L3 — parse "simulated=1 status=S done=C/T percent=P". Invalid → null.
+ *
+ * `simulated=1` is REQUIRED by the pattern, not optional. A line without it is
+ * not a drill status line this parser will accept — which means a stripped
+ * label fails to round-trip rather than being read as a live figure.
+ */
+export function parseDrillStatusLine(line: string): {
+  readonly simulated: true;
+  readonly status: string;
+  readonly completed: number;
+  readonly total: number;
+  readonly percent: number;
+} | null {
+  const m = line.trim().match(/^simulated=1 status=(\S+) done=(\d+)\/(\d+) percent=(\d+)$/);
   if (!m) return null;
-  return { status: m[1]!, completed: Number(m[2]), total: Number(m[3]), percent: Number(m[4]) };
+  return { simulated: true, status: m[1]!, completed: Number(m[2]), total: Number(m[3]), percent: Number(m[4]) };
 }
 
 /** L3 — true when status line matches run. */
@@ -726,6 +884,7 @@ export function drillStatusLineMatches(run: DrillRun): boolean {
 
 /** L3 — parse detailed drill status. Invalid → null. */
 export function parseDrillStatusLineDetailed(line: string): {
+  readonly simulated: true;
   readonly status: string;
   readonly workbook: string;
   readonly market: string;
@@ -734,9 +893,10 @@ export function parseDrillStatusLineDetailed(line: string): {
   readonly fills: number;
   readonly refused: boolean;
 } | null {
-  const m = line.trim().match(/^status=(\S+) workbook=(\S+) market=(\S+) done=(\d+)\/(\d+) fills=(\d+) refused=([01])$/);
+  const m = line.trim().match(/^simulated=1 status=(\S+) workbook=(\S+) market=(\S+) done=(\d+)\/(\d+) fills=(\d+) refused=([01])$/);
   if (!m) return null;
   return {
+    simulated: true,
     status: m[1]!,
     workbook: m[2]!,
     market: m[3]!,

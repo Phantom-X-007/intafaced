@@ -207,15 +207,29 @@ Anti-cheat basics: scores only while season `live`; rank = score DESC, earlier `
 
 Migration: `drizzle/0002_tournaments.sql`.
 
-## Paper trading (Stage-3 ops — no live money)
+## Paper trading (no live money)
 
-Workbook paper drills consume trade's `paper` market flag. **No prices invented here.** Ops kill-switch: `ACADEMY_PAPER_TRADING_ENABLED` (flag `academy.paper-trading`) — when false, `paperDrill` refuses `academy.paper_trading_disabled`. Live trade on svc-trade is unaffected.
+Workbook paper drills consume trade's `paper` market flag. **No prices invented here.** Ops kill-switch: `ACADEMY_PAPER_TRADING_ENABLED` (flag `academy.paper-trading`) — when false, `paperDrill` and `paperDrillResult` refuse `academy.paper_trading_disabled`. Live trade on svc-trade is unaffected.
 
-| Capability                          | Gate                                  |
-| ----------------------------------- | ------------------------------------- |
-| `paperDrill` / `paperOpsStatus`     | `academy:read` when enabled           |
-| Kill paper without killing live     | `ACADEMY_PAPER_TRADING_ENABLED=false` |
-| Real ledger holds / live placeOrder | **Never** — trade Stage-1 isolation   |
+`paperDrill` answers "may this workbook be drilled on this market". `paperDrillResult` answers "what did it come to" — it replays the caller's completed steps and trade's fills and returns the reading of them. It is **stateless**: academy stores no run and no position, so the caller holds the events and this service holds the rules.
+
+| Capability                            | Gate                                          |
+| ------------------------------------- | --------------------------------------------- |
+| `paperDrill` / `paperOpsStatus`       | `academy:read` when enabled                   |
+| `paperDrillResult`                    | `academy:read` when enabled                   |
+| Kill paper without killing live       | `ACADEMY_PAPER_TRADING_ENABLED=false`         |
+| Real ledger holds / live `placeOrder` | **Never** — trade Stage-1 isolation           |
+| A result that is not labelled         | **Never** — `academy.paper_result_unlabelled` |
+
+### Two rules that are enforced, not documented
+
+**Everything a drill produces is sealed.** `sealSimulated` is the only constructor for a paper payload, and every wire schema requires the seal as literals — `simulated: true`, `venue: 'paper'`, `realLedger: false`, `withdrawable: false`, plus the disclaimer in full. The run itself carries `simulated: true`, so every projection (board card, both status lines, the CSV export) reads the label from one place rather than remembering to add it. A status line with the label stripped no longer parses; it does not degrade into something readable as live.
+
+**Nothing is priced here.** Prices, sizes and the mark are the ones **trade published**, handed in as decimal strings — a JSON number is a 400, not a coercion. A fill with no published price is `academy.paper_price_unavailable`; an open position with no published mark comes back `unrealisedPnl: null, markUnavailable: true`. Neither is filled in with a plausible number.
+
+`paper/ledger-isolation.test.ts` reads every module under `src/paper/` and fails the build on any import of the ledger's write surface (client, recipes, `orderHold`, `tradeFill`, `.post(`). The decimal **math** from `@intafaced/ledger-client` is allowed and required — a simulated figure uses the one money implementation, or it is a float pretending.
+
+**Known gap — the flag is taken on trust.** `market.paper` arrives in the input. Academy has no way to ask trade whether a market really is paper: no `packages/contracts` surface publishes trade markets. Until one exists, a caller that lies about the flag gets a drill against a market that is not paper — and academy still posts nothing, so the blast radius is a wrong label rather than a wrong ledger entry. Closing it needs a contracts PR first (see `docs/ops/trk/academy.paper-trading.md`).
 
 ## Curriculum import pipeline (Stage-1)
 

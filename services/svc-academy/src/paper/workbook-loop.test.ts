@@ -14,6 +14,9 @@ import {
   listPaperFillRefs,
   startPaperDrill,
   startPaperDrillForCatalogItem,
+  replayPaperDrill,
+  drillStepsExportIsLabelled,
+  FOUNDATIONS_PAPER_STEPS,
   isDrillStatusComplete,
   isDrillStatusActive,
   drillCompletionRatio,
@@ -527,5 +530,113 @@ describe('paper Stage-2 workbook loop', () => {
     expect(drillPercentAtLeast(started.run, 0)).toBe(true);
     expect(clampRemainingStepsPageSize(started.run, 99)).toBe(started.run.steps.length);
     expect(fillCountAtMost(started.run, 0)).toBe(true);
+  });
+});
+
+/**
+ * THE LABEL TRAVELS WITH THE RUN.
+ *
+ * These read as small assertions and they are the row's whole point: a drill
+ * projection that forgets to say "simulated" is indistinguishable from a live
+ * one at the exact moment somebody is deciding whether the number is theirs.
+ */
+describe('a drill cannot be projected without saying it is simulated', () => {
+  const start = (marketId = 'm-label') =>
+    startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId, paper: true, symbol: 'BTC/USDT' },
+    });
+
+  it('the run itself carries it, so every projection reads it from one place', () => {
+    const started = start();
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(started.run.simulated).toBe(true);
+    expect(drillBoardCard(started.run).simulated).toBe(true);
+  });
+
+  it('both status lines lead with it, so a pasted line stays labelled', () => {
+    const started = start();
+    if (!started.ok) return;
+    expect(drillStatusLine(started.run).startsWith('simulated=1 ')).toBe(true);
+    expect(drillStatusLineDetailed(started.run).startsWith('simulated=1 ')).toBe(true);
+  });
+
+  it('a status line with the label STRIPPED no longer parses — it does not read as live', () => {
+    const started = start();
+    if (!started.ok) return;
+    const stripped = drillStatusLine(started.run).replace('simulated=1 ', '');
+
+    expect(parseDrillStatusLine(stripped)).toBeNull();
+    expect(drillStatusLineConsistent(stripped)).toBe(false);
+    expect(parseDrillStatusLineDetailed(drillStatusLineDetailed(started.run).replace('simulated=1 ', ''))).toBeNull();
+  });
+
+  it('an export leads with the label and still round-trips its rows', () => {
+    const started = start();
+    if (!started.ok) return;
+    const text = drillStepsExportText(started.run);
+
+    expect(drillStepsExportIsLabelled(text)).toBe(true);
+    expect(text.split('\n')[0]).toContain('simulated=1');
+    expect(drillStepsExportHasHeader(text)).toBe(true);
+    expect(drillStepsExportRoundTripOk(started.run)).toBe(true);
+    // The label is a comment, not a row — it must not be counted as a step.
+    expect(countDrillStepsExportDataLines(text)).toBe(started.run.steps.length);
+  });
+});
+
+describe('replayPaperDrill — the loop is reachable end to end, and still refuses', () => {
+  const market = { marketId: 'm-replay', paper: true, symbol: 'BTC/USDT' };
+  const replay = (over: Record<string, unknown> = {}) =>
+    replayPaperDrill({ slug: 'foundations-paper-workbook', kind: 'workbook', market, ...over });
+
+  it('walks a workbook to complete — the thing the outline could never do before', () => {
+    const result = replay({ completedStepIds: FOUNDATIONS_PAPER_STEPS.map((s) => s.id) });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.run.status).toBe('complete');
+    expect(isDrillComplete(result.run)).toBe(true);
+    expect(result.run.simulated).toBe(true);
+  });
+
+  it('attaches trade-published fills, keeping the decimal strings intact', () => {
+    const result = replay({
+      fills: [{ fillId: 'f-1', marketId: 'm-replay', side: 'buy', price: '0.1', size: '3' }],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.run.fillRefs[0]).toMatchObject({ fillId: 'f-1', side: 'buy', price: '0.1', size: '3' });
+  });
+
+  it('REFUSES a live market before replaying anything', () => {
+    expect(replay({ market: { ...market, paper: false }, completedStepIds: ['size-from-invalidation'] })).toMatchObject({
+      ok: false,
+      reason: 'not_paper',
+    });
+  });
+
+  it('refuses a non-workbook catalog kind', () => {
+    expect(replay({ kind: 'playbook' })).toMatchObject({ ok: false });
+  });
+
+  it('a refusal part-way through is the result of the whole replay', () => {
+    expect(replay({ completedStepIds: ['size-from-invalidation', 'not-a-step'] })).toMatchObject({
+      ok: false,
+      reason: 'unknown_step',
+    });
+  });
+
+  it.each([
+    ['a price sent as a number', { fillId: 'f-1', marketId: 'm-replay', side: 'buy', price: 100, size: '1' }],
+    ['a size sent as a number', { fillId: 'f-1', marketId: 'm-replay', side: 'buy', price: '100', size: 1 }],
+    ['a negative price', { fillId: 'f-1', marketId: 'm-replay', side: 'buy', price: '-1', size: '1' }],
+    ['an unreadable price', { fillId: 'f-1', marketId: 'm-replay', side: 'buy', price: '1e5', size: '1' }],
+    ['a side that is neither', { fillId: 'f-1', marketId: 'm-replay', side: 'hodl', price: '1', size: '1' }],
+    ['another market', { fillId: 'f-1', marketId: 'm-elsewhere', side: 'buy', price: '1', size: '1' }],
+  ])('refuses %s', (_why, bad) => {
+    expect(replay({ fills: [bad] })).toMatchObject({ ok: false, reason: 'bad_fill' });
   });
 });

@@ -19,8 +19,21 @@ import {
 import { curriculumInventory, curriculumImportStageStatus } from './curriculum/import-pipeline.js';
 import { resolveCurriculumDeepLink, listCurriculumPathDeepLinks } from './curriculum/deep-links.js';
 import { curriculumBodyForLocale, curriculumI18nStrategyLine } from './curriculum/i18n-strategy.js';
-import { startPaperDrillForCatalogItem } from './paper/workbook-loop.js';
+import {
+  drillProgress,
+  isDrillComplete,
+  remainingStepIds,
+  replayPaperDrill,
+  startPaperDrillForCatalogItem,
+} from './paper/workbook-loop.js';
 import { PAPER_OPS_ENV_KEY, PAPER_OPS_FLAG_ID } from './paper/ops-gate.js';
+import {
+  assertSealedSimulated,
+  sealSimulated,
+  SIMULATED_VENUE,
+  valueSimulatedDrill,
+  type PublishedFill,
+} from './paper/simulated-result.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
 
 /**
@@ -178,12 +191,86 @@ const curriculumItemLocalizedOut = curriculumItemOut.extend({
   i18nStrategy: z.string(),
 });
 
+/**
+ * The seal, as a SCHEMA — every field a literal.
+ *
+ * This is the labelling rule enforced by the type system rather than by
+ * remembering. A handler that returns a paper payload without `simulated: true`
+ * does not compile, and one that somehow gets past that is rejected by the
+ * output parser at runtime. The alternative — a `simulated?: boolean` a caller
+ * is trusted to set — is the version that ships unlabelled on the day someone
+ * adds a field in a hurry.
+ */
+const simulatedSealOut = {
+  simulated: z.literal(true),
+  venue: z.literal(SIMULATED_VENUE),
+  realLedger: z.literal(false),
+  withdrawable: z.literal(false),
+  disclaimer: z.string().min(1),
+};
+
 const paperDrillOut = z.discriminatedUnion('ok', [
   z.object({
     ok: z.literal(true),
+    ...simulatedSealOut,
     marketId: z.string(),
     symbol: z.string(),
     steps: z.array(z.object({ id: z.string(), instruction: z.string() })),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.enum(['not_paper', 'no_market', 'unknown_step', 'bad_fill']),
+    message: z.string(),
+  }),
+]);
+
+/**
+ * A trade-published fill, as it may arrive.
+ *
+ * `price` and `size` are `z.string()` and there is no `z.coerce` anywhere near
+ * them. A body carrying `"price": 68412.5` is a 400 rather than a float in a
+ * book — doctrine §0.6's "never a number" does not have a practice exemption,
+ * because a wrong practice figure is still a figure this platform published.
+ */
+const publishedFillIn = z.object({
+  fillId: z.string().min(1).max(128),
+  marketId: z.string().min(1),
+  side: z.enum(['buy', 'sell']),
+  price: z.string().min(1),
+  size: z.string().min(1),
+  recordedAt: z.date().optional(),
+});
+
+const simulatedValuationOut = z.object({
+  fillCount: z.number().int(),
+  boughtSize: z.string(),
+  soldSize: z.string(),
+  openSize: z.string(),
+  averageBuyPrice: z.string().nullable(),
+  averageSellPrice: z.string().nullable(),
+  realisedPnl: z.string(),
+  /** Null, never a guess, when trade published no mark for the open size. */
+  unrealisedPnl: z.string().nullable(),
+  totalPnl: z.string().nullable(),
+  markUnavailable: z.boolean(),
+});
+
+const paperDrillResultOut = z.discriminatedUnion('ok', [
+  z.object({
+    ok: z.literal(true),
+    ...simulatedSealOut,
+    result: z.object({
+      workbookSlug: z.string(),
+      marketId: z.string(),
+      symbol: z.string(),
+      status: z.enum(['active', 'complete', 'refused']),
+      stepCount: z.number().int(),
+      completedCount: z.number().int(),
+      remainingStepIds: z.array(z.string()),
+      ratio: z.string(),
+      complete: z.boolean(),
+      valuation: simulatedValuationOut,
+    }),
   }),
   z.object({
     ok: z.literal(false),
@@ -374,6 +461,15 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.season_invalid':
     case 'academy.standing_invalid':
       return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+
+    case 'academy.paper_price_unavailable':
+    case 'academy.paper_result_unlabelled':
+      // Neither is the caller's fault and neither may be softened into a
+      // partial answer. "No price was published" and "this figure lost its
+      // simulated label" are both states where the only safe payload is no
+      // payload — a 200 carrying a best guess is the incident this row exists
+      // to prevent.
+      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
 
     case 'academy.stake_unavailable':
     case 'academy.stream_unavailable':
@@ -585,11 +681,114 @@ export function createAcademyRouter(academy: AcademyService) {
           if (!result.ok) {
             return { ok: false as const, reason: result.reason, message: result.message };
           }
+          const sealed = assertSealedSimulated(
+            sealSimulated({
+              marketId: result.run.marketId,
+              symbol: result.run.symbol,
+              steps: result.run.steps.map((step) => ({ id: step.id, instruction: step.instruction })),
+            }),
+          );
           return {
             ok: true as const,
-            marketId: result.run.marketId,
-            symbol: result.run.symbol,
-            steps: result.run.steps.map((step) => ({ id: step.id, instruction: step.instruction })),
+            simulated: sealed.simulated,
+            venue: sealed.venue,
+            realLedger: sealed.realLedger,
+            withdrawable: sealed.withdrawable,
+            disclaimer: sealed.disclaimer,
+            ...sealed.result,
+          };
+        }),
+      ),
+
+    /**
+     * The drill, finished — steps ticked off and trade's fills valued.
+     * (TRK-academy.paper-trading Stage-2 "completable with simulated results".)
+     *
+     * `paperDrill` above answers "may I start this". This answers "what did it
+     * come to", which is the half a workbook could not previously reach: the
+     * loop's later functions had no caller, so a drill could be opened over the
+     * wire and never closed with anything to show.
+     *
+     * STATELESS, and that is the design rather than a shortcut. Academy stores
+     * no run and no position, so the caller replays what happened — the steps
+     * they completed and the fills TRADE gave them — and this returns the
+     * authoritative reading of it. Every refusal the step-by-step path would
+     * have raised is raised here in the same order: a live market, a non-
+     * workbook slug, an unknown step, a malformed fill.
+     *
+     * WHAT IT WILL NOT DO. It has no price source. Prices and sizes are the
+     * ones trade published, handed in as decimal strings; a fill missing one is
+     * `academy.paper_price_unavailable`, and an open position with no published
+     * mark comes back `unrealisedPnl: null, markUnavailable: true`. Neither
+     * case is filled in with a plausible number, because a fabricated price in
+     * a practice drill is still this platform stating a price that never
+     * existed.
+     *
+     * AND IT MOVES NOTHING. No hold, no fill, no ledger post — doctrine §0.6,
+     * and `paper/ledger-isolation.test.ts` fails the build if that changes.
+     */
+    paperDrillResult: scopedProcedure('academy:read', { module: 'academy' })
+      .input(
+        z.object({
+          slug: z.string().min(1),
+          market: z
+            .object({ marketId: z.string().min(1), paper: z.boolean(), symbol: z.string().min(1) })
+            .nullable()
+            .default(null),
+          completedStepIds: z.array(z.string().min(1)).max(64).default([]),
+          fills: z.array(publishedFillIn).max(256).default([]),
+          /** Trade's published mark for open size. Absent → reported unmarked. */
+          markPrice: z.string().min(1).nullable().default(null),
+        }),
+      )
+      .output(paperDrillResultOut)
+      .query(({ input }) =>
+        guard(async () => {
+          academy.assertPaperTradingEnabled();
+          const item = getCurriculumItem(input.slug);
+          if (!item) {
+            throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
+          }
+
+          const replayed = replayPaperDrill({
+            slug: input.slug,
+            kind: item.kind,
+            market: input.market,
+            completedStepIds: input.completedStepIds,
+            fills: input.fills,
+          });
+          if (!replayed.ok) {
+            return { ok: false as const, reason: replayed.reason, message: replayed.message };
+          }
+
+          const run = replayed.run;
+          const progress = drillProgress(run);
+          // Throws `academy.paper_price_unavailable` rather than valuing a fill
+          // whose price nobody published.
+          const valuation = valueSimulatedDrill(input.fills as readonly PublishedFill[], input.markPrice);
+
+          const sealed = assertSealedSimulated(
+            sealSimulated({
+              workbookSlug: run.workbookSlug,
+              marketId: run.marketId,
+              symbol: run.symbol,
+              status: run.status,
+              stepCount: progress.stepCount,
+              completedCount: progress.completedCount,
+              remainingStepIds: [...remainingStepIds(run)],
+              ratio: progress.ratio,
+              complete: isDrillComplete(run),
+              valuation,
+            }),
+          );
+          return {
+            ok: true as const,
+            simulated: sealed.simulated,
+            venue: sealed.venue,
+            realLedger: sealed.realLedger,
+            withdrawable: sealed.withdrawable,
+            disclaimer: sealed.disclaimer,
+            result: sealed.result,
           };
         }),
       ),
