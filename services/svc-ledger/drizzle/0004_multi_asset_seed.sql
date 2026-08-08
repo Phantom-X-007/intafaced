@@ -9,9 +9,19 @@
 -- Following 0000's precedent exactly: adding an asset is a data change, never a
 -- code change, and the insert is idempotent so the file is re-runnable.
 --
--- DECIMALS. This is the scale the ledger reconciles the asset at, and it is not
--- cosmetic — it is how much of a position can exist below the smallest amount
--- anyone can see.
+-- DECIMALS. CORRECTED 2026-08-08 (STOP §4.2b #5). This file used to claim that
+-- this is "the scale the ledger reconciles the asset at, and it is not cosmetic".
+-- Nothing reads the column. Every balance is `numeric(38,18)` and reconciliation
+-- compares at 18 decimal places for every asset, so the values below are a
+-- DECLARATION OF INTENT and change no behaviour anywhere today. The correction is
+-- recorded here rather than the sentence quietly deleted, because a false safety
+-- claim that vanishes without trace is how the next audit re-finds it.
+--
+-- The numbers themselves are kept, and are still the right numbers to declare —
+-- they are what the scale should be if and when it is enforced. What that
+-- enforcement does with the sub-unit remainder (`mulBps` rounds `ceil` at 18 dp,
+-- so it exists) is a fee/rounding policy decision, not a correctness one. See
+-- `schema.ts` at the column and `assets-decimals.test.ts`.
 --   · Fiat currencies at 2, matching the existing USD/EUR/GBP rows. JPY is
 --     conventionally quoted to 0 decimal places as a currency, but it is stored
 --     at 2 like every other fiat here: a JPY *balance* still needs sub-unit
