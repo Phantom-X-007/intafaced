@@ -243,7 +243,16 @@ export const ledgerTx = ledger.table(
     id: uuid('id').primaryKey().defaultRandom(),
     /** Commit order. The hash chain follows this sequence exactly. */
     seq: bigserial('seq', { mode: 'bigint' }).notNull(),
-    /** Retry protection. A repeated key returns the original transaction. */
+    /**
+     * Retry protection. A repeated key returns the original transaction.
+     *
+     * At least 8 characters, in the database as well as in `assertValidPost`
+     * (0009). The key is the IDENTITY of a movement, and after #1060 `post()`
+     * returns the existing transaction for a known key before it validates the
+     * body — so a row holding `''` means the next caller whose key normalises to
+     * empty is handed that transaction and told its own movement succeeded, with
+     * nothing having moved and no error raised anywhere.
+     */
     idempotencyKey: text('idempotency_key').notNull(),
     module: text('module').notNull(),
     reason: text('reason').notNull(),
@@ -257,6 +266,8 @@ export const ledgerTx = ledger.table(
     uniqueIndex('ledger_tx_idempotency_idx').on(t.idempotencyKey),
     index('ledger_tx_seq_idx').on(t.seq),
     index('ledger_tx_module_idx').on(t.module, t.postedAt),
+    /** The 8-character minimum `assertValidPost` states, enforced here too (0009). */
+    check('ledger_tx_idempotency_key_len_ck', sql`length(idempotency_key) >= 8`),
   ],
 );
 
