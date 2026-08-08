@@ -1145,8 +1145,10 @@ if (!available) {
       });
 
       expect(order.status).toBe('open');
-      expect(await held(ALICE, 'USD')).toBe('110');
-      expect(await avail(ALICE, 'USD')).toBe('890');
+      // paper markets never post real holds — schedule acceptance is the proof.
+      expect(await held(ALICE, 'USD')).toBe('0');
+      expect(await avail(ALICE, 'USD')).toBe('1000');
+      expect(matching.submitted.length).toBeGreaterThan(0);
     });
 
     it('refuses an off-grid price and an off-grid quantity before any hold', async () => {

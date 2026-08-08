@@ -193,6 +193,11 @@ export type TradeErrorCode =
    * cannot permanently outrun the ledger.
    */
   | 'trade.fee_exceeds_fill'
+  /**
+   * Forex/commodity production listing without fiat settlement rails (D-S-05).
+   * Model/paper listings remain legal; this is the production-list lie.
+   */
+  | 'trade.unsettled_asset_class_listing'
   | 'trade.hold_uncovered'
   | 'trade.convert_disabled'
   | 'trade.convert_no_liquidity'
