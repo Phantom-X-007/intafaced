@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
@@ -77,16 +78,25 @@ if (!available) {
        * entry is its asset. Without this setup the `tx_id` and `account_id`
        * foreign keys would fail first and the test would pass for the wrong
        * reason — which is how a test ends up asserting nothing.
+       *
+       * A FRESH OWNER EACH TIME. `accounts_identity_purpose_idx` is UNIQUE on
+       * (owner_type, owner_id, asset_id, kind, purpose), so reusing one owner made
+       * the second call collide on the identity index — which is the index doing
+       * its job, and it failed these tests on the first CI run. `randomUUID`
+       * satisfies `accounts_owner_id_space_ck`, which requires the `user` space to
+       * be a UUID.
        */
-      async function realTxAndAccount(): Promise<{ txId: string; accountId: string }> {
+      let probe = 0;
+      async function realTxAndAccount(assetId = 'USDT'): Promise<{ txId: string; accountId: string }> {
+        probe += 1;
         const [tx] = await db.sql<Array<{ id: string }>>`
           INSERT INTO ledger_tx (idempotency_key, module, reason, hash)
-          VALUES (${'guards-fk-' + Date.now()}, 'test', 'entries asset fk probe', 'h-guards-fk')
+          VALUES (${`guards-fk-probe-${probe}`}, 'test', 'entries asset fk probe', ${`h-guards-fk-${probe}`})
           RETURNING id
         `;
         const [account] = await db.sql<Array<{ id: string }>>`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
-          VALUES ('user'::owner_type, ${USER}, 'USDT', 'available'::account_kind, '')
+          VALUES ('user'::owner_type, ${randomUUID()}, ${assetId}, 'available'::account_kind, '')
           RETURNING id
         `;
         return { txId: tx!.id, accountId: account!.id };
@@ -114,14 +124,33 @@ if (!available) {
         ).resolves.toBeDefined();
       });
 
-      it('and an asset cannot be deleted out from under existing value (ON DELETE RESTRICT)', async () => {
+      /**
+       * ISOLATED TO THE ENTRIES FK ON PURPOSE.
+       *
+       * `DELETE FROM assets WHERE id = 'USDT'` would be restricted by
+       * `accounts_asset_id_fk` as well, since accounts hold an asset too — so the
+       * obvious version of this test passes even if the entries FK does not exist,
+       * which is the exact failure mode this PR is about.
+       *
+       * So: a purpose-made asset referenced ONLY by an entry. The account stays in
+       * `USDT` while the entry names `ENTFK`, which is possible because nothing ties
+       * `ledger_entries.asset_id` to its account's asset — recorded as its own
+       * finding in the audit file, and what makes this isolation available here.
+       */
+      it('and an asset cannot be deleted out from under an entry alone (ON DELETE RESTRICT)', async () => {
+        await db.sql`INSERT INTO assets (id, kind, decimals) VALUES ('ENTFK', 'crypto', 18) ON CONFLICT (id) DO NOTHING`;
         const { txId, accountId } = await realTxAndAccount();
+
         await db.sql`
           INSERT INTO ledger_entries (tx_id, account_id, asset_id, direction, amount, balance_after)
-          VALUES (${txId}, ${accountId}, 'USDT', 'debit'::direction, 1::numeric, 0::numeric)
+          VALUES (${txId}, ${accountId}, 'ENTFK', 'debit'::direction, 1::numeric, 1::numeric)
         `;
 
-        await expect(db.sql`DELETE FROM assets WHERE id = 'USDT'`).rejects.toMatchObject({ code: FK_VIOLATION });
+        // No account holds ENTFK, so only the entries FK can be doing the refusing.
+        const holders = await db.sql<Array<{ n: string }>>`SELECT count(*) AS n FROM accounts WHERE asset_id = 'ENTFK'`;
+        expect(Number(holders[0]!.n)).toBe(0);
+
+        await expect(db.sql`DELETE FROM assets WHERE id = 'ENTFK'`).rejects.toMatchObject({ code: FK_VIOLATION });
       });
     });
 
