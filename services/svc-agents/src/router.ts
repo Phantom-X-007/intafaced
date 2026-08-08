@@ -27,6 +27,7 @@ import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
 import { supportTierGate } from './support-agent/tier-gate.js';
 import { invokeSupportDataTool, supportAnswerOrEscalate } from './support-agent/data-tools.js';
+import { runSupportReplySession } from './support-agent/session-run.js';
 import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
 
 /**
@@ -134,6 +135,55 @@ const navigatorFindingOutput = z.union([
 
 /** An ask that produced no fact, and who refused it. */
 const navigatorUnansweredOutput = z.object({
+  tool: z.string(),
+  refusedBy: z.enum(['guardrail', 'tool']),
+  reason: z.string(),
+  userMessageKey: z.string(),
+});
+
+/**
+ * One grounded fact a support desk tool returned.
+ *
+ * Same shape discipline as the navigator's: every branch echoes a row the caller
+ * supplied or the desk held. The account projection carries status and KYC tier
+ * and nothing else — there is no balance field here to leak or invent, which is
+ * how §0.6 is kept by construction rather than by review.
+ */
+const supportFindingOutput = z.union([
+  z.object({
+    status: z.literal('ok'),
+    tool: z.literal('support.kb.search'),
+    articles: z.array(
+      z.object({
+        articleKey: z.string(),
+        titleKey: z.string(),
+        bodyKey: z.string(),
+      }),
+    ),
+  }),
+  z.object({
+    status: z.literal('ok'),
+    tool: z.literal('support.ticket.read'),
+    ticket: z.object({
+      ticketId: z.string(),
+      ownerUserId: z.string(),
+      status: z.enum(['open', 'pending', 'resolved', 'closed']),
+      category: z.string(),
+    }),
+  }),
+  z.object({
+    status: z.literal('ok'),
+    tool: z.literal('identity.account.read'),
+    account: z.object({
+      userId: z.string(),
+      status: z.enum(['active', 'frozen', 'closed']),
+      kycTier: z.string(),
+    }),
+  }),
+]);
+
+/** A desk read that produced no fact, and who refused it. */
+const supportUnansweredOutput = z.object({
   tool: z.string(),
   refusedBy: z.enum(['guardrail', 'tool']),
   reason: z.string(),
@@ -1948,6 +1998,196 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
           return decision;
         }),
+
+      /**
+       * Stage-2 `support.reply` as a METERED RUN on the fleet runtime.
+       *
+       * The support routes above are pure: they answer "what would the desk say"
+       * without a session, so the declared toolset is enforced by nothing at call
+       * time and the usage is metered by nothing at all. This one drives the same
+       * pure tools through `openSession → act → settle → closeSession`, so every
+       * desk read is guardrail-checked and audited, and the run settles through
+       * `UsageMeter` → ledger — the only accounting path.
+       *
+       * The requester is `ctx.principal.userId`, never an input field: a support
+       * run that could read another user's ticket or account projection would be
+       * a PII incident wearing a feature's clothes.
+       *
+       * A mutation, not a query: it opens a session and writes audit rows.
+       */
+      runSession: scopedProcedure('agents:execute', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z.record(z.array(z.string().min(1).max(120)).max(100)).default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            /** The user is asking for money to move. Escalates to a person, free. */
+            moneyRequest: z.boolean().optional(),
+            // Capped well under the guardrail's per-session action budget: one
+            // read is one audited tool call, refusals included.
+            asks: z
+              .array(
+                z.object({
+                  tool: z.string().min(1).max(120),
+                  articles: z
+                    .array(
+                      z.object({
+                        articleKey: z.string().min(1).max(160),
+                        titleKey: z.string().min(1).max(160),
+                        bodyKey: z.string().min(1).max(160),
+                      }),
+                    )
+                    .max(200)
+                    .nullable()
+                    .optional(),
+                  ticket: z
+                    .object({
+                      ticketId: z.string().min(1).max(120),
+                      ownerUserId: z.string().max(120),
+                      status: z.enum(['open', 'pending', 'resolved', 'closed']),
+                      category: z.string().max(64),
+                    })
+                    .nullable()
+                    .optional(),
+                  account: z
+                    .object({
+                      userId: z.string().max(120),
+                      status: z.enum(['active', 'frozen', 'closed']),
+                      kycTier: z.string().max(64),
+                    })
+                    .nullable()
+                    .optional(),
+                }),
+              )
+              .max(20),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              userTier: z.string(),
+              findings: z.array(supportFindingOutput),
+              unanswered: z.array(supportUnansweredOutput),
+              citedArticleKeys: z.array(z.string()).min(1),
+              asked: z.number().int(),
+              answered: z.number().int(),
+              complete: z.boolean(),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('escalate'),
+              reason: z.enum(['kb_no_hit', 'money_request', 'desk_refused']),
+              userMessageKey: z.literal('agents.support.escalated'),
+              findings: z.array(supportFindingOutput),
+              unanswered: z.array(supportUnansweredOutput),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.support.empty'),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read']),
+              userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
+              unanswered: z.array(supportUnansweredOutput),
+              metering: runMeteringOutput,
+            }),
+          ]),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            const result = await runSupportReplySession({
+              runtime,
+              userId: ctx.principal.userId,
+              feeAssetId,
+              plane: input.plane,
+              tierLaw: input.law ?? null,
+              userTier: input.userTier,
+              ...(input.moneyRequest === undefined ? {} : { moneyRequest: input.moneyRequest }),
+              asks: input.asks.map((ask) => ({
+                tool: ask.tool,
+                articles: ask.articles ?? null,
+                ticket: ask.ticket ?? null,
+                account: ask.account ?? null,
+              })),
+            });
+
+            const metering = {
+              sessionId: result.metering.sessionId,
+              billedAmount: result.metering.billedAmount,
+              assetId: result.metering.assetId,
+              sessionClosed: result.metering.sessionClosed,
+              settlements: result.metering.settlements.map((s) => ({
+                windowId: s.windowId,
+                amount: s.amount,
+                chargeKey: s.chargeKey,
+                settled: s.settled,
+              })),
+            };
+
+            if (result.status === 'empty') {
+              return { status: 'empty' as const, userMessageKey: result.userMessageKey, metering };
+            }
+
+            const unanswered = result.unanswered.map((u) => ({
+              tool: u.tool,
+              refusedBy: u.refusedBy,
+              reason: u.reason,
+              userMessageKey: u.userMessageKey as string,
+            }));
+
+            if (result.status === 'refuse') {
+              return {
+                status: 'refuse' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                unanswered,
+                metering,
+              };
+            }
+
+            const findings = result.findings.map((f) =>
+              f.tool === 'support.kb.search'
+                ? { status: 'ok' as const, tool: 'support.kb.search' as const, articles: f.articles.map((a) => ({ ...a })) }
+                : f,
+            );
+
+            if (result.status === 'escalate') {
+              return {
+                status: 'escalate' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                findings,
+                unanswered,
+                metering,
+              };
+            }
+
+            return {
+              status: 'ok' as const,
+              userTier: result.userTier,
+              findings,
+              unanswered,
+              citedArticleKeys: [...result.citedArticleKeys],
+              asked: result.asked,
+              answered: result.answered,
+              complete: result.complete,
+              metering,
+            };
+          }),
+        ),
     }),
 
     /**
