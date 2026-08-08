@@ -969,7 +969,14 @@ function renderFreezeMd(m) {
     `- **Ops churn:** ${churn.consecutive} consecutive docs-only tip merges${churn.consecutive >= 5 ? ' ⚠ CHURN (≥5) — value gate + Board-Delta required' : ''}`,
   );
   lines.push(`- **Stranded branches (P1):** ${m.strandedCount ?? (m.strandedBranches || []).length}`);
-  lines.push(`- **Worktrees:** ${m.worktreeCount ?? '?'} ${m.worktreeOverCap ? '⚠ OVER CAP 20 — run `pnpm wt:gc:apply`' : '(cap 20)'}`);
+  // Recommend the DRY RUN, never the destructive form. A cap warning is a
+  // count, not a diagnosis: it cannot tell an abandoned checkout from four
+  // live agents. Pointing an operator straight at `wt:gc:apply` is how
+  // "Another lane's worktree-gc --apply deleted two of this lane's worktrees
+  // mid-edit" happened (docs/LANE-CLOSEOUT-OPS-2026-08-08.md).
+  lines.push(
+    `- **Worktrees:** ${m.worktreeCount ?? '?'} ${m.worktreeOverCap ? '⚠ OVER CAP 20 — review with `pnpm wt:gc` (dry run; it prints why each one is kept). Removal is attended-only.' : '(cap 20)'}`,
+  );
   if (m.actionsRuns24h) {
     const by = Object.entries(m.actionsRuns24h.byName || {})
       .map(([n, c]) => `${n}=${c}`)
@@ -1110,7 +1117,8 @@ function printStatus(m) {
     );
   }
   console.log(`  stranded(P1): ${m.strandedCount ?? 0}`);
-  console.log(`  worktrees: ${m.worktreeCount ?? '?'}${m.worktreeOverCap ? ' ⚠ OVER CAP 20 — pnpm wt:gc:apply' : ''}`);
+  // Dry run only — same reasoning as the markdown report above.
+  console.log(`  worktrees: ${m.worktreeCount ?? '?'}${m.worktreeOverCap ? ' ⚠ OVER CAP 20 — review: pnpm wt:gc (dry run)' : ''}`);
   if (m.actionsRuns24h) {
     const by = Object.entries(m.actionsRuns24h.byName || {})
       .sort((a, b) => b[1] - a[1])
