@@ -73,7 +73,14 @@ function dedupeKey(userId: string, sourceSubject: string, sourceIdempotencyKey: 
   return `${userId}\0${sourceSubject}\0${sourceIdempotencyKey}`;
 }
 
-/** In-memory store for unit tests — same dedupe / self-only semantics as Postgres. */
+/**
+ * In-memory store for unit tests — same dedupe / self-only semantics as Postgres.
+ *
+ * That sentence is now checked rather than asserted: `store.conformance.test.ts`
+ * runs one set of assertions against both engines, memory always and Postgres
+ * whenever one is reachable. It was written because the claim had already
+ * stopped being true in two branches of `list`, both reachable with a valid UUID.
+ */
 export class MemoryNotifyStore implements NotifyStore {
   private readonly byId = new Map<string, Notification>();
   private readonly byDedupe = new Map<string, string>();
@@ -115,17 +122,28 @@ export class MemoryNotifyStore implements NotifyStore {
   async list(query: ListQuery): Promise<ListResult> {
     let rows = [...this.byId.values()].filter((r) => r.userId === query.userId);
     if (query.unreadOnly) rows = rows.filter((r) => r.readAt === null);
-    rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
+    // Plain ordinal comparison on the tiebreak, matching `ORDER BY id DESC` on a
+    // uuid column. `localeCompare` is locale-dependent, and the filter below has
+    // always used `<` — two orderings deciding one page is how a row gets served
+    // twice or never.
+    rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
 
     if (query.cursor) {
+      // Looked up WITH the caller's id, and an unresolvable cursor ends the walk
+      // — both matching the Postgres engine, which has always done this.
+      //
+      // Ignoring the cursor instead (the old behaviour) returned PAGE ONE, so a
+      // client whose cursor row had been deleted would page forever. And because
+      // `byId` is not scoped by user, a foreign notification id sliced the
+      // caller's own list at a stranger's timestamp — passing guessed ids and
+      // watching the page move answers "does this id exist, and roughly when was
+      // it made". The router validates that a cursor is a UUID, not whose it is.
       const cursor = this.byId.get(query.cursor);
-      if (cursor) {
-        rows = rows.filter(
-          (r) =>
-            r.createdAt.getTime() < cursor.createdAt.getTime() ||
-            (r.createdAt.getTime() === cursor.createdAt.getTime() && r.id < cursor.id),
-        );
-      }
+      if (!cursor || cursor.userId !== query.userId) return { items: [], nextCursor: null };
+      rows = rows.filter(
+        (r) =>
+          r.createdAt.getTime() < cursor.createdAt.getTime() || (r.createdAt.getTime() === cursor.createdAt.getTime() && r.id < cursor.id),
+      );
     }
 
     const page = rows.slice(0, query.limit);
