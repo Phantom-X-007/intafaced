@@ -73,7 +73,7 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
     escrow = escReceipt.contractAddress!;
     escrowAbi = esc.abi;
 
-    await seller.walletClient.writeContract({
+    const mintHash = await seller.walletClient.writeContract({
       address: token,
       abi: tokenAbi,
       functionName: 'mint',
@@ -81,26 +81,36 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
       account: seller.walletClient.account!,
       chain: seller.walletClient.chain,
     });
+    await seller.publicClient.waitForTransactionReceipt({ hash: mintHash });
   }, 120_000);
 
+  /** viem writeContract returns a hash — under CI load, reads can race the mine. */
+  async function write(fn: () => Promise<`0x${string}`>) {
+    const hash = await fn();
+    await seller.publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
   async function openAndLock(opts?: { disposition?: number; window?: number; arbiter?: Address }) {
-    await seller.walletClient.writeContract({
-      address: escrow,
-      abi: escrowAbi,
-      functionName: 'open',
-      args: [
-        buyer,
-        token,
-        amount,
-        opts?.arbiter ?? ('0x0000000000000000000000000000000000000000' as Address),
-        '0x0000000000000000000000000000000000000000' as Address,
-        0,
-        opts?.window ?? 3600,
-        opts?.disposition ?? TimeoutDisposition.RefundSeller,
-      ],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: escrow,
+        abi: escrowAbi,
+        functionName: 'open',
+        args: [
+          buyer,
+          token,
+          amount,
+          opts?.arbiter ?? ('0x0000000000000000000000000000000000000000' as Address),
+          '0x0000000000000000000000000000000000000000' as Address,
+          0,
+          opts?.window ?? 3600,
+          opts?.disposition ?? TimeoutDisposition.RefundSeller,
+        ],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
     const nextId = (await seller.publicClient.readContract({
       address: escrow,
       abi: escrowAbi,
@@ -108,22 +118,26 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
     })) as bigint;
     const id = nextId - 1n;
 
-    await seller.walletClient.writeContract({
-      address: token,
-      abi: tokenAbi,
-      functionName: 'approve',
-      args: [escrow, amount],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
-    await seller.walletClient.writeContract({
-      address: escrow,
-      abi: escrowAbi,
-      functionName: 'lock',
-      args: [id],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: token,
+        abi: tokenAbi,
+        functionName: 'approve',
+        args: [escrow, amount],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: escrow,
+        abi: escrowAbi,
+        functionName: 'lock',
+        args: [id],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
     return id;
   }
 
@@ -136,14 +150,16 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
       args: [buyer],
     })) as bigint;
 
-    await seller.walletClient.writeContract({
-      address: escrow,
-      abi: escrowAbi,
-      functionName: 'release',
-      args: [id],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: escrow,
+        abi: escrowAbi,
+        functionName: 'release',
+        args: [id],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
 
     const after = (await seller.publicClient.readContract({
       address: token,
@@ -172,14 +188,16 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
       args: [seller.deployer],
     })) as bigint;
 
-    await seller.walletClient.writeContract({
-      address: escrow,
-      abi: escrowAbi,
-      functionName: 'refund',
-      args: [id],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: escrow,
+        abi: escrowAbi,
+        functionName: 'refund',
+        args: [id],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
 
     const after = (await seller.publicClient.readContract({
       address: token,
@@ -201,14 +219,16 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
 
   it('dispute → settleTimeout (keeper): pre-agreed refund; no stranded amount', async () => {
     const id = await openAndLock({ window: 1, disposition: TimeoutDisposition.RefundSeller });
-    await seller.walletClient.writeContract({
-      address: escrow,
-      abi: escrowAbi,
-      functionName: 'dispute',
-      args: [id],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: escrow,
+        abi: escrowAbi,
+        functionName: 'dispute',
+        args: [id],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
 
     await seller.publicClient.request({ method: 'evm_increaseTime' as never, params: [2] as never });
     await seller.publicClient.request({ method: 'evm_mine' as never, params: [] as never });
@@ -220,14 +240,16 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
       args: [seller.deployer],
     })) as bigint;
 
-    await seller.walletClient.writeContract({
-      address: escrow,
-      abi: escrowAbi,
-      functionName: 'settleTimeout',
-      args: [id],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: escrow,
+        abi: escrowAbi,
+        functionName: 'settleTimeout',
+        args: [id],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
 
     const after = (await seller.publicClient.readContract({
       address: token,
@@ -249,14 +271,16 @@ describeOnChain('SovereignEscrow on chain (S-A3)', () => {
 
   it('refuses settleTimeout before deadline', async () => {
     const id = await openAndLock({ window: 86_400 });
-    await seller.walletClient.writeContract({
-      address: escrow,
-      abi: escrowAbi,
-      functionName: 'dispute',
-      args: [id],
-      account: seller.walletClient.account!,
-      chain: seller.walletClient.chain,
-    });
+    await write(() =>
+      seller.walletClient.writeContract({
+        address: escrow,
+        abi: escrowAbi,
+        functionName: 'dispute',
+        args: [id],
+        account: seller.walletClient.account!,
+        chain: seller.walletClient.chain,
+      }),
+    );
 
     await expect(
       seller.walletClient.writeContract({
