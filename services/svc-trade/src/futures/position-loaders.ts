@@ -59,7 +59,14 @@ export function sqlFundingPositionLoader(sql: Sql): FundingPositionLoader {
         FROM trade.positions p
         JOIN trade.markets m ON m.id = p.market_id
         WHERE p.status = 'open' AND p.market_id = ${marketId}
-        ORDER BY p.opened_at ASC
+        -- p.id is the tiebreak, not decoration: opened_at is not unique, so two
+        -- positions opened in the same tick had no stable order between two
+        -- queries. Funding legs are built by iterating this list, and under the
+        -- old loop-counter ledger key a mere row-order flip between a crashed
+        -- tick and its replay re-posted the ENTIRE plan. The key no longer
+        -- depends on order, so this is belt-and-braces — but a money path that
+        -- reads rows in a nondeterministic order has no business doing so.
+        ORDER BY p.opened_at ASC, p.id ASC
       `;
       return rows.map(mapFunding);
     },

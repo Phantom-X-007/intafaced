@@ -7,6 +7,43 @@
  *
  * Convention: positive rate → longs pay shorts (amount = |rate| * notional).
  * Rate is a decimal string in ABSOLUTE terms for the period (e.g. "0.0001" = 1bp).
+ *
+ * ── The ledger key is `(period, payer, payee)`, and it must stay that way ────
+ *
+ * `runFundingTick` posts these legs BEFORE it writes the settle marker, so a
+ * crash in that gap replays the whole plan. The replay is only safe because the
+ * ledger dedupes on the recipe key — which means the key has to identify the
+ * WORK, not where the work happened to land in a loop.
+ *
+ * This previously appended `:${seq}`, a counter running across the nested
+ * payer×payee loop. Nothing needed it — each (payer, payee) pair is emitted at
+ * most once per plan, so the three ids were already unique — and it broke the
+ * only property that mattered: a replay whose book has changed (one short
+ * closed their position in between, which needs no job enabled and is a plain
+ * `DELETE /api/v1/positions/:id`) renumbers every downstream leg. The surviving
+ * pairs then arrive at the ledger under keys it has never seen, and post a
+ * SECOND time. Meanwhile `applyFundingNets` is idempotent on (position, period)
+ * and correctly does nothing, so `margin_current` records one charge while the
+ * ledger has taken two — the inverse of #1034, reached through the gap #1047
+ * left open. That is the third funding double-charge in this file's history;
+ * the first two are #1034 and #1047.
+ *
+ * KNOWN RESIDUAL, deliberately not fixed here: the loader returns positions
+ * open *now*, not positions open as of the period. A position OPENED between a
+ * failed attempt and its replay is a genuinely new pair with a genuinely new
+ * key, so the replay posts an extra leg.
+ *
+ * The victim is NOT the new position — it is consistent, charged once in both
+ * the ledger and its margin. The victim is the PAYER, whose collateral the
+ * ledger drains for both the original legs and the new one while
+ * `applyFundingNets` (idempotent on (position, period)) records only the first.
+ * That is the same ledger-vs-`margin_current` divergence as #1034 and #1047,
+ * which is the thing to say out loud: this residual is in the same family as
+ * the bug above it, not a fairness question about period membership.
+ *
+ * It is unchanged by this fix — measured identical under the old and new keys —
+ * so nothing was traded away. Closing it needs a decision about what a period's
+ * membership IS, which is product law, not a refactor.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
 
@@ -96,7 +133,6 @@ export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
   const payeePool = rate > 0n ? S : L;
 
   const legs: FundingLeg[] = [];
-  let seq = 0;
   for (const { p: payer, n: pn } of payers) {
     const payerShare = (total * pn) / payerPool;
     if (payerShare <= 0n) continue;
@@ -107,8 +143,10 @@ export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
       const piece = isLast ? remaining : (payerShare * sn) / payeePool;
       if (piece <= 0n) continue;
       remaining -= piece;
-      seq += 1;
-      const fundingId = `${input.periodId}:${payer.positionId}:${payee.positionId}:${seq}`;
+      // (period, payer, payee) and nothing else. Each pair is emitted at most
+      // once per plan, so this is already unique — and unlike a loop counter it
+      // is the SAME key when the tick replays. See the header note.
+      const fundingId = `${input.periodId}:${payer.positionId}:${payee.positionId}`;
       legs.push({
         payerPositionId: payer.positionId,
         payeePositionId: payee.positionId,
@@ -125,6 +163,26 @@ export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
       });
     }
   }
+
+  // The invariant the ledger keys rest on, asserted where it lives.
+  //
+  // Uniqueness holds because payers and payees are disjoint by side and each
+  // pair is visited once — but only as long as `positions` carries no duplicate
+  // position id. Today that is guaranteed by a PRIMARY KEY two files away, in
+  // another module, with nothing here that would notice if it stopped being
+  // true. And the failure would be silent in the worst direction: the ledger
+  // would dedupe the colliding leg away and take LESS than `applyFundingNets`
+  // decrements from margin, so the row and the money disagree with no error.
+  //
+  // Cheaper to refuse the plan than to discover that in a reconcile.
+  const keys = new Set(legs.map((l) => l.recipe.idempotencyKey));
+  if (keys.size !== legs.length) {
+    throw new Error(
+      `funding plan for ${input.periodId} produced ${legs.length} legs under ${keys.size} distinct ledger keys — ` +
+        `refusing to post a plan whose legs would silently dedupe against each other`,
+    );
+  }
+
   return legs;
 }
 
