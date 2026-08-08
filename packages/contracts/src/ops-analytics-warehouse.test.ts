@@ -105,3 +105,43 @@ describe('analytics Stage-1 — warehouse replica + empty surface', () => {
     expect(r.status).toBe('refuse');
   });
 });
+
+/**
+ * A read-only MARKER must not rescue a writer WORD, and must not be matched by
+ * accident.
+ *
+ * The guard returned `ok` on the marker check before it ever reached the
+ * forbidden-fragment loop, and matched markers with `includes` — so `_ro`, a
+ * substring of `_role` and `_root`, presented half the writer names in the
+ * denylist as read-only credentials.
+ */
+describe('assertAnalyticsReplicaRole — a marker is not a bypass', () => {
+  const url = (user: string) => `postgres://${user}:x@localhost:5433/wh`;
+
+  it('refuses writer names whose spelling happens to contain a marker', () => {
+    // Every one of these was accepted: `_ro` matches inside `_role` and `_root`.
+    for (const user of ['postgres_root', 'writer_role', 'admin_role', 'intafaced_ops_root', 'svc_ledger_rw_rotator']) {
+      const result = assertAnalyticsReplicaRole(url(user), 'readonly');
+      expect(result.ok, user).toBe(false);
+    }
+  });
+
+  it('refuses a writer word even when the username really does end in a marker', () => {
+    // `admin_ro` is still admin. No marker rescues this class.
+    for (const user of ['admin_ro', 'postgres_ro', 'writer_readonly', 'migrator_ro']) {
+      expect(assertAnalyticsReplicaRole(url(user), 'readonly').ok, user).toBe(false);
+    }
+  });
+
+  it('still allows what the marker exists for — a service name made read-only', () => {
+    for (const user of ['svc_ledger_ro', 'analytics_ro', 'replica_ro', 'readonly', 'warehouse_readonly']) {
+      expect(assertAnalyticsReplicaRole(url(user), 'readonly').ok, user).toBe(true);
+    }
+  });
+
+  it('still refuses a bare service name', () => {
+    for (const user of ['svc_ledger', 'svc_trade', 'intafaced_ops']) {
+      expect(assertAnalyticsReplicaRole(url(user), 'readonly').ok, user).toBe(false);
+    }
+  });
+});

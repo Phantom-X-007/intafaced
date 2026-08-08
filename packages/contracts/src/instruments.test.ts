@@ -293,3 +293,32 @@ describe('isInstrumentOpen', () => {
     expect(isInstrumentOpen(halted, new Date('2026-01-14T03:00:00Z'))).toBe(false);
   });
 });
+
+/**
+ * Sizes are compared as scaled bigints, not as doubles.
+ *
+ * The maxQty ≥ minQty refine used `Number()` on both sides — in the file whose
+ * header states "there is not a `number` in this file that describes a price or
+ * a size". Not decorative: two decimal strings that differ in the 18th place
+ * become the same double, so the check passed on a pair it exists to reject.
+ */
+describe('size comparison is exact', () => {
+  /** A real instrument, with only the two sizes under test changed. */
+  function withQty(minQty: string, maxQty: string) {
+    const base = INSTRUMENTS.find((i) => i.symbol === 'BTC/USDT');
+    expect(base, 'fixture instrument must exist').toBeDefined();
+    return { ...base!, minQty, maxQty };
+  }
+
+  it('rejects a maxQty below minQty by one unit in the last place', () => {
+    // Both sides are exactly 1 as a double, so `Number(max) < Number(min)` was
+    // false and the schema accepted a maximum smaller than its minimum.
+    const result = instrumentSchema.safeParse(withQty('1.000000000000000001', '1'));
+    expect(result.success).toBe(false);
+  });
+
+  it('still accepts an equal pair and an ordinary range', () => {
+    expect(instrumentSchema.safeParse(withQty('1', '1')).success).toBe(true);
+    expect(instrumentSchema.safeParse(withQty('0.00001', '1000')).success).toBe(true);
+  });
+});
