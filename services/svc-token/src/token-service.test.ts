@@ -3,7 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, afterAll } from 'vitest';
 import { trace } from '@opentelemetry/api';
 import { MemoryEventBus } from '@intafaced/events';
 import {
@@ -1139,7 +1139,96 @@ if (!available) {
 
     it('refuses to mint once the schedule is exhausted', async () => {
       // Far enough out that the reward has halved below one unit of precision.
-      await expect(token.mintEpoch(10_000_000)).rejects.toBeInstanceOf(TokenError);
+      await expect(token.mintEpoch(10_000_000)).rejects.toMatchObject({ code: 'token.supply_exhausted' });
+    });
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE MINT CEILING WAS MEASURED AGAINST A PLAN THAT CAN BE EDITED
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `token.supply_exhausted` is the only thing between a mis-tuned curve and
+     * permanent supply inflation, and it had NO test naming it — the one case
+     * above asserted `TokenError` and nothing more, and it only ever reached the
+     * schedule-exhausted branch.
+     *
+     * The cap branch was worse than untested. It compares
+     * `cumulativeEmission(epoch, params)` — what the CURVE says should have been
+     * emitted — against `params.maxSupply`. Both live in `token_params`, which
+     * §4.3 hands to governance on purpose and which the README's kill-switch
+     * argument assumes can be retuned. Lower the curve after minting under a
+     * generous one and the cumulative recomputes small, the cap passes, and more
+     * supply is created on top of what is already out. Nothing looked at what had
+     * actually been minted.
+     */
+    describe('against a retuned curve', () => {
+      /**
+       * These two rewrite the `token_params` singleton, which `beforeEach` does
+       * NOT truncate — so they put it back. A suite that leaves the economy row
+       * edited is a flake waiting for whoever adds the next test below it.
+       */
+      let original: { total_supply: string; halving_interval: number; emission_curve: unknown };
+
+      const dbToken = () => new TokenService(sql, ledger, bus, { ...options, loadParamsFromDb: true, feeScheduleTtlMs: 0 });
+
+      const setParams = async (totalSupply: string, initialEpochReward: string) => {
+        await sql`
+          UPDATE token.token_params
+             SET total_supply = ${totalSupply}::numeric, halving_interval = 1000,
+                 emission_curve = ${sql.json({ initialEpochReward } as never)}
+           WHERE id = true
+        `;
+      };
+
+      beforeEach(async () => {
+        const rows = await sql<Array<typeof original>>`
+          SELECT total_supply::text, halving_interval, emission_curve FROM token.token_params WHERE id = true
+        `;
+        original = rows[0]!;
+      });
+
+      afterEach(async () => {
+        await sql`
+          UPDATE token.token_params
+             SET total_supply = ${original.total_supply}::numeric,
+                 halving_interval = ${original.halving_interval},
+                 emission_curve = ${sql.json(original.emission_curve as never)}
+           WHERE id = true
+        `;
+      });
+
+      it('refuses to mint past the cap after the curve underneath it is retuned down', async () => {
+        // A generous curve with a small cap: one epoch takes us to the ceiling.
+        await setParams('100', '100');
+        const first = await dbToken().mintEpoch(0);
+        expect(formatAmount(first.minted)).toBe('100');
+
+        // Now retune the curve DOWN — an operator "fixing" a curve they think
+        // was too generous. Under the new curve `cumulativeEmission` for the
+        // next epoch is a single unit, which sails past a cap of 100.
+        await setParams('100', '1');
+
+        await expect(dbToken().mintEpoch(1)).rejects.toMatchObject({ code: 'token.supply_exhausted' });
+
+        // Nothing was created, and the books still close. Refusing BEFORE the
+        // post is the whole point: a mint cannot be taken back.
+        const rows = await sql<Array<{ total: string }>>`SELECT COALESCE(SUM(mined_amount), 0) AS total FROM token.emission_epochs`;
+        expect(formatAmount(amt(rows[0]!.total))).toBe('100');
+        expect(ledger.totalsByAsset().IFC).toBe('0');
+      });
+
+      it('refuses to mint past a cap that has been lowered under an already-emitted supply', async () => {
+        await setParams('1000', '100');
+        await dbToken().mintEpoch(0);
+        await dbToken().mintEpoch(1);
+
+        // The cap itself is a `token_params` column. Lowering it below what is
+        // already out must stop further minting, not be quietly outvoted by a
+        // curve that still thinks there is room.
+        await sql`UPDATE token.token_params SET total_supply = 150 WHERE id = true`;
+
+        await expect(dbToken().mintEpoch(2)).rejects.toMatchObject({ code: 'token.supply_exhausted' });
+      });
     });
 
     // TOKEN_ASSET_ID is configurable (env.ts) so a testnet can run its own
