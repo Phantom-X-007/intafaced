@@ -124,10 +124,9 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '0',
     status: 'ready',
-    owner: 'Nitro',
     requires: ['packages/i18n'],
     dependsOn: ['infra.ui-tokens'],
-    note: 'Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface.',
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface.',
   }),
 
   // ── PHASE 1 · THE CORE ───────────────────────────────────────────────────
@@ -296,40 +295,40 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'ready',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/copy'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 3 — D-S-03 Stage: follow/unfollow + envelope mirror refuse; blank DIRECTION §8 leader_share_bps + jurisdiction → refuse-closed; fee-share settle via ledger-client sweepFeesToRewards+rewardPay when owner publishes. Never invent rates/geo/P&L fees/ranking. Residual: owner §8 numbers, on-chain session-key caps (build order §7.1).',
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Prior wip 2026-08-07 money wave 3 — D-S-03 Stage: follow/unfollow + envelope mirror refuse; blank DIRECTION §8 leader_share_bps + jurisdiction → refuse-closed (never invent rates). Residual: owner §8 numbers, on-chain session-key caps (build order §7.1).',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot', 'pay.rails'],
-    note: 'NOT started as a product. What exists: the instrument model (asset_class + schedule on trade.markets) and venue-hours enforcement on order-create — #102 added assertMarketOpen before the hold, so a weekend EUR/USD order is refused with trade.market_closed rather than funded. Hours coverage completed since: the unrecognised-schedule fail-safe (rows.ts casts the DB enum with no runtime parse, so an enum added without a TRADING_SCHEDULES entry must refuse, not throw), the cme-globex daily settlement break, Chicago DST, and an end-to-end proof that a closed venue takes no hold and writes no intent row. Still missing for the actual feature: fiat settlement rails, so no forex market is listed in production.',
+    requires: ['services/svc-trade', 'packages/contracts/src/instruments.ts'],
+    note: 'On OPEN_MONEY allowlist 2026-08-08. NOT production listing: D-S-05 / instrument ADR — model + venue hours first; listing forex pairs without fiat settlement is the lie. What exists: asset_class + schedule on trade.markets; assertMarketOpen refuse on closed venue. Still missing for full product: fiat settlement rails so no forex market is listed in production.',
   }),
   f('trade.algo', 'TWAP / VWAP / POV execution', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'ready',
     dependsOn: ['trade.spot'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M4. **wip 2026-08-07** Nitro money wave 2 — D-S-04 TWAP Stage (parent=schedule, children via placeOrder, refuse blank mark/empty book). VWAP/POV still out (no honest volume series).',
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Prior wip 2026-08-07 money wave 2 — D-S-04 TWAP Stage (parent=schedule, children via placeOrder, refuse blank mark/empty book). VWAP/POV still out (no honest volume series).',
     requires: ['services/svc-trade/src/algo'],
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot'],
-    note: 'partial — public REST: markets, orderbook, ticker, tickers, trades (tape; ?since= ms), ohlcv (live fill aggregation #345 + materialize job default OFF TRADE_CANDLE_JOBS_*; honest [] when never traded; never invent candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed (?since= ms on closed), GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills; ?symbol= filter + ?since= ms), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance (ledger projection, real self-only balances — not stub), GET positions (open futures rows when present; [] when none — never invent); POST/DELETE positions with required exitPrice on close (realized PnL via planClose). setLeverage/setMarginMode still not mounted. Still open: OHLCV empty (no candle job); futures jobs default OFF; live index/matching seed residual. Private WS is under `ws.gateway` (/private/stream), not this REST surface. LIVE PROBE 2026-07-30 found orderbook/ticker **502 MatchingUnavailable** when matching returned 404 for never-journalled markets; **#185** fixed that code path — empty/missing book is now honest empty depth `[]` (not engine-down 502). Residual: svc-matching still derives markets from journal replay only, so books stay empty until an order lands or trade.mm-bot seeds depth — bots may still see empty books, not "exchange down", until seeding. OHLCV remains [] until candle job.',
+    requires: ['services/svc-trade/src/public-rest.ts', 'services/svc-trade/src/private-rest.ts'],
+    note: 'On OPEN_MONEY allowlist 2026-08-08. partial — public REST: markets, orderbook, ticker, tickers, trades (tape; ?since= ms), ohlcv (live fill aggregation #345 + materialize job default OFF TRADE_CANDLE_JOBS_*; honest [] when never traded; never invent candles); private REST (edge-signed principal, fail-closed): GET orders/open|closed (?since= ms on closed), GET orders/:id, POST orders (placeOrder money path, trade:write + jurisdiction), DELETE orders/:id (cancelOrder), DELETE orders[?symbol=] (cancelAllOrders, sequential money path), GET account/trades (myFills; ?symbol= filter + ?since= ms), GET account/fees (published maker/taker bps per symbol; {} when none), GET account/balance (ledger projection, real self-only balances — not stub), GET positions (open futures rows when present; [] when none — never invent); POST/DELETE positions with required exitPrice on close (realized PnL via planClose). setLeverage/setMarginMode still not mounted. Still open: OHLCV empty (no candle job); futures jobs default OFF; live index/matching seed residual. Private WS is under `ws.gateway` (/private/stream), not this REST surface. LIVE PROBE 2026-07-30 found orderbook/ticker **502 MatchingUnavailable** when matching returned 404 for never-journalled markets; **#185** fixed that code path — empty/missing book is now honest empty depth `[]` (not engine-down 502). Residual: svc-matching still derives markets from journal replay only, so books stay empty until an order lands or trade.mm-bot seeds depth — bots may still see empty books, not "exchange down", until seeding. OHLCV remains [] until candle job.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
     phase: '2',
     status: 'ready',
-    owner: 'Nitro',
     dependsOn: ['trade.spot'],
-    note: 'Updated 2026-08-02: seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port (env map then optional venue public mid TRADE_MM_SEED_MID_FROM_VENUE, never invent) on main (MM-1/2/3). Still residual: orderFilled event accountId recovery, production mid ops. Not Done — ready with ops kill-switches.',
+    requires: ['services/svc-trade/src/mm'],
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port on main (MM-1/2/3). Still residual: orderFilled event accountId recovery, production mid ops. Not Done — ready with ops kill-switches.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
@@ -392,11 +391,13 @@ export const FEATURES = [
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'ready',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
-    requires: ['docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md'],
-    note: "Repointed 2026-08-03 (ADR `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`): the terminal is the vendored Vue desk, not the retired Next scaffold — this row previously named both codebases at once. On the shell today: order entry, blotter, depth and public tape against svc-edge; real OHLCV candles via `assets/js/market-chart/kline.js` (lightweight-charts, honest [] when never traded); hotkeys #337, honesty #349, sub-account selector #358, a11y #367. NOT done, and the three gaps are the ported scaffold's strengths: (1) no live feed at all — `Exchange.vue:1020` hardcodes `feedLive: false` and the screen says so; the sequenced-delta + gap-resnapshot client is still to port; (2) no runtime shape validation of edge responses; (3) `bignumber.min.js` is vendored but `ix-trade.js` does not reference it, so desk arithmetic is not yet decimal-safe. `dependsOn` is `ws.depth` not `ws.gateway` so the book is not blocked on positions.",
+    requires: [
+      'docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue',
+    ],
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Repointed 2026-08-03 (ADR retire-apps-web): the terminal is the vendored Vue desk, not the retired Next scaffold. On the shell today: order entry, blotter, depth and public tape against svc-edge; real OHLCV candles via assets/js/market-chart/kline.js; hotkeys #337, honesty #349, sub-account selector #358, a11y #367. NOT done: (1) no live feed — Exchange.vue hardcodes feedLive: false; (2) no runtime shape validation of edge responses; (3) desk arithmetic not yet decimal-safe on bignumber. dependsOn is ws.depth not ws.gateway so the book is not blocked on positions.',
   }),
   f('web.shell', 'Product shell — the served customer surface', {
     module: 'core-ops',
@@ -417,11 +418,10 @@ export const FEATURES = [
   f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'ready',
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'Updated 2026-07-31: positions channel receives positionUpdated from trade.futures open/close (#281). Still wip product gateway.',
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Positions channel receives positionUpdated from trade.futures open/close (#281). Still not full product gateway done — residual streams/ops.',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
@@ -432,7 +432,7 @@ export const FEATURES = [
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
     note:
-      'CLAIM RELEASED 2026-08-08 by Nitro, by name, alongside `ops.admin`. Agents may implement. `wip` became `ready` only because the tracker ' +
+      'CLAIM RELEASED 2026-08-08 by Nitro, by name, alongside `ops.admin`. On OPEN_MONEY allowlist 2026-08-08 so the swarm money gate no longer hides this row. Agents may implement. `wip` became `ready` only because the tracker ' +
       'refuses a `wip` row with no owner — "someone is on it right now" needs a name — and `ready` means what it says here: every dependency is ' +
       'done and it is free to claim. Nothing about what is built changed with this edit; the paragraph below is unaltered and still governs. ' +
       'What the release does NOT touch: card acquiring stays a commercial relationship no PR closes (see socket.psp-partners), so an agent that ' +
@@ -830,18 +830,17 @@ export const FEATURES = [
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',
     phase: '5',
-    status: 'wip',
-    owner: 'cursor-swarm-bank',
+    status: 'ready',
     dependsOn: ['pay.rails'],
     requires: ['services/svc-bank/src/ramps/ramp-service.ts', 'services/svc-bank/src/ramps/rails.ts'],
     note:
-      '**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF wip 2026-08-07** (feat/bank-denon-residual, claim TRK-bank.ramps). ' +
-      'CRYPTO LEG — ledger surface on main path: `ramps.programme|onramps|offramps|offramp` + ops `creditOnramp`; value only via ' +
-      'ledger-client `deposit` / `withdrawHold` / `withdrawSettle` against rail `bank-crypto-ledger` (distinct from svc-pay ' +
-      '`crypto-native` so operator credit cannot desync pay chain reconciliation). `BANK_RAMP_MODE=none|crypto-ledger`, default none; ' +
-      '`simulated: true` always; fiat refuses `bank.fiat_ramp_socket` → socket.psp-partners. No earn APY / card BIN invented. ' +
-      'FIAT LEG — **socket.psp-partners**, not this row. Live chain confirm/send remains svc-pay + Class X. ' +
-      '**Reclaimed 2026-08-04** M6 — Nitro agents thin Class M.',
+      '**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF DONE #997** (claim TRK-bank.ramps status:merged). ' +
+      'OWNER CLEARED 2026-08-08 (axis C1 absorbs #1128 closeout): stale `owner: cursor-swarm-bank` fenced ALL of services/svc-bank ' +
+      'via claim-check path map and parked money-critical #1102. Same release standard as #1122. ' +
+      'CRYPTO LEG — ledger surface on main: ramps.programme|onramps|offramps|offramp + ops creditOnramp; value only via ' +
+      'ledger-client deposit/withdrawHold/withdrawSettle against rail bank-crypto-ledger. BANK_RAMP_MODE=none|crypto-ledger, default none; ' +
+      'simulated: true always; fiat refuses bank.fiat_ramp_socket → socket.psp-partners. No earn APY / card BIN invented. ' +
+      'FIAT LEG — socket.psp-partners, not this row. Live chain confirm/send remains svc-pay + Class X.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
     module: 'agents',
@@ -907,11 +906,11 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'token.staking'],
-    status: 'wip',
-    owner: 'Nitro',
+    status: 'ready',
+    requires: ['services/svc-agents'],
     note:
-      'Stage-1 programme appoint/freeze + Stage-2 residency desk (non-money). ' +
-      'Stage next 2026-08-07: IFC pay + revenue share refuse-closed Class M (ambassadors/ifc-pay.ts) — no invent rates. ' +
+      'Owner released 2026-08-08 (axis C1 / Nitro green light). Stage-1 programme appoint/freeze + Stage-2 residency desk (non-money). ' +
+      'Stage next: IFC pay + revenue share refuse-closed Class M — no invent rates. ' +
       'Not tracker done until residencies seasons + real pay/share (or product-cut) match title.',
   }),
   f('academy.tournaments', 'Seasonal ladders, IFC prize pools', {
@@ -1044,10 +1043,21 @@ export const FEATURES = [
   f('market.vendors', 'Vendor lifecycle — apply, vet, list, stake-gated slots', {
     module: 'market',
     phase: '5',
+    status: 'done',
     dependsOn: ['token.staking'],
     requires: ['services/svc-market'],
     note:
-      'STAGE 2 (apply → vet → stake-gated slots) — NOT done; Stage 3 public read is still missing. ' +
+      'ALL THREE STAGES ON MAIN 2026-08-08 — #1109 (apply → vet), #1115 (stake-gated slots), #1126 (public list eligibility). ' +
+      'STAGE 3: `profile` and `listed` are genuinely anonymous publicProcedures, plus VendorService.listingEligibility as the seam ' +
+      'market.commerce calls. Eligibility is COMPUTED on every read — approved, holds an open slot, and the live svc-token tier ' +
+      'still covers one — never a stored is_listed flag, because a stored grant lies the moment behaviour changes. That is what ' +
+      'makes done-bar clause 5 real: a vendor who claimed slots at Operator and then unstaked to Base still HOLDS those rows and ' +
+      'is not listed. Proven by listing-eligibility.test.ts (12 tests), confirmed executed in the CI log rather than inferred from ' +
+      'a green aggregate. Suspended, rejected and undecided collapse into ONE public refusal code, so a public read cannot ' +
+      'enumerate who was thrown off the marketplace. Stake source unreachable means nobody is listed rather than everybody. ' +
+      'RESIDUAL, additive and named: the directory read costs one stake read per candidate, capped at 50 a page and ordered by ' +
+      'registration date only — ranking is DIRECTION 8 and owner-gated; the upgrade path marked in code is a batch entitlement ' +
+      'read on svc-token, never a cached flag. ' +
       'STAGE 1: services/svc-market exists — market.vendors (one row per user) plus append-only market.vendor_status_events ' +
       'enforced by a database trigger; applyAsVendor/mine on market:read/write, listApplications/vet/history on a market:ops ' +
       'operator scope. market:read and market:write UNSTUBBED in packages/auth. /api/market is in svc-edge UPSTREAMS, so the ' +
@@ -1074,11 +1084,8 @@ export const FEATURES = [
       'truth. Instead `slots` reports usable = min(held, capacity) and 0 for anyone not approved, so an unstaked vendor reads ' +
       'usable:0 instantly — that is how DoD clause 5 holds with no event. NO suspension POLICY was added: releasing on a ' +
       'transition an operator recorded is not deciding it. ' +
-      'DEPENDS ON PR #1100 (CI green, unmerged): until it merges /internal/stake/:userId returns 500 to every caller because ' +
-      'AccessTier.minStake is a bigint, so no slot can be claimed in an environment built from main — the fail-closed path makes ' +
-      'that a refusal rather than a free-for-all. Stage 2 stacks on PR #1109 (Stage 1, CI green, unmerged). ' +
-      'Still open: Stage 3 public list eligibility feeding market.commerce, and the org-vs-user question — per-user chosen as ' +
-      'the reversible answer (adding org_id later is a nullable column plus a backfill).',
+      'PR #1100 (stake endpoint serialization) and #1109 (Stage 1) are on main — the earlier note that they were unmerged is stale. ' +
+      'Org-vs-user left as per-user on purpose (adding org_id later is a nullable column plus a backfill). market.commerce still open.',
   }),
   f('market.commerce', 'Listings, subscriptions, purchases, house commission', {
     module: 'market',

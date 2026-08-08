@@ -1,6 +1,6 @@
 # Revised five dispatches — anti-drift pass (2026-08-08)
 
-**Status:** ready to paste. Holds the five C1–C5 briefs that the axis planner planned to release after Nitro’s full green light, revised after a four-lane anti-drift audit.
+**Status:** C1 is **executing in-repo** (not paste-only). Holds the five C1–C5 briefs that the axis planner planned to release after Nitro’s full green light, revised after a four-lane anti-drift audit, then **re-verified at tip 2026-08-08** (errata below).
 
 **Parent session:** Code session `bbaab7e1-2319-432c-ba6f-0c97cf7bb44d` (axis planner). Died mid-synthesis on org subscription disable; four subagent reports completed, two parents failed. Synthesis completed here from those reports + live re-check.
 
@@ -20,7 +20,7 @@
 | **C4 shipping** | **Invented deploy policy** | **ADR first.** `workflow_dispatch` only until branch protection (G1). No deploy-on-merge-to-main. No host yet → capability is file + recommendation, not go-live.                                               |
 | **C5 estate**   | **Violates as written**    | Do **not** build a second blocker report — widen `swarm.mjs` socket filters + use `BOARD-CLEAR-HUMAN-BLOCKERS.md`. Never unattended `wt:gc --apply`. Do not touch `value-gate` thresholds.                      |
 
-**The earlier “apps/web was built when the upstream exchange vendor already existed” framing is false on chronology** — `apps/web` landed two days _before_ the vendored tree. Real failure modes: assessment treated as decision; work continued on scaffold after superior product arrived; decision lived only in ADR for a day and craft still landed in the retired path.
+**The earlier “apps/web was built when the vendored exchange already existed” framing is false on chronology** — `apps/web` landed two days _before_ the vendored tree. Real failure modes: assessment treated as decision; work continued on scaffold after superior product arrived; decision lived only in ADR for a day and craft still landed in the retired path.
 
 ---
 
@@ -253,3 +253,19 @@ These recurred in ADR/docs forensics and still have no full machine guard:
 | Lane 4 child: ADR reversal forensics  | a778301fe8f2041c4 | completed    |
 
 Synthesis confidence: high on C2–C5 shape and C1 forex exclusion; medium on exact owner-row status until C1 re-derives `features.mjs` at tip.
+
+---
+
+## Errata — tip re-verify after first synthesis (same day)
+
+The first banked synthesis was incomplete. Re-derived against `origin/main` after #1090/#1130:
+
+| Claim in first synthesis                           | Live tip fact                                                                                                                   | Correction                                                                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Leave `trade.forex` out of allowlist (horizon LAW) | Horizon still says LAW→IN/GF; **D-S-05 ADR is Accepted/done**; product law is "model yes / production list no until fiat rails" | **Include `trade.forex` in OPEN_MONEY** with that fence in the note — cutting it was over-caution, not fidelity to green light |
+| Release `pay.gateway` owner                        | Already `ready`/unowned at tip                                                                                                  | Owner work already done; still needed **allowlist entry** or money gate keeps hiding it                                        |
+| Release `ops.admin`                                | Already free                                                                                                                    | No-op                                                                                                                          |
+| Five features only                                 | Green light also unlocked payments                                                                                              | Allowlist = five **+ `pay.gateway`**                                                                                           |
+| `p2p.merchants` free to open                       | `wip` / `owner: nitro-agent`                                                                                                    | Allowlist ready when free; do not steal live claim                                                                             |
+| `market.vendors` needs greenfield service          | `services/svc-market` exists; Stages 1–3 largely on main; #1128 closes tracker to `done`                                        | Do not rebuild; collision risk with open #1128 on `features.mjs`                                                               |
+| Stop at "paste five chats"                         | Green light was to **open the machine**                                                                                         | **C1 ships as a PR from this resume**, not a paste handoff                                                                     |

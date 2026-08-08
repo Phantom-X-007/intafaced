@@ -37,19 +37,19 @@ this file, the coordinator does not know it.
 | `freeProduct=0`     | Both shell and implementable empty — **not** “platform done”; run P1–P5                                         |
 | `freeTracker`       | Ready/unowned tracker rows that are **not** implementable (money-gated, dep-blocked, thin spec, wave-1 exclude) |
 
-### Tracker implementable gate (Nitro approved — open non-money)
+### Tracker implementable gate (Nitro approved — money wave allowlist)
 
 A tracker row is **IMPLEMENTABLE** when **all** hold:
 
 1. `status` is `ready`, `owner` is none, every `dependsOn` is `done`
 2. Spec at `docs/ops/trk/<id>.md`, **≥100 lines**, code-grounded
-3. `id` does **not** match `/^(trade|pay|bank|venue|p2p|market)\./` — money stays gated
+3. If `id` matches `/^(trade|pay|bank|venue|p2p|market)\./`, it is on the **OPEN_MONEY allowlist** in `tooling/scripts/swarm.mjs` (not every money id)
 
 Implementable rows enter **freeProduct** under normal Class N: path-disjoint, width **3–6**, worktrees, claim files.
 
 **`residual-own` on a TRK claim** means “spec done, awaiting implement.” It **MUST NOT** hide implementable rows from the free board. Only **`claimed` | `pr-open` | `done`/`merged`/`retired` | money-gated | dep-blocked** hide them.
 
-**Money-class (closed until Nitro opens a wave):** any id matching the money prefix rule (includes futures/otc/copy/forex/algo/ccxt-api, venue.aggregation, pay.\*, p2p.merchants, bank.earn/cards/ramps, market.vendors).
+**Money-class (wave open 2026-08-08 — allowlist only):** prefix still classifies a row as money; **implementable** only for exact ids in `OPEN_MONEY`: `trade.forex`, `trade.ccxt-api`, `venue.aggregation`, `p2p.merchants`, `market.vendors`, `pay.gateway`. All other money ids stay closed until Nitro adds them to the allowlist. (`trade.forex` remains **model/hours only** — D-S-05 / instrument ADR: do not list production pairs until fiat settlement rails exist.)
 
 **Wave-1 exclude from auto-spawn** even if non-money: `ops.admin`, `ops.compliance`.
 

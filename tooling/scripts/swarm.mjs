@@ -177,8 +177,15 @@ function validateResidualPathHints() {
   }
 }
 
-/** Money-class ids stay closed until Nitro opens a wave. */
-const MONEY_TRACKER_RE = /^(trade|pay|bank|venue|p2p|market)\./;
+/**
+ * Money-class prefix — still used to *classify* a row. Implementability for money
+ * ids is gated by OPEN_MONEY (exact allowlist), not by wiping this prefix.
+ * Nitro opened the wave 2026-08-08 (axis plan #1090 + DECISION-LOG). Do not
+ * generalise the set; adding an id is a product decision, not cleanup.
+ */
+const MONEY_PREFIX_RE = /^(trade|pay|bank|venue|p2p|market)\./;
+/** Exact money ids the swarm may treat as implementable when ready/unowned/deps/spec ok. */
+const OPEN_MONEY = new Set(['trade.forex', 'trade.ccxt-api', 'venue.aggregation', 'p2p.merchants', 'market.vendors', 'pay.gateway']);
 /** Wave-1 exclude even if non-money. */
 const WAVE1_EXCLUDE = new Set(['ops.admin', 'ops.compliance']);
 
@@ -231,13 +238,16 @@ function loadTrackerRows() {
         '--input-type=module',
         '-e',
         `import { FEATURES } from ${JSON.stringify(pathToFileURL(join(ROOT, 'tooling/tracker/features.mjs')).href)};
-         const byId = Object.fromEntries(FEATURES.map((f) => [f.id, f]));
+         const OPEN_MONEY = new Set(${JSON.stringify([...OPEN_MONEY])});
+         const WAVE1_EXCLUDE = new Set(${JSON.stringify([...WAVE1_EXCLUDE])});
+         const MONEY_PREFIX_RE = ${MONEY_PREFIX_RE.toString()};
          const done = new Set(FEATURES.filter((f) => f.status === 'done').map((f) => f.id));
          const rows = FEATURES.filter((f) => f.status === 'ready' && !f.owner).map((f) => {
            const deps = f.dependsOn || [];
            const depsDone = deps.every((d) => done.has(d));
-           const money = /^(trade|pay|bank|venue|p2p|market)\\./.test(f.id);
-           const wave1ex = ['ops.admin', 'ops.compliance'].includes(f.id);
+           const money = MONEY_PREFIX_RE.test(f.id);
+           const wave1ex = WAVE1_EXCLUDE.has(f.id);
+           const moneyOpen = !money || OPEN_MONEY.has(f.id);
            return {
              featureId: f.id,
              title: f.title || f.id,
@@ -246,6 +256,7 @@ function loadTrackerRows() {
              dependsOn: deps,
              depsDone,
              money,
+             moneyOpen,
              wave1ex,
            };
          });
@@ -259,7 +270,8 @@ function loadTrackerRows() {
     for (const r of rows) {
       const lines = trkSpecLineCount(r.featureId);
       const specOk = lines >= 100;
-      const impl = r.depsDone && !r.money && !r.wave1ex && specOk;
+      // moneyOpen is false only for money-class ids outside Nitro's allowlist.
+      const impl = r.depsDone && r.moneyOpen !== false && !r.wave1ex && specOk;
       const claim = {
         id: 'TRK-' + r.featureId,
         rank: impl ? 50 : 300,
@@ -272,7 +284,7 @@ function loadTrackerRows() {
           ? `implementable TRK (spec ${lines} lines · deps done) — Stage-1 Class N`
           : [
               !r.depsDone && 'dep-blocked',
-              r.money && 'money-gated',
+              r.money && r.moneyOpen === false && 'money-gated',
               r.wave1ex && 'wave1-exclude',
               !specOk && `thin/missing spec (${lines} lines)`,
             ]
@@ -919,7 +931,7 @@ function buildModel() {
           ? '6-8'
           : '3-6 (P1–P3 only)',
     mandate:
-      'freeProduct = freeShell(REGROUP/AFK/LANDER/INTEGRITY) + freeImplementable TRK. residual-own does not hide TRK implementable. Money-class closed. Wave1 exclude ops.admin/ops.compliance. freeShell=0 is not all-clear when freeImplementable>0.',
+      'freeProduct = freeShell(REGROUP/AFK/LANDER/INTEGRITY) + freeImplementable TRK. residual-own does not hide TRK implementable. Money-class: allowlist only (trade.forex, trade.ccxt-api, venue.aggregation, p2p.merchants, market.vendors, pay.gateway) — all other money ids stay closed. Wave1 exclude ops.admin/ops.compliance. freeShell=0 is not all-clear when freeImplementable>0.',
     // AFK anti-drift (docs/ops/SWARM-MANDATE.md ladder) — freeShell=0 alone must not kill spawn
     afkLadder:
       freeImplementable.length > 0
