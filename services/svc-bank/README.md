@@ -67,6 +67,14 @@ tRPC, `packages/contracts`. All money crosses the wire as **decimal strings**.
 | `transfers.listSchedules` | `bank:read`  | The user's standing orders                                                                   |
 | `transfers.executions`    | `bank:read`  | What ran, what did not, and **why** — the answer to "where is my rent"                       |
 | `transfers.cancel`        | `bank:write` | Stop future firings. Never reverses ones that happened                                       |
+| `transfers.pause`         | `bank:write` | Hold a standing order. The reversible half of `cancel`                                       |
+| `transfers.resume`        | `bank:write` | Start it again **from here** — returns the occurrences that will never be made up            |
+
+**Resume does not settle up, and says so on the wire.** `planDue` fires every occurrence between `lastFired` and `now`, which is right after an outage and wrong after a pause: the user stopped the order precisely so those transfers would not happen, and catching up would move three months of rent in one pass on a day nobody chose. So `resume` records the elapsed occurrences as `skipped` — a **row**, not an absence, because `MAX(occurrence)` over `transfer_executions` _is_ `lastFired`, so writing the rows is what moves the schedule's floor forward. The same unique index that makes a double-fire impossible makes a double-skip impossible; there is no second watermark to keep in step. Resuming posts nothing to the ledger, ever.
+
+`skipped` is not `rejected`. Rejected means the ledger refused a real attempt — an empty space — and the user is owed the difference. Skipped means nobody asked. Collapsing them leaves both "why is my space empty" and "why did nothing happen while I was away" unanswerable.
+
+The occurrences that were written off are in the **response**, not merely in the record. A client that renders `status: 'active'` and nothing else lets a user believe the missed months are still coming.
 
 ### `earn`
 
@@ -237,6 +245,8 @@ needs preventing. One asset, one owner. The refusal is tested.
 
 Holding a database transaction open across the ledger call is a deliberate cost: it is what makes "claimed" and "posted" inseparable. Committing the claim first would create a window where a claimed occurrence has no ledger transaction and no process left alive to make one — a transfer the user was told would happen, that never will. A committed `pending` row is swept explicitly anyway, because that is the one failure that would strand a transfer forever with no error anywhere.
 
+**A stranded claim is its own reason to look at a schedule.** The runner asks two questions, not one: what is due (`status = 'active' AND next_run_at <= now`), and what holds a `pending` row — **whatever its status, whatever its `next_run_at`**. Sweeping used to be a side effect of the schedule coming due again, which was true enough while a schedule was either active or dead. `pause` broke that silently: a paused order is never selected by the due query, so a claim stranded before the pause would sit there for as long as the user left it paused, with nothing raised anywhere. `resume` made it worse, not better — it moves `next_run_at` _past_ the stranded occurrence. Cancelling does not retract a claim either, for the reason cancel is not a reversal. Sweeping plans no new occurrences and advances no `next_run_at`; it finishes what was started and touches nothing else. The count is reported separately as `strandedSwept`, because it is the number an operator wants to be zero and it is invisible in `settled`.
+
 **Advance `next_run_at` last.** If that update is lost, the next pass reconsiders occurrences the executions table already owns and skips them — wasted work, never a double transfer. The other order would let a crash advance past an occurrence that never fired.
 
 **A rejected occurrence is consumed, not queued.** A monthly transfer that failed in March is a March transfer; silently making it up in April would move money the user is no longer expecting to move. The rejection is recorded with its code so the user gets a reason.
@@ -277,18 +287,19 @@ Three changes, none of which removes cross-user transfer:
 
 The service checks these; the database enforces them regardless.
 
-| Constraint                                 | What it catches                                                                                    |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `transfer_executions_occurrence_idx`       | **the double-fire guard** — a retried, duplicated, or DST-rewound scheduler firing twice           |
-| `interest_accruals_pool_date_idx`          | a daily cron that fires twice, or a catch-up run overlapping the live schedule                     |
-| `spaces_one_primary_idx`                   | two labels claiming the same balance — a UI summing spaces would double-count the user's own money |
-| `transfer_executions_settled_has_tx_ck`    | a "settled" firing with nothing in the book to point at — a phantom transfer                       |
-| `transfer_executions_rejected_has_code_ck` | "your standing order did not run" with no "because"                                                |
-| `earn_pools_term_matches_kind_ck`          | a fixed pool with no maturity (funds locked with no release date)                                  |
-| `earn_positions_principal_positive_ck`     | a negative position dragging the interest base below the honest ones                               |
-| `earn_pools_apr_sane_ck`                   | a bps/percent unit mix-up draining a pool reserve in a day                                         |
-| `scheduled_transfers_amount_positive_ck`   | an instruction to pull money the other way that nobody authorised                                  |
-| `interest_accruals_consistent_ck`          | money paid with nobody to pay it to, or recipients paid nothing                                    |
+| Constraint                                     | What it catches                                                                                      |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `transfer_executions_occurrence_idx`           | **the double-fire guard** — a retried, duplicated, or DST-rewound scheduler firing twice             |
+| `interest_accruals_pool_date_idx`              | a daily cron that fires twice, or a catch-up run overlapping the live schedule                       |
+| `spaces_one_primary_idx`                       | two labels claiming the same balance — a UI summing spaces would double-count the user's own money   |
+| `transfer_executions_settled_has_tx_ck`        | a "settled" firing with nothing in the book to point at — a phantom transfer                         |
+| `transfer_executions_rejected_has_code_ck`     | "your standing order did not run" with no "because"                                                  |
+| `transfer_executions_skipped_moved_nothing_ck` | a paused-over occurrence carrying a ledger tx id — resume claiming, in the book, that it moved value |
+| `earn_pools_term_matches_kind_ck`              | a fixed pool with no maturity (funds locked with no release date)                                    |
+| `earn_positions_principal_positive_ck`         | a negative position dragging the interest base below the honest ones                                 |
+| `earn_pools_apr_sane_ck`                       | a bps/percent unit mix-up draining a pool reserve in a day                                           |
+| `scheduled_transfers_amount_positive_ck`       | an instruction to pull money the other way that nobody authorised                                    |
+| `interest_accruals_consistent_ck`              | money paid with nobody to pay it to, or recipients paid nothing                                      |
 
 ---
 

@@ -58,6 +58,25 @@ export const GATES = [
     why: 'coordination law must stay in the files a cold agent auto-loads',
   },
   {
+    id: 'worktree-gc-selftest',
+    script: 'tooling/scripts/worktree-gc.mjs',
+    args: ['--self-test'],
+    doctrine: 'multi-dev law, §0 (destructive tooling)',
+    why:
+      'the only tool in this repo that deletes another agent’s working state, and until this entry nothing ran its ' +
+      'proof. #1151 fixed three ways it did exactly that — it read no claim board, so a worktree named **live** in ' +
+      'docs/LIVE-LANES.md was garbage on its first clean minute (docs/LANE-CLOSEOUT-OPS-2026-08-08.md:333 records ' +
+      'another lane losing two worktrees mid-edit and an unpushed branch to that); it had no mtime signal; and it ' +
+      'found MAIN via `rev-parse --show-toplevel`, so run from a linked worktree the real main checkout was just ' +
+      'another cherry-empty row and `git branch -D main` was in the plan (MEGA-AUDIT-2026-08-07-FINDINGS.md:887, ' +
+      'severity high, recorded and unfixed for a day). #1151 also shipped 15 classifier fixtures that go red if any ' +
+      'of the three is reverted — and wired them to nothing, so a revert broke no check that verify or CI ran. That ' +
+      'is the shape of the six guards this repo has already built correct and left unreachable. Cheap enough to sit ' +
+      'second: --self-test returns before the script touches git or the disk, so it costs no fetch and no worktree ' +
+      'walk. Lives in tooling/scripts/, so the manifest check below does not cover it — this entry is the only thing ' +
+      'holding it, which is precisely why deleting the entry has to be a visible act rather than a silent one.',
+  },
+  {
     id: 'tracker',
     script: 'tooling/scripts/tracker.mjs',
     args: ['--check'],

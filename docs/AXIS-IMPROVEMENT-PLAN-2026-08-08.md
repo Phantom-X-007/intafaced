@@ -222,7 +222,9 @@ Evidence: `git ls-files docs/ops | awk -F/ 'NF==3{print "(root)"} NF>3{print $3}
 
 **Where it stands.** The machine works: 715 commits and 712 merged pull requests in seven days, zero reverts, 7-minute median pull-request lifetime. It is also better written down than the earlier audit credited — `swarm.mjs`, `claim-check.mjs`, `claim-staleness.mjs`, `worktree.mjs`, `SWARM-MANDATE.md` and `AGENT_PROTOCOL.md` are all in the repository. What lives only in chat is the _coordinator_ layer: how a wave is planned, how lanes are fenced, how the falsification method is run. Two of its own numbers drift — 23 worktrees against a cap of 20, 20 stranded branches — and the cap is decorative, because `pnpm wt:gc:check` exists but is wired to nothing.
 
-**What should change.** One thing, and it is a chore: schedule `pnpm wt:gc:apply`. It already exists and already clears both.
+**What should change.** One thing, and it is a chore: run `pnpm wt:gc` — the dry run — and read why each worktree is kept. Removal is a separate, **attended** step: `pnpm wt:gc:apply -- --yes`. `--apply` alone prints the plan and refuses.
+
+> **SUPERSEDED 2026-08-08 by #1151.** This paragraph originally read _"schedule `pnpm wt:gc:apply`. It already exists and already clears both."_ Both halves were wrong by then. `pnpm wt:gc:apply` no longer removes anything on its own — it prints a plan and exits 1 — and **scheduling it is now barred**: `worktree-gc.mjs` cannot tell an abandoned checkout from four live agents, and running it unattended is how another lane lost two worktrees mid-edit plus an unpushed branch (`LANE-CLOSEOUT-OPS-2026-08-08.md`). The tool itself now says so, citing A8 of `AXIS-DISPATCH-REVISED-ANTI-DRIFT-2026-08-08.md`. Worktree drift is a **cheap** error; deleting a live checkout is not. Left in place rather than deleted, because a plan that quietly loses the recommendation it made teaches nobody why.
 
 For the coordinator layer, the honest answer is that **there is no machine version.** Writing down how to run a falsification wave is a person writing a document, and keeping it true is a person maintaining it — the weekly ritual this plan is not allowed to propose. The narrower, self-maintaining alternative: whichever coordinator chat runs next writes its own dispatch brief into `tooling/agent-protocol/` as a side effect of running. The method gets recorded by being used, or not at all.
 
@@ -230,9 +232,9 @@ For the coordinator layer, the honest answer is that **there is no machine versi
 
 **What it unlocks.** Branch and worktree drift stops being something anyone notices.
 
-**How it stays true without a human.** A scheduled workflow. Everything else here is explicitly not automatable and is stated as such.
+**How it stays true without a human.** It does not, and that is now the decision rather than a gap — see the superseded note above. The unattended half is `pnpm wt:gc:check`, which reports the cap and deletes nothing; the deletion stays attended.
 
-**Effort.** One agent session for the scheduled cleanup. Zero for the rest, by design.
+**Effort.** One attended pass whenever the cap warning fires. Zero for the rest, by design.
 
 **Risk if we do nothing.** Drift keeps growing and the coordinator method stays in transcripts. The second risk is real and has no machine answer.
 

@@ -9,7 +9,13 @@ import {
   refuseAmbassadorIfcPay,
   refuseAmbassadorRevenueShare,
 } from './ambassadors/ifc-pay.js';
-import { getCurriculumItem, listCurriculum } from './curriculum/catalog.js';
+import {
+  curriculumDepthReport,
+  curriculumStudyGuide,
+  getCurriculumItem,
+  listCurriculum,
+  listCurriculumStudyGuides,
+} from './curriculum/catalog.js';
 import { curriculumInventory, curriculumImportStageStatus } from './curriculum/import-pipeline.js';
 import { resolveCurriculumDeepLink, listCurriculumPathDeepLinks } from './curriculum/deep-links.js';
 import { curriculumBodyForLocale, curriculumI18nStrategyLine } from './curriculum/i18n-strategy.js';
@@ -86,10 +92,42 @@ const curriculumSummaryOut = z.object({
   path: curriculumPath,
   order: z.number().int(),
   summary: z.string(),
+  /** Derived from the body, never hand-typed — see `readingMinutes` in curriculum/content.ts. */
+  estimatedMinutes: z.number().int().positive(),
 });
+
+const curriculumKeyTermOut = z.object({ term: z.string(), definition: z.string() });
+
+/**
+ * The teaching scaffolding that turns a markdown blob into a screen: what a
+ * reader should be able to do, the vocabulary the body assumes, and the
+ * questions that reveal whether they got it. Nothing here is graded — grading
+ * and XP belong to the `cert*` procedures.
+ */
+const curriculumTeachingOut = {
+  objectives: z.array(z.string()).min(1),
+  keyTerms: z.array(curriculumKeyTermOut).min(1),
+  selfCheck: z.array(z.string()).min(1),
+};
 
 const curriculumItemOut = curriculumSummaryOut.extend({
   body: z.string(),
+  ...curriculumTeachingOut,
+});
+
+const curriculumStudyGuideOut = curriculumSummaryOut
+  .omit({ order: true, summary: true })
+  .extend({ ...curriculumTeachingOut, bodyChars: z.number().int().nonnegative() });
+
+const curriculumDepthOut = z.object({
+  total: z.number().int(),
+  deep: z.number().int(),
+  thin: z.number().int(),
+  thinSlugs: z.array(z.string()),
+  minBodyChars: z.number().int(),
+  shortestBodyChars: z.number().int(),
+  totalBodyChars: z.number().int(),
+  allDeep: z.boolean(),
 });
 
 const curriculumInventoryOut = z.object({
@@ -387,7 +425,7 @@ export function createAcademyRouter(academy: AcademyService) {
           if (!item) {
             throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
           }
-          return item;
+          return { ...item, objectives: [...item.objectives], keyTerms: [...item.keyTerms], selfCheck: [...item.selfCheck] };
         }),
       ),
 
@@ -448,6 +486,9 @@ export function createAcademyRouter(academy: AcademyService) {
           const localized = curriculumBodyForLocale(item.body, input.locale);
           return {
             ...item,
+            objectives: [...item.objectives],
+            keyTerms: [...item.keyTerms],
+            selfCheck: [...item.selfCheck],
             body: localized.body,
             locale: localized.resolution.locale,
             fellBack: localized.resolution.fellBack,
@@ -455,6 +496,60 @@ export function createAcademyRouter(academy: AcademyService) {
           };
         }),
       ),
+
+    /**
+     * The study guide for one item: objectives, key terms, self-check and the
+     * reading estimate, without the markdown body.
+     *
+     * This is what an index screen needs. `curriculumItem` hands back several
+     * thousand characters of prose, which is the wrong payload for a card, and
+     * a client that had to fetch the whole body to show "3 objectives, 4 min"
+     * would either over-fetch every row or invent the numbers locally.
+     *
+     * Unknown slug → `academy.curriculum_not_found`. We never synthesise a guide.
+     */
+    curriculumStudyGuide: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ slug: z.string().min(1).max(120) }))
+      .output(curriculumStudyGuideOut)
+      .query(({ input }) =>
+        guard(async () => {
+          const guide = curriculumStudyGuide(input.slug);
+          if (!guide) {
+            throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
+          }
+          return { ...guide, objectives: [...guide.objectives], keyTerms: [...guide.keyTerms], selfCheck: [...guide.selfCheck] };
+        }),
+      ),
+
+    /**
+     * Study guides for a whole path, in the path's display order — one call for
+     * a path index. Omitting `path` returns the entire spine.
+     */
+    curriculumStudyGuides: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ path: curriculumPath.optional() }).optional())
+      .output(z.array(curriculumStudyGuideOut))
+      .query(({ input }) =>
+        listCurriculumStudyGuides(input?.path).map((guide) => ({
+          ...guide,
+          objectives: [...guide.objectives],
+          keyTerms: [...guide.keyTerms],
+          selfCheck: [...guide.selfCheck],
+        })),
+      ),
+
+    /**
+     * Depth inventory over the library. `curriculumInventory` answers "are there
+     * 20 playbooks and 3 workbooks"; its validation floor is 40 characters, which
+     * a three-bullet stub clears. This answers the second question — is any of it
+     * long enough to be worth reading — and it answers by NAMING what falls short
+     * in `thinSlugs` rather than asserting that nothing does.
+     */
+    curriculumDepth: scopedProcedure('academy:read', { module: 'academy' })
+      .output(curriculumDepthOut)
+      .query(() => {
+        const report = curriculumDepthReport();
+        return { ...report, thinSlugs: [...report.thinSlugs] };
+      }),
 
     /**
      * Paper drill gate for a workbook (TRK-academy.paper-trading Stage 2+3).
