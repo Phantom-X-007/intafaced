@@ -50,6 +50,21 @@ const decimalString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are positi
 const positiveDecimal = decimalString.refine((v) => /[1-9]/.test(v), 'must be greater than zero');
 
 /**
+ * A size as a scaled bigint at 18 dp — the rule this file's own header states.
+ *
+ * The size comparison below used `Number()` on both sides, in the file whose
+ * header says "there is not a `number` in this file that describes a price or a
+ * size". It was not decorative: `minQty: '1.000000000000000001'` and
+ * `maxQty: '1'` both become exactly `1` as doubles, so the refine passed and the
+ * schema accepted a maxQty BELOW its minQty. `decimalString` already guarantees
+ * the shape, so the scaled form is exact and needs no parser.
+ */
+function scaledQty(value: string): bigint {
+  const [whole = '0', frac = ''] = value.split('.');
+  return BigInt(whole) * 10n ** 18n + BigInt(frac.padEnd(18, '0') || '0');
+}
+
+/**
  * Instrument id — branded so it cannot be passed where a market UUID or a
  * display symbol is expected.
  *
@@ -414,7 +429,7 @@ export const instrumentSchema = z
         message: `${i.assetClass} does not trade 24/7 — give it a session schedule`,
       });
     }
-    if (i.maxQty !== null && Number(i.maxQty) < Number(i.minQty)) {
+    if (i.maxQty !== null && scaledQty(i.maxQty) < scaledQty(i.minQty)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['maxQty'], message: 'maxQty must be at least minQty' });
     }
   });

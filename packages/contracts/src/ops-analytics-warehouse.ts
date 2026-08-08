@@ -47,7 +47,31 @@ export const FORBIDDEN_ANALYTICS_WRITER_USER_FRAGMENTS = [
   'rw_',
 ] as const;
 
-/** Preferred read-only username markers (any one is enough). */
+/**
+ * Writer words no read-only marker may rescue.
+ *
+ * `admin_ro` is still admin. These are refused before the marker is consulted —
+ * which is the half the original ordering got wrong.
+ */
+const NEVER_READONLY_USER_FRAGMENTS = ['postgres', 'migrator', 'owner', 'admin', 'writer', 'rw_'] as const;
+
+/**
+ * Service-owned names a genuine read-only marker DOES rescue.
+ *
+ * This is the documented intent — "`svc_ledger_ro` is allowed; bare
+ * `svc_ledger` is not" — and it is the only class where a marker wins.
+ */
+const SERVICE_OWNED_USER_FRAGMENTS = ['svc_ledger', 'svc_trade', 'svc_identity', 'intafaced_ops'] as const;
+
+/**
+ * Read-only username markers, matched as a SUFFIX or the whole username.
+ *
+ * Anchored on purpose. Matched with `includes`, `_ro` is a substring of `_role`
+ * and `_root`, and `analytics_ro` is a substring of `analytics_root` — so
+ * `postgres_root`, `writer_role`, `admin_role` and `svc_ledger_rw_rotator` all
+ * presented as read-only. A suffix is what a read-only role actually looks
+ * like, and anything that misses now fails closed rather than open.
+ */
 export const ALLOWED_ANALYTICS_READONLY_USER_MARKERS = ['_ro', 'readonly', 'analytics_ro', 'replica_ro'] as const;
 
 export const analyticsReplicaEndpointSchema = z.object({
@@ -91,13 +115,32 @@ export function assertAnalyticsReplicaRole(url: string, role: string): ReplicaRo
     return { ok: false, reason: 'analytics replica URL missing username' };
   }
   const lower = username.toLowerCase();
-  // Read-only marker wins first so `svc_ledger_ro` is allowed; bare `svc_ledger` is not.
-  const hasRoMarker = ALLOWED_ANALYTICS_READONLY_USER_MARKERS.some((m) => lower.includes(m.toLowerCase()));
-  if (hasRoMarker) {
+
+  // A writer word is never rescued by a marker. `admin_ro` is still admin, and
+  // this class has to be refused BEFORE the marker is consulted — the previous
+  // order returned early on the marker and never reached this loop at all.
+  for (const frag of NEVER_READONLY_USER_FRAGMENTS) {
+    if (lower.includes(frag)) {
+      return {
+        ok: false,
+        reason: `refuse writer-looking username "${username}" — analytics must not use primary credentials`,
+      };
+    }
+  }
+
+  // The marker rescues a SERVICE name and nothing else, which is the documented
+  // intent: `svc_ledger_ro` is allowed, bare `svc_ledger` is not.
+  //
+  // Anchored, because `includes` was the second half of the bug: `_ro` is a
+  // substring of `_role` and `_root`, and `analytics_ro` is a substring of
+  // `analytics_root`. A suffix (or the whole username) is what a read-only role
+  // actually looks like.
+  if (ALLOWED_ANALYTICS_READONLY_USER_MARKERS.some((m) => lower === m || lower.endsWith(m))) {
     return { ok: true, username };
   }
-  for (const frag of FORBIDDEN_ANALYTICS_WRITER_USER_FRAGMENTS) {
-    if (lower.includes(frag.toLowerCase())) {
+
+  for (const frag of SERVICE_OWNED_USER_FRAGMENTS) {
+    if (lower.includes(frag)) {
       return {
         ok: false,
         reason: `refuse writer-looking username "${username}" — analytics must not use primary credentials`,
