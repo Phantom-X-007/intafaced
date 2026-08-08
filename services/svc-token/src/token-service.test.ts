@@ -37,6 +37,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_token_init.sql'), 'utf8');
 const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_stake_pending.sql'), 'utf8');
 const migrationBuybackClaim = readFileSync(join(here, '..', 'drizzle', '0002_buyback_window_claim.sql'), 'utf8');
+const migrationYieldPlan = readFileSync(join(here, '..', 'drizzle', '0003_yield_window_plan.sql'), 'utf8');
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -75,6 +76,7 @@ if (!available) {
   await sql.unsafe(migration);
   await sql.unsafe(migrationPending);
   await sql.unsafe(migrationBuybackClaim);
+  await sql.unsafe(migrationYieldPlan);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -119,7 +121,7 @@ if (!available) {
   };
 
   beforeEach(async () => {
-    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-token');
     token = new TokenService(sql, ledger, bus, options);
@@ -474,8 +476,128 @@ if (!available) {
       await accrueFees('trade', '100');
 
       await token.distributeRevenue({ windowId: 'w-retry', sources: [{ module: 'trade', amount: amt('100') }] });
-      await token.distributeRevenue({ windowId: 'w-retry', sources: [{ module: 'trade', amount: amt('100') }] });
+      const again = await token.distributeRevenue({ windowId: 'w-retry', sources: [{ module: 'trade', amount: amt('100') }] });
 
+      expect(await balanceOf(USER_A)).toBe('100');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+
+      // And the RE-RUN SAYS SO. It used to report `distributed: 100,
+      // recipients: 1` — counting a post the ledger had turned into a no-op —
+      // so the operator's only feedback channel said the window had paid out
+      // twice.
+      expect(formatAmount(again.distributed)).toBe('0');
+      expect(again.recipients).toBe(0);
+      expect(again.alreadyPaid).toBe(1);
+    });
+
+    /**
+     * ═════════════════════════════════════════════════════════════════════════
+     * A WINDOW PAYS THE STAKERS IT HAD, NOT THE STAKERS IT HAS
+     * ═════════════════════════════════════════════════════════════════════════
+     *
+     * `distributeRevenue` documents itself as resumable — "re-running pays only
+     * whoever was missed". That was true only while the staker set stood still,
+     * and the staker set moves continuously.
+     *
+     * The recipient list was recomputed from `status = 'active'` on every call.
+     * Re-run a fully-settled window after ONE new stake opened and the list
+     * grew: the users already paid had spent their `(window, user)` reward keys
+     * so their posts became silent no-ops, and the newcomer's key was fresh —
+     * so the newcomer was paid in full out of a window whose revenue was
+     * already gone. `rewardsEngine` is a `house` account and §4.2 makes every
+     * non-treasury account hard non-negative, so that value comes out of some
+     * OTHER window's undistributed revenue, or the run dies mid-loop and leaves
+     * the window half paid.
+     */
+    it('does not pay a staker who joined AFTER the window was distributed', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '100');
+
+      const first = await token.distributeRevenue({ windowId: 'w-late', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(first.distributed)).toBe('100');
+      expect(await balanceOf(USER_A)).toBe('100');
+      // The window is settled to the attounit — nothing is left behind it.
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
+
+      // A newcomer stakes, and the operator re-runs the window — the operation
+      // the method's own docstring calls safe.
+      await fund(USER_B, '1000');
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+
+      const again = await token.distributeRevenue({ windowId: 'w-late', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      // B was not staked when this window was planned, so this window owes B
+      // nothing. B earns from the NEXT window, like everybody else who joined.
+      expect(await balanceOf(USER_B)).toBe('0');
+      expect(formatAmount(again.distributed)).toBe('0');
+      expect(again.recipients).toBe(0);
+      expect(again.alreadyPaid).toBe(1);
+
+      // And nothing was conjured: A keeps exactly the window, the engine is
+      // still empty, and the books close.
+      expect(await balanceOf(USER_A)).toBe('100');
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('finishes a window that crashed halfway, paying only whoever was missed', async () => {
+      // The promise the frozen plan has to keep: resumability is the REASON
+      // each payout is its own transaction, and it must survive the plan being
+      // frozen.
+      for (const user of [USER_A, USER_B]) {
+        await fund(user, '1000');
+        await token.stake({ userId: user, amount: amt('1000'), tier: 'flex' });
+      }
+      await accrueFees('trade', '100');
+
+      // First run pays both. Then forget that B was paid, exactly as a crash
+      // between the ledger post and the row update would leave it.
+      await token.distributeRevenue({ windowId: 'w-crash', sources: [{ module: 'trade', amount: amt('100') }] });
+      await sql`UPDATE token.yield_payouts SET ledger_tx_id = NULL, paid_at = NULL WHERE window_id = 'w-crash' AND user_id = ${USER_B}`;
+
+      const resumed = await token.distributeRevenue({ windowId: 'w-crash', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      // B's post is re-driven and the ledger's key makes it a no-op, so nobody
+      // is paid twice — and A, whose row still says paid, is not re-posted.
+      expect(resumed.alreadyPaid).toBe(1);
+      expect(resumed.recipients).toBe(1);
+      expect(await balanceOf(USER_A)).toBe('50');
+      expect(await balanceOf(USER_B)).toBe('50');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('refuses a re-run that names a different revenue total for the same window', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '100');
+      await token.distributeRevenue({ windowId: 'w-changed', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      // `sources` is operator-typed. Paying the frozen plan while the operator
+      // asks for a different figure answers a request nobody made; re-planning
+      // pays the difference to whoever is staked today. Saying so beats both.
+      await accrueFees('trade', '900');
+      await expect(
+        token.distributeRevenue({ windowId: 'w-changed', sources: [{ module: 'trade', amount: amt('1000') }] }),
+      ).rejects.toMatchObject({ code: 'token.yield_window_mismatch' });
+
+      expect(await balanceOf(USER_A)).toBe('100');
+    });
+
+    it('plans a window the first time somebody is actually staked', async () => {
+      // The empty-pool case is not a settled window: the revenue is still in
+      // the engine, so the window must be plannable later rather than frozen
+      // empty forever.
+      await accrueFees('trade', '100');
+      const empty = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(empty.recipients).toBe(0);
+
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+
+      const now = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(now.distributed)).toBe('100');
       expect(await balanceOf(USER_A)).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });

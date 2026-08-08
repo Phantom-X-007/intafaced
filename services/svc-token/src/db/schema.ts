@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, numeric, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, numeric, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -266,4 +266,37 @@ export const governanceVotes = token.table(
   ],
 );
 
-export const schema = { tokenParams, stakes, emissionEpochs, buybackRuns, proposals, governanceVotes };
+/**
+ * WHO A YIELD WINDOW PAYS — frozen at plan time (0003).
+ *
+ * Not a balance and not a total: one row is one INSTRUCTION, written once when
+ * a window is first distributed and never revised. The value itself is a
+ * `rewardPay` transaction in the ledger, which `ledgerTxId` points at.
+ *
+ * It exists because the recipient list used to be recomputed from today's
+ * active stakes on every call, which made `distributeRevenue`'s own
+ * resumability promise false: a re-run after a new stake opened paid the
+ * newcomer in full out of a window already distributed to the last attounit,
+ * because their `(window, user)` reward key was the only one still unspent.
+ */
+export const yieldPayouts = token.table(
+  'yield_payouts',
+  {
+    windowId: text('window_id').notNull(),
+    userId: uuid('user_id').notNull(),
+    /** The share owed. Written once — a column that changed would be a running total. */
+    amount: amount('amount').notNull(),
+    /** Null until the reward post for this row has returned. */
+    ledgerTxId: text('ledger_tx_id'),
+    paidAt: tstz('paid_at'),
+    plannedAt: tstz('planned_at').notNull().defaultNow(),
+  },
+  (t) => [
+    /** One payout per member per window — the pair the reward key already assumed. */
+    primaryKey({ columns: [t.windowId, t.userId] }),
+    /** The resume query: what this window still owes. */
+    index('yield_payouts_unpaid_idx').on(t.windowId),
+  ],
+);
+
+export const schema = { tokenParams, stakes, emissionEpochs, buybackRuns, proposals, governanceVotes, yieldPayouts };

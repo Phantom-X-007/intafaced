@@ -38,6 +38,12 @@ export class TokenError extends Error {
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
+      /**
+       * A window id that is already planned, re-run naming a different revenue
+       * total. The frozen plan and the new figure cannot both be right, and
+       * guessing which one the operator meant is not this service's call.
+       */
+      | 'token.yield_window_mismatch'
       // Buyback refusals. Every one of these must fire BEFORE the burn posts —
       // the burn is irreversible, so a refusal that arrives after it is not a
       // refusal (0002 / token-economics ADR).
@@ -139,6 +145,26 @@ export interface TokenServiceOptions {
    * Tests set false and inject `emission` / `buyback` so pure service tests need no DB row.
    */
   loadParamsFromDb?: boolean;
+}
+
+/** One frozen line of a yield window's plan: who is owed what, and whether it has posted. */
+export interface YieldPlanRow {
+  userId: string;
+  amount: Amount;
+  /** Null until the `rewardPay` for this row has returned. */
+  ledgerTxId: string | null;
+}
+
+export interface YieldRunResult {
+  windowId: string;
+  /** Value moved BY THIS RUN. A re-run that posts nothing reports zero. */
+  distributed: Amount;
+  /** Stakers paid BY THIS RUN. */
+  recipients: number;
+  /** Stakers whose share rounded to nothing when the window was planned. */
+  skipped: number;
+  /** Planned rows this run found already posted — the resumability signal. */
+  alreadyPaid: number;
 }
 
 export interface StakeRecord {
@@ -647,11 +673,12 @@ export class TokenService {
     windowId: string;
     /** Fees to sweep in, per source module. */
     sources: ReadonlyArray<{ module: string; amount: Amount }>;
-  }): Promise<{ windowId: string; distributed: Amount; recipients: number; skipped: number }> {
+  }): Promise<YieldRunResult> {
     return withMoneySpan('token.distributeRevenue', { operation: 'yield', windowId: input.windowId }, async (span) => {
       const result = await this.distributeRevenueInner(input);
       span.setAttribute('intafaced.recipients', result.recipients);
       span.setAttribute('intafaced.distributed', formatAmount(result.distributed));
+      span.setAttribute('intafaced.already_paid', result.alreadyPaid);
       return result;
     });
   }
@@ -659,7 +686,7 @@ export class TokenService {
   private async distributeRevenueInner(input: {
     windowId: string;
     sources: ReadonlyArray<{ module: string; amount: Amount }>;
-  }): Promise<{ windowId: string; distributed: Amount; recipients: number; skipped: number }> {
+  }): Promise<YieldRunResult> {
     for (const source of input.sources) {
       if (source.amount <= 0n) continue;
       await this.ledger.post(
@@ -682,7 +709,7 @@ export class TokenService {
     if (stakes.length === 0) {
       // Nothing staked. The revenue stays in the rewards engine for the next
       // window rather than being stranded or returned — it is already ours.
-      return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: 0 };
+      return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: 0, alreadyPaid: 0 };
     }
 
     const shares = distributeYield(
@@ -742,7 +769,7 @@ export class TokenService {
       recipients++;
     }
 
-    return { windowId: input.windowId, distributed, recipients, skipped };
+    return { windowId: input.windowId, distributed, recipients, skipped, alreadyPaid: 0 };
   }
 
   // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────
