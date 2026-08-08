@@ -1,6 +1,6 @@
-# AFK residual STOP — Claude session, 2026-08-08
+# AFK residual STOP — second session, 2026-08-08
 
-**Tip at writing:** `866e747a` — `test(notify): the inbox store was the last one nothing executed (#1057)`
+**Tip at writing:** `3ed2be80` — `docs(bank): the README answers a question with a call that throws (#1063)`
 **Peer:** a second agent session ran the same night in `svc-ledger` / `svc-trade` (#1047, #1049, #1050, #1051, #1055, #1057, #1058).
 
 This session took the two lanes the peer was not in: `svc-notify` durability and
