@@ -1,8 +1,16 @@
 import type { Sql } from 'postgres';
-import { formatAmount, type AccountRef, type Balance, type LedgerClient, type LedgerTx, type PostRequest } from '@intafaced/ledger-client';
+import {
+  formatAmount,
+  LedgerError,
+  type AccountRef,
+  type Balance,
+  type LedgerClient,
+  type LedgerTx,
+  type PostRequest,
+} from '@intafaced/ledger-client';
 import type { EventBus } from '@intafaced/events';
 import { PostgresLedger } from './ledger/postgres-ledger.js';
-import { readFreeze, writeFreeze, type FreezeState } from './ledger/freeze.js';
+import { freezeEventKey, readFreeze, writeFreeze, type FreezeState } from './ledger/freeze.js';
 import { runReconciliation, type ReconciliationReport } from './ledger/reconcile.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
@@ -108,9 +116,19 @@ export class LedgerService implements LedgerClient {
    * whoever finds the platform halted must be able to find out why and by whom.
    */
   async freeze(reason: string, actor: string): Promise<FreezeState> {
-    const state = await writeFreeze(this.sql, { frozen: true, reason, actor });
-    await this.publishFreeze(state);
-    return state;
+    try {
+      const state = await writeFreeze(this.sql, { frozen: true, reason, actor });
+      await this.publishFreeze(state);
+      return state;
+    } catch (err) {
+      // Already frozen under different attribution — keep the first reason
+      // standing (STOP §4.2b #3). Recon must not erase an operator freeze, and
+      // the caller still sees the durable halt.
+      if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
+        return this.freezeState();
+      }
+      throw err;
+    }
   }
 
   async unfreeze(actor: string): Promise<FreezeState> {
@@ -184,7 +202,12 @@ export class LedgerService implements LedgerClient {
         actor: state.actor ?? 'unknown',
         changedAt: state.changedAt.toISOString(),
       },
-      { idempotencyKey: `ledger.freeze:${state.changedAt.toISOString()}` },
+      // STOP §4.2b #7 — see `freezeEventKey`. This used to key off
+      // `changedAt.toISOString()`, which is millisecond-precision, so a freeze
+      // and the thaw right after it inside one millisecond shared a msgID and
+      // JetStream dropped the second: the THAW. Every consumer then believed
+      // the platform was still halted while the database said it was open.
+      { idempotencyKey: freezeEventKey(state) },
     );
   }
 
