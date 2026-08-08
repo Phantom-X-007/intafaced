@@ -18,6 +18,7 @@ import {
   type EntryInput,
 } from '@intafaced/ledger-client';
 import { z } from 'zod';
+import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 
 /**
@@ -61,6 +62,15 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
     return { status: 412, body: { message: err.message, code: err.code } };
   }
+  // 400 for both history refusals, same reasoning as `owner_identity_space`
+  // above: the request as asked cannot be answered, retrying it unchanged is
+  // guaranteed useless, and the fix is in the caller's hands — invert the
+  // window, or narrow it. A 500 would tell an operator to look at this service
+  // for a fault that is not here, and would read as "the ledger is broken" on a
+  // caller that is about to decide whether to show a user a number.
+  if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
+    return { status: 400, body: { message: err.message, code: err.code } };
+  }
   if (err instanceof LedgerError) return { status: 500, body: { message: err.message, code: err.code } };
   if (err instanceof z.ZodError) return { status: 400, body: { message: err.message } };
   return { status: 500, body: { message: 'Ledger request failed' } };
@@ -100,6 +110,37 @@ export async function handleS2sBalance(ledger: LedgerService, body: unknown) {
   };
 }
 
+/**
+ * The read svc-bank's spend view has been calling since before it existed.
+ *
+ * It was calling `/trpc/history`, this file registered three routes, and Fastify
+ * answered `404 Route POST:/trpc/history not found` — which svc-bank's client
+ * correctly refused to paper over, so `/bank/analytics` returned 500 rather than
+ * a zero. The socket its adapter declared is this handler.
+ *
+ * Output is a BARE ARRAY of decimal-string amounts, because that is the contract
+ * the caller already parses (`result.map(...)`). Wrapping it in
+ * `{ entries, truncated }` would be a nicer envelope and would break the caller
+ * this change exists to unbreak — so the cap is made visible by refusing instead
+ * (see `ledger/history.ts`), which needs no envelope and cannot be ignored.
+ */
+export async function handleS2sHistory(ledger: LedgerService, body: unknown) {
+  const input = historyInputSchema.parse(body);
+  const range = parseHistoryRange(input.from, input.to);
+  const entries = await ledger.history(input.account, range);
+
+  return entries.map((e) => ({
+    txId: e.txId,
+    module: e.module,
+    reason: e.reason,
+    direction: e.direction,
+    // Decimal string on the wire, always. `formatAmount` is the only encoder;
+    // a `number` here would round 18-decimal amounts on the way out.
+    amount: formatAmount(e.amount),
+    postedAt: e.postedAt.toISOString(),
+  }));
+}
+
 export async function handleS2sBalances(ledger: LedgerService, body: unknown) {
   const input = balancesInput.parse(body);
   const balances = await ledger.balances(input.ownerType, input.ownerId);
@@ -120,7 +161,7 @@ export async function handleS2sBalances(ledger: LedgerService, body: unknown) {
  * `serviceProcedure` in the router (as an earlier revision of this PR did)
  * changed a type signature and nothing a caller could reach.
  *
- * These three raw handlers are the real money plane, and they had no
+ * These raw handlers are the real money plane, and they had no
  * authentication of any kind. `/trpc/post` reaches `ledger.post()` directly, so
  * anyone able to reach the port could credit `railBoundary` — a `treasury`
  * account, the one owner type allowed to run negative — and debit their own
@@ -197,4 +238,11 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
   app.post('/trpc/post', guarded(handleS2sPost));
   app.post('/trpc/balance', guarded(handleS2sBalance));
   app.post('/trpc/balances', guarded(handleS2sBalances));
+  // Guarded by the same `authenticate` as the other three, and that is the point
+  // of registering it here rather than anywhere else: an entry history is a
+  // record of what a person or the house did with their money, at least as
+  // sensitive as the balance it sums to. A read route mounted outside `guarded`
+  // would have been unauthenticated exactly as the money plane once was. There
+  // is one door, and every route goes through it.
+  app.post('/trpc/history', guarded(handleS2sHistory));
 }

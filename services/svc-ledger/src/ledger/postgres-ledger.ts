@@ -19,6 +19,7 @@ import {
   type PostedEntry,
 } from '@intafaced/ledger-client';
 import { frozenMessage } from './freeze.js';
+import { HISTORY_MAX_ENTRIES, HistoryTooLargeError, type HistoryEntry, type HistoryRange } from './history.js';
 
 /**
  * THE LEDGER, on Postgres.
@@ -277,6 +278,68 @@ export class PostgresLedger implements LedgerClient {
     }));
   }
 
+  /**
+   * Every entry against ONE account in the half-open window `[from, to)`.
+   *
+   * The read behind svc-bank's spend projection. See `history.ts` for why it
+   * refuses over `HISTORY_MAX_ENTRIES` rather than returning a short array, and
+   * for the §13 pagination socket.
+   *
+   * An account nobody has ever posted to has no row, and this returns `[]` — the
+   * same reasoning as `balance()` returning zero for one: a read must never have
+   * the side effect of creating an account, and "no movements" is the true and
+   * complete answer for an account that has had none. It is NOT an error, and
+   * making it one would turn every user who has not yet transacted into a failure
+   * on their own analytics screen.
+   *
+   * `ORDER BY t.posted_at, e.id` and not `posted_at` alone: two entries can share
+   * a timestamp (one transaction touching an account twice, or two transactions
+   * inside the same instant), and an unstable order makes a re-run of the same
+   * read disagree with itself for no reason a caller could diagnose.
+   */
+  async history(ref: AccountRef, range: HistoryRange): Promise<HistoryEntry[]> {
+    // Same identity predicate as `balance()`, `purpose` included: a withdrawal
+    // hold and an order's reservation are different accounts, and a history that
+    // merged them would report movements the caller did not ask about.
+    const accountRows = await this.sql<Array<{ id: string }>>`
+      SELECT id FROM accounts
+       WHERE owner_type = ${ref.ownerType}::owner_type
+         AND owner_id   = ${ref.ownerId}
+         AND asset_id   = ${ref.assetId}
+         AND kind       = ${ref.kind}::account_kind
+         AND purpose    = ${accountPurpose(ref)}
+    `;
+
+    const accountId = accountRows[0]?.id;
+    if (!accountId) return [];
+
+    // LIMIT cap + 1. One row past the cap is the whole detection: the cheapest
+    // way to learn the answer would have been clipped, and it keeps what this
+    // process buffers bounded whether the read answers or refuses.
+    const rows = await this.sql<HistoryRow[]>`
+      SELECT t.id AS tx_id, t.module, t.reason, e.direction, e.amount, t.posted_at
+        FROM ledger_entries e
+        JOIN ledger_tx t ON t.id = e.tx_id
+       WHERE e.account_id = ${accountId}
+         AND t.posted_at >= ${range.from}
+         AND t.posted_at <  ${range.to}
+       ORDER BY t.posted_at ASC, e.id ASC
+       LIMIT ${HISTORY_MAX_ENTRIES + 1}
+    `;
+
+    if (rows.length > HISTORY_MAX_ENTRIES) throw new HistoryTooLargeError(accountId, range, HISTORY_MAX_ENTRIES);
+
+    return rows.map((r) => ({
+      txId: r.tx_id,
+      module: r.module,
+      reason: r.reason,
+      direction: r.direction,
+      // numeric(38,18) → scaled bigint. It never passes through a `number`.
+      amount: parseAmount(r.amount),
+      postedAt: r.posted_at,
+    }));
+  }
+
   async getTx(txId: string): Promise<LedgerTx | null> {
     const rows = await this.sql<TxRow[]>`SELECT * FROM ledger_tx WHERE id = ${txId}`;
     return rows[0] ? this.hydrate(this.sql, rows[0]) : null;
@@ -358,6 +421,16 @@ interface TxRow {
   posted_at: Date;
   hash: string;
   previous_hash: string | null;
+}
+
+/** The join `history()` projects — deliberately narrower than `EntryRow`. */
+interface HistoryRow {
+  tx_id: string;
+  module: string;
+  reason: string;
+  direction: 'debit' | 'credit';
+  amount: string;
+  posted_at: Date;
 }
 
 interface EntryRow {

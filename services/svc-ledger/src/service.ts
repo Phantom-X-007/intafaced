@@ -11,6 +11,7 @@ import {
 import type { EventBus } from '@intafaced/events';
 import { PostgresLedger } from './ledger/postgres-ledger.js';
 import { freezeEventKey, readFreeze, writeFreeze, type FreezeState } from './ledger/freeze.js';
+import type { HistoryEntry, HistoryRange } from './ledger/history.js';
 import { runReconciliation, type ReconciliationReport } from './ledger/reconcile.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
@@ -84,6 +85,23 @@ export class LedgerService implements LedgerClient {
 
   balances(ownerType: AccountRef['ownerType'], ownerId: string): Promise<Balance[]> {
     return this.engine.balances(ownerType, ownerId);
+  }
+
+  /**
+   * Entry history for one account in one window — a READ, and nothing else.
+   *
+   * Deliberately NOT on the `LedgerClient` interface, for the same reason
+   * `freeze` is not: `LedgerClient` is what every calling service codes against
+   * and what the conformance suite pins, and this is one caller's projection
+   * source rather than a capability every ledger implementation must offer.
+   *
+   * No span wrapper, matching `balance`/`balances`. `withMoneySpan` exists to
+   * keep MOVEMENTS at 100% through the tail sampler; nothing moves here, and
+   * tagging a read `money_path=true` would dilute the one signal that decides
+   * what the collector keeps.
+   */
+  history(ref: AccountRef, range: HistoryRange): Promise<HistoryEntry[]> {
+    return this.engine.history(ref, range);
   }
 
   getTx(txId: string): Promise<LedgerTx | null> {

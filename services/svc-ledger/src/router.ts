@@ -11,6 +11,7 @@ import {
   InvalidEntryError,
   type EntryInput,
 } from '@intafaced/ledger-client';
+import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 
 /**
@@ -33,6 +34,12 @@ function toTrpcError(err: unknown): TRPCError {
   }
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
+  // The window as asked cannot be answered, and retrying it unchanged never
+  // will be. Same status as `s2s-http.httpError` gives these two, so the mounted
+  // route and its twin cannot tell a caller different things about one refusal.
+  if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   if (err instanceof LedgerError) {
     return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
@@ -127,6 +134,71 @@ export function createLedgerRouter(ledger: LedgerService) {
           kind: b.account.kind,
           amount: formatAmount(b.amount),
         }));
+      }),
+
+    /**
+     * Entry history for one account in one window (§8.1 projection source).
+     *
+     * `serviceProcedure`, not `scopedProcedure('ledger:read')`, and the choice
+     * is not a coin flip:
+     *
+     *   · The caller is a SERVICE. svc-bank folds this into a spend summary
+     *     after deciding, with the user's token, which spaces that user may see.
+     *     It holds service credentials on this path and forwards no user token,
+     *     so a scoped procedure would reject the only caller there is.
+     *
+     *   · The input is a bare `AccountRef`, which can name `house` and
+     *     `treasury` accounts — `rail:*`, `fees:*`, `mint`. `balances` can
+     *     restrict a principal to its own rows because its input carries the
+     *     owner and `ctx.principal` can be compared against it; here the same
+     *     check would have to trust the caller to say who it is asking for.
+     *     Under `ledger:read` that turns every holder of a read scope into
+     *     someone who can enumerate the platform's own movements, transaction by
+     *     transaction. Service credentials are the stronger statement, and the
+     *     true one about who calls this.
+     *
+     *   · AUTHORISATION IS THE MODULE'S JOB (README: this service "does not
+     *     decide whether a movement is allowed"). The same split applies to
+     *     reads — svc-ledger answers what the book says to a caller that proved
+     *     it is one of ours; WHICH HUMAN may see it is svc-bank's question, and
+     *     svc-bank already asks it.
+     *
+     * Served on no port, like every procedure in this file: `index.ts` exports
+     * this router for its TYPE and registers no tRPC plugin. The reachable
+     * surface is `registerS2sHttp`, where `/trpc/history` is mounted behind the
+     * same service-credential guard. This entry exists so the two describe one
+     * API — it is not what makes the route safe.
+     */
+    history: serviceProcedure
+      .input(historyInputSchema)
+      .output(
+        z.array(
+          z.object({
+            txId: z.string(),
+            module: z.string(),
+            reason: z.string(),
+            direction: z.enum(['debit', 'credit']),
+            /** Decimal string. Money never crosses as a `number`. */
+            amount: z.string(),
+            postedAt: z.string(),
+          }),
+        ),
+      )
+      .query(async ({ input }) => {
+        try {
+          const range = parseHistoryRange(input.from, input.to);
+          const entries = await ledger.history(input.account, range);
+          return entries.map((e) => ({
+            txId: e.txId,
+            module: e.module,
+            reason: e.reason,
+            direction: e.direction,
+            amount: formatAmount(e.amount),
+            postedAt: e.postedAt.toISOString(),
+          }));
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     // ── Operator surface (§14 admin controls) ────────────────────────────────

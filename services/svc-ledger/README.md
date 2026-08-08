@@ -10,17 +10,30 @@
 
 Internal tRPC. Note there is no user-facing write path, and `packages/auth` has no `ledger:write` scope at all — a user moves value by asking a module to act, never by calling the ledger.
 
-| Procedure   | Scope               | Input                                  | Output                                                   |
-| ----------- | ------------------- | -------------------------------------- | -------------------------------------------------------- |
-| `health`    | —                   | —                                      | `{ ok, service, postingEnabled }`                        |
-| `post`      | service credentials | `PostRequest` (decimal-string amounts) | `{ txId, hash, postedAt }`                               |
-| `balance`   | `ledger:read`       | `AccountRef`                           | `{ accountId, assetId, kind, amount }`                   |
-| `balances`  | `ledger:read`       | `{ ownerType, ownerId }`               | `Balance[]` — own account only                           |
-| `reconcile` | `admin:treasury`    | —                                      | `{ ok, accountsChecked, chainLength, unbalancedAssets }` |
-| `freeze`    | `admin:treasury`    | `{ reason }`                           | `{ postingEnabled, frozenReason, frozenBy }`             |
-| `unfreeze`  | `admin:treasury`    | —                                      | `{ postingEnabled, frozenReason, frozenBy }`             |
+| Procedure   | Scope               | Input                                       | Output                                                    |
+| ----------- | ------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `health`    | —                   | —                                           | `{ ok, service, postingEnabled }`                         |
+| `post`      | service credentials | `PostRequest` (decimal-string amounts)      | `{ txId, hash, postedAt }`                                |
+| `balance`   | `ledger:read`       | `AccountRef`                                | `{ accountId, assetId, kind, amount }`                    |
+| `balances`  | `ledger:read`       | `{ ownerType, ownerId }`                    | `Balance[]` — own account only                            |
+| `history`   | service credentials | `{ account, from, to }` — ISO, `[from, to)` | `{ txId, module, reason, direction, amount, postedAt }[]` |
+| `reconcile` | `admin:treasury`    | —                                           | `{ ok, accountsChecked, chainLength, unbalancedAssets }`  |
+| `freeze`    | `admin:treasury`    | `{ reason }`                                | `{ postingEnabled, frozenReason, frozenBy }`              |
+| `unfreeze`  | `admin:treasury`    | —                                           | `{ postingEnabled, frozenReason, frozenBy }`              |
 
 HTTP: `GET /health` (liveness) · `GET /ready` — returns **503 when frozen**, so a frozen ledger leaves the load balancer rotation instead of refusing posts one by one.
+
+### `history` — a read, and the two ways it refuses
+
+The projection source for svc-bank's spend view (§8.1). That service keeps no `spent_this_month` counter — a second source of truth for money in everything but name — so it folds this window on demand instead. It is a READ: it takes no chain-tip lock, touches no balance, and has no path into `post()`.
+
+**Service credentials, not `ledger:read`.** The caller is a service, and it forwards no user token: svc-bank has already decided, with the user's token, which spaces that user may see. The input is a bare `AccountRef`, which can name `house` and `treasury` accounts — `rail:*`, `fees:*`, `mint` — and unlike `balances` there is nothing in it to compare a principal against, so `ledger:read` would turn every holder of a read scope into someone who can enumerate the platform's own movements transaction by transaction. Which human may see a movement stays svc-bank's question, exactly as whether a movement is _allowed_ stays the calling module's.
+
+**Bounded at 10 000 entries per window, and it refuses rather than truncating.** An unbounded read of the service that owns every balance in the OS is one request away from exhausting its heap, so there is a cap. Returning the first 10 000 would produce an array indistinguishable from a complete one — svc-bank would sum it and call the total "your spending", short by whatever fell off the end with nothing saying so. So over the cap the read refuses with `ledger.history_range_too_large`, naming the cap and the window; the remedy is a narrower window, and it works. The query asks for `cap + 1` rows: one row past the cap is enough to know the answer would have been clipped, and memory stays bounded either way.
+
+An **inverted** window (`to` before `from`) refuses too — `ledger.history_range_invalid`. It matches no row, so an empty array would be a plausible-looking answer to a question nobody meant to ask. A **zero-width** window (`from == to`) is legal and empty: half-open `[t, t)` genuinely contains nothing. An account that has never been posted to answers `[]`, and reading it does not create it.
+
+> **§13 socket — paged history.** Nothing browses this yet, and a `limit` without a cursor is silent truncation with a parameter in front of it. When a paged history is needed, add `after: <entry id>` and page on `(posted_at, e.id)` — the order this already returns, and the one `ledger_entries_account_idx` already supports.
 
 ---
 
