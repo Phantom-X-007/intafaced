@@ -8,6 +8,7 @@ import { env } from './env.js';
 import { TokenService } from './token-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createTokenRouter, type TokenRouter } from './router.js';
+import { registerInternalStake } from './internal-stake.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -76,12 +77,11 @@ app.get('/ready', async () => ({
   emissionsAutoTick: env.EMISSIONS_AUTO_TICK,
 }));
 
-app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
-    return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
-  }
-  const access = await token.accessOf(req.params.userId);
-  return { staked: access.staked.toString(), tier: access.tier, feeDiscountBps: access.feeDiscountBps };
+// The S2S stake gate. Lives in its own module so it can be tested — see
+// internal-stake.ts for what breaks when money is serialised wrong here.
+registerInternalStake(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  accessOf: (userId) => token.accessOf(userId),
 });
 
 /**
