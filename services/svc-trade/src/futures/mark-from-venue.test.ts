@@ -20,7 +20,25 @@ const DUST = '0.000000000000000001';
 /** `[price, quantity]` decimal strings → the scaled-bigint pair the fabric hands over. */
 const lvl = (p: string, q: string) => [parseAmount(p), parseAmount(q)] as const;
 
-function snap(partial: { bids?: [string, string][]; asks?: [string, string][]; venueId?: string; symbol?: string }): VenueBookSnapshot {
+/**
+ * A book the adapter JUST READ — which is what every case in this file means by
+ * "a venue book". They are all about size, mapping and transport, not age.
+ *
+ * `observedAt` used to be a hard-coded `1_700_000_000_000` (November 2023), and
+ * it did not matter, because `markSourceFromVenuePublicBook` discarded the field
+ * and stamped the CALLER's clock instead. Now that a venue mark carries the
+ * book's real observation time, a fixed past stamp is a three-year-old book, and
+ * five assertions below correctly stopped believing it. Defaulting to "now" is
+ * what these tests always meant. Age is varied deliberately, and only, in
+ * `mark-observed-at.test.ts`.
+ */
+function snap(partial: {
+  bids?: [string, string][];
+  asks?: [string, string][];
+  venueId?: string;
+  symbol?: string;
+  observedAt?: Date;
+}): VenueBookSnapshot {
   const level = ([p, q]: [string, string]) => [parseAmount(p), parseAmount(q)] as const;
   return {
     venueId: partial.venueId ?? 'binance-spot',
@@ -29,7 +47,7 @@ function snap(partial: { bids?: [string, string][]; asks?: [string, string][]; v
     asks: (partial.asks ?? []).map(level),
     sequence: 1,
     sequenced: true,
-    observedAt: new Date(1_700_000_000_000),
+    observedAt: partial.observedAt ?? new Date(),
   };
 }
 

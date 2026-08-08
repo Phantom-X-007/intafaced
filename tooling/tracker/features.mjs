@@ -1492,10 +1492,11 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'SmartAccount already routes contract owners through ERC-1271; the verifier itself is not built. Owner set 2026-08-07, and this is arguably the highest-value unbuilt item in the protocol suite: until a P-256 verifier exists on-chain, "passkey smart accounts" is true of the service and NOT true of the chain — the account cannot check a passkey signature itself. Named on the blockchain task board as S-A9.',
+    requires: ['services/svc-protocol/contracts/passkey'],
+    note: 'CLOSED 2026-08-08 (S-A9). PasskeyOwner.sol answers ERC-1271 for a SmartAccount contract owner: WebAuthn get assertion (authData||sha256(clientDataJSON)) verified via RIP-7212 P256VERIFY at 0x100, challenge bound to the digest under check, low-s enforced. Hermetic bridge tests mirror svc-identity signing; on-chain suite requires the precompile (anvil/Base). Residuals named in NatSpec + docs/audits/protocol-smart-accounts-2026-08-08.md: origin/rpId not enforced on-chain yet; gas to be snapshotted on the ruled P0 rail; no audited:true.',
   }),
   f('socket.social-recovery', 'Guardian-based account recovery', {
     module: 'protocol',

@@ -69,7 +69,24 @@ export interface VenueBookSnapshot {
   readonly sequence: number;
   /** False when this venue publishes no update numbering at all. See the header. */
   readonly sequenced: boolean;
-  /** When THIS PROCESS finished reading it. Our clock, not theirs. */
+  /**
+   * When THIS PROCESS finished reading it. Our clock, not theirs.
+   *
+   * NOT DECORATION. This field is the only thing that makes a downstream
+   * staleness check mean anything, and a consumer that reads `bids` and `asks`
+   * and drops it has no age left to check: the only clock it can stamp with is
+   * its own at the moment it asked, which makes every price it derives exactly
+   * zero seconds old and every age limit it owns unreachable.
+   *
+   * That is not hypothetical. `svc-trade`'s futures mark did precisely this —
+   * read the book, discarded this field, stamped the caller's clock — and a
+   * four-hour-old external book cleared a sixty-second liquidation gate as a
+   * result (`services/svc-trade/src/futures/mark-observed-at.test.ts`).
+   *
+   * So: carry it. Anything deriving a price, a mid or a mark from a snapshot
+   * must propagate this value to whatever judges that price's age, and must
+   * REFUSE rather than substitute a clock of its own when it is missing.
+   */
   readonly observedAt: Date;
 }
 
