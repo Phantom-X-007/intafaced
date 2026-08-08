@@ -10,9 +10,9 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **40%** — 46 of 116 features shipped
+`█████████░░░░░░░░░░░` **43%** — 53 of 122 features shipped
 
-Phases: **0** 10/11 · **1** ✅ · **2** 6/24 · **3** 5/17 · **3P** 1/8 · **4** 4/5 · **4P** 0/3 · **5** 9/35 · **5P** 0/2
+Phases: **0** 10/11 · **1** ✅ · **2** 6/24 · **3** 5/17 · **3P** 7/12 · **4** 4/5 · **4P** 0/3 · **5** 9/36 · **5P** 1/3
 
 **In progress:** Moderated dispute resolution (nitro-agent) · Payment instruments — where the buyer actually pays (nitro-agent) · P2P merchant programme — badges, limits, API (nitro-agent)
 

@@ -1,6 +1,7 @@
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { factoryAbi, poolAbi } from './abi.js';
 import { getAmountOut, priceImpactBps } from './math.js';
+import { pickBestRoute } from '../router/sovereign-quote.js';
 
 /** Unsigned call the user's smart account (or EOA) will submit. Value always 0. */
 export interface UnsignedAmmCall {
@@ -58,4 +59,15 @@ export function quoteExactIn(input: { amountIn: bigint; reserveIn: bigint; reser
     amountOut,
     priceImpactBps: priceImpactBps(input.amountIn, input.reserveIn, input.reserveOut, input.feeBps),
   };
+}
+
+/** Pool quote vs optional caller-supplied book out — never invents a book mid (S-A5). */
+export function quoteBestExactIn(input: {
+  amountIn: bigint;
+  reserveIn: bigint;
+  reserveOut: bigint;
+  feeBps: number;
+  bookAmountOut: bigint | null;
+}) {
+  return pickBestRoute(input);
 }

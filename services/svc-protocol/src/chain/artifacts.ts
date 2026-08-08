@@ -35,7 +35,20 @@ import type { Abi, Hex } from 'viem';
  */
 
 export type ArtifactName =
-  'AccountFactory' | 'SmartAccount' | 'SessionKeyLib' | 'SovereignToken' | 'TokenFactory' | 'ConstantProductPool' | 'PoolFactory';
+  | 'AccountFactory'
+  | 'SmartAccount'
+  | 'SessionKeyLib'
+  | 'SovereignToken'
+  | 'TokenFactory'
+  | 'ConstantProductPool'
+  | 'PoolFactory'
+  | 'FailClosedOracle'
+  | 'IsolatedLendingMarket'
+  | 'MerchantAccept'
+  | 'SovereignRouter'
+  | 'CrewVault'
+  | 'LaunchLpLock'
+  | 'MockERC20';
 
 export interface ContractArtifact {
   readonly contractName: string;

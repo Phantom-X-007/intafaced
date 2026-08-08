@@ -140,6 +140,40 @@ export const SUITES = [
      */
     sources: ['amm/ConstantProductPool.sol', 'amm/IERC20Minimal.sol', 'amm/PoolFactory.sol'],
   },
+  {
+    name: 'oracle',
+    expect: 'compiles',
+    /** S-A12 — fail-closed dual-source marks. Never reads AMM. */
+    sources: ['oracle/IPriceOracle.sol', 'oracle/FailClosedOracle.sol'],
+  },
+  {
+    name: 'lending',
+    expect: 'compiles',
+    /** S-A4 — isolated over-collateral market; needs oracle interface + ERC-20. */
+    sources: ['lending/IsolatedLendingMarket.sol', 'oracle/IPriceOracle.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+  },
+  {
+    name: 'merchant',
+    expect: 'compiles',
+    /** S-A6 — zero-KYB merchant accept; platform never hardcoded. */
+    sources: ['merchant/MerchantAccept.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+  },
+  {
+    name: 'router',
+    expect: 'compiles',
+    /**
+     * S-A5 — pool execution router; book compare is off-chain.
+     * Does NOT compile ConstantProductPool into this suite (would overwrite
+     * amm artefacts). Uses the inline IConstantProductPool interface only.
+     */
+    sources: ['router/SovereignRouter.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
+    name: 'vaults',
+    expect: 'compiles',
+    /** S-L1 crew vault + S-L4 LP lock (trust). */
+    sources: ['vaults/CrewVault.sol', 'trust/LaunchLpLock.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+  },
 ];
 
 /** The exact `sources` object a suite is compiled from. */

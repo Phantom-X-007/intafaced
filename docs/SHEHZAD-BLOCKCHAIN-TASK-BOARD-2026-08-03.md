@@ -1,10 +1,16 @@
 # Shehzad — Blockchain / Protocol Plane task board
 
-**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-07  
+**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-08  
 **Audience:** `@shehzad002` (Shehzad / Shizu) + his agents  
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
+> ### 2026-08-08 delta — P0 remainder ship
+>
+> Shipped on `feat/protocol-p0-remainder` (this PR): **S-A12** FailClosedOracle · **S-A4** IsolatedLendingMarket (ready, not full SPEC done-bar) · **S-A5** SovereignRouter + quote pick · **S-A6** MerchantAccept · **S-A10/A11** paymaster + bundler policy modules + ADR · **S-A13** deployment registry artefact · **S-K7** inheritance ADR · **S-L1** CrewVault · **S-L4** LaunchLpLock (LP leg).
+>
+> Still open / Nitro-gated: S-A1 audit package · S-A3 escrow (separate PR) · S-A9 passkey (separate PR) · S-C1 venue · S-I3/I4 · S-L2 (ADR only) · S-L3/L5/L6 · S-D2–D4 INTACHAIN · paymaster **funding** · public registry rows.
+>
 > ### 2026-08-07 delta — read this before anything else
 >
 > **Ownership is unchanged.** What changed is the accounting around it, and one part of that was expensive:
