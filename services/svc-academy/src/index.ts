@@ -2,10 +2,12 @@ import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
+import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AcademyService } from './academy-service.js';
 import { createHostRightsSource } from './host-rights.js';
 import { createStakeSource } from './stake-source.js';
+import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
 import { isUsable, NullStreamProvider, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -31,12 +33,25 @@ registerProcessHooks(
  * and there is no credential in this process that could reach anything which
  * moves value.
  *
- * NO BUS CONNECTION either, and that is worth stating because most services
- * here have one. Lobbies publish nothing: the §8.3 event this service would
+ * ONE PUBLISH, NO SUBSCRIBE. This header used to say "NO BUS CONNECTION
+ * either", and the reason it gave was exact: the §8.3 event this service would
  * eventually emit is `intafaced.identity.xp.earned` on certification, and
- * certification ships with the curriculum. Connecting to NATS to publish
- * nothing would add a boot dependency that can fail, in exchange for no
- * capability at all.
+ * connecting to NATS to publish nothing would add a boot dependency that can
+ * fail in exchange for no capability at all. Certification has now shipped
+ * (`certs/`), so there is a capability, and the connection buys it.
+ *
+ * The boot-dependency objection still stands, and is answered rather than
+ * ignored: the connect is attempted, and a failure DEGRADES rather than kills.
+ * Seats, presence, the 2D scene, the curriculum catalog and paper drills have
+ * nothing to do with NATS, and taking svc-academy out of the fleet because a
+ * cert award could not be published would trade the whole service for one
+ * downstream side effect. `/ready` reports `xp.usable: false` and `grantCert`
+ * returns `publisher_unavailable` — the same out-loud honesty the stream
+ * provider gets, for the same reason. The award itself is recoverable: it is
+ * keyed on the grant, so granting again re-publishes it (certs/xp-publish.ts).
+ *
+ * It still subscribes to nothing. `crew-events.ts` remains unmounted — a
+ * consumer is a different decision from a producer, and this one is not it.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -65,11 +80,42 @@ const hostRights = createHostRightsSource(env.IDENTITY_URL, env.INTERNAL_SERVICE
  */
 const stream: StreamProvider = new NullStreamProvider();
 
-const academy = new AcademyService(sql, stakes, hostRights, stream, {
-  maxRoomCapacity: env.ACADEMY_MAX_ROOM_CAPACITY,
-  tournamentEnabled: env.ACADEMY_TOURNAMENT_ENABLED,
-  paperTradingEnabled: env.ACADEMY_PAPER_TRADING_ENABLED,
+/**
+ * The one publish: cert grant → `intafaced.identity.xp.earned`.
+ *
+ * `ownedStreams` is empty because academy owns no stream. `xpEarned` is declared
+ * on the `identity` service, svc-identity creates that stream, and a producer
+ * that also created it would be a second definition of somebody else's storage.
+ *
+ * A failed connect is caught, not fatal — see this file's header for why a
+ * lobby must not go down with the bus, and certs/xp-publish.ts for why the
+ * award it misses is recoverable rather than lost.
+ */
+const bus = await JetStreamEventBus.connect({
+  servers: env.NATS_URL,
+  producer: env.SERVICE_NAME,
+  streamPrefix: env.NATS_STREAM_PREFIX,
+}).catch((err: unknown) => {
+  console.error({ err, nats: env.NATS_URL }, 'svc-academy could not reach the bus — certification XP will not be published');
+  return null;
 });
+
+const certXp: CertXpPublisher = bus
+  ? new BusCertXpPublisher(bus, (err, grant) => console.error({ err, certId: grant.certId }, 'cert XP publish failed'))
+  : new NullCertXpPublisher();
+
+const academy = new AcademyService(
+  sql,
+  stakes,
+  hostRights,
+  stream,
+  {
+    maxRoomCapacity: env.ACADEMY_MAX_ROOM_CAPACITY,
+    tournamentEnabled: env.ACADEMY_TOURNAMENT_ENABLED,
+    paperTradingEnabled: env.ACADEMY_PAPER_TRADING_ENABLED,
+  },
+  certXp,
+);
 
 export const appRouter = createAcademyRouter(academy);
 export type AppRouter = typeof appRouter;
@@ -95,6 +141,13 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
   stream: { id: stream.id, usable: isUsable(stream), configured: env.ACADEMY_STREAM_PROVIDER },
+  // Same contract as `stream`: degraded is reported, not hidden. `usable: false`
+  // means certifications still grant and their XP is not reaching the ladder.
+  //
+  // The URL is NOT echoed here the way ACADEMY_STREAM_PROVIDER is. That one is
+  // an enum; NATS_URL can carry credentials (`nats://user:pass@host`), and
+  // /ready is the least authenticated surface this service has.
+  xp: { id: certXp.id, usable: certXp.usable, publishes: 'intafaced.identity.xp.earned' },
 }));
 
 await app.register(fastifyTRPCPlugin, {
@@ -110,12 +163,13 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, stream: stream.id, trpc: true }, 'svc-academy ready');
+app.log.info({ port: env.HTTP_PORT, stream: stream.id, xp: certXp.id, trpc: true }, 'svc-academy ready');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
+      await bus?.close();
       await sql.end({ timeout: 5 });
       process.exit(0);
     })();
