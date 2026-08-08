@@ -22,6 +22,8 @@ import {
 import { createPayRouter } from './router.js';
 import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
+import { SubMerchantService } from './submerchants.js';
+import { createSubMerchantRouter } from './submerchant-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
@@ -201,6 +203,16 @@ const userMoney = new UserMoneyService(sql, ledger, rails, {
 const merchantState = new MerchantStateService(sql);
 
 /**
+ * PayFac sub-merchant trees and the permissions over them (§6.1).
+ *
+ * NO LEDGER CLIENT, ON PURPOSE. This service decides who may act on whose behalf
+ * inside one merchant tree; it never moves value, holds a balance or knows an
+ * amount. Value still leaves and enters the book through `PayService` /
+ * `UserMoneyService` and their recipes, exactly as before (Doctrine §0.6).
+ */
+const subMerchants = new SubMerchantService(sql);
+
+/**
  * MERGED, not nested.
  *
  * `mergeRouters` keeps one wire surface, so the edge still forwards `/api/pay`
@@ -215,9 +227,18 @@ const merchantState = new MerchantStateService(sql);
  * and a merchant surface having separate files is the shape this would want
  * anyway.
  */
-export const appRouter = mergeRouters(createPayRouter(pay, rails, userMoney), createMerchantStateRouter(merchantState));
+export const appRouter = mergeRouters(
+  createPayRouter(pay, rails, userMoney),
+  createMerchantStateRouter(merchantState),
+  // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's
+  // own merchant node from the authenticated principal, because a merchant node
+  // taken from a request body would let any merchant claim to be acting as any
+  // other and the subtree fence would be measuring the wrong actor.
+  createSubMerchantRouter(subMerchants, pay),
+);
 export type { PayRouter } from './router.js';
 export type { MerchantStateRouter } from './merchant-state-router.js';
+export type { SubMerchantRouter } from './submerchant-router.js';
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
