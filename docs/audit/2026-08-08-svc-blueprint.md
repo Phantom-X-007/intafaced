@@ -1,7 +1,7 @@
 # svc-blueprint — promise audit 2026-08-08 (REPORT ONLY — the service is owner-locked)
 
 Tip: `ff6b50c2`
-Auditor: Claude session — lane C
+Auditor: agent session — lane C
 Claim gate:
 
 ```

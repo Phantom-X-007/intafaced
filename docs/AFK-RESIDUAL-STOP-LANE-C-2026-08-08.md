@@ -1,9 +1,9 @@
-# Stop note — Claude lane C (svc-bank · svc-blueprint · svc-token), 2026-08-08
+# Stop note — agent lane C (svc-bank · svc-blueprint · svc-token), 2026-08-08
 
 New tip at stop: **`ff6b50c2`** — `fix(token): a settled yield window paid a
 staker who joined after it settled (#1076)`.
 
-Session window: 02:25 → 03:30 UTC. Nitro AFK throughout. Three other Claude
+Session window: 02:25 → 03:30 UTC. Nitro AFK throughout. Three other agent
 sessions were live in disjoint lanes.
 
 ---
@@ -32,7 +32,7 @@ left alone. Full detail: `docs/audit/2026-08-08-svc-bank.md`.
    the borrower. A second caller's money lands in a stake pot no withdrawal of
    theirs can reach, and the service's own reconciliation invariant
    (`principalOf` == `stakedOf`) breaks for both users. **A complete, typechecked
-   patch with five tests is pushed to `fix/claude-bank-idempotency-conflict`** —
+   patch with five tests is pushed to `fix/bank-idempotency-conflict-parked`** —
    no PR, rebased on tip, take it or drop it.
 2. **A standing order ignores a lock the same user set.** `resolveForDebit`
    refuses an archived or self-locked space and has exactly two call sites, both
