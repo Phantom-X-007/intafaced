@@ -173,6 +173,69 @@ interface SlotRow {
   released_at: Date | null;
 }
 
+/**
+ * WHAT A STRANGER SEES (Stage 3).
+ *
+ * Four fields, and the omissions are the design. Everything left out was left
+ * out for a reason worth writing down, because the next person to add a field
+ * here will be adding it to an UNAUTHENTICATED response:
+ *
+ *   · `userId` — the platform account id behind the vendor. Publishing it joins
+ *     a marketplace storefront to a person's account across every other module.
+ *     `market.commerce` references a VENDOR, and that is the id it gets.
+ *   · `status` — redundant and dangerous at once. A profile only exists when the
+ *     vendor is listed, so it would always read `approved`; the only thing it
+ *     could ever carry is the information that somebody ELSE was suspended.
+ *   · the vetting reason, `actorId`, `actorScope`, and anything at all from
+ *     `market.vendor_status_events` — operator-internal. "Rejected: suspected
+ *     counterfeit stock" is a defamation-shaped disclosure and Stage 1 put that
+ *     table behind `market:ops` deliberately. `history` stays the only reader.
+ *   · the stake TIER, capacity, and held/usable slot counts — a tier name is a
+ *     public statement about the size of someone's holdings. svc-market reads
+ *     `vendorSlots` to decide, and then does not repeat what it learned.
+ *   · slot `ref`s — Stage 2 reserved those for `market.commerce` listing ids.
+ *     Which of a vendor's listings are live is commerce's surface to publish.
+ *
+ * `createdAt` is when the APPLICATION was made, not when it was approved. The
+ * approval date is only derivable from the operator event log, and reading that
+ * table to render a public page is the first step towards leaking it.
+ */
+export interface PublicVendorProfile {
+  id: string;
+  displayName: string;
+  description: string;
+  createdAt: string;
+}
+
+/** Why a vendor is not listed. `market.stake_unavailable` is never one of these — see `listingEligibility`. */
+export type ListingRefusalCode =
+  'market.vendor_not_found' | 'market.vendor_not_approved' | 'market.slot_required' | 'market.stake_required';
+
+/**
+ * Whether a vendor may present as listed, and why not when they may not.
+ *
+ * A returned verdict rather than a thrown error because the caller this exists
+ * for — `market.commerce`'s listing create — needs to BRANCH on it, and a
+ * refusal that arrives as an exception gets caught by a generic handler and
+ * turned into a 500 that tells the vendor nothing they can act on.
+ */
+export interface VendorListingEligibility {
+  /** `null` only when no vendor matched the lookup. */
+  vendorId: string | null;
+  listed: boolean;
+  code?: ListingRefusalCode;
+  reason?: string;
+}
+
+function toPublicProfile(vendor: VendorRecord): PublicVendorProfile {
+  return {
+    id: vendor.id,
+    displayName: vendor.displayName,
+    description: vendor.description,
+    createdAt: vendor.createdAt,
+  };
+}
+
 function toSlot(row: SlotRow): VendorSlotRecord {
   return {
     id: row.id,
@@ -657,5 +720,229 @@ export class VendorService {
       usable: usableSlots(facts, { open: rows.length }),
       slots: rows.map(toSlot),
     };
+  }
+
+  // ── Stage 3: public list eligibility ───────────────────────────────────────
+
+  /**
+   * Is this vendor listed, right now?
+   *
+   * ── THE SEAM `market.commerce` CALLS ───────────────────────────────────────
+   *
+   * A service METHOD and not only a router procedure, because the consumer named
+   * by the DoD ("feeds `market.commerce` listing create — refuse if not
+   * listed/eligible") is another service's write path, not a browser. Commerce
+   * asks by `userId` — a vendor creating a listing arrives as a principal, and
+   * `market.commerce` has no reason to know svc-market's vendor id. The public
+   * profile asks by `vendorId`. Both keys, one rule.
+   *
+   * ── ELIGIBILITY IS COMPUTED, NEVER STORED ──────────────────────────────────
+   *
+   * There is no `is_listed` column and there must not be one, for the reason
+   * `services/svc-p2p/src/reputation.ts:71-75` already gives about badges: "a
+   * badge that can only be granted is a badge that lies". A stored flag is
+   * correct exactly until the fact under it changes and nothing runs — which for
+   * unstaking is ALWAYS, because svc-market never learns that somebody unstaked
+   * (no bus subject, no publisher, and polling would be a second source of truth
+   * that is wrong between ticks). The flag would then say `listed` about a vendor
+   * whose entitlement is gone, which is DoD clause 5 failing while looking fine.
+   *
+   * ── THE ORDER OF THE CHECKS IS LOAD-BEARING TWICE ──────────────────────────
+   *
+   * Every cheap local fact is settled before the network call. That is not only
+   * a latency choice: it means a suspended vendor, a rejected one, an unknown id
+   * and a vendor holding no slot are all answered WITHOUT svc-token, so an
+   * svc-token outage cannot turn those into a 500. The only callers who reach the
+   * stake read are the ones whose answer genuinely depends on it.
+   *
+   * ── WHAT IT THROWS RATHER THAN RETURNS, AND WHY THAT IS THE POINT ──────────
+   *
+   * Every finding ABOUT THE VENDOR is a returned value. `market.stake_unavailable`
+   * is THROWN, because "we could not check" is not a finding about the vendor and
+   * must never be recorded as one: a caller handed `{ listed: false, code:
+   * 'market.stake_required' }` during an svc-token outage would tell an honest
+   * vendor to go and stake, and a caller that logged it would log a mass
+   * unstaking that never happened. Callers still fail CLOSED on it — the profile
+   * read below shows a vendor nothing, and the directory drops them — but they do
+   * it knowing the difference.
+   */
+  async listingEligibility(target: { vendorId: string } | { userId: string }): Promise<VendorListingEligibility> {
+    const [row] =
+      'vendorId' in target
+        ? await this.sql<VendorRow[]>`
+            SELECT id, user_id, display_name, description, status, created_at, updated_at
+              FROM market.vendors WHERE id = ${target.vendorId}
+          `
+        : await this.sql<VendorRow[]>`
+            SELECT id, user_id, display_name, description, status, created_at, updated_at
+              FROM market.vendors WHERE user_id = ${target.userId}
+          `;
+
+    if (!row) {
+      return {
+        vendorId: null,
+        listed: false,
+        code: 'market.vendor_not_found',
+        reason: 'No vendor application for that id.',
+      };
+    }
+    return this.eligibilityFor(toVendor(row));
+  }
+
+  /**
+   * The rule itself, over a vendor row already read.
+   *
+   * Private so that no caller can hand it a row it did not read from this
+   * service and get an eligibility verdict about a vendor that does not exist.
+   */
+  private async eligibilityFor(vendor: VendorRecord): Promise<VendorListingEligibility> {
+    if (vendor.status !== 'approved') {
+      /**
+       * Suspended, rejected and still-undecided collapse into ONE code on
+       * purpose. This value reaches a public surface, and "suspended" is an
+       * operator's finding about a person: a public read that distinguished it
+       * from "never applied" would let anyone enumerate who had been thrown off
+       * the marketplace. `vet`'s reason, the actor and the event log stay behind
+       * `market:ops` where Stage 1 put them.
+       */
+      return {
+        vendorId: vendor.id,
+        listed: false,
+        code: 'market.vendor_not_approved',
+        reason: 'Only an approved vendor can be listed.',
+      };
+    }
+
+    const open = await this.openSlotCount(vendor.id);
+    if (open === 0) {
+      return {
+        vendorId: vendor.id,
+        listed: false,
+        code: 'market.slot_required',
+        reason: 'An approved vendor is listed once they hold a listing slot. Claim one.',
+      };
+    }
+
+    /**
+     * The live tier, every time — the whole mechanism behind "under-staked
+     * vendors cannot present as listed". A vendor who claimed three slots at
+     * Operator and then unstaked to Base still HOLDS three rows, because nothing
+     * released them and nothing was ever going to. `usableSlots` clamps them to
+     * what the tier svc-token reports THIS SECOND actually covers, which is zero.
+     */
+    const entitlement = await this.stakes.entitlementOf(vendor.userId);
+    if (usableSlots({ status: vendor.status, capacity: entitlement.vendorSlots }, { open }) === 0) {
+      return {
+        vendorId: vendor.id,
+        listed: false,
+        // `stake_required` rather than `slots_exhausted`: the slots are held, it
+        // is the entitlement that went away, and re-staking is the thing that
+        // fixes it. Same code and same instruction as the claim path's stake gate.
+        code: 'market.stake_required',
+        reason: 'Your stake no longer covers a listing slot. Stake IFC to be listed again.',
+      };
+    }
+
+    return { vendorId: vendor.id, listed: true };
+  }
+
+  /**
+   * What an unauthenticated visitor sees — `null` unless the vendor is listed.
+   *
+   * ONE `null` FOR EVERY REASON. Unknown id, never approved, suspended, holds no
+   * slot, unstaked — all the same answer, because the alternative is a probe: a
+   * caller that could tell "suspended" from "no such vendor" could enumerate
+   * every vendor an operator has thrown off the marketplace, without holding
+   * `market:ops` and without leaving a trace. The distinguishing detail lives in
+   * `listingEligibility` for the services that are entitled to it.
+   *
+   * Fails closed by construction: an unreadable stake source throws out of
+   * `listingEligibility`, so it is never mistaken for `listed: false`.
+   */
+  async publicProfile(vendorId: string): Promise<PublicVendorProfile | null> {
+    const [row] = await this.sql<VendorRow[]>`
+      SELECT id, user_id, display_name, description, status, created_at, updated_at
+        FROM market.vendors WHERE id = ${vendorId}
+    `;
+    if (!row) return null;
+
+    const vendor = toVendor(row);
+    const eligibility = await this.eligibilityFor(vendor);
+    return eligibility.listed ? toPublicProfile(vendor) : null;
+  }
+
+  /**
+   * The public directory — every vendor who is listed right now.
+   *
+   * ── THE ORDER IS DELIBERATELY BORING ───────────────────────────────────────
+   *
+   * `created_at ASC`, tie-broken by id. Registration order: a fact the database
+   * already holds, stable under pagination, and it says nothing about how good
+   * anybody is. Ranking, quality scoring and featured placement are reserved to
+   * the owner by `docs/DIRECTION-2026-07-31.md:186-199` §8, and picking one here
+   * — even "newest first", which is a growth choice — would be this service
+   * deciding listing policy. A public list is not a ranked list.
+   *
+   * ── FAILS CLOSED PER VENDOR ────────────────────────────────────────────────
+   *
+   * A vendor whose stake cannot be read is DROPPED, not shown. One flaky lookup
+   * therefore costs one vendor rather than blanking the marketplace, and a total
+   * svc-token outage returns an empty page — nobody appears, rather than
+   * everybody. That empty page is the honest answer: it is not "there are no
+   * vendors", it is "nobody whose entitlement we can currently prove", and the
+   * span attribute below is where that difference is a number rather than a
+   * silence nobody can see.
+   *
+   * A page can come back shorter than `limit`, because the entitlement filter
+   * runs after it. That is correct and not worth back-filling: back-filling would
+   * mean paging svc-token until the page was full, which turns one slow lookup
+   * into an unbounded number of them.
+   *
+   * ponytail: one stake read per candidate, capped at 50 a page. The upgrade path
+   * when the directory gets real traffic is a BATCH entitlement read on svc-token
+   * — never a cached `is_listed`, which is the exact lie this method exists to
+   * avoid.
+   */
+  async listedVendors(options: { limit?: number } = {}): Promise<PublicVendorProfile[]> {
+    const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+
+    /**
+     * Both cheap gates are the database's: approved, and holding at least one
+     * open slot. Only the survivors cost a network call, so the common case —
+     * most rows in this table are applications nobody has decided yet — reaches
+     * svc-token zero times.
+     */
+    const rows = await this.sql<Array<VendorRow & { open_slots: string }>>`
+      SELECT v.id, v.user_id, v.display_name, v.description, v.status, v.created_at, v.updated_at,
+             (SELECT COUNT(*) FROM market.vendor_slots s WHERE s.vendor_id = v.id AND s.released_at IS NULL) AS open_slots
+        FROM market.vendors v
+       WHERE v.status = 'approved'::market.vendor_status
+         AND EXISTS (SELECT 1 FROM market.vendor_slots s WHERE s.vendor_id = v.id AND s.released_at IS NULL)
+       ORDER BY v.created_at ASC, v.id ASC
+       LIMIT ${limit}
+    `;
+
+    return withMarketSpan('market.listed', { op: 'listed' }, async (span) => {
+      let unreadable = 0;
+      const checked = await Promise.all(
+        rows.map(async (row) => {
+          const vendor = toVendor(row);
+          try {
+            const entitlement = await this.stakes.entitlementOf(vendor.userId);
+            const usable = usableSlots({ status: vendor.status, capacity: entitlement.vendorSlots }, { open: Number(row.open_slots) });
+            return usable > 0 ? toPublicProfile(vendor) : null;
+          } catch {
+            // Fail closed. A vendor we cannot verify is not shown — and is
+            // counted, so an outage is visible as an outage.
+            unreadable += 1;
+            return null;
+          }
+        }),
+      );
+
+      span.setAttribute('intafaced.market.listed_candidates', rows.length);
+      span.setAttribute('intafaced.market.listed_stake_unreadable', unreadable);
+      return checked.filter((profile): profile is PublicVendorProfile => profile !== null);
+    });
   }
 }

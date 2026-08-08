@@ -1,10 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { router, scopedProcedure } from '@intafaced/contracts';
+import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-service.js';
 
 /**
- * THE VENDOR LIFECYCLE ROUTER — Stage 2 (§8.7, `market.vendors`).
+ * THE VENDOR LIFECYCLE ROUTER — Stage 3 (§8.7, `market.vendors`).
  *
  * ── WHY THE SCHEMAS STILL LIVE HERE AND NOT IN `packages/contracts` ────────
  *
@@ -37,6 +37,22 @@ import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-serv
  * operator whose own account is tier `none`, or one working from a region the
  * platform does not sell into. Their authority comes from `market:ops`, which is
  * never on a user session (packages/auth WITHHELD_FROM_SESSION).
+ *
+ * ── AND WHY STAGE 3's TWO READS CARRY NEITHER ──────────────────────────────
+ *
+ * `profile` and `listed` are `publicProcedure`: no scope, no jurisdiction guard,
+ * and genuinely reachable unauthenticated — svc-edge forwards a request with no
+ * token, or with a refused one, as ANONYMOUS rather than rejecting it at the door
+ * (`services/svc-edge/src/index.ts` "forwarding anonymous"), so these are the
+ * marketplace a visitor sees before they have an account.
+ *
+ * No scope, because a shopfront nobody can look at is not a shopfront. No
+ * `{ module: 'market' }` either: the matrix asks "may this USER apply/list here,
+ * at their verification tier", and an anonymous reader is not a user — gating a
+ * public page on a KYC tier would refuse everybody who has not signed up, which
+ * is the entire audience. Halting the module is still possible and still lands
+ * before this code: `/api/market` is in svc-edge `UPSTREAMS`, so the kill-switch
+ * closes the door in an `onRequest` hook.
  */
 
 const vendorStatus = z.enum(['applied', 'approved', 'rejected', 'suspended']);
@@ -58,6 +74,18 @@ const slotOut = z.object({
   ref: z.string(),
   claimedAt: z.string().datetime(),
   releasedAt: z.string().datetime().nullable(),
+});
+
+/**
+ * The public shape. Four fields, and `vendor-service.ts` `PublicVendorProfile`
+ * carries the full argument for each omission — no userId, no status, no tier,
+ * no slot refs, and nothing whatsoever from the operator event log.
+ */
+const publicVendorOut = z.object({
+  id: z.string().uuid(),
+  displayName: z.string(),
+  description: z.string(),
+  createdAt: z.string().datetime(),
 });
 
 const statusEventOut = z.object({
@@ -220,6 +248,54 @@ export function createMarketRouter(vendors: VendorService) {
       .query(async ({ ctx }) => {
         try {
           return await vendors.slotStatus(ctx.principal!.userId);
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    /**
+     * One listed vendor's public profile (Stage 3).
+     *
+     * NOT_FOUND covers every "you cannot see this vendor" — unknown id, never
+     * approved, suspended, holds no slot, or has unstaked below the tier that
+     * paid for their slots. One answer for all five, so nobody can use this
+     * endpoint to work out who was suspended. See `publicProfile`.
+     *
+     * `market.stake_unavailable` is deliberately NOT flattened into that: it
+     * reaches `mapError` and becomes a 500. A 404 would tell a caller this vendor
+     * does not exist, which is false, cacheable, and would still be being served
+     * long after svc-token came back.
+     */
+    profile: publicProcedure
+      .input(z.object({ vendorId: z.string().uuid() }))
+      .output(publicVendorOut)
+      .query(async ({ input }) => {
+        let profile;
+        try {
+          profile = await vendors.publicProfile(input.vendorId);
+        } catch (err) {
+          mapError(err);
+        }
+        if (!profile) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'No listed vendor with that id.' });
+        }
+        return profile;
+      }),
+
+    /**
+     * The public directory of listed vendors, in registration order.
+     *
+     * Registration order and nothing else: ranking and featured placement are the
+     * owner's (§8). A page can be shorter than `limit` when a vendor on it has
+     * dropped below their tier, and an svc-token outage empties it — nobody
+     * appears rather than everybody.
+     */
+    listed: publicProcedure
+      .input(z.object({ limit: z.number().int().positive().max(50).optional() }).optional())
+      .output(z.array(publicVendorOut))
+      .query(async ({ input }) => {
+        try {
+          return await vendors.listedVendors({ limit: input?.limit });
         } catch (err) {
           mapError(err);
         }

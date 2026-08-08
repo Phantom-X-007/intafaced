@@ -1,9 +1,10 @@
 # svc-market
 
-Vendor lifecycle for `market.vendors` (§8.7). **Stage 2: a user applies to be a
-marketplace vendor, an operator vets the application, and an approved vendor
-holds listing slots their IFC stake tier pays for.** The public vendor profile is
-Stage 3 and is not built.
+Vendor lifecycle for `market.vendors` (§8.7). **A user applies to be a
+marketplace vendor, an operator vets the application, an approved vendor holds
+listing slots their IFC stake tier pays for, and a stranger with no account can
+see who is listed right now.** Stage 3 completes the mountain — apply → vet →
+slot → list eligibility — with no commerce money settlement.
 
 Doctrine: §0.6 no balances here; §2 no SQL into another service's schema; the
 stake numbers stay in svc-token.
@@ -14,7 +15,7 @@ stake numbers stay in svc-token.
 | ----- | ---------------------------------------------------------- | ----- |
 | **1** | Apply → vet, with an append-only decision history          | **✓** |
 | **2** | Stake-gated listing slots, from `vendorSlots` under a lock | **✓** |
-| 3     | Public listing eligibility, feeding `market.commerce`      | no    |
+| **3** | Public listing eligibility, feeding `market.commerce`      | **✓** |
 
 ## API
 
@@ -23,6 +24,8 @@ tRPC under `/trpc` (edge mounts `/api/market`). Principal via edge HMAC
 
 | Procedure          | Scope          | Behaviour                                         |
 | ------------------ | -------------- | ------------------------------------------------- |
+| `profile`          | **public**     | One listed vendor's public profile                |
+| `listed`           | **public**     | The directory of vendors listed right now         |
 | `applyAsVendor`    | `market:write` | Create the caller's own application (`applied`)   |
 | `mine`             | `market:read`  | The caller's own application, or `null`           |
 | `claimSlot`        | `market:write` | Take a listing slot, if the caller's tier has one |
@@ -32,7 +35,7 @@ tRPC under `/trpc` (edge mounts `/api/market`). Principal via edge HMAC
 | `vet`              | `market:ops`   | Record an operator's decision and apply it        |
 | `history`          | `market:ops`   | The decision trail for one application            |
 
-HTTP: `GET /health`, `GET /ready` (`stage: 2-stake-gated-slots`).
+HTTP: `GET /health`, `GET /ready` (`stage: 3-list-eligibility`).
 
 Neither `claimSlot` nor `releaseSlot` takes a `vendorId`: a slot is always spent
 against the caller's own vendor row. A claim that could name its vendor would let
@@ -42,6 +45,14 @@ anyone burn somebody else's capacity, and the refusal would land on the victim.
 enforced: `market` is OPEN_BASIC, so an applicant needs verification tier
 `basic`. The operator procedures deliberately do not — a desk operator's
 authority is `market:ops`, not their own KYC tier.
+
+`profile` and `listed` carry neither a scope nor the matrix guard. They are the
+shopfront: svc-edge forwards a request with no token as ANONYMOUS, so these
+resolve for somebody who has never signed up, which is the whole audience. The
+matrix asks "may this USER apply/list here, at their verification tier" and an
+anonymous reader is not a user. Halting the module still lands first — `/api/market`
+is in svc-edge `UPSTREAMS`, so the kill-switch closes the door in an `onRequest`
+hook, before any of this code runs.
 
 ### What this service will not decide
 
@@ -124,6 +135,96 @@ would be a second source of truth that is wrong between ticks. So `slots` report
 `usable = min(held, capacity)`, and `0` for anyone not `approved`. A vendor who
 drops to Base reads `usable: 0` immediately, which is what makes "under-staked
 vendors cannot present as listed" hold whether or not a release ever happened.
+
+## Public list eligibility (Stage 3)
+
+**A vendor is listed if they are approved, hold at least one open slot, and their
+CURRENT stake tier still covers at least one of those slots.** Computed on every
+read. There is no `is_listed` column and there must not be one, for the reason
+`services/svc-p2p/src/reputation.ts` gives about badges — _"a badge that can only
+be granted is a badge that lies"_. A stored flag is right until the fact under it
+changes and nothing runs, and for unstaking nothing ever runs: svc-market is
+never told. The flag would then read `listed` for a vendor whose entitlement is
+gone, which is DoD clause 5 failing while looking fine.
+
+The under-staked case is the one the clause exists for. A vendor claims three
+slots at Operator, unstakes to Base, and **nothing releases those rows** — Stage 2
+deliberately has no unstake subscriber. They are not listed anyway, because
+`usableSlots` clamps what they hold to what svc-token says their tier covers this
+second. `src/listing-eligibility.test.ts` asserts the three slot rows are still
+open before asserting the vendor has vanished from the marketplace, so the test
+cannot pass by the rows quietly disappearing.
+
+**A partial drop still leaves them listed**, and that is deliberate: somebody at
+Initiate is entitled to a slot. Which of an over-held vendor's listings stays
+live is `market.commerce`'s to decide when it exists; this mountain answers at the
+vendor level.
+
+### What a stranger sees
+
+Four fields: `id`, `displayName`, `description`, `createdAt`. Every omission is
+argued in `PublicVendorProfile` — no `userId` (joins a storefront to a person's
+account across every module), no `status` (always `approved` when a profile
+exists, so the only thing it could carry is that somebody else was suspended), no
+tier or slot counts (a tier name is a public statement about the size of
+somebody's holdings), no slot `ref`s, and **nothing whatsoever from
+`market.vendor_status_events`** — the vetting reason, the operator's id and the
+scope they held stay behind `market:ops` where Stage 1 put them.
+
+`profile` answers **one NOT_FOUND for every reason**: unknown id, never approved,
+suspended, rejected, holds no slot, unstaked. A caller that could tell those apart
+could enumerate everybody an operator has thrown off the marketplace.
+
+### The `market.commerce` seam
+
+`VendorService.listingEligibility({ vendorId })` or `({ userId })` — a method, not
+only a procedure, because the consumer the DoD names is another service's write
+path. Commerce holds a principal, so it asks by `userId`; the public profile asks
+by `vendorId`; one rule serves both. It returns a verdict with a code commerce can
+act on (`market.vendor_not_found`, `market.vendor_not_approved`,
+`market.slot_required`, `market.stake_required`) rather than throwing, because a
+refusal that arrives as an exception gets flattened into a 500 that tells the
+vendor nothing.
+
+`market.stake_unavailable` is the exception, and it is **thrown**: "we could not
+check" is not a finding about the vendor and must never be recorded as one. A
+caller handed `stake_required` during an svc-token outage would tell an honest
+vendor to go and stake.
+
+**No commerce surface was built here** — no listing table, no price, no
+commission. Those are `market.commerce`, and its commission rate is an
+owner-gated blank.
+
+### Fail closed, ordered so an outage costs as little as possible
+
+Every locally-decidable fact is settled before the network call, so a suspended
+vendor, a rejected one, an unknown id and a vendor with no slot are all answered
+**without** svc-token. Only callers whose answer genuinely depends on the stake
+read can be affected by an outage.
+
+When it is affected: the directory drops that vendor and keeps going — one flaky
+lookup costs one vendor, and a total outage returns an empty page. **Nobody
+appears rather than everybody.** The single `profile` read throws instead, and
+reaches the caller as a 500: a 404 there would assert the vendor does not exist,
+which is false and cacheable. That path is tested against a `node:http` server
+returning the exact 500 `GET /internal/stake/:userId` produces on `main` today.
+
+One stake read per candidate, capped at 50 a page. If the directory ever takes
+real traffic the upgrade is a **batch** entitlement read on svc-token — never a
+cached `is_listed`.
+
+### The order is deliberately boring
+
+`created_at ASC`, tie-broken by id. Registration order: already in the database,
+stable under pagination, and it says nothing about how good anybody is. Ranking,
+quality scoring and featured placement are reserved to the owner by
+`docs/DIRECTION-2026-07-31.md` §8, and choosing one here — even "newest first",
+which is a growth choice — would be this service deciding listing policy. A
+public list is not a ranked list.
+
+A page can come back shorter than `limit`, because the entitlement filter runs
+after it. Back-filling would mean paging svc-token until the page was full, which
+turns one slow lookup into an unbounded number of them.
 
 ## Events
 
