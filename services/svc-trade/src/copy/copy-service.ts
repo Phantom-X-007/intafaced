@@ -126,13 +126,20 @@ export class CopyService {
     if (follow.followerId !== principal.userId) {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
-    // Clear the churn counters with the follow. They are keyed on
-    // leader:follower, not on followId, so leaving them behind meant
-    // unfollowing and re-following resumed the OLD period stats — a follower
-    // who had been capped stayed capped under a brand-new envelope, and the
-    // round-trip count that drives decay never reset either.
+    // The churn counters deliberately SURVIVE this.
+    //
+    // They are keyed `leader:follower`, not on `followId`, and that is correct:
+    // SPEC-SOVEREIGN caps leader earnings "per follower per period" and decays
+    // the rate with turnover, so the unit is the pair and the period — not the
+    // envelope. Clearing them here would make `unfollow` — which is unilateral,
+    // needs no law, and is always allowed — a free reset of the abuse brake:
+    // farm to the cap, unfollow, re-follow, farm again, unbounded, for the cost
+    // of two API calls. That is precisely what the cap exists to stop.
+    //
+    // (The counters are in fact LIFETIME rather than per-period today, because
+    // `copy_period_stats` has no period column. That is a real gap and the fix
+    // is a period key, not a user-triggered delete.)
     await this.store.deleteFollow(follow.followId);
-    await this.store.clearPeriodStats(`${follow.leaderId}:${follow.followerId}`);
     return { followId: follow.followId, revoked: true as const };
   }
 

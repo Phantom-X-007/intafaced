@@ -53,29 +53,33 @@ export interface PresentMirrorPlan {
 /**
  * Exposure after mirroring one leader fill.
  *
- * Exposure is a SIGNED net notional: a buy adds, a sell subtracts, and a
- * follower mirroring a leader who goes net short simply carries a negative
- * number. The cap bounds its MAGNITUDE, which is what "aggregate exposure"
- * means — how much position the envelope permits, in either direction.
+ * Exposure is a CUMULATIVE SESSION BUDGET, not a net position: every mirror
+ * adds, whatever its side, and nothing ever gives budget back.
  *
- * This exists as one exported function because the bug it replaces was two
- * expressions that disagreed: `planMirror` checked `current + notional` and
- * `CopyService` separately wrote `current + plan.notional`, both ignoring the
- * side. Exposure therefore only ever went UP. A follower who opened and closed
- * ten 100-unit positions read as 2000 of open exposure while holding nothing,
- * and was locked out of their own envelope permanently — with no way back down,
- * because nothing anywhere ever decremented it.
+ * That is not an accident of this service — it is what the envelope IS.
+ * `SessionKeyLib.sol` holds the real cap as `uint128 spendLimitWei`,
+ * documented as "cumulative cap on native value this session may ever move",
+ * and SPEC-SOVEREIGN §2 is explicit that the cap is enforced on-chain because
+ * "a cap only we enforce is a promise; a cap the account enforces is a fact".
+ * This module is the service-side honesty gate in front of that account, so
+ * its arithmetic has to agree with the chain's. Netting a sell against a buy
+ * here would approve mirrors the account will reject, which is worse than
+ * refusing them.
  *
- * The check and the write now call the same function, so they cannot drift
- * apart again.
+ * A follower who exhausts their budget is a session key with its
+ * `spendLimitWei` spent. The remedy is a NEW session — a fresh follow with a
+ * fresh envelope and expiry — not handing budget back, which the chain cannot
+ * do either.
+ *
+ * This exists as one exported function because the real bug was two
+ * expressions that disagreed about the same number: `planMirror` checked
+ * `currentExposure + observation.notional` while `CopyService` separately
+ * wrote `current + plan.notional`. They happened to agree, and nothing made
+ * them. The check and the write now call this, and the approved value rides on
+ * the plan, so they cannot drift apart.
  */
-export function exposureAfterMirror(currentExposure: Amount, side: MirrorSide, notional: Amount): Amount {
-  return side === 'buy' ? currentExposure + notional : currentExposure - notional;
-}
-
-/** Magnitude of a signed exposure — the cap is direction-agnostic. */
-export function absExposure(exposure: Amount): Amount {
-  return exposure < 0n ? -exposure : exposure;
+export function exposureAfterMirror(currentExposure: Amount, _side: MirrorSide, notional: Amount): Amount {
+  return currentExposure + notional;
 }
 
 /**
@@ -115,7 +119,7 @@ export function planMirror(input: {
   }
 
   const nextExposure = exposureAfterMirror(input.currentExposure, observation.side, observation.notional);
-  if (absExposure(nextExposure) > follow.envelope.maxAggregateExposure) {
+  if (nextExposure > follow.envelope.maxAggregateExposure) {
     throw new CopyError(
       `Mirror would exceed aggregate exposure cap ${formatAmount(follow.envelope.maxAggregateExposure)}`,
       'trade.copy_cap_exceeded',

@@ -278,14 +278,19 @@ describe('CopyService', () => {
   });
 
   /**
-   * Closing a mirrored position must give the exposure back.
+   * Exposure is a cumulative session BUDGET, not a net position.
    *
-   * Exposure was `current + notional` for BOTH sides, in two places that had
-   * drifted apart — so it only ever went up. A follower who opened and closed
-   * the same position repeatedly was permanently locked out of their own
-   * envelope while holding nothing, with no path anywhere that decremented it.
+   * The real bug was two expressions that disagreed about the same number:
+   * `planMirror` checked `currentExposure + observation.notional` while
+   * `CopyService` separately wrote `current + plan.notional`. They happened to
+   * agree; nothing made them. The approved value now rides on the plan.
+   *
+   * The arithmetic itself is deliberately unchanged, and this test says why:
+   * the envelope mirrors `SessionKeyLib`'s `uint128 spendLimitWei`, documented
+   * as the cumulative cap on what a session may EVER move. Netting a sell
+   * against a buy here would approve mirrors the on-chain account rejects.
    */
-  it('a round trip returns to zero exposure — a sell is not another buy', async () => {
+  it('a sell spends budget like a buy — the cap is cumulative, not net', async () => {
     const store = new MemoryCopyFollowStore();
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
@@ -295,59 +300,36 @@ describe('CopyService', () => {
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
       region: 'SG',
-      permittedMarkets: ['BTC-USDT'],
+      permittedMarkets: ['BTC-USDT', 'ETH-USDT'],
       maxNotionalPerOrder: '100',
-      maxAggregateExposure: '100',
+      maxAggregateExposure: '250',
       expiresAt: futureExpiry,
     });
+    const mirror = (side: 'buy' | 'sell', notional: string, marketId = 'BTC-USDT') =>
+      svc.planMirrorForFollow(principal, { followId: follow.followId, marketId, side, qty: '0.01', notional });
 
-    const mirror = (side: 'buy' | 'sell', notional: string) =>
-      svc.planMirrorForFollow(principal, { followId: follow.followId, marketId: 'BTC-USDT', side, qty: '0.01', notional });
+    const bought = await mirror('buy', '100');
+    expect(bought.nextExposure).toBe('100');
 
-    const opened = await mirror('buy', '100');
-    expect(opened.nextExposure).toBe('100');
-    expect(await store.getExposure(follow.followId)).toBe(parseAmount('100'));
+    // A closing sell does NOT hand budget back.
+    const sold = await mirror('sell', '100');
+    expect(sold.nextExposure).toBe('200');
+    expect(await store.getExposure(follow.followId)).toBe(parseAmount('200'));
 
-    const closed = await mirror('sell', '100');
-    expect(closed.nextExposure).toBe('0');
-    expect(await store.getExposure(follow.followId)).toBe(0n);
-
-    // Ten more round trips at the full cap. Under the old arithmetic the second
-    // buy alone was already refused; a follower holding nothing must not be.
-    for (let i = 0; i < 10; i += 1) {
-      await mirror('buy', '100');
-      await mirror('sell', '100');
-    }
-    expect(await store.getExposure(follow.followId)).toBe(0n);
+    // And alternating sides across permitted markets cannot evade the cap —
+    // a net-position model would let this run forever.
+    await expect(mirror('buy', '100', 'ETH-USDT')).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
   });
 
-  it('the cap bounds exposure in BOTH directions, not just long', async () => {
-    const store = new MemoryCopyFollowStore();
-    const svc = new CopyService(new MemoryLedger(), {
-      feeShareLaw: publishedFee,
-      jurisdictionLaw: publishedJur,
-      store,
-    });
-    const follow = await svc.follow(principal, {
-      leaderId: LEADER,
-      region: 'SG',
-      permittedMarkets: ['BTC-USDT'],
-      maxNotionalPerOrder: '100',
-      maxAggregateExposure: '100',
-      expiresAt: futureExpiry,
-    });
-    const mirror = (side: 'buy' | 'sell', notional: string) =>
-      svc.planMirrorForFollow(principal, { followId: follow.followId, marketId: 'BTC-USDT', side, qty: '0.01', notional });
-
-    // Net short to the cap is allowed — a leader who goes short is mirrorable.
-    await mirror('sell', '100');
-    expect(await store.getExposure(follow.followId)).toBe(-parseAmount('100'));
-
-    // Beyond it, in that direction, is refused: the cap is a magnitude.
-    await expect(mirror('sell', '1')).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
-  });
-
-  it('unfollow clears the churn counters, so re-following is a fresh period', async () => {
+  /**
+   * The churn counters must survive an unfollow.
+   *
+   * They are keyed `leader:follower` because the spec's unit is the pair and
+   * the period, not the envelope. `unfollow` is unilateral, needs no law and is
+   * always allowed — so clearing them there would make the abuse brake resettable
+   * for the price of two API calls: farm to the cap, unfollow, re-follow, repeat.
+   */
+  it('re-following does not reset a spent earnings cap', async () => {
     const store = new MemoryCopyFollowStore();
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
@@ -363,16 +345,12 @@ describe('CopyService', () => {
       expiresAt: futureExpiry,
     };
     const follow = await svc.follow(principal, envelope);
-
-    // Stats are keyed leader:follower, not followId — so they outlive the row.
     const key = `${LEADER}:${FOLLOWER}`;
     await store.setPeriodStats(key, { earningsPaid: parseAmount('100'), roundTrips: 42 });
 
     await svc.unfollow(principal, { followId: follow.followId });
-    expect(await store.getPeriodStats(key)).toEqual({ earningsPaid: 0n, roundTrips: 0 });
-
-    // A brand-new envelope must not inherit a spent cap or a decayed rate.
     await svc.follow(principal, envelope);
-    expect(await store.getPeriodStats(key)).toEqual({ earningsPaid: 0n, roundTrips: 0 });
+
+    expect(await store.getPeriodStats(key)).toEqual({ earningsPaid: parseAmount('100'), roundTrips: 42 });
   });
 });
