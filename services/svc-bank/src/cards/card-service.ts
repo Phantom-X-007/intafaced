@@ -75,9 +75,15 @@ import { cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
  *   after the capture, before the remainder is returned
  *     The merchant has been paid and the user's unspent remainder is still in
  *     the hold account. Visible — `cards.test.ts` reads that account directly —
- *     and returned by re-driving `capture` with the same amount, because both
- *     posts are idempotent on the authorisation. Nothing is lost; something is
- *     late.
+ *     and returned by `resumeSettlements`, which re-drives the reversal for the
+ *     amount its row was claimed with. Nothing is lost; something is late.
+ *
+ *     NOT by re-driving `capture`. That was claimed here for a while and it was
+ *     never true: a settled sequence 0 closes the authorisation, so the re-drive
+ *     is refused `bank.card_authorization_closed` before either post is reached,
+ *     and the repo's own test asserts that refusal. A recovery story that only
+ *     exists in a comment is worse than an admitted gap — it is why the loans
+ *     module has `resumePendingLoans` as a CALL and not as a paragraph.
  *
  *     They are NOT one posting, unlike the loan seizure. The argument that made
  *     a liquidation atomic was that the borrower could spend inside the window;
@@ -527,6 +533,105 @@ export class CardService {
     return (await this.ledger.balance(withdrawalHoldAccount(userId, assetId, authorizationId))).amount;
   }
 
+  /**
+   * OPERATOR SURFACE: re-drive the posts of settlements that were claimed and
+   * never reached the ledger, and report what is still held.
+   *
+   * The other half of the crash story, and the card equivalent of
+   * `resumePendingLoans` — which exists for exactly this reason on the loan side.
+   * Two shapes of stuck money end up here, and neither is reachable by calling
+   * `capture` again:
+   *
+   *   · A capture whose post failed. Sequence 0 is `rejected` or `pending`, and
+   *     the user's ENTIRE hold is still in the authorisation's hold account.
+   *   · A partial capture whose REVERSAL post failed. Sequence 0 is settled — so
+   *     the authorisation is correctly closed to new decisions — and the user's
+   *     unspent remainder is stuck in that account with nothing left to move it.
+   *
+   * Safe to run at any time and any number of times, for the same reason
+   * `resumePending` is: every post is idempotent on the authorisation, and each
+   * row is re-driven for THE AMOUNT IT WAS CLAIMED WITH. No amount is passed in
+   * here, because a recovery that can restate what moved is not a recovery.
+   *
+   * Failures are collected rather than thrown, so one unpostable row does not
+   * hide the rows behind it — the same reasoning as `runRiskSweep.refused`.
+   */
+  async resumeSettlements(input: { cardId: string; authorizationRef: string }): Promise<{
+    authorizationId: string;
+    resumed: Array<{
+      sequence: number;
+      kind: 'capture' | 'reversal';
+      amount: Amount;
+      outcome: 'settled' | 'failed';
+      ledgerTxId?: string;
+      reason?: string;
+    }>;
+    held: Amount;
+  }> {
+    const card = await this.card(input.cardId);
+    const authorization = await this.requireApprovedAuthorization(card, input.authorizationRef);
+
+    const rows = await this.sql<Array<{ sequence: number; kind: 'capture' | 'reversal'; amount: string }>>`
+      SELECT sequence, kind, amount::text AS amount FROM bank.card_settlements
+       WHERE authorization_id = ${authorization.id} AND status <> 'settled'
+       ORDER BY sequence ASC
+    `;
+
+    const resumed: Array<{
+      sequence: number;
+      kind: 'capture' | 'reversal';
+      amount: Amount;
+      outcome: 'settled' | 'failed';
+      ledgerTxId?: string;
+      reason?: string;
+    }> = [];
+
+    for (const row of rows) {
+      const amount = parseAmount(row.amount);
+      try {
+        const ledgerTxId = await this.settlement({
+          authorization,
+          sequence: row.sequence,
+          kind: row.kind,
+          amount,
+          post: () =>
+            this.ledger.post(
+              row.kind === 'capture'
+                ? recipes.withdrawSettle({
+                    userId: card.userId,
+                    assetId: card.assetId,
+                    amount,
+                    rail: card.issuer,
+                    withdrawalId: authorization.id,
+                  })
+                : recipes.withdrawReverse({
+                    userId: card.userId,
+                    assetId: card.assetId,
+                    amount,
+                    rail: card.issuer,
+                    withdrawalId: authorization.id,
+                  }),
+            ),
+        });
+        resumed.push({ sequence: row.sequence, kind: row.kind, amount, outcome: 'settled', ledgerTxId });
+      } catch (err) {
+        resumed.push({
+          sequence: row.sequence,
+          kind: row.kind,
+          amount,
+          outcome: 'failed',
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return {
+      authorizationId: authorization.id,
+      resumed,
+      held: await this.heldFor(authorization.id, card.userId, card.assetId),
+    };
+  }
+
   // ── Cashback ───────────────────────────────────────────────────────────────
 
   /**
@@ -654,8 +759,8 @@ export class CardService {
     return row ? toAuthorization(row) : null;
   }
 
-  /** An authorisation that is approved, settled, and has nothing against it yet. */
-  private async requireOpenAuthorization(card: CardRecord, authorizationRef: string): Promise<AuthorizationRecord> {
+  /** An authorisation that exists, was approved, and whose hold really landed. */
+  private async requireApprovedAuthorization(card: CardRecord, authorizationRef: string): Promise<AuthorizationRecord> {
     const authorization = await this.authorizationByRef(card.id, authorizationRef);
     if (!authorization) {
       throw new BankError(`Authorisation ${authorizationRef} not found on this card`, 'bank.card_authorization_not_found');
@@ -663,8 +768,32 @@ export class CardService {
     if (authorization.decision !== 'approved' || authorization.status !== 'settled') {
       throw new BankError(`Authorisation ${authorizationRef} was declined and holds nothing`, 'bank.card_authorization_declined');
     }
+    return authorization;
+  }
+
+  /**
+   * An authorisation that is approved, settled, and has nothing against it yet.
+   *
+   * `status = 'settled'` IS THE LOAD-BEARING PART OF THIS QUERY. Counting every
+   * sequence-0 row regardless of status closes the authorisation on the strength
+   * of a settlement that never reached the ledger: a post that threw leaves a
+   * `rejected` row, a process that died between the claim and the post leaves a
+   * `pending` one, and in both cases the user's whole hold is still sitting in an
+   * account only this authorisation can name. Treating either as "already
+   * settled" refuses the retry that would release it — and refuses `reverse()`
+   * too, because it comes through here as well. That is stranded funds with no
+   * way out, produced by one transient ledger error.
+   *
+   * A settlement that DID reach the ledger still closes the authorisation, which
+   * is what makes a second capture at a different amount, and a reversal after a
+   * capture, impossible rather than merely unlikely. Recovering the remainder of
+   * a capture that got that far is `resumeSettlements`, not a re-drive of this.
+   */
+  private async requireOpenAuthorization(card: CardRecord, authorizationRef: string): Promise<AuthorizationRecord> {
+    const authorization = await this.requireApprovedAuthorization(card, authorizationRef);
     const settled = await this.sql<Array<{ count: string }>>`
-      SELECT count(*)::text AS count FROM bank.card_settlements WHERE authorization_id = ${authorization.id} AND sequence = 0
+      SELECT count(*)::text AS count FROM bank.card_settlements
+       WHERE authorization_id = ${authorization.id} AND sequence = 0 AND status = 'settled'
     `;
     if (settled[0]!.count !== '0') {
       throw new BankError(`Authorisation ${authorizationRef} has already been settled`, 'bank.card_authorization_closed');
@@ -713,15 +842,41 @@ export class CardService {
           ON CONFLICT (authorization_id, sequence) DO NOTHING
           RETURNING id, ledger_tx_id
         `;
-        if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id, ledgerTxId: null };
-        const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.card_settlements
+        if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id, ledgerTxId: null, amount: input.amount };
+        const existing = await tx<Array<{ id: string; ledger_tx_id: string | null; amount: string }>>`
+          SELECT id, ledger_tx_id, amount::text AS amount FROM bank.card_settlements
            WHERE authorization_id = ${input.authorization.id} AND sequence = ${input.sequence}
         `;
-        return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
+        return {
+          claimed: false as const,
+          id: existing[0]!.id,
+          ledgerTxId: existing[0]!.ledger_tx_id,
+          amount: parseAmount(existing[0]!.amount),
+        };
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
+
+    // THE LEDGER KEY IS THE AUTHORISATION, NOT THE AMOUNT.
+    //
+    // `post()` returns the existing transaction for a reused business key and
+    // never compares the body against it, which is correct for a re-drive and
+    // wrong for a disagreement. Without this check a second caller arriving at
+    // the same sequence with a DIFFERENT amount is handed the first caller's
+    // transaction and believes its own number: it reports a capture at a value
+    // the ledger never saw, computes its remainder from that value — so the
+    // reversal is wrong too — and pays cashback on it out of a real pot. Two
+    // concurrent operator calls, or a client retry landing before the first
+    // response, is all it takes.
+    //
+    // The claimed row is the record of what this sequence is for. A caller who
+    // disagrees with it is refused by name rather than quietly reconciled.
+    if (claim.amount !== input.amount) {
+      throw new BankError(
+        `Settlement ${input.sequence} on this authorisation was claimed for ${formatAmount(claim.amount)}, not ${formatAmount(input.amount)}`,
+        'bank.card_settlement_amount_conflict',
+      );
+    }
 
     if (!claim.claimed && claim.ledgerTxId) return claim.ledgerTxId;
 
