@@ -68,12 +68,14 @@ export class JetStreamEventBus implements EventBus {
     const def = EVENT_CATALOG[name] as EventDef;
     const stream = streamName(def.service, this.opts.streamPrefix);
 
+    const maxDeliver = opts.maxDeliver ?? 5;
+
     await this.jsm.consumers.add(stream, {
       durable_name: opts.durable,
       ack_policy: AckPolicy.Explicit,
       deliver_policy: DeliverPolicy.All,
       filter_subject: def.subject,
-      max_deliver: opts.maxDeliver ?? 5,
+      max_deliver: maxDeliver,
       ack_wait: 30_000_000_000, // 30s in ns
     });
 
@@ -94,8 +96,8 @@ export class JetStreamEventBus implements EventBus {
           await handler(validated, env as Envelope<Payload<K>>);
           msg.ack();
         } catch (err) {
-          // Redelivery is JetStream's job; after max_deliver the message is
-          // parked for the operator. Never ack a message we failed to process.
+          // Redelivery is JetStream's job. Never ack a message we failed to
+          // process.
           //
           // The delay is the difference between retrying and only appearing to.
           // A bare `nak()` redelivers immediately, so the default budget of five
@@ -103,7 +105,9 @@ export class JetStreamEventBus implements EventBus {
           // milliseconds and the message parked before the blip it was meant to
           // ride out had finished. svc-notify says a transient failure MUST be
           // retried; three attempts in five milliseconds is not a retry.
-          msg.nak(nakBackoffMs(msg.info.redeliveryCount));
+          const attempt = msg.info.redeliveryCount;
+          if (attempt >= maxDeliver) announceAbandoned(def.subject, opts.durable, attempt, msg.data, err);
+          msg.nak(nakBackoffMs(attempt));
           if (!(err instanceof Error)) throw err;
         }
       }
@@ -126,6 +130,64 @@ export class JetStreamEventBus implements EventBus {
     await Promise.all(this.subs.map((s) => s.unsubscribe()));
     await this.nc.drain();
   }
+}
+
+/**
+ * The last attempt has just failed — say so, once, before the bus goes quiet.
+ *
+ * WHAT "PARKED FOR THE OPERATOR" USED TO MEAN
+ *
+ * Nothing. `SubscribeOptions.maxDeliver` said "before the message goes to the
+ * dead-letter subject", and there is no dead-letter subject — the phrase
+ * appeared exactly once in this repo, in that sentence. JetStream simply stops
+ * redelivering: no subject, no row, no log, no advisory consumer. A margin call
+ * that failed its whole budget left the same trace as one that was never
+ * published, and the only "operator" who could have been reading was a NATS
+ * advisory nobody subscribes to.
+ *
+ * So this is not a dead-letter queue and does not pretend to be one. Publishing
+ * to a new subject would mean inventing one in the catalog, which is a decision
+ * and not a bug fix. This is the smallest true thing: the moment the bus gives
+ * up is the moment somebody is told, with enough to find the message — subject,
+ * durable, attempt count, and the envelope's own idempotency key, which is what
+ * a replay would be keyed on.
+ *
+ * `console.error` because this package deliberately depends on no logger and
+ * chooses none for its consumers. A structured line on a path that should never
+ * run beats a silence that always looks healthy.
+ *
+ * Fail-safe: this must never be why a message is not nak'd, so every part of it
+ * that could throw — decoding a payload that already failed to parse — is
+ * caught and dropped in favour of reporting less.
+ */
+function announceAbandoned(subject: string, durable: string, attempt: number, data: Uint8Array, err: unknown): void {
+  let idempotencyKey = 'unknown';
+  let producer = 'unknown';
+  try {
+    const env = decodeEnvelope(data);
+    idempotencyKey = env.idempotencyKey;
+    producer = env.producer;
+  } catch {
+    // The message could not be decoded — which may well be why it failed. The
+    // announcement is worth more than the fields it is missing.
+  }
+
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      event: 'bus.message_abandoned',
+      subject,
+      durable,
+      producer,
+      idempotencyKey,
+      attempts: attempt,
+      reason: err instanceof Error ? err.message : String(err),
+      msg:
+        'event bus gave up on this message — max_deliver is spent, JetStream will not redeliver it, ' +
+        'and nothing downstream will retry it. The stream retains it for 90 days: it can be replayed ' +
+        'by resetting this durable consumer once the cause is fixed.',
+    }),
+  );
 }
 
 /**
