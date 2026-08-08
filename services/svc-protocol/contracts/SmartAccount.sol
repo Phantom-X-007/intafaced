@@ -38,9 +38,9 @@ import {SessionKeyLib} from "./SessionKeyLib.sol";
  *
  * ── §13 sockets ─────────────────────────────────────────────────────────────
  *   · SOCKET: passkey (P-256) owners. `owner` may be a contract, in which case
- *     signature validation goes through ERC-1271 — so a deployed P-256 verifier
- *     is an owner today without any change to this file. The verifier contract
- *     itself is `socket.p256-verifier`.
+ *     signature validation goes through ERC-1271 — so a deployed `PasskeyOwner`
+ *     (contracts/passkey/) is an owner without any change to this file.
+ *     S-A9 / previously `socket.p256-verifier`.
  *   · SOCKET: social recovery (`socket.social-recovery`). Deliberately absent.
  *     A guardian set is a second party who can take the account, and the
  *     platform must never be one; the design needs its own review before any
