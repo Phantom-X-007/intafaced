@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Sql } from 'postgres';
 import { MarketError, VendorService } from './vendor-service.js';
+import type { SlotEntitlementSource } from './stake-source.js';
 
 /**
  * The refusals, proved to happen BEFORE the database is touched.
@@ -25,7 +26,20 @@ const noDatabase = new Proxy(
 const VENDOR = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OPERATOR = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-const vendors = new VendorService(noDatabase);
+/**
+ * The stake gate, held to the same standard as the database: none of the
+ * refusals below may reach it. A guard that consults svc-token before rejecting
+ * a blank display name has made a network call to answer a form error — and
+ * under an svc-token outage it would report `market.stake_unavailable` for a
+ * problem the caller could have fixed themselves.
+ */
+const noStake: SlotEntitlementSource = {
+  entitlementOf() {
+    throw new Error('svc-market called the stake gate before refusing — the guard ran too late');
+  },
+};
+
+const vendors = new VendorService(noDatabase, noStake);
 
 describe('vet — nothing in svc-market decides an application', () => {
   it('refuses a caller who does not hold the operator scope', async () => {
@@ -61,5 +75,22 @@ describe('apply — the fields an operator has to read cannot be blank', () => {
     await expect(vendors.applyAsVendor({ userId: OPERATOR, displayName: 'Acme', description: '\n\t ' })).rejects.toMatchObject({
       code: 'market.vendor_description_required',
     });
+  });
+});
+
+describe('claimSlot — the cheap refusal happens before the expensive lookups', () => {
+  /**
+   * A blank `ref` is refused before the vendor is read and before svc-token is
+   * asked. Both proxies above throw if either happens, so this test fails if the
+   * check ever moves below them — which matters because the stake lookup is a
+   * network call and the vendor read is a query, and neither should be spent on
+   * a request that was malformed.
+   */
+  it('refuses a blank slot reference without a query or a stake lookup', async () => {
+    await expect(vendors.claimSlot({ userId: VENDOR, ref: '   ' })).rejects.toMatchObject({ code: 'market.slot_ref_required' });
+  });
+
+  it('refuses an empty slot reference', async () => {
+    await expect(vendors.claimSlot({ userId: VENDOR, ref: '' })).rejects.toBeInstanceOf(MarketError);
   });
 });

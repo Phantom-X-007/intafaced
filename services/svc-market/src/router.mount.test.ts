@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketRouter } from './router.js';
-import type { VendorService } from './vendor-service.js';
+import { MarketError, type VendorService } from './vendor-service.js';
 
 /**
  * REACHABILITY, NOT SHAPE.
@@ -65,6 +65,14 @@ const vendorRow = {
   updatedAt: '2026-08-08T10:00:00.000Z',
 };
 
+const slotRow = {
+  id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  vendorId: VENDOR,
+  ref: 'listing-1',
+  claimedAt: '2026-08-08T10:00:00.000Z',
+  releasedAt: null,
+};
+
 function stubVendors(overrides: Partial<VendorService> = {}): VendorService {
   return {
     applyAsVendor: vi.fn(async () => vendorRow),
@@ -72,6 +80,17 @@ function stubVendors(overrides: Partial<VendorService> = {}): VendorService {
     listApplications: vi.fn(async () => []),
     vet: vi.fn(async () => ({ changed: true, vendor: { ...vendorRow, status: 'approved' as const }, event: null })),
     history: vi.fn(async () => []),
+    claimSlot: vi.fn(async () => ({ claimed: true, slot: slotRow })),
+    releaseSlot: vi.fn(async () => ({ released: true })),
+    slotStatus: vi.fn(async () => ({
+      vendorId: VENDOR,
+      status: 'approved' as const,
+      tier: 'Operator',
+      capacity: 3,
+      held: 1,
+      usable: 1,
+      slots: [slotRow],
+    })),
     ...overrides,
   } as unknown as VendorService;
 }
@@ -122,6 +141,115 @@ describe('svc-market mount — who may apply', () => {
     const vendors = stubVendors();
     await expect(createMarketRouter(vendors).createCaller(signed()).mine()).resolves.toBeNull();
     expect(vendors.myVendor).toHaveBeenCalledWith(USER);
+  });
+});
+
+describe('svc-market mount — who may take a listing slot', () => {
+  it('refuses an anonymous slot claim', async () => {
+    const vendors = stubVendors();
+    await expect(createMarketRouter(vendors).createCaller(anonymous()).claimSlot({ ref: 'listing-1' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(vendors.claimSlot).not.toHaveBeenCalled();
+  });
+
+  /**
+   * THE ONE THAT MATTERS MOST HERE. There is no `vendorId` in the input schema at
+   * all, so the slot is always spent against the caller's own vendor row. A claim
+   * that could name its vendor would let anyone burn somebody else's capacity —
+   * and the refusal would land on the victim.
+   */
+  it('claims against the principal, never against a vendor named in the body', async () => {
+    const vendors = stubVendors();
+    const result = await createMarketRouter(vendors).createCaller(signed()).claimSlot({ ref: 'listing-1' });
+    expect(result.claimed).toBe(true);
+    expect(vendors.claimSlot).toHaveBeenCalledWith({ userId: USER, ref: 'listing-1' });
+  });
+
+  it('refuses a claim from a caller holding only market:read', async () => {
+    const vendors = stubVendors();
+    const reader = principal({ scopes: ['market:read'] });
+    await expect(createMarketRouter(vendors).createCaller(signed(reader)).claimSlot({ ref: 'listing-1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(vendors.claimSlot).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unverified claimant with the matrix code', async () => {
+    const vendors = stubVendors();
+    const unverified = principal({ tier: 'none' });
+    await expect(createMarketRouter(vendors).createCaller(signed(unverified)).claimSlot({ ref: 'listing-1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      cause: { code: 'denied.kyc_required', requiredTier: 'basic' },
+    });
+    expect(vendors.claimSlot).not.toHaveBeenCalled();
+  });
+
+  it('releases against the principal too', async () => {
+    const vendors = stubVendors();
+    await expect(createMarketRouter(vendors).createCaller(signed()).releaseSlot({ ref: 'listing-1' })).resolves.toEqual({
+      released: true,
+    });
+    expect(vendors.releaseSlot).toHaveBeenCalledWith({ userId: USER, ref: 'listing-1' });
+  });
+
+  it('reads the caller own slot position, including what is usable', async () => {
+    const vendors = stubVendors();
+    await expect(createMarketRouter(vendors).createCaller(signed()).slots()).resolves.toMatchObject({
+      tier: 'Operator',
+      capacity: 3,
+      held: 1,
+      usable: 1,
+    });
+    expect(vendors.slotStatus).toHaveBeenCalledWith(USER);
+  });
+
+  it('refuses to read a slot position anonymously', async () => {
+    const vendors = stubVendors();
+    await expect(createMarketRouter(vendors).createCaller(anonymous()).slots()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(vendors.slotStatus).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The refusal codes reach the caller distinguishable, because they are three
+   * different instructions: stake, wait for a release, or try again later.
+   */
+  it('maps a stake refusal to FORBIDDEN and a full tier to CONFLICT', async () => {
+    const stakeRequired = stubVendors({
+      claimSlot: vi.fn(async () => {
+        throw new MarketError('Stake to earn a slot', 'market.stake_required');
+      }),
+    } as unknown as Partial<VendorService>);
+    await expect(createMarketRouter(stakeRequired).createCaller(signed()).claimSlot({ ref: 'l' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      cause: { code: 'market.stake_required' },
+    });
+
+    const exhausted = stubVendors({
+      claimSlot: vi.fn(async () => {
+        throw new MarketError('Every slot is in use', 'market.slots_exhausted');
+      }),
+    } as unknown as Partial<VendorService>);
+    await expect(createMarketRouter(exhausted).createCaller(signed()).claimSlot({ ref: 'l' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      cause: { code: 'market.slots_exhausted' },
+    });
+  });
+
+  /**
+   * An svc-token outage must NOT read as "go and stake". A 403 would send a
+   * vendor who has already staked off to stake again; a 500 says try again.
+   */
+  it('reports an unreadable stake gate as our failure, not the caller own', async () => {
+    const down = stubVendors({
+      claimSlot: vi.fn(async () => {
+        throw new MarketError('Stake gate unavailable (500)', 'market.stake_unavailable');
+      }),
+    } as unknown as Partial<VendorService>);
+    await expect(createMarketRouter(down).createCaller(signed()).claimSlot({ ref: 'l' })).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      cause: { code: 'market.stake_unavailable' },
+    });
   });
 });
 

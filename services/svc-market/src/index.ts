@@ -5,6 +5,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
 import { VendorService } from './vendor-service.js';
+import { createStakeSource } from './stake-source.js';
 import { createMarketRouter, type MarketRouter } from './router.js';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -22,7 +23,8 @@ registerProcessHooks(
 );
 
 /**
- * svc-market — vendor lifecycle Stage 1: apply, then vet (§8.7).
+ * svc-market — vendor lifecycle Stage 2: apply, vet, and stake-gated listing
+ * slots (§8.7).
  *
  * NO LEDGER CLIENT and no LEDGER_URL. `market.vendors` moves no value: purchases,
  * subscriptions and house commission are `market.commerce`, a different mountain
@@ -45,12 +47,24 @@ const sql = postgres(env.DATABASE_URL, {
 
 // Fail at boot, loudly, rather than answering the first real request with
 // "relation does not exist" — which reads as a broken query rather than a
-// migration that never ran.
+// migration that never ran. Both tables, because Stage 2's is in a separate
+// migration and a half-migrated database must not start either.
 await sql`SELECT 1 FROM market.vendors LIMIT 1`.catch(() => {
   throw new Error('market schema is missing — run migrations before starting svc-market');
 });
+await sql`SELECT 1 FROM market.vendor_slots LIMIT 1`.catch(() => {
+  throw new Error('market.vendor_slots is missing — run migrations before starting svc-market');
+});
 
-const vendors = new VendorService(sql);
+/**
+ * The stake gate, constructed explicitly and never reached by a fallback.
+ *
+ * There is no branch here that substitutes a permissive source when svc-token is
+ * unconfigured: `TOKEN_URL` has a default and `INTERNAL_SERVICE_SECRET` does
+ * not, so a misconfigured deployment fails at import rather than handing every
+ * vendor unlimited listing slots.
+ */
+const vendors = new VendorService(sql, createStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET));
 const appRouter = createMarketRouter(vendors);
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -62,11 +76,11 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 /**
- * Readiness names the stage out loud. `market.listings` and the stake-gated slots
- * behind it are Stage 2 and 3; a client that reads `stage` knows the listing half
- * of the marketplace is not there yet, rather than discovering it from a 404.
+ * Readiness names the stage out loud. The public vendor profile is Stage 3; a
+ * client that reads `stage` knows the listing half of the marketplace is not
+ * there yet, rather than discovering it from a 404.
  */
-app.get('/ready', async () => ({ ready: true, stage: '1-apply-vet' }));
+app.get('/ready', async () => ({ ready: true, stage: '2-stake-gated-slots' }));
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
@@ -81,7 +95,7 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, stage: '1-apply-vet', trpc: true }, 'svc-market ready');
+app.log.info({ port: env.HTTP_PORT, stage: '2-stake-gated-slots', trpc: true }, 'svc-market ready');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
