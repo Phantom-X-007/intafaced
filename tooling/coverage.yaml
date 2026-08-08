@@ -1309,9 +1309,13 @@ capabilities:
   - id: connect.latency-grading
     capability: Latency grading — every adapter scored live, feeding execution routing weights
     law: '27:760'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #23'
-      note: Routing weights that respond to live round-trip, book staleness and reject rates. No row.
+    tracker: [connect.latency-grading]
+    note: >-
+      Gap closed 2026-08-08. §30:793 phases Connect at 2 — the phase being worked — and this had no
+      board presence at all. The row carries D-S-18's rule verbatim: latency grading is a measurement,
+      never an estimate, so an unmeasured adapter has no score and receives no routing weight. It
+      computes blocked on venue.aggregation, which is one public market-data adapter with the trading
+      half deliberately unbuilt; there is nothing to grade against anything.
   - id: connect.venue-vault
     capability: Venue Vault — per-user encrypted external API keys, HSM-backed, withdrawal permission refused
     law: '27:761'
@@ -1323,19 +1327,26 @@ capabilities:
   - id: connect.data-lake
     capability: Unified data lake — normalised ticks, books and fills to a time-series store
     law: '27:762'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #22'
-      note: The law calls it our data moat and the backtest fuel for §29. Nothing captures it today.
+    tracker: [connect.data-lake]
+    note: >-
+      Gap closed 2026-08-08. The law calls it our data moat and the backtest fuel for §29, and D-S-18
+      records the same edge from the other side — Quant is blocked on this lake, the lake on §27's
+      adapters. Capture only is decided; the store is not — no time-series database is chosen or in
+      either compose file. Blocked on venue.aggregation.
 
   # ── §28 INTAFACED EXECUTION · v2.1, 0% tracked ─────────────────────────────
   - id: execution.sor
     capability: svc-execution — cross-venue Smart Order Router, OMS/EMS, execution reports
     law: '28:770'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #24'
-      note: >-
-        §30:793 phases this at 2 — the phase being worked now. svc-dex refuses by name because
-        "svc-execution does not exist" (services/svc-dex/src/quote/market-data-source.ts:190).
+    tracker: [execution.sor]
+    note: >-
+      Gap closed 2026-08-08. §30:793 phases this at 2 — the phase being worked — and svc-dex refuses by
+      name because "svc-execution does not exist"
+      (services/svc-dex/src/quote/market-data-source.ts:190). The row is explicit that the ranking rule
+      is NOT re-opened: packages/venue-adapter already ranks on effective price with one bounded, tested
+      5 bps internal tie-break (D-S-06 accepted), and this capability extends that cost model with
+      impact, latency grade and transfer cost rather than proposing a second thumb on the scale. No
+      services/svc-execution is authorised by the row existing.
   - id: execution.algo-engine
     capability: Algo engine generalised cross-venue — TWAP/VWAP/EWAP/PVOL, iceberg, sniper, pairs, basis
     law: '28:771'
@@ -1344,15 +1355,24 @@ capabilities:
   - id: execution.arbitrage
     capability: Arbitrage engine — cross-exchange, triangular, spot-perp basis, funding, DEX to CEX with inventory
     law: '28:772'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #25'
-      note: An opportunity scanner, risk-checked sizing and PnL attribution per opportunity class. No row.
+    tracker: [execution.arbitrage]
+    note: >-
+      Gap closed 2026-08-08. Rides the one ranking rule under execution.sor — no per-leg preference —
+      and keeps the law's own honesty term, "no bridge-latency fantasy": a DEX-to-CEX opportunity priced
+      on a bridge completing inside the spread is refused, not sized. What is not decided is capital:
+      every opportunity class needs house inventory both sides and no inventory policy or exposure cap
+      exists. Blocked on execution.sor.
   - id: execution.market-making
     capability: Market-making engine — internal MM and external-venue MM, one engine
     law: '28:773'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #26'
-      note: trade.mm-bot covers internal book seeding only. Working the street is a different product.
+    tracker: [execution.market-making]
+    note: >-
+      Gap closed 2026-08-08, with the tension named on the row rather than left to be discovered:
+      trade.mm-bot covers internal book seeding only, working the street is a different product, and
+      §28:773 wants one engine for both — which collides with the futures mark law, "a price that moves
+      money is never supplied by the party it pays". mark-from-depth.ts records the measured version of
+      that collision (two dust orders minted a payout-grade mid worth 2,000 USDT). Internal quotes may
+      seed liquidity; they may not become a mark. Spread and inventory magnitudes stay owner numbers.
   - id: execution.risk-spine
     capability: Risk spine — pre-trade checks per strategy, venue exposure caps, drawdown halts, global kill-switch
     law: '28:775'
@@ -1363,11 +1383,14 @@ capabilities:
   - id: execution.house-tenant
     capability: House desk sealed private tenant — the Throne Law
     law: '28:777'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.b #27'
-      note: >-
-        A tenancy isolation requirement — separate keys, separate namespace, strategies never in this
-        repo — with no row and no test asserting the seal holds.
+    tracker: [execution.house-tenant]
+    note: >-
+      Gap closed 2026-08-08 — FLAGGED, NOT DESIGNED. A tenancy isolation requirement (separate keys,
+      separate namespace, strategies never in this repo) with no test asserting the seal holds. A house
+      desk trading alongside customers is a conflict-of-interest and fairness question, so the row says
+      an owner ADR precedes any code and deliberately proposes no answer — not what the desk may see of
+      customer flow, not whether it may quote markets customers trade. §30:795 gives this row's plane as
+      "—"; the row's F is custody of house money, not a plane ruling.
 
   # ── §29 INTAFACED QUANT · v2.1, 0% tracked ─────────────────────────────────
   - id: quant.studio
@@ -1446,11 +1469,14 @@ capabilities:
   - id: v22.alerts
     capability: Alerts and watchlists — price, funding, liquidation proximity, whale flow, portfolio digests
     law: '31:809'
-    gap:
-      audit: 'BUILD-COVERAGE-AUDIT-2026-08-03.md · A1.c #33'
-      note: >-
-        The law phases the ALERTS CORE at Phase 2 — the phase being worked now. ops.notifications is
-        fan-out, not alerting: nothing evaluates a condition and decides to notify.
+    tracker: [v22.alerts]
+    note: >-
+      Gap closed 2026-08-08. The law phases the ALERTS CORE at Phase 2 — the phase being worked — while
+      ops.notifications is fan-out, not alerting: nothing evaluated a condition and decided to notify,
+      and nothing said so. The row keeps the two halves apart (core at 2, intelligence tiers at 5) and
+      carries the refusal rule: an alert compared against a price the platform cannot source refuses
+      rather than firing on a stale number. Blocked on ops.notifications, which cannot deliver
+      out-of-app until the owner supplies gateway credentials.
   - id: v22.business-banking
     capability: svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll
     law: '31:811'
@@ -1826,19 +1852,12 @@ baseline:
     - m.core.site-builder
     - m.core.social-promotion
     - core.mobile-apps
-    - connect.latency-grading
-    - connect.data-lake
-    - execution.sor
-    - execution.arbitrage
-    - execution.market-making
-    - execution.house-tenant
     - quant.studio
     - quant.sdk
     - quant.backtest
     - quant.marketplace
     - v22.auto-invest
     - v22.tax-engine
-    - v22.alerts
     - v22.business-banking
     - v22.predict
     - v22.infra-b2b
