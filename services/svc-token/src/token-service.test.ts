@@ -1110,6 +1110,46 @@ if (!available) {
     });
   });
 
+  // ── The economy row itself ────────────────────────────────────────────────
+  //
+  // `token_params` is the singleton every rate, curve and cap is read from. The
+  // service refuses when it is missing rather than falling back to the constants
+  // compiled into source — deliberately, because a deployment charging a
+  // discount the database does not hold is the exact divergence that refusal was
+  // added to close. Three throw sites, and no test named the code.
+
+  describe('a deployment whose token_params row is missing', () => {
+    let saved: Array<Record<string, unknown>>;
+
+    beforeEach(async () => {
+      saved = await sql<Array<Record<string, unknown>>>`SELECT * FROM token.token_params WHERE id = true`;
+      await sql`DELETE FROM token.token_params WHERE id = true`;
+    });
+
+    afterEach(async () => {
+      await sql`DELETE FROM token.token_params WHERE id = true`;
+      if (saved[0]) await sql`INSERT INTO token.token_params ${sql(saved[0] as never)}`;
+    });
+
+    const dbToken = () => new TokenService(sql, ledger, bus, { ...options, loadParamsFromDb: true, feeScheduleTtlMs: 0 });
+
+    it('refuses to price a fee discount rather than falling back to the compiled schedule', async () => {
+      await expect(dbToken().feeDiscountSchedule()).rejects.toMatchObject({ code: 'token.params_missing' });
+    });
+
+    it('refuses to split a buyback rather than inventing the split', async () => {
+      await expect(dbToken().buybackParams()).rejects.toMatchObject({ code: 'token.params_missing' });
+    });
+
+    it('refuses to mint rather than emitting against a curve nobody configured', async () => {
+      await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_missing' });
+
+      const rows = await sql`SELECT epoch FROM token.emission_epochs`;
+      expect(rows).toHaveLength(0);
+      expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+  });
+
   // ── Emissions ─────────────────────────────────────────────────────────────
 
   describe('emissions', () => {
@@ -1478,6 +1518,33 @@ if (!available) {
       const afterClose = new Date('2026-07-23T00:00:00.000Z');
       await expect(token.castVote({ proposalId: open.id, userId: USER_A, choice: 'for', now: afterClose })).rejects.toMatchObject({
         code: 'token.proposal_window',
+      });
+    });
+
+    /**
+     * A refusal nothing executes is a refusal nobody has checked still fires.
+     * `token.proposal_not_found` had two throw sites and no test naming it —
+     * the same shape as `token.supply_exhausted`, which turned out to be
+     * guarding the wrong number (#1083).
+     */
+    it('refuses to vote on a proposal that does not exist, rather than recording a ballot against nothing', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const missing = '00000000-0000-4000-8000-0000000000ff';
+
+      await expect(token.castVote({ proposalId: missing, userId: USER_A, choice: 'for', now })).rejects.toMatchObject({
+        code: 'token.proposal_not_found',
+      });
+
+      const votes = await sql`SELECT id FROM token.governance_votes`;
+      expect(votes).toHaveLength(0);
+    });
+
+    it('reports an unknown proposal rather than an empty tally', async () => {
+      // The dangerous alternative is a zero tally, which reads as "nobody
+      // voted" for a proposal that was never opened.
+      await expect(token.getProposal('00000000-0000-4000-8000-0000000000fe')).rejects.toMatchObject({
+        code: 'token.proposal_not_found',
       });
     });
 
