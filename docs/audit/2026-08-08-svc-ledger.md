@@ -103,7 +103,21 @@ CI found two real faults in this test on its first run, both recorded in the PR.
 
 ---
 
-## Broken, parked — and why it is not an agent call
+## Broken, parked — now DECIDED
+
+> **UPDATED same day.** Every item in this section was parked as "Nitro must decide".
+> He returned it: _"i cannot make decisions myself. you need to make these decisions."_
+> All of them are now decided, with the research and a flip condition each, in
+> [`2026-08-08-spine-decisions.md`](2026-08-08-spine-decisions.md).
+> Short version: the `assets.decimals` question dissolved (doctrine §4.2 invariant 5
+> already fixes the ledger at 18 decimals for every asset, so the column cannot be a
+> ledger scale); strict idempotency body-matching is **NO**; a trigger backstop for
+> sum-to-zero is **NO**, because reconciliation already detects it and freezes; the
+> `svc-trade` gate was never violated, only unrecorded; and the cross-asset entry gap
+> is **shipped** in #1082 rather than deferred.
+> The original reasoning is kept below — it is what the decisions were made from.
+
+### Original findings (now decided, see above)
 
 **1 · What enforcing `assets.decimals` does with the sub-unit remainder.**
 Three options, and every one is a fee/rounding policy: refuse the post (a legal 18 dp

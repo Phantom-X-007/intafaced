@@ -55,7 +55,32 @@ silently, so a test that asserts nothing looks identical to a test that passes.
 
 ---
 
-## 3 · Nitro must decide
+## 3 · Decided — nothing pending a ruling
+
+> **SUPERSEDED, same day.** Nitro's instruction was _"i cannot make decisions myself.
+> you need to make these decisions."_ All four items below are now decided, with the
+> research behind each and a flip condition, in
+> [`docs/audit/2026-08-08-spine-decisions.md`](audit/2026-08-08-spine-decisions.md).
+>
+> Two were not judgement calls once checked: **doctrine §4.2 invariant 5 fixes the
+> ledger at 18 decimals for every asset**, so `assets.decimals` cannot be a ledger
+> scale and there is no dust policy for the ledger to have (D1); and the `svc-trade`
+> gate was not violated — Nitro's written authorisation for the funding residual
+> outranks a PR comment, so the gap was a missing _record_, now written (D4).
+>
+> Two are engineering judgements and both come out **NO**: strict body-match on an
+> idempotency replay (D2 — it would trade a rare silent wrong for a common loud stop
+> on the money path, the affordable version misses the worst case, and #1067 already
+> closed the realistic one) and a trigger backstop for sum-to-zero (D3 —
+> reconciliation already detects it and freezes, per the same doctrine invariant).
+>
+> One item moved from "next session's first unit" to **shipped**: §5's cross-asset
+> entry gap is closed by #1082.
+>
+> The original text is kept below unedited, because a superseded ruling that vanishes
+> is how the next audit re-derives it from scratch.
+
+### Original text (superseded)
 
 **1 · The `svc-trade` claim gate contradicts itself.** `claim-check` reports
 `services/svc-trade` human-claimed by three owners with _"an agent must NOT implement
@@ -110,7 +135,24 @@ sessions on the same repo, and the version that blocks is the one doing the mone
 
 ---
 
-## 5 · Next session's first unit
+## 5 · Shipped after all — #1082
+
+> **UPDATED same day.** This was written as the next session's first unit and then
+> taken, because Nitro asked for the spine finished rather than handed over. **#1082**
+> closes it with a composite foreign key `(account_id, asset_id) → accounts (id,
+asset_id)`, so an entry's asset must be its own account's asset. `RESTRICT` on
+> update as well as delete — re-pointing an account at another asset would silently
+> re-file every entry already written against it.
+>
+> It also forced #1068's `ON DELETE RESTRICT` test to be rewritten, and that is the
+> tidiest evidence the fix was right: that test could only isolate one foreign key
+> from another by _constructing the illegal state_, and after 0010 the state is
+> unrepresentable. Losing the ability to prove which of two keys refused is a good
+> trade for the two never being able to disagree.
+>
+> Original text below, kept for the reasoning.
+
+### Original text (now shipped)
 
 **`ledger_entries.asset_id` is not tied to its account's asset.** Raw SQL can record an
 entry in `USDT` against a `BTC` account — the entry lands in one book while
