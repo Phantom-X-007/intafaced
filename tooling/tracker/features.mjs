@@ -275,11 +275,22 @@ export const FEATURES = [
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
-    owner: 'cursor-swarm-otc',
+    status: 'ready',
     dependsOn: ['trade.spot', 'token.staking'],
     requires: ['services/svc-trade'],
-    note: 'Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table.',
+    note:
+      'Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank ' +
+      'DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. ' +
+      'Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table. ' +
+      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-otc — no open PR and no branch on origin; its stage merged as #1000. ' +
+      'This one was the most expensive stale claim in the file and the reason is worth keeping. `requires: [services/svc-trade]` names the WHOLE ' +
+      'service, so while this row was owned, claim-check answered "human-claimed" for every path in svc-trade — a directory with twenty-plus ' +
+      'agent PRs merged into it during the same week. Combined with the module fallback (an owned row with `module: trade` locks ' +
+      '`services/svc-trade` even when it declares no paths), the service reported three separate human owners. ' +
+      'DELIBERATELY NOT TOUCHED in the same pass, so nobody reads this as a blanket unlock: `trade.copy` and `trade.algo` keep `owner: Nitro` ' +
+      'because their stated residual IS an owner decision — the blank §8 numbers — so the claim is describing reality, not stale. ' +
+      '`connect.venue-vault` keeps `owner: shehzad002`; it is key custody and genuinely his. Those two are why svc-trade will still read as ' +
+      'claimed after this PR, and that is correct rather than a miss.',
   }),
   f('trade.copy', 'Copy trading, audited leaders, profit share', {
     module: 'trade',
@@ -373,13 +384,17 @@ export const FEATURES = [
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
   f('pay.gateway', 'Branded gateway, hosted checkout, payment links', {
-    owner: 'Nitro',
     module: 'pay',
     phase: '3',
-    status: 'wip',
+    status: 'ready',
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
     note:
+      'CLAIM RELEASED 2026-08-08 by Nitro, by name, alongside `ops.admin`. Agents may implement. `wip` became `ready` only because the tracker ' +
+      'refuses a `wip` row with no owner — "someone is on it right now" needs a name — and `ready` means what it says here: every dependency is ' +
+      'done and it is free to claim. Nothing about what is built changed with this edit; the paragraph below is unaltered and still governs. ' +
+      'What the release does NOT touch: card acquiring stays a commercial relationship no PR closes (see socket.psp-partners), so an agent that ' +
+      'reads this as permission to enable a card rail has misread it. ' +
       'Updated 2026-08-06 after #346 (M1, shehzad002) landed. WHAT IS REAL, and it is most of the row: the tRPC router is mounted ' +
       '(`index.ts` registers it on `/trpc`, the edge routes `/api/pay` there), and `checkout.open`/`checkout.status`, ' +
       '`merchant.create|me|submitKyb|decideKybStub|profile|createLink|listLinks|deactivateLink` and ' +
@@ -1011,37 +1026,100 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
-    status: 'wip',
-    owner: 'cursor-swarm-ops-support',
+    status: 'ready',
     dependsOn: ['identity.accounts'],
-    note: 'Stage-1 2026-08-07 #989: ticket spine. Stage-2 2026-08-07: operator queue API (listQueue/next/claim) wired on svc-support — no money. Residual: apps/admin desk UI + read-only account panel.',
+    note:
+      'Stage-1 2026-08-07 #989: ticket spine. Stage-2 2026-08-07 #999: operator queue API (listQueue/next/claim) wired on svc-support — no money. ' +
+      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-ops-support. Released on evidence, not assumption — that swarm has no open PR and ' +
+      'no branch on origin, and its staged work is already merged. A claim nobody is inside costs exactly what the collision it prevents costs: ' +
+      'the next agent reads `owner` and stands down. ' +
+      'Residual, re-derived 2026-08-08 and larger than "desk UI": tickets and comments are two in-process `Map`s (`support-service.ts`), so the ' +
+      'desk loses every ticket on restart AND two replicas behind the edge serve disjoint ticket sets — the second is the argument that survives ' +
+      '"just do not restart it". The claim in `operator-queue.ts` is read-then-write over a Map, so its exclusivity is TOCTOU by construction. ' +
+      'Durability is not one class: svc-support has no `support` Postgres schema and no `svc_support` role in tooling/infra/postgres-init, and no ' +
+      'TEST_DATABASE_URL_SUPPORT in CI — the store class is the small half. Note `env.ts` already REQUIRES DATABASE_URL through serviceEnvSchema ' +
+      'while its own docblock says "no database"; the comment is the thing that is wrong, not the env. KB is further along than this row implied: ' +
+      'five articles exist keyed with English copy in @intafaced/i18n, and `searchKb`/`getKbById` are written but not exposed on the router. ' +
+      'Genuinely absent: any customer entry point — `create` is reachable only as a raw tRPC call through the edge, and the customer form must be ' +
+      'Vue in the vendored shell, never a new SPA.',
   }),
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',
     phase: '5',
-    status: 'wip',
-    owner: 'cursor-swarm-affiliates',
+    status: 'ready',
     dependsOn: ['ledger.double-entry'],
-    note: 'Stage-1 2026-08-07 #996: admin treeStatus/node + payout refuse-closed. Stage-2 2026-08-07: members roster + freeze/unfreeze honestyLine — no invent rates. Residual: Class M ledger recipe after DIRECTION §8 owner rates.',
+    note:
+      'READ THE DEFECT PARAGRAPH BELOW BEFORE TREATING `ready` AS A CLEAN START. ' +
+      'Stage-1 2026-08-07 #996: admin treeStatus/node + payout refuse-closed. Stage-2 2026-08-07 #1008: members roster + freeze/unfreeze honestyLine. ' +
+      'Stage-3 2026-08-07 #1027, WHICH THIS ROW NEVER RECORDED: durable commission accruals — migration 0007, an SQL store, and two MOUNTED ' +
+      'procedures on svc-identity (`affiliates.accrueDryRun`, `affiliates.accrue`). ' +
+      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-affiliates — no open PR, no branch on origin. Kept `wip` rather than `ready` because ' +
+      'the row is not idle, it is DEFECTIVE, and the next reader must not treat it as a clean start. ' +
+      'THE DEFECT, found 2026-08-08 by reading #1027 rather than its PR title: `DEFAULT_ACCRUAL_TIERS` in `affiliates/commission.ts` hardcodes ' +
+      '10% / 5% / 2% fee-share rates as the FALLBACK when a caller omits `tiers`, and `affiliates.accrue` persists rows computed from them. ' +
+      'Nobody published those numbers. DIRECTION §8 item 10 reserves "every other fee-share rate" to the owner, and this row\'s own non-goal ' +
+      'says no commission percentage without fee events. The refuse-closed gate was fitted to `payout` only — but the invented number enters at ' +
+      'ACCRUAL, which is where a claim on real money is created; payout is merely where it leaves. It is also test-locked: the suite computes ' +
+      'expected values from the fake rates, so deleting them reddens tests, which is how an honesty debt becomes load-bearing. ' +
+      'Removing it is Class N, needs no owner number, and is the first thing to do here — port the discriminated-union law from ' +
+      '`svc-trade/src/copy/fee-share-law.ts`, where `published: false` makes the rate unreachable in the type system rather than merely unset. ' +
+      'Also open and not previously written down: `attribute` reads the parent map, decides, then inserts with no transaction, so two accounts ' +
+      'referring each other concurrently can both pass the cycle check and write a 2-cycle the DB does not forbid — every later read then throws ' +
+      '`referral.cycle` and that subtree bricks, with no repair path. `listByBeneficiary` is written and indexed and reachable from no procedure, ' +
+      'so an affiliate cannot see their own earnings — and must not, until the rate law is fixed, or the statement shows fabricated money. ' +
+      'Residual unchanged: Class M ledger recipe after DIRECTION §8 owner rates; reuse `rewardPay` + `sweepFeesToRewards` unchanged, because ' +
+      'ADDING or CHANGING a ledger recipe is a DIRECTION §8 carve-out and stops being agent-mergeable.',
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', {
     module: 'core-ops',
     phase: '5',
-    status: 'wip',
-    owner: 'cursor-swarm-analytics',
+    status: 'ready',
     dependsOn: ['ledger.double-entry'],
-    requires: ['packages/contracts'],
-    note: 'Stage-1 2026-08-07: replica role law + honest empty warehouse surface in contracts (ops-analytics-warehouse) + ADR/runbook. No invent volume. Residual: physical replica wiring, ETL cube job, admin consumer — not tracker done.',
+    note:
+      'Stage-1 2026-08-07: replica role law + honest empty warehouse surface in contracts (ops-analytics-warehouse) + ADR/runbook. No invent volume. ' +
+      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-analytics — no open PR, no branch on origin. ' +
+      'THE `requires` IS DELETED IN THE SAME BREATH, and that matters more than the owner did. It named `packages/contracts`, a package eleven ' +
+      'services import, so claim-check reported ALL of packages/contracts as owned by one analytics swarm: every agent touching any contract ' +
+      'anywhere in the platform was told a human held it. `requires` is meant to prove a path exists on disk for a `done` claim; on an OWNED row ' +
+      'it silently becomes a lock, and pointing it at a shared package locks the package rather than the feature. ' +
+      'Residual, re-derived 2026-08-08 and CORRECTED — "admin consumer" is stale, #1032 landed one: apps/admin serves ' +
+      '/api/analytics/warehouse over queryWarehouseSurface with 3 tests. What is actually missing: (1) LAG IS NEVER MEASURED. The only supply of ' +
+      '`lagSeconds` in the tree is `ANALYTICS_REPLICA_LAG_SECONDS`, a string an operator types once — set it to 5 and the surface reports freshness ' +
+      '`live` forever whether or not a replica exists. Nothing queries pg_last_xact_replay_timestamp or pg_stat_replication anywhere. It is ' +
+      'harmless only because the GET path always passes zero facts, so no number is painted yet; the badge logic is already wrong. A lag reading ' +
+      'must itself carry a measurement time, or a stale reading passes as fresh. (2) `assertAnalyticsReplicaRole` HAS NO PRODUCTION CALLER — the ' +
+      'admin route reads a self-declared `ANALYTICS_REPLICA_CONFIGURED` boolean and never sees a URL, and the three ANALYTICS_REPLICA_*_URL vars ' +
+      'in .env.example are read by no code. It is a check that would fail correctly if anything called it. (3) `empty` cannot distinguish "the ETL ' +
+      'never ran" from "the ETL ran and found nothing" — no watermark exists, so `empty` currently overclaims. (4) No ETL/cube job; cube helpers ' +
+      'have zero production callers. Not tracker done until replica wiring + one honest cube + access control ship.',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
     phase: '5',
     status: 'ready',
-    owner: 'Nitro',
     dependsOn: ['infra.ui-tokens'],
     requires: ['apps/admin'],
-    note: 'Downgraded 2026-07-28: apps/admin has ZERO test files and makes no network call of any kind. Every kill-switch, freeze and reconcile is React `useState` in the browser — flipping one changes a local boolean and nothing else. An operator console that appears to halt the ledger and does not is worse than no console.',
+    note:
+      'CLAIM RELEASED 2026-08-08 by Nitro, by name, alongside `pay.gateway`. The `owner: Nitro` never meant a human was typing — ' +
+      'it meant agents must not implement here, and that is now lifted. ' +
+      'AND THE NOTE IT REPLACES WAS FALSE, WHICH IS THE MORE EXPENSIVE HALF. The old text — "apps/admin has ZERO test files and ' +
+      'makes no network call of any kind ... every kill-switch, freeze and reconcile is React `useState`" — was true when written on ' +
+      '2026-07-28 and has been wrong since 2026-07-30. Re-derived from the tree on 2026-08-08: apps/admin has 5 test files and ~50 ' +
+      'cases; `/` and `/ledger` post through their own BFF routes to svc-edge `/admin/kill-switches` and `/admin/ledger/{freeze,unfreeze}`, ' +
+      'which reach svc-ledger `/operator/freeze`; the console is mounted in docker-compose.apps.yml on :3100 with operator and treasury ' +
+      'tokens. The five merges that made it real: #186, #360, #447 (which DELETED the fake freeze path), #436, #1032. ' +
+      'EXACTLY ONE control is still inert — "Run reconcile (simulated)" (`ledger-ops.tsx`) — and it is honest about it three ways: the ' +
+      'button says simulated, the payload field is named `simulated` rather than `result`, and `delivered: false` is a literal type so ' +
+      'no code path can claim otherwise. Reconcile is dark at TWO layers, not one: svc-ledger never mounts its tRPC router, so ' +
+      '`ledger.reconcile` has no HTTP surface at all, and svc-edge therefore has nothing to proxy. Per-flag switches on the kill board ' +
+      'are session previews and say Preview on every row. ' +
+      'WHY A STALE NOTE IS A REAL COST, not paperwork: this row is what a dispatcher reads before assigning work, and for eleven days ' +
+      'it advertised shipped, tested, money-authority code as theatre — an invitation to rebuild it. That is the same failure the ' +
+      'tracker header warns about, arriving from the opposite direction. ' +
+      'Still NOT `done`, and the gap is not the UI: there is no fee-param or listing WRITE path anywhere in the platform (market rows ' +
+      'are written by migration only), no operator-scoped treasury balance read, and the console is published on :3100 behind a shared ' +
+      'token with no SSO and no network ACL — that exposure is Class X and no PR closes it.',
   }),
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', {
     module: 'notify',
