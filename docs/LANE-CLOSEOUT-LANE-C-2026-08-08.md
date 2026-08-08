@@ -43,7 +43,12 @@ open:
 - **`fix/bank-idempotency-conflict-parked`** — a finished, typechecked patch with
   five tests for the svc-bank finding below. It is rebased on tip and has no PR
   **because `services/svc-bank` is owner-locked and an agent must not implement
-  there.** Take it or drop it; do not treat it as unfinished work.
+  there.** Take it or drop it; do not treat it as unfinished work. The same work
+  also sits on origin under a second, agent-prefixed branch name;
+  `git branch -r | grep bank-idempotency` finds both. That second name is
+  described rather than spelled because writing it out names a model provider,
+  which Doctrine §0.7 forbids in any doc — it turned the brand-scan gate red on
+  main for all four lanes when this note first landed.
 
 ## Not started
 
