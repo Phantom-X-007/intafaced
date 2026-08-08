@@ -10,8 +10,39 @@
  * Quality is `mid` (two-sided book mid), not `index`. Liquidation consumers
  * already accept mid under the default MarkPolicy.
  *
- * Does not open WS streams here — a single REST snapshot is enough for a mark
- * tick. Streaming/gap-detection stays inside the fabric for adapters that need it.
+ * Does not open WS streams here. Streaming/gap-detection stays inside the fabric
+ * for adapters that need it.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * OPEN, UNFIXED: THIS FILE POLLS A CONTRACT THAT REFUSES TO OFFER POLLING
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * The sentence that used to stand here — "a single REST snapshot is enough for a
+ * mark tick" — was not this file's call to make.
+ * `packages/venue-contracts/src/adapter.ts` documents `snapshotBook` as *"used
+ * ONCE to seed, and again after a gap"*, and states there is deliberately no
+ * polling method because *"a fabric that could poll would poll, and a polled
+ * book is a book with an unbounded and invisible age between reads."*
+ *
+ * `readBook` below calls `snapshotBook` on EVERY mark read: the 15-second
+ * liquidation timer, every close, every valuation. That is the polling the
+ * contract refuses to offer, reached by using the seeding method as one.
+ *
+ * It is the same finding as the `observedAt` one below seen from the other end —
+ * a polled book's age is exactly what the discarded stamp was hiding — but
+ * carrying the stamp only makes that age VISIBLE and gateable. It does not make
+ * it small, and it does not make this call legal under the contract.
+ *
+ * The fix is `SequencedBookTracker` (`packages/venue-adapter/src/fabric/
+ * sequenced-book.ts`, already written and already gap-checking): seed once with
+ * `snapshotBook`, drive with `streamBook`, resnapshot on a detected gap, refuse
+ * to serve while `desynced`, and mid the maintained top of book — whose
+ * `observedAt` is then the last applied delta rather than the last poll. That is
+ * a subscription lifecycle (ownership, reconnect, per-symbol trackers, clean
+ * shutdown) and not a change to this function, so it is NOT done here and is
+ * recorded rather than left implied. Until it lands, the staleness gates are the
+ * only control there is: a book that stops updating now ages out of the
+ * liquidation gate instead of being re-stamped fresh on every read.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * THIS MID USED TO BE SIZE-BLIND TOO
@@ -51,7 +82,7 @@ import { BinanceSpotMarketData, BybitSpotMarketData } from '@intafaced/venue-ada
 import type { MarkSource, QuotedMarkSource } from './liquidation-tick.js';
 import { markSourceFromBook, midFromBook } from './mark-source.js';
 import { DEFAULT_DEPTH_QUOTE_POLICY, bestLevelIsQuotable, minBestLevelNotional, type DepthQuotePolicy } from './mark-from-depth.js';
-import type { MarkPolicy } from './mark-policy.js';
+import { DEFAULT_FUTURES_MARK_POLICY, acceptableForMarking, type MarkPolicy } from './mark-policy.js';
 
 export type VenueSymbolResolver = (marketId: string) => string | null;
 
@@ -96,6 +127,36 @@ export function midFromVenueBook(snapshot: VenueTopOfBook, policy: DepthQuotePol
 }
 
 /**
+ * THE VENUE'S OWN OBSERVATION TIME, WHICH THIS FILE USED TO THROW AWAY.
+ *
+ * `VenueBookSnapshot.observedAt` — *"When THIS PROCESS finished reading it. Our
+ * clock, not theirs."* — is the one truthful age this path has, and
+ * `markSourceFromVenuePublicBook` read `snap.bids` / `snap.asks` and discarded
+ * it. Every venue quote was therefore stamped with the CALLER's clock and had
+ * age exactly zero, which is the condition `mark-policy.ts` names in its own
+ * header as defeating every staleness check it defines. `maxAgeSeconds: 300`
+ * and `liquidationMaxAgeSeconds: 60` were unreachable on this path in
+ * production: no production caller supplies `markSourceFromBook`'s `now`.
+ *
+ * It matters most on THIS path and not on the matching-depth one for the reason
+ * the header above already gives about size: this book belongs to somebody
+ * else. An adapter that serves a tracker-maintained book, a retried snapshot, a
+ * cached response or a venue that answered slowly all produce a book genuinely
+ * older than the moment we asked for it — and only `observedAt` knows by how
+ * much.
+ *
+ * NULL RATHER THAN A SUBSTITUTE. The contract makes the field required, so a
+ * missing or unparseable one is a broken adapter, and the safe reading of a
+ * broken adapter is "no mark" — substituting our clock is precisely the bug
+ * being removed, re-entered through the error path.
+ */
+function readObservedAt(snapshot: { observedAt?: unknown }): Date | null {
+  const at = snapshot.observedAt;
+  if (!(at instanceof Date)) return null;
+  return Number.isFinite(at.getTime()) ? at : null;
+}
+
+/**
  * MarkSource that mids an external venue public book via MarketDataAdapter.
  * Inject the adapter — a real one (`BinanceSpotMarketData`, `BybitSpotMarketData`)
  * or a test double. This function knows nothing about which venue it is reading,
@@ -125,8 +186,14 @@ export function markSourceFromVenuePublicBook(input: {
       if (symbol == null || symbol.trim() === '') return null;
       try {
         const snap = await input.adapter.snapshotBook(symbol, limit);
+        const observedAt = readObservedAt(snap);
+        // A snapshot that cannot say when it was read cannot be aged, and a
+        // mark that cannot be aged clears every staleness gate by construction.
+        // `VenueBookSnapshot.observedAt` is not optional in the contract, so
+        // this branch is an adapter that broke it — refuse, never invent.
+        if (observedAt == null) return null;
         const { bestBid, bestAsk } = bestFromVenueBook(snap, depthPolicy);
-        return { bestBid, bestAsk, last: null };
+        return { bestBid, bestAsk, last: null, observedAt };
       } catch {
         // Venue down / rate limited / malformed — null, never invent a mid.
         return null;
@@ -143,14 +210,42 @@ export function markSourceFromVenuePublicBook(input: {
  * observation time survive the fallback. Collapsing to a bare price string here
  * would hand the liquidation gate an unlabelled mark, and an unlabelled mark is
  * one the gate has no grounds to refuse.
+ *
+ * ── NON-NULL IS NOT THE SAME AS USABLE, AND THIS IS WHERE THAT BIT ───────────
+ *
+ * `quote()` used to fall through on `null` ALONE. That was indistinguishable
+ * from correct while the only way a source could refuse was by returning null —
+ * every gate-level refusal happened downstream, and `markPrice()` (which runs
+ * the liquidation gate inside `markSourceFromBook`) fell through properly.
+ *
+ * Carrying `observedAt` created the first refusal that does NOT look like null:
+ * a stale venue book is a perfectly well-formed quote that no gate will accept.
+ * Under the old rule it WON the preference and then got refused downstream, so a
+ * four-hour-old external book would shadow a healthy matching book and the
+ * position would be skipped rather than priced — turning "the venue is stale"
+ * into "this position cannot be liquidated at all". That is the failure mode
+ * this file's own header denies: *"a refusal is not even an outage —
+ * `markSourcePrefer` falls through to matching depth."* It had to stay true.
+ *
+ * So the primary wins only if its quote is usable for ANYTHING —
+ * `acceptableForMarking`, the WEAKER of the two gates, deliberately. This
+ * function does not know whether its caller is drawing a screen or seizing
+ * collateral, so it must not apply the caller's bar; a quote that clears marking
+ * but not liquidation is still a legitimate valuation mark and is still
+ * preferred, and the consumer's own gate is what refuses it for a seizure.
+ *
+ * When BOTH are unusable the primary's quote is handed back rather than null, so
+ * the caller's gate produces a stated reason ("mark is 14400s old") instead of a
+ * bare "no mark". A refusal that says why is worth more than one that does not.
  */
-export function markSourcePrefer(primary: MarkSource, secondary: MarkSource): MarkSource {
+export function markSourcePrefer(primary: MarkSource, secondary: MarkSource, policy: MarkPolicy = DEFAULT_FUTURES_MARK_POLICY): MarkSource {
   const quote =
     primary.quote || secondary.quote
       ? async (args: { marketId: string; symbol?: string; at: Date }) => {
           const first = primary.quote ? await primary.quote(args) : null;
-          if (first != null) return first;
-          return secondary.quote ? await secondary.quote(args) : null;
+          if (first != null && acceptableForMarking(first, args.at, policy).ok) return first;
+          const second = secondary.quote ? await secondary.quote(args) : null;
+          return second ?? first;
         }
       : undefined;
 

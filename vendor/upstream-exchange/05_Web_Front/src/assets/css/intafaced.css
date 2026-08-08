@@ -932,6 +932,128 @@ a:hover {
   flex: 0 0 auto;
 }
 
+/* ── the sub-navigation of a deep vertical ─────────────────────────────────
+   /bank and /pay are several screens each, and this strip is how a reader
+   moves between them. It scrolls rather than wraps: a wrapped tab strip
+   changes the height of the page header between screens, and a header that
+   moves under the pointer is how someone clicks the wrong tab. */
+.ix-subnav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  margin: 0 0 22px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--ix-hairline);
+  scrollbar-width: thin;
+}
+.ix-subnav-item {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--ix-text-dim);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.ix-subnav-item:hover {
+  color: var(--ix-text);
+}
+.ix-subnav-item.is-current {
+  color: var(--ix-orange);
+  border-bottom-color: var(--ix-orange);
+}
+.ix-subnav-item:focus-visible {
+  outline: 2px solid var(--ix-orange);
+  outline-offset: -2px;
+}
+
+/* A labelled form field. `ix-form-row` is a flex line of bare inputs, which is
+   fine for one control and unreadable for six — a transfer form whose fields
+   are distinguishable only by placeholder is a form people post the wrong
+   number into.
+
+   HOW THE LABEL REACHES THE CONTROL, AND WHERE IT CANNOT. The vendor's `Input`
+   puts a plain `id` on its WRAPPER div, so `<label for>` against it resolved to
+   a <div> and did nothing — a label that looks associated and is not. The pages
+   pass `element-id` instead, which the component forwards to the real <input>,
+   and the uiproof label audit checks every `for` lands on a form control.
+
+   `Select` has no such escape: it renders a focusable <div tabindex="0"> and a
+   type="hidden" input, and neither can be the target of a label. Those fields
+   therefore carry a bare <label> with no `for` — an unassociated caption is
+   honest, a `for` pointing at nothing is not — and their accessible name comes
+   from the component's own translated `placeholder`. */
+.ix-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ix-field > label {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ix-text-faint);
+}
+.ix-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+/* The sentence under a card heading. It was an inline style repeated on every
+   module screen, and repeated inline styles are how two screens end up with
+   two different greys. */
+.ix-lead {
+  color: var(--ix-text-dim);
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+/* The outcome of a write the service ACCEPTED. The refusal arm is IxState, so
+   a mutation that failed names which system said no in the same vocabulary a
+   failed read does. */
+.ix-done {
+  border: 1px solid rgba(0, 178, 117, 0.32);
+  border-left: 3px solid var(--ix-up);
+  border-radius: var(--ix-radius);
+  background: rgba(0, 178, 117, 0.08);
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ix-text-dim);
+  margin-top: 14px;
+}
+.ix-done strong {
+  color: var(--ix-text);
+  font-weight: 650;
+}
+
+/* A row of controls under a table row or a form. */
+.ix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* A second heading INSIDE a card — the category breakdown under a spend
+   summary, the payment instruction under a checkout session. Deliberately
+   smaller than `.ix-card-head h2`: two headings at the same weight in one card
+   read as two cards that failed to separate. */
+.ix-subhead {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ix-text-faint);
+}
+
 @media screen and (max-width: 768px) {
   .ix-page {
     padding: 80px 14px 60px;

@@ -125,6 +125,15 @@ export const SUITES = [
     sources: ['escrow/SovereignEscrow.sol', 'escrow/MockERC20.sol', 'amm/IERC20Minimal.sol'],
   },
   {
+    name: 'passkey',
+    expect: 'compiles',
+    /**
+     * S-A9 / `socket.p256-verifier` — P-256 owner that answers ERC-1271.
+     * Own suite so an accounts edit does not stale this bytecode (and reverse).
+     */
+    sources: ['passkey/P256.sol', 'passkey/PasskeyOwner.sol', 'interfaces/IAccount.sol'],
+  },
+  {
     name: 'launch',
     expect: 'compiles',
     /**

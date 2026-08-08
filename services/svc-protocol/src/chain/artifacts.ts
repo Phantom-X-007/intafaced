@@ -43,7 +43,9 @@ export type ArtifactName =
   | 'ConstantProductPool'
   | 'PoolFactory'
   | 'SovereignEscrow'
-  | 'MockERC20';
+  | 'MockERC20'
+  | 'PasskeyOwner'
+  | 'P256';
 
 export interface ContractArtifact {
   readonly contractName: string;
