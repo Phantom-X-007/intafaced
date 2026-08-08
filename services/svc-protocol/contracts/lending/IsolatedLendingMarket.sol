@@ -15,7 +15,9 @@ import {IPriceOracle} from "../oracle/IPriceOracle.sol";
  * Rates are construction params, not invented mid-flight.
  *
  * Permissionless keepers. Partial liquidation via closeFactorBps.
- * P0 — not the full SPEC-LENDING done-bar (testnet + cascade suite residual).
+ * Engineering done-bar (cascade + flash/reentrancy adversarial) lives in
+ * `src/lending/lending-cascade-flash.onchain.test.ts` + `lending-honesty.test.ts`.
+ * Persistent public testnet deploy remains Nitro RPC residual — not this file.
  */
 contract IsolatedLendingMarket {
     uint256 private constant WAD = 1e18;

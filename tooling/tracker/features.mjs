@@ -682,12 +682,11 @@ export const FEATURES = [
       '(#193) and factory honesty on predict/build (#128). ERC-4337 v0.7 user operations are built and hashed ' +
       'independently by src/chain/userop.ts, which is the whole basis on which the relay can refuse to forward ' +
       'something the user did not authorise. ' +
-      'WHAT REMAINS after 2026-08-08: (1) EXTERNAL audit still open — internal adversarial package shipped ' +
-      '(docs/audits/protocol-smart-accounts-2026-08-08.md + src/accounts/adversarial-audit.test.ts); socket.contract-audit ' +
-      'stays socket until Nitro budget + firm; (2) passkey verifier ON-CHAIN is done (socket.p256-verifier closed S-A9); ' +
-      '(3) userOp hash never checked against live EntryPoint (socket.userop-differential-test); (4) no fuzz/invariant ' +
-      'suite and no gas snapshots (socket.contract-toolchain); (5) paymaster FUNDING still Nitro — policy modules exist; ' +
-      '(6) public deployment registry rows wait on Nitro RPC funding.',
+      'STATUS stays ready (not done) — honesty residuals 2026-08-08: (1) EXTERNAL audit / Nitro budget ' +
+      '(socket.contract-audit; internal package #1176 shipped); (2) S-A9 PasskeyOwner ON-CHAIN exists but live passkey ' +
+      'owner flow on configured Base Sepolia env is not proven (RPC/funding Nitro); (3) userOp hash vs live EntryPoint ' +
+      '(socket.userop-differential-test); (4) fuzz/invariant + gas snapshots (socket.contract-toolchain); ' +
+      '(5) paymaster FUNDING Nitro — policy modules exist; (6) public deployment registry rows wait on Nitro RPC.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',
@@ -714,15 +713,16 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'ready',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.amm', 'socket.price-oracle'],
     requires: ['services/svc-protocol/contracts/lending/IsolatedLendingMarket.sol'],
     note:
-      'S-A4 P0 2026-08-08: IsolatedLendingMarket — over-collateral, no rehypothecation, fail-closed oracle marks, ' +
-      'permissionless liquidate + close factor, immutable kink rates. On-chain suite lending-oracle.onchain.test.ts. ' +
-      'STATUS stays ready (not done): SPEC-LENDING done-bar still wants cascade suite, flash-loan adversarial pack, ' +
-      'and persistent public testnet with verified source (Nitro RPC). Do not invent rates or AMM marks.',
+      'CLOSED engineering bar 2026-08-08 (S-A4): IsolatedLendingMarket + FailClosedOracle marks, immutable kink rates ' +
+      '(no invent / no AMM), cascade suite + flash/reentrancy adversarial pack ' +
+      '(lending-cascade-flash.onchain.test.ts, lending-honesty.test.ts). ' +
+      'RESIDUAL named Nitro RPC gate: persistent public testnet (Base Sepolia → Base P0) with verified source — ' +
+      'dev-anvil is not that row. Unaudited: no real deposits until socket.contract-audit.',
   }),
   f('protocol.escrow', 'Non-custodial P2P escrow contracts', {
     module: 'protocol',
