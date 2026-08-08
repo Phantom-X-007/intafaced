@@ -73,9 +73,22 @@ export function planOtcSettle(input: {
   };
 }
 
-/** Post settle plan in order. Idempotent via recipe keys. */
+/**
+ * Post settle plan in order. Idempotent via recipe keys (see `otcSettleIdsFor`).
+ *
+ * HOUSE MONEY MOVES FIRST, and the order is the point. If the desk is short the
+ * asset it is selling, the failure has to land on the house, not the customer:
+ * posting the taker hold first takes the customer's funds into a hold pot that
+ * this module has no path to release — there is no OTC cancel and no
+ * `orderHoldRelease` call anywhere in `otc/` — so a house inventory shortfall
+ * stranded a customer's balance behind a refusal they did not cause.
+ *
+ * With `mmHold` first, an inventory shortfall refuses before anything of the
+ * customer's has moved. A shortfall on the taker side instead leaves house
+ * funds in a house hold pot, which ops can see and recover.
+ */
 export async function postOtcSettle(ledger: LedgerClient, plan: OtcSettlePlan): Promise<void> {
-  await ledger.post(plan.hold);
   await ledger.post(plan.mmHold);
+  await ledger.post(plan.hold);
   await ledger.post(plan.fill);
 }

@@ -423,19 +423,19 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
             baseAsset: z.string().min(1).max(32),
             quoteAsset: z.string().min(1).max(32),
             qty: decimal,
-            midPrice: decimal,
             makerId: z.string().min(1).max(120).optional(),
           }),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
             if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            // No `midPrice` on this input, deliberately. The taker names the
+            // side and the size; the desk names the price.
             return otc.quote(ctx.principal, {
               side: input.side,
               baseAsset: input.baseAsset,
               quoteAsset: input.quoteAsset,
               qty: input.qty,
-              midPrice: input.midPrice,
               makerId: input.makerId,
             });
           }),
