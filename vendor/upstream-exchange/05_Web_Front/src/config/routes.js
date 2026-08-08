@@ -92,8 +92,34 @@ export default [
     // /platform is the hub: it holds the svc-identity session the scoped
     // modules need and reports, from a live probe, what each one can do today.
     { path: '/platform', component: resolve=>(require(["../pages/intafaced/Platform"],resolve)) },
+    // ── The two deep verticals ────────────────────────────────────────────
+    //
+    // /bank and /pay are NOT one screen each. svc-bank has eight routers and
+    // svc-pay six, and a single flat page per service could reach about a
+    // fifth of either. Each row below is one router's surface; the tab strip
+    // that links them is generated from ../config/ix-nav.js, so a route added
+    // here without a nav row (or the reverse) is visible immediately rather
+    // than becoming an orphan page nobody can navigate to.
+    //
+    // They are FLAT, not nested children. A parent /bank component wrapping a
+    // <router-view> would re-mount and re-fetch the overview's three reads on
+    // every tab change, and the overview is the one screen none of the others
+    // needs. Each row is its own page with its own reads.
     { path: '/bank', component: resolve=>(require(["../pages/intafaced/Bank"],resolve)) },
+    { path: '/bank/spaces', component: resolve=>(require(["../pages/intafaced/bank/Spaces"],resolve)) },
+    { path: '/bank/transfers', component: resolve=>(require(["../pages/intafaced/bank/Transfers"],resolve)) },
+    { path: '/bank/earn', component: resolve=>(require(["../pages/intafaced/bank/Earn"],resolve)) },
+    { path: '/bank/loans', component: resolve=>(require(["../pages/intafaced/bank/Loans"],resolve)) },
+    { path: '/bank/cards', component: resolve=>(require(["../pages/intafaced/bank/Cards"],resolve)) },
+    { path: '/bank/ramps', component: resolve=>(require(["../pages/intafaced/bank/Ramps"],resolve)) },
+    { path: '/bank/analytics', component: resolve=>(require(["../pages/intafaced/bank/Analytics"],resolve)) },
     { path: '/pay', component: resolve=>(require(["../pages/intafaced/Pay"],resolve)) },
+    { path: '/pay/money', component: resolve=>(require(["../pages/intafaced/pay/Money"],resolve)) },
+    { path: '/pay/merchant', component: resolve=>(require(["../pages/intafaced/pay/Merchant"],resolve)) },
+    { path: '/pay/links', component: resolve=>(require(["../pages/intafaced/pay/Links"],resolve)) },
+    { path: '/pay/payments', component: resolve=>(require(["../pages/intafaced/pay/Payments"],resolve)) },
+    { path: '/pay/settlements', component: resolve=>(require(["../pages/intafaced/pay/Settlements"],resolve)) },
+    { path: '/pay/checkout', component: resolve=>(require(["../pages/intafaced/pay/Checkout"],resolve)) },
     { path: '/p2p', component: resolve=>(require(["../pages/intafaced/P2P"],resolve)) },
     { path: '/token', component: resolve=>(require(["../pages/intafaced/Token"],resolve)) },
     { path: '/agents', component: resolve=>(require(["../pages/intafaced/Agents"],resolve)) },

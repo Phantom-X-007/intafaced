@@ -304,6 +304,29 @@ module.exports = {
             }
         },
         bank: {
+            // ── The tab strip of the /bank vertical ─────────────────────────
+            // One row per svc-bank router. `<row>Blurb` is read by the tile grid
+            // on the overview via `$t(row.labelKey + 'Blurb')`, so a row added to
+            // config/ix-nav.js needs BOTH keys or the tile prints its own key.
+            nav: {
+                aria: "Banking sections",
+                overview: "Overview",
+                spaces: "Spaces",
+                spacesBlurb: "Name a pot, set a goal, lock it until a date. Every space is a view of a ledger account, never a second balance.",
+                transfers: "Transfers",
+                transfersBlurb: "Move value once, or on a standing order, and read every occurrence that actually ran.",
+                earn: "Earn",
+                earnBlurb: "The pools on offer, what you have in them, and the term you are committed to.",
+                loans: "Borrowing",
+                loansBlurb: "Collateralised loans: the products, your positions, and the two LTV thresholds before the button.",
+                cards: "Cards",
+                cardsBlurb: "Issue, freeze and close a card, and read every authorisation decision — declines included.",
+                ramps: "Ramps",
+                rampsBlurb: "Value arriving and leaving over a rail. The fiat leg is not built, and says so.",
+                analytics: "Spending",
+                analyticsBlurb: "What left, what arrived and where it went, summarised by svc-bank over a window you choose."
+            },
+
             spaces: "Spaces",
             unnamed: "Assets without a space",
             pools: "Earn pools",
@@ -325,9 +348,257 @@ module.exports = {
             cadence: "Cadence",
             nextRun: "Next run",
             status: "Status",
-            days: "days"
+            days: "days",
+
+            // Column and field labels shared across the vertical's screens.
+            yes: "Yes",
+            no: "No",
+            kind: "Kind",
+            health: "Borrowing health",
+            interest: "Interest",
+            spaceName: "Name",
+            ledgerAccount: "Ledger account",
+            filterAsset: "Filter by asset",
+            filterAssetHint: "Leave blank for all",
+            assetHint: "e.g. USDT",
+            amountHint: "Decimal string, e.g. 100.50",
+            isoHint: "ISO-8601, e.g. 2026-09-01T00:00:00Z",
+            spaceNameHint: "e.g. Rent",
+            spaceIdHint: "The destination space id you were given",
+            goalOptional: "Goal (optional)",
+            lockedUntilOptional: "Locked until (optional)",
+            endsAtOptional: "Ends at (optional)",
+            startsAt: "Starts at",
+            fromSpace: "From",
+            toSpace: "To",
+            chooseSpace: "Choose a space",
+            clientRef: "Your reference",
+            clientRefHint: "Your own id for this movement — a retry with the same one is the same movement",
+            ledgerTx: "Ledger transaction",
+            occurrence: "Occurrence",
+            rejection: "Rejection",
+            executions: "Occurrences",
+            daily: "Daily",
+            weekly: "Weekly",
+            monthly: "Monthly",
+
+            // Actions and their accepted outcomes.
+            createSpace: "Create a space",
+            spaceCreated: "Space created",
+            archive: "Archive",
+            archived: "Space archived",
+            send: "Send",
+            transferPosted: "Transfer posted",
+            createStanding: "Create standing order",
+            standingCreated: "Standing order created",
+            standingCancelled: "Standing order cancelled",
+            pause: "Pause",
+            resume: "Resume",
+            standingPaused: "Standing order paused",
+            standingResumed: "Standing order resumed",
+            skippedWhilePaused: "Occurrences that came due while it was paused and will never fire:",
+            nothingSkipped: "No occurrence came due while it was paused.",
+            cancel: "Cancel",
+            deposit: "Deposit",
+            depositAccepted: "Deposit accepted",
+            withdraw: "Withdraw",
+            positionClosed: "Position closed",
+            borrow: "Borrow",
+            openLoan: "Open the loan",
+            loanOpened: "Loan opened",
+            manage: "Manage",
+            manageLoan: "Manage this loan",
+            addCollateral: "Add collateral",
+            addCollateralAmount: "Collateral to add",
+            collateralAdded: "Collateral added",
+            collateralAmount: "Collateral",
+            collateralReleased: "Collateral released",
+            repay: "Repay",
+            repayAmount: "Repayment",
+            repaymentPosted: "Repayment posted",
+            interestPaid: "Interest paid",
+            principalPaid: "Principal paid",
+            remaining: "Remaining principal",
+            closeLoan: "Close the loan",
+            loanClosed: "Loan closed",
+            issueCard: "Issue a card",
+            cardIssued: "Card issued",
+            cardUpdated: "Card updated",
+            freeze: "Freeze",
+            unfreeze: "Unfreeze",
+            closeCard: "Close",
+            sendOut: "Send out",
+            offrampAccepted: "Withdrawal accepted",
+            newOfframp: "Send value out",
+
+            // Empty answers. Every one of these is a 200 with nothing in it.
+            noPools: "No pool is on offer for this asset.",
+            noPositions: "You hold no position in any pool.",
+            noSchedules: "No standing order on this account.",
+            noExecutions: "This standing order has not run yet.",
+            noLoans: "No loan on this account.",
+            noProducts: "No loan product is on offer for this asset.",
+            noDebt: "No debt",
+            noCards: "No card on this account.",
+            noAuthorizations: "No authorisation has been decided on this card.",
+            noOnramps: "Nothing has arrived over a ramp on this account.",
+            noOfframps: "Nothing has left over a ramp on this account.",
+            noOutflow: "No outflow in this window.",
+            noRail: "No crypto rail configured",
+
+            // Loans.
+            marginCallLtv: "Margin-call LTV",
+            marginCalled: "Margin called",
+            minPrincipal: "Minimum principal",
+            productName: "Product",
+            openingLtv: "Opening LTV",
+            portfolioLtv: "Portfolio LTV",
+            debtValue: "Debt value",
+            collateralValue: "Collateral value",
+
+            // Earn.
+            poolName: "Pool",
+            positions: "My positions",
+            maturesAt: "Matures",
+            flexibleTerm: "Flexible",
+
+            // Cards.
+            programme: "Card programme",
+            programmeId: "Programme id",
+            programmeName: "Programme",
+            simulated: "Simulated",
+            myCards: "My cards",
+            panTail: "Card ending",
+            issuer: "Issuer",
+            cashback: "Cashback",
+            perAuthLimit: "Per-authorisation limit",
+            decisions: "Authorisation decisions",
+            decision: "Decision",
+            declineCode: "Decline code",
+            merchantCategory: "Category",
+            authorizationRef: "Reference",
+
+            // Ramps.
+            onramps: "Value in",
+            offramps: "Value out",
+            rail: "Rail",
+            railRef: "Rail reference",
+            cryptoRail: "Crypto rail",
+            destinationRef: "Destination",
+            destinationRefHint: "Where the value should land",
+            holdTx: "Hold transaction",
+            settlementTx: "Settlement transaction",
+
+            // Spending analytics.
+            from: "From",
+            to: "To",
+            last30: "Last 30 days",
+            last90: "Last 90 days",
+            totalOutflow: "Total out",
+            totalInflow: "Total in",
+            net: "Net",
+            movements: "Movements",
+            byCategory: "Outflow by category",
+            category: "Category",
+            outflow: "Out",
+
+            overview: {
+                scopeTitle: "What this section can do for you today",
+                scopeBody: "Every svc-bank procedure demands bank:read or bank:write, and the jurisdiction matrix demands a verification tier on top. Where your session is short of either, the screen names which one rather than showing an empty table.",
+                spacesLead: "Balances svc-bank read from the ledger at request time. A space is a view of a ledger account, not a second balance.",
+                unnamedLead: "Assets you hold that no space has been named for yet.",
+                healthLead: "Whether anything you have borrowed is close to a margin call. The mark is svc-bank's; nothing here recalculates it.",
+                noSpaces: "No space on this account yet.",
+                noUnnamed: "Every asset you hold has a space.",
+                openSpaces: "Open spaces"
+            },
+
+            spacesPage: {
+                lead: "Name a pot, give it a goal, lock it until a date. Every space is a view of one ledger account and prints which account, so you can check us against the book.",
+                createLead: "A new space is created empty. Value reaches it by transfer — creating one never moves anything."
+            },
+
+            transfersPage: {
+                title: "Transfers",
+                lead: "Move value between spaces once, or on a repeating standing order, and read every occurrence that actually ran.",
+                oneOff: "One-off transfer",
+                oneOffLead: "The destination is an id you were given. This session can only enumerate its own spaces, and a directory of other people's would not be a payment feature.",
+                standing: "Standing order",
+                standingLead: "svc-bank runs the schedule. An occurrence that could not be funded is recorded with its rejection rather than silently skipped.",
+                executionsLead: "Every occurrence of this standing order, including the ones that were rejected and why.",
+                needSpace: "Create a space first — a transfer moves value between spaces.",
+                idempotency: "This draft's id, sent with the request so a retry is the same movement and not a second one:"
+            },
+
+            earnPage: {
+                lead: "The pools svc-bank offers, what you already hold in them, and the term each one commits you to.",
+                depositLead: "The deposit moves value from your primary space into the pool. Interest accrues in svc-bank; nothing here projects a yield."
+            },
+
+            loansPage: {
+                title: "Borrowing",
+                lead: "Collateralised loans. The margin-call and liquidation thresholds are published before you borrow, not discovered by being liquidated.",
+                healthLead: "svc-bank's own mark of what you owe against what you pledged. This screen never recalculates it.",
+                noMarks: "Nothing is borrowed, so there is nothing to mark.",
+                manageLead: "Add collateral, repay, or close. Closing releases the collateral in full and is only possible on a settled loan.",
+                productsLead: "What is on offer, and on what terms. Read the two LTV thresholds before you borrow.",
+                liquidationTitle: "Read this before you borrow",
+                liquidationBody: "You will be margin called at {margin} loan-to-value and liquidated at {liq}. Neither threshold is negotiable once the loan is open, and the mark that triggers them is taken by svc-bank, not by you."
+            },
+
+            cardsPage: {
+                title: "Cards",
+                lead: "Issue a card against a balance, freeze it, close it, and read every authorisation decision the programme made.",
+                programmeLead: "What this deployment's card programme is — including whether it is a simulator.",
+                simulatedTitle: "This programme is simulated",
+                simulatedBody: "Cards issued here are not usable at a merchant. Authorisations are decided by svc-bank against your ledger balance so the decline reasons are real, but no value reaches anybody outside this platform.",
+                issueLead: "The per-authorisation limit is the most a single purchase may draw. It is a decimal amount and is enforced by svc-bank, not by this screen.",
+                decisionsLead: "Every decision, approvals and declines alike. The declines are the point — \"why was I declined\" is the question a card generates."
+            },
+
+            rampsPage: {
+                title: "Ramps",
+                lead: "Value arriving on this account and value leaving it, over the rails this deployment has.",
+                programmeLead: "What the ramp programme is — including whether it simulates, and which leg is not built.",
+                simulatedTitle: "This programme is simulated",
+                simulatedBody: "Nothing here broadcasts to a chain. The ledger entries are real and reconcile; the rail movement does not leave this platform.",
+                fiatTitle: "The fiat leg is not built",
+                fiatBody: "Moving money to or from a bank account needs a licensed partner relationship, which is a decision a human makes and not a feature an agent can ship. Until then this section is crypto only, and svc-bank refuses a fiat request before any hold is posted.",
+                onrampsLead: "Value credited to your account over a rail, and the ledger transaction that recorded it.",
+                offrampLead: "Crypto only. The amount is a decimal string and leaves your balance the moment svc-bank accepts the hold."
+            },
+
+            analyticsPage: {
+                title: "Spending",
+                lead: "What left this account, what arrived, and where it went — summarised by svc-bank over a window you choose.",
+                rangeTitle: "The window",
+                rangeLead: "svc-bank groups the movements. Every figure below is its answer, printed as it arrived — this screen adds nothing up.",
+                summarise: "Summarise",
+                summaryTitle: "Summary"
+            }
         },
         pay: {
+            // ── The tab strip of the /pay vertical ──────────────────────────
+            // One row per svc-pay router. `deposit.credit` has no row and never
+            // will: it is admin:treasury, and an operator surface on a customer
+            // page is how a customer page becomes an operator one.
+            nav: {
+                aria: "Payments sections",
+                overview: "Overview",
+                money: "My money",
+                moneyBlurb: "Your own custodial balance, and moving it off the platform over a rail.",
+                merchant: "Merchant account",
+                merchantBlurb: "Become a merchant, submit a verification dossier, and read what we owe you.",
+                links: "Payment links",
+                linksBlurb: "Hosted-checkout pointers you can send to a payer. The token is issued once.",
+                payments: "Payments",
+                paymentsBlurb: "The merchant integration path: create, authorise, capture, refund, and the append-only log.",
+                settlements: "Settlements",
+                settlementsBlurb: "Close a window into gross, fees and net, then pay it out over a rail.",
+                checkout: "Hosted checkout",
+                checkoutBlurb: "The payer's own path, exercised anonymously — no session, no rail choice, no amount override."
+            },
+
             healthTitle: "Pay service",
             healthLead: "Public health — which rails are configured (ids only). Live money movement is a separate decision.",
             rails: "Configured rails",
@@ -340,7 +611,210 @@ module.exports = {
             withdrawals: "My withdrawals",
             noWithdrawals: "No withdrawals on this account yet.",
             amount: "Amount",
-            created: "Created"
+            created: "Created",
+
+            // Rail health, in the detail an operator needs.
+            railHealthTitle: "Rails",
+            railHealthLead: "A rail can be perfectly healthy at simulating, so mode is on the wire beside usable. This demands pay:read; where a session does not carry it the refusal is named rather than hidden.",
+            railId: "Rail",
+            mode: "Mode",
+            capabilities: "Capabilities",
+            usable: "Usable",
+            healthy: "Healthy",
+            latency: "Latency",
+            railReason: "Reason",
+            rail: "Rail",
+            chooseRail: "Choose a rail",
+            railRef: "Rail reference",
+            railAdapter: "Rail",
+
+            // Merchant.
+            merchantTitle: "Merchant account",
+            merchantId: "Merchant id",
+            merchantMode: "Mode",
+            modeGateway: "Gateway",
+            modePsp: "Payment service provider",
+            modePayfac: "Payment facilitator",
+            feeBps: "Fee",
+            feeBpsHint: "Whole basis points, e.g. 250 for 2.5%",
+            merchantCreated: "Merchant created",
+            kybTitle: "Business verification",
+            kybStatus: "Verification",
+            kybRef: "Dossier reference",
+            kybRefHint: "The reference of the dossier you submitted",
+            submitKyb: "Submit dossier",
+            kybSubmitted: "Dossier submitted",
+            kybDecided: "Decision recorded",
+            stubApprove: "Approve (stub)",
+            stubReject: "Reject (stub)",
+            balancesTitle: "What we owe you",
+            clearing: "Clearing",
+            profileTitle: "Checkout profile",
+            domains: "Domains",
+            domainsHint: "Comma separated, e.g. shop.example, checkout.example",
+            createProfile: "Create profile",
+            profileCreated: "Profile created",
+
+            // Payment links.
+            newLink: "New payment link",
+            createLink: "Create the link",
+            linkCreated: "Payment link created",
+            linkLabel: "Label",
+            linkLabelHint: "What the payer will see, e.g. Invoice 104",
+            fixedAmountOptional: "Fixed amount (optional)",
+            currencyOptional: "Currency (optional)",
+            expiresAtOptional: "Expires at (optional)",
+            maxUsesOptional: "Maximum uses (optional)",
+            maxUsesHint: "Whole number. Leave blank for unbounded",
+            tokenOnce: "Copy this token now. svc-pay issues it once and will not show it again — anyone holding it can open a checkout against this merchant.",
+            myLinks: "My payment links",
+            prefix: "Prefix",
+            currency: "Currency",
+            uses: "Uses",
+            expiresAt: "Expires",
+            active: "Active",
+            deactivate: "Deactivate",
+            linkDeactivated: "Link deactivated",
+            noLinks: "No payment link on this merchant.",
+            payerChooses: "Payer chooses",
+            unbounded: "Unbounded",
+            remainingUses: "Uses left",
+
+            // Payments.
+            paymentsTitle: "Payments",
+            allStatuses: "Any status",
+            method: "Method",
+            methodHint: "e.g. card, transfer",
+            captured: "Captured",
+            refunded: "Refunded",
+            openPayment: "Open",
+            noPayments: "No payment matches this filter.",
+            paymentDetail: "This payment",
+            paymentId: "Payment id",
+            captureAmountOptional: "Capture amount (optional)",
+            captureAmountHint: "Blank captures the full authorised amount",
+            refundAmount: "Refund amount",
+            authorize: "Authorise",
+            authorized: "Authorised",
+            capture: "Capture",
+            capturedOk: "Captured",
+            refund: "Refund",
+            refundedOk: "Refunded",
+            history: "Event history",
+            at: "At",
+            event: "Event",
+            railEventId: "Rail event",
+            noHistory: "No event has been recorded against this payment.",
+            newPayment: "Take a payment",
+            paymentCreated: "Payment created",
+            customerRefOptional: "Customer reference (optional)",
+            customerRefHint: "Your own id for the payer",
+
+            // Settlements.
+            runSettlement: "Close a window",
+            settlementPosted: "Settlement posted",
+            window: "Window",
+            windowHint: "The window key svc-pay settles on, e.g. 2026-08",
+            findSettlement: "Find a settlement",
+            settlementId: "Settlement id",
+            settlementIdHint: "The id svc-pay returned when the window closed",
+            settlementDetail: "This settlement",
+            gross: "Gross",
+            fees: "Fees",
+            net: "Net",
+            payoutRef: "Payout reference",
+            payout: "Pay out",
+            payoutSent: "Payout sent",
+            destinationKind: "Destination kind",
+            destinationKindHint: "e.g. address, iban",
+            destinationRef: "Destination",
+            destinationRefHint: "Where the value should land",
+
+            // My money.
+            newWithdrawal: "Withdraw",
+            withdrawNow: "Withdraw",
+            withdrawalAccepted: "Withdrawal accepted",
+            attempts: "Attempts",
+            failureCode: "Failure",
+
+            // Hosted checkout.
+            resolveTitle: "What a link says it is",
+            linkToken: "Link token",
+            linkTokenHint: "The token the merchant sent you",
+            resolve: "Resolve",
+            openCheckout: "Open a checkout",
+            sessionOpened: "Checkout session opened",
+            sessionToken: "Session token",
+            sessionTokenHint: "The token returned when the session opened",
+            sessionTitle: "The session",
+            instruction: "How to pay",
+            reference: "Reference",
+            payExactly: "Pay exactly",
+            noInstruction: "The rail has not issued a payment instruction for this session yet.",
+
+            overview: {
+                merchantLead: "Whether this account is a merchant. One merchant per account, so there is nothing to choose between.",
+                notAMerchant: "This account is not a merchant. That is an answer, not a refusal — svc-pay returned no merchant for it.",
+                openMerchant: "Open merchant account"
+            },
+
+            moneyPage: {
+                title: "My money",
+                lead: "Your own custodial balance, and moving it off the platform. The balance is the ledger's; svc-pay forwards it rather than summing its own tables.",
+                withdrawLead: "The amount leaves your balance the moment svc-pay accepts it. There is no cancelling a payout, which is why your own reference is required rather than generated.",
+                stepUpTitle: "This needs a stepped-up session",
+                stepUpBody: "Withdrawing carries an interactive-only scope: no API key may hold it, and an ordinary session has to pass two-factor step-up first. If your session has not, the refusal below will say so by name.",
+                noRailToUse: "svc-pay has no rail registered, so there is nothing to withdraw over."
+            },
+
+            merchantPage: {
+                title: "Merchant account",
+                lead: "Becoming a merchant, verifying the business, and reading what the platform owes you.",
+                createTitle: "Become a merchant",
+                createLead: "The account is created against your own session. The fee is what the platform keeps from each payment, in whole basis points.",
+                kybLead: "Submit the reference of your verification dossier. This records the reference; it does not decide anything.",
+                stubTitle: "The two buttons below are a sandbox stub",
+                stubBody: "A verification anyone can approve for themselves is not verification. svc-pay allows these only where this deployment's value-movement posture is sandbox, and refuses them by name otherwise — the refusal is the correct answer on a live deployment.",
+                balancesLead: "Clearing is what we owe you and have not settled. Available is what you can already spend. Both are read from the ledger, independently of svc-pay's own tables, which is what makes reconciling them mean something.",
+                profileLead: "The domains your hosted checkout may be embedded on. Checkout configuration and fee routing are free-form on the wire and are not collected here — a raw JSON box on a fee-routing field is a way to post a typo into money movement."
+            },
+
+            linksPage: {
+                title: "Payment links",
+                lead: "Hosted-checkout pointers. A link is a many-payer capability: whoever holds the token can open a checkout against your merchant account.",
+                needMerchant: "This account is not a merchant yet, so it has no payment links.",
+                createLead: "Leave the amount blank to let the payer choose it. A fixed amount is frozen into every session the link opens.",
+                expiryNote: "Leaving the expiry blank means svc-pay's default, not \"never\". A link with no expiry cannot be created.",
+                listLead: "Only the prefix is stored — the full token was shown once, when the link was created."
+            },
+
+            paymentsPage: {
+                title: "Payments",
+                lead: "The merchant integration path. This is the merchant's side of a payment; the payer's side is the hosted checkout.",
+                detailLead: "Authorise, capture and refund carry different authority. Refunding is a separate scope from taking payment, so one may be allowed while the other is refused.",
+                historyLead: "The append-only record of what happened to this payment, exactly as svc-pay wrote it.",
+                createLead: "Creating a payment names the rail, which is why this path is the merchant's and not the payer's."
+            },
+
+            settlementsPage: {
+                title: "Settlements",
+                lead: "Closing a window into gross, fees and net, and paying the net out over a rail.",
+                noListTitle: "There is no settlement list",
+                noListBody: "svc-pay exposes closing a window, reading one by id, and paying one out — nothing that enumerates them. A table here would have to invent either the rows or the procedure, so this screen asks for a window or an id instead.",
+                runLead: "Closing a window totals the payments in it. The window key is svc-pay's, not this screen's.",
+                payoutLead: "Value leaves the book here, so this carries its own scope. A session that could close the window may still be refused the payout."
+            },
+
+            checkoutPage: {
+                title: "Hosted checkout",
+                lead: "The payer's own path, exercised the way a payer will exercise it.",
+                publicTitle: "Nothing on this screen uses your session",
+                publicBody: "A hosted checkout takes money from somebody who is not logged in — that is what it is. These three calls are public, and this screen sends no token on any of them, so a merchant testing their own link exercises the same anonymous path a customer will.",
+                resolveLead: "What the link says it is, before anybody pays. This never returns merchant secrets.",
+                openLead: "The rail is chosen by svc-pay, not here. A hosted checkout that could name its own rail would be a way around the platform's own posture.",
+                fixedAmount: "This link fixes the amount. svc-pay ignores any amount sent with the session, so there is nothing to type.",
+                statusLead: "Only a verified rail webhook can mark a session paid. Polling here is how a payer learns that it happened."
+            }
         },
         p2p: {
             fiat: "Fiat currencies",

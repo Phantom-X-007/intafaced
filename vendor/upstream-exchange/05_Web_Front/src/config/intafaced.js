@@ -249,6 +249,24 @@ function classify(status, body) {
     // simply not served, which for our routers means the tRPC plugin was never
     // registered.
     if (status === 404 && body && body.error === 'Not Found') return { reason: REASON.NOT_MOUNTED, message: body.message || 'The service does not serve this path' };
+
+    // tRPC's OWN "this router has no such procedure", which is a different
+    // sentence from every other NOT_FOUND it emits.
+    //
+    // Both arrive as `code: 'NOT_FOUND', httpStatus: 404`: the one below is a
+    // deployed service that is older than the router in the source tree, and
+    // `resolveLink` answering `pay.link_not_found` is a service that is exactly
+    // current and was asked about a link that does not exist. Collapsing them
+    // sends a reader to look for a missing payment link when what is missing is
+    // half the service, so the discriminator is tRPC's own fixed prefix rather
+    // than the code — a business NOT_FOUND never writes that sentence, because
+    // tRPC writes it before any resolver runs.
+    //
+    // NOT_MOUNTED, not NOT_ROUTED: the edge routed it and the service answered.
+    // The gap is the router, and that is where somebody has to go and look.
+    if (code === 'NOT_FOUND' && /^No procedure found on path/.test(message)) {
+      return { reason: REASON.NOT_MOUNTED, message: message };
+    }
     if (code === 'UNAUTHORIZED' || status === 401) return { reason: REASON.UNAUTHORIZED, message: message };
     if (code === 'FORBIDDEN' || status === 403) {
         if (data.intafacedCode === 'scope.denied') return { reason: REASON.SCOPE_DENIED, message: message };

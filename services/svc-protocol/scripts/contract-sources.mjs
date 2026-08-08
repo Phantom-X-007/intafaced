@@ -116,6 +116,24 @@ export const SUITES = [
     sources: ['AccountFactory.sol', 'SessionKeyLib.sol', 'SmartAccount.sol', 'interfaces/IAccount.sol'],
   },
   {
+    name: 'escrow',
+    expect: 'compiles',
+    /**
+     * S-A3 / `protocol.escrow` — sovereign (non-custodial) P2P escrow.
+     * Not the ledger escrow in svc-p2p. MockERC20 is suite-local for tests.
+     */
+    sources: ['escrow/SovereignEscrow.sol', 'escrow/MockERC20.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
+    name: 'passkey',
+    expect: 'compiles',
+    /**
+     * S-A9 / `socket.p256-verifier` — P-256 owner that answers ERC-1271.
+     * Own suite so an accounts edit does not stale this bytecode (and reverse).
+     */
+    sources: ['passkey/P256.sol', 'passkey/PasskeyOwner.sol', 'interfaces/IAccount.sol'],
+  },
+  {
     name: 'launch',
     expect: 'compiles',
     /**

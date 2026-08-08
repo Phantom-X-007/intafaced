@@ -48,7 +48,10 @@ export type ArtifactName =
   | 'SovereignRouter'
   | 'CrewVault'
   | 'LaunchLpLock'
-  | 'MockERC20';
+  | 'SovereignEscrow'
+  | 'MockERC20'
+  | 'PasskeyOwner'
+  | 'P256';
 
 export interface ContractArtifact {
   readonly contractName: string;

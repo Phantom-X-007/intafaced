@@ -196,13 +196,34 @@ export function markSourceFromBook(input: {
     bestBid: string | null;
     bestAsk: string | null;
     last: string | null;
+    /**
+     * WHEN THE UNDERLYING SOURCE OBSERVED THIS BOOK — the field that decides
+     * whether the staleness gates are reachable at all.
+     *
+     * `mark-policy.ts`: *"`asOf` is when the quote was OBSERVED, not when it
+     * was read. A source that stamps read-time defeats every staleness check
+     * below."* Every book that has a truthful observation time MUST carry it
+     * here. `VenueBookSnapshot.observedAt` is one, and it was being read and
+     * discarded — so `maxAgeSeconds: 300` and `liquidationMaxAgeSeconds: 60`
+     * were structurally unreachable on the venue path and a four-hour-old
+     * external book cleared a sixty-second gate.
+     *
+     * Omitted / null is a NARROW, ARGUED allowance, not a convenience: it means
+     * this reader has no observation time distinct from the read, because the
+     * read IS the observation. That is true of `markSourceFromDepth` — an
+     * `EngineDepth` read from our own matching engine answers as of the moment
+     * it answers and carries no timestamp to carry. It is NOT true of anything
+     * that snapshots, caches, streams or proxies a third party's book, and a
+     * reader in that class that leaves this out is lying about its age.
+     */
+    observedAt?: Date | null;
   } | null>;
   policy?: MarkPolicy;
   /**
-   * Observation clock. Omitted, the quote is stamped with the instant the
-   * CALLER asked for — which for a live book snapshot is the truth: there is no
-   * venue timestamp to carry, and the read happened now. Supply this only when
-   * the underlying feed knows better than the caller's clock.
+   * Observation clock. Consulted only when `readBook` returns no `observedAt` —
+   * the book's own stamp is the truth and beats any clock supplied here. With
+   * neither, the quote is stamped with the instant the CALLER asked for, which
+   * is honest exactly when the read is the observation (see above).
    */
   now?: () => Date;
 }): QuotedMarkSource {
@@ -211,7 +232,12 @@ export function markSourceFromBook(input: {
   const quote = async (args: { marketId: string; symbol?: string; at: Date }): Promise<FuturesQuotedMark | null> => {
     const book = await input.readBook(args.marketId);
     if (!book) return null;
-    const asOfMs = (input.now ? input.now() : args.at).getTime();
+    const observed = book.observedAt ?? (input.now ? input.now() : args.at);
+    const asOfMs = observed.getTime();
+    // An `Invalid Date` makes every age comparison NaN, and `NaN > 300` is
+    // false — so a broken stamp would pass both gates rather than fail them.
+    // A book that cannot say when it was observed is not a book we can gate.
+    if (!Number.isFinite(asOfMs)) return null;
 
     const mid = midFromBook(book.bestBid, book.bestAsk);
     if (mid != null) {
