@@ -324,9 +324,16 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       .output(
         z.object({
           windowId: z.string(),
+          /** Value moved BY THIS CALL. A re-run that posts nothing reports 0. */
           distributed: amountString,
           recipients: z.number().int().nonnegative(),
           skipped: z.number().int().nonnegative(),
+          /**
+           * Planned payouts this call found already posted — the operator's only
+           * way to tell "this window was already settled" from "this window has
+           * just paid out again", which the previous shape could not express.
+           */
+          alreadyPaid: z.number().int().nonnegative(),
         }),
       )
       .mutation(async ({ input }) =>
@@ -340,6 +347,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
             distributed: formatAmount(result.distributed),
             recipients: result.recipients,
             skipped: result.skipped,
+            alreadyPaid: result.alreadyPaid,
           };
         }),
       ),

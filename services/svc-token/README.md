@@ -91,21 +91,26 @@ Every recipe this service invokes, and what it touches:
 
 **Yield: one ledger transaction per recipient**, keyed on `(window, user)`. A crash halfway through is resumable — re-running pays only whoever was missed. One giant transaction would be atomic but unresumable, and with thousands of stakers that is the worse trade.
 
+**Yield: plan the window before paying any of it.** That resumability sentence is only true while the recipient list stands still, and the list was recomputed from `stakes WHERE status = 'active'` on every call. Re-run a settled window after one new stake opened and the list grew: the users already paid had spent their `(window, user)` keys, so their posts were silent no-ops — and the newcomer's key was fresh, so the newcomer was paid in full out of a window whose revenue was already gone. So the plan is written once into `token.yield_payouts` and read thereafter (0003). A window pays the stakers it had, not the stakers it has; a re-run naming a different revenue total is refused (`token.yield_window_mismatch`) rather than guessed at. `distributeRevenue` now reports `alreadyPaid` alongside `recipients`, so a re-run reads as "already settled" instead of as a second payout.
+
 ---
 
 ## Database constraints as a backstop
 
 The service checks these; the database enforces them regardless.
 
-| Constraint                           | What it catches                                                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `emission_epochs_within_schedule_ck` | **the mint ceiling** — a retried allocation minting unauthorised supply                                   |
-| `buyback_runs_split_conserved_ck`    | a rounding bug promising the rewards engine tokens that do not exist                                      |
-| `buyback_runs_window_idx` (unique)   | the same revenue window being recorded twice — but see the note below, it fires late                      |
-| `stakes_lock_required_ck`            | an m3/m12 stake with no `unlocks_at` — a lock multiplier on withdrawable-on-demand funds, i.e. free yield |
-| `stakes_amount_positive_ck`          | a negative stake dragging the pro-rata denominator down and overpaying everyone else                      |
-| `governance_votes_one_per_user_idx`  | ballot stuffing                                                                                           |
-| `token_params_singleton_ck`          | two rows = two economies, whichever a job reads first wins                                                |
+| Constraint                                | What it catches                                                                                           |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `emission_epochs_within_schedule_ck`      | **the mint ceiling** — a retried allocation minting unauthorised supply                                   |
+| `buyback_runs_split_conserved_ck`         | a rounding bug promising the rewards engine tokens that do not exist                                      |
+| `buyback_runs_window_idx` (unique)        | the same revenue window being recorded twice — but see the note below, it fires late                      |
+| `stakes_lock_required_ck`                 | an m3/m12 stake with no `unlocks_at` — a lock multiplier on withdrawable-on-demand funds, i.e. free yield |
+| `stakes_amount_positive_ck`               | a negative stake dragging the pro-rata denominator down and overpaying everyone else                      |
+| `governance_votes_one_per_user_idx`       | ballot stuffing                                                                                           |
+| `token_params_singleton_ck`               | two rows = two economies, whichever a job reads first wins                                                |
+| `yield_payouts` PK `(window_id, user_id)` | two payouts to one staker for one window — the pair the reward key already assumed                        |
+| `yield_payouts_paid_has_tx_ck`            | a payout marked paid with nothing in the book to point at, or a transaction nobody recorded finishing     |
+| `yield_payouts_amount_positive_ck`        | a planned payout of nothing — an instruction the ledger would refuse and no run could ever clear          |
 
 > **Known ordering gap, not introduced by the honesty pass — flagged, not fixed.** `recordBuyback` posts the burn to the ledger _before_ inserting the `buyback_runs` row, and that insert is `ON CONFLICT (id) DO NOTHING`, which only dedupes on the run id. A second call over the same `revenueWindow` under a _different_ `runId` therefore burns first and only then trips `buyback_runs_window_idx`, leaving a burn with no run row. The ledger key `token.burn:${runId}` makes a retry of the _same_ run safe; it does not make a re-windowed run safe. Fixing it means claiming the window row before the post — the same claim-before-post shape `stake` already uses — which is a money-path change and belongs in its own reviewed PR alongside the `token.buyback` socket work.
 

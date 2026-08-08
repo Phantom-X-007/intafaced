@@ -81,6 +81,7 @@ function stubToken(overrides: Partial<TokenService> = {}): TokenService {
       distributed: amt('100'),
       recipients: 1,
       skipped: 0,
+      alreadyPaid: 0,
     })),
     recordBuyback: vi.fn(async () => ({
       runId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -274,7 +275,7 @@ describe('svc-token mount — yield + buyback', () => {
         windowId: 'w1',
         sources: [{ module: 'trade', amount: '100' }],
       });
-    expect(result).toEqual({ windowId: 'w1', distributed: '100', recipients: 1, skipped: 0 });
+    expect(result).toEqual({ windowId: 'w1', distributed: '100', recipients: 1, skipped: 0, alreadyPaid: 0 });
     expect(token.distributeRevenue).toHaveBeenCalledWith({
       windowId: 'w1',
       sources: [{ module: 'trade', amount: amt('100') }],
