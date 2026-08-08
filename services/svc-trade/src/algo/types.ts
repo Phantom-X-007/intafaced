@@ -25,6 +25,7 @@ export type AlgoMissCode =
   | 'trade.algo_mark_missing'
   | 'trade.algo_insufficient_balance'
   | 'trade.algo_market_closed'
+  | 'trade.algo_principal_unavailable'
   | 'trade.algo_child_refused';
 
 export interface AlgoChildRef {

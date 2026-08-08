@@ -175,6 +175,9 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.algo_mark_missing': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_insufficient_balance': { ccxt: 'InsufficientFunds', status: 400 },
   'trade.algo_child_refused': { ccxt: 'InvalidOrder', status: 400 },
+  // The schedule outlived the session that authorised it — the venue cannot act
+  // on the caller's behalf, which is an availability answer, not a bad request.
+  'trade.algo_principal_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
 };
 

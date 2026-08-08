@@ -202,6 +202,42 @@ describe('TwapEngine — D-S-04 done bar', () => {
     expect(engine.get(parent.id)!.status).toBe('halted');
   });
 
+  /**
+   * The restart case: the schedule survived, the caller's authority did not.
+   *
+   * `algoPrincipals` is in-process and only written by `createTwap`, so after a
+   * restart `tickAllAlgos` rehydrates parents that have no principal. Treated
+   * as an ordinary child refusal this was a MISS — which ADVANCES the schedule
+   * — so every surviving algo burned its whole remaining plan in
+   * `sliceIntervalMs × N` and ended `completed` having placed nothing.
+   *
+   * It must halt instead, and the slice index must not move.
+   */
+  it('no authority to act halts the schedule and consumes no slice', async () => {
+    const ports = makePorts({
+      placeChild: async () => {
+        throw new TradeError('this schedule outlived the session that authorised it', 'trade.algo_principal_unavailable');
+      },
+    });
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, baseInput(), LOT);
+
+    const tick = await engine.tick(parent.id);
+    expect(tick.kind).toBe('halted');
+    if (tick.kind === 'halted') expect(tick.code).toBe('trade.algo_principal_unavailable');
+
+    const after = engine.get(parent.id)!;
+    expect(after.status).toBe('halted');
+    // The whole point: the plan is intact and the user can still cancel it.
+    expect(after.nextSliceIndex).toBe(0);
+    expect(after.children).toHaveLength(0);
+
+    // A further tick does not grind through the rest of the schedule either.
+    await engine.tick(parent.id);
+    expect(engine.get(parent.id)!.nextSliceIndex).toBe(0);
+    expect(engine.get(parent.id)!.status).toBe('halted');
+  });
+
   it('child place goes through placeChild port (ordinary order path)', async () => {
     const ports = makePorts();
     const engine = new TwapEngine(ports);
