@@ -10,9 +10,9 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **41%** — 45 of 109 features shipped
+`████████░░░░░░░░░░░░` **39%** — 45 of 116 features shipped
 
-Phases: **0** 10/11 · **1** ✅ · **2** 6/17 · **3** 5/17 · **3P** 1/8 · **4** 4/5 · **4P** 0/3 · **5** 8/35 · **5P** 0/2
+Phases: **0** 10/11 · **1** ✅ · **2** 6/24 · **3** 5/17 · **3P** 1/8 · **4** 4/5 · **4P** 0/3 · **5** 8/35 · **5P** 0/2
 
 **In progress:** Copy trading, audited leaders, profit share (Nitro) · TWAP / VWAP / POV execution (Nitro) · Pro terminal — depth, charts, hotkeys, sub-accounts (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Nitro) · Moderated dispute resolution (nitro-agent) · Payment instruments — where the buyer actually pays (nitro-agent) · P2P merchant programme — badges, limits, API (nitro-agent) · Fiat on/off ramp reusing svc-pay adapters (cursor-swarm-bank) · Residencies, IFC pay, revenue share (Nitro)
 

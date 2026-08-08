@@ -73,6 +73,14 @@ const slotRow = {
   releasedAt: null,
 };
 
+/** No `userId`, no `status`, no tier — see `PublicVendorProfile` for each omission. */
+const publicRow = {
+  id: VENDOR,
+  displayName: 'Acme',
+  description: 'I sell things',
+  createdAt: '2026-08-08T10:00:00.000Z',
+};
+
 function stubVendors(overrides: Partial<VendorService> = {}): VendorService {
   return {
     applyAsVendor: vi.fn(async () => vendorRow),
@@ -91,6 +99,9 @@ function stubVendors(overrides: Partial<VendorService> = {}): VendorService {
       usable: 1,
       slots: [slotRow],
     })),
+    publicProfile: vi.fn(async () => publicRow),
+    listedVendors: vi.fn(async () => [publicRow]),
+    listingEligibility: vi.fn(async () => ({ vendorId: VENDOR, listed: true })),
     ...overrides,
   } as unknown as VendorService;
 }
@@ -310,5 +321,76 @@ describe('svc-market mount — who may vet', () => {
       createMarketRouter(vendors).createCaller(signed(operator)).vet({ vendorId: VENDOR, decision: 'rejected', reason: '' }),
     ).rejects.toThrow();
     expect(vendors.vet).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * STAGE 3 — THE PUBLIC HALF.
+ *
+ * Every other suite in this file asserts that something is REFUSED. These assert
+ * the opposite and it is just as load-bearing: a marketplace nobody can look at
+ * without an account is not a marketplace, and `publicProcedure` is only public
+ * if an anonymous context genuinely reaches the resolver.
+ */
+describe('svc-market mount — the public marketplace', () => {
+  it('serves a listed vendor profile to a caller with no token at all', async () => {
+    const vendors = stubVendors();
+    await expect(createMarketRouter(vendors).createCaller(anonymous()).profile({ vendorId: VENDOR })).resolves.toEqual(publicRow);
+    expect(vendors.publicProfile).toHaveBeenCalledWith(VENDOR);
+  });
+
+  it('serves the directory to a caller with no token at all', async () => {
+    const vendors = stubVendors();
+    await expect(createMarketRouter(vendors).createCaller(anonymous()).listed()).resolves.toEqual([publicRow]);
+    expect(vendors.listedVendors).toHaveBeenCalledWith({ limit: undefined });
+  });
+
+  /**
+   * The output schema is the disclosure gate. A field the service starts
+   * returning — a userId, a status, a tier — is stripped here rather than
+   * shipped, and this test is what proves the schema is doing that job rather
+   * than passing everything through.
+   */
+  it('strips anything the service returns beyond the four public fields', async () => {
+    const leaky = stubVendors({
+      publicProfile: vi.fn(async () => ({ ...publicRow, userId: USER, status: 'approved', tier: 'Sovereign' })),
+    } as unknown as Partial<VendorService>);
+    const profile = await createMarketRouter(leaky).createCaller(anonymous()).profile({ vendorId: VENDOR });
+    expect(Object.keys(profile).sort()).toEqual(['createdAt', 'description', 'displayName', 'id']);
+  });
+
+  /**
+   * ONE 404 FOR EVERY REASON. Suspended, rejected, unstaked, holds no slot, never
+   * existed — the caller cannot tell which, so this endpoint cannot be used to
+   * enumerate who an operator threw off the marketplace.
+   */
+  it('answers NOT_FOUND for a vendor who is not listed, whatever the reason', async () => {
+    const hidden = stubVendors({ publicProfile: vi.fn(async () => null) } as unknown as Partial<VendorService>);
+    await expect(createMarketRouter(hidden).createCaller(anonymous()).profile({ vendorId: VENDOR })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  /**
+   * An unreadable stake source is OUR failure and stays distinguishable from
+   * "no such vendor". A 404 here would assert a vendor does not exist because
+   * svc-token was down, and that answer is exactly the sort a client caches.
+   */
+  it('reports an unreadable stake gate as a 500, not as a missing vendor', async () => {
+    const down = stubVendors({
+      publicProfile: vi.fn(async () => {
+        throw new MarketError('Stake gate unavailable (500)', 'market.stake_unavailable');
+      }),
+    } as unknown as Partial<VendorService>);
+    await expect(createMarketRouter(down).createCaller(anonymous()).profile({ vendorId: VENDOR })).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      cause: { code: 'market.stake_unavailable' },
+    });
+  });
+
+  it('caps how much of the directory one request can ask for', async () => {
+    const vendors = stubVendors();
+    await expect(createMarketRouter(vendors).createCaller(anonymous()).listed({ limit: 5_000 })).rejects.toThrow();
+    expect(vendors.listedVendors).not.toHaveBeenCalled();
   });
 });
