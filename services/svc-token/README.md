@@ -99,20 +99,20 @@ Every recipe this service invokes, and what it touches:
 
 The service checks these; the database enforces them regardless.
 
-| Constraint                                | What it catches                                                                                           |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `emission_epochs_within_schedule_ck`      | **the mint ceiling** — a retried allocation minting unauthorised supply                                   |
-| `buyback_runs_split_conserved_ck`         | a rounding bug promising the rewards engine tokens that do not exist                                      |
-| `buyback_runs_window_idx` (unique)        | the same revenue window being recorded twice — but see the note below, it fires late                      |
-| `stakes_lock_required_ck`                 | an m3/m12 stake with no `unlocks_at` — a lock multiplier on withdrawable-on-demand funds, i.e. free yield |
-| `stakes_amount_positive_ck`               | a negative stake dragging the pro-rata denominator down and overpaying everyone else                      |
-| `governance_votes_one_per_user_idx`       | ballot stuffing                                                                                           |
-| `token_params_singleton_ck`               | two rows = two economies, whichever a job reads first wins                                                |
-| `yield_payouts` PK `(window_id, user_id)` | two payouts to one staker for one window — the pair the reward key already assumed                        |
-| `yield_payouts_paid_has_tx_ck`            | a payout marked paid with nothing in the book to point at, or a transaction nobody recorded finishing     |
-| `yield_payouts_amount_positive_ck`        | a planned payout of nothing — an instruction the ledger would refuse and no run could ever clear          |
+| Constraint                                | What it catches                                                                                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `emission_epochs_within_schedule_ck`      | one epoch minting more than its own scheduled amount. **Not the supply ceiling** — that is the emitted-total check in `mintEpoch`, because a per-row bound cannot see a total |
+| `buyback_runs_split_conserved_ck`         | a rounding bug promising the rewards engine tokens that do not exist                                                                                                          |
+| `buyback_runs_window_no_overlap_ex`       | two runs covering the same instant — identical, nested or partial. Claimed BEFORE the burn posts (0002)                                                                       |
+| `stakes_lock_required_ck`                 | an m3/m12 stake with no `unlocks_at` — a lock multiplier on withdrawable-on-demand funds, i.e. free yield                                                                     |
+| `stakes_amount_positive_ck`               | a negative stake dragging the pro-rata denominator down and overpaying everyone else                                                                                          |
+| `governance_votes_one_per_user_idx`       | ballot stuffing                                                                                                                                                               |
+| `token_params_singleton_ck`               | two rows = two economies, whichever a job reads first wins                                                                                                                    |
+| `yield_payouts` PK `(window_id, user_id)` | two payouts to one staker for one window — the pair the reward key already assumed                                                                                            |
+| `yield_payouts_paid_has_tx_ck`            | a payout marked paid with nothing in the book to point at, or a transaction nobody recorded finishing                                                                         |
+| `yield_payouts_amount_positive_ck`        | a planned payout of nothing — an instruction the ledger would refuse and no run could ever clear                                                                              |
 
-> **Known ordering gap, not introduced by the honesty pass — flagged, not fixed.** `recordBuyback` posts the burn to the ledger _before_ inserting the `buyback_runs` row, and that insert is `ON CONFLICT (id) DO NOTHING`, which only dedupes on the run id. A second call over the same `revenueWindow` under a _different_ `runId` therefore burns first and only then trips `buyback_runs_window_idx`, leaving a burn with no run row. The ledger key `token.burn:${runId}` makes a retry of the _same_ run safe; it does not make a re-windowed run safe. Fixing it means claiming the window row before the post — the same claim-before-post shape `stake` already uses — which is a money-path change and belongs in its own reviewed PR alongside the `token.buyback` socket work.
+> **Fixed — this paragraph used to say it was not.** `recordBuyback` posted the burn to the ledger _before_ inserting the `buyback_runs` row, and that insert was `ON CONFLICT (id) DO NOTHING`, which dedupes only on the run id — so a second call over the same `revenueWindow` under a _different_ `runId` burned for real and only then tripped an index its conflict clause did not name: tokens irreversibly gone, no row, no event, an opaque 500. **#767 and migration `0002_buyback_window_claim.sql` closed it**: the window is now claimed `pending` before the burn posts and settled after, the same claim-before-post shape `stake` uses, and the unique index was replaced by the exclusion constraint above — which also refuses the nested and partial overlaps the old index never saw. The text above stayed stale for months of merges, which is its own lesson: a README that says a money path is unsafe, about a path that is now safe, invites somebody to fix it a second time.
 
 ---
 
