@@ -1,4 +1,4 @@
-import { MoneyError } from '@intafaced/ledger-client';
+import { MoneyError, mulBps, sub, type Amount } from '@intafaced/ledger-client';
 
 /**
  * FEE TIERS (§5.2 step 4, §4.1 rank perks).
@@ -12,6 +12,34 @@ import { MoneyError } from '@intafaced/ledger-client';
  * accepted is snapshotted onto the order row, and this function is what turns
  * it into the rate the `tradeFill` recipe is handed.
  */
+
+/**
+ * Whether a side still receives a positive amount after its fee is taken.
+ *
+ * Mirrors `tradeFill` / `marketMakerMakerFill` in ledger-client: fees use
+ * `mulBps` ceil, and a fee that equals the receivable emits a zero-amount
+ * entry the ledger refuses. That refusal used to land AFTER `settleFill`
+ * inserted fill rows, so the fills table stayed permanently ahead of the
+ * ledger and re-runs could not heal (remainingHold overstated consumption).
+ * Call this BEFORE any fill row write.
+ *
+ * @returns true when both sides keep a strictly positive receivable
+ */
+export function fillReceivablesSurviveFees(input: {
+  /** What the taker pays (quote on buy, base on sell). */
+  readonly takerPaysAmount: Amount;
+  /** What the maker pays (base on buy, quote on sell). */
+  readonly makerPaysAmount: Amount;
+  readonly makerFeeBps: number;
+  readonly takerFeeBps: number;
+}): boolean {
+  // Each side's fee is taken from what that side RECEIVES (the other side's pay).
+  const takerFee = mulBps(input.makerPaysAmount, input.takerFeeBps);
+  const makerFee = mulBps(input.takerPaysAmount, input.makerFeeBps);
+  const takerReceives = sub(input.makerPaysAmount, takerFee);
+  const makerReceives = sub(input.takerPaysAmount, makerFee);
+  return takerReceives > 0n && makerReceives > 0n;
+}
 
 /**
  * Apply a rank discount to a published fee rate.
@@ -68,5 +96,20 @@ export function ratesForFill(market: MarketFeeSchedule, makerDiscountBps: number
   return {
     makerFeeBps: effectiveFeeBps(market.makerBps, makerDiscountBps),
     takerFeeBps: effectiveFeeBps(market.takerBps, takerDiscountBps),
+  };
+}
+
+/**
+ * Amounts each side pays on one match, matching `tradeFill`'s asset split.
+ * Pure; used by the pre-insert fee guard so settleFill and the recipe agree.
+ */
+export function fillPayAmounts(input: { readonly takerSide: 'buy' | 'sell'; readonly qty: Amount; readonly quoteAmount: Amount }): {
+  takerPaysAmount: Amount;
+  makerPaysAmount: Amount;
+} {
+  const takerBuys = input.takerSide === 'buy';
+  return {
+    takerPaysAmount: takerBuys ? input.quoteAmount : input.qty,
+    makerPaysAmount: takerBuys ? input.qty : input.quoteAmount,
   };
 }

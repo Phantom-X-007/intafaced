@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MoneyError, mulBps, parseAmount as amt, formatAmount } from '@intafaced/ledger-client';
-import { effectiveFeeBps, ratesForFill } from './fees.js';
+import { MoneyError, mulBps, parseAmount as amt, formatAmount, recipes } from '@intafaced/ledger-client';
+import { effectiveFeeBps, fillPayAmounts, fillReceivablesSurviveFees, ratesForFill } from './fees.js';
 
 /**
  * Fee tiers, as pure arithmetic.
@@ -81,5 +81,80 @@ describe('ratesForFill', () => {
     expect(formatAmount(full)).toBe('0.02');
     expect(formatAmount(discounted)).toBe('0.0193');
     expect(discounted).toBeLessThan(full);
+  });
+});
+
+describe('fillReceivablesSurviveFees', () => {
+  /**
+   * THE GAP THIS GUARDS.
+   *
+   * `markets_dust_free_ck` only forces tick×lot ≥ 1 wei. A one-wei receivable
+   * with any non-zero fee has fee == amount under mulBps ceil, and tradeFill
+   * refuses. settleFill used to insert fill rows first, so the refusal left
+   * trade.fills permanently ahead of the ledger. This pure guard must agree
+   * with the recipe on every boundary case.
+   */
+  it('refuses the 1-wei × non-zero fee case the recipe refuses', () => {
+    const oneWei = 1n;
+    expect(
+      fillReceivablesSurviveFees({
+        takerPaysAmount: oneWei,
+        makerPaysAmount: oneWei,
+        makerFeeBps: 10,
+        takerFeeBps: 20,
+      }),
+    ).toBe(false);
+
+    expect(() =>
+      recipes.tradeFill({
+        fillId: 'f-dust',
+        makerId: 'm',
+        takerId: 't',
+        makerOrderId: 'mo',
+        takerOrderId: 'to',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        qty: oneWei,
+        quoteAmount: oneWei,
+        takerSide: 'buy',
+        makerFeeBps: 10,
+        takerFeeBps: 20,
+      }),
+    ).toThrow(/Fee exceeds fill value/);
+  });
+
+  it('allows a zero-fee 1-wei fill (receivable survives)', () => {
+    expect(
+      fillReceivablesSurviveFees({
+        takerPaysAmount: 1n,
+        makerPaysAmount: 1n,
+        makerFeeBps: 0,
+        takerFeeBps: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it('allows a normal notional with published fees', () => {
+    const pays = fillPayAmounts({
+      takerSide: 'buy',
+      qty: amt('0.01'),
+      quoteAmount: amt('500'),
+    });
+    expect(
+      fillReceivablesSurviveFees({
+        ...pays,
+        makerFeeBps: 10,
+        takerFeeBps: 20,
+      }),
+    ).toBe(true);
+  });
+
+  it('fillPayAmounts matches tradeFill asset split for both sides', () => {
+    const buy = fillPayAmounts({ takerSide: 'buy', qty: amt('2'), quoteAmount: amt('100') });
+    expect(buy.takerPaysAmount).toBe(amt('100'));
+    expect(buy.makerPaysAmount).toBe(amt('2'));
+    const sell = fillPayAmounts({ takerSide: 'sell', qty: amt('2'), quoteAmount: amt('100') });
+    expect(sell.takerPaysAmount).toBe(amt('2'));
+    expect(sell.makerPaysAmount).toBe(amt('100'));
   });
 });
