@@ -121,8 +121,45 @@ crossed to.
 | Market order into an empty book        | **Accepted**, zero fills, whole quantity cancelled (`market_remainder`). Uniform with a market order that exhausts the book — the caller releases the hold either way. |
 | Market order with `GTC`                | Behaves as IOC. A market order can never rest, whatever TIF it carried.                                                                                                |
 | Post-only on anything that cannot rest | Rejected `invalid_tif` rather than reinterpreted.                                                                                                                      |
-| Duplicate order id                     | Rejected. Bots retry; a retry that opens a second order is the worst bug this service could have.                                                                      |
+| Duplicate order id                     | Rejected **while the id is live** — resting in the book, or held by an untriggered stop. See the scope note below; it is narrower than it reads.                       |
 | Cancel of an unknown id                | No-op, not an error. A cancel racing a fill is normal.                                                                                                                 |
+
+### Duplicate order ids — what the guard actually covers
+
+This table used to say "Rejected. Bots retry; a retry that opens a second order is the worst
+bug this service could have." That is the right fear and the wrong promise, so it is written
+out properly here rather than left to be read as more than it is.
+
+The guard checks one thing: **is this id live right now** — resting in the book, or held by an
+untriggered stop. That set is populated in exactly one place, when an order comes to rest, and
+emptied when the order fills, is cancelled, or is pulled by self-trade prevention.
+
+Two consequences follow, and the second is the one that surprises people:
+
+1. An id becomes reusable the moment its order fully fills, is cancelled, or is pulled.
+2. **An order that never rests is never protected at all.** A market order, an IOC that fully
+   fills, a FOK, or a limit that fully crosses is never in that set at any point in its life,
+   so the guard cannot fire for it even while it is executing.
+
+**Why the engine does not fix this itself.** Rejecting an id the engine has _ever_ seen means
+keeping every id forever, in a single-process in-memory book — memory that grows with lifetime
+order count and is never reclaimed. Bounding it with an eviction horizon is worse than not
+doing it: the identical bug returns after the horizon, silently, which is the failure mode
+worth the least. So the engine guards what it can see and says so.
+
+**Where order identity is actually enforced.** In the caller. `svc-trade` looks an order up by
+id before submitting and short-circuits on any existing row regardless of status, so a bot
+retrying a filled order never reaches the engine. That is the real guard, it lives where the
+durable record lives, and it is the right place for it.
+
+**The one path this leaves open, named so it is not lost:** house market-maker seeding submits
+with deterministic ids and deliberately keeps no order row, so the caller-side guard does not
+apply to it. Its run counter resets on process restart while the run history persists, so a
+restart can re-mint ids whose orders have already filled. Closing that is one line of id
+derivation in `svc-trade`'s seeder — not a change to this engine.
+
+`book.test.ts` pins all of the above, including the two negative cases, so this section and the
+code cannot drift apart quietly.
 
 ### Self-trade prevention — cancel-oldest
 
@@ -157,9 +194,12 @@ work:
 1. **Inputs only, never outcomes.** A journal of outcomes would be a transcript: a bug in the matcher would replay
    perfectly while the book stayed wrong. Replaying inputs through the same matcher is what makes the state
    _verifiable_ rather than merely reproducible.
-2. **Written before the book moves.** A crash between the two costs a duplicate replay of one input, which is
-   idempotent — the order id is already live, so it comes back `duplicate_order_id`. A crash the other way round
-   would cost a fill nobody can reconstruct.
+2. **Written before the book moves.** A crash between the two costs at most a re-execution of one input against a
+   book rebuilt from the same journal, which lands on the same state. Note what this does _not_ rest on: the
+   duplicate-id guard cannot carry this argument, because an order that never rests is never live and so never
+   comes back `duplicate_order_id` (see the scope note above). The property that does carry it is that recovery
+   replays every record exactly once into an empty book. A crash the other way round would cost a fill nobody can
+   reconstruct.
 
 Amounts are decimal strings on disk. A journal is read years after it is written, possibly by a process that does
 not share this build; a scaled bigint is our private representation, not an archival format.
