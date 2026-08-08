@@ -7,6 +7,23 @@ describe('otc mid-source', () => {
     expect(otcPairKey(' eth ', ' usd ')).toBe('ETH/USD');
   });
 
+  it('an asset containing the separator is refused, not normalised', () => {
+    // Otherwise ('BTC','USDT/X') and ('BTC/USDT','X') collide on one mid.
+    expect(otcPairKey('BTC', 'USDT/X')).toBeNull();
+    expect(otcPairKey('BTC/USDT', 'X')).toBeNull();
+    expect(otcPairKey('', 'USDT')).toBeNull();
+    expect(otcPairKey('BTC', '   ')).toBeNull();
+  });
+
+  it('drops an ops entry whose price is not a positive decimal', () => {
+    // An ops typo must cost a refusal at boot, not surface to a customer.
+    const src = createConfigOtcMidSource('BTC/USDT:not-a-number,ETH/USDT:0,SOL/USDT:-5,XRP/USDT:1e5');
+    expect(src('BTC/USDT')).toBeNull();
+    expect(src('ETH/USDT')).toBeNull();
+    expect(src('SOL/USDT')).toBeNull();
+    expect(src('XRP/USDT')).toBeNull();
+  });
+
   it('the production default sources nothing', async () => {
     expect(await NO_OTC_MIDS('BTC/USDT')).toBeNull();
   });

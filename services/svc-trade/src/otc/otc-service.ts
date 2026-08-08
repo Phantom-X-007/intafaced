@@ -13,7 +13,7 @@ import type { Principal } from '@intafaced/auth';
 import { otcSettleIdsFor } from '../spot/ids.js';
 import { otcDeskLawStatusLine, requirePublishedOtcDeskLaw, type OtcDeskLaw, UNPUBLISHED_OTC_DESK_LAW } from './desk-law.js';
 import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
-import { NO_OTC_MIDS, otcPairKey, type OtcMidSource } from './mid-source.js';
+import { NO_OTC_MIDS, normalizeOtcAsset, otcPairKey, type OtcMidSource } from './mid-source.js';
 import {
   acceptOtcQuote,
   buildOtcQuote,
@@ -86,9 +86,18 @@ export class OtcDeskService {
 
     // The desk's own mid. There is deliberately no caller-supplied fallback:
     // a taker who can name the price can name it at 1 and take the inventory.
-    const baseAsset = input.baseAsset.trim();
-    const quoteAsset = input.quoteAsset.trim();
-    const pair = otcPairKey(baseAsset, quoteAsset);
+    //
+    // The assets are carried forward in the SAME normalised form the mid was
+    // looked up under. Trimming here while upper-casing only for the lookup
+    // meant `baseAsset: 'btc'` found the mid published for `BTC/USDT` and then
+    // settled against ledger asset `btc`, which does not exist — an unsettleable
+    // quote the desk had already promised to honour.
+    const baseAsset = normalizeOtcAsset(input.baseAsset);
+    const quoteAsset = normalizeOtcAsset(input.quoteAsset);
+    const pair = baseAsset && quoteAsset ? otcPairKey(baseAsset, quoteAsset) : null;
+    if (baseAsset == null || quoteAsset == null || pair == null) {
+      throw new OtcError('OTC asset pair is not a usable pair of ledger asset ids', 'trade.otc_no_reference_price');
+    }
     const sourced = await this.midSource(pair);
     if (sourced == null || String(sourced).trim() === '') {
       throw new OtcError(
