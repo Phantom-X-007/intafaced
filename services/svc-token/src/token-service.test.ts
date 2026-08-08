@@ -1146,7 +1146,11 @@ if (!available) {
 
       const rows = await sql`SELECT epoch FROM token.emission_epochs`;
       expect(rows).toHaveLength(0);
-      expect(ledger.totalsByAsset().IFC).toBe('0');
+      // Nothing was minted anywhere. `totalsByAsset()` is not the check here:
+      // this ledger has never seen IFC at all, so the asset has no key in it —
+      // which is a stronger statement than a zero, and asserting '0' against it
+      // was this test's own bug on its first CI run.
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
     });
   });
 
