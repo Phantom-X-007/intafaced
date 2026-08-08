@@ -193,9 +193,65 @@ describe.skipIf(!available)('JetStreamEventBus — the at-least-once contract ev
 
     expect(await until(() => attempts >= 3)).toBe(true);
     await new Promise((r) => setTimeout(r, 500));
-    // Parked for the operator, not spinning. A bus that retried forever would
-    // keep a broken handler hot and hide the failure.
+    // Stopped, not spinning. A bus that retried forever would keep a broken
+    // handler hot and hide the failure.
     expect(attempts).toBe(3);
+  });
+
+  it('says so, once, when it gives up — the message is otherwise abandoned in silence', async () => {
+    // "Parked for the operator" was the claim, and no operator was ever told:
+    // there is no dead-letter subject, no advisory consumer, and no row. A
+    // margin call that spent its whole budget left the same trace as one that
+    // was never published.
+    const b = await bus();
+    const payload = user();
+    const key = `abandoned-${randomUUID()}`;
+    const lines: string[] = [];
+    const realError = console.error;
+    console.error = (...args: unknown[]) => {
+      lines.push(String(args[0]));
+    };
+
+    try {
+      let attempts = 0;
+      await b.subscribe(
+        'userCreated',
+        async (p) => {
+          if (p.userId !== payload.userId) return;
+          attempts += 1;
+          throw new Error('permanently broken');
+        },
+        { durable: `d-${randomUUID().slice(0, 8)}`, maxDeliver: 2 },
+      );
+
+      await b.publish('userCreated', payload, { idempotencyKey: key });
+      expect(await until(() => attempts >= 2)).toBe(true);
+      // Long enough for a third delivery to arrive if the budget were not spent,
+      // so a second announcement would be caught rather than raced past.
+      await new Promise((r) => setTimeout(r, 1_500));
+
+      const announced = lines
+        .map((line) => {
+          try {
+            return JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            return null;
+          }
+        })
+        .filter((entry) => entry?.event === 'bus.message_abandoned' && entry?.idempotencyKey === key);
+
+      // ONCE. On the last attempt, not on every failed one — an error line per
+      // retry is how a real one gets skimmed past.
+      expect(announced).toHaveLength(1);
+      expect(announced[0]).toMatchObject({
+        subject: 'intafaced.identity.user.created',
+        attempts: 2,
+        reason: 'permanently broken',
+      });
+      expect(announced[0]!.durable).toBeTruthy();
+    } finally {
+      console.error = realError;
+    }
   });
 
   it('publishes the same idempotency key once — server-side dedupe inside the window', async () => {

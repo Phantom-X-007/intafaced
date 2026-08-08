@@ -30,7 +30,22 @@ export interface Handler<K extends EventName> {
 export interface SubscribeOptions {
   /** Durable consumer name. Required for JetStream — this is what survives restarts. */
   durable: string;
-  /** Max redeliveries before the message goes to the dead-letter subject. */
+  /**
+   * How many times JetStream may deliver this message before it gives up.
+   *
+   * There is NO dead-letter subject. This used to say there was; the phrase
+   * appeared once in this repo, in that sentence, and nothing implemented it.
+   * What actually happens on the last failed attempt is that redelivery stops
+   * and the message stays in the stream, unacked, for the stream's 90-day
+   * retention — recoverable by resetting the durable consumer, and reachable by
+   * nothing automatic.
+   *
+   * Because that state is invisible from the outside, the bus prints one
+   * structured `bus.message_abandoned` error as it happens, naming the subject,
+   * the durable, the producer and the envelope's idempotency key. It is a
+   * signal, not a queue: if a subject needs its failures handled rather than
+   * announced, that is a subject in the catalog and a consumer for it.
+   */
   maxDeliver?: number;
   signal?: AbortSignal;
 }
