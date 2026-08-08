@@ -1013,7 +1013,47 @@ if (!available) {
      * The clock is injected. With the ambient one this test would pass for the
      * wrong reason five days a week and fail on the other two.
      */
+    it('refuses production listing of forex without fiat settlement rails (D-S-05)', async () => {
+      await expect(
+        trade.listMarket({
+          symbol: 'EUR/USD-PROD',
+          baseAsset: 'EUR',
+          quoteAsset: 'USD',
+          tickSize: amt('0.00001'),
+          lotSize: amt('0.01'),
+          minQty: amt('0.01'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 10,
+          takerBps: 20,
+          assetClass: 'forex',
+          schedule: 'fx-global',
+          // paper omitted → production listing
+        }),
+      ).rejects.toMatchObject({ code: 'trade.unsettled_asset_class_listing' });
+
+      // paper model remains legal
+      const paper = await trade.listMarket({
+        symbol: 'EUR/USD-PAPER',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        tickSize: amt('0.00001'),
+        lotSize: amt('0.01'),
+        minQty: amt('0.01'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        assetClass: 'forex',
+        schedule: 'fx-global',
+        paper: true,
+      });
+      expect(paper.paper).toBe(true);
+      expect(paper.assetClass).toBe('forex');
+    });
+
     it('refuses a weekend forex order and holds nothing', async () => {
+      // paper=true: D-S-05 allows modelling forex; production active listing is refused.
       const eurusd = await trade.listMarket({
         symbol: 'EUR/USD',
         baseAsset: 'EUR',
@@ -1027,10 +1067,12 @@ if (!available) {
         takerBps: 20,
         assetClass: 'forex',
         schedule: 'fx-global',
+        paper: true,
       });
 
       // Saturday. The listing is `active` throughout — this is the venue, not a halt.
       expect(eurusd.status).toBe('active');
+      expect(eurusd.paper).toBe(true);
       const saturday = new TradeService(sql, ledger, matching, perks, bus, {
         spotEnabled: true,
         now: () => new Date('2026-01-10T12:00:00Z'),
@@ -1082,6 +1124,7 @@ if (!available) {
         takerBps: 20,
         assetClass: 'forex',
         schedule: 'fx-global',
+        paper: true,
       });
 
       // Wednesday noon UTC — inside the session on any definition.
@@ -1102,8 +1145,9 @@ if (!available) {
       });
 
       expect(order.status).toBe('open');
-      expect(await held(ALICE, 'USD')).toBe('110');
-      expect(await avail(ALICE, 'USD')).toBe('890');
+      // paper markets never post real holds — schedule acceptance is the proof.
+      expect(await held(ALICE, 'USD')).toBe('0');
+      expect(await avail(ALICE, 'USD')).toBe('1000');
     });
 
     it('refuses an off-grid price and an off-grid quantity before any hold', async () => {

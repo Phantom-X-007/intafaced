@@ -368,6 +368,18 @@ export class TradeService {
    * dormant until the first partial fill hit it in production.
    */
   async listMarket(input: ListMarketInput): Promise<Market> {
+    const assetClass = input.assetClass ?? 'crypto';
+    const paper = input.paper === true;
+    const status = input.status ?? 'active';
+    // D-S-05 / instrument-enum ADR: modelling forex/commodities is honest;
+    // listing them for production trading without fiat settlement is the lie.
+    // paper=true (drills) and non-active status remain allowed.
+    if ((assetClass === 'forex' || assetClass === 'commodity') && status === 'active' && !paper) {
+      throw new TradeError(
+        `${assetClass} cannot be listed for production trading until fiat settlement rails exist — list as paper=true or status pending/halted (model is fine)`,
+        'trade.unsettled_asset_class_listing',
+      );
+    }
     const rows = await this.sql<MarketRow[]>`
       INSERT INTO trade.markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
@@ -379,9 +391,9 @@ export class TradeService {
         ${formatAmount(input.minQty)}::numeric,
         ${input.maxQty == null ? null : formatAmount(input.maxQty)}::numeric,
         ${formatAmount(input.minNotional)}::numeric,
-        ${input.status ?? 'active'}, ${input.makerBps}, ${input.takerBps}, now(),
-        ${input.assetClass ?? 'crypto'}, ${input.schedule ?? 'crypto-24x7'},
-        ${input.displayName ?? input.symbol}, ${input.paper === true}
+        ${status}, ${input.makerBps}, ${input.takerBps}, now(),
+        ${assetClass}, ${input.schedule ?? 'crypto-24x7'},
+        ${input.displayName ?? input.symbol}, ${paper}
       )
       ON CONFLICT (symbol) DO UPDATE SET updated_at = now()
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,

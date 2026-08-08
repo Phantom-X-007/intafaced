@@ -97,6 +97,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Saturday never trades it again.
    */
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /**
+   * Production listing of forex/commodity without fiat settlement (D-S-05).
+   * Not a symbol to drop forever if the operator later enables rails — BadRequest.
+   */
+  'trade.unsettled_asset_class_listing': { ccxt: 'BadRequest', status: 400 },
   /** Operator kill-switch across the whole spot plane — venue-wide, retryable. */
   'trade.spot_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },
