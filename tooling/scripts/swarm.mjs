@@ -307,6 +307,50 @@ function loadTrackerFree() {
   return t.notYet;
 }
 
+/**
+ * A9 — the work no agent free board can see: socket rows + owned non-done rows.
+ * Read-only derivation over features.mjs. Never a gate. Never re-decides socket
+ * basis. Renders into FREEZE so "what is waiting on a human / chain owner" has
+ * one place, not six docs with no count (axis plan A9).
+ */
+function loadInvisibleBoard() {
+  try {
+    const out = execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `import { FEATURES } from ${JSON.stringify(pathToFileURL(join(ROOT, 'tooling/tracker/features.mjs')).href)};
+         const sockets = FEATURES.filter((f) => f.status === 'socket').map((f) => ({
+           id: f.id,
+           title: f.title || f.id,
+           owner: f.owner || '(unowned)',
+           plane: f.plane || 'F',
+           note: (f.note || '').slice(0, 160),
+         }));
+         const owned = FEATURES.filter((f) => f.owner && f.status !== 'done' && f.status !== 'socket').map((f) => ({
+           id: f.id,
+           title: f.title || f.id,
+           owner: f.owner,
+           status: f.status,
+           note: (f.note || '').slice(0, 160),
+         }));
+         process.stdout.write(JSON.stringify({
+           socketCount: sockets.length,
+           socketUnowned: sockets.filter((s) => s.owner === '(unowned)').length,
+           sockets: sockets.sort((a, b) => a.owner.localeCompare(b.owner) || a.id.localeCompare(b.id)),
+           ownedCount: owned.length,
+           owned: owned.sort((a, b) => a.owner.localeCompare(b.owner) || a.id.localeCompare(b.id)),
+         }));`,
+      ],
+      { encoding: 'utf8', cwd: ROOT, maxBuffer: 10 * 1024 * 1024 },
+    );
+    return JSON.parse(out);
+  } catch (e) {
+    return { error: String(e.message || e), socketCount: 0, sockets: [], ownedCount: 0, owned: [] };
+  }
+}
+
 function listClaimLocks() {
   if (!existsSync(CLAIMS_DIR)) return [];
   return readdirSync(CLAIMS_DIR)
@@ -879,6 +923,7 @@ function buildModel() {
   const strandedBranches = strandedOurs(strandedRes);
   const wtCount = worktreeCount();
   const actionsRuns24h = countActionsRuns24h();
+  const invisible = loadInvisibleBoard();
   // F-STANDBY only when BOTH shell and implementable boards are empty.
   // freeShell=0 alone is NOT idle when freeImplementable>0 (or P1 still has work).
   const fStandby =
@@ -891,6 +936,7 @@ function buildModel() {
     tipFull,
     tipSubject,
     generatedAt: new Date().toISOString(),
+    invisible,
     openPrCount: prs.length,
     openPrs: prs.map((p) => ({
       number: p.number,
@@ -1030,6 +1076,38 @@ function renderFreezeMd(m) {
     lines.push(
       `| **${c.id}** | ${c.track} | ${(c.title || '').replace(/\|/g, '/')} | ${(c.collisions || []).join('<br>').replace(/\|/g, '/')} |`,
     );
+  }
+  lines.push('');
+  // A9 — invisible to freeProduct (sockets + owned non-done). Report only.
+  const inv = m.invisible || {};
+  lines.push('## Invisible to freeProduct (A9 — report only, never a gate)');
+  lines.push('');
+  if (inv.error) {
+    lines.push(`_Could not derive: ${inv.error}_`);
+  } else {
+    lines.push(
+      `**Sockets:** ${inv.socketCount ?? 0} (${inv.socketUnowned ?? 0} unowned) · **Owned non-done (non-socket):** ${inv.ownedCount ?? 0}`,
+    );
+    lines.push('');
+    lines.push(
+      'These rows are deliberately off the free implementable board. They still exist — a quarter of the platform when sockets alone are counted. Ranked for humans, not for spawn.',
+    );
+    lines.push('');
+    lines.push('### Socket rows');
+    lines.push('');
+    lines.push('| id | owner | plane | title |');
+    lines.push('| --- | --- | --- | --- |');
+    for (const s of inv.sockets || []) {
+      lines.push(`| **${s.id}** | ${s.owner} | ${s.plane || '—'} | ${(s.title || '').replace(/\|/g, '/')} |`);
+    }
+    lines.push('');
+    lines.push('### Owned non-done (human or named agent claim)');
+    lines.push('');
+    lines.push('| id | owner | status | title |');
+    lines.push('| --- | --- | --- | --- |');
+    for (const o of inv.owned || []) {
+      lines.push(`| **${o.id}** | ${o.owner} | ${o.status} | ${(o.title || '').replace(/\|/g, '/')} |`);
+    }
   }
   lines.push('');
   lines.push('## Open PR snapshot');
