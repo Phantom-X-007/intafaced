@@ -607,16 +607,18 @@ if (!available) {
 
     it('fee-exhausting match refuses BEFORE fill rows — hold stays whole, re-run can heal', async () => {
       /**
-       * markets_dust_free_ck allows tick×lot = 1 wei. Any non-zero fee then
-       * ceil-rounds to the whole receivable. Recipe refuses; if fill rows
-       * landed first, remainingHold permanently overstated consumption.
-       * Guard must fire first so a cancel still returns the full hold.
+       * markets_dust_free_ck requires tick×lot ≥ 1 wei — so both cannot be 1 wei
+       * (product 1e-36). Use tick=1, lot=1 wei so the listing is legal; any
+       * non-zero fee then ceil-rounds a 1-wei receivable to the whole amount.
+       * Recipe refuses; if fill rows landed first, remainingHold permanently
+       * overstated consumption. Guard must fire first so a cancel still returns
+       * the full hold.
        */
       const dust = await trade.listMarket({
         symbol: 'DUST/USDT',
         baseAsset: 'BTC',
         quoteAsset: 'USDT',
-        tickSize: amt('0.000000000000000001'),
+        tickSize: amt('1'),
         lotSize: amt('0.000000000000000001'),
         minQty: amt('0.000000000000000001'),
         maxQty: amt('1'),
@@ -627,23 +629,23 @@ if (!available) {
       await fund(BOB, 'BTC', '1');
       await fund(ALICE, 'USDT', '1');
 
-      const maker = await rest(BOB, dust, 'sell', '0.000000000000000001', '0.000000000000000001', 'bob-dust');
+      // price must be on tick (1); qty on lot (1 wei) → 1 wei base at 1 USDT
+      const maker = await rest(BOB, dust, 'sell', '1', '0.000000000000000001', 'bob-dust');
       matching.scriptFills([
         {
           makerOrderId: maker.id,
           makerAccountId: BOB,
-          price: '0.000000000000000001',
+          price: '1',
           qty: '0.000000000000000001',
         },
       ]);
 
-      await expect(rest(ALICE, dust, 'buy', '0.000000000000000001', '0.000000000000000001', 'alice-dust')).rejects.toMatchObject({
+      await expect(rest(ALICE, dust, 'buy', '1', '0.000000000000000001', 'alice-dust')).rejects.toMatchObject({
         code: 'trade.fee_exceeds_fill',
       });
 
       expect(await sql`SELECT id FROM trade.fills`).toHaveLength(0);
       expect(postsWithReason('trade.fill')).toHaveLength(0);
-      // Taker hold still funded (engine may have accepted; recovery is cancel).
       // Maker still open with full hold — nothing was drawn by a phantom fill.
       expect(formatAmount((await ledger.balance(orderHoldAccount(BOB, 'BTC', maker.id))).amount)).toBe('0.000000000000000001');
       expect(ledger.totalsByAsset()).toEqual({ BTC: '0', USDT: '0' });
