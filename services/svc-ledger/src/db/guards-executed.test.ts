@@ -113,6 +113,43 @@ if (!available) {
         ).rejects.toMatchObject({ code: FK_VIOLATION });
       });
 
+      /**
+       * 0010 · THE ENTRY'S ASSET MUST BE THE ACCOUNT'S OWN ASSET.
+       *
+       * Both assets here are registered and both columns individually pass 0006's
+       * foreign keys. The entry is positive. The account is real. What is wrong is
+       * that they disagree — the entry records a movement in `BTC` against an
+       * account holding `USDT`, so `balance_after` describes a balance in an asset
+       * the entry is not in.
+       *
+       * Nothing caught this before 0010, including reconciliation: it replays
+       * entries per asset, so it re-derives the same wrong answer and reports green.
+       */
+      it('REFUSES an entry whose asset is not its account’s asset', async () => {
+        const { txId, accountId } = await realTxAndAccount('USDT');
+
+        await expect(
+          db.sql`
+            INSERT INTO ledger_entries (tx_id, account_id, asset_id, direction, amount, balance_after)
+            VALUES (${txId}, ${accountId}, 'BTC', 'debit'::direction, 1::numeric, 1::numeric)
+          `,
+        ).rejects.toMatchObject({ code: FK_VIOLATION });
+      });
+
+      it('and an account cannot be moved to another asset while entries describe it', async () => {
+        // ON UPDATE RESTRICT. Re-pointing the account would silently re-file every
+        // entry already written against it into a different book.
+        const { txId, accountId } = await realTxAndAccount('USDT');
+        await db.sql`
+          INSERT INTO ledger_entries (tx_id, account_id, asset_id, direction, amount, balance_after)
+          VALUES (${txId}, ${accountId}, 'USDT', 'debit'::direction, 1::numeric, 1::numeric)
+        `;
+
+        await expect(db.sql`UPDATE accounts SET asset_id = 'BTC' WHERE id = ${accountId}`).rejects.toMatchObject({
+          code: FK_VIOLATION,
+        });
+      });
+
       it('accepts the same entry in a registered asset — so the refusal is about the asset', async () => {
         const { txId, accountId } = await realTxAndAccount();
 
@@ -125,30 +162,33 @@ if (!available) {
       });
 
       /**
-       * ISOLATED TO THE ENTRIES FK ON PURPOSE.
+       * REWRITTEN BY 0010, and the reason is the finding.
        *
-       * `DELETE FROM assets WHERE id = 'USDT'` would be restricted by
-       * `accounts_asset_id_fk` as well, since accounts hold an asset too — so the
-       * obvious version of this test passes even if the entries FK does not exist,
-       * which is the exact failure mode this PR is about.
+       * This test used to isolate the entries foreign key by giving an entry an
+       * asset its own account did not hold — the only way to make `DELETE FROM
+       * assets` fail on the ENTRIES key rather than on `accounts_asset_id_fk`,
+       * which restricts the same delete.
        *
-       * So: a purpose-made asset referenced ONLY by an entry. The account stays in
-       * `USDT` while the entry names `ENTFK`, which is possible because nothing ties
-       * `ledger_entries.asset_id` to its account's asset — recorded as its own
-       * finding in the audit file, and what makes this isolation available here.
+       * Needing an illegal state to be constructible in order to test a guard is a
+       * finding about the schema, and it was: raw SQL could record a `USDT` entry
+       * against a `BTC` account, so the entry landed in one asset's book while
+       * `balance_after` described a balance in another. 0010's composite foreign
+       * key makes that unrepresentable, which is worth more than the isolation this
+       * test wanted — so the isolation is gone and the stronger property is
+       * asserted instead.
+       *
+       * RESTRICT is still covered: the asset holds an account AND an entry, and the
+       * delete is refused. It no longer proves WHICH key refused, and after 0010
+       * there is no arrangement in which they can disagree.
        */
-      it('and an asset cannot be deleted out from under an entry alone (ON DELETE RESTRICT)', async () => {
+      it('and an asset holding live value cannot be deleted (ON DELETE RESTRICT)', async () => {
         await db.sql`INSERT INTO assets (id, kind, decimals) VALUES ('ENTFK', 'crypto', 18) ON CONFLICT (id) DO NOTHING`;
-        const { txId, accountId } = await realTxAndAccount();
+        const { txId, accountId } = await realTxAndAccount('ENTFK');
 
         await db.sql`
           INSERT INTO ledger_entries (tx_id, account_id, asset_id, direction, amount, balance_after)
           VALUES (${txId}, ${accountId}, 'ENTFK', 'debit'::direction, 1::numeric, 1::numeric)
         `;
-
-        // No account holds ENTFK, so only the entries FK can be doing the refusing.
-        const holders = await db.sql<Array<{ n: string }>>`SELECT count(*) AS n FROM accounts WHERE asset_id = 'ENTFK'`;
-        expect(Number(holders[0]!.n)).toBe(0);
 
         await expect(db.sql`DELETE FROM assets WHERE id = 'ENTFK'`).rejects.toMatchObject({ code: FK_VIOLATION });
       });
