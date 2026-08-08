@@ -216,6 +216,11 @@ function toTrpcError(err: unknown): TRPCError {
         // Not a client error: the caller asked for something reasonable and the
         // trade was not in a state that could honour it.
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'p2p.trade_moved':
+        // Same shape as the terminal case: the request was fine, the trade
+        // changed underneath it. A client that retries will be answered by
+        // whatever the trade's new state allows.
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
     }
   }
 

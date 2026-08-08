@@ -98,6 +98,12 @@ export type P2pErrorCode =
   | 'p2p.dispute_already_open'
   | 'p2p.dispute_already_resolved'
   | 'p2p.escrow_missing'
+  // The trade changed state between the moment a caller decided what to do with
+  // it and the moment it took the row lock to do it. The timeout sweep is the
+  // caller this exists for: it reads a status, then acts on it several round
+  // trips later, and the action for the state it read is not the action for the
+  // state the trade is now in.
+  | 'p2p.trade_moved'
   | 'p2p.trading_disabled'
   | 'p2p.dispute_evidence_rejected'
   | 'p2p.erase_blocked'
@@ -1002,8 +1008,21 @@ export class P2pService {
    * Always re-drives the lock first. From `created` that is what turns "did it
    * lock?" from a guess into a fact; from `escrowed`/`fiat_sent` it is a no-op.
    */
-  private async unwind(tradeId: string, reason: string): Promise<TradeRecord> {
+  private async unwind(tradeId: string, reason: string, expectStatus?: TradeStatus): Promise<TradeRecord> {
     let trade = await this.getTrade(tradeId);
+
+    // The timeout sweep chose this action from a status it read outside the row
+    // lock, several round trips ago. If the trade has moved since, its new state
+    // carries its own deadline and its own action, and the next sweep will take
+    // that one — so this pass refuses rather than applying a decision made about
+    // a trade that no longer exists in that form.
+    //
+    // `escalateDispute` already re-checks this way under its lock. This is the
+    // same check on the two sweep paths that actually move value, which did not
+    // have it.
+    if (expectStatus && trade.status !== expectStatus) {
+      throw new P2pError(`Trade ${tradeId} was ${expectStatus} when the sweep read it and is now ${trade.status}`, 'p2p.trade_moved');
+    }
 
     if (trade.status === 'created') {
       try {
@@ -1021,7 +1040,10 @@ export class P2pService {
       throw new P2pError(`Trade ${tradeId} is ${trade.status} and holds no escrow`, 'p2p.escrow_missing');
     }
 
-    await this.recordDecision({ tradeId, to: 'cancelled', resolution: 'refunded', reason });
+    // The status observed just above, re-checked under the row lock. Closes the
+    // window between that read and the decision write — the one a concurrent
+    // `markFiatSent` fits into, on the cancel path as much as the sweep's.
+    await this.recordDecision({ tradeId, to: 'cancelled', resolution: 'refunded', reason, expectStatus: trade.status });
     return this.settle(tradeId);
   }
 
@@ -1414,12 +1436,33 @@ export class P2pService {
     resolution: TradeResolution;
     /** `<actor>.<what happened>` — carried onto the event and the audit trail. */
     reason: string;
+    /**
+     * The status the caller decided on, re-checked here under the row lock.
+     *
+     * Checked AFTER `assertTransition` so a trade that reached a terminal state
+     * still reports `p2p.trade_terminal` — "already released" and "moved while
+     * you were deciding" are different incidents and a retrying caller needs to
+     * tell them apart.
+     */
+    expectStatus?: TradeStatus;
   }): Promise<void> {
     await transaction(
       this.sql,
       async (tx) => {
         const trade = await this.lockTrade(tx, input.tradeId);
         assertTransition(trade.status, input.to);
+
+        if (input.expectStatus && trade.status !== input.expectStatus) {
+          // `escrowed → cancelled` and `fiat_sent → cancelled` are both legal
+          // edges, so `assertTransition` cannot tell these apart — which is
+          // exactly why the check has to be here. Refunding a trade that has
+          // become `fiat_sent` hands the seller their asset back after the buyer
+          // has already sent the fiat off-platform, and opens no dispute.
+          throw new P2pError(
+            `Trade ${input.tradeId} was ${input.expectStatus} when this was decided and is now ${trade.status}`,
+            'p2p.trade_moved',
+          );
+        }
 
         if (input.resolution !== 'voided' && !holdsEscrow(trade.status)) {
           // Releasing or refunding requires the escrow to provably exist. From
@@ -1432,7 +1475,13 @@ export class P2pService {
           );
         }
 
-        await this.writeDecision(tx, { trade, to: input.to, resolution: input.resolution, reason: input.reason, now: await txNow(tx) });
+        await this.writeDecision(tx, {
+          trade,
+          to: input.to,
+          resolution: input.resolution,
+          reason: input.reason,
+          now: await txNow(tx),
+        });
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
@@ -1683,7 +1732,7 @@ export class P2pService {
       case 'settle_or_void': {
         // `created` — the take never finished. Re-drive the lock so we KNOW
         // whether anything is in escrow, then unwind whatever we find.
-        const result = await this.unwind(tradeId, 'timeout.escrow_incomplete');
+        const result = await this.unwind(tradeId, 'timeout.escrow_incomplete', status);
         await this.publishExpired(tradeId, status, result.resolution === 'voided' ? 'voided' : 'refunded');
         return 'acted';
       }
@@ -1691,7 +1740,7 @@ export class P2pService {
       case 'refund': {
         // `escrowed` — the buyer never even claimed to have paid. The seller's
         // asset goes home in full.
-        await this.unwind(tradeId, 'timeout.payment_window_elapsed');
+        await this.unwind(tradeId, 'timeout.payment_window_elapsed', status);
         await this.publishExpired(tradeId, status, 'refunded');
         return 'acted';
       }
