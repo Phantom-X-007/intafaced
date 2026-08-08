@@ -56,6 +56,17 @@ export type DeliveryStatus =
  */
 export const DEFAULT_CLAIM_LEASE_MS = 15_000;
 
+/**
+ * How often the delivery sweep runs — see `DeliveryStore.reapExhausted`.
+ *
+ * One minute, and the exact number does not matter much: the rows it retires
+ * are already finished, so the interval only decides how long a finished row
+ * reads as `pending`. Short enough that a person checking whether their margin
+ * call went out gets the truth within a minute of it becoming true; long enough
+ * that the sweep is invisible next to the traffic.
+ */
+export const DELIVERY_REAP_INTERVAL_MS = 60_000;
+
 export interface DeliveryRecord {
   id: string;
   notificationId: string;
@@ -123,6 +134,39 @@ export interface DeliveryStore {
   claim(notificationId: string, channel: ChannelId, maxAttempts: number): Promise<ClaimResult>;
   settle(input: SettleInput): Promise<void>;
   listForNotification(notificationId: string): Promise<DeliveryRecord[]>;
+  /**
+   * Retire rows that have run out of attempts and that nobody owns.
+   *
+   * WHY THIS EXISTS AS A SWEEP AND NOT ONLY INSIDE `claim`
+   *
+   * `abandoned` used to be written in exactly one place: the retire branch of
+   * `claim`, reached when a LATER bus redelivery finds the row out of attempts.
+   * That branch depends on there being a later redelivery, and there is not
+   * always one. `max_deliver` is 5 and `NOTIFY_MAX_DELIVERY_ATTEMPTS` may be
+   * configured up to 5 — the README's env table says "1–5, at or below the bus
+   * maxDeliver" — so the delivery that spends the last attempt can be the same
+   * one JetStream then parks. No sixth message arrives, `claim` is never called
+   * again for that pair, and the row stays `pending` forever.
+   *
+   * README: "After NOTIFY_MAX_DELIVERY_ATTEMPTS the row is `abandoned` rather
+   * than left looking like it is still being retried." `notify.deliveries` is
+   * user-facing on purpose — a margin call's own recipient reads it — so a row
+   * that says `pending` while nothing is retrying it is the service telling the
+   * person whose collateral is at risk that help is still on the way.
+   *
+   * The predicate is deliberately the same one `claim` retires on, so the sweep
+   * writes only what the next claim would have written and never more:
+   *   • `attempts >= maxAttempts` — `claim` would refuse to re-own it
+   *   • settled `failed`, or `pending` with no live lease — nobody is mid-send
+   *
+   * A live lease is never touched. That row has an owner who is about to settle
+   * it, possibly as `accepted`.
+   *
+   * Returns the number of rows retired. Never sends, never acks, never writes
+   * `accepted_at`: this only ever moves a row from "still being tried" to the
+   * truth, which is that it is over.
+   */
+  reapExhausted(maxAttempts: number): Promise<number>;
 }
 
 export interface UpsertTargetInput {
@@ -241,6 +285,23 @@ export class MemoryDeliveryStore implements DeliveryStore {
 
   async listForNotification(notificationId: string): Promise<DeliveryRecord[]> {
     return [...this.byId.values()].filter((r) => r.notificationId === notificationId).sort((a, b) => a.channel.localeCompare(b.channel));
+  }
+
+  async reapExhausted(maxAttempts: number): Promise<number> {
+    const now = this.now();
+    let retired = 0;
+    for (const record of this.byId.values()) {
+      if (record.attempts < maxAttempts) continue;
+      if (record.status !== 'pending' && record.status !== 'failed') continue;
+      const ownerMidSend = record.status === 'pending' && record.leaseUntil !== null && record.leaseUntil.getTime() > now.getTime();
+      if (ownerMidSend) continue;
+      record.status = 'abandoned';
+      record.refusalCode = 'channel.attempts_exhausted';
+      record.leaseUntil = null;
+      record.updatedAt = now;
+      retired += 1;
+    }
+    return retired;
   }
 }
 
@@ -447,6 +508,30 @@ export class PostgresDeliveryStore implements DeliveryStore {
        ORDER BY channel ASC
     `;
     return rows.map(fromDeliveryPg);
+  }
+
+  async reapExhausted(maxAttempts: number): Promise<number> {
+    // One statement, the same shape as the retire branch in `claim`. Two
+    // replicas sweeping at once is harmless: `status` is in the WHERE clause,
+    // so the second finds nothing left to retire.
+    //
+    // The pending arm matches `deliveries_lease_idx` — partial on
+    // `status = 'pending' AND lease_until IS NOT NULL` — which until now was an
+    // index no query used.
+    const rows = await this.sql<{ id: string }[]>`
+      UPDATE notify.deliveries
+         SET status = 'abandoned',
+             refusal_code = 'channel.attempts_exhausted',
+             lease_until = NULL,
+             updated_at = now()
+       WHERE attempts >= ${maxAttempts}
+         AND (
+           status = 'failed'
+           OR (status = 'pending' AND (lease_until IS NULL OR lease_until <= now()))
+         )
+      RETURNING id
+    `;
+    return rows.length;
   }
 }
 

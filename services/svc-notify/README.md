@@ -223,6 +223,15 @@ budget for the whole message and eventually park a notification that three other
 other channels handled perfectly. After `NOTIFY_MAX_DELIVERY_ATTEMPTS` the row is
 `abandoned` rather than left looking like it is still being retried.
 
+**Two things write `abandoned`, and the second one is why the first sentence is
+true.** The claim retires a spent row when a later redelivery arrives — but a
+message that reaches the attempt ceiling and `max_deliver` together is parked by
+JetStream, and no later redelivery arrives. A one-minute sweep
+(`reapExhausted`, wired in `index.ts`) retires those rows on the same predicate
+the claim uses, so a row nobody is retrying stops reading as `pending` whether or
+not the bus ever comes back. It writes only a failure — never an attempt, never
+an acceptance — and never touches a row whose claim lease is still live.
+
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
 `<loanId>` — a loan can be called, cured and called again, and the second call is
 a different fact.
