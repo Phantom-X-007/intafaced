@@ -262,9 +262,10 @@ export const FEATURES = [
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['trade.spot'],
-    note: '**Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent. **Isolated margin ONLY.** `DIRECTION` §1 and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` done-bar item 8 forbid a cross-margin path even disabled — this row advertised cross/isolated until 2026-08-07 and was wrong. **Orderable behind a flag since 2026-08-08** — `assertTradable` takes a futures order when `TRADE_FUTURES_ENABLED` is on and refuses `trade.futures_disabled` when off, which is the shipped default; orders match on the same svc-matching book (D-S-06, no second book) and settle through the ledger. STATUS STAYS `ready`, NOT `done`: orderability is one of the six things `DIRECTION` §1 calls MVP, and the other five are untouched — no leveraged entry through the book (a futures order is funded by the same full hold as a spot order), funding still off and owner-reserved, insurance fund absent, and the gap-series liquidation proof unrun. The unblocker was `c7dfb5e4`/`cc90c2f4` making the mark size-aware; before those, an orderable futures book was a self-dealing machine.',
+    note: '**Partial-liquidation ladder landed #1136 (2026-08-08)** — futures/maintenance-ladder.ts, depth-referenced tiers in scaled bigint, wired through liquidation-tick.ts behind an optional dep so the old full-close path runs unchanged when absent. The gap-series proof THIS NOTE PREVIOUSLY RECORDED AS UNRUN is now run: 100→96→94→93 then a 14% gap to 80 yields [skipped_healthy, skipped_healthy, partially_liquidated, partially_liquidated, liquidated], margin drawn totals exactly 100, and a gap past the 2000 bps breaker is refused rather than traded through. STILL NOT done: no leveraged entry through the book, funding still off and owner-reserved, insurance-fund ACCOUNT choice owner-reserved (so the fund receiving the shortfall is proved only engine-side), and no margin-call grace clock — svc-trade has no transport for one and the ADR forbids starting grace without it. **Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent. **Isolated margin ONLY.** `DIRECTION` §1 and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` done-bar item 8 forbid a cross-margin path even disabled — this row advertised cross/isolated until 2026-08-07 and was wrong. **Orderable behind a flag since 2026-08-08** — `assertTradable` takes a futures order when `TRADE_FUTURES_ENABLED` is on and refuses `trade.futures_disabled` when off, which is the shipped default; orders match on the same svc-matching book (D-S-06, no second book) and settle through the ledger. STATUS STAYS `ready`, NOT `done`: orderability is one of the six things `DIRECTION` §1 calls MVP, and the other five are untouched — no leveraged entry through the book (a futures order is funded by the same full hold as a spot order), funding still off and owner-reserved, insurance fund absent, and the gap-series liquidation proof unrun. The unblocker was `c7dfb5e4`/`cc90c2f4` making the mark size-aware; before those, an orderable futures book was a self-dealing machine.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
@@ -470,8 +471,10 @@ export const FEATURES = [
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['pay.psp'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    note: '**Sub-merchant tree landed #1135 (2026-08-08)** — merchants.parent_merchant_id (NULL = top of its own tree, nothing backfilled) plus settling_party, and pay.merchant_permission_events as an append-only journal behind a trigger. Authorization is two checks that are not the same check, both at the procedure boundary: a STRUCTURAL ancestor-or-self scope that cannot be widened, and an AREA check over descendants only; the acting node is resolved from the principal and is deliberately not on the wire. Moves no value. **The "14 permission areas" in this title has never existed anywhere** — it is one string copied between this file, coverage.yaml and the build doc; ELEVEN areas shipped, each naming a surface svc-pay actually has, and area is text not an enum so a twelfth costs one line. Fixing the number is an OWNER decision. Also found: payfac was never actually blocked by pay.psp — merchant.create has accepted mode payfac since migration 0000 and it changed nothing. STILL NOT done: the nine areas naming gateway procedures are not yet enforced there — router.ts still authorizes with a single assertMerchantOwnership userId comparison, and wiring it touches the money paths. **Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
@@ -853,8 +856,10 @@ export const FEATURES = [
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['agents.gateway'],
-    note: 'Stage-1 2026-08-04: navigatorAgentGuardrail — navigator.plan/tool_select + read-only trade/identity tools; money-write tools refuse undeclared. Stage-2 grounded tools residual. Not tracker done until live grounded env.',
+    note: '**Metered guardrailed session landed #1150 (2026-08-08)** — navigator/session-run.ts drives the #1114 openSession → act → settle → closeSession path rather than a parallel one, so the runtime decides tool admissibility at call time instead of a guardrail being documented and enforced by nobody. Proved load-bearing by mutation, not by comment: bypassing runtime.act to call the tool executor directly fails 6 of 14 tests, including the money-write refusal and both thrown-path tests. STILL NOT done: no guardrail is written to agent_definitions at boot — registerScannerAgent exists and is called from NOWHERE, so a navigator twin would have been dead code making boot registration look wired when it is not; tool inputs remain caller-supplied fixtures. Stage-1 2026-08-04: navigatorAgentGuardrail — navigator.plan/tool_select + read-only trade/identity tools; money-write tools refuse undeclared. Stage-2 grounded tools residual. Not tracker done until live grounded env.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
@@ -865,8 +870,10 @@ export const FEATURES = [
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['agents.gateway', 'trade.spot'],
-    note: 'Stage-1 2026-08-04: pure fixture rank in svc-agents (`scanner/rank.ts`) — empty/stale/incomplete refuse with copy keys; no invent prices; no auto-trade. Live tools + shell UX residual. Not tracker done until allowlisted live data path.',
+    note: "**Metered session run landed #1114 (2026-08-08)** — scanner.runSession drives ranking through the fleet runtime, so each ticker fetch is admitted, counted against the session budget and audited. A scanner run bills ZERO and says so; no synthetic charge was invented to make it look metered. Dark-plane and blank-tier law refuse BEFORE the session opens (openCalls === 0), so nobody is billed for a scan that never happened. STILL NOT done: tickers are caller-supplied fixtures, not real allowlisted data in env, which is this row's own done bar; registerScannerAgent is exported but called from nowhere, so runSession 404s until a guardrail is registered. Known gap: agents.scanner.tier_closed is missing from packages/i18n/src/catalog.ts. Stage-1 2026-08-04: pure fixture rank in svc-agents (`scanner/rank.ts`) — empty/stale/incomplete refuse with copy keys; no invent prices; no auto-trade. Live tools + shell UX residual. Not tracker done until allowlisted live data path.",
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
@@ -900,6 +907,9 @@ export const FEATURES = [
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',
     phase: '5',
+    status: 'wip',
+    owner: 'nitro-agent',
+    note: '**Cert XP emit landed #1117 (2026-08-08)** — certs/xp-publish.ts turns a grant into a real xpEarned publish keyed on academy.cert:cert:<userId>:<certId>, including on the already-granted path (safe because identity does ON CONFLICT (idempotency_key) DO NOTHING), which is the recovery path. STILL NOT done: this row promises "→ real perks" and the work stops at XP. svc-identity is the SoT for rank and rank_thresholds.perks; a cert→perk map here would be a second opinion on another service\'s table and needs a contracts PR first. An unpriced cert publishes nothing rather than a guessed amount.',
     dependsOn: ['academy.curriculum', 'identity.rank'],
   }),
   f('academy.ambassadors', 'Residencies, IFC pay, revenue share', {
@@ -1207,10 +1217,11 @@ export const FEATURES = [
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', {
     module: 'notify',
     phase: '5',
-    status: 'ready',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
-    note: 'In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers: fillSettled, p2pEscrowLocked, p2pEscrowReleased, p2pEscrowRefunded, p2pTradeDisputed (openedBy only #157), kycApproved, rankUpdated, stakeCreated, bankMarginCalled; ON CONFLICT dedupe). Multi-channel fan-out now exists: one NotificationChannel adapter interface with three real out-of-app adapters (email/push/SMS), per-channel delivery rows with attempted_at kept apart from accepted_at, claim-per-(notification,channel) idempotency, confirmed-address targets, and a retryable/permanent split that decides whether the bus redelivers. The outcome column is accepted_at, not delivered_at: a 2xx from a gateway is custody, not receipt, and no delivery receipts are modelled (migration 0002). NOT done: no out-of-app channel can actually deliver until the owner supplies gateway credentials — until then email, push and SMS refuse every message with channel.not_configured and the refusal is on the record. In-app is the honest fallback and is genuinely delivering.',
+    note: '**Liquidation fan-out landed #1116 (2026-08-08)** — svc-notify now consumes intafaced.trade.position.updated and writes a critical inbox row plus out-of-app fan-out when a futures position is liquidated. That subject was previously consumed only by svc-ws, which fans it over a private WebSocket — reaching exactly the traders who happen to have the app open, the opposite of the population that needs to hear it. Only liquidated notifies; the other three transitions are acked and not written, because a row behind every open and close is undecided product law (a policy object with the conservative default, deliberately not an env var). **MUST NOT flip to done:** every out-of-app channel still refuses in every real deploy — the gateway credentials are Class X and blocked on the owner, not on code. In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers: fillSettled, p2pEscrowLocked, p2pEscrowReleased, p2pEscrowRefunded, p2pTradeDisputed (openedBy only #157), kycApproved, rankUpdated, stakeCreated, bankMarginCalled; ON CONFLICT dedupe). Multi-channel fan-out now exists: one NotificationChannel adapter interface with three real out-of-app adapters (email/push/SMS), per-channel delivery rows with attempted_at kept apart from accepted_at, claim-per-(notification,channel) idempotency, confirmed-address targets, and a retryable/permanent split that decides whether the bus redelivers. The outcome column is accepted_at, not delivered_at: a 2xx from a gateway is custody, not receipt, and no delivery receipts are modelled (migration 0002). NOT done: no out-of-app channel can actually deliver until the owner supplies gateway credentials — until then email, push and SMS refuse every message with channel.not_configured and the refusal is on the record. In-app is the honest fallback and is genuinely delivering.',
   }),
   f('v22.alerts', 'Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31)', {
     module: 'notify',
