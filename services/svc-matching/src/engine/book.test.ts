@@ -574,6 +574,50 @@ describe('validation', () => {
     seed(book, { id: 'dup', account: 'a', type: 'stop', side: 'buy', qty: '1', stopPrice: '1' });
     expect(book.submit(order({ id: 'dup', account: 'a', side: 'buy', qty: '1', price: '100' })).rejected?.code).toBe('duplicate_order_id');
   });
+
+  // ── The scope of that guard, pinned ────────────────────────────────────────
+  //
+  // Both tests above resubmit an id that is still LIVE, which is the only case
+  // the guard covers. The two below are the cases it does not, and they are
+  // asserted rather than left to be discovered: the README's scope note is only
+  // worth having if a change that widens or narrows it fails here.
+  //
+  // This is not the engine conceding the point. Order identity across time is
+  // enforced by the caller, which has a durable row to check; the engine keeps
+  // no history and rejecting an id it has ever seen would mean keeping every id
+  // forever in an in-memory book.
+
+  it('does NOT guard an id whose order has fully filled — the caller owns identity across time', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'maker', account: 'a', side: 'sell', qty: '1', price: '100' });
+
+    // Take the whole resting order, so `maker` leaves the book entirely.
+    book.submit(order({ id: 'taker', account: 'b', side: 'buy', qty: '1', price: '100' }));
+    expect(book.depth().asks).toEqual([]);
+
+    const again = book.submit(order({ id: 'maker', account: 'a', side: 'sell', qty: '1', price: '100' }));
+
+    expect(again.accepted).toBe(true);
+    expect(again.rejected).toBeFalsy();
+    expect(book.depth().asks).toEqual([['100', '1']]);
+  });
+
+  it('does NOT guard the id of an order that never rests — it is never live to be found', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'liq1', account: 'a', side: 'sell', qty: '1', price: '100' });
+    seed(book, { id: 'liq2', account: 'a', side: 'sell', qty: '1', price: '100' });
+
+    // A market order is never in the index at any point in its life, so the
+    // guard has nothing to check even while the order is executing.
+    const first = book.submit(order({ id: 'mkt', account: 'b', type: 'market', side: 'buy', qty: '1' }));
+    expect(first.accepted).toBe(true);
+
+    const second = book.submit(order({ id: 'mkt', account: 'b', type: 'market', side: 'buy', qty: '1' }));
+
+    expect(second.accepted).toBe(true);
+    expect(second.rejected).toBeFalsy();
+    expect(second.fills).toHaveLength(1);
+  });
 });
 
 // ── Sequences ───────────────────────────────────────────────────────────────
