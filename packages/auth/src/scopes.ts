@@ -128,11 +128,6 @@ export function hasScope(granted: readonly string[], required: Scope): boolean {
   return expandScopes(granted).has(required);
 }
 
-export function hasAllScopes(granted: readonly string[], required: readonly Scope[]): boolean {
-  const expanded = expandScopes(granted);
-  return required.every((r) => expanded.has(r));
-}
-
 /**
  * Scopes that must never be granted to a long-lived API key.
  *
@@ -246,7 +241,13 @@ const SESSION_SCOPE_LIST = [
   // Non-custodial and `minTier: 'none'`, so §22 says permissionless — and a
   // scope issued to nobody left the smart-account claim flow unreachable.
   'protocol:read',
-] as const;
+  // `satisfies`, not a plain `as const`. The comment on WITHHELD_SCOPE_REASONS
+  // credits the compiler with enforcing that every scope is either issued to a
+  // session or withheld with a written reason — but nothing constrained the
+  // members of THIS list to be real scopes, so a typo was caught only
+  // indirectly, by the mistyped scope going missing from the withheld side.
+  // This makes the guarantee the one the comment claims.
+] as const satisfies readonly Scope[];
 
 export type SessionScope = (typeof SESSION_SCOPE_LIST)[number];
 
