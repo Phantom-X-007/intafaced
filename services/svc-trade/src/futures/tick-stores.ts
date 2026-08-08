@@ -5,7 +5,7 @@
  */
 import type { Sql } from 'postgres';
 import type { FundingMarginApplier, FundingPeriodStore } from './funding-tick.js';
-import type { LiquidationAttemptStore, PositionCloser } from './liquidation-tick.js';
+import type { LiquidationAttemptStore, PositionCloser, PositionReducer } from './liquidation-tick.js';
 import type { EventBus } from '@intafaced/events';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 
@@ -131,6 +131,55 @@ export function sqlLiquidationAttemptStore(sql: Sql): LiquidationAttemptStore {
         VALUES (${liquidationId})
         ON CONFLICT (liquidation_id) DO NOTHING
       `;
+    },
+  };
+}
+
+/**
+ * Shrink a position after a PARTIAL liquidation rung.
+ *
+ * ONE STATEMENT, AND THE GUARDS ARE IN THE `WHERE`.
+ *
+ * `size > sizeClosed` is the important one. A partial rung must never take a
+ * position to zero through this path: `positions_size_positive_ck` would reject
+ * it, and the exception would arrive AFTER the tranche's realised loss had
+ * already posted to the ledger. Filtering in the predicate turns that into a
+ * no-op the tick can see instead of a half-applied liquidation. A rung that
+ * genuinely exhausts the position is `closesPosition` and goes through
+ * `sqlPositionCloser` — this function is not the path for it.
+ *
+ * `status = 'open'` covers the concurrent voluntary close: a trader who closes
+ * the whole position between the plan and this write leaves nothing to shrink,
+ * and the row must not be resurrected to a smaller size.
+ *
+ * NO EVENT IS PUBLISHED HERE. `positionUpdated` carries `status`, and there is no
+ * honest status for "still open, smaller than it was" on that schema today.
+ * Publishing `open` with the new size would be truthful about the size and silent
+ * about the fact that a liquidation just took part of it, which is the kind of
+ * half-disclosure `DIRECTION` §1 rules out for ADL. The tick's
+ * `partially_liquidated` item is the observable record until the contract carries
+ * a partial-liquidation event; adding one is a `packages/contracts` PR and a
+ * different service's file.
+ */
+export function sqlPositionReducer(sql: Sql): PositionReducer {
+  return {
+    async reduce(positionId, input) {
+      if (input.sizeClosed <= 0n) return;
+      const sizeClosed = formatAmount(input.sizeClosed);
+      const marginRemaining = formatAmount(input.marginRemaining < 0n ? 0n : input.marginRemaining);
+      await sql`
+        UPDATE trade.positions
+           SET size = size - ${sizeClosed}::numeric,
+               margin_current = ${marginRemaining}::numeric,
+               updated_at = now()
+         WHERE id = ${positionId}
+           AND status = 'open'
+           AND size > ${sizeClosed}::numeric
+      `;
+      // input.liquidationId / input.reason are for logs — the ledger already
+      // carries the idempotency key that makes this rung identifiable.
+      void input.liquidationId;
+      void input.reason;
     },
   };
 }
