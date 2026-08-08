@@ -8,6 +8,9 @@ import type { FastifyInstance } from 'fastify';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { periodIdFor, type FundingRateEntry } from './funding-rate-source.js';
 
+/** Clock-skew allowance on a publisher's `asOfMs`. Anything beyond is refused. */
+const FUTURE_SKEW_MS = 60_000;
+
 export interface InternalFundingRateDeps {
   internalSecret: string;
   publishFundingRate: (entry: FundingRateEntry) => void;
@@ -49,9 +52,24 @@ export function registerInternalFundingRate(app: FastifyInstance, deps: Internal
       });
     }
 
-    const asOfMs = req.body?.asOfMs ?? (deps.now ?? Date.now)();
+    const nowMs = (deps.now ?? Date.now)();
+    const asOfMs = req.body?.asOfMs ?? nowMs;
     if (!Number.isFinite(asOfMs) || asOfMs < 0) {
       return reply.code(400).send({ error: 'trade.funding_rate_publish_invalid', message: 'asOfMs invalid' });
+    }
+    // A future `asOfMs` is not a harmless oddity. `isRateFresh` requires
+    // `now >= asOf`, so one publish stamped past the horizon makes `quote()`
+    // return null for that market FOREVER — funding silently stops being
+    // collected and the tick only writes skip rows. The same value makes
+    // `new Date(asOfMs).toISOString()` throw, which the public
+    // `GET /api/v1/funding-rate/:symbol` handler does not catch, so that
+    // symbol 500s permanently too. One clock-skew allowance, then refuse.
+    if (asOfMs > nowMs + FUTURE_SKEW_MS) {
+      return reply.code(400).send({
+        error: 'trade.funding_rate_publish_invalid',
+        message:
+          'asOfMs is in the future — a rate cannot be observed before it exists, and a future stamp silently stops funding for this market',
+      });
     }
 
     // The period must be NAMED by the publisher. It is never derived from the
@@ -69,15 +87,62 @@ export function registerInternalFundingRate(app: FastifyInstance, deps: Internal
     // Bucketing the clock to 8h would swap one invention for another: doctrine
     // says funding is every 8h but names no anchor, so the service would be
     // choosing where the boundary falls. Refusing is the honest answer.
-    const periodStartIso = req.body?.periodStartIso?.trim();
-    const periodId = req.body?.periodId?.trim() || (periodStartIso ? periodIdFor(marketId, periodStartIso) : '');
-    if (!periodId) {
+    //
+    // WHAT THIS DOES NOT DO, stated plainly so the next reader does not see a
+    // fixed file: requiring a name BOUNDS NOTHING BY ITSELF. A publisher that
+    // sends `periodStartIso: new Date().toISOString()` on every poll gets a
+    // fresh period every poll and the original over-charge, and that is the
+    // most obvious way an author satisfies a new required field. What the
+    // checks below buy is a smaller surface — the id must be a real instant,
+    // canonicalised, and scoped to its own market — which takes it from "any
+    // string" to "any valid instant". That is a reduction, not a bound.
+    //
+    // The bound is the ANCHOR: rejecting an instant that is not on the market's
+    // funding boundary. That boundary is exactly the product fact this refuses
+    // to invent, so it has to arrive as per-market config, not as a constant
+    // here. Until it does, this endpoint trusts its publisher on cadence.
+    const rawPeriodId = req.body?.periodId?.trim();
+    const rawStartIso = req.body?.periodStartIso?.trim();
+    if (!rawPeriodId && !rawStartIso) {
       return reply.code(400).send({
         error: 'trade.funding_rate_publish_invalid',
         message:
           'periodId or periodStartIso is required — a funding period is a product fact and is never derived from the clock. ' +
           'A publisher that does not name its period cannot be settled idempotently, and every republish would charge a full period again.',
       });
+    }
+
+    let periodId: string;
+    if (rawPeriodId) {
+      // A supplied id must belong to the market it is published for.
+      // `funding_periods` is keyed on `period_id` ALONE, so one id copy-pasted
+      // across two markets means the second market's period reads as already
+      // settled and its longs and shorts never exchange collateral — no error,
+      // no log. `markSettled` also infers `market_id` by slicing to the first
+      // colon, so an id without this prefix writes a garbage attribution.
+      if (rawPeriodId !== marketId && !rawPeriodId.startsWith(`${marketId}:`)) {
+        return reply.code(400).send({
+          error: 'trade.funding_rate_publish_invalid',
+          message: `periodId must be scoped to its market — expected it to start with "${marketId}:"`,
+        });
+      }
+      periodId = rawPeriodId;
+    } else {
+      // Canonicalise the instant before it becomes an identity.
+      //
+      // `periodIdFor` is a bare concat, so `...T22:13:20.000Z`,
+      // `...T22:13:20Z` and `...T00:13:20+02:00` are the SAME moment and three
+      // different chargeable periods. An oracle that changes its date library —
+      // or a second publisher with a different one — double-charges without
+      // anyone changing a period.
+      const parsed = Date.parse(rawStartIso!);
+      if (!Number.isFinite(parsed)) {
+        return reply.code(400).send({
+          error: 'trade.funding_rate_publish_invalid',
+          message: 'periodStartIso must be a valid ISO-8601 instant',
+        });
+      }
+      periodId = periodIdFor(marketId, new Date(parsed).toISOString());
     }
 
     const entry: FundingRateEntry = { marketId, rate, periodId, asOfMs };
