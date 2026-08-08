@@ -1,4 +1,4 @@
-import { InsufficientFundsError } from './types.js';
+import { InsufficientFundsError, LedgerError } from './types.js';
 
 /**
  * Map svc-ledger HTTP error bodies back to typed ledger errors.
@@ -6,6 +6,40 @@ import { InsufficientFundsError } from './types.js';
  * Production service clients used to `throw new Error(text)`, which dropped
  * `instanceof InsufficientFundsError` and broke fail-closed void paths (P2P-01).
  * s2s-http now emits structured `code` + amount fields when possible.
+ *
+ * THAT FIX WAS ONE CODE WIDE.
+ *
+ * `s2s-http.httpError` deliberately puts `code` on the wire for five distinct
+ * cases and gives four of them their own status: `ledger.insufficient_funds`
+ * (400), `ledger.owner_identity_space` (400), `ledger.unauthenticated` (401),
+ * `ledger.frozen` (412), and any other `LedgerError` (500). This function
+ * rebuilt exactly one of them, so every other code arrived at the caller as a
+ * bare `Error` — no `code`, and `instanceof LedgerError` false.
+ *
+ * Five services call through here: svc-pay, svc-token, svc-agents, svc-trade,
+ * svc-bank. What it cost them, in their own code:
+ *
+ *     rejection_code = ${err instanceof LedgerError ? err.code : 'bank.post_failed'}
+ *       — svc-bank card-service.ts:589 and :734, loans/loan-service.ts:1601
+ *
+ * A card cashback or a loan disbursement refused because THE LEDGER WAS FROZEN
+ * was written to the database, permanently, as `bank.post_failed`. The operator
+ * reading rejection codes could not tell a deliberate platform halt from a post
+ * that failed for an unknown reason — which is the same class of loss as a freeze
+ * overwriting the previous freeze's reason (#1055): the reason a money movement
+ * was refused, recorded wrongly. `svc-bank/router.ts:198` degrades the same way,
+ * turning a 412 into a generic 500 for the end user.
+ *
+ * So: any structured `code` now rebuilds a `LedgerError` carrying it.
+ *
+ * `LedgerError` and not the specific subclass, on purpose. `InsufficientFundsError`
+ * can be rebuilt faithfully because s2s-http sends its four fields.
+ * `UnbalancedTransactionError` carries `perAsset`, which is NOT on the wire, and
+ * `OwnerIdentitySpaceError` carries the owner type and id, which are not either.
+ * Constructing those with invented or empty fields would hand a caller a typed
+ * error whose data is fabricated — worse than an honest base class, because it
+ * looks trustworthy. Callers branch on `instanceof LedgerError` and on `.code`,
+ * and both of those are now true and correct.
  */
 export function rehydrateLedgerHttpError(path: string, status: number, detail: string): Error {
   let parsed: Record<string, unknown> | null = null;
@@ -32,5 +66,14 @@ export function rehydrateLedgerHttpError(path: string, status: number, detail: s
     );
   }
 
+  // Any other code svc-ledger names, kept as a code. The message is the
+  // service's own; the path and status go in only when there is nothing better,
+  // because a caller that logs `err.message` should see what the ledger said,
+  // not our envelope around it.
+  if (code) return new LedgerError(message, code);
+
+  // No structured body at all — a proxy error page, a truncated response, a
+  // handler that threw before `httpError` ran. There is no code to carry, and
+  // inventing one would be worse than saying so.
   return new Error(`svc-ledger ${path} failed (${status}): ${detail}`);
 }
