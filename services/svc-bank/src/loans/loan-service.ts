@@ -531,6 +531,32 @@ export class LoanService {
       );
     }
 
+    /**
+     * AND "THE SAME TERMS" INCLUDES WHO IS ASKING.
+     *
+     * The guard above reads `loan` — the FIRST caller's row — for exactly the
+     * reason it explains, and then stops at the amount. Hold the principal
+     * equal and the rest of that reasoning still applies to the borrower: this
+     * caller's request is answered out of somebody else's loan.
+     *
+     * Active row: they are told "your loan is open", with a status, an LTV and
+     * two ledger transaction ids, having locked no collateral of their own and
+     * drawn no principal of their own. Pending row: `completePending` below
+     * drives the OTHER borrower's loan using THIS caller's collateral figure,
+     * out of the other borrower's account.
+     *
+     * The product is checked for the same reason one step down: `loan` carries
+     * the first call's asset pair and APR, while the LTV above was computed
+     * against the product named in THIS request.
+     */
+    if (loan.userId !== input.userId || loan.productId !== product.id) {
+      throw new BankError(
+        `Loan ${loan.id} already exists and was not opened by this request — a retry must carry the same terms. ` +
+          `Use a new loan id to open a different loan`,
+        'bank.loan_borrower_mismatch',
+      );
+    }
+
     if (loan.status !== 'pending') {
       // A completed retry. Return what already exists rather than opening a
       // second position against the same collateral.

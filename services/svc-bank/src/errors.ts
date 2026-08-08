@@ -23,6 +23,18 @@ export type BankErrorCode =
   | 'bank.position_not_found'
   | 'bank.position_closed'
   | 'bank.position_locked'
+  /**
+   * A deposit reused a position id that is already taken by a different one —
+   * another user, another pool, or another amount.
+   *
+   * `bank.loan_principal_mismatch`, for earn. The insert is `ON CONFLICT (id)
+   * DO NOTHING`, so without this the second deposit runs against the first
+   * one's row: the ledger moves the second caller's value into a stake pot
+   * keyed by their own id, the row that gets activated is the first caller's,
+   * and `principalOf()` and `stakedOf()` — the two answers this service gives
+   * to "how much is staked" — stop agreeing. Same id must mean same deposit.
+   */
+  | 'bank.position_conflict'
   | 'bank.not_owner'
   // ── Loans (§8.1) ───────────────────────────────────────────────────────────
   | 'bank.loan_product_not_found'
@@ -45,6 +57,18 @@ export type BankErrorCode =
    * same terms; a different amount needs a different id.
    */
   | 'bank.loan_principal_mismatch'
+  /**
+   * A retry reused a loan id that belongs to a different borrower, or names a
+   * different product.
+   *
+   * The sibling of `bank.loan_principal_mismatch` and the same reasoning: the
+   * guards run on the new input while the row is the first call's. Hold the
+   * principal equal and a second caller was answered out of somebody else's
+   * loan — told it was open with none of their own value moved, or, on a
+   * `pending` row, driving that borrower's loan with this caller's collateral
+   * figure.
+   */
+  | 'bank.loan_borrower_mismatch'
   /**
    * Borrower cannot fund the collateral lock at open. Distinct from
    * `bank.loan_reserve_underfunded` (platform short) and from a raw
