@@ -83,13 +83,88 @@ export const merchants = pay.table(
      * partner decision — `kyb_status` is the state machine; digital KYB is `pay.psp`.
      */
     kybRef: text('kyb_ref'),
+    /**
+     * THE PAYFAC TREE (§6.1). NULL means "top of its own tree".
+     *
+     * An ordinary gateway merchant is a tree of one, so this column changes
+     * nothing about any row that already existed. A sub-merchant is still a
+     * sovereign account with its own `user_id` — the tree records who may act on
+     * whose behalf, never where value sits (Doctrine §0.6).
+     */
+    parentMerchantId: uuid('parent_merchant_id'),
+    /**
+     * WHO SETTLES THIS MERCHANT — a field, not an assumption.
+     *
+     * `docs/SPEC-PAY-VERTICALS-2026-08-02.md` §2 states this as the one hard
+     * design constraint of payfac mode: "if it is hardcoded as us, adopting a
+     * partner later is a rewrite; if it is a party reference, it is
+     * configuration". `'self'` is the only value the service accepts today and
+     * it means what settlement already does — the merchant's own ledger account.
+     * Anything else is refused rather than stored and ignored, because settling
+     * a sub-merchant out of our own account is acquiring and needs a sponsor.
+     */
+    settlingParty: text('settling_party').notNull().default('self'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    /** One merchant per sovereign account in this PR — sub-merchants are PayFac. */
+    /**
+     * One merchant per sovereign account, still. A sub-merchant does NOT relax
+     * this — it has its own account, so "settle this account's takings" stays
+     * unambiguous. PayFac added a parent, not a second row per user.
+     */
     uniqueIndex('merchants_user_idx').on(t.userId),
     index('merchants_status_idx').on(t.status),
+    index('merchants_parent_idx').on(t.parentMerchantId),
+  ],
+);
+
+/**
+ * WHO MAY ACT ON WHOSE BEHALF INSIDE ONE PAYFAC TREE (§6.1).
+ *
+ * An APPEND-ONLY JOURNAL, not a mutable grant table: the effective permission is
+ * the latest row for a `(grantee, subject, area)` triple, and a revoke is a new
+ * row. The same rule `payment_events` and `merchant_status_events` follow, and
+ * for the same reason — "who could refund this sub-merchant's payments on the
+ * 3rd" is argued from in a dispute, and an editable answer is not evidence.
+ *
+ * `area` is text rather than a pg enum on purpose. The tracker title claims
+ * "14 permission areas" and nobody ever wrote them down (see `submerchants.ts`);
+ * an enum would freeze an unsettled list into a migration against a live table.
+ */
+export const merchantPermissionEvents = pay.table(
+  'merchant_permission_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Total order. Transaction timestamps collide; this does not. */
+    seq: bigserial('seq', { mode: 'number' }).notNull(),
+    /** The ancestor node that holds the permission. */
+    granteeMerchantId: uuid('grantee_merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    /** The descendant node it is held over. Never equal to the grantee. */
+    subjectMerchantId: uuid('subject_merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    area: text('area').notNull(),
+    /** `'grant'` | `'revoke'`. The latest row for a triple is the answer. */
+    action: text('action').notNull(),
+    /** Required and non-blank, enforced by a CHECK as well as by the service. */
+    reason: text('reason').notNull(),
+    actorId: text('actor_id').notNull(),
+    /** Authority is held by a NODE, not a person — one human may hold two. */
+    actorMerchantId: uuid('actor_merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    actorScope: text('actor_scope').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('merchant_permission_events_seq_idx').on(t.seq),
+    /** The authorization lookup, on every scoped call: one triple, newest first. */
+    index('merchant_permission_events_triple_idx').on(t.granteeMerchantId, t.subjectMerchantId, t.area, t.seq),
+    /** "Who can do what to this sub-merchant" — the console query. */
+    index('merchant_permission_events_subject_idx').on(t.subjectMerchantId, t.seq),
   ],
 );
 
@@ -556,6 +631,7 @@ export const merchantWebhookDeliveries = pay.table(
 
 export const schema = {
   merchants,
+  merchantPermissionEvents,
   paymentProfiles,
   paymentLinks,
   checkoutSessions,

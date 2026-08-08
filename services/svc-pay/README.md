@@ -5,7 +5,7 @@ The payments core (§6.1). Merchants, the payment lifecycle, settlement into the
 **What it is NOT:** it does not hold balances (the ledger does), it does not choose between rails (smart routing is its own feature), and it does not know the name of a single payment processor. Every rail — the two here and every one that comes later — is an implementation of one interface, and `src/rails/conformance.ts` is what keeps that true.
 
 **In this PR:** gateway mode, the adapter interface, `crypto-native`, `card-sandbox`, and the conformance kit.
-**Not in this PR** (each a separate tracker feature): PSP mode, PayFac sub-merchant trees, smart routing, fraud scoring, the checkout builder, subscriptions, commerce plugins, disputes.
+**Not in this PR** (each a separate tracker feature): PSP mode, smart routing, fraud scoring, the checkout builder, subscriptions, commerce plugins, disputes. PayFac **sub-merchant trees** landed separately — [see below](#payfac--sub-merchant-trees-61).
 
 ---
 
@@ -127,7 +127,52 @@ That builds `EvmLiveChain` (`src/rails/evm-chain.ts`, `posture: 'live'`), starts
 
 > **Interface mismatch, flagged not papered over.** `RailAdapter.payout` takes a `SettlementInstruction`, which is merchant-shaped — it is the only payout shape §6.1 has. Every adapter uses `settlementId` purely as the payout idempotency key and reads `merchantId` not at all, so a user withdrawal passes its own id and the user id and works correctly. Generalising it to a `PayoutInstruction` is a change to a reviewed interface plus its conformance kit, so it belongs in its own PR (§15.2).
 
+### PayFac — sub-merchant trees (§6.1)
+
+A merchant may now have children. `merchants.parent_merchant_id` is the tree (NULL = top of its own tree, which is what every merchant already was), and `merchants.settling_party` is the spec's one hard design constraint made a column rather than an assumption — `docs/SPEC-PAY-VERTICALS-2026-08-02.md` §2: _"model the sub-merchant relationship so the settling party is a field, not an assumption."_
+
+**This slice moves no value.** No ledger client, no recipe, no balance, no amount. A sub-merchant is a sovereign account exactly as a merchant is; the tree decides **who may ask**, never where money sits (Doctrine §0.6).
+
+| Procedure                       | Scope       | Input                                                    | Output              |
+| ------------------------------- | ----------- | -------------------------------------------------------- | ------------------- |
+| `submerchant.create`            | `pay:write` | `{ parentMerchantId, userId, pricing: { feeBps }, … }`   | `SubMerchant`       |
+| `submerchant.list`              | `pay:read`  | `{ merchantId, limit? }`                                 | `SubMerchant[]`     |
+| `submerchant.get`               | `pay:read`  | `{ merchantId }`                                         | `SubMerchant`       |
+| `submerchantPermission.grant`   | `pay:write` | `{ granteeMerchantId, subjectMerchantId, area, reason }` | `PermissionEvent`   |
+| `submerchantPermission.revoke`  | `pay:write` | `{ granteeMerchantId, subjectMerchantId, area, reason }` | `PermissionEvent`   |
+| `submerchantPermission.list`    | `pay:read`  | `{ subjectMerchantId }`                                  | `PermissionGrant[]` |
+| `submerchantPermission.history` | `pay:read`  | `{ subjectMerchantId, limit? }`                          | `PermissionEvent[]` |
+| `submerchantPermission.areas`   | `pay:read`  | –                                                        | the area vocabulary |
+
+#### The two checks, which are not the same check
+
+1. **Scope** — structural and absolute. The caller's merchant node must be an ancestor of the subject, or the subject itself. **No grant widens this.** A parent cannot read a sibling subtree, a child cannot read upward, and two payfacs are invisible to each other.
+2. **Area** — a permission, and only for a subject that is not the caller itself. A merchant holds every area over its **own** node. Over a descendant it holds an area only if it is the **root** of that tree (the node with the platform relationship, which §2 of the spec makes liable for everyone beneath it), or a live grant says so.
+
+**The acting node comes from the token.** There is no `actorMerchantId` on the wire. `pay:write` is a merchant's own scope held by every merchant on the platform, so a merchant node taken from a request body would leave the fence working perfectly while measuring the wrong actor.
+
+**Delegation flows down, and only what you hold.** A non-root node cannot self-grant, cannot grant laterally (one child never gets authority over another), and cannot grant an area it was not given. Onboarding writes exactly two default areas to each intermediate ancestor — `merchant.profile` and `submerchant`, visibility only. **No value-shaped area is held by any non-root node until somebody grants it by name and says why.**
+
+**`pay.merchant_permission_events` is append-only**, enforced by a trigger. A revoke is a new row. "Who could refund this sub-merchant's payments on the 3rd" is argued from in a dispute, and an editable answer is not evidence.
+
+#### The "14 permission areas" — said out loud
+
+The tracker row is titled _"PayFac mode — sub-merchant trees, 14 permission areas"_. **That list has never existed.** The phrase is one title string copied between `tooling/tracker/features.mjs`, `tooling/coverage.yaml`, `INTAFACED_DEFINITIVE_BUILD.md` and three board renders derived from them; `docs/PAY-LANE-HARVEST-AND-BUILD-PLAN-2026-08-08.md` §2 found the same thing independently and §6.3 puts _"enumerate them, or drop the claim from the title"_ on the owner's list.
+
+So this ships the **mechanism**, and `PERMISSION_AREAS` in `src/submerchants.ts` is **eleven** areas — every one that names a surface this service actually has: `merchant.profile`, `checkout.profile`, `payment.link`, `payment`, `payment.refund`, `settlement`, `settlement.payout`, `webhook`, `kyb`, `submerchant`, `permission`. Padding the list to hit a number in a title would be inventing product law inside an implementation. `area` is stored as text, so the twelfth is a one-line change and no migration.
+
+#### What is deliberately NOT here
+
+- **Settling a sub-merchant out of our account.** `settlingParty` accepts `'self'` only and refuses everything else by name (`pay.submerchant_settling_party_unsupported`). That is acquiring — a sponsor bank and an acquiring BIN, which `docs/SPEC-PAY-VERTICALS-2026-08-02.md` §8 puts on the owner's list and `socket.psp-partners` tracks. The column exists so adopting a partner later is configuration rather than a rewrite; it is not a switch this service can throw.
+- **Enforcing the areas on the gateway surface.** Nine of the eleven areas name procedures in `router.ts` that still authorize with `assertMerchantOwnership` — a single `merchant.userId === principal.userId` comparison, unchanged by this PR. That comparison is correct for a merchant acting on itself and is exactly the extension point `router.ts` already names: _"When PayFac trees or merchant teams land, this function is the one place a membership check replaces the equality."_ Wiring it is a second PR against `payment-service.ts` and the money paths, and doing it in the same change as the tree would put a rewrite of every merchant authorization into a schema PR.
+- **Split payments and sub-merchant fee routing.** Ledger recipes, Class M, and the owner's sign-off (`docs/PAY-LANE-HARVEST-AND-BUILD-PLAN-2026-08-08.md` §6.4).
+- **Sub-merchant KYB workflow and document capture.** `pay.psp`.
+
 ### Error codes
+
+`pay.submerchant_out_of_scope` and `pay.submerchant_permission_denied` map to **FORBIDDEN**, and they are different questions on purpose: the first says the node is not yours to look at, the second says it is yours to look at and not yours to act on. `pay.submerchant_user_already_merchant` maps to **CONFLICT** — one merchant per sovereign account is a database rule and nothing the caller resends fixes it. `pay.submerchant_cycle` is **CONFLICT** rather than a 500 so the message naming the corrupted node survives to an operator.
+
+Also: `pay.submerchant_grant_lateral`, `pay.submerchant_grant_self`, `pay.submerchant_grant_redundant`, `pay.submerchant_revoke_redundant`, `pay.submerchant_area_unknown`, `pay.submerchant_too_deep`, `pay.submerchant_reason_required`, `pay.submerchant_pricing_invalid`, `pay.submerchant_settling_party_unsupported`, `pay.submerchant_not_onboarded`.
 
 `pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`, `pay.rail_not_live`.
 
