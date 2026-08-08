@@ -702,74 +702,188 @@ export class TokenService {
     const total = input.sources.reduce((acc, s) => acc + (s.amount > 0n ? s.amount : 0n), 0n);
     if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
 
-    const stakes = await this.sql<Array<{ user_id: string; amount: string; tier: StakeTier; multiplier_bps: string }>>`
-      SELECT user_id, amount, tier, multiplier_bps FROM token.stakes WHERE status = 'active' ORDER BY id ASC
-    `;
+    const plan = await this.planYieldWindow(input.windowId, total);
 
-    if (stakes.length === 0) {
-      // Nothing staked. The revenue stays in the rewards engine for the next
-      // window rather than being stranded or returned — it is already ours.
-      return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: 0, alreadyPaid: 0 };
-    }
-
-    const shares = distributeYield(
-      total,
-      stakes.map((s) => ({
-        userId: s.user_id,
-        amount: parseAmount(s.amount),
-        tier: s.tier,
-        // The multiplier SNAPSHOTTED when the stake opened, not today's table.
-        // A staker locked for 12 months bought that multiplier; re-tuning the
-        // ladder afterwards must not retroactively change what they earn.
-        multiplierBps: Number(s.multiplier_bps),
-      })),
-    );
-
-    /**
-     * Sum shares per user before posting.
-     *
-     * `distributeYield` returns one share PER STAKE, and a user can hold several
-     * (a flex stake and an m12 stake, say). The reward key is per (window, user),
-     * so posting each share separately meant the second one hit the ledger's
-     * idempotency check and became a silent no-op — the user was underpaid and
-     * the remainder sat in the rewards engine.
-     *
-     * Summing first keeps one payout per user per window, which is also the
-     * invariant the key already assumed. Found by partner audit.
-     */
-    const perUser = new Map<string, Amount>();
-    for (const share of shares) {
-      perUser.set(share.userId, (perUser.get(share.userId) ?? 0n) + share.share);
+    if (plan.rows.length === 0) {
+      // Nothing staked when this window was planned. The revenue stays in the
+      // rewards engine for the next window rather than being stranded or
+      // returned — it is already ours. No plan row is written, so a later run
+      // once somebody IS staked plans the window then and pays it out of the
+      // revenue still sitting there.
+      return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: plan.skipped, alreadyPaid: 0 };
     }
 
     let distributed = 0n;
     let recipients = 0;
-    let skipped = 0;
+    let alreadyPaid = 0;
 
-    for (const [userId, amount] of perUser) {
-      // A share can round to zero for a dust-sized stake. Posting a zero-amount
-      // entry is rejected by the ledger by design, so skip rather than fail the
-      // whole run for one staker who earned nothing this window.
-      if (amount <= 0n) {
-        skipped++;
+    for (const row of plan.rows) {
+      // A row that already carries a ledger transaction is not re-posted and,
+      // just as importantly, is not COUNTED. Reporting a no-op post as a fresh
+      // payout made a re-run tell the operator the window had paid out twice —
+      // in the only channel the operator has.
+      if (row.ledgerTxId !== null) {
+        alreadyPaid++;
         continue;
       }
 
-      await this.ledger.post(
+      const posted = await this.ledger.post(
         recipes.rewardPay({
-          rewardId: `yield:${input.windowId}:${userId}`,
-          userId,
+          rewardId: `yield:${input.windowId}:${row.userId}`,
+          userId: row.userId,
           assetId: this.assetId,
-          amount,
+          amount: row.amount,
           reason: 'token.yield.distributed',
         }),
       );
 
-      distributed += amount;
+      // After the post, never before: a row that says "paid" must have a
+      // transaction to point at, which is what `yield_payouts_paid_has_tx_ck`
+      // enforces regardless of what this code does. A crash between the post
+      // and this update leaves the row unpaid; the retry re-posts (idempotent
+      // on the same key) and lands the same transaction id.
+      await this.sql`
+        UPDATE token.yield_payouts
+           SET ledger_tx_id = ${posted.id}, paid_at = now()
+         WHERE window_id = ${input.windowId} AND user_id = ${row.userId} AND paid_at IS NULL
+      `;
+
+      distributed += row.amount;
       recipients++;
     }
 
-    return { windowId: input.windowId, distributed, recipients, skipped, alreadyPaid: 0 };
+    return { windowId: input.windowId, distributed, recipients, skipped: plan.skipped, alreadyPaid };
+  }
+
+  /**
+   * WHO THIS WINDOW PAYS — decided once, then read.
+   *
+   * The recipient list used to be recomputed from `token.stakes WHERE status =
+   * 'active'` on every call, which made the method's own resumability promise
+   * false: a re-run after a new stake opened produced a LARGER list, the
+   * already-paid users' `(window, user)` keys were spent so their posts became
+   * silent no-ops, and the newcomer's key was fresh — so the newcomer was paid
+   * in full out of a window that had already been distributed to the attounit.
+   * The value came out of the rewards engine, which is a `house` account: it
+   * either drains some other window's undistributed revenue or dies mid-loop on
+   * a hard non-negative CHECK, leaving the window half paid.
+   *
+   * Freezing the plan is the same claim-before-post shape `stake` (0001) and
+   * `recordBuyback` (0002) already use, applied to the one thing that was never
+   * claimed. It decides no economic number — it records the answer the existing
+   * pro-rata maths gives, at the moment it is first asked.
+   *
+   * The advisory lock covers the read-then-write: two operators invoking the
+   * same window at the same instant would otherwise both compute a plan, and
+   * `ON CONFLICT DO NOTHING` would merge two plans into one whose rows sum to
+   * more than the window swept.
+   */
+  private async planYieldWindow(windowId: string, total: Amount): Promise<{ rows: YieldPlanRow[]; skipped: number }> {
+    const existing = await this.readYieldPlan(this.sql, windowId);
+    if (existing.length > 0) return { rows: this.assertPlanCoversTotal(windowId, existing, total), skipped: 0 };
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        // Serialise planning of THIS window only. `hashtext` is stable across
+        // sessions, and an xact lock is released by commit or rollback alike, so
+        // a crash mid-plan cannot wedge the window.
+        await tx`SELECT pg_advisory_xact_lock(hashtext(${`token.yield:${windowId}`})::bigint)`;
+
+        const raced = await this.readYieldPlan(tx, windowId);
+        if (raced.length > 0) return { rows: this.assertPlanCoversTotal(windowId, raced, total), skipped: 0 };
+
+        const stakes = await tx<Array<{ user_id: string; amount: string; tier: StakeTier; multiplier_bps: string }>>`
+          SELECT user_id, amount, tier, multiplier_bps FROM token.stakes WHERE status = 'active' ORDER BY id ASC
+        `;
+        if (stakes.length === 0) return { rows: [], skipped: 0 };
+
+        const shares = distributeYield(
+          total,
+          stakes.map((s) => ({
+            userId: s.user_id,
+            amount: parseAmount(s.amount),
+            tier: s.tier,
+            // The multiplier SNAPSHOTTED when the stake opened, not today's
+            // table. A staker locked for 12 months bought that multiplier;
+            // re-tuning the ladder afterwards must not retroactively change what
+            // they earn.
+            multiplierBps: Number(s.multiplier_bps),
+          })),
+        );
+
+        /**
+         * Sum shares per user before writing the plan.
+         *
+         * `distributeYield` returns one share PER STAKE, and a user can hold
+         * several (a flex stake and an m12 stake, say). The reward key is per
+         * (window, user), so posting each share separately meant the second one
+         * hit the ledger's idempotency check and became a silent no-op — the
+         * user was underpaid and the remainder sat in the rewards engine.
+         *
+         * Summing first keeps one payout per user per window, which is also the
+         * invariant the key — and now the primary key of `yield_payouts` —
+         * already assumed. Found by partner audit.
+         */
+        const perUser = new Map<string, Amount>();
+        for (const share of shares) {
+          perUser.set(share.userId, (perUser.get(share.userId) ?? 0n) + share.share);
+        }
+
+        const rows: YieldPlanRow[] = [];
+        let skipped = 0;
+
+        for (const [userId, amount] of [...perUser.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
+          // A share can round to zero for a dust-sized stake. The ledger rejects
+          // zero-amount entries by design, so a zero row would be an instruction
+          // nothing could ever clear — counted, never written.
+          if (amount <= 0n) {
+            skipped++;
+            continue;
+          }
+          rows.push({ userId, amount, ledgerTxId: null });
+        }
+
+        for (const row of rows) {
+          await tx`
+            INSERT INTO token.yield_payouts (window_id, user_id, amount)
+            VALUES (${windowId}, ${row.userId}, ${formatAmount(row.amount)}::numeric)
+          `;
+        }
+
+        return { rows, skipped };
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  private async readYieldPlan(sql: Sql, windowId: string): Promise<YieldPlanRow[]> {
+    const rows = await sql<Array<{ user_id: string; amount: string; ledger_tx_id: string | null }>>`
+      SELECT user_id, amount, ledger_tx_id FROM token.yield_payouts
+       WHERE window_id = ${windowId} ORDER BY user_id ASC
+    `;
+    return rows.map((r) => ({ userId: r.user_id, amount: parseAmount(r.amount), ledgerTxId: r.ledger_tx_id }));
+  }
+
+  /**
+   * A re-run must be the SAME window, not just the same id.
+   *
+   * `sources` is operator-typed, so a re-run can name a different total — a
+   * correction, a typo, a different set of modules. Paying the frozen plan
+   * anyway would answer a request nobody made, and re-planning would pay the
+   * difference to whoever happens to be staked today. Both are worse than
+   * saying so. The same reasoning `bank.loan_principal_mismatch` makes.
+   */
+  private assertPlanCoversTotal(windowId: string, rows: YieldPlanRow[], total: Amount): YieldPlanRow[] {
+    const planned = rows.reduce((acc, r) => acc + r.amount, 0n);
+    if (planned !== total) {
+      throw new TokenError(
+        `Window ${windowId} was already planned to distribute ${formatAmount(planned)} ${this.assetId}, but this call names ` +
+          `${formatAmount(total)} — a re-run must carry the same revenue. Use a new window id to distribute a different amount`,
+        'token.yield_window_mismatch',
+      );
+    }
+    return rows;
   }
 
   // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────
