@@ -4,7 +4,7 @@
  * Skips without anvil; CI with REQUIRE_EVM_CHAIN=1 must run this.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Address, Abi } from 'viem';
+import type { Address, Abi, PublicClient } from 'viem';
 import { loadArtifact } from '../chain/artifacts.js';
 
 const WAD = 10n ** 18n;
@@ -33,6 +33,12 @@ describeOnChain('oracle + isolated lending on chain (S-A12/S-A4)', () => {
   let oracleAbi: Abi;
   let marketAbi: Abi;
   let tokenAbi: Abi;
+
+  /** viem writeContract returns a hash — wait so later reads cannot race the mine. */
+  async function write(client: PublicClient, fn: () => Promise<`0x${string}`>) {
+    const hash = await fn();
+    await client.waitForTransactionReceipt({ hash });
+  }
 
   beforeAll(async () => {
     if (!chainUp && devChainMod.devChainRequired()) {
@@ -96,39 +102,46 @@ describeOnChain('oracle + isolated lending on chain (S-A12/S-A4)', () => {
     });
     market = (await a.publicClient.waitForTransactionReceipt({ hash: mkTx })).contractAddress!;
 
-    // mint collateral + borrow liquidity
-    await a.walletClient.writeContract({
-      address: col,
-      abi: tokenAbi,
-      functionName: 'mint',
-      args: [borrower.deployer, 100n * WAD],
-      account: a.walletClient.account!,
-      chain: a.walletClient.chain,
-    });
-    await a.walletClient.writeContract({
-      address: bor,
-      abi: tokenAbi,
-      functionName: 'mint',
-      args: [a.deployer, 1_000n * WAD],
-      account: a.walletClient.account!,
-      chain: a.walletClient.chain,
-    });
-    await a.walletClient.writeContract({
-      address: bor,
-      abi: tokenAbi,
-      functionName: 'approve',
-      args: [market, 1_000n * WAD],
-      account: a.walletClient.account!,
-      chain: a.walletClient.chain,
-    });
-    await a.walletClient.writeContract({
-      address: market,
-      abi: marketAbi,
-      functionName: 'supplyLiquidity',
-      args: [1_000n * WAD],
-      account: a.walletClient.account!,
-      chain: a.walletClient.chain,
-    });
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: col,
+        abi: tokenAbi,
+        functionName: 'mint',
+        args: [borrower.deployer, 100n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: bor,
+        abi: tokenAbi,
+        functionName: 'mint',
+        args: [a.deployer, 1_000n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: bor,
+        abi: tokenAbi,
+        functionName: 'approve',
+        args: [market, 1_000n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: market,
+        abi: marketAbi,
+        functionName: 'supplyLiquidity',
+        args: [1_000n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
   }, 180_000);
 
   async function reportBoth(priceCol: bigint, priceBor: bigint) {
@@ -136,42 +149,50 @@ describeOnChain('oracle + isolated lending on chain (S-A12/S-A4)', () => {
       [col, priceCol],
       [bor, priceBor],
     ] as const) {
-      await a.walletClient.writeContract({
-        address: oracle,
-        abi: oracleAbi,
-        functionName: 'report',
-        args: [asset, price],
-        account: a.walletClient.account!,
-        chain: a.walletClient.chain,
-      });
-      await reporterB.walletClient.writeContract({
-        address: oracle,
-        abi: oracleAbi,
-        functionName: 'report',
-        args: [asset, price],
-        account: reporterB.walletClient.account!,
-        chain: reporterB.walletClient.chain,
-      });
+      await write(a.publicClient, () =>
+        a.walletClient.writeContract({
+          address: oracle,
+          abi: oracleAbi,
+          functionName: 'report',
+          args: [asset, price],
+          account: a.walletClient.account!,
+          chain: a.walletClient.chain,
+        }),
+      );
+      await write(reporterB.publicClient, () =>
+        reporterB.walletClient.writeContract({
+          address: oracle,
+          abi: oracleAbi,
+          functionName: 'report',
+          args: [asset, price],
+          account: reporterB.walletClient.account!,
+          chain: reporterB.walletClient.chain,
+        }),
+      );
     }
   }
 
   it('oracle refuses disagreement', async () => {
-    await a.walletClient.writeContract({
-      address: oracle,
-      abi: oracleAbi,
-      functionName: 'report',
-      args: [col, 100n * WAD],
-      account: a.walletClient.account!,
-      chain: a.walletClient.chain,
-    });
-    await reporterB.walletClient.writeContract({
-      address: oracle,
-      abi: oracleAbi,
-      functionName: 'report',
-      args: [col, 130n * WAD],
-      account: reporterB.walletClient.account!,
-      chain: reporterB.walletClient.chain,
-    });
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: oracle,
+        abi: oracleAbi,
+        functionName: 'report',
+        args: [col, 100n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
+    await write(reporterB.publicClient, () =>
+      reporterB.walletClient.writeContract({
+        address: oracle,
+        abi: oracleAbi,
+        functionName: 'report',
+        args: [col, 130n * WAD],
+        account: reporterB.walletClient.account!,
+        chain: reporterB.walletClient.chain,
+      }),
+    );
     await expect(
       a.publicClient.readContract({
         address: oracle,
@@ -184,31 +205,37 @@ describeOnChain('oracle + isolated lending on chain (S-A12/S-A4)', () => {
 
   it('borrow works with agreeing marks; unhealthy borrow reverts', async () => {
     await reportBoth(100n * WAD, 100n * WAD);
-    await borrower.walletClient.writeContract({
-      address: col,
-      abi: tokenAbi,
-      functionName: 'approve',
-      args: [market, 50n * WAD],
-      account: borrower.walletClient.account!,
-      chain: borrower.walletClient.chain,
-    });
-    await borrower.walletClient.writeContract({
-      address: market,
-      abi: marketAbi,
-      functionName: 'depositCollateral',
-      args: [50n * WAD],
-      account: borrower.walletClient.account!,
-      chain: borrower.walletClient.chain,
-    });
+    await write(borrower.publicClient, () =>
+      borrower.walletClient.writeContract({
+        address: col,
+        abi: tokenAbi,
+        functionName: 'approve',
+        args: [market, 50n * WAD],
+        account: borrower.walletClient.account!,
+        chain: borrower.walletClient.chain,
+      }),
+    );
+    await write(borrower.publicClient, () =>
+      borrower.walletClient.writeContract({
+        address: market,
+        abi: marketAbi,
+        functionName: 'depositCollateral',
+        args: [50n * WAD],
+        account: borrower.walletClient.account!,
+        chain: borrower.walletClient.chain,
+      }),
+    );
     // 50 col @ 100, max LTV 50% → max debt value 25
-    await borrower.walletClient.writeContract({
-      address: market,
-      abi: marketAbi,
-      functionName: 'borrow',
-      args: [20n * WAD],
-      account: borrower.walletClient.account!,
-      chain: borrower.walletClient.chain,
-    });
+    await write(borrower.publicClient, () =>
+      borrower.walletClient.writeContract({
+        address: market,
+        abi: marketAbi,
+        functionName: 'borrow',
+        args: [20n * WAD],
+        account: borrower.walletClient.account!,
+        chain: borrower.walletClient.chain,
+      }),
+    );
     const debt = (await a.publicClient.readContract({
       address: market,
       abi: marketAbi,
