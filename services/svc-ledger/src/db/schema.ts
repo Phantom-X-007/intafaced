@@ -99,6 +99,33 @@ export const directionEnum = ledger.enum('direction', ['debit', 'credit']);
 export const assets = ledger.table('assets', {
   id: text('id').primaryKey(),
   kind: assetKindEnum('kind').notNull(),
+  /**
+   * DECLARED SCALE. NOTHING READS IT — and that is the honest description
+   * (STOP §4.2b #5).
+   *
+   * 0004 says this is "the scale the ledger reconciles the asset at, and it is
+   * not cosmetic". Both halves were false. Every balance is `numeric(38,18)`,
+   * reconciliation compares at 18 decimal places for every asset regardless of
+   * this column (`reconcile.ts`), and `mulBps` rounds `ceil` at 18 dp — so a fee
+   * on a 2 dp fiat or an 8 dp metal accrues a remainder below the asset's own
+   * smallest unit, which no rail can move out and no reconciliation flags.
+   *
+   * Setting `JPY` to 2 or to 18 changes nothing anywhere in the system today.
+   * The column is a declaration of intent that no code consults, which is the
+   * same shape as the refusal declared and never emitted (#1035) and the builder
+   * every post refuses (#1054) — with the difference that this one reads as a
+   * safety property, so anyone auditing the book would reasonably believe scale
+   * was enforced.
+   *
+   * NOT wired here on purpose. Enforcing it means choosing what happens to the
+   * sub-unit remainder — refuse the post, round to the asset's scale and send the
+   * dust somewhere named, or keep 18 dp internally and expose a rounded view —
+   * and every one of those is a fee/rounding policy with a house account and a
+   * user-visible consequence. There is no law in the doctrine to read it off, so
+   * an agent picking one would be inventing a fee policy. `assets-decimals.test.ts`
+   * pins the current state so that the day someone wires it, they have to decide
+   * deliberately rather than discover the dust later.
+   */
   decimals: integer('decimals').notNull().default(18),
   active: boolean('active').notNull().default(true),
   createdAt: createdAt(),
