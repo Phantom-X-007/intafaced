@@ -283,7 +283,9 @@ if (!available) {
       expect(checkNames).toEqual(
         expect.arrayContaining([
           'accounts_non_negative_ck',
-          'accounts_hold_purposed_ck',
+          // Widened from `accounts_hold_purposed_ck` by 0007: every lock kind
+          // names its claim, not just `hold`.
+          'accounts_lock_purposed_ck',
           'accounts_purpose_len_ck',
           'accounts_owner_id_space_ck',
           'ledger_entries_positive_ck',
