@@ -1008,6 +1008,70 @@ if (!available) {
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
+     * "SAME TERMS" HAS TO INCLUDE WHO IS ASKING
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * `bank.loan_principal_mismatch` below already refuses a retry that changes
+     * the AMOUNT, on exactly the right reasoning: `ON CONFLICT (id) DO NOTHING`
+     * makes the service read back the first call's row while every guard ran on
+     * the new input. That reasoning did not reach the borrower.
+     *
+     * With the principal held equal, a second caller reusing the id was told
+     * "your loan is open" — a status, an LTV, and two ledger transaction ids —
+     * with no collateral of theirs locked and no principal of theirs drawn.
+     * On the `pending` branch it is not merely a wrong answer: the second
+     * caller's collateral FIGURE drives the first borrower's loan, out of the
+     * first borrower's account.
+     */
+    describe('a loan id belonging to another borrower', () => {
+      it('refuses the second borrower, and draws nothing for them', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        await fund(OTHER, 'BTC', '1');
+        const product = await makeProduct();
+        const loanId = '6f000000-0000-4000-8000-00000000dddd';
+
+        await loans.open({ loanId, productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+
+        await expect(
+          loans.open({ loanId, productId: product.id, userId: OTHER, collateralAmount: amt('1'), principal: amt('5000'), now }),
+        ).rejects.toMatchObject({ code: 'bank.loan_borrower_mismatch' });
+
+        // OTHER borrowed nothing and pledged nothing — the state they are in is
+        // the state they were in before the call.
+        expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'USDT'))).amount)).toBe('0');
+        expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'BTC'))).amount)).toBe('1');
+        expect(await loans.loansOf(OTHER)).toHaveLength(0);
+      });
+
+      it('refuses the second borrower on a loan still stuck pending, leaving the first one alone', async () => {
+        await fund(BORROWER, 'BTC', '1');
+        await fund(OTHER, 'BTC', '5');
+        const product = await makeProduct();
+        const loanId = '6f000000-0000-4000-8000-00000000eeee';
+
+        // Reserve empty: the draw fails and the loan is left `pending` with the
+        // borrower's collateral locked — the documented crash window above.
+        await loans
+          .open({ loanId, productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
+        await fundReserve('USDT', '100000');
+
+        await expect(
+          loans.open({ loanId, productId: product.id, userId: OTHER, collateralAmount: amt('5'), principal: amt('5000'), now }),
+        ).rejects.toMatchObject({ code: 'bank.loan_borrower_mismatch' });
+
+        // The first borrower's collateral is still the ONE they pledged, not the
+        // five the second caller named, and the second caller still has theirs.
+        const loan = await loans.loan(loanId);
+        expect(loan.userId).toBe(BORROWER);
+        expect(formatAmount(await loans.collateralOf(loan))).toBe('1');
+        expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'BTC'))).amount)).toBe('5');
+      });
+    });
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
      * IF THE PROCESS DIES BETWEEN THE LOCK AND THE DRAW, WHOSE FUNDS ARE STRANDED?
      * ═══════════════════════════════════════════════════════════════════════════
      *

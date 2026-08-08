@@ -611,6 +611,72 @@ if (!available) {
       expect(await stakedOf(USER_A, 'USDT')).toBe('0');
     });
 
+    /**
+     * THE REUSED REQUEST ID.
+     *
+     * `positionId` is caller-supplied so a retried HTTP request is the same
+     * deposit. Nothing checked that a taken id belonged to the SAME deposit,
+     * and `ON CONFLICT (id) DO NOTHING` cannot tell the two apart: the second
+     * caller's value went into a stake pot keyed by their own id, the
+     * `status = 'active'` update landed on the FIRST caller's row, and the
+     * service's two answers to "how much is staked" — its table and the ledger —
+     * stopped agreeing. The second caller was told their deposit was earning.
+     */
+    it('refuses a deposit that reuses another user position id, and moves none of their money', async () => {
+      const pool = await openPool();
+      await fund(USER_A, 'USDT', '1000');
+      await fund(USER_B, 'USDT', '1000');
+
+      const shared = '7f000000-0000-4000-8000-00000000aaaa';
+      await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId: shared });
+
+      await expect(bank.earn.deposit({ poolId: pool.id, userId: USER_B, amount: amt('300'), positionId: shared })).rejects.toMatchObject({
+        code: 'bank.position_conflict',
+      });
+
+      // B kept every unit, and holds nothing in a pot no withdrawal of theirs
+      // could ever reach.
+      expect(await availableOf(USER_B, 'USDT')).toBe('1000');
+      expect(await stakedOf(USER_B, 'USDT')).toBe('0');
+
+      // A's position is untouched, and the two halves of the reconciliation
+      // still agree — which is the invariant this whole service rests on.
+      expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('400');
+      expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('400');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
+    });
+
+    it('refuses a deposit that reuses one of the caller own position ids for a different amount', async () => {
+      const pool = await openPool();
+      await fund(USER_A, 'USDT', '1000');
+
+      const shared = '7f000000-0000-4000-8000-00000000bbbb';
+      await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('100'), positionId: shared });
+
+      await expect(bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('500'), positionId: shared })).rejects.toMatchObject({
+        code: 'bank.position_conflict',
+      });
+
+      // The refusal is the point: without it this answered "your 500 is
+      // earning" while 100 was staked and 900 sat in available.
+      expect(await stakedOf(USER_A, 'USDT')).toBe('100');
+      expect(await availableOf(USER_A, 'USDT')).toBe('900');
+    });
+
+    it('still treats a genuine retry of the same deposit as one deposit', async () => {
+      const pool = await openPool();
+      await fund(USER_A, 'USDT', '1000');
+
+      const positionId = '7f000000-0000-4000-8000-00000000cccc';
+      const first = await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
+      const retry = await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
+
+      expect(retry.id).toBe(first.id);
+      expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+      expect(await availableOf(USER_A, 'USDT')).toBe('600');
+      expect(formatAmount(await bank.earn.poolSize(pool.id))).toBe('400');
+    });
+
     it('computes pool size from positions, with no stored total', async () => {
       const pool = await openPool();
       for (const user of [USER_A, USER_B, USER_C]) {
