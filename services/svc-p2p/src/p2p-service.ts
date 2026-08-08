@@ -1484,8 +1484,9 @@ export class P2pService {
    *
    * Idempotent from end to end: the recipe is keyed on the trade id, so a
    * re-run returns the original transaction rather than moving value again, and
-   * `settled_at` is only stamped once the post has succeeded. Everything
-   * between the decision and this stamp is the sweeper's responsibility.
+   * `settled_at` is only stamped once the post AND the announcement have
+   * succeeded. Everything between the decision and this stamp is the sweeper's
+   * responsibility.
    */
   async settle(tradeId: string): Promise<TradeRecord> {
     const trade = await this.getTrade(tradeId);
@@ -1522,14 +1523,28 @@ export class P2pService {
     // `voided` posts nothing: the lock never happened, so there is nothing to
     // move. The row still terminates, which is what stops it being swept again.
 
+    // ANNOUNCED BEFORE THE STAMP, not after.
+    //
+    // `settled_at` is what takes a trade off `sweepSettlements()`'s work list
+    // (`resolved_at IS NOT NULL AND settled_at IS NULL`), and `settle()` returns
+    // early on an already-stamped row. So anything that could fail AFTER the
+    // stamp was a thing that would never be retried: one refused envelope — a
+    // bus outage, a broker restart, a crash between the two statements — and the
+    // release event and both parties' XP awards were gone for good. The value
+    // had moved and nothing downstream would ever be told, with no work list
+    // left holding the trade and no error to find it by.
+    //
+    // The reverse failure costs a re-publish, and that is the cheap direction:
+    // every publish here carries a business idempotency key, JetStream dedupes
+    // on it (`msgID`) and consumers dedupe on it again, so a second envelope
+    // finds the original award. A lost one has nowhere to be found.
+    await this.announceSettlement(trade, fee);
+
     const rows = await this.sql<TradeRow[]>`
       UPDATE p2p.p2p_trades SET settled_at = now() WHERE id = ${tradeId} AND settled_at IS NULL
       RETURNING *
     `;
-    const settled = rows[0] ? toTrade(rows[0]) : await this.getTrade(tradeId);
-
-    await this.announceSettlement(settled, fee);
-    return settled;
+    return rows[0] ? toTrade(rows[0]) : await this.getTrade(tradeId);
   }
 
   private async announceSettlement(trade: TradeRecord, fee: Amount): Promise<void> {
