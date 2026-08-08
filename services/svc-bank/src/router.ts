@@ -171,6 +171,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.card_authorization_declined':
       case 'bank.card_authorization_closed':
       case 'bank.card_capture_exceeds_authorization':
+      /** Disagrees with a claimed settlement row — same class as ramp_conflict. */
+      case 'bank.card_settlement_amount_conflict':
       case 'bank.ramp_invalid_amount':
       case 'bank.ramp_invalid_destination':
       case 'bank.ramp_conflict':
@@ -1319,6 +1321,56 @@ export function createBankRouter(bank: BankServices) {
         guard(async () => {
           const result = await bank.cards.reverse({ cardId: input.cardId, authorizationRef: input.authorizationRef });
           return { returned: formatAmount(result.returned), ledgerTxId: result.ledgerTxId };
+        }),
+      ),
+
+    /**
+     * Re-drive card settlements that were claimed and never reached the ledger,
+     * and report what is still held against the authorisation.
+     *
+     * The card equivalent of `resumePendingLoans`, and it exists for the same
+     * reason: one failed post must not leave a user's hold unreachable. Takes no
+     * amount — each row is re-driven for the amount it was claimed with, because
+     * a recovery that can restate what moved is not a recovery.
+     */
+    cardResumeSettlement: scopedProcedure('admin:treasury')
+      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128) }))
+      .output(
+        z.object({
+          authorizationId: z.string(),
+          resumed: z.array(
+            z.object({
+              sequence: z.number().int(),
+              kind: z.enum(['capture', 'reversal']),
+              amount: amountString,
+              outcome: z.enum(['settled', 'failed']),
+              ledgerTxId: z.string().optional(),
+              reason: z.string().optional(),
+            }),
+          ),
+          // Read from the ledger, not added up from our own rows. Zero is the
+          // invariant an operator is actually checking for after a recovery.
+          held: amountString,
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const result = await bank.cards.resumeSettlements({
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+          });
+          return {
+            authorizationId: result.authorizationId,
+            resumed: result.resumed.map((row) => ({
+              sequence: row.sequence,
+              kind: row.kind,
+              amount: formatAmount(row.amount),
+              outcome: row.outcome,
+              ...(row.ledgerTxId === undefined ? {} : { ledgerTxId: row.ledgerTxId }),
+              ...(row.reason === undefined ? {} : { reason: row.reason }),
+            })),
+            held: formatAmount(result.held),
+          };
         }),
       ),
 

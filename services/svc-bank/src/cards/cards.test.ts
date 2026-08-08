@@ -465,6 +465,143 @@ if (!available) {
       expect(ledger.totalsByAsset().USDT).toBe('0');
     });
 
+    // ── One failed post must not strand the hold ──────────────────────────────
+    //
+    // These three are the regression suite for a defect that had no test: the
+    // "already settled" check counted every sequence-0 settlement row regardless
+    // of status, so a post that threw — one transient svc-ledger blip — closed
+    // the authorisation on the strength of a settlement that never happened. The
+    // retry was refused, `reverse()` was refused because it comes through the
+    // same check, and the user's entire hold sat in an account nothing could
+    // reach. There was no operator surface to release it and none to read it.
+
+    /** A CardService whose ledger refuses one kind of post, and only that one. */
+    const ledgerFailingOn = (keyPrefix: string) => {
+      const client = {
+        ...ledger,
+        balance: ledger.balance.bind(ledger),
+        post: async (tx: Parameters<MemoryLedger['post']>[0]) => {
+          if (tx.idempotencyKey.startsWith(keyPrefix)) throw new Error('svc-ledger unreachable');
+          return ledger.post(tx);
+        },
+      } as unknown as MemoryLedger;
+      return new CardService(sql, client, { issuer: cardSim() });
+    };
+
+    it('re-drives a capture whose post failed, instead of stranding the whole hold', async () => {
+      await fund(HOLDER, 'USDT', '500');
+      const card = await issueCard();
+      const auth = await cards.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('120') });
+
+      // The hold landed; the capture's post does not.
+      const broken = ledgerFailingOn('withdraw.settle');
+      await expect(broken.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('120') })).rejects.toThrow(
+        'svc-ledger unreachable',
+      );
+
+      // The row records the failure, and the money is still held — not lost.
+      const rows = await sql<Array<{ status: string; rejection_code: string | null }>>`
+        SELECT status, rejection_code FROM bank.card_settlements WHERE authorization_id = ${auth.id} AND sequence = 0
+      `;
+      expect(rows[0]!.status).toBe('rejected');
+      expect(await heldOn(auth.id)).toBe('120');
+
+      // THE POINT: the retry is allowed through, and it completes.
+      const captured = await cards.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('120') });
+      expect(formatAmount(captured.captured)).toBe('120');
+      expect(await heldOn(auth.id)).toBe('0');
+      expect(await availableOf(HOLDER, 'USDT')).toBe('380');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
+    });
+
+    it('lets reverse() release a hold after a failed capture, rather than refusing it as closed', async () => {
+      await fund(HOLDER, 'USDT', '500');
+      const card = await issueCard();
+      const auth = await cards.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('120') });
+
+      const broken = ledgerFailingOn('withdraw.settle');
+      await expect(broken.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('120') })).rejects.toThrow(
+        'svc-ledger unreachable',
+      );
+
+      // The merchant never got paid, so the whole hold goes back to the user.
+      const reversed = await cards.reverse({ cardId: card.id, authorizationRef: 'auth-1' });
+      expect(formatAmount(reversed.returned)).toBe('120');
+      expect(await heldOn(auth.id)).toBe('0');
+      expect(await availableOf(HOLDER, 'USDT')).toBe('500');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
+    });
+
+    /**
+     * The remainder case, and the reason `resumeSettlements` exists as a CALL.
+     *
+     * Sequence 0 settled, so the authorisation is correctly closed to new
+     * decisions — re-driving `capture` is refused and should be. Without a
+     * recovery procedure the user's unspent remainder has nothing left that can
+     * move it.
+     */
+    it('recovers the remainder of a partial capture whose reversal post failed', async () => {
+      await fund(HOLDER, 'USDT', '500');
+      const card = await issueCard();
+      const auth = await cards.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('120') });
+
+      const broken = ledgerFailingOn('withdraw.reverse');
+      await expect(broken.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('50') })).rejects.toThrow(
+        'svc-ledger unreachable',
+      );
+
+      // The merchant has their 50. The user's 70 is stuck in the hold account.
+      expect(await heldOn(auth.id)).toBe('70');
+      await expect(cards.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('50') })).rejects.toMatchObject({
+        code: 'bank.card_authorization_closed',
+      });
+
+      const recovered = await cards.resumeSettlements({ cardId: card.id, authorizationRef: 'auth-1' });
+      expect(recovered.resumed).toEqual([expect.objectContaining({ sequence: 1, kind: 'reversal', outcome: 'settled' })]);
+      expect(formatAmount(recovered.held)).toBe('0');
+      expect(await availableOf(HOLDER, 'USDT')).toBe('450');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
+    });
+
+    /**
+     * The ledger's business key is the authorisation, not the amount, and `post()`
+     * returns an existing transaction for a reused key without comparing bodies.
+     * So a second caller at the same sequence with a different amount used to be
+     * handed the first caller's transaction and believe its own number — wrong
+     * captured figure to the operator, wrong remainder reversed, cashback paid on
+     * a value the ledger never saw.
+     */
+    it('refuses a settlement that disagrees with the amount its row was claimed for', async () => {
+      await fund(HOLDER, 'USDT', '500');
+      const card = await issueCard({ cashbackBps: 500 });
+      const auth = await cards.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+      // Sequence 0 is claimed for 40 and its post fails, leaving the claim behind.
+      const broken = ledgerFailingOn('withdraw.settle');
+      await expect(broken.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('40') })).rejects.toThrow(
+        'svc-ledger unreachable',
+      );
+
+      // A capture for a DIFFERENT amount is refused by name, not reconciled.
+      await expect(cards.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') })).rejects.toMatchObject({
+        code: 'bank.card_settlement_amount_conflict',
+      });
+
+      // Nothing moved, and no cashback was paid on a number nobody captured.
+      expect(await heldOn(auth.id)).toBe('100');
+      const cashback = await sql<Array<{ count: string }>>`
+        SELECT count(*)::text AS count FROM bank.card_cashback WHERE authorization_id = ${auth.id}
+      `;
+      expect(cashback[0]!.count).toBe('0');
+
+      // The claimed amount still completes, which is what a re-drive means.
+      const captured = await cards.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('40') });
+      expect(formatAmount(captured.captured)).toBe('40');
+      expect(formatAmount(captured.returned)).toBe('60');
+      expect(await heldOn(auth.id)).toBe('0');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
+    });
+
     it('refuses a capture larger than what was authorised and held', async () => {
       await fund(HOLDER, 'USDT', '500');
       const card = await issueCard();

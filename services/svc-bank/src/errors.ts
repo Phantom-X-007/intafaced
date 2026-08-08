@@ -107,6 +107,16 @@ export type BankErrorCode =
   /** A capture may never exceed what was authorised and held. */
   | 'bank.card_capture_exceeds_authorization'
   /**
+   * A settlement re-drive disagreed with the amount its row was claimed for.
+   *
+   * The ledger's business key is the authorisation, not the amount, and a reused
+   * key returns the original transaction without comparing bodies — correct for a
+   * re-drive, silently wrong for a disagreement. Refused rather than reconciled,
+   * because the alternative reports a capture the ledger never saw and reverses
+   * a remainder computed from it.
+   */
+  | 'bank.card_settlement_amount_conflict'
+  /**
    * Cashback was owed and the rewards pot could not pay it.
    *
    * `loanBadDebt`'s rule applied to the other direction: a platform that cannot
