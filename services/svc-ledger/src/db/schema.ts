@@ -176,8 +176,19 @@ export const accounts = ledger.table(
     check('accounts_non_negative_ck', sql`owner_type = 'treasury' OR balance >= 0`),
     /** A purpose is a business key, and it participates in an index (0001). */
     check('accounts_purpose_len_ck', sql`length(purpose) <= 128`),
-    /** Every hold names its claim, in the database and not only in the service (0001). */
-    check('accounts_hold_purposed_ck', sql`kind <> 'hold' OR length(purpose) > 0`),
+    /**
+     * Every LOCK names its claim, in the database and not only in the service.
+     *
+     * 0001 covered `hold` alone and said so; `ledger-client` later moved to
+     * requiring a purpose on all four lock kinds via `assertPurposedLocks`, and
+     * no migration followed until 0007. Phrased as "anything not spendable"
+     * rather than a list of lock kinds on purpose: a lock kind added later must
+     * fail CLOSED into the constraint, not slip out of it.
+     *
+     * Equivalence with `ACCOUNT_KIND_CLASS` is asserted against a live Postgres
+     * in src/ledger/lock-purpose.test.ts.
+     */
+    check('accounts_lock_purposed_ck', sql`kind = 'available' OR length(purpose) > 0`),
     /**
      * Every `owner_id` is drawn from the space its `owner_type` declares (0005).
      * Kept character-for-character identical to `isValidOwnerId` in
