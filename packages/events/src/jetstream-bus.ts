@@ -1,4 +1,13 @@
-import { connect, type NatsConnection, type JetStreamClient, type JetStreamManager, RetentionPolicy, AckPolicy, DeliverPolicy } from 'nats';
+import {
+  connect,
+  type NatsConnection,
+  type JetStreamClient,
+  type JetStreamManager,
+  type ConsumerInfo,
+  RetentionPolicy,
+  AckPolicy,
+  DeliverPolicy,
+} from 'nats';
 import type { ModuleId } from '@intafaced/config';
 import { EVENT_CATALOG, type EventDef, type EventName } from './catalog.js';
 import { streamName, wildcard } from './subject.js';
@@ -70,13 +79,13 @@ export class JetStreamEventBus implements EventBus {
 
     const maxDeliver = opts.maxDeliver ?? 5;
 
-    await this.jsm.consumers.add(stream, {
+    await ensureConsumer(this.jsm, stream, {
       durable_name: opts.durable,
       ack_policy: AckPolicy.Explicit,
       deliver_policy: DeliverPolicy.All,
       filter_subject: def.subject,
       max_deliver: maxDeliver,
-      ack_wait: 30_000_000_000, // 30s in ns
+      ack_wait: ACK_WAIT_NS,
     });
 
     const consumer = await this.js.consumers.get(stream, opts.durable);
@@ -204,6 +213,73 @@ function announceAbandoned(subject: string, durable: string, attempt: number, da
 export function nakBackoffMs(redeliveryCount: number): number {
   const attempt = Number.isFinite(redeliveryCount) && redeliveryCount > 0 ? Math.floor(redeliveryCount) : 1;
   return Math.min(1_000 * 2 ** (attempt - 1), 8_000);
+}
+
+/**
+ * The bus `ack_wait`, in nanoseconds. 30s.
+ *
+ * Named because other packages reason against it: `svc-notify`'s claim lease
+ * must outlast one gateway attempt and stay UNDER this, and its docstring cites
+ * the number. A bound computed against a constant that has drifted is not a
+ * bound.
+ */
+export const ACK_WAIT_NS = 30_000_000_000;
+
+/**
+ * Idempotent consumer creation — and, unlike before, idempotent RECONCILIATION.
+ *
+ * THE DRIFT THIS CLOSES
+ *
+ * `subscribe()` called `consumers.add()` and stopped there. A durable consumer
+ * is created once and then lives in the server; `add` on one that already
+ * exists does not apply the config it was handed — it either refuses or returns
+ * the config the server already had. So `max_deliver` and `ack_wait` were
+ * whatever the FIRST boot of that durable asked for, permanently, and changing
+ * either in this file had no effect on any deployment past its first.
+ *
+ * `ensureStream` below has always done the other thing — catch "already exists"
+ * and call `streams.update`, "in case the registry grew". Streams reconciled on
+ * every boot; consumers never did. That asymmetry was the bug.
+ *
+ * It matters beyond tidiness because other services compute bounds against
+ * these numbers. `svc-notify`'s README requires `NOTIFY_MAX_DELIVERY_ATTEMPTS`
+ * to sit "at or below the bus maxDeliver", and the delivery row that retires a
+ * spent margin call depends on that relationship holding. A live consumer with
+ * a stale `max_deliver` makes that bound a statement about a number nobody is
+ * using.
+ *
+ * Reconciled by COMPARISON rather than by catching an error, because the two
+ * possible behaviours of `add` on an existing durable — refuse, or hand back
+ * the stale config — need the same correction and only one of them throws.
+ * `filter_subject` is deliberately not reconciled: JetStream does not accept it
+ * in an update, and it is derived from the event name, so it cannot drift
+ * without the durable name drifting too.
+ */
+async function ensureConsumer(jsm: JetStreamManager, stream: string, cfg: ConsumerConfigInput): Promise<void> {
+  let live: ConsumerInfo;
+  try {
+    live = await jsm.consumers.add(stream, cfg);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/already exists|already in use/i.test(message)) throw err;
+    live = await jsm.consumers.info(stream, cfg.durable_name);
+  }
+
+  if (live.config.max_deliver === cfg.max_deliver && live.config.ack_wait === cfg.ack_wait) return;
+
+  await jsm.consumers.update(stream, cfg.durable_name, {
+    max_deliver: cfg.max_deliver,
+    ack_wait: cfg.ack_wait,
+  });
+}
+
+interface ConsumerConfigInput {
+  durable_name: string;
+  ack_policy: AckPolicy;
+  deliver_policy: DeliverPolicy;
+  filter_subject: string;
+  max_deliver: number;
+  ack_wait: number;
 }
 
 /** Idempotent stream creation — safe to call on every boot. */

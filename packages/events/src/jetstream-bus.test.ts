@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { connect } from 'nats';
 import { recordInfraProbe } from '@intafaced/db';
 import { afterAll, describe, expect, it } from 'vitest';
-import { JetStreamEventBus, nakBackoffMs } from './jetstream-bus.js';
+import { ACK_WAIT_NS, JetStreamEventBus, nakBackoffMs } from './jetstream-bus.js';
 
 /**
  * `JetStreamEventBus` against a real NATS server.
@@ -251,6 +251,39 @@ describe.skipIf(!available)('JetStreamEventBus — the at-least-once contract ev
       expect(announced[0]!.durable).toBeTruthy();
     } finally {
       console.error = realError;
+    }
+  });
+
+  it('applies a changed maxDeliver to a durable that already exists', async () => {
+    // A durable consumer is created once and then lives in the server. `add`
+    // on one that already exists does NOT apply the config it is handed — it
+    // either refuses or hands back the config the server already had. So
+    // before this was reconciled, `max_deliver` and `ack_wait` were whatever
+    // the FIRST boot of that durable asked for, permanently: changing either
+    // in jetstream-bus.ts had no effect on any deployment past its first.
+    //
+    // Reached through the public `subscribe`, not by calling the helper, so it
+    // is the boot path that is under test — that is where the drift lived.
+    const b = await bus();
+    const durable = `d-${randomUUID().slice(0, 8)}`;
+
+    const first = await b.subscribe('userCreated', async () => {}, { durable, maxDeliver: 2 });
+    await first.unsubscribe();
+
+    const second = await b.subscribe('userCreated', async () => {}, { durable, maxDeliver: 4 });
+    await second.unsubscribe();
+
+    // Asked of the SERVER, not of our own config object — the whole failure was
+    // that the two had stopped being the same thing.
+    const nc = await connect({ servers: URL });
+    try {
+      const info = await (await nc.jetstreamManager()).consumers.info(`${PREFIX}_IDENTITY`, durable);
+      expect(info.config.max_deliver).toBe(4);
+      // The other value `subscribe` sets, and the one svc-notify's claim lease
+      // is bounded against.
+      expect(info.config.ack_wait).toBe(ACK_WAIT_NS);
+    } finally {
+      await nc.close();
     }
   });
 
