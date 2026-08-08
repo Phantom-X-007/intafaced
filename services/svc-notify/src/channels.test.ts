@@ -31,6 +31,7 @@ import { MemoryMuteStore } from './preferences/mute.js';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
 const LOAN = '55555555-5555-4555-8555-555555555555';
+const POSITION = '66666666-6666-4666-8666-666666666666';
 
 const NO_GATEWAYS = { NOTIFY_GATEWAY_TIMEOUT_MS: 1_000 } as const;
 
@@ -105,6 +106,35 @@ function marginCall(overrides: Partial<{ sequence: number }> = {}) {
     collateralAssetId: 'BTC',
     calledAt: new Date().toISOString(),
     graceExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    ...overrides,
+  };
+}
+
+/**
+ * A `trade.position.updated` payload. Every amount is a decimal string, as it
+ * is on the wire — a number here would be a test that agrees with a bug.
+ */
+function position(overrides: Partial<{ status: 'open' | 'closing' | 'closed' | 'liquidated'; positionId: string }> = {}) {
+  return {
+    positionId: POSITION,
+    userId: USER,
+    marketId: 'BTC-PERP',
+    symbol: 'BTC-PERP',
+    status: 'liquidated' as const,
+    side: 'long' as const,
+    contracts: '1.5',
+    entryPrice: '61000.00',
+    markPrice: '54900.00',
+    notional: '91500.00',
+    leverage: '10',
+    collateral: '9150.00',
+    unrealizedPnl: '-9150.00',
+    realizedPnl: '-9150.00',
+    liquidationPrice: '54900.00',
+    marginMode: 'isolated' as const,
+    fundingPaid: '12.40',
+    closingReason: null,
+    ts: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -750,9 +780,141 @@ describe('out-of-app copy comes from the same catalog as the screen', () => {
     await bus.publish('bankMarginCalled', marginCall());
     await bus.publish('kycApproved', { userId: USER, tier: 'basic', jurisdiction: 'DE' });
     await bus.publish('rankUpdated', { userId: USER, rank: 2, previousRank: 1, xp: '10' });
+    await bus.publish('positionUpdated', position());
 
+    expect(seen).toContain('notify.trade.position.liquidated.title');
     expect(seen.length).toBeGreaterThan(0);
     for (const key of seen) expect(MESSAGE_KEYS).toContain(key);
+  });
+});
+
+describe('the liquidation consumer', () => {
+  let h: Harness;
+
+  beforeEach(() => {
+    h = harness();
+  });
+
+  it('writes one critical inbox row for a liquidation and dedupes redelivery', async () => {
+    const bus = new MemoryEventBus('svc-trade');
+    await subscribeNotificationEvents(bus, h.notify);
+
+    await bus.publish('positionUpdated', position());
+    await bus.publish('positionUpdated', position());
+    expect(await h.notify.unreadCount(USER)).toBe(1);
+
+    const rows = await h.notify.list({ userId: USER, limit: 10, unreadOnly: false });
+    const row = rows.items.find((n) => n.kind === 'trade.position.liquidated')!;
+    expect(row.severity).toBe('critical');
+    expect(row.sourceSubject).toBe('intafaced.trade.position.updated');
+    expect(row.sourceIdempotencyKey).toBe(`${POSITION}:liquidated`);
+    expect(row.href).toBe(`/trade/futures/positions/${POSITION}`);
+  });
+
+  it('carries every amount across as the decimal string it arrived as', async () => {
+    // A notification that rounded a size or a price would be a second, wrong
+    // copy of a number svc-trade owns. Nothing here parses; nothing here sums.
+    const bus = new MemoryEventBus('svc-trade');
+    await subscribeNotificationEvents(bus, h.notify);
+    await bus.publish('positionUpdated', position());
+
+    const rows = await h.notify.list({ userId: USER, limit: 10, unreadOnly: false });
+    const row = rows.items.find((n) => n.kind === 'trade.position.liquidated')!;
+    expect(row.params).toMatchObject({
+      contracts: '1.5',
+      entryPrice: '61000.00',
+      notional: '91500.00',
+      symbol: 'BTC-PERP',
+      side: 'long',
+    });
+    for (const key of ['contracts', 'entryPrice', 'notional'] as const) {
+      expect(typeof row.params[key]).toBe('string');
+    }
+  });
+
+  it('renders the liquidation without leaving a key or a placeholder in the copy', () => {
+    const rendered = renderNotification(
+      {
+        id: 'n-liq',
+        userId: USER,
+        kind: 'trade.position.liquidated',
+        titleKey: 'notify.trade.position.liquidated.title',
+        bodyKey: 'notify.trade.position.liquidated.body',
+        params: { side: 'long', symbol: 'BTC-PERP', contracts: '1.5', entryPrice: '61000.00' },
+        href: null,
+        severity: 'critical',
+        readAt: null,
+        sourceSubject: 'intafaced.trade.position.updated',
+        sourceIdempotencyKey: `${POSITION}:liquidated`,
+        createdAt: new Date(),
+      },
+      'en',
+    );
+
+    expect(rendered.title).toBe('Position liquidated');
+    expect(rendered.body).toContain('BTC-PERP');
+    expect(rendered.body).toContain('1.5');
+    expect(rendered.body).not.toContain('notify.trade');
+    expect(rendered.body).not.toContain('{');
+  });
+
+  it('acks every other transition without writing a row — an inbox nobody reads is an outage too', async () => {
+    const bus = new MemoryEventBus('svc-trade');
+    await subscribeNotificationEvents(bus, h.notify);
+
+    for (const status of ['open', 'closing', 'closed'] as const) {
+      await bus.publish('positionUpdated', position({ status, positionId: POSITION }));
+    }
+    expect(await h.notify.unreadCount(USER)).toBe(0);
+
+    // …and the one the trader did not choose still lands.
+    await bus.publish('positionUpdated', position({ status: 'liquidated' }));
+    expect(await h.notify.unreadCount(USER)).toBe(1);
+  });
+
+  it('honours a widened policy without any other change', async () => {
+    // The default is deliberately the narrowest honest one. Product law may
+    // widen it; this pins that the policy is what decides, not a hard-coded if.
+    const bus = new MemoryEventBus('svc-trade');
+    await subscribeNotificationEvents(bus, h.notify, {
+      positionNotify: { statuses: ['liquidated', 'closed'], severity: 'action' },
+    });
+
+    await bus.publish('positionUpdated', position({ status: 'closed' }));
+    const rows = await h.notify.list({ userId: USER, limit: 10, unreadOnly: false });
+    expect(rows.items).toHaveLength(1);
+    expect(rows.items[0]!.severity).toBe('action');
+    expect(rows.items[0]!.sourceIdempotencyKey).toBe(`${POSITION}:closed`);
+  });
+
+  it('records a refusal on every out-of-app channel when the trader registered none', async () => {
+    // The whole point of `critical`: "we had no way to reach you about your
+    // liquidation" has to be a row written at the time, not an inference from
+    // an empty table afterwards.
+    const bus = new MemoryEventBus('svc-trade');
+    await subscribeNotificationEvents(bus, h.notify);
+    await bus.publish('positionUpdated', position());
+
+    const rows = await h.notify.list({ userId: USER, limit: 10, unreadOnly: false });
+    const row = rows.items.find((n) => n.kind === 'trade.position.liquidated')!;
+    const deliveries = await h.deliveries.listForNotification(row.id);
+    for (const channel of ['email', 'push', 'sms'] as const) {
+      const record = deliveries.find((d) => d.channel === channel)!;
+      expect(record.status).toBe('refused');
+      expect(record.acceptedAt).toBeNull();
+      expect(record.refusalCode).not.toBeNull();
+    }
+  });
+
+  it('naks so the bus redelivers when a channel wants another attempt', async () => {
+    const flaky = new SpyChannel('email', 'retryable');
+    const local = harness(registry([flaky]));
+    await confirmTarget(local, 'email', 'trader@example.com');
+
+    const bus = new MemoryEventBus('svc-trade');
+    await subscribeNotificationEvents(bus, local.notify);
+
+    await expect(bus.publish('positionUpdated', position())).rejects.toThrow(/wants a retry/);
   });
 });
 
@@ -894,6 +1056,6 @@ describe('consumers whose producer has not created a stream are reported, not hi
       reason: 'stream not found',
     });
     // Every other consumer still attached — the inbox is not held hostage.
-    expect(report.subscriptions).toHaveLength(8);
+    expect(report.subscriptions).toHaveLength(9);
   });
 });

@@ -6,15 +6,18 @@ import {
   p2pEscrowRefunded,
   p2pEscrowReleased,
   p2pTradeDisputed,
+  positionUpdated,
   rankUpdated,
   stakeCreated,
   wiringSocketReason,
   type EventBus,
   type EventName,
   type Handler,
+  type PayloadOf,
   type Subscription,
 } from '@intafaced/events';
 import type { CreateResult, NotifyService } from './notify-service.js';
+import type { Severity } from './store.js';
 
 /**
  * EVENT WIRING — fan-out.
@@ -103,6 +106,60 @@ export interface SubscriptionReport {
   readonly pending: readonly PendingConsumer[];
 }
 
+/** The lifecycle states `intafaced.trade.position.updated` can carry. */
+type PositionStatus = PayloadOf<'positionUpdated'>['status'];
+
+/**
+ * WHICH POSITION TRANSITIONS ARE WORTH A NOTIFICATION — AND WHY THIS IS A
+ * POLICY OBJECT RATHER THAN AN `if`.
+ *
+ * `trade.position.updated` is a high-frequency stream: svc-trade's position
+ * service publishes on every transition and `tick-stores` publishes again when
+ * the mark price moves a position through liquidation. Notifying on all of them
+ * would put an inbox row — and, for anyone with a confirmed address, an email —
+ * behind every open and every close a trader makes. That is how an inbox stops
+ * being read, and an inbox nobody reads is the same outage as an inbox nothing
+ * writes to.
+ *
+ * So the default is the single transition the user did not ask for and cannot
+ * infer from their own action: `liquidated`. Opening a position, closing one,
+ * and starting to close one are all things the trader just did; being
+ * liquidated is something that happened to them while they were not looking.
+ *
+ * WHICH OTHER STATES DESERVE A MESSAGE IS PRODUCT LAW, AND IT HAS NOT BEEN
+ * DECIDED. This object is where that decision lands when it is made, and the
+ * default here is the conservative one — the fewest messages that still covers
+ * the case where silence costs the user money. Widening it is a one-line change
+ * to `statuses` and two i18n keys per new state; it is deliberately NOT an env
+ * variable, because "which notifications exist" is a product fact that should
+ * be the same in every deployment rather than a per-environment surprise.
+ */
+export interface PositionNotifyPolicy {
+  /** Transitions that produce an inbox row. Everything else is acked and not written. */
+  readonly statuses: readonly PositionStatus[];
+  /**
+   * Severity for those rows.
+   *
+   * `critical` is not decoration here either: it is what makes the dispatcher
+   * record a refusal on every out-of-app channel even when the trader
+   * registered none, so "we had no way to reach you about your liquidation" is
+   * a row written at the time rather than an inference from an empty table
+   * afterwards. It is also what makes the message ignore a channel mute — the
+   * same rule margin calls already run under, for the same reason.
+   */
+  readonly severity: Severity;
+}
+
+export const DEFAULT_POSITION_NOTIFY_POLICY: PositionNotifyPolicy = {
+  statuses: ['liquidated'],
+  severity: 'critical',
+};
+
+export interface SubscribeOptions {
+  /** Override the conservative default above. Production boots without one. */
+  readonly positionNotify?: PositionNotifyPolicy;
+}
+
 /**
  * Throw when — and only when — a channel wants another attempt.
  *
@@ -159,8 +216,13 @@ async function attach<K extends EventName>(
   }
 }
 
-export async function subscribeNotificationEvents(bus: EventBus, notify: NotifyService): Promise<SubscriptionReport> {
+export async function subscribeNotificationEvents(
+  bus: EventBus,
+  notify: NotifyService,
+  options: SubscribeOptions = {},
+): Promise<SubscriptionReport> {
   const attachments: Attachment[] = [];
+  const positionPolicy = options.positionNotify ?? DEFAULT_POSITION_NOTIFY_POLICY;
 
   attachments.push(
     await attach(bus, 'fillSettled', fillSettled.subject, 'notify-fill-settled', async (payload) => {
@@ -182,6 +244,65 @@ export async function subscribeNotificationEvents(bus: EventBus, notify: NotifyS
           severity: 'info',
           sourceSubject: fillSettled.subject,
           sourceIdempotencyKey: payload.fillId,
+        }),
+      );
+    }),
+  );
+
+  attachments.push(
+    await attach(bus, 'positionUpdated', positionUpdated.subject, 'notify-position-updated', async (payload) => {
+      /**
+       * THE OTHER MONEY-ADJACENT ONE.
+       *
+       * A liquidation is the futures twin of a margin call: collateral was
+       * consumed and the trader was not the one who decided it. svc-ws already
+       * fans this subject to the owning principal, but a private WebSocket
+       * reaches exactly the people who happen to have the app open — which is
+       * the opposite of the population that needs to hear about a liquidation.
+       * This consumer is the durable half of that same fact.
+       *
+       * Everything not on the policy is ACKED AND NOT WRITTEN. That is a real
+       * decision, not a shortcut: see `PositionNotifyPolicy` for why the default
+       * is `liquidated` alone. It is also why this returns before `notify.create`
+       * rather than filtering afterwards — a suppressed row must never reach the
+       * dispatcher, or a muted-but-critical rule would send a message for a
+       * notification the inbox does not contain.
+       *
+       * The business key is `<positionId>:<status>`, not the position id: the
+       * policy may later cover more than one transition of the same position,
+       * and keying on the id alone would silently swallow every state after the
+       * first. `ts` is deliberately NOT in the key — a redelivery carries the
+       * same timestamp, but a producer that re-publishes with a fresh one would
+       * turn a duplicate into a second liquidation notice.
+       *
+       * Every amount below crosses as the decimal string it arrived as. None of
+       * these is parsed, summed or compared here, and nothing in this service
+       * holds a position — svc-trade owns the position and the ledger owns the
+       * value (§0.6).
+       */
+      if (!positionPolicy.statuses.includes(payload.status)) return;
+
+      nakIfRetryable(
+        await notify.create({
+          userId: payload.userId,
+          kind: 'trade.position.liquidated',
+          titleKey: 'notify.trade.position.liquidated.title',
+          bodyKey: 'notify.trade.position.liquidated.body',
+          params: {
+            positionId: payload.positionId,
+            marketId: payload.marketId,
+            symbol: payload.symbol,
+            side: payload.side,
+            status: payload.status,
+            contracts: payload.contracts,
+            entryPrice: payload.entryPrice,
+            notional: payload.notional,
+            ts: payload.ts,
+          },
+          href: `/trade/futures/positions/${payload.positionId}`,
+          severity: positionPolicy.severity,
+          sourceSubject: positionUpdated.subject,
+          sourceIdempotencyKey: `${payload.positionId}:${payload.status}`,
         }),
       );
     }),
