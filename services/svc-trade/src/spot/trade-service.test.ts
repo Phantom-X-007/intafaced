@@ -629,8 +629,8 @@ if (!available) {
       await fund(BOB, 'BTC', '1');
       await fund(ALICE, 'USDT', '1');
 
-      // price must be on tick (1); qty on lot (1 wei) → 1 wei base at 1 USDT
-      const maker = await rest(BOB, dust, 'sell', '1', '0.000000000000000001', 'bob-dust');
+      // rest(user, market, side, qty, price, clientId) — qty on lot (1 wei), price on tick (1)
+      const maker = await rest(BOB, dust, 'sell', '0.000000000000000001', '1', 'bob-dust');
       matching.scriptFills([
         {
           makerOrderId: maker.id,
@@ -640,7 +640,7 @@ if (!available) {
         },
       ]);
 
-      await expect(rest(ALICE, dust, 'buy', '1', '0.000000000000000001', 'alice-dust')).rejects.toMatchObject({
+      await expect(rest(ALICE, dust, 'buy', '0.000000000000000001', '1', 'alice-dust')).rejects.toMatchObject({
         code: 'trade.fee_exceeds_fill',
       });
 
