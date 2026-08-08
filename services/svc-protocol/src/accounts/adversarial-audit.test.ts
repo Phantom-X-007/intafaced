@@ -45,10 +45,11 @@ function input(overrides: Partial<SessionSpecInput> = {}): SessionSpecInput {
 
 function abiFnNames(contract: 'SmartAccount' | 'AccountFactory'): string[] {
   const artifact = loadArtifact(contract);
-  return artifact.abi
-    .filter((x): x is { type: 'function'; name: string } => x.type === 'function' && 'name' in x)
-    .map((x) => x.name)
-    .sort();
+  const names: string[] = [];
+  for (const item of artifact.abi) {
+    if (item.type === 'function') names.push(item.name);
+  }
+  return names.sort();
 }
 
 describe('S-A1 adversarial · platform cannot move funds without a user signature', () => {
