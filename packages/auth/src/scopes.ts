@@ -53,6 +53,12 @@ export const SCOPES = [
   'launch:write',
   'market:read',
   'market:write',
+  // Marketplace operator actions — vetting a vendor application. Separate from
+  // `market:write`, which is what a user APPLIES with: an applicant who could
+  // also decide is not an applicant. Same shape as `support:ops`, and for the
+  // same reason a module-local ops scope beats `admin:write` here — halting a
+  // marketplace and approving a vendor are different authorities.
+  'market:ops',
   'academy:read',
   'academy:write',
 
@@ -106,6 +112,9 @@ const IMPLIED: Partial<Record<Scope, readonly Scope[]>> = {
   'bank:card': ['bank:read'],
   'launch:write': ['launch:read'],
   'market:write': ['market:read'],
+  // An operator has to read the queue to work it, and reads an application's
+  // fields to decide on it. Mirrors `support:ops`.
+  'market:ops': ['market:read', 'market:write'],
   'academy:write': ['academy:read'],
   'agents:execute': ['agents:read'],
   'notify:write': ['notify:read'],
@@ -236,6 +245,27 @@ const SESSION_SCOPE_LIST = [
   // Support desk (ops.support Stage-1) — non-custodial tickets.
   'support:read',
   'support:write',
+  // UNSTUBBED. These read 'svc-market not built' until this commit, and the
+  // reason given there was the right one: "a scope for a router that cannot be
+  // called is noise in every token in the platform; these get issued by the PR
+  // that ships the service." This is that PR — `services/svc-market` mounts
+  // /trpc and svc-edge routes `/api/market` to it.
+  //
+  // `market:write` is what APPLIES to be a vendor, and an application nobody may
+  // submit is not an application — withholding it would ship svc-market
+  // unreachable, the outage-with-a-comment this table exists to stop.
+  //
+  // Issued even though `market` is `custodial: true`, for the reason `bank:read`
+  // and `bank:write` are: the module is OPEN_BASIC in the JURISDICTION_MATRIX, so
+  // an unverified caller is refused at tier `basic` whatever scopes they hold —
+  // and the refusal they meet then names the step they can take, instead of a
+  // dead end the UI cannot turn into an action. Vendor lifecycle Stage 1 takes
+  // custody of nothing in any case; that is `market.commerce`.
+  //
+  // What this deliberately does NOT hand out is the authority to DECIDE an
+  // application. That is `market:ops`, withheld below.
+  'market:read',
+  'market:write',
   // Read-only by construction, on a plane that has no write scope to hold:
   // svc-protocol's own suite asserts `SCOPES` contains no `protocol:write`.
   // Non-custodial and `minTier: 'none'`, so §22 says permissionless — and a
@@ -293,12 +323,16 @@ export const WITHHELD_FROM_SESSION: Readonly<Record<Exclude<Scope, SessionScope>
   // that ships the service.
   'launch:read': 'svc-launch not built',
   'launch:write': 'svc-launch not built',
-  'market:read': 'svc-market not built',
-  'market:write': 'svc-market not built',
 
   // Support operator actions (assign/resolve). Users get support:read/write on
   // session; ops is staff-only.
   'support:ops': 'Operator scope — support desk staff actions',
+
+  // Marketplace operator actions (vetting a vendor application). Users get
+  // market:read/write on session; deciding is staff-only. An applicant who could
+  // also approve their own application is not an applicant, and svc-market has no
+  // criterion to decide with — a human supplies the decision (§8 "mine alone").
+  'market:ops': 'Operator scope — vetting a vendor application is a human decision',
 
   // Operator scopes. Never on a user session, whatever the account.
   // `admin:compliance` is the sharp one: it approves KYC records, so a session
