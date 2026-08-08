@@ -17,8 +17,12 @@
  *     sequenced and simply WRONG is caught by the only thing that can catch it.
  *   · `transport.ts` — the two-interface seam that lets the tests produce the
  *     failures a healthy venue never will.
- *   · `venues/binance-spot.ts` — one venue, done properly. Public market data is
- *     live; the trading half refuses loudly rather than pretending.
+ *   · `venues/binance-spot.ts` — the first venue, done properly. Public market
+ *     data is live; the trading half refuses loudly rather than pretending.
+ *   · `venues/bybit-spot.ts` — the SECOND venue, public market data only. It is
+ *     what makes `latency.ts` and `cross-check.ts` mean something: a grade with
+ *     nothing to rank against is a number, and a median of one venue is that
+ *     venue's opinion of itself.
  */
 export * from './sequenced-book.js';
 export * from './book-feed.js';
@@ -27,3 +31,4 @@ export * from './latency.js';
 export * from './cross-check.js';
 export * from './transport.js';
 export * from './venues/binance-spot.js';
+export * from './venues/bybit-spot.js';

@@ -1,0 +1,13 @@
+-- Reverses 0016_positions_open_unique_predicate_scope.sql.
+--
+-- Strips the recorded decision off `positions_open_unique_idx` and leaves the
+-- index itself untouched — the up migration never altered it, so there is
+-- nothing about the invariant to restore. What this reversal actually undoes is
+-- the DISCOVERABILITY: after it runs, `\d+ trade.positions` and every schema
+-- dump go back to showing a partial unique index whose `WHERE status = 'open'`
+-- looks like an oversight rather than a ruling, which is precisely the state
+-- that let #1103's review pass over the predicate.
+--
+-- Non-destructive: no data is read or written and no constraint is dropped, so
+-- 0016 can be re-applied afterwards unconditionally.
+COMMENT ON INDEX "trade"."positions_open_unique_idx" IS NULL;

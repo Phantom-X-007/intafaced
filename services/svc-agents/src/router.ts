@@ -17,6 +17,7 @@ import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
 import { invokeNavigatorDataTool } from './navigator/data-tools.js';
 import { navigatorTierGate } from './navigator/tier-gate.js';
+import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
@@ -72,13 +73,14 @@ const actionOutput = z.object({
 });
 
 /**
- * What a metered scanner run cost, on the wire.
+ * What a metered agent run cost, on the wire.
  *
  * Amounts are decimal STRINGS: they are scaled bigint in the meter and JSON has
  * no bigint, and a money field that arrives as a `number` has already lost the
- * argument (§0.5).
+ * argument (§0.5). Shared by every run that opens a session, so two agents can
+ * never drift into reporting their bill in two different shapes.
  */
-const scannerMeteringOutput = z.object({
+const runMeteringOutput = z.object({
   sessionId: z.string().nullable(),
   billedAmount: z.string(),
   assetId: z.string(),
@@ -91,6 +93,51 @@ const scannerMeteringOutput = z.object({
       settled: z.boolean(),
     }),
   ),
+});
+
+/**
+ * One grounded fact a navigator data tool returned.
+ *
+ * Every branch is an echo of what the tool was given or found. There is no
+ * "assumed" or "estimated" member, and there is nowhere for one to hide: a
+ * navigator answer is exactly the union of these, or it is a refusal.
+ */
+const navigatorFindingOutput = z.union([
+  z.object({
+    status: z.literal('ok'),
+    tool: z.literal('trade.quote'),
+    marketId: z.string(),
+    last: z.string(),
+    asOf: z.string(),
+  }),
+  z.object({
+    status: z.literal('ok'),
+    tool: z.literal('trade.markets.list'),
+    markets: z.array(
+      z.object({
+        marketId: z.string(),
+        symbol: z.string(),
+        status: z.enum(['open', 'halted', 'closed']),
+      }),
+    ),
+  }),
+  z.object({
+    status: z.literal('ok'),
+    tool: z.literal('identity.session.read'),
+    session: z.object({
+      sessionId: z.string(),
+      userId: z.string(),
+      status: z.enum(['open', 'closed']),
+    }),
+  }),
+]);
+
+/** An ask that produced no fact, and who refused it. */
+const navigatorUnansweredOutput = z.object({
+  tool: z.string(),
+  refusedBy: z.enum(['guardrail', 'tool']),
+  reason: z.string(),
+  userMessageKey: z.string(),
 });
 
 const sessionOutput = z.object({
@@ -920,18 +967,18 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               tickersAccepted: z.number().int(),
               tickersRefusedByTool: z.number().int(),
               tickersRefusedByGuardrail: z.number().int(),
-              metering: scannerMeteringOutput,
+              metering: runMeteringOutput,
             }),
             z.object({
               status: z.literal('empty'),
               userMessageKey: z.literal('agents.scanner.empty'),
-              metering: scannerMeteringOutput,
+              metering: runMeteringOutput,
             }),
             z.object({
               status: z.literal('unavailable'),
               userMessageKey: z.literal('agents.scanner.unavailable'),
               reason: z.enum(['stale', 'no_quotes', 'market_plane_dark']),
-              metering: scannerMeteringOutput,
+              metering: runMeteringOutput,
             }),
             z.object({
               status: z.literal('refuse'),
@@ -939,7 +986,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
               tickersRefusedByTool: z.number().int(),
               tickersRefusedByGuardrail: z.number().int(),
-              metering: scannerMeteringOutput,
+              metering: runMeteringOutput,
             }),
           ]),
         )
@@ -1365,6 +1412,169 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             },
           };
         }),
+
+      /**
+       * Stage-2 `navigator.answer` as a METERED RUN on the fleet runtime.
+       *
+       * The navigator routes above are pure: they answer "what would the
+       * navigator say" without a session, so the declared guardrail is enforced
+       * by nothing at call time and the usage is metered by nothing at all.
+       * This one drives the same pure tools through
+       * `openSession → act → settle → closeSession`, so every lookup is
+       * guardrail-checked and audited, and the run settles through `UsageMeter`
+       * → ledger — the only accounting path.
+       *
+       * A mutation, not a query: it opens a session and writes audit rows.
+       */
+      runSession: scopedProcedure('agents:execute', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            userTier: z.string().max(64),
+            law: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  matrix: z.record(z.array(z.string().min(1).max(120)).max(100)).default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            // Capped well under the guardrail's per-session action budget: one
+            // ask is one audited tool call, refusals included.
+            asks: z
+              .array(
+                z.object({
+                  tool: z.string().min(1).max(120),
+                  quote: z
+                    .object({
+                      marketId: z.string().min(1).max(64),
+                      last: z.string().nullable(),
+                      asOf: z.string().min(1),
+                      maxAgeMs: z.number().int().positive().max(86_400_000),
+                    })
+                    .nullable()
+                    .optional(),
+                  markets: z
+                    .array(
+                      z.object({
+                        marketId: z.string().min(1).max(64),
+                        symbol: z.string().min(1).max(64),
+                        status: z.enum(['open', 'halted', 'closed']),
+                      }),
+                    )
+                    .max(500)
+                    .nullable()
+                    .optional(),
+                  session: z
+                    .object({
+                      sessionId: z.string().min(1).max(120),
+                      userId: z.string().min(1).max(120),
+                      status: z.enum(['open', 'closed']),
+                    })
+                    .nullable()
+                    .optional(),
+                }),
+              )
+              .max(20),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              userTier: z.string(),
+              findings: z.array(navigatorFindingOutput),
+              unanswered: z.array(navigatorUnansweredOutput),
+              asked: z.number().int(),
+              answered: z.number().int(),
+              complete: z.boolean(),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.navigator.empty'),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['trade_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_answer']),
+              userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
+              unanswered: z.array(navigatorUnansweredOutput),
+              metering: runMeteringOutput,
+            }),
+          ]),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            const result = await runNavigatorAnswerSession({
+              runtime,
+              userId: ctx.principal.userId,
+              feeAssetId,
+              plane: input.plane,
+              tierLaw: input.law ?? null,
+              userTier: input.userTier,
+              asks: input.asks.map((ask) => ({
+                tool: ask.tool,
+                quote: ask.quote ?? null,
+                markets: ask.markets ?? null,
+                session: ask.session ?? null,
+              })),
+              ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            });
+
+            const metering = {
+              sessionId: result.metering.sessionId,
+              billedAmount: result.metering.billedAmount,
+              assetId: result.metering.assetId,
+              sessionClosed: result.metering.sessionClosed,
+              settlements: result.metering.settlements.map((s) => ({
+                windowId: s.windowId,
+                amount: s.amount,
+                chargeKey: s.chargeKey,
+                settled: s.settled,
+              })),
+            };
+
+            if (result.status === 'empty') {
+              return { status: 'empty' as const, userMessageKey: result.userMessageKey, metering };
+            }
+
+            const unanswered = result.unanswered.map((u) => ({
+              tool: u.tool,
+              refusedBy: u.refusedBy,
+              reason: u.reason,
+              userMessageKey: u.userMessageKey as string,
+            }));
+
+            if (result.status === 'refuse') {
+              return {
+                status: 'refuse' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                unanswered,
+                metering,
+              };
+            }
+
+            return {
+              status: 'ok' as const,
+              userTier: result.userTier,
+              findings: result.findings.map((f) =>
+                f.tool === 'trade.markets.list'
+                  ? { status: 'ok' as const, tool: 'trade.markets.list' as const, markets: f.markets.map((m) => ({ ...m })) }
+                  : f,
+              ),
+              unanswered,
+              asked: result.asked,
+              answered: result.answered,
+              complete: result.complete,
+              metering,
+            };
+          }),
+        ),
     }),
 
     /**

@@ -33,6 +33,26 @@ const schema = serviceEnvSchema
       /** Platform fee, in bps, taken off the escrowed amount at release. */
       P2P_FEE_BPS: z.coerce.number().int().min(0).max(9_999).default(30),
 
+      /**
+       * Largest `maxAmt` an offer may advertise — the merchant badge's first
+       * real entitlement (`merchant-limits.ts` argues why the numbers are not
+       * invented in code).
+       *
+       * DECIMAL STRINGS, not numbers. These are amounts, and an amount that
+       * arrives through `z.coerce.number()` has already been through a float by
+       * the time anything reads it. Left unset they are `null` — unlimited,
+       * which is exactly the behaviour before offer limits existed, so adding
+       * this pair cannot refuse an offer any existing deployment allows today.
+       */
+      P2P_OFFER_MAX_STANDARD: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string')
+        .optional(),
+      P2P_OFFER_MAX_MERCHANT: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string')
+        .optional(),
+
       /** `created` → the take never finished escrowing. Nothing is locked yet. */
       P2P_ESCROW_DEADLINE_SECONDS: z.coerce.number().int().min(30).default(120),
 

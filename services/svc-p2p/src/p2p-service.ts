@@ -1,5 +1,7 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
+import { checkOfferLimit, NO_OFFER_LIMITS, type OfferLimitPolicy } from './merchant-limits.js';
+import type { MerchantStatus } from './merchant-programme.js';
 import { isSupportedFiat } from '@intafaced/config';
 import type { EventBus } from '@intafaced/events';
 import {
@@ -119,6 +121,7 @@ export type P2pErrorCode =
   | 'p2p.merchant_not_found'
   | 'p2p.merchant_reason_required'
   | 'p2p.merchant_transition_invalid'
+  | 'p2p.offer_limit_exceeded'
   // Deployment has no moderator allowlist and the caller does not hold
   // admin:compliance — the queue exists but nobody can authenticate into it.
   | 'p2p.moderation_unreachable'
@@ -220,6 +223,19 @@ export interface P2pServiceOptions {
   tradingEnabled?: boolean;
   /** Floating offers need one. Absent = floating offers cannot be taken. */
   referencePrices?: ReferencePriceSource;
+  /**
+   * Offer size ceilings by merchant standing (TRK-p2p.merchants Stage 2).
+   * Absent = no ceiling, which is the behaviour before Stage 2 existed.
+   */
+  offerLimits?: OfferLimitPolicy;
+  /**
+   * This maker's merchant standing, or `null` when they are not in the programme.
+   *
+   * A PORT, not the service: svc-p2p's escrow paths must not be able to reach
+   * the merchant writer by accident, and this file needs exactly one fact from
+   * it. `index.ts` supplies it from `MerchantService`; tests supply a stub.
+   */
+  merchantStatusOf?: (userId: string) => Promise<MerchantStatus | null>;
 }
 
 /**
@@ -468,6 +484,8 @@ export class P2pService {
   private readonly deadlines: DeadlinePolicy;
   private readonly xpPolicy: XpPolicy;
   private readonly referencePrices: ReferencePriceSource | undefined;
+  private readonly offerLimits: OfferLimitPolicy;
+  private readonly merchantStatusOf: ((userId: string) => Promise<MerchantStatus | null>) | undefined;
   private readonly instruments: TradeInstrumentAttacher;
   private tradingEnabled: boolean;
 
@@ -483,6 +501,8 @@ export class P2pService {
     this.xpPolicy = options.xp ?? DEFAULT_XP_POLICY;
     this.tradingEnabled = options.tradingEnabled ?? true;
     this.referencePrices = options.referencePrices;
+    this.offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
+    this.merchantStatusOf = options.merchantStatusOf;
   }
 
   /**
@@ -538,6 +558,25 @@ export class P2pService {
     // cost makers real liquidity for a fix they did not ask for.
     if (!Array.isArray(input.methods) || input.methods.length === 0) {
       throw new PricingError('An offer must declare at least one payment method it accepts', 'p2p.offer_methods_required');
+    }
+
+    /**
+     * OFFER CEILING BY MERCHANT STANDING (TRK-p2p.merchants Stage 2).
+     *
+     * An offer is a promise to complete a trade of that size, and an account
+     * with no record promising a very large one is the shape of most exit
+     * scams. The merchant programme is the record that justifies a bigger
+     * promise, so the badge and the ceiling are one control seen from two sides.
+     *
+     * CREATE only, and no ceiling is configured by default — `merchant-limits.ts`
+     * says why the numbers are an operator decision rather than invented here.
+     * Existing offers are never re-judged: breaking live liquidity to apply a
+     * new rule costs makers real money for a change they did not ask for.
+     */
+    if (this.merchantStatusOf) {
+      const standing = await this.merchantStatusOf(input.makerId);
+      const verdict = checkOfferLimit({ status: standing, maxAmt: input.maxAmt, asset: input.asset, policy: this.offerLimits });
+      if (!verdict.withinLimit) throw new P2pError(verdict.reason, 'p2p.offer_limit_exceeded');
     }
 
     const totalAmt = input.totalAmt ?? input.maxAmt;

@@ -164,6 +164,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
 
   // ── Genuinely our fault, and not the caller's to fix ──────────────────────
   'trade.dust_fill': { ccxt: 'ExchangeError', status: 500 },
+  'trade.fee_exceeds_fill': { ccxt: 'ExchangeError', status: 500 },
   'trade.hold_uncovered': { ccxt: 'ExchangeError', status: 500 },
   /**
    * A fill sequence is already owned by a DIFFERENT match, so settling would

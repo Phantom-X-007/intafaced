@@ -187,6 +187,12 @@ export type TradeErrorCode =
   | 'trade.not_owner'
   | 'trade.perks_unavailable'
   | 'trade.dust_fill'
+  /**
+   * A match is legal on the grid but fees leave a side with a zero receivable
+   * (`mulBps` ceil on a 1-wei leg). Refused BEFORE fill rows so the fills table
+   * cannot permanently outrun the ledger.
+   */
+  | 'trade.fee_exceeds_fill'
   | 'trade.hold_uncovered'
   | 'trade.convert_disabled'
   | 'trade.convert_no_liquidity'

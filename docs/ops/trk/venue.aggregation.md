@@ -15,7 +15,7 @@
 
 1. Cross-venue **market data** and (later) **trading** talk **our adapter fabric** — not a third-party connectivity library in the money path.
 2. **§27 / Doctrine 5:** no `ccxt` in workspace **by design**; we are the CCXT-class layer (typed, streaming-first, latency-graded, ledger-aware).
-3. At least a **second venue** has a real `MarketDataAdapter` + factory id (today only `binance-spot`).
+3. At least a **second venue** has a real `MarketDataAdapter` + factory id — **met 2026-08-08**: `bybit-spot`, public MD only. Was `binance-spot` alone.
 4. Trading half either works with credentials + rails **or** throws typed `not_ready` — never silent no-op success.
 5. Marks **never invent mid** when venue/book missing (empty venue, unknown id, unmapped market, empty book → null).
 6. Venue Vault for credentials exists before live trading half is claimed done.
@@ -47,17 +47,18 @@ Value never moves here (§0.6); account types are **observations** of third-part
 | Area                               | Path                                                       | Status                                                                                                                      |
 | ---------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Binance spot public MD             | `src/fabric/venues/binance-spot.ts`                        | **Done** — `BinanceSpotMarketData` implements MD                                                                            |
-| Trading / account methods          | same file                                                  | **Throw** `VenueUnavailableError(..., 'not_ready', ...)` for place/cancel/fetch/openOrders/balances/positions/transferRails |
+| Bybit spot public MD               | `src/fabric/venues/bybit-spot.ts`                          | **Done** — `BybitSpotMarketData` implements MD; public only, **no trade/account classes exist for it at all**               |
+| Trading / account methods          | `binance-spot.ts` only                                     | **Throw** `VenueUnavailableError(..., 'not_ready', ...)` for place/cancel/fetch/openOrders/balances/positions/transferRails |
 | Book feed                          | `src/fabric/book-feed.ts`                                  | Streams over adapter                                                                                                        |
 | Sequenced book                     | `src/fabric/sequenced-book.ts`                             | Gap-aware book tracker                                                                                                      |
 | Rate limit / latency / cross-check | `src/fabric/rate-limit.ts`, `latency.ts`, `cross-check.ts` | Fabric machinery                                                                                                            |
-| Factory surface                    | re-exported via fabric index                               | One venue id wired                                                                                                          |
+| Factory surface                    | re-exported via fabric index                               | **Two** venue ids wired                                                                                                     |
 
 ### 2.3 svc-trade mount (partial — marks only)
 
 | Piece           | Path                                                 | Behavior                                                                                           |
 | --------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Adapter factory | `services/svc-trade/src/futures/mark-from-venue.ts`  | `createVenueMarketDataAdapter` — only `binance-spot`; unknown → null                               |
+| Adapter factory | `services/svc-trade/src/futures/mark-from-venue.ts`  | `createVenueMarketDataAdapter` — `binance-spot`, `bybit-spot`; unknown / near-miss id → null       |
 | Env             | `services/svc-trade/src/env.ts`                      | `TRADE_VENUE_MARK_VENUE`, `TRADE_VENUE_MARK_SYMBOLS`, `TRADE_MM_SEED_MID_FROM_VENUE` (default OFF) |
 | Boot            | `services/svc-trade/src/index.ts`                    | Builds public adapter; warns if unknown id; never invents                                          |
 | MM mid          | `services/svc-trade/src/mm/mid-source.ts`            | Optional venue mid after env map miss                                                              |
@@ -67,10 +68,10 @@ Value never moves here (§0.6); account types are **observations** of third-part
 
 ### 2.4 Still not built (tracker note 2026-08-02)
 
-1. Only **one** public venue — second needs real adapter + factory id.
-2. **Trading half** not built (credentials construct; ops throw `not_ready`).
-3. **Venue Vault** absent (credential custody).
-4. No live-network CI for trading.
+1. ~~Only **one** public venue — second needs real adapter + factory id.~~ **CLOSED 2026-08-08** — `bybit-spot` public MD, registered in `createVenueMarketDataAdapter` and reached by id from the ops factory. Four residuals remain, so the row is still not `done`.
+2. **Trading half** not built (credentials construct; ops throw `not_ready`). Untouched — `bybit-spot` deliberately has no trade/account half to be honest about.
+3. **Venue Vault** absent (credential custody). Untouched, and not required for public MD.
+4. No live-network CI for trading — nor for public MD. `bybit-spot` is tested against fixtures only; nothing in CI reaches the venue.
 5. Futures **risk truth** remains human **M3** — not this mountain.
 
 ---
@@ -92,12 +93,12 @@ Value never moves here (§0.6); account types are **observations** of third-part
 
 ## 4 · DoD sketch (checkable — staged)
 
-### Stage 1 — second public MD venue (smallest free craft)
+### Stage 1 — second public MD venue (smallest free craft) — **DONE 2026-08-08**
 
-- [ ] New `MarketDataAdapter` implementation (venue chosen by product/ops).
-- [ ] `createVenueMarketDataAdapter` knows the id.
-- [ ] Symbol map tests; empty book → null mid.
-- [ ] No trading, no Vault.
+- [x] New `MarketDataAdapter` implementation — `BybitSpotMarketData` (`packages/venue-adapter/src/fabric/venues/bybit-spot.ts`). Chosen because everything on its wire is a decimal string (REST **and** WS) and both its REST book and its stream carry an update id, so the existing `SequencedBookTracker` / `MaintainedBook` drive it unchanged. No venue SDK, no `ccxt`.
+- [x] `createVenueMarketDataAdapter` knows the id — `bybit-spot`; near-miss ids (`bybit`, `bybit-futures`) still refuse.
+- [x] Symbol map tests; empty book → null mid — plus one-sided, unknown venue symbol, unmapped market, malformed payload, rate-limited and unreachable, each asserted `null` on the money path through the real adapter.
+- [x] No trading, no Vault — no `BybitSpotTrade`/`BybitSpotAccount` exist; no credential is read, held or named.
 - [ ] Optional: tracker title rename mountain event (drop CCXT).
 
 ### Stage 2 — MD production hardness
@@ -124,7 +125,7 @@ Value never moves here (§0.6); account types are **observations** of third-part
 
 ## 5 · Gaps
 
-1. Second+ venue MD adapters.
+1. ~~Second+ venue MD adapters.~~ Second done (`bybit-spot`); a THIRD is not required by any residual.
 2. Entire trading half.
 3. Venue Vault.
 4. Live-network CI policy.

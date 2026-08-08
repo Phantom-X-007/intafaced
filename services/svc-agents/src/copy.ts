@@ -50,6 +50,7 @@ export const COPY_KEYS = [
   'agents.merchant.unavailable',
   'agents.copy_intel.empty',
   'agents.copy_intel.unavailable',
+  'agents.navigator.empty',
   'agents.navigator.unavailable',
   'agents.navigator.tier_closed',
   'agents.support.unavailable',
@@ -102,6 +103,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.merchant.unavailable': 'Approval-rate metrics are unavailable right now — samples are missing or too old to trust.',
   'agents.copy_intel.empty': 'No leader performance samples were provided.',
   'agents.copy_intel.unavailable': 'Leader stats are unavailable — samples are incomplete or the window is invalid.',
+  'agents.navigator.empty': 'Nothing was asked, so nothing was looked up and nothing was charged.',
   'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
   'agents.navigator.tier_closed':
     'This Sovereign Intelligence navigator action is closed until product tier rules are published — nothing was invented or run.',

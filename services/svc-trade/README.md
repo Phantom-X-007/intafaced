@@ -104,8 +104,10 @@ Every recipe this service invokes, and what it touches. **No new recipes were ad
 **Every key is a business key.** `fillId` derives from `(marketId, engineSequence)` — the engine's own business
 key for a match — and `orderId` derives from `(userId, marketId, clientOrderId)` when the caller supplies one, so
 a retry from a bot, a redelivery from JetStream, or an operator replaying a day all compute the same key and the
-ledger returns the original transaction. `crypto.randomUUID()` appears exactly once in this service, for an order
-whose caller chose not to supply a client id — and that order is the only one a retry can double.
+ledger returns the original transaction. On the **spot live place path**, `crypto.randomUUID()` is used only when
+the caller omits `clientOrderId` — and that order is the only live place a retry can double-hold. Elsewhere in this
+service UUID generation is used for paper place, OTC quote ids, copy follow ids, and futures position ids (position
+open has no client idempotency key — see audit residual).
 
 ### Seed / mm honesty (Spec SD-2…SD-4)
 
@@ -155,24 +157,24 @@ Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matc
 
 #### Ops enable path (default safe)
 
-| Env                            | Default | Meaning                                                                                                                                     |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapter today: **`binance-spot`** (no keys). Unknown id → warn once, stay off (never invent). |
-| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                       |
-| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                |
+| Env                            | Default | Meaning                                                                                                                                                       |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`** — both keyless. Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                         |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                  |
 
 **Enable checklist (ops):**
 
-1. Confirm `packages/venue-adapter` Binance spot public path is acceptable for this environment (egress, rate limits).
-2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols).
-3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls).
+1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget. Both governors reserve 20% headroom, and both refuse rather than silently waiting.
+2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols). The symbol format is the unified one (`BTC/USDT`) for either venue — the venue's own spelling is produced inside the adapter and nowhere else.
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` **or** `bybit-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median.
 4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
 5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
 6. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; never invent.
 
 **Honesty bans:** invent mid, invent second venue adapter without fabric support, treat empty/one-sided book as a price, treat account observations as ledger truth, enable trading half of venue (credentials / Vault) as if public mark worked.
 
-**Second venue:** only when a real `MarketDataAdapter` exists in fabric and `createVenueMarketDataAdapter` knows the id — do not stub a name.
+**Second venue:** shipped 2026-08-08 as `bybit-spot` (public market data only; no trade or account half exists for it, and no credential is read anywhere in it). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A THIRD venue is not needed by any open residual on `venue.aggregation`.
 
 Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
@@ -229,14 +231,14 @@ never needs to vary, and a fixed key is what makes a double-release impossible r
 
 The question asked of every step, and the answers the code is shaped around.
 
-| Crash point                                   | Whose funds | Why not                                                                                                                                                                                                                                                                               |
-| --------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| After the risk checks, before the intent row  | nobody      | Nothing has been written and nothing posted.                                                                                                                                                                                                                                          |
-| After the intent row, before the hold         | nobody      | A `pending` row has no ledger post behind it and no engine presence. The only correct recovery is to delete it — and that is the only thing it can do. This is why the row comes **before** the hold: a hold posted against an order id that exists nowhere is money nobody can find. |
-| After the hold, before the engine             | nobody      | The row is `open` with its hold intact. Cancelling it releases in full; svc-matching answers `404` for an order it never took, which is an answer, not an error.                                                                                                                      |
-| The engine submission fails at the transport  | nobody      | **Indeterminate** — the engine may hold the order. The hold is deliberately _kept_, because releasing funds for an order that might be live in the book is exactly the failure this ordering exists to prevent. Recovery is a cancel.                                                 |
-| After a fill row, before the `tradeFill` post | nobody      | The fills table can only ever be **ahead** of the ledger, so `consumed` is never understated and a release is never overstated. Worst case the funds stay in `hold`; re-running the fill re-posts the same idempotency key and heals it.                                              |
-| After the release, before the terminal status | nobody      | Terminal status is what makes `finalize` return early, so the release happens **first**. A crash leaves a non-terminal row, a retry recomputes the same remainder, and the fixed release key makes the second post a no-op.                                                           |
+| Crash point                                   | Whose funds | Why not                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| After the risk checks, before the intent row  | nobody      | Nothing has been written and nothing posted.                                                                                                                                                                                                                                                                           |
+| After the intent row, before the hold         | nobody      | A `pending` row has no ledger post behind it and no engine presence. The only correct recovery is to delete it — and that is the only thing it can do. This is why the row comes **before** the hold: a hold posted against an order id that exists nowhere is money nobody can find.                                  |
+| After the hold, before the engine             | nobody      | The row is `open` with its hold intact. Cancelling it releases in full; svc-matching answers `404` for an order it never took, which is an answer, not an error.                                                                                                                                                       |
+| The engine submission fails at the transport  | nobody      | **Indeterminate** — the engine may hold the order. The hold is deliberately _kept_, because releasing funds for an order that might be live in the book is exactly the failure this ordering exists to prevent. Recovery is a cancel.                                                                                  |
+| After a fill row, before the `tradeFill` post | nobody      | Fills stay ahead of the ledger so `consumed` is never understated. **Fee-exhaust class is different:** if fees leave a side with nothing, `tradeFill` throws forever — so `settleFill` now refuses with `trade.fee_exceeds_fill` _before_ inserting rows. Ordinary post failures still heal on re-run of the same key. |
+| After the release, before the terminal status | nobody      | Terminal status is what makes `finalize` return early, so the release happens **first**. A crash leaves a non-terminal row, a retry recomputes the same remainder, and the fixed release key makes the second post a no-op.                                                                                            |
 
 The one ordering that is **not** safe, and is therefore not used: posting `tradeFill` before recording the fill.
 A crash there understates `consumed`, and the next release hands back money the fill already spent — drawn out of
@@ -293,15 +295,15 @@ which is exactly why it is the right place to be strict.
 
 The service checks these; the database enforces them regardless.
 
-| Constraint                                | What it catches                                                                                        |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `orders_hold_positive_ck`                 | **an order row with no hold behind it** — the one thing that would let the engine match unfunded value |
-| `orders_not_overfilled_ck`                | this service and the engine disagreeing about a book                                                   |
-| `orders_client_id_idx` (unique)           | a retried bot request opening a second position                                                        |
-| `fills_market_sequence_role_idx` (unique) | a redelivered fill event settling a match twice                                                        |
-| `markets_dust_free_ck`                    | a listing whose smallest legal fill is worth zero — the ledger will not post a movement of nothing     |
-| `markets_fee_bounds_ck`                   | a fee at or above 100%, which `tradeFill` would refuse to build entries for                            |
-| `orders_price_shape_ck`                   | a limit order with no price, or a market order carrying one                                            |
+| Constraint                                | What it catches                                                                                                                                                                                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `orders_hold_positive_ck`                 | **live orders must carry a non-negative hold** — was `> 0` at init; paper markets (`0006`) widened to `>= 0` so sim rows need no ledger post. Live `placeOrder` still posts `hold_amount > 0`; the CHECK alone no longer forbids an unfunded open row (service + paper isolation own that) |
+| `orders_not_overfilled_ck`                | this service and the engine disagreeing about a book                                                                                                                                                                                                                                       |
+| `orders_client_id_idx` (unique)           | a retried bot request opening a second position                                                                                                                                                                                                                                            |
+| `fills_market_sequence_role_idx` (unique) | a redelivered fill event settling a match twice                                                                                                                                                                                                                                            |
+| `markets_dust_free_ck`                    | a listing whose smallest legal fill is worth zero — the ledger will not post a movement of nothing                                                                                                                                                                                         |
+| `markets_fee_bounds_ck`                   | a fee at or above 100%, which `tradeFill` would refuse to build entries for                                                                                                                                                                                                                |
+| `orders_price_shape_ck`                   | a limit order with no price, or a market order carrying one                                                                                                                                                                                                                                |
 
 ---
 

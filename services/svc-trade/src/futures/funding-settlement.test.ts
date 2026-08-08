@@ -63,6 +63,41 @@ describe('funding-settlement planner', () => {
     expect(fundingAmount(amt('50000'), amt('0.0001'))).toBe(amt('5'));
   });
 
+  /**
+   * KNOWN RESIDUAL (funding period membership) — prove, do not fix.
+   *
+   * The loader returns positions open *now*, not as of the period. A position
+   * opened between a failed tick and its replay is a new pair with a new key,
+   * so the ledger posts an extra leg. applyFundingNets is idempotent on
+   * (position, period) and records only the first net for the original payer —
+   * ledger-vs-margin divergence. Product law needed for membership; this test
+   * freezes the arithmetic of the residual so a silent "fix" cannot land.
+   */
+  it('documents membership residual: a new position mid-period adds a new ledger key for the same period', () => {
+    const periodId = 'm1:period-membership';
+    const first = planFundingSettlement({
+      periodId,
+      marketId: 'm1',
+      rate: '0.0001',
+      positions: [pos('L1', 'long'), pos('S1', 'short', B)],
+    });
+    const afterOpen = planFundingSettlement({
+      periodId,
+      marketId: 'm1',
+      rate: '0.0001',
+      positions: [pos('L1', 'long'), pos('L_new', 'long'), pos('S1', 'short', B)],
+    });
+    expect(first).toHaveLength(1);
+    expect(afterOpen.length).toBeGreaterThan(first.length);
+    const firstKeys = new Set(first.map((l) => l.recipe.idempotencyKey));
+    const newKeys = afterOpen.map((l) => l.recipe.idempotencyKey).filter((k) => !firstKeys.has(k));
+    expect(newKeys.length).toBeGreaterThan(0);
+    // Original pair still present under the same key (replay-safe for that leg).
+    expect(firstKeys.has(afterOpen.find((l) => l.payerPositionId === 'L1' && l.payeePositionId === 'S1')!.recipe.idempotencyKey)).toBe(
+      true,
+    );
+  });
+
   it('zero rate → no legs', () => {
     const legs = planFundingSettlement({
       periodId: 'm1:t0',

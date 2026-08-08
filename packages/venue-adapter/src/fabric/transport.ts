@@ -43,6 +43,22 @@ export interface HttpPort {
 export interface StreamHandle {
   /** Raw frames, already JSON-parsed, in arrival order. Ends when the socket closes. */
   readonly messages: AsyncIterable<unknown>;
+  /**
+   * Send one frame to the venue, JSON-encoded.
+   *
+   * A websocket is bidirectional and the first venue in this fabric hid that:
+   * Binance puts the subscription in the URL path and the client never speaks, so
+   * a receive-only handle looked like the whole shape. It is not — most venues
+   * subscribe by MESSAGE (`{"op":"subscribe","args":[…]}`), and a heartbeat is a
+   * message too.
+   *
+   * OPTIONAL rather than required, so that a caller holding a receive-only double
+   * keeps compiling. An adapter that needs it must check and REFUSE — see
+   * `bybit-spot.ts`. Silently skipping the subscribe would leave a socket that is
+   * open, healthy, and permanently silent, which is indistinguishable from a
+   * quiet market in every metric this fabric has.
+   */
+  send?(payload: unknown): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -190,6 +206,9 @@ export function webSocketStreamPort(capacity = 4_096): StreamPort {
 
       return {
         messages: queue,
+        async send(payload: unknown) {
+          socket.send(JSON.stringify(payload));
+        },
         async close() {
           queue.close();
           socket.close();
