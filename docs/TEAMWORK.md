@@ -4,17 +4,17 @@ How Nitro and Denon build this together. One page. If it grows past one page it 
 
 ## Aim — what agents build next
 
-**Fix what is built before building more.** `services/svc-trade/src/futures/` is 38 files of live liquidation, margin, mark and funding code. Denon's `docs/adr/2026-08-05-futures-risk-and-mark-law.md` is Accepted and **not implemented**: realised profit still pays unbounded from the house fee pot, so a winning close is refused when the pot is short; the liquidation loop has no per-position error handling, so one failure skips every remaining position; there is no leverage cap; and neither the liquidator nor the seeder consults the kill switch. Futures jobs default OFF, so nothing is at risk today — they fire the day one env var flips.
+**Fix what is built before building more.** Futures already has a large merged surface (`services/svc-trade/src/futures/`) and Denon's `docs/adr/2026-08-05-futures-risk-and-mark-law.md` is **Accepted**. Much of that law has since landed (mark/caller prices, funding idempotency, profit-source bound, order path behind a flag that ships **off**). The remaining job is residual law vs code — not a greenfield product — and it still beats inventing new phase-5 volume. Re-derive the open gaps on tip before coding; do not treat a day-old gap list as truth.
 
 Then, in **Denon's stated order** (`docs/DIRECTION-2026-07-31.md` §1 — _"futures are NOT first, and this is the decision I most want respected"_):
 
-| #   | His order               | State today                               | Needs                                                           |
-| --- | ----------------------- | ----------------------------------------- | --------------------------------------------------------------- |
-| 1   | Seed books / mm-bot     | `ready`, owner Nitro, no spec             | Denon ADR: how seeded depth is disclosed in the orderbook API   |
-| 2   | Multi-asset instruments | **no tracker row exists**                 | a row, then resume `feat/multi-asset-instruments`               |
-| 3   | Perpetual futures       | 38 files built, ADR unimplemented         | the work above                                                  |
-| 4   | OTC desk                | `ready`, unowned, no spec                 | do not dual-build until claimed; was briefly `cursor-swarm-otc` |
-| 5   | Algo (TWAP only)        | `wip`, owner Nitro, ADR accepted, no spec | a spec                                                          |
+| #   | His order               | State today (re-derived 2026-08-08)  | Needs                                                         |
+| --- | ----------------------- | ------------------------------------ | ------------------------------------------------------------- |
+| 1   | Seed books / mm-bot     | `ready`, owner Nitro                 | Denon ADR: how seeded depth is disclosed in the orderbook API |
+| 2   | Multi-asset instruments | **no tracker row exists**            | a row, then resume `feat/multi-asset-instruments`             |
+| 3   | Perpetual futures       | `ready`, large surface, ADR residual | residual law implementation on tip, flag stays off until safe |
+| 4   | OTC desk                | `ready`, unowned                     | claim before dual-build                                       |
+| 5   | Algo (TWAP only)        | `wip`, owner Nitro                   | a spec                                                        |
 
 Buildable today but **not** on his list, so not first: `trade.forex` (cannot list until fiat rails exist), `trade.ccxt-api`, `venue.aggregation` (market-data half only).
 
@@ -60,6 +60,6 @@ node tooling/scripts/teamwork.mjs
 1. **Places recording who owns what** — target **3**.
 2. **Words before an agent's first edit** — target **under 1,000**.
 
-The counting rule is the two lists inside that script, so changing what counts is a reviewable diff. Run it from a checkout level with `origin/main`; it warns if you are behind. As of 2026-08-08 the answers are **14** and **42,847**.
+The counting rule is the two lists inside that script, so changing what counts is a reviewable diff. Run it from a checkout level with `origin/main`; it warns if you are behind. As of 2026-08-08 the answers are **14** and **42,847** — re-run the command; do not quote these.
 
 If either number rises, the bureaucracy is regrowing. A new coordination mechanism must delete an existing one.
