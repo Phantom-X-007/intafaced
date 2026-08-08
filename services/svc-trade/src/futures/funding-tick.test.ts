@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseAmount as amt, type PostRequest } from '@intafaced/ledger-client';
-import { memoryFundingPeriodStore, runFundingTick, type FundingRateSource, type FundingPositionLoader } from './funding-tick.js';
+import {
+  memoryFundingMarginApplier,
+  memoryFundingPeriodStore,
+  runFundingTick,
+  type FundingRateSource,
+  type FundingPositionLoader,
+} from './funding-tick.js';
 import type { FundingOpenPosition } from './funding-settlement.js';
 
 const A = '11111111-1111-4111-8111-111111111111';
@@ -69,6 +75,7 @@ describe('runFundingTick', () => {
         rates,
         positions: positionsOf(longShort()),
         periods: memoryFundingPeriodStore(),
+        margins: memoryFundingMarginApplier(),
         ledger,
       },
       'm1',
@@ -88,6 +95,7 @@ describe('runFundingTick', () => {
         rates: fixedRate('0.0001'),
         positions: positionsOf([]),
         periods: memoryFundingPeriodStore(),
+        margins: memoryFundingMarginApplier(),
         ledger,
       },
       'm1',
@@ -105,6 +113,7 @@ describe('runFundingTick', () => {
         rates: fixedRate('0.0001', 'm1:period-1'),
         positions: positionsOf(longShort()),
         periods,
+        margins: memoryFundingMarginApplier(),
         ledger,
       },
       'm1',
@@ -127,6 +136,7 @@ describe('runFundingTick', () => {
       rates: fixedRate('0.0001', 'm1:period-2'),
       positions: positionsOf(longShort()),
       periods,
+      margins: memoryFundingMarginApplier(),
       ledger,
     };
     await runFundingTick(deps, 'm1');
@@ -143,6 +153,7 @@ describe('runFundingTick', () => {
         rates: fixedRate('0', 'm1:zero'),
         positions: positionsOf(longShort()),
         periods,
+        margins: memoryFundingMarginApplier(),
         ledger,
       },
       'm1',
@@ -164,6 +175,7 @@ describe('runFundingTick', () => {
         rates: { quote: async () => null },
         positions: positionsOf(longShort()),
         periods,
+        margins: memoryFundingMarginApplier(),
         ledger,
         now: () => fixed,
       },
@@ -188,6 +200,7 @@ describe('runFundingTick', () => {
         rates: fixedRate('0.0001', 'm1:empty-book'),
         positions: positionsOf([]),
         periods,
+        margins: memoryFundingMarginApplier(),
         ledger,
       },
       'm1',
@@ -211,6 +224,7 @@ describe('runFundingTick', () => {
         rates: { quote },
         positions: positionsOf(longShort()),
         periods: memoryFundingPeriodStore(),
+        margins: memoryFundingMarginApplier(),
         ledger,
         now: () => fixed,
       },

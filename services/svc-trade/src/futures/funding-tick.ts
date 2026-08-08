@@ -66,7 +66,6 @@ export interface FundingPeriodStore {
  *
  * Payers: margin_current -= paid, funding_paid += paid.
  * Payees: funding_paid -= received (receipt goes to available, not re-margin).
- * Optional on older wires — production must set it or close over-releases.
  *
  * `periodId` is not decoration. This runs between an idempotent ledger post and
  * the settle marker that stops the tick re-running, so a restart in that gap
@@ -83,8 +82,29 @@ export interface FundingTickDeps {
   positions: FundingPositionLoader;
   periods: FundingPeriodStore;
   ledger: Pick<LedgerClient, 'post'>;
-  /** Required in production so margin_current tracks collateral. */
-  margins?: FundingMarginApplier;
+  /**
+   * REQUIRED, and the requirement is the fix.
+   *
+   * This was `margins?`, with `if (deps.margins)` at the call site. #1047 made
+   * the applier idempotent on `(position, period)` and closed the double-debit —
+   * but only for a wire that passes one. A wire that omits it skipped the step
+   * entirely and silently: `margin_current` never moved with funding, so close
+   * and liquidation read open-time margin and over-release collateral. That is
+   * the Tier-1 defect #1034 existed to close, reachable again through an
+   * omission the compiler was happy with and nothing logged at boot.
+   *
+   * A runtime throw was the other option and is worse: it fails at the first
+   * funding tick, which may be hours after the deploy that caused it, on a
+   * market that then stops settling. Required in the type fails at build.
+   *
+   * What the type still cannot state: the applier must be IDEMPOTENT on
+   * (position, period), because this call sits between an idempotent ledger post
+   * and the settle marker written after it. `sqlFundingMarginApplier` gets that
+   * from 0014's claim table; a hand-rolled applier that decrements twice is
+   * still a double-debit, so the interface says so above and the memory helper
+   * below models it.
+   */
+  margins: FundingMarginApplier;
   /** Optional clock for tests. */
   now?: () => Date;
 }
@@ -153,9 +173,12 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
   // is written last, so a restart in this gap replays everything above it.
   // Without this step at all, close/liquidation read open-time margin and
   // over-release; without its idempotency, a replay charges margin twice.
-  if (deps.margins) {
-    await deps.margins.applyFundingNets(netFundingPaid(legs), quote.periodId);
-  }
+  //
+  // No longer guarded by `if (deps.margins)`. The guard read as caution and
+  // acted as an opt-out from the margin move: a wire that forgot the dep settled
+  // funding in the ledger and left every position's margin untouched, with no
+  // error anywhere. `margins` is required, so this always runs.
+  await deps.margins.applyFundingNets(netFundingPaid(legs), quote.periodId);
 
   await deps.periods.markSettled(quote.periodId, {
     legCount: legs.length,
@@ -189,6 +212,47 @@ export function netFundingPaid(legs: readonly FundingLeg[]): { positionId: strin
 }
 
 /** In-memory period store for unit tests and single-process dev. */
+/**
+ * In-memory margin applier, with the production idempotency rule modelled.
+ *
+ * Exists because `margins` is now required, and the honest way to satisfy a
+ * required money dependency in a test is a working one, not `{ async
+ * applyFundingNets() {} }`. A no-op stub would let a test pass while asserting
+ * the opposite of production: it is exactly the shape of the `if (deps.margins)`
+ * skip this change removes.
+ *
+ * Claims `(positionId, periodId)` before applying, the same key and the same
+ * order as 0014's claim table, so a replay is a no-op here for the same reason it
+ * is a no-op against Postgres. `paidByPosition` lets a test read the effect
+ * without a database.
+ */
+export function memoryFundingMarginApplier(): FundingMarginApplier & {
+  paidByPosition(positionId: string): Amount;
+  applied(): ReadonlyArray<{ positionId: string; periodId: string }>;
+} {
+  const claimed = new Set<string>();
+  const paid = new Map<string, Amount>();
+  const log: Array<{ positionId: string; periodId: string }> = [];
+
+  return {
+    async applyFundingNets(nets, periodId) {
+      for (const net of nets) {
+        const key = `${net.positionId}:${periodId}`;
+        if (claimed.has(key)) continue;
+        claimed.add(key);
+        paid.set(net.positionId, (paid.get(net.positionId) ?? 0n) + net.paid);
+        log.push({ positionId: net.positionId, periodId });
+      }
+    },
+    paidByPosition(positionId) {
+      return paid.get(positionId) ?? 0n;
+    },
+    applied() {
+      return log;
+    },
+  };
+}
+
 export function memoryFundingPeriodStore(): FundingPeriodStore {
   const settled = new Map<string, number>();
   const skips = new Map<string, { reason: FundingSkipReason; marketId: string }>();
