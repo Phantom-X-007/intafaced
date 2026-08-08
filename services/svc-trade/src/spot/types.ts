@@ -216,6 +216,7 @@ export type TradeErrorCode =
   | 'trade.algo_mark_missing'
   | 'trade.algo_insufficient_balance'
   | 'trade.algo_child_refused'
+  | 'trade.algo_principal_unavailable'
   | 'trade.algo_market_closed'
   /** Identity S2S ownership consult failed — refuse rather than store an unvalidated id */
   | 'trade.sub_account_unavailable'

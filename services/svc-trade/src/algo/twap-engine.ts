@@ -310,6 +310,19 @@ export class TwapEngine {
         return this.halt(parent, `insufficient balance mid-schedule: ${message}`, 'trade.algo_insufficient_balance');
       }
 
+      // No authority to act → HALT, and do NOT consume the slice.
+      //
+      // A miss means "the market would not take this slice"; the schedule
+      // advances because that slice's moment has passed. This is a different
+      // thing: the venue cannot act for the caller AT ALL, and every remaining
+      // slice will fail the same way. Recording it as a miss burned the entire
+      // remaining schedule in `sliceIntervalMs × N` and left the parent
+      // `completed` having placed nothing — an order silently destroyed by a
+      // deploy, and "completed" is the wrong word for it.
+      if (err instanceof TradeError && err.code === 'trade.algo_principal_unavailable') {
+        return this.halt(parent, message, 'trade.algo_principal_unavailable');
+      }
+
       return this.recordMiss(parent, {
         sliceIndex: parent.nextSliceIndex,
         code: 'trade.algo_child_refused',

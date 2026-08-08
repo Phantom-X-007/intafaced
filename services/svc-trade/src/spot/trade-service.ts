@@ -246,7 +246,29 @@ export class TradeService {
           if (!parent) throw new TradeError(`algo ${req.parentId} not found`, 'trade.algo_not_found');
           const principal = this.algoPrincipals.get(parent.userId);
           if (!principal) {
-            throw new TradeError('algo principal missing for child place', 'trade.algo_child_refused');
+            // ── SOCKET §13 · `socket.algo-principal-durability` ─────────────
+            //
+            // `algoPrincipals` is in-process and only ever written by
+            // `createTwap`. `tickAllAlgos` rehydrates the PARENT from Postgres
+            // but cannot rehydrate the caller's authority, so after a restart
+            // every schedule that survived finds nothing here.
+            //
+            // The obvious fix — persist the principal with the parent — is not
+            // a refactor: it stores an authorisation grant that outlives the
+            // session that gave it, and how long a schedule may carry the right
+            // to trade on someone's behalf is owner law, not a default to pick.
+            // Minting a principal from the parent's userId is worse — that is
+            // the service granting itself authority the user never presented.
+            //
+            // Until that is decided the honest behaviour is to STOP. The engine
+            // halts on this code and leaves the schedule intact, so the user
+            // finds an order that stopped with a stated reason and can cancel
+            // or re-place it — rather than one that quietly ran to "completed"
+            // having placed nothing.
+            throw new TradeError(
+              "this schedule outlived the session that authorised it — refusing to place on the caller's behalf (SOCKET §13 socket.algo-principal-durability)",
+              'trade.algo_principal_unavailable',
+            );
           }
           try {
             const order = await this.placeOrder(principal, {
