@@ -1,6 +1,6 @@
 # AFK residual STOP — Claude session, 2026-08-08
 
-**Tip at writing:** `18755dd9` — `fix(ledger-client): delete a hold builder every post refuses, and guard the rest (#1054)`
+**Tip at writing:** `866e747a` — `test(notify): the inbox store was the last one nothing executed (#1057)`
 **Peer:** a second agent session ran the same night in `svc-ledger` / `svc-trade` (#1047, #1049, #1050, #1051, #1055, #1057, #1058).
 
 This session took the two lanes the peer was not in: `svc-notify` durability and
@@ -57,13 +57,22 @@ sweep that silently matches nothing passes forever.
 
 ## 2 · In flight when this was written
 
-| PR    | State                                                                                    |
-| ----- | ---------------------------------------------------------------------------------------- |
-| #1056 | `svc-notify` inbox — memory engine fixed to match Postgres, two-engine conformance suite |
-| #1059 | `packages/events` — the bus announces a message it has given up on                       |
+| PR    | State                                                                                                |
+| ----- | ---------------------------------------------------------------------------------------------------- |
+| #1056 | **MERGED** — `svc-notify` inbox: memory engine fixed to match Postgres, two-engine conformance suite |
+| #1059 | **MERGED** — `packages/events`: the bus announces a message it has given up on                       |
+| #1063 | Open — `svc-bank` docs, see §4b                                                                      |
 
-Both had `pnpm verify` pass locally with the run labelled INCOMPLETE (no local
-Postgres, no local NATS). Their gates are CI's to report, not this note's.
+Four merges this session: #1053, #1054, #1056, #1059. Each passed CI in full;
+each `pnpm verify` run on this machine was labelled INCOMPLETE (no local
+Postgres, no local NATS) and is reported that way rather than as green — the
+Postgres and NATS halves were proven by CI, not here.
+
+Worth noting for #1059: the new assertion was confirmed to have **executed**
+against the real NATS container in CI, not skipped — the `bus.message_abandoned`
+line appears in the job log with the right subject and idempotency key. A test
+that would have silently skipped is the failure mode that matters for a
+skip-if-unavailable suite.
 
 ---
 
@@ -138,15 +147,22 @@ direction in which this costs money.
 
 **Why it is not fixed here:** making them agree is a correctness fix, but
 choosing _which_ order is a money judgement with a real asymmetry, and the
-Postgres side lives in `services/svc-ledger`, where the peer session had open
-PRs all night. Changing only the memory side would make the reference
-implementation match production while making it **less** money-safe — a silent
-downgrade dressed as a conformance fix.
+Postgres side lives in `services/svc-ledger`. Changing only the memory side
+would make the reference implementation match production while making it
+**less** money-safe — a silent downgrade dressed as a conformance fix.
 
-**Needs:** an owner's call on the order, then one change on each side plus a
-conformance case that replays an invalid body after commit. The existing
-conformance suite only ever replays a _valid_ request, which is why the
-divergence has been invisible to the one suite whose whole job is forbidding it.
+**RESOLVED — the peer session owns it.** `claim:check` on
+`services/svc-ledger/src/ledger/postgres-ledger.ts` reports an open branch
+`fix/ledger-idempotency-order` on exactly that file. Dropped here rather than
+duplicated, per the collision rule. The analysis above is left in place because
+it is what a reviewer of that PR needs: **the direction that costs money is
+validate-first**, and the memory comment justifying the other order is false
+about its own code.
+
+One thing to check on that PR when it lands: the conformance suite only ever
+replays a _valid_ request, which is why the divergence has been invisible to the
+one suite whose whole job is forbidding it. A case that replays an **invalid**
+body after commit is what makes the fix stick.
 
 ### 3.3 A non-`Error` throw from a handler takes the consumer down
 
@@ -199,6 +215,41 @@ either note carries.
 
 ---
 
+## 4b · `svc-bank`, audited — mostly a negative result
+
+Lead 1 below was taken before stopping. Recording what was checked and came out
+**clean**, because "svc-bank was audited" is worth nothing without the list:
+
+- **Rounding.** README: _"Rounding is always down, in the reserve's favour."_
+  All fourteen `mul` / `div` / `mulBps` call sites in the service —
+  `earn/interest.ts` and `loans/risk.ts` — pass rounding **explicitly**.
+  `dailyInterest` floors twice. The promise holds. Notably this is the same
+  claim `packages/ledger-client` makes and breaks (§3.1): svc-bank is the
+  disciplined one.
+- **The double-transfer guard.** README: _"Advance `next_run_at` last."_
+  `driveSchedule` does, after firing both stranded claims and planned
+  occurrences, and derives what already fired from `MAX(occurrence)` on the
+  executions table rather than from a counter on the schedule row. Holds.
+- **The `userStake` collision the README calls catastrophic.** Structurally
+  impossible since `purpose` joined account identity — `accounts_identity_purpose_idx`
+  is unique and includes it, and the two services use different purposes
+  (`token:stake:<id>` / `bank:earn:<id>`), different per position. The danger is
+  real in the docs and gone in the code.
+
+**One finding, shipped as #1063:** the README answers "How much have I got
+earning?" with `ledger.balance(userStake(userId, asset))` — a two-argument call
+to a function that takes three and throws without the third. Alongside it, the
+svc-token section and `env.ts` both justify the `TOKEN_ASSET_ID` guard with that
+dead collision. The guard is right and stays (§8.1: native staking belongs to
+svc-token); only its reasoning was stale, which is how a guard gets relaxed for
+the wrong reason.
+
+No reachable money break was found in `svc-bank`. Stated plainly rather than
+padded — the service is well built, and the next auditor should spend their time
+on `svc-pay` instead.
+
+---
+
 ## 5 · For the next session
 
 The method that produced both merges is the one the previous note named, and it
@@ -209,16 +260,16 @@ state would make it false.
 
 Three specific leads, in order of expected value:
 
-1. **`services/svc-bank`** — never audited this way. Loans, cards, ramps,
-   transfers, and the freeze-cascade interaction all carry the same style of
-   load-bearing comment. The known-recent fix (#1021, loan retry) suggests the
-   area is live.
+1. ~~`services/svc-bank`~~ — **taken, see §4b.** Rounding and the transfer
+   scheduler both hold; one stale-docs finding shipped as #1063; no reachable
+   money break found. Cards, ramps and the freeze-cascade interaction were NOT
+   reached and remain open.
 2. **`services/svc-pay` / public-api** — webhook journal, sandbox keys,
-   idempotency. No live acquirer work (Class X).
-3. **"tested by nothing"** — two of the ten merges in the previous wave were
-   exactly this, and both were money-adjacent. `packages/venue-adapter` carries
-   money arithmetic with the default-rounding exposure named in §3.1 above and
-   has not been checked from that angle.
+   idempotency. Now the best-value lane. No live acquirer work (Class X).
+3. **`packages/venue-adapter`** — the four call sites named in §3.1 live here
+   and in svc-trade, and this package has never been checked from the
+   "tested by nothing" angle. Two of the previous wave's ten merges were exactly
+   that, and both were money-adjacent.
 
 **Not agent-decidable, unchanged from the previous note:**
 `NOTIFY_GATEWAY_TIMEOUT_MS` at its 30s ceiling breaks the lease bound; real
