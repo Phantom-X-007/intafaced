@@ -261,12 +261,18 @@ export class EarnService {
         const maturesAt =
           pool.kind === 'fixed' && pool.termDays !== null ? new Date(now.getTime() + pool.termDays * 24 * 60 * 60 * 1000) : null;
 
-        await this.sql`
+        const claimed = await this.sql<Array<{ id: string }>>`
           INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
           VALUES (${positionId}, ${pool.id}, ${input.userId}, ${pool.assetId},
                   ${formatAmount(input.amount)}::numeric, ${now}, ${maturesAt}, 'pending')
           ON CONFLICT (id) DO NOTHING
+          RETURNING id
         `;
+
+        if (claimed.length === 0) {
+          const finished = await this.reuseOrRefuse(positionId, input.userId, pool.id, input.amount);
+          if (finished) return finished;
+        }
 
         try {
           await this.ledger.post(
@@ -292,6 +298,45 @@ export class EarnService {
         return this.position(positionId);
       },
     );
+  }
+
+  /**
+   * A `positionId` that is already taken: the same deposit arriving twice, or a
+   * DIFFERENT deposit wearing an id somebody else already used.
+   *
+   * Only the first is a retry, and `ON CONFLICT (id) DO NOTHING` cannot tell
+   * them apart on its own. Without this check the second one ran the whole
+   * deposit path against the first one's row: the ledger post moved the SECOND
+   * caller's value into a stake pot keyed by their own id, the `UPDATE … status
+   * = 'active'` landed on the FIRST caller's row, and the two halves of this
+   * service's own reconciliation — `principalOf()` from the table and
+   * `stakedOf()` from the ledger — stopped agreeing. The second caller was told
+   * their deposit was earning while their money sat in a pot no `withdraw` of
+   * theirs could reach, because `withdraw` resolves the owner from the row.
+   *
+   * The check svc-token's `claimStakePending` already makes, and the same
+   * reasoning `bank.loan_principal_mismatch` makes for loans: a retry that asks
+   * for different terms is a different request.
+   *
+   * Returns the existing position when the retry is genuine and already
+   * finished — nothing left to post — and null when it is genuine but still
+   * `pending`, which re-drives (the ledger post is idempotent on the id).
+   */
+  private async reuseOrRefuse(positionId: string, userId: string, poolId: string, amount: Amount): Promise<PositionRecord | null> {
+    const rows = await this.sql<Array<{ user_id: string; pool_id: string; principal: string; status: string }>>`
+      SELECT user_id, pool_id, principal, status FROM bank.earn_positions WHERE id = ${positionId}
+    `;
+    const existing = rows[0];
+    if (!existing) throw new BankError(`Position ${positionId} disappeared after a conflict`, 'bank.position_not_found');
+
+    if (existing.user_id !== userId || existing.pool_id !== poolId || parseAmount(existing.principal) !== amount) {
+      throw new BankError(
+        `Position ${positionId} already exists on different terms — a deposit that is not a retry of that one needs a new position id`,
+        'bank.position_conflict',
+      );
+    }
+
+    return existing.status === 'pending' ? null : this.position(positionId);
   }
 
   async position(positionId: string): Promise<PositionRecord> {

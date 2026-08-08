@@ -248,6 +248,8 @@ bank.loan.reserve.fund:<debtAssetId>:<fundingId>     one reserve top-up
 
 `occurrence` is derived from `(startsAt, cadence, n)` — never from a counter. Two workers, a retry, and a catch-up run after an outage all compute the same index for the same intended transfer.
 
+**A key that is already taken is a retry only if the terms match.** `positionId` and `loanId` are client-supplied, so the id alone cannot separate "the same request arriving twice" from "a different request wearing an id somebody has already used" — and `ON CONFLICT (id) DO NOTHING` silently keeps the first row while every guard runs on the new input. Both paths therefore compare before they proceed, and refuse on a mismatch: `bank.position_conflict`, `bank.loan_principal_mismatch`, `bank.loan_borrower_mismatch`. Same id + same terms stays idempotent, which is the whole reason the id is the client's to choose.
+
 ---
 
 ## Coordination with svc-token
