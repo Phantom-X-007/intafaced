@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { ACCOUNT_KINDS } from '@intafaced/ledger-client';
 
 /**
  * LOCK POTS MUST NAME THEIR CLAIM IN THE DATABASE (STOP §4.2b #1).
@@ -55,12 +56,55 @@ if (!available) {
       ).resolves.toBeDefined();
     });
 
-    it.each(['hold', 'escrow', 'stake', 'collateral'] as const)('REFUSES unpurposed %s via raw SQL (no ledger-client)', async (kind) => {
+    /**
+     * DRIVEN OFF THE KIND LIST, NOT A COPY OF IT.
+     *
+     * 0007's CHECK enumerated the four locked kinds, and this test enumerated
+     * the same four independently — so a fifth lock kind would have been added
+     * to the enum, missed by the constraint, and missed by the test that exists
+     * to guard the constraint. Both lists have to come from one place, and
+     * `ACCOUNT_KINDS` in ledger-client is where kinds are declared.
+     *
+     * `available` is the single exemption: it reserves nothing, so it has
+     * nothing to name. Everything else must justify itself in the database, and
+     * a new kind is covered here the moment it joins the enum.
+     */
+    const LOCK_KINDS = ACCOUNT_KINDS.filter((k) => k !== 'available');
+
+    it('covers every non-available kind the enum declares', () => {
+      // Guards the guard: if `ACCOUNT_KINDS` were ever empty or mis-imported,
+      // `it.each` below would silently assert nothing at all.
+      expect(LOCK_KINDS.length).toBeGreaterThanOrEqual(4);
+      expect(LOCK_KINDS).not.toContain('available');
+    });
+
+    it.each(LOCK_KINDS)('REFUSES unpurposed %s via raw SQL (no ledger-client)', async (kind) => {
       await expect(
         db.sql`
             INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
             VALUES ('user'::owner_type, ${USER}, 'USDT', ${kind}::account_kind, '')
           `,
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    });
+
+    /**
+     * THE BACKFILL 0007 SHIPPED, AS A TEST.
+     *
+     * 0008 refuses a `legacy:<id>` purpose rather than accepting it, because a
+     * purpose that names the row it is attached to answers nothing. Under 0007's
+     * constraint this insert SUCCEEDED — the string is non-empty, so the CHECK
+     * was satisfied by data it existed to catch.
+     *
+     * The migration cannot re-raise here (its refusal ran before this schema had
+     * any rows), so the constraint has to carry the rule forward. Anything that
+     * looks like the minted identity is refused on the way in.
+     */
+    it('REFUSES the legacy: stamp 0007 would have minted', async () => {
+      await expect(
+        db.sql`
+          INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
+          VALUES ('user'::owner_type, ${USER}, 'USDT', 'collateral'::account_kind, ${'legacy:' + USER})
+        `,
       ).rejects.toMatchObject({ code: CHECK_VIOLATION });
     });
 
