@@ -1,8 +1,8 @@
 # Revised five dispatches — anti-drift pass (2026-08-08)
 
-**Status:** ready to paste. Holds the five C1–C5 briefs that Claude planned to release after Nitro’s full green light, revised after a four-lane anti-drift audit.
+**Status:** ready to paste. Holds the five C1–C5 briefs that the axis planner planned to release after Nitro’s full green light, revised after a four-lane anti-drift audit.
 
-**Parent session:** Claude Code `bbaab7e1-2319-432c-ba6f-0c97cf7bb44d` (axis planner). Died mid-synthesis on org Claude-subscription disable; four subagent reports completed, two parents failed. Synthesis completed here from those reports + live re-check.
+**Parent session:** Code session `bbaab7e1-2319-432c-ba6f-0c97cf7bb44d` (axis planner). Died mid-synthesis on org subscription disable; four subagent reports completed, two parents failed. Synthesis completed here from those reports + live re-check.
 
 **Plan home:** [`docs/AXIS-IMPROVEMENT-PLAN-2026-08-08.md`](AXIS-IMPROVEMENT-PLAN-2026-08-08.md) · PR [#1090](https://github.com/Phantom-X-007/intafaced/pull/1090)
 
@@ -20,7 +20,7 @@
 | **C4 shipping** | **Invented deploy policy** | **ADR first.** `workflow_dispatch` only until branch protection (G1). No deploy-on-merge-to-main. No host yet → capability is file + recommendation, not go-live.                                               |
 | **C5 estate**   | **Violates as written**    | Do **not** build a second blocker report — widen `swarm.mjs` socket filters + use `BOARD-CLEAR-HUMAN-BLOCKERS.md`. Never unattended `wt:gc --apply`. Do not touch `value-gate` thresholds.                      |
 
-**Claude’s earlier “apps/web was built when Bizzan already existed” framing is false on chronology** — `apps/web` landed two days _before_ the vendored tree. Real failure modes: assessment treated as decision; work continued on scaffold after superior product arrived; decision lived only in ADR for a day and craft still landed in the retired path.
+**The earlier “apps/web was built when the upstream exchange vendor already existed” framing is false on chronology** — `apps/web` landed two days _before_ the vendored tree. Real failure modes: assessment treated as decision; work continued on scaffold after superior product arrived; decision lived only in ADR for a day and craft still landed in the retired path.
 
 ---
 
