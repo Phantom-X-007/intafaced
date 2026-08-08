@@ -29,6 +29,12 @@ export interface MirrorPlan {
   readonly side: MirrorSide;
   readonly qty: Amount;
   readonly notional: Amount;
+  /**
+   * Signed net exposure once this mirror is taken — the value the caller must
+   * persist. Carried on the plan so the write cannot recompute it differently
+   * from the check that approved it.
+   */
+  readonly nextExposure: Amount;
   readonly reason: 'within_envelope';
 }
 
@@ -40,7 +46,36 @@ export interface PresentMirrorPlan {
   readonly side: MirrorSide;
   readonly qty: string;
   readonly notional: string;
+  readonly nextExposure: string;
   readonly reason: 'within_envelope';
+}
+
+/**
+ * Exposure after mirroring one leader fill.
+ *
+ * Exposure is a SIGNED net notional: a buy adds, a sell subtracts, and a
+ * follower mirroring a leader who goes net short simply carries a negative
+ * number. The cap bounds its MAGNITUDE, which is what "aggregate exposure"
+ * means — how much position the envelope permits, in either direction.
+ *
+ * This exists as one exported function because the bug it replaces was two
+ * expressions that disagreed: `planMirror` checked `current + notional` and
+ * `CopyService` separately wrote `current + plan.notional`, both ignoring the
+ * side. Exposure therefore only ever went UP. A follower who opened and closed
+ * ten 100-unit positions read as 2000 of open exposure while holding nothing,
+ * and was locked out of their own envelope permanently — with no way back down,
+ * because nothing anywhere ever decremented it.
+ *
+ * The check and the write now call the same function, so they cannot drift
+ * apart again.
+ */
+export function exposureAfterMirror(currentExposure: Amount, side: MirrorSide, notional: Amount): Amount {
+  return side === 'buy' ? currentExposure + notional : currentExposure - notional;
+}
+
+/** Magnitude of a signed exposure — the cap is direction-agnostic. */
+export function absExposure(exposure: Amount): Amount {
+  return exposure < 0n ? -exposure : exposure;
 }
 
 /**
@@ -79,8 +114,8 @@ export function planMirror(input: {
     );
   }
 
-  const nextExposure = input.currentExposure + observation.notional;
-  if (nextExposure > follow.envelope.maxAggregateExposure) {
+  const nextExposure = exposureAfterMirror(input.currentExposure, observation.side, observation.notional);
+  if (absExposure(nextExposure) > follow.envelope.maxAggregateExposure) {
     throw new CopyError(
       `Mirror would exceed aggregate exposure cap ${formatAmount(follow.envelope.maxAggregateExposure)}`,
       'trade.copy_cap_exceeded',
@@ -95,6 +130,7 @@ export function planMirror(input: {
     side: observation.side,
     qty: observation.qty,
     notional: observation.notional,
+    nextExposure,
     reason: 'within_envelope',
   };
 }
@@ -141,6 +177,7 @@ export function presentMirrorPlan(plan: MirrorPlan): PresentMirrorPlan {
     side: plan.side,
     qty: formatAmount(plan.qty),
     notional: formatAmount(plan.notional),
+    nextExposure: formatAmount(plan.nextExposure),
     reason: plan.reason,
   };
 }

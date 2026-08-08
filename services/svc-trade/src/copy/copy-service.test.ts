@@ -276,4 +276,103 @@ describe('CopyService', () => {
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
   });
+
+  /**
+   * Closing a mirrored position must give the exposure back.
+   *
+   * Exposure was `current + notional` for BOTH sides, in two places that had
+   * drifted apart — so it only ever went up. A follower who opened and closed
+   * the same position repeatedly was permanently locked out of their own
+   * envelope while holding nothing, with no path anywhere that decremented it.
+   */
+  it('a round trip returns to zero exposure — a sell is not another buy', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '100',
+      expiresAt: futureExpiry,
+    });
+
+    const mirror = (side: 'buy' | 'sell', notional: string) =>
+      svc.planMirrorForFollow(principal, { followId: follow.followId, marketId: 'BTC-USDT', side, qty: '0.01', notional });
+
+    const opened = await mirror('buy', '100');
+    expect(opened.nextExposure).toBe('100');
+    expect(await store.getExposure(follow.followId)).toBe(parseAmount('100'));
+
+    const closed = await mirror('sell', '100');
+    expect(closed.nextExposure).toBe('0');
+    expect(await store.getExposure(follow.followId)).toBe(0n);
+
+    // Ten more round trips at the full cap. Under the old arithmetic the second
+    // buy alone was already refused; a follower holding nothing must not be.
+    for (let i = 0; i < 10; i += 1) {
+      await mirror('buy', '100');
+      await mirror('sell', '100');
+    }
+    expect(await store.getExposure(follow.followId)).toBe(0n);
+  });
+
+  it('the cap bounds exposure in BOTH directions, not just long', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '100',
+      expiresAt: futureExpiry,
+    });
+    const mirror = (side: 'buy' | 'sell', notional: string) =>
+      svc.planMirrorForFollow(principal, { followId: follow.followId, marketId: 'BTC-USDT', side, qty: '0.01', notional });
+
+    // Net short to the cap is allowed — a leader who goes short is mirrorable.
+    await mirror('sell', '100');
+    expect(await store.getExposure(follow.followId)).toBe(-parseAmount('100'));
+
+    // Beyond it, in that direction, is refused: the cap is a magnitude.
+    await expect(mirror('sell', '1')).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
+  });
+
+  it('unfollow clears the churn counters, so re-following is a fresh period', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const envelope = {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '100',
+      expiresAt: futureExpiry,
+    };
+    const follow = await svc.follow(principal, envelope);
+
+    // Stats are keyed leader:follower, not followId — so they outlive the row.
+    const key = `${LEADER}:${FOLLOWER}`;
+    await store.setPeriodStats(key, { earningsPaid: parseAmount('100'), roundTrips: 42 });
+
+    await svc.unfollow(principal, { followId: follow.followId });
+    expect(await store.getPeriodStats(key)).toEqual({ earningsPaid: 0n, roundTrips: 0 });
+
+    // A brand-new envelope must not inherit a spent cap or a decayed rate.
+    await svc.follow(principal, envelope);
+    expect(await store.getPeriodStats(key)).toEqual({ earningsPaid: 0n, roundTrips: 0 });
+  });
 });

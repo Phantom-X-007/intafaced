@@ -25,6 +25,8 @@ export interface CopyFollowStore {
   setExposure(followId: string, amount: Amount): Promise<void>;
   getPeriodStats(pairKey: string): Promise<CopyPeriodStats>;
   setPeriodStats(pairKey: string, stats: CopyPeriodStats): Promise<void>;
+  /** Drop a pair's churn counters — used when the follow itself goes away. */
+  clearPeriodStats(pairKey: string): Promise<void>;
 }
 
 /** In-memory store — default for unit tests and single-process dev. */
@@ -67,6 +69,10 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
 
   async setPeriodStats(pairKey: string, stats: CopyPeriodStats): Promise<void> {
     this.period.set(pairKey, stats);
+  }
+
+  async clearPeriodStats(pairKey: string): Promise<void> {
+    this.period.delete(pairKey);
   }
 }
 
@@ -209,5 +215,9 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         round_trips = EXCLUDED.round_trips,
         updated_at = now()
     `;
+  }
+
+  async clearPeriodStats(pairKey: string): Promise<void> {
+    await this.sql`DELETE FROM copy_period_stats WHERE pair_key = ${pairKey}`;
   }
 }
