@@ -215,8 +215,18 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
   };
 
   for (const record of records) {
-    if (record.kind === 'submit') bookFor(record.marketId).submit(fromWire(record.order));
-    else bookFor(record.marketId).cancel(record.orderId);
+    if (record.kind === 'submit') {
+      bookFor(record.marketId).submit(fromWire(record.order));
+      continue;
+    }
+    /**
+     * CANCEL MUST NOT OPEN A MARKET ON REPLAY. Live cancel no longer journals
+     * unknown markets, but journals written before that fix still contain
+     * cancel-only phantoms. Replaying those through bookFor re-invented empty
+     * markets forever. Cancel is a no-op when the market never submitted.
+     */
+    const existing = books.get(record.marketId);
+    if (existing) existing.cancel(record.orderId);
   }
 
   return books;
@@ -231,13 +241,18 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   const tail = records.filter((r) => r.seq > snapshot.journalSeq);
 
   for (const record of tail) {
-    let book = books.get(record.marketId);
-    if (!book) {
-      book = new OrderBook(record.marketId);
-      books.set(record.marketId, book);
+    if (record.kind === 'submit') {
+      let book = books.get(record.marketId);
+      if (!book) {
+        book = new OrderBook(record.marketId);
+        books.set(record.marketId, book);
+      }
+      book.submit(fromWire(record.order));
+      continue;
     }
-    if (record.kind === 'submit') book.submit(fromWire(record.order));
-    else book.cancel(record.orderId);
+    // Same rule as full replay: cancel never invents a market.
+    const existing = books.get(record.marketId);
+    if (existing) existing.cancel(record.orderId);
   }
 
   return books;
