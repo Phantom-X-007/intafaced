@@ -265,6 +265,69 @@ if (!available) {
         code: 'market.purchase_conflict',
       });
     });
+
+    it('refuses purchase when the buyer has insufficient funds', async () => {
+      const listing = await liveListing();
+      // No deposit — buyer balance is zero.
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: randomUUID() })).rejects.toMatchObject({
+        code: 'market.insufficient_funds',
+      });
+      const [row] = await sql<Array<{ status: string; rejection_code: string | null }>>`
+        SELECT status, rejection_code FROM market.purchases WHERE buyer_id = ${BUYER}
+      `;
+      expect(row?.status).toBe('rejected');
+      expect(row?.rejection_code).toMatch(/insufficient/i);
+    });
+
+    it('refuses purchase when the vendor is suspended', async () => {
+      const listing = await liveListing();
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-susp',
+        }),
+      );
+      const mine = await vendors.myVendor(VENDOR_USER);
+      await vendors.vet({
+        vendorId: mine!.id,
+        decision: 'suspended',
+        reason: 'policy',
+        actorId: OPERATOR,
+        actorScope: MARKET_OPS_SCOPE,
+      });
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: randomUUID() })).rejects.toMatchObject({
+        code: 'market.vendor_not_approved',
+      });
+    });
+
+    it('refuses purchase when the listing has no live slot (crash orphan)', async () => {
+      await approvedVendor(VENDOR_USER);
+      // Simulate insert-without-claim: active listing, no slot row for its id.
+      const [orphan] = await sql<Array<{ id: string }>>`
+        INSERT INTO market.listings (vendor_id, title, description, offer_type, asset_id, price, status)
+        SELECT id, 'Orphan', 'no slot', 'one_time', 'USDT', 10::numeric, 'active'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+        RETURNING id
+      `;
+      // Give the vendor ANOTHER live slot so vendor-level listed is true.
+      await vendors.claimSlot({ userId: VENDOR_USER, ref: 'unrelated-ref' });
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-orphan',
+        }),
+      );
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: orphan!.id, purchaseId: randomUUID() })).rejects.toMatchObject({
+        code: 'market.listing_slot_missing',
+      });
+      expect((await commerce.publicListings()).map((l) => l.id)).not.toContain(orphan!.id);
+    });
   });
 
   describe('schema honesty', () => {

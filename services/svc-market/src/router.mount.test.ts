@@ -394,3 +394,102 @@ describe('svc-market mount — the public marketplace', () => {
     expect(vendors.listedVendors).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * market.commerce mount — scopes, not money shape.
+ * Money path lives in commerce.test.ts (Postgres). Here: write needs market:write,
+ * and the service is never called when the guard refuses.
+ */
+describe('svc-market mount — commerce scopes', () => {
+  const listingId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const purchaseId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const listingRow = {
+    id: listingId,
+    vendorId: VENDOR,
+    title: 'Bot',
+    description: 'A bot',
+    offerType: 'one_time' as const,
+    assetId: 'USDT',
+    price: '10',
+    status: 'active' as const,
+    createdAt: '2026-08-09T00:00:00.000Z',
+    updatedAt: '2026-08-09T00:00:00.000Z',
+  };
+
+  function stubCommerce() {
+    return {
+      programme: vi.fn(() => ({ commissionBps: 500, commissionConfigured: true })),
+      createListing: vi.fn(async () => listingRow),
+      archiveListing: vi.fn(async () => ({ ...listingRow, status: 'archived' as const })),
+      myListings: vi.fn(async () => [listingRow]),
+      publicListings: vi.fn(async () => [listingRow]),
+      purchase: vi.fn(async () => ({
+        id: purchaseId,
+        listingId,
+        buyerId: USER,
+        vendorId: VENDOR,
+        vendorUserId: USER,
+        assetId: 'USDT',
+        price: '10',
+        commissionBps: 500,
+        status: 'settled' as const,
+        ledgerTxId: 'tx-1',
+        rejectionCode: null,
+        createdAt: '2026-08-09T00:00:00.000Z',
+        settledAt: '2026-08-09T00:00:00.000Z',
+      })),
+      purchasesOf: vi.fn(async () => []),
+    };
+  }
+
+  it('refuses createListing without market:write and never calls commerce', async () => {
+    const commerce = stubCommerce();
+    const reader = principal({ scopes: ['market:read'] });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed(reader))
+        .createListing({ title: 'Bot', description: 'A bot', offerType: 'one_time', assetId: 'USDT', price: '10' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(commerce.createListing).not.toHaveBeenCalled();
+  });
+
+  it('accepts createListing with market:write against the principal', async () => {
+    const commerce = stubCommerce();
+    const result = await createMarketRouter(stubVendors(), commerce as never)
+      .createCaller(signed())
+      .createListing({ title: 'Bot', description: 'A bot', offerType: 'one_time', assetId: 'USDT', price: '10' });
+    expect(result.id).toBe(listingId);
+    expect(commerce.createListing).toHaveBeenCalledWith(expect.objectContaining({ userId: USER, title: 'Bot', price: '10' }));
+  });
+
+  it('refuses purchase without market:write', async () => {
+    const commerce = stubCommerce();
+    const reader = principal({ scopes: ['market:read'] });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed(reader))
+        .purchase({ listingId, purchaseId }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(commerce.purchase).not.toHaveBeenCalled();
+  });
+
+  it('serves public listings anonymously', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(anonymous())
+        .listings(),
+    ).resolves.toEqual([listingRow]);
+    expect(commerce.publicListings).toHaveBeenCalled();
+  });
+
+  it('reports blank commission config on the public programme', async () => {
+    const commerce = stubCommerce();
+    commerce.programme = vi.fn(() => ({ commissionBps: null, commissionConfigured: false }));
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(anonymous())
+        .commerceProgramme(),
+    ).resolves.toEqual({ commissionBps: null, commissionConfigured: false });
+  });
+});

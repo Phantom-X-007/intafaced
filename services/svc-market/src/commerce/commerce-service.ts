@@ -245,6 +245,9 @@ export class CommerceService {
   /**
    * Public catalogue of active listings whose vendor is currently listed.
    * Eligibility is re-checked; a stored active flag alone is not enough.
+   * A listing without a live slot `ref = listing.id` is dropped (crash orphan
+   * after insert-before-claim must not sell). Stake outages drop the row like
+   * `listedVendors` — nobody rather than a 500 for the whole page.
    */
   async publicListings(opts?: { limit?: number }): Promise<ListingRecord[]> {
     const limit = Math.min(opts?.limit ?? 50, 50);
@@ -257,8 +260,16 @@ export class CommerceService {
     const out: ListingRecord[] = [];
     for (const row of rows) {
       if (out.length >= limit) break;
-      const elig = await this.vendors.listingEligibility({ vendorId: row.vendor_id });
-      if (elig.listed) out.push(toListing(row));
+      try {
+        const elig = await this.vendors.listingEligibility({ vendorId: row.vendor_id });
+        if (!elig.listed) continue;
+        if (!(await this.listingHoldsLiveSlot(row.id, row.vendor_id))) continue;
+        out.push(toListing(row));
+      } catch (err) {
+        // stake_unavailable and friends — drop this vendor's rows, keep the page.
+        if (err instanceof MarketError && err.code === 'market.stake_unavailable') continue;
+        throw err;
+      }
     }
     return out;
   }
@@ -293,6 +304,14 @@ export class CommerceService {
     const eligibility = await this.vendors.listingEligibility({ vendorId: listing.vendorId });
     if (!eligibility.listed) {
       throw new MarketError(eligibility.reason ?? 'Vendor is not eligible to sell', eligibility.code ?? 'market.vendor_not_approved');
+    }
+    // Vendor-level listed is not enough: this listing must hold its own slot.
+    // Closes the crash window where insert succeeded and claimSlot never ran.
+    if (!(await this.listingHoldsLiveSlot(listing.id, listing.vendorId))) {
+      throw new MarketError(
+        'This listing has no live slot — it cannot be sold until the vendor reclaims one',
+        'market.listing_slot_missing',
+      );
     }
 
     // Resolve vendor user id for the ledger leg.
@@ -383,6 +402,21 @@ export class CommerceService {
       throw new MarketError('That listing is not yours', 'market.listing_not_owned');
     }
     return listing;
+  }
+
+  /**
+   * True when this listing id is the `ref` of an unreleased vendor slot.
+   * Create writes the listing then claims; if claim never ran, sell/catalogue refuse.
+   */
+  private async listingHoldsLiveSlot(listingId: string, vendorId: string): Promise<boolean> {
+    const rows = await this.sql<Array<{ id: string }>>`
+      SELECT id FROM market.vendor_slots
+       WHERE vendor_id = ${vendorId}
+         AND ref = ${listingId}
+         AND released_at IS NULL
+       LIMIT 1
+    `;
+    return rows.length > 0;
   }
 
   private async claimPurchase(input: {
