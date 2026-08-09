@@ -701,38 +701,99 @@ export class AcademyService {
       this.mapTournamentErr(e);
     }
 
-    // live→frozen: durable ranked snapshot (rank+score only, no prize invent).
+    // live→frozen: snapshot + status flip MUST be one transaction.
+    // Split writes left a crash hole: snapshot exists while status stays live
+    // (scores still write; later freeze ON CONFLICT DO NOTHING keeps the old
+    // snapshot — re-rank under a "frozen" audit that is not the real board).
     if (current.status === 'live' && input.status === 'frozen') {
-      const standingRows = await this.sql<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
-        SELECT season_id, user_id, score, updated_at FROM academy.tournament_standings
-         WHERE season_id = ${input.seasonId}
-      `;
-      let snapshot: FreezeStandingsSnapshot;
-      try {
-        const frozen = freezeSeasonWithSnapshot(
-          current,
-          standingRows.map((r) => ({
-            seasonId: r.season_id,
-            userId: r.user_id,
-            score: r.score,
-            updatedAt: r.updated_at,
-          })),
-        );
-        snapshot = frozen.snapshot;
-      } catch (e) {
-        this.mapTournamentErr(e);
-      }
-      const standingsJson = snapshot.standings.map((s) => ({
-        rank: s.rank,
-        userId: s.userId,
-        score: s.score,
-        updatedAt: s.updatedAt.toISOString(),
-      }));
-      await this.sql`
-        INSERT INTO academy.tournament_freeze_snapshots (season_id, frozen_at, standings)
-        VALUES (${input.seasonId}, ${snapshot.frozenAt}, ${this.sql.json(standingsJson as never)})
-        ON CONFLICT (season_id) DO NOTHING
-      `;
+      return transaction(
+        this.sql,
+        async (tx) => {
+          const locked = await tx<
+            Array<{
+              id: string;
+              slug: string;
+              title: string;
+              status: SeasonStatus;
+              rules_summary: string;
+              starts_at: Date;
+              ends_at: Date | null;
+            }>
+          >`
+            SELECT id, slug, title, status, rules_summary, starts_at, ends_at
+              FROM academy.tournament_seasons
+             WHERE id = ${input.seasonId}
+             FOR UPDATE
+          `;
+          if (!locked[0]) throw new AcademyError(`Season ${input.seasonId} not found`, 'academy.season_not_found');
+          const lockedSeason = this.toSeason(locked[0]);
+          try {
+            assertNoPrizeAttachment(lockedSeason);
+            transitionSeason(lockedSeason, 'frozen');
+          } catch (e) {
+            this.mapTournamentErr(e);
+          }
+          if (lockedSeason.status !== 'live') {
+            throw new AcademyError(
+              `Season ${input.seasonId} is ${lockedSeason.status} — cannot freeze (concurrent transition)`,
+              'academy.season_invalid',
+            );
+          }
+
+          const standingRows = await tx<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+            SELECT season_id, user_id, score, updated_at FROM academy.tournament_standings
+             WHERE season_id = ${input.seasonId}
+          `;
+          let snapshot: FreezeStandingsSnapshot;
+          try {
+            const frozen = freezeSeasonWithSnapshot(
+              lockedSeason,
+              standingRows.map((r) => ({
+                seasonId: r.season_id,
+                userId: r.user_id,
+                score: r.score,
+                updatedAt: r.updated_at,
+              })),
+            );
+            snapshot = frozen.snapshot;
+          } catch (e) {
+            this.mapTournamentErr(e);
+          }
+          const standingsJson = snapshot.standings.map((s) => ({
+            rank: s.rank,
+            userId: s.userId,
+            score: s.score,
+            updatedAt: s.updatedAt.toISOString(),
+          }));
+          await tx`
+            INSERT INTO academy.tournament_freeze_snapshots (season_id, frozen_at, standings)
+            VALUES (${input.seasonId}, ${snapshot.frozenAt}, ${tx.json(standingsJson as never)})
+            ON CONFLICT (season_id) DO NOTHING
+          `;
+          const rows = await tx<
+            Array<{
+              id: string;
+              slug: string;
+              title: string;
+              status: SeasonStatus;
+              rules_summary: string;
+              starts_at: Date;
+              ends_at: Date | null;
+            }>
+          >`
+            UPDATE academy.tournament_seasons
+               SET status = 'frozen', updated_at = now()
+             WHERE id = ${input.seasonId}
+               AND status = 'live'
+             RETURNING id, slug, title, status, rules_summary, starts_at, ends_at
+          `;
+          if (!rows[0]) {
+            throw new AcademyError(`Season ${input.seasonId} left live during freeze (concurrent transition)`, 'academy.season_invalid');
+          }
+          return this.toSeason(rows[0]);
+        },
+        { isolation: 'read committed' },
+      );
     }
 
     const rows = await this.sql<
@@ -800,8 +861,10 @@ export class AcademyService {
   /**
    * Operator bulk score write — Stage-2 L3 residual on the wire.
    * Pure `validateBulkScoreWrite` owns refuse rules (live-only, no empty, no
-   * dup user, score bounds). Then each accepted patch uses the same upsert as
-   * setStanding. No prize fields, no invent scores.
+   * dup user, score bounds). Accepted patches upsert in ONE transaction under
+   * a season-row lock so freeze cannot interleave a partial board, and a
+   * mid-batch crash cannot leave half the patch set durable.
+   * No prize fields, no invent scores.
    */
   async bulkSetStandings(input: {
     seasonId: string;
@@ -827,11 +890,62 @@ export class AcademyService {
         ...(gate.badUserId !== undefined ? { badUserId: gate.badUserId } : {}),
       };
     }
-    const standings: StandingRecord[] = [];
-    for (const p of gate.patches) {
-      standings.push(await this.setStanding({ seasonId: input.seasonId, userId: p.userId, score: p.score }));
-    }
-    return { ok: true, accepted: standings.length, standings };
+
+    const now = new Date();
+    return transaction(
+      this.sql,
+      async (tx) => {
+        // Total order vs freeze: lock season before re-check + multi-row upsert.
+        const locked = await tx<
+          Array<{
+            id: string;
+            slug: string;
+            title: string;
+            status: SeasonStatus;
+            rules_summary: string;
+            starts_at: Date;
+            ends_at: Date | null;
+          }>
+        >`
+          SELECT id, slug, title, status, rules_summary, starts_at, ends_at
+            FROM academy.tournament_seasons
+           WHERE id = ${input.seasonId}
+           FOR UPDATE
+        `;
+        if (!locked[0]) throw new AcademyError(`Season ${input.seasonId} not found`, 'academy.season_not_found');
+        const lockedSeason = this.toSeason(locked[0]);
+        const reGate = validateBulkScoreWrite({
+          seasonStatus: lockedSeason.status,
+          seasonId: input.seasonId,
+          patches: input.patches,
+          startsAt: lockedSeason.startsAt,
+          endsAt: lockedSeason.endsAt,
+          now,
+        });
+        if (reGate.status === 'refuse') {
+          return {
+            ok: false as const,
+            reason: reGate.reason,
+            message: reGate.message,
+            ...(reGate.badUserId !== undefined ? { badUserId: reGate.badUserId } : {}),
+          };
+        }
+
+        const standings: StandingRecord[] = [];
+        for (const p of reGate.patches) {
+          const rows = await tx<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+            INSERT INTO academy.tournament_standings (season_id, user_id, score, updated_at)
+            VALUES (${input.seasonId}, ${p.userId}, ${p.score}, now())
+            ON CONFLICT (season_id, user_id) DO UPDATE SET score = EXCLUDED.score, updated_at = now()
+            RETURNING season_id, user_id, score, updated_at
+          `;
+          const r = rows[0]!;
+          standings.push({ seasonId: r.season_id, userId: r.user_id, score: r.score, updatedAt: r.updated_at });
+        }
+        return { ok: true as const, accepted: standings.length, standings };
+      },
+      { isolation: 'read committed' },
+    );
   }
 
   async standings(seasonId: string): Promise<RankedStanding[]> {

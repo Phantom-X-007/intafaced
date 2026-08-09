@@ -1031,9 +1031,19 @@ export const FEATURES = [
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
-    note: '**Cert XP emit landed #1117 (2026-08-08)** — certs/xp-publish.ts turns a grant into a real xpEarned publish keyed on academy.cert:cert:<userId>:<certId>, including on the already-granted path (safe because identity does ON CONFLICT (idempotency_key) DO NOTHING), which is the recovery path. STILL NOT done: this row promises "→ real perks" and the work stops at XP. svc-identity is the SoT for rank and rank_thresholds.perks; a cert→perk map here would be a second opinion on another service\'s table and needs a contracts PR first. An unpriced cert publishes nothing rather than a guessed amount.',
+    // GHOST OWNER CLEARED 2026-08-09 L07 W9: was wip @nitro-agent with cert XP
+    // + grant race + spine seals already on main (#1117 · #1370 · #1490). No open
+    // academy PR held the path — the leftover owner fenced ALL of
+    // services/svc-academy via module fallback (false block on residual honesty).
+    // status ready (not wip): mechanism free; full title "→ real perks" is multi-svc residual.
+    status: 'ready',
+    owner: null,
+    note:
+      'GHOST OWNER CLEARED 2026-08-09 L07 W9 (was wip @nitro-agent). Cert XP emit + grant race honesty + spine seals on tip ' +
+      '(#1117 · #1370 · #1490). NOT tracker done: title promises "→ real perks" and work stops at XP. ' +
+      'svc-identity is SoT for rank + rank_thresholds.perks; a cert→perk map here would be a second opinion and ' +
+      'needs a contracts PR first. Unpriced cert publishes nothing rather than a guessed amount. Academy residual honesty ' +
+      'is free; invent-risk perk product stays multi-svc / Denon-law.',
     dependsOn: ['academy.curriculum', 'identity.rank'],
   }),
   f('academy.ambassadors', 'Residencies, IFC pay, revenue share', {
