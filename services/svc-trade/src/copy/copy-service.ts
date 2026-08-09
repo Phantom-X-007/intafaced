@@ -160,6 +160,9 @@ export class CopyService {
   /**
    * Plan a mirror of a leader fill for one of the caller's follows.
    * Typed refuse on cap / market / expiry — never invent a different shape.
+   *
+   * Exposure is claimed with `addExposureIfUnderCap` so two concurrent mirrors
+   * cannot both pass a stale near-cap read and overshoot maxAggregateExposure.
    */
   async planMirrorForFollow(
     principal: Principal,
@@ -195,37 +198,28 @@ export class CopyService {
       currentExposure: current,
       now: this.now(),
     });
-    // The plan carries the exposure the cap check approved. Recomputing it here
-    // is what let the write ignore the side while the check did not.
-    await this.store.setExposure(follow.followId, plan.nextExposure);
-    return presentMirrorPlan(plan);
+    // Atomic claim — the plan's optimistic nextExposure may be stale under
+    // concurrency; the store returns the true post-claim value (or refuses).
+    const claimed = await this.store.addExposureIfUnderCap(follow.followId, plan.notional, follow.envelope.maxAggregateExposure);
+    if (!claimed.ok) {
+      throw new CopyError('Mirror would exceed maxAggregateExposure', 'trade.copy_cap_exceeded');
+    }
+    return presentMirrorPlan({ ...plan, nextExposure: claimed.newExposure });
   }
 
   /**
    * Attribute + settle leader fee-share for a follower fill via ledger-client.
    * Blank §8 rates → refuse. Cap / kill → typed skip or refuse.
    *
-   * ── KNOWN RACE, and it is why this module is not mounted yet ───────────────
+   * ── Reserve-then-post (closes the concurrent over-pay race) ───────────────
    *
-   * The earnings cap does not hold under concurrency. This method reads the
-   * period stats, posts, re-reads, and writes — four separate awaits with no
-   * row lock and no atomic increment. Two fills settling at once both read the
-   * old `earningsPaid`, both pass the cap inside `attributeCopyFeeShare`, and
-   * both pay. The cap is the churn brake the spec designs against (§ earnings
-   * cap per follower per period), so breaching it is precisely the abuse it
-   * exists to stop.
+   * Order: attribute gross/capped intent → **atomic reserve** under the period
+   * cap → post ledger with the reserved amount → **release** on ledger failure.
+   * Two fills with different fillIds (different business keys) can no longer
+   * both pass a stale earningsPaid read and both move money past the cap.
    *
-   * The ledger side is safe — `windowId` and `rewardId` are business keys on
-   * `fillId`, so a redelivery re-posts the same key and moves nothing twice.
-   * It is the COUNTER that loses updates, which means the ledger faithfully
-   * records an over-payment rather than preventing it.
-   *
-   * Fixing it properly is a reserve-then-post restructure — atomically claim
-   * the intended share, post, and release on failure — plus an atomic
-   * increment primitive on the store. That is its own change with its own
-   * adversarial pass, and it must land BEFORE any route reaches this class.
-   * The exposure counter in `planMirrorForFollow` has the same read-modify-write
-   * shape and needs the same treatment.
+   * Ledger keys stay on fillId. Period boundary (D11) is not invented here —
+   * pair-lifetime counters remain as today. Module stays unmounted.
    */
   async settleFeeShare(
     principal: Principal,
@@ -260,23 +254,47 @@ export class CopyService {
       feeShareKilled: follow.feeShareKilled,
     });
 
-    await this.store.setPeriodStats(key, {
-      earningsPaid: period.earningsPaid,
-      roundTrips: period.roundTrips + 1,
-    });
+    // Cap is owner-published law only — never invent. requirePublished ran inside attribute.
+    const law = this.feeShareLaw;
+    if (law.published !== true) {
+      // attributeCopyFeeShare already throws on blank; this is defensive for types.
+      throw new CopyError(
+        'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+        'trade.copy_fee_share_blank',
+      );
+    }
+    const cap = parseAmount(law.earningsCapPerFollower);
 
-    if (attribution.skippedReason !== null) {
-      return { ...presentFeeShareAttribution(attribution), settled: false as const };
+    // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
+    // reserveEarnings always +1 round-trip so decay still advances on skips.
+    const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
+    const reserved = await this.store.reserveEarnings(key, intend, cap);
+
+    if (reserved.reserved <= 0n) {
+      const skipped =
+        attribution.skippedReason !== null
+          ? attribution
+          : {
+              ...attribution,
+              cappedLeaderShare: 0n,
+              skippedReason: 'cap_reached' as const,
+            };
+      return { ...presentFeeShareAttribution(skipped), settled: false as const };
     }
 
-    const plan = planCopyFeeShareSettle(attribution);
-    await postCopyFeeShareSettle(this.ledger, plan);
-    const after = await this.store.getPeriodStats(key);
-    await this.store.setPeriodStats(key, {
-      earningsPaid: after.earningsPaid + attribution.cappedLeaderShare,
-      roundTrips: after.roundTrips,
-    });
-    return { ...presentFeeShareAttribution(attribution), settled: true as const };
+    const finalAttribution = {
+      ...attribution,
+      cappedLeaderShare: reserved.reserved,
+      skippedReason: null as null,
+    };
+    const plan = planCopyFeeShareSettle(finalAttribution);
+    try {
+      await postCopyFeeShareSettle(this.ledger, plan);
+    } catch (err) {
+      await this.store.releaseEarnings(key, reserved.reserved);
+      throw err;
+    }
+    return { ...presentFeeShareAttribution(finalAttribution), settled: true as const };
   }
 
   /** Forbidden surfaces — explicit refuse for honesty tests. */
