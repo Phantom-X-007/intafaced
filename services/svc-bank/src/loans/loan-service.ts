@@ -876,17 +876,36 @@ export class LoanService {
     return { loanId: loan.id, days: results, charged };
   }
 
-  /** Every open loan accrues. The job's entry point. */
-  async accrueAll(until: Date = new Date(), limit = 1_000): Promise<Array<{ loanId: string; charged: Amount; days: number }>> {
+  /**
+   * Every open loan accrues. The job's entry point.
+   *
+   * One loan that cannot accrue (bad row, transient fault) must not stop the
+   * rest of the book. Failures are returned for the operator, not swallowed —
+   * same isolation posture as `runRiskSweep` and earn `accrueAll`.
+   */
+  async accrueAll(
+    until: Date = new Date(),
+    limit = 1_000,
+  ): Promise<{
+    results: Array<{ loanId: string; charged: Amount; days: number }>;
+    failures: Array<{ loanId: string; reason: string; code?: string }>;
+  }> {
     const rows = await this.sql<Array<{ id: string }>>`
       SELECT id FROM bank.loans WHERE status IN ('active', 'margin_call', 'liquidating') ORDER BY opened_at ASC LIMIT ${limit}
     `;
-    const out: Array<{ loanId: string; charged: Amount; days: number }> = [];
+    const results: Array<{ loanId: string; charged: Amount; days: number }> = [];
+    const failures: Array<{ loanId: string; reason: string; code?: string }> = [];
     for (const row of rows) {
-      const result = await this.accrue({ loanId: row.id, until });
-      out.push({ loanId: row.id, charged: result.charged, days: result.days.length });
+      try {
+        const result = await this.accrue({ loanId: row.id, until });
+        results.push({ loanId: row.id, charged: result.charged, days: result.days.length });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        const code = err instanceof BankError ? err.code : undefined;
+        failures.push({ loanId: row.id, reason, ...(code ? { code } : {}) });
+      }
     }
-    return out;
+    return { results, failures };
   }
 
   // ── Repayment ──────────────────────────────────────────────────────────────

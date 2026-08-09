@@ -6,6 +6,7 @@ import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import {
+  LedgerError,
   MemoryLedger,
   earnPoolReserve,
   formatAmount,
@@ -15,6 +16,7 @@ import {
   subAccountAvailable,
   userAvailable,
   userStake,
+  type LedgerClient,
 } from '@intafaced/ledger-client';
 import { createBankServices, type BankServices } from './bank-service.js';
 import { createBankRouter } from './router.js';
@@ -369,6 +371,68 @@ if (!available) {
       await Promise.all(Array.from({ length: 8 }, () => bank.transfers.runDueTransfers({ now }).catch(() => undefined)));
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('100');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    /**
+     * Isolation residual (audit B-3 class): a mid-drive throw (frozen ledger,
+     * network fault) used to escape `runDueTransfers` and stop every later
+     * schedule on the pass — and the thrower stayed first forever because its
+     * `next_run_at` never advanced. One user's incident is not a platform stop.
+     */
+    it('one schedule that throws mid-drive does not stop every other standing order on the pass', async () => {
+      const primaryA = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rentA = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent A' });
+      const primaryB = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const rentB = await bank.spaces.create({ userId: USER_B, assetId: 'USDT', name: 'Rent B' });
+      await fund(USER_A, 'USDT', '500');
+      await fund(USER_B, 'USDT', '500');
+
+      const scheduleA = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primaryA.id,
+        toSpaceId: rentA.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+      const scheduleB = await bank.transfers.schedule({
+        userId: USER_B,
+        fromSpaceId: primaryB.id,
+        toSpaceId: rentB.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      // ORDER BY next_run_at ASC, then id implicitly by insert — poison A so
+      // if isolation is missing B never settles when A throws first.
+      const poisonPrefix = `bank.transfer:${scheduleA.id}:`;
+      const real = ledger;
+      const isolating: LedgerClient = {
+        post: async (request) => {
+          if (request.idempotencyKey.startsWith(poisonPrefix)) {
+            throw new LedgerError('Ledger posting is frozen: isolation residual test', 'ledger.frozen');
+          }
+          return real.post(request);
+        },
+        balance: (ref) => real.balance(ref),
+        balances: (ownerType, ownerId) => real.balances(ownerType, ownerId),
+        getTx: (txId) => real.getTx(txId),
+        getTxByKey: (key) => real.getTxByKey(key),
+      };
+      bank = createBankServices(sql, isolating, memoryLedgerHistory(real), { nativeAssetId: 'IFC' });
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+
+      expect(report.failures).toEqual(
+        expect.arrayContaining([expect.objectContaining({ scheduleId: scheduleA.id, code: 'ledger.frozen' })]),
+      );
+      expect(report.settled).toBe(1);
+      expect(formatAmount(await bank.spaces.balanceOf(rentB))).toBe('100');
+      // A: occurrence not consumed — claim rolled back on rethrow.
+      expect(await bank.transfers.executions(scheduleA.id)).toHaveLength(0);
+      expect(await availableOf(USER_A, 'USDT')).toBe('500');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -1323,6 +1387,47 @@ if (!available) {
       await bank.earn.fundPool({ poolId: pool.id, fundingId: 'rescue-1', amount: amt('100') });
       const rescued = await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-02T00:00:00Z') });
       expect(formatAmount(rescued.paid)).toBe('1');
+    });
+
+    /**
+     * Isolation residual (audit B-4 class): one underfunded pool used to throw
+     * out of `accrueAll` and leave every later pool unpaid for the day.
+     * Single-pool `accrue` stays loud; the job entry point must continue.
+     */
+    it('one underfunded pool does not withhold every other pool’s yield for the day', async () => {
+      // Empty pool first by name/asset sort: asset_id ASC then apr DESC —
+      // both USDT; give empty a higher APR so it is first in listPools.
+      const empty = await bank.earn.createPool({ assetId: 'USDT', kind: 'flexible', name: 'Empty first', aprBps: 5000 });
+      const healthy = await bank.earn.createPool({ assetId: 'USDT', kind: 'flexible', name: 'Healthy', aprBps: 3650 });
+      await fund(USER_A, 'USDT', '1000');
+      await fund(USER_B, 'USDT', '1000');
+      await bank.earn.deposit({
+        poolId: empty.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
+      await bank.earn.deposit({
+        poolId: healthy.id,
+        userId: USER_B,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
+      await accrueBankFees('USDT', '10000');
+      await bank.earn.fundPool({ poolId: healthy.id, fundingId: 'healthy-seed', amount: amt('10000') });
+      // empty stays unfunded
+
+      const report = await bank.earn.accrueAll(new Date('2026-03-02T00:00:00Z'));
+
+      expect(report.failures).toEqual(
+        expect.arrayContaining([expect.objectContaining({ poolId: empty.id, code: 'bank.pool_underfunded' })]),
+      );
+      expect(report.results.some((r) => r.poolId === healthy.id && formatAmount(r.paid) === '1')).toBe(true);
+      expect(await availableOf(USER_B, 'USDT')).toBe('1');
+      // Empty day not consumed.
+      const emptyRows = await sql`SELECT id FROM bank.interest_accruals WHERE pool_id = ${empty.id}`;
+      expect(emptyRows).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
     it('does not pay interest on a position opened after the accrual moment', async () => {

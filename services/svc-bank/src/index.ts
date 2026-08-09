@@ -241,8 +241,16 @@ app.post('/internal/jobs/accrue-interest', async (req, reply) => {
     return reply.code(503).send({ error: 'interest accrual is disabled', code: 'bank.accrual_disabled' });
   }
   return withSpan('bank.job.accrueInterest', async () => {
-    const results = await bank.earn.accrueAll();
-    return results.map((r) => ({ poolId: r.poolId, date: r.date, recipients: r.recipients, alreadyAccrued: r.alreadyAccrued }));
+    const report = await bank.earn.accrueAll();
+    return {
+      results: report.results.map((r) => ({
+        poolId: r.poolId,
+        date: r.date,
+        recipients: r.recipients,
+        alreadyAccrued: r.alreadyAccrued,
+      })),
+      failures: report.failures,
+    };
   });
 });
 
@@ -267,8 +275,11 @@ app.post('/internal/jobs/accrue-loan-interest', async (req, reply) => {
     return reply.code(503).send({ error: 'loan interest accrual is disabled', code: 'bank.loan_accrual_disabled' });
   }
   return withSpan('bank.job.accrueLoanInterest', async () => {
-    const results = await bank.loans.accrueAll();
-    return results.map((r) => ({ loanId: r.loanId, days: r.days }));
+    const report = await bank.loans.accrueAll();
+    return {
+      results: report.results.map((r) => ({ loanId: r.loanId, days: r.days })),
+      failures: report.failures,
+    };
   });
 });
 
