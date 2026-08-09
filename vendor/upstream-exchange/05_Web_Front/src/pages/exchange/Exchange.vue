@@ -61,6 +61,12 @@
         <dt>{{ $t("exchange.terminal.volume24h") }}</dt>
         <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || num(currentCoin.volume) > 0">{{ currentCoin.coin }}</em></dd>
       </dl>
+      <!-- Last / 24h high-low-volume are REST ticker snapshots, not the live depth
+           stream. Badge "Depth live" is separate — do not let 24h labels imply a
+           rolling live window without provenance. -->
+      <div class="ix-head-snapshot" :title="$t('intafaced.trade.snapshotSource')">
+        {{ $t('intafaced.trade.snapshotSource') }}
+      </div>
 
       <!-- A-UI-SUB: identity catalogue switcher. No balances. No order routing. -->
       <div class="ix-head-sub">
@@ -1330,9 +1336,11 @@ export default {
     /** Structural block (halt/market type / sub routing) — separate from field validation. */
     orderBlockReason() {
       if (!this.isLogin) return '';
-      if (this.exchangeable != 1) return '{{ $t("exchange.terminal.halted") }}';
+      if (this.exchangeable != 1) return this.$t('exchange.terminal.halted');
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {
-        return 'Market ' + (this.side === 'BUY' ? 'buy' : 'sell') + ' is disabled for this pair.';
+        return this.$t('exchange.terminal.marketDisabled', {
+          side: this.side === 'BUY' ? 'buy' : 'sell'
+        });
       }
       var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
       if (subBlock) return subBlock;
@@ -3190,6 +3198,19 @@ $radius-sm: var(--ix-radius-sm, 8px);
   margin-left: auto;
   flex: 0 1 auto;
   min-width: 0;
+}
+
+.ix-head-snapshot {
+  flex: 0 1 auto;
+  max-width: 11rem;
+  margin-left: 8px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: $dim;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ix-head-status {
