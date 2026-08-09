@@ -107,11 +107,11 @@ Until this landed the edge sent **no CORS headers at all** — not a permissive 
 
 **Live control is the operator surface, not the `edge.gateway` flag.**
 
-| Surface                     | What it does                                                                                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /admin/kill-switches` | Per-module halt (`admin:write` + MFA). Reads and cancels still pass; new commitments return `503 edge.module_killed`.                            |
-| `GET /admin/status`         | Who is killed, **what cannot be killed** (`outsideTheDoor`), and **kill durability** (`killState` — process-local; `multiReplicaShared: false`). |
-| `POST /admin/ledger/freeze` | Money-plane halt (`admin:treasury`) — durable row on svc-ledger, not an in-memory module flag.                                                   |
+| Surface                     | What it does                                                                                                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /admin/kill-switches` | Per-module halt (`admin:write` + MFA). Reads and cancels still pass; new commitments return `503 edge.module_killed`.                                                                                                                 |
+| `GET /admin/status`         | Who is killed, **what cannot be killed** (`outsideTheDoor`), **kill durability** (`killState` — process-local; `multiReplicaShared: false`), and **`flagEdgeGateway.enforced: false`** so the console never invents a flag-only halt. |
+| `POST /admin/ledger/freeze` | Money-plane halt (`admin:treasury`) — durable row on svc-ledger, not an in-memory module flag.                                                                                                                                        |
 
 `edge.gateway` in `FLAG_REGISTRY` is **`NOT_ENFORCED`**. Flipping that flag does **not** take the proxy down. Do not operate as if it does. The real kill is `/admin/kill-switches` + the `onRequest` guard in `control-plane.ts`.
 
@@ -123,10 +123,10 @@ Until this landed the edge sent **no CORS headers at all** — not a permissive 
 
 ## Transport hardening (built)
 
-| Control          | Where                                  | Honesty                                                                                                                                                                                      |
-| ---------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Security headers | `src/hardening.ts` (`@fastify/helmet`) | Always on.                                                                                                                                                                                   |
-| Rate limit       | same file (`@fastify/rate-limit`)      | Per-replica in-process counters. Keyed on `req.ip`. Without `EDGE_TRUST_PROXY` behind a balancer, every caller shares one bucket — boot log warns. `OPTIONS`/`/health`/`/ready` unthrottled. |
+| Control          | Where                                  | Honesty                                                                                                                                                                                                                                                                                               |
+| ---------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Security headers | `src/hardening.ts` (`@fastify/helmet`) | Always on.                                                                                                                                                                                                                                                                                            |
+| Rate limit       | same file (`@fastify/rate-limit`)      | Per-replica in-process counters. Keyed on `req.ip`. Without `EDGE_TRUST_PROXY` behind a balancer, every caller shares one bucket — boot log warns. `OPTIONS`/`/health`/`/ready` unthrottled. **`/ready.rateLimit`** reports armed budget + `multiReplicaShared: false` (never invent a shared store). |
 
 ## Configuration
 

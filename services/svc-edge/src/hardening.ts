@@ -99,6 +99,49 @@ export function rateLimitSummary(config: RateLimitConfig): { level: 'info' | 'wa
 }
 
 /**
+ * Unauthenticated `/ready` posture for the throttle — counts and booleans only.
+ *
+ * Mirrors the screening/CORS shape: an operator (or probe) can see whether the
+ * control is armed without reading boot logs, and without inventing a shared
+ * store. Counters are in-process; `multiReplicaShared` is always false until a
+ * deliberate shared-store PR lands (same honesty posture as kill durability).
+ */
+export interface RateLimitReadiness {
+  readonly enabled: boolean;
+  /** Null when disabled — no budget is in force. */
+  readonly max: number | null;
+  readonly windowMs: number | null;
+  readonly trustProxy: boolean;
+  /** Always false today — per-replica memory only. */
+  readonly multiReplicaShared: false;
+  /** One short line; not the full boot WARN essay. */
+  readonly note: string;
+}
+
+export function rateLimitReadiness(config: RateLimitConfig): RateLimitReadiness {
+  if (!config.enabled) {
+    return {
+      enabled: false,
+      max: null,
+      windowMs: null,
+      trustProxy: config.trustProxy,
+      multiReplicaShared: false,
+      note: 'Throttle off — front door counts nothing (EDGE_RATE_LIMIT_ENABLED). Per-replica only; no shared store.',
+    };
+  }
+  return {
+    enabled: true,
+    max: config.max,
+    windowMs: config.windowMs,
+    trustProxy: config.trustProxy,
+    multiReplicaShared: false,
+    note: config.trustProxy
+      ? 'Per-replica in-process counters; proxy headers trusted for req.ip. Not fleet-wide.'
+      : 'Per-replica in-process counters; EDGE_TRUST_PROXY unset — behind a balancer every caller may share ONE bucket.',
+  };
+}
+
+/**
  * Security headers.
  *
  * This service answers JSON and serves no markup, so most of helmet's document

@@ -4,7 +4,7 @@ import { createAdminApi, httpLedgerOperator } from './admin-api.js';
 import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
 import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
-import { rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
+import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
 import { markAuthOutcome, registerMetrics } from './metrics.js';
 import { exchangePrincipal } from './principal-exchange.js';
@@ -202,6 +202,9 @@ app.get('/ready', async () => ({
   // facts, and a probe that renders both as `0` cannot tell an operator which
   // one is why the front-end says the platform is unreachable.
   cors: { configured: cors.configured, allowedOrigins: cors.origins.length },
+  // Throttle posture without boot logs. multiReplicaShared is always false —
+  // counters are per process; do not invent a shared store on /ready.
+  rateLimit: rateLimitReadiness(rateLimit),
   // Readiness is about the process, never about the switches: a killed module is
   // an operator's decision, and taking the edge out of the load balancer because
   // of it would remove the surface that serves cancels and reads.
