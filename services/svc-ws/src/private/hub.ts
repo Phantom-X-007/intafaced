@@ -68,6 +68,11 @@ export interface PrivateOrderHubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
   readonly maxConnections: number;
+  /**
+   * Soft ceiling per principal so one user cannot fill the whole replica pool.
+   * Defaults to 16 when omitted (env: `WS_PRIVATE_MAX_CONNECTIONS_PER_USER`).
+   */
+  readonly maxConnectionsPerUser?: number;
 }
 
 interface Subscription {
@@ -114,6 +119,16 @@ export class PrivateOrderHub {
   attach(userId: string, sink: PrivateSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
       sink.close(CLOSE_TRY_LATER, 'private gateway at capacity');
+      return null;
+    }
+
+    const maxPerUser = this.#options.maxConnectionsPerUser ?? 16;
+    let forUser = 0;
+    for (const existing of this.#subscriptions) {
+      if (!existing.closed && existing.userId === userId) forUser++;
+    }
+    if (forUser >= maxPerUser) {
+      sink.close(CLOSE_TRY_LATER, 'too many private connections for this user');
       return null;
     }
 

@@ -74,11 +74,19 @@ describe('private WebSocket gateway', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  async function boot(opts: { tokens: TokenConfig | null; maxConnections?: number } = { tokens }): Promise<void> {
+  async function boot(
+    opts: {
+      tokens: TokenConfig | null;
+      maxConnections?: number;
+      maxConnectionsPerUser?: number;
+      heartbeatMs?: number;
+    } = { tokens },
+  ): Promise<void> {
     hub = new PrivateOrderHub({
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: opts.maxConnections ?? 10,
+      maxConnectionsPerUser: opts.maxConnectionsPerUser,
     });
     server = createServer((_req, res) => {
       res.writeHead(404);
@@ -93,15 +101,15 @@ describe('private WebSocket gateway', () => {
     gateway = createPrivateWebSocketGateway({
       server,
       hub,
-      heartbeatMs: 30_000,
+      heartbeatMs: opts.heartbeatMs ?? 30_000,
       log: { info: () => undefined, warn: () => undefined },
       enabled: () => enabled,
       tokens: opts.tokens,
     });
   }
 
-  async function accessToken(scopes: string[], cfg: TokenConfig = tokens): Promise<string> {
-    const { token } = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes }, cfg);
+  async function accessToken(scopes: string[], cfg: TokenConfig = tokens, userId: string = USER): Promise<string> {
+    const { token } = await issueAccessToken({ userId, sessionId: SESSION, scopes }, cfg);
     return token;
   }
 
@@ -413,5 +421,103 @@ describe('private WebSocket gateway', () => {
     expect(blocked.frames.filter((f) => JSON.parse(f).type === 'ready')).toHaveLength(0);
     holder.socket.close();
     if (!blocked.closed) blocked.socket.close();
+  });
+
+  it('terminates a private socket that never answers pong and frees the hub seat', async () => {
+    // Real TCP + short heartbeat. autoPong:false is the ws@8 contract so a
+    // dead peer cannot keep a hub seat forever (same as public /stream).
+    await boot({ tokens, heartbeatMs: 50 });
+    const token = await accessToken(['trade:read']);
+    const dead = new WebSocket(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`, {
+      autoPong: false,
+    });
+    dead.on('error', () => undefined);
+
+    let frames = 0;
+    const gotReady = new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('ready frames never arrived')), 3_000);
+      dead.on('message', () => {
+        frames++;
+        if (frames >= 3) {
+          clearTimeout(t);
+          resolve();
+        }
+      });
+    });
+    const closed = new Promise<void>((resolve) => {
+      dead.once('close', () => resolve());
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('private socket never opened')), 3_000);
+      if (dead.readyState === WebSocket.OPEN) {
+        clearTimeout(t);
+        resolve();
+        return;
+      }
+      dead.once('open', () => {
+        clearTimeout(t);
+        resolve();
+      });
+      dead.once('error', (err) => {
+        clearTimeout(t);
+        reject(err);
+      });
+    });
+    await gotReady;
+    expect(hub.connections).toBe(1);
+
+    // Two heartbeat windows: first marks not-alive + ping; second terminates.
+    // Give headroom for slow CI schedulers.
+    await Promise.race([closed, new Promise<void>((r) => setTimeout(r, 2_000))]);
+    expect(dead.readyState).toBe(WebSocket.CLOSED);
+    const deadline = Date.now() + 2_000;
+    while (hub.connections !== 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(hub.connections).toBe(0);
+  }, 15_000);
+
+  it('refuses a user past per-user cap while another user still connects', async () => {
+    await boot({ tokens, maxConnections: 20, maxConnectionsPerUser: 2 });
+    const tokenA = await accessToken(['trade:read'], tokens, USER);
+    const tokenB = await accessToken(['trade:read'], tokens, OTHER);
+
+    const a1 = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${tokenA}`);
+    const a2 = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${tokenA}`);
+    await a1.frameCount(3);
+    await a2.frameCount(3);
+    expect(hub.connections).toBe(2);
+
+    const a3 = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${tokenA}`);
+    await a3.openOrClose();
+    // Hub closes then gateway terminates — code may be 1013 or abnormal 1006.
+    if (!a3.closed) {
+      await new Promise<void>((resolve) => {
+        a3.socket.once('close', () => resolve());
+        setTimeout(resolve, 1_000);
+      });
+    }
+    expect(
+      a3.frames.filter((f) => {
+        try {
+          return JSON.parse(f).type === 'ready';
+        } catch {
+          return false;
+        }
+      }),
+    ).toHaveLength(0);
+    expect(a3.closed).not.toBeNull();
+    expect(hub.connections).toBe(2);
+
+    const b1 = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${tokenB}`);
+    await b1.frameCount(3);
+    expect(hub.connections).toBe(3);
+    expect(b1.frames).toHaveLength(3);
+
+    a1.socket.close();
+    a2.socket.close();
+    b1.socket.close();
+    if (!a3.closed) a3.socket.close();
   });
 });
