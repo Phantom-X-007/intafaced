@@ -1,8 +1,7 @@
 /**
- * Subscriptions — schedule arithmetic first.
+ * Subscriptions — schedule arithmetic + lifecycle (no charge runner yet).
  *
  * Crypto path is invoice-and-watch only (protocol forbids pull signatures).
- * Card path may later use RailAdapter mandate ops. Neither is implemented here.
  */
 export {
   CADENCES,
@@ -14,3 +13,4 @@ export {
   type Cadence,
   type DuePlan,
 } from './schedule.js';
+export { SubscriptionService, assertMandateTermsUnchanged, type MandateRecord, type SubscriptionRecord } from './subscription-service.js';
