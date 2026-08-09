@@ -11,9 +11,9 @@
  * next adapter. A new rail adds one line to the map.
  *
  * card-sandbox accepts `bank` only because it invents a `po_*` ref; it is never
- * a live bank rail (`socket.psp-partners`). Bank refs still must look like an
- * IBAN so we never journal a non-destination. IFSC is not validated here
- * (no partner table) — non-IBAN bank refs refuse until that unit ships.
+ * a live bank rail (`socket.psp-partners`). Bank refs must look like an IBAN
+ * **or** a structural IFSC (India). Neither proves the account exists or that a
+ * live bank rail is configured — shape only, before withdrawHold.
  */
 
 export const PAYOUT_DESTINATION_KINDS: Readonly<Record<string, readonly string[]>> = {
@@ -61,6 +61,20 @@ export function isIbanRef(ref: string): boolean {
   return remainder === 1;
 }
 
+/**
+ * IFSC structural check (India): 4 letters + 0 + 6 alphanumeric = 11 chars.
+ * Does not prove the bank branch exists or a partner rail is live.
+ */
+export function isIfscRef(ref: string): boolean {
+  const compact = ref.replace(/\s+/g, '').toUpperCase();
+  return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(compact);
+}
+
+/** Bank ref is an IBAN or IFSC structural shape. */
+export function isBankDestinationRef(ref: string): boolean {
+  return isIbanRef(ref) || isIfscRef(ref);
+}
+
 function assertDestinationShape(kind: string, ref: string): void {
   const trimmed = ref.trim();
   if (kind === 'crypto') {
@@ -73,9 +87,9 @@ function assertDestinationShape(kind: string, ref: string): void {
     return;
   }
   if (kind === 'bank') {
-    if (!isIbanRef(trimmed)) {
+    if (!isBankDestinationRef(trimmed)) {
       throw new DestinationKindError(
-        `Bank destination ref must be a structural IBAN (mod-97). IFSC and other schemes are not validated here yet.`,
+        `Bank destination ref must be a structural IBAN (mod-97) or IFSC (11-char India scheme).`,
         'pay.invalid_destination_ref',
       );
     }
