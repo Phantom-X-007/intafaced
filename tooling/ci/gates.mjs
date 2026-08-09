@@ -195,6 +195,15 @@ export const GATES = [
       'gets this instead.',
   },
   {
+    id: 'shell-i18n',
+    script: 'tooling/ci/shell-i18n-scan.mjs',
+    doctrine: '§9 / §14.4',
+    why:
+      'hardcoded user-facing strings in the Vue shell are the same class of §9 miss as the apps/ i18n scans. The tip ' +
+      'keying pass is done (scan returns 0 across the product .vue set); the old NOT_GATES reason claimed 200+ hits and ' +
+      'was stale. Blocking so a new hardcode cannot ship green.',
+  },
+  {
     id: 'vendor-java-money',
     script: 'tooling/ci/vendor-java-money-scan.mjs',
     doctrine: 'dual-book Option B',
@@ -342,8 +351,6 @@ export const NOT_GATES = {
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
   'dependency-audit.mjs':
     'the supply-chain ratchet (`pnpm scan:deps`), wired as its own workflow (.github/workflows/supply-chain.yml) on dependency-surface PRs plus a weekly cron. NOT a GATES entry for the same reason claim-check is not: it needs NETWORK — the advisory database is remote — and reddening a local `pnpm verify` on a train is how a security gate gets deleted. It is a ratchet, not a severity gate: 12 advisories were already in the tree when it landed (8 high, 2 on production paths — drizzle-orm direct and fast-uri under fastify), so `--audit-level=high` would have red-mained on day one, the trap shell-i18n-scan documents. NEW advisories fail; STALE frozen entries also fail, so the list can only shrink. When it reaches zero, replace the baseline with a plain `pnpm audit --audit-level=high` and delete this entry.',
-  'shell-i18n-scan.mjs':
-    'Vue-shell companion to i18n-scan. Deliberately NOT a gate until a fresh keying pass: tip currently has 200+ hardcoded user-facing strings across the shell, so wiring it as blocking would red main. Run by hand via `pnpm scan:shell-i18n` to drive that pass; promote to GATES (blocking) once the count is zero. Not advisory-GATES either — the scan exits 1 by design and its header claims it blocks; keep that contract for the day it is wired.',
   'value-gate.mjs':
     'stamp-mill detector for near-duplicate commits — the docs-only rule (Board-Delta trailer) AND, since 2026-08-06, the code rule (near-duplicate subject SERIES whose new symbols nothing outside them calls; Serial-Work trailer). Wired as an explicit STRICT step in BOTH workflows and in neither gate list: docs-format.yml, because ci.yml excludes docs/** and **/*.md so coordinator docs PRs never hit GATES; and the `gates` job of ci.yml, because docs-format only fires on markdown, so a code PR without a slice doc never met the gate at all — half of how #832–#876 landed. (ci.yml writes that exclusion as negated `paths:` rather than `paths-ignore`, because INTAFACED_DEFINITIVE_BUILD.md is law and coverage-check has to see it; the set of excluded docs is unchanged.) Still NOT a GATES entry: it needs a current `origin/main` plus >=11 ancestors, which a laptop `pnpm verify` cannot promise, and reddening a local verify over a stale fetch is how a gate gets deleted. Both checkouts now pin fetch-depth: 0 — under the actions/checkout default of 1 it compared an empty ancestor list against an empty ancestor list and printed OK. Local pre-flight: `pnpm value-gate:self-test` (20 fixtures).',
   'checkout-staleness.mjs':
