@@ -197,7 +197,7 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 
 ## Tests
 
-`pnpm --filter @intafaced/svc-indexer test` — **151 tests.** 98 need nothing at all; 27 need Postgres; 26 need a chain. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true.
+`pnpm --filter @intafaced/svc-indexer test` — hermetic suite every run (memory store + mount + sovereignty + always-on chain refusals); Postgres and live-chain suites add more when their deps answer. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true. Do not treat a stale headcount in this paragraph as the Done bar — re-run the suite.
 
 | File                                | Covers                                                                                                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |

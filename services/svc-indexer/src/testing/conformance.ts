@@ -369,6 +369,31 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
       expect((await shallow.sync()).idle).toBe('halted');
     });
 
+    /**
+     * README: resume is for AFTER re-index, not instead of it. Without this
+     * path a deep halt is permanent even when an operator has repaired the
+     * projection — sync would keep returning idle:halted forever.
+     */
+    it('resume after a deep halt clears the halt so a later pass can run', async () => {
+      source.append(block(level(MARKET, 'bid', '100', '1')));
+      for (let i = 0; i < 9; i++) source.append(block(level(MARKET, 'bid', '100', String(i + 2))));
+
+      const shallow = newIndexer(2);
+      await shallow.sync();
+      source.reorg(1, [block(level(MARKET, 'bid', '100', '99'))]);
+      await expect(shallow.sync()).rejects.toBeInstanceOf(ReorgTooDeepError);
+      expect(shallow.halted).not.toBeNull();
+      expect(shallow.lastError).not.toBeNull();
+
+      shallow.resume();
+      expect(shallow.halted).toBeNull();
+      expect(shallow.lastError).toBeNull();
+      // The deep fork is still present — next pass must ATTEMPT (throw again),
+      // not silently idle as halted.
+      await expect(shallow.sync()).rejects.toBeInstanceOf(ReorgTooDeepError);
+      expect(shallow.halted).not.toBeNull();
+    });
+
     // ── Pruning ───────────────────────────────────────────────────────────
 
     it('prunes superseded versions without changing what is served', async () => {
