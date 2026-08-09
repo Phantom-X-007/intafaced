@@ -31,7 +31,7 @@ async function ctx(scopes: string[], userId = USER): Promise<Context> {
     },
     authConfig,
   );
-  return { principal: await verifyAccessToken(token, authConfig), region: 'DE', requestId: 'req-sub' };
+  return { principal: await verifyAccessToken(token, authConfig), service: null, region: 'DE', requestId: 'req-sub' };
 }
 
 function mandateRecord(overrides: Record<string, unknown> = {}) {
