@@ -91,7 +91,10 @@ public class DualBookMoneyDoorInterceptor implements HandlerInterceptor {
             // exchange-api order place/cancel (second book if still wired)
             "/order/add",
             // ucenter promotion card exchange freezes available → frozen (increaseFrozen)
-            "/promotion"
+            "/promotion",
+            // exchange matching process — publishes exchange-order-completed (settlement)
+            "/monitor/reset-trader",
+            "/monitor/start-trader"
     );
 
     /**

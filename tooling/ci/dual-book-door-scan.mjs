@@ -2,8 +2,8 @@
 /**
  * Dual-book door-kill registration scan (Plan P2-4 · Spec DB-2 · Architect A1).
  *
- * Proves the Spring money-door interceptor exists and is registered on the four
- * money-facing ApplicationConfig modules (admin, ucenter-api, otc-api, exchange-api).
+ * Proves the Spring money-door interceptor exists and is registered on the five
+ * money-facing ApplicationConfig modules (admin, ucenter-api, otc-api, exchange-api, exchange).
  *
  * Does not prove a running JVM — that is residual until a Spring boot smoke exists.
  * Combined with DAO no-ops + service throws + vendor-java-money-scan, this is the
@@ -111,6 +111,9 @@ const REQUIRED_CONFIG_MARKERS = [
   { id: 'ucenter-api', pathIncludes: ['ucenter-api', 'ApplicationConfig.java'] },
   { id: 'otc-api', pathIncludes: ['otc-api', 'ApplicationConfig.java'] },
   { id: 'exchange-api', pathIncludes: ['exchange-api', 'ApplicationConfig.java'] },
+  // Matching process hosts MonitorController paths that publish settlement Kafka.
+  // Path must not match exchange-api: use the module directory boundary.
+  { id: 'exchange', pathIncludes: ['00_framework/exchange/', 'ApplicationConfig.java'] },
 ];
 
 const appConfigs = walk(VENDOR, (name, p) => name === 'ApplicationConfig.java');
