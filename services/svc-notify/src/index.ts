@@ -15,6 +15,7 @@ import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
 import { ALERT_SWEEP_INTERVAL_MS, AlertService, type AlertSweepReport } from './alerts/service.js';
 import { PostgresAlertStore } from './alerts/store.js';
+import { createTradeHttpMarkSource } from './alerts/trade-http-mark.js';
 import type { MarkSource } from './alerts/types.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -128,13 +129,12 @@ const notify = new NotifyService(
 );
 
 /**
- * v22.alerts mark port — default is dark.
+ * v22.alerts mark port.
  *
- * An alert compared against a price the platform cannot source must refuse
- * rather than fire on a stale or invented number. Until a real mark feed is
- * injected (trade public mark / owner-configured source), every evaluation
- * returns `alert.price_unavailable`. Watchlist CRUD still works; fire does not
- * invent a price.
+ * Dark when TRADE_URL is unset — refuse rather than invent. Live when TRADE_URL
+ * points at svc-trade's public REST (same ticker bank already uses for loan
+ * marks). The live claim is never written as a literal on this entrypoint —
+ * only createTradeHttpMarkSource does that, and only when a base URL is set.
  */
 const darkMarks: MarkSource = {
   kind: 'dark',
@@ -146,7 +146,8 @@ const darkMarks: MarkSource = {
     };
   },
 };
-const alerts = new AlertService(new PostgresAlertStore(sql), darkMarks, notify);
+const alertMarks: MarkSource = env.TRADE_URL ? createTradeHttpMarkSource({ baseUrl: env.TRADE_URL }) : darkMarks;
+const alerts = new AlertService(new PostgresAlertStore(sql), alertMarks, notify);
 /** Last alert sweep — see the interval below. Null until the first pass completes. */
 let lastAlertSweep: AlertSweepReport | null = null;
 let lastAlertSweepAt: string | null = null;

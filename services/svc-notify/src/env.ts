@@ -138,6 +138,17 @@ const schema = serviceEnvSchema
 
       /** How long an address-confirmation code stays valid. */
       NOTIFY_VERIFY_TTL_MINUTES: z.coerce.number().int().min(1).max(120).default(15),
+
+      /**
+       * Public trade base URL for v22.alerts marks (`GET /api/v1/markets` +
+       * `GET /api/v1/ticker/:symbol`). Same surface svc-bank already uses for
+       * loan marks — no invent, no shared table.
+       *
+       * Unset / blank → production keeps the dark MarkSource (canFire false).
+       * Set → live wiring; individual quotes may still refuse when the book is
+       * empty or trade is down.
+       */
+      TRADE_URL: blankAsAbsent(z.string().url().optional()),
     }),
   )
   .superRefine((parsed, ctx) => {

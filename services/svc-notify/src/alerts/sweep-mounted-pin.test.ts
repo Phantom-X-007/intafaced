@@ -59,14 +59,19 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(createAlert).toMatch(/evaluation: alerts\.evaluationStatus\(\)/);
   });
 
-  it('no mark source in production claims to be live — that is a Class X credential decision, not a code change', () => {
-    // The inverse of the D-S-13 second correction: there, a gate went green
-    // because handlers existed. Here the risk is the opposite direction — a
-    // future edit flipping `kind` to 'live' to make a surface look finished while
-    // no feed is actually wired. The dark port is the honest default and stays
-    // until an owner provisions a real one.
+  it('live is only claimed by the trade HTTP factory when TRADE_URL is set — never hardcoded in the entrypoint', () => {
+    // Inverse of the D-S-13 second correction: do not paint `kind: 'live'` on
+    // the entrypoint to look finished. Dark remains the default when TRADE_URL
+    // is unset. Live comes only from createTradeHttpMarkSource (public ticker
+    // bank already uses) — not Class X credentials, and not invent.
     const index = src('index.ts');
     expect(index).toMatch(/kind: 'dark'/);
-    expect(index).not.toMatch(/kind: 'live'/);
+    expect(index).toMatch(/createTradeHttpMarkSource/);
+    expect(index).toMatch(/env\.TRADE_URL/);
+    // Entrypoint must not hardcode a live claim; only the factory may.
+    expect(index).not.toMatch(/kind:\s*'live'/);
+    const factory = src('alerts/trade-http-mark.ts');
+    expect(factory).toMatch(/kind:\s*'live'/);
+    expect(factory).toMatch(/\/api\/v1\/ticker\//);
   });
 });
