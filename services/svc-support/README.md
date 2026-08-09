@@ -51,25 +51,25 @@ to a user needs an owner ruling (DIRECTION §8 item 9).
 tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
 (`EDGE_PRINCIPAL_SECRET`).
 
-| Procedure              | Scope                 | Behaviour                   |
-| ---------------------- | --------------------- | --------------------------- |
-| `support.create`       | `support:write`       | Create ticket for principal |
-| `support.listMine`     | `support:read`        | List caller tickets         |
-| `support.listAll`      | `support:ops`         | Operator list               |
-| `support.get`          | `support:read` / ops  | Self or operator            |
-| `support.comment`      | `support:write` / ops | Add comment                 |
-| `support.listComments` | `support:read` / ops  | Thread for ticket           |
-| `support.setStatus`    | `support:ops`         | Status change + trail row   |
-| `support.events`       | `support:read` / ops  | Audit trail, oldest first   |
-| `support.accountState` | `support:ops`         | Grounding read (no userId)  |
-| `support.escalate`     | `support:ops`         | Case file; refuses if empty |
-| `support.caseFile`     | `support:ops`         | Case file or null           |
-| `support.listKb`       | public                | Platform i18n-keyed spine   |
-| `support.searchKb`     | public                | Search spine by fragment    |
-| `support.getKb`        | public                | One article or null         |
-| `support.listQueue`    | `support:ops`         | Prioritised queue           |
-| `support.next`         | `support:ops`         | Peek next                   |
-| `support.claim`        | `support:ops`         | Exclusive claim (atomic)    |
+| Procedure              | Scope                 | Behaviour                    |
+| ---------------------- | --------------------- | ---------------------------- |
+| `support.create`       | `support:write`       | Create ticket for principal  |
+| `support.listMine`     | `support:read`        | List caller tickets          |
+| `support.listAll`      | `support:ops`         | Operator list                |
+| `support.get`          | `support:read` / ops  | Self or operator             |
+| `support.comment`      | `support:write` / ops | Add comment                  |
+| `support.listComments` | `support:read` / ops  | Thread for ticket            |
+| `support.setStatus`    | `support:ops`         | Status change + trail row    |
+| `support.events`       | `support:read` / ops  | Audit trail, oldest first    |
+| `support.accountState` | `support:ops`         | Grounding read (no userId)   |
+| `support.escalate`     | `support:ops`         | Case file; refuses if empty  |
+| `support.caseFile`     | `support:ops`         | Case file or null            |
+| `support.listKb`       | public                | Platform i18n-keyed spine    |
+| `support.searchKb`     | public                | Search spine by fragment     |
+| `support.getKb`        | public                | One article or null          |
+| `support.listQueue`    | `support:ops`         | Unassigned open/pending only |
+| `support.next`         | `support:ops`         | Peek next free ticket        |
+| `support.claim`        | `support:ops`         | Exclusive claim (atomic)     |
 
 HTTP: `GET /health`, `GET /ready` (`stage: 4-audited-grounded-desk`,
 `store: postgres`, `accountStateSource: svc-identity`).

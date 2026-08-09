@@ -15,6 +15,7 @@ import type {
 import { DarkAccountState, type AccountStateSource } from './account-state.js';
 import { buildCaseFile, citeAccountState, citeComment, citeKbArticle, groundingFor } from './case-file.js';
 import { getKbById, listPlatformKb, searchKb } from './kb-catalog.js';
+import { isTerminal } from './lifecycle.js';
 import { assignNext, buildOperatorQueue, type QueueEntry, type QueueResult } from './operator-queue.js';
 import { MemorySupportStore, type SupportStore } from './store.js';
 import { withSupportSpan } from './tracing.js';
@@ -225,6 +226,12 @@ export class SupportService implements SupportContract {
     return withSupportSpan('support.escalate', { op: 'escalate' }, async (span) => {
       const ticket = await this.store.findById(input.ticketId);
       if (!ticket) throw ticketNotFound();
+      // Closed is terminal (lifecycle). An escalation after close is a second
+      // desk inventing work on a finished complaint — refuse by code, no case
+      // file, no trail noise. resolved → escalate stays legal (user not fixed).
+      if (isTerminal(ticket.status)) {
+        throw new SupportError('escalation refused: ticket is terminal', 'support.escalation.terminal');
+      }
 
       const readAt = new Date().toISOString();
       const citations: SupportCitation[] = [];

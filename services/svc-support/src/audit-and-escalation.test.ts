@@ -292,4 +292,21 @@ describe('escalation carries its case file', () => {
     const ticket = await support.getTicket({ userId: USER, ticketId: t.id, asOperator: true });
     expect(ticket.status).toBe('open');
   });
+
+  it('escalating a closed ticket is refused by code — terminal means finished', async () => {
+    const { support } = desk();
+    const t = await openTicket(support);
+    await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'closed' });
+    expect(
+      await codeOf(() =>
+        support.escalate({
+          operatorId: OP,
+          ticketId: t.id,
+          reason: 'other',
+          summary: 'Late hand-off after close.',
+        }),
+      ),
+    ).toBe('support.escalation.terminal');
+    expect(await support.getCaseFile({ operatorId: OP, ticketId: t.id })).toBeNull();
+  });
 });
