@@ -24,6 +24,7 @@ import {
   assertNotional,
   assertPrice,
   assertQty,
+  assertSettlementRails,
   assertSpotSurface,
   assertTradable,
   holdFor,
@@ -574,6 +575,7 @@ export class TradeService {
     // `assertSpotSurface`.
     assertSpotSurface(market, 'convert');
     assertTradable(market);
+    assertSettlementRails(market);
     assertQty(market, input.qty);
     // Same schedule gate as placeOrder / TWAP create. A quote for a shut venue
     // is a lie — convertExecute would then refuse market_closed after the user
@@ -682,6 +684,8 @@ export class TradeService {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
     assertTradable(market, { futuresEnabled: this.futuresEnabled });
+    // W4 U1: seed FX/commodity stay active in DB; place must refuse before hold.
+    assertSettlementRails(market);
 
     // Stage-1 paper isolation (academy.paper-trading): a paper market must never
     // post orderHold / tradeFill against real available balances. Live markets
@@ -2094,7 +2098,7 @@ export class TradeService {
     const kind = (input.kind ?? 'twap').toLowerCase();
     if (kind !== 'twap') {
       throw new TradeError(
-        `algo kind "${kind}" is not available — v1 is TWAP only (VWAP/POV wait on a real volume series)`,
+        `algo kind "${kind}" is not available — v1 is TWAP only (VWAP/POV blocked on market maturity, not missing candles)`,
         'trade.algo_unsupported_kind',
       );
     }
@@ -2104,6 +2108,7 @@ export class TradeService {
     // `assertTradable` happens to refuse the kind.
     assertSpotSurface(market, 'TWAP');
     assertTradable(market);
+    assertSettlementRails(market);
     assertMarketOpen(market, this.now());
     assertQty(market, input.totalQty);
     if (input.subAccountId) {

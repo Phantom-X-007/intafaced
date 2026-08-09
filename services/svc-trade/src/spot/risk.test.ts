@@ -5,6 +5,7 @@ import {
   assertNotional,
   assertPrice,
   assertQty,
+  assertSettlementRails,
   assertSpotSurface,
   assertTradable,
   holdFor,
@@ -346,6 +347,20 @@ describe('venue hours', () => {
   it('an active market is still refused when the venue is shut', () => {
     expect(() => assertTradable(EURUSD)).not.toThrow();
     expect(() => assertMarketOpen(EURUSD, new Date('2026-01-10T12:00:00Z'))).toThrow(TradeError);
+  });
+
+  it('W4 U1: production forex/commodity without rails refuse before hold', () => {
+    // EURUSD fixture is production-shaped (paper false) like migration seeds.
+    expect(() => assertSettlementRails(EURUSD)).toThrow(TradeError);
+    try {
+      assertSettlementRails(EURUSD);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(TradeError);
+      expect((e as TradeError).code).toBe('trade.unsettled_asset_class_listing');
+    }
+    expect(() => assertSettlementRails({ ...EURUSD, paper: true })).not.toThrow();
+    expect(() => assertSettlementRails(BTCUSDT)).not.toThrow();
   });
 
   /**
