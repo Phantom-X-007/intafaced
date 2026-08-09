@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { healthFromGrade, LatencyGradeRegistry, VenueLatencyGrader } from './latency.js';
-import { isRoutable } from '../source.js';
+import { parseAmount } from '@intafaced/ledger-client';
+import { type MarketDataAdapter, VenueUnavailableError } from '@intafaced/venue-contracts';
+import {
+  healthFromGrade,
+  isGraded,
+  LatencyGradeRegistry,
+  UNMEASURED_LATENCY_MS,
+  VenueLatencyGrader,
+} from './latency.js';
+import { isRoutable, type LiquiditySource, type VenueHealth } from '../source.js';
+import { planRoute } from '../router.js';
+import type { HttpPort, HttpResponse } from './transport.js';
+import { BINANCE_SPOT_RATE_LIMIT, BinanceSpotMarketData } from './venues/binance-spot.js';
+import { BybitSpotMarketData } from './venues/bybit-spot.js';
+import { RateLimitGovernor } from './rate-limit.js';
 
 const T0 = new Date('2026-07-30T12:00:00Z');
 const at = (offsetMs: number) => new Date(T0.getTime() + offsetMs);
@@ -16,13 +29,72 @@ function feed(
 }
 
 describe('VenueLatencyGrader', () => {
-  it('grades an unmeasured venue F, not A — no bad news is not evidence', () => {
+  it('reads an unmeasured venue as UNGRADED — no score, not a low score', () => {
     const grade = new VenueLatencyGrader('v').grade(T0);
-    expect(grade.grade).toBe('F');
+
+    // D-S-18: "a score for an adapter that has not run is not a low score — it
+    // is no score". `null`, the fabric's existing word for a refused answer.
+    expect(grade.grade).toBeNull();
+    expect(isGraded(grade)).toBe(false);
     expect(grade.samples).toBe(0);
+    expect(grade.reasons[0]).toContain('ungraded');
+  });
+
+  it('invents no statistic for a venue it has never measured', () => {
+    const grade = new VenueLatencyGrader('v').grade(T0);
+
+    // Not 0. A 0% reject rate over zero samples reads as "never once refused
+    // us", which is a perfect score awarded for silence.
+    expect(grade.rejectRateBps).toBeNull();
+    expect(grade.errorRateBps).toBeNull();
+    expect(grade.p50Ms).toBeNull();
     expect(grade.p95Ms).toBeNull();
-    expect(grade.provisional).toBe(true);
-    expect(grade.reasons[0]).toContain('never graded, not graded good');
+    expect(grade.staleMs).toBeNull();
+  });
+
+  it('distinguishes ungraded from a measured F — the two need opposite responses', () => {
+    const never = new VenueLatencyGrader('never-called');
+    const awful = new VenueLatencyGrader('measured-and-awful');
+    feed(awful, 20, 30_000);
+
+    const ungraded = never.grade(T0);
+    const failing = awful.grade(at(100));
+
+    // The whole point of this row. If both were 'F' an operator could not tell
+    // "this venue times out" (a venue fault) from "nothing ever called this
+    // venue" (unwired plumbing on our side).
+    expect(ungraded.grade).toBeNull();
+    expect(failing.grade).toBe('F');
+    expect(ungraded.grade).not.toBe(failing.grade);
+    expect(isGraded(ungraded)).toBe(false);
+    expect(isGraded(failing)).toBe(true);
+  });
+
+  it('names the measurement, so a consumer cannot read round-trip as stream lag', () => {
+    const grader = new VenueLatencyGrader('v');
+    expect(grader.grade(T0).measurement).toBe('rest-round-trip');
+    feed(grader, 5, 10);
+    // Stated on the ungraded grade too — which measurement is missing is itself
+    // information, and it does not change once observations arrive.
+    expect(grader.grade(at(50)).measurement).toBe('rest-round-trip');
+  });
+
+  it('grades a slow venue worse than a fast one on identical sample counts', () => {
+    const fast = new VenueLatencyGrader('fast');
+    const slow = new VenueLatencyGrader('slow');
+    feed(fast, 20, 40);
+    feed(slow, 20, 2_000);
+
+    const fastGrade = fast.grade(at(100));
+    const slowGrade = slow.grade(at(100));
+
+    expect(fastGrade.grade).toBe('A');
+    expect(slowGrade.grade).toBe('D');
+    expect(slowGrade.p95Ms).toBeGreaterThan(fastGrade.p95Ms!);
+    // Ordered on the scale, not merely different.
+    expect(['A', 'B', 'C', 'D', 'F'].indexOf(slowGrade.grade!)).toBeGreaterThan(
+      ['A', 'B', 'C', 'D', 'F'].indexOf(fastGrade.grade!),
+    );
   });
 
   it('grades a fast, clean venue A', () => {
@@ -95,6 +167,37 @@ describe('VenueLatencyGrader', () => {
     expect(grader.grade(at(5_000)).samples).toBe(0);
   });
 
+  it('a stale observation does not count as current — and does not keep its old grade', () => {
+    const grader = new VenueLatencyGrader('v', { maxAgeMs: 1_000 });
+    feed(grader, 20, 10, 'ok', 0);
+
+    // Inside the window: a genuine A, earned on 20 fast reads.
+    expect(grader.grade(at(500)).grade).toBe('A');
+
+    // Once those same observations age out, the A does not persist. A grade
+    // computed from a measurement taken an hour ago is a claim about the past
+    // presented as the present.
+    const after = grader.grade(at(5_000));
+    expect(after.grade).toBeNull();
+    expect(after.grade).not.toBe('A');
+    expect(isGraded(after)).toBe(false);
+    expect(after.samples).toBe(0);
+    // And it is excluded rather than trusted, so ageing out is safe.
+    expect(healthFromGrade(after, at(5_000)).healthy).toBe(false);
+  });
+
+  it('an observation inside the window but past the staleness ceiling is F, not ungraded', () => {
+    // The two absences are different: evidence that has aged OUT of the window
+    // leaves nothing to grade (ungraded); evidence still IN the window whose
+    // newest member is old is a measured venue that has gone quiet (F).
+    const grader = new VenueLatencyGrader('v');
+    feed(grader, 20, 10);
+    const grade = grader.grade(at(30_000));
+    expect(grade.grade).toBe('F');
+    expect(isGraded(grade)).toBe(true);
+    expect(grade.samples).toBe(20);
+  });
+
   it('evicts by count, so a busy venue does not grow without limit', () => {
     const grader = new VenueLatencyGrader('v', { maxSamples: 10 });
     feed(grader, 50, 10);
@@ -144,9 +247,15 @@ describe('healthFromGrade — the whole wiring into routing', () => {
     expect(healthFromGrade(grader.grade(at(50)), at(50)).healthy).toBe(true);
   });
 
-  it('an unmeasured venue IS excluded — unmeasured is not healthy', () => {
+  it('an unmeasured venue IS excluded — ungraded is not permission to route', () => {
     const health = healthFromGrade(new VenueLatencyGrader('v').grade(T0), T0);
+
+    // The asymmetry: we do not claim the venue is slow, and we still decline to
+    // route to it. D-S-18: "an unscored adapter must not receive routing weight."
     expect(health.healthy).toBe(false);
+    expect(health.reason).toContain('ungraded');
+    // And it does not masquerade as a bad measurement either.
+    expect(health.reason).not.toContain('grade F');
   });
 
   it('carries p95 as latencyMs, which is what the router breaks ties on', () => {
@@ -193,5 +302,193 @@ describe('LatencyGradeRegistry', () => {
     feed(registry.for('a'), 5, 10);
     feed(registry.for('a'), 5, 10, 'ok', 5);
     expect(registry.for('a').grade(at(50)).samples).toBe(10);
+  });
+
+  it('reports ungraded for a registered venue that has never answered', () => {
+    const registry = new LatencyGradeRegistry();
+    registry.for('registered-never-called');
+    feed(registry.for('busy'), 20, 10);
+
+    const grades = registry.gradeAll(at(100));
+    const byId = new Map(grades.map((g) => [g.venueId, g]));
+
+    // Registration is not measurement. A venue appears in the report because we
+    // know about it, and it reads `null` until it has actually answered us.
+    expect(byId.get('registered-never-called')!.grade).toBeNull();
+    expect(byId.get('busy')!.grade).toBe('A');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// REACHABILITY
+//
+// The grade being correct is not the bar. Seven guards in this repo were correct
+// in isolation and unreachable in place, each with a comment asserting the
+// property the code lacked. These tests hold the adapters through the
+// `MarketDataAdapter` INTERFACE — the type every consumer actually has, since
+// `createVenueMarketDataAdapter` returns `MarketDataAdapter | null` — and read
+// the grade through it. If `latencyGrade` were declared only on the concrete
+// classes, none of this would compile.
+//
+// No live network: fake HTTP transports only. `venue.aggregation` residual (4)
+// records that there is no live-network CI, and adding one is a separate call.
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('latency grading is reachable through MarketDataAdapter', () => {
+  /** A venue that answers one REST call, at a controllable cost in ms. */
+  function fakeHttp(body: unknown, costMs: number, clock: { now: number }, status = 200): HttpPort {
+    return {
+      async get(): Promise<HttpResponse> {
+        clock.now += costMs;
+        return { status, body, header: () => null };
+      },
+    };
+  }
+
+  const exchangeInfo = { symbols: [] };
+  const bybitInfo = { retCode: 0, result: { list: [] } };
+
+  it('exposes the grade on both venues through the interface, not just the class', () => {
+    const binance: MarketDataAdapter = new BinanceSpotMarketData();
+    const bybit: MarketDataAdapter = new BybitSpotMarketData();
+
+    // Reachable through the contract. This is the assertion that would have
+    // caught the guard being exported and consumed by nothing.
+    expect(typeof binance.latencyGrade).toBe('function');
+    expect(typeof bybit.latencyGrade).toBe('function');
+    expect(binance.latencyGrade!().venueId).toBe('binance-spot');
+    expect(bybit.latencyGrade!().venueId).toBe('bybit-spot');
+  });
+
+  it('reads UNGRADED before the adapter has made a single call', () => {
+    const adapters: MarketDataAdapter[] = [new BinanceSpotMarketData(), new BybitSpotMarketData()];
+
+    for (const adapter of adapters) {
+      const grade = adapter.latencyGrade!(T0);
+      // A freshly constructed adapter has measured nothing. It must not read as
+      // an A (a venue we have proven fast) and must not read as an F (a venue we
+      // have proven slow). It reads as unmeasured.
+      expect(grade.grade).toBeNull();
+      expect(grade.samples).toBe(0);
+      expect(grade.measurement).toBe('rest-round-trip');
+    }
+  });
+
+  it('becomes graded once real calls have been observed, on an injected clock', async () => {
+    const clock = { now: T0.getTime() };
+    const adapter: MarketDataAdapter = new BinanceSpotMarketData({
+      http: fakeHttp(exchangeInfo, 40, clock),
+      clock: () => clock.now,
+      restBase: 'https://rest.test',
+    });
+
+    expect(adapter.latencyGrade!(new Date(clock.now)).grade).toBeNull();
+
+    await adapter.markets();
+
+    const grade = adapter.latencyGrade!(new Date(clock.now));
+    expect(grade.samples).toBe(1);
+    expect(grade.grade).toBe('A');
+    expect(grade.p95Ms).toBe(40);
+    // One call is not a p95. The letter is offered and labelled, not trusted.
+    expect(grade.provisional).toBe(true);
+  });
+
+  it('grades the slower of two real adapters worse — the comparison #1148 made possible', async () => {
+    const fastClock = { now: T0.getTime() };
+    const slowClock = { now: T0.getTime() };
+
+    const fast: MarketDataAdapter = new BinanceSpotMarketData({
+      http: fakeHttp(exchangeInfo, 30, fastClock),
+      clock: () => fastClock.now,
+      restBase: 'https://rest.test',
+    });
+    const slow: MarketDataAdapter = new BybitSpotMarketData({
+      http: fakeHttp(bybitInfo, 2_500, slowClock),
+      clock: () => slowClock.now,
+      restBase: 'https://rest.test',
+    });
+
+    await fast.markets();
+    await slow.markets();
+
+    const fastGrade = fast.latencyGrade!(new Date(fastClock.now));
+    const slowGrade = slow.latencyGrade!(new Date(slowClock.now));
+
+    expect(fastGrade.grade).toBe('A');
+    expect(slowGrade.grade).toBe('D');
+    expect(slowGrade.p95Ms!).toBeGreaterThan(fastGrade.p95Ms!);
+  });
+
+  it('does not charge a venue for a delay OUR rate limiter imposed', async () => {
+    const clock = { now: T0.getTime() };
+    // A governor with almost nothing to spend refuses before the request is made
+    // (`markets()` costs weight 20).
+    const governor = new RateLimitGovernor({ ...BINANCE_SPOT_RATE_LIMIT, capacity: 2 }, clock.now);
+    const adapter: MarketDataAdapter = new BinanceSpotMarketData({
+      http: fakeHttp(exchangeInfo, 10, clock),
+      clock: () => clock.now,
+      restBase: 'https://rest.test',
+      governor,
+    });
+
+    await expect(adapter.markets()).rejects.toThrow(VenueUnavailableError);
+
+    // Still ungraded. Timing our own refusal would make our throttling look like
+    // the venue degrading, and the grade would then argue for routing away from
+    // a venue that did nothing wrong.
+    const grade = adapter.latencyGrade!(new Date(clock.now));
+    expect(grade.grade).toBeNull();
+    expect(grade.samples).toBe(0);
+  });
+});
+
+describe('an unmeasured venue cannot win a routing tie-break', () => {
+  it('loses the equal-price tie to a venue with a real measurement', async () => {
+    // The sentinel is the one number in latency.ts that could be mistaken for a
+    // measurement, and `VenueHealth.latencyMs` has no `null` to use. The
+    // mitigation is directional: the sentinel is the MAXIMUM and router.ts sorts
+    // ascending, so an unmeasured venue always loses a tie it enters.
+    const measured = new VenueLatencyGrader('measured');
+    feed(measured, 20, 250);
+    const unmeasured = new VenueLatencyGrader('unmeasured');
+    // Answering, never succeeding, and too thin to exclude: graded F but
+    // provisional, so it stays healthy AND carries the sentinel into ranking.
+    feed(unmeasured, 2, 5, 'error');
+
+    const measuredHealth = healthFromGrade(measured.grade(at(100)), at(100));
+    const unmeasuredHealth = healthFromGrade(unmeasured.grade(at(100)), at(100));
+
+    expect(measuredHealth.healthy).toBe(true);
+    expect(unmeasuredHealth.healthy).toBe(true);
+    expect(unmeasuredHealth.latencyMs).toBe(UNMEASURED_LATENCY_MS);
+
+    const source = (id: string, health: VenueHealth): LiquiditySource => ({
+      id,
+      kind: 'external-cex',
+      capabilities: ['quote'],
+      health: () => health,
+      markets: async () => [],
+      quote: async (req) => ({
+        venueId: id,
+        symbol: req.symbol,
+        side: req.side,
+        amount: parseAmount('1'),
+        price: parseAmount('30000'),
+        feeBps: 10,
+        expiresAt: at(60_000),
+      }),
+      orderBook: async () => ({}) as never,
+      submit: async () => ({}) as never,
+    });
+
+    const plan = await planRoute(
+      { symbol: 'BTC/USDT', side: 'buy', amount: parseAmount('1') },
+      [source('unmeasured', unmeasuredHealth), source('measured', measuredHealth)],
+      { now: at(100) },
+    );
+
+    // Identical price and fee, so the ONLY discriminator is latencyMs.
+    expect(plan.legs[0]!.venueId).toBe('measured');
   });
 });
