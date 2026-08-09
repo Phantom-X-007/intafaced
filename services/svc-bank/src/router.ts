@@ -1558,6 +1558,9 @@ export function createBankRouter(bank: BankServices) {
           outstandingPrincipal: amountString,
           badDebt: amountString,
           funded: amountString,
+          drift: amountString,
+          /** False until funded is journal-independent; do not treat drift 0 as green. */
+          independent: z.boolean(),
           insuranceCapacity: amountString,
         }),
       )
@@ -1569,6 +1572,8 @@ export function createBankRouter(bank: BankServices) {
             outstandingPrincipal: formatAmount(r.outstandingPrincipal),
             badDebt: formatAmount(r.badDebt),
             funded: formatAmount(r.funded),
+            drift: formatAmount(r.drift),
+            independent: r.independent,
             insuranceCapacity: formatAmount(await bank.loans.insuranceCapacity(input.debtAssetId)),
           };
         }),
