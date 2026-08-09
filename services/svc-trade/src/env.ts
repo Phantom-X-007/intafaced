@@ -115,6 +115,21 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
       /**
+       * OPTIONS SETTLEMENT FIXING CONFIG (trade.options / D7).
+       *
+       * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
+       * kind=options throws `trade.options_fixing_unconfigured` until this is
+       * set to a non-empty opaque string. The string is stamped on the market
+       * row as `settlement_fixing`; it is NOT parsed for source, window, expiry
+       * clock, or funded payor account. Those are owner law (D7) and inventing
+       * them here would be the exact failure this thin slice exists to prevent.
+       *
+       * No IV surface. No pricing model. Orders on options remain refused by
+       * `assertTradable` (`trade.market_kind_unsupported`) until an engine exists.
+       */
+      TRADE_OPTIONS_SETTLEMENT_FIXING: z.string().default(''),
+
+      /**
        * Futures residual jobs (liquidation scan + funding ticks).
        * Default OFF — must be explicitly enabled. Never invents markets/rates.
        */

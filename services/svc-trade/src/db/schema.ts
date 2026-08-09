@@ -29,6 +29,12 @@ export const trade = pgSchema('trade');
 /** §5.2 `markets.kind`. Only `spot` is served in this PR; the others are listed states. */
 export const marketKindEnum = trade.enum('market_kind', ['spot', 'futures', 'options']);
 
+/** European option call/put when kind=options (0017). NULL on non-options. */
+export const optionTypeEnum = trade.enum('option_type', ['call', 'put']);
+
+/** v1 European only (0017). American is a product decision + migration. */
+export const optionStyleEnum = trade.enum('option_style', ['european']);
+
 /**
  * What class of thing is listed (0001).
  *
@@ -130,6 +136,16 @@ export const markets = trade.table(
     schedule: tradingScheduleEnum('schedule').notNull().default('crypto-24x7'),
     /** Paper/sim market — placeOrder never posts real ledger holds. */
     paper: boolean('paper').notNull().default(false),
+    /**
+     * European option terms (0017) — all null unless kind=options.
+     * CHECK `markets_options_terms_ck` makes half-listed options impossible.
+     * `settlementFixing` is an opaque D7 stamp, not a fabricated oracle price.
+     */
+    optionType: optionTypeEnum('option_type'),
+    optionStyle: optionStyleEnum('option_style'),
+    optionStrike: amount('option_strike'),
+    optionExpiryAt: tstz('option_expiry_at'),
+    settlementFixing: text('settlement_fixing'),
     /**
      * Which plane lists this market (§22, §17.5).
      *

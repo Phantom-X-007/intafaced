@@ -30,6 +30,7 @@ import {
   protectionPriceFor,
   requireSupportedType,
 } from './risk.js';
+import { resolveOptionsListing } from './options-listing.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
@@ -106,6 +107,14 @@ export interface TradeServiceOptions {
    * enable funding, and does not pick a leverage — see `assertTradable`.
    */
   futuresEnabled?: boolean;
+  /**
+   * Opaque D7 settlement-fixing config (`TRADE_OPTIONS_SETTLEMENT_FIXING`).
+   *
+   * EMPTY BY DEFAULT. Presence is the only signal — never parsed for source,
+   * window, or payor account (those are owner law). Empty → listMarket refuses
+   * kind=options with `trade.options_fixing_unconfigured`.
+   */
+  optionsSettlementFixing?: string;
   /**
    * Seed/mm bot place path (SD-4 kill-switch). OFF refuses `seeded: true` places.
    * Default false — seed must be deliberately enabled.
@@ -217,25 +226,39 @@ export interface ListMarketInput {
   /** Paper market — drills only; placeOrder never posts ledger holds. */
   paper?: boolean;
   /**
-   * `spot` (default) or `futures`. The column and its enum have existed since
-   * `0000_trade_init.sql`, whose own comment says "the kind enum already carries
-   * their values, so listing a futures market later is" additive — and this method
-   * hardcoded `'spot'` anyway, so the only way a futures row reached
-   * `trade.markets` was raw SQL in a test.
+   * `spot` (default), `futures`, or `options`. The column and its enum have
+   * existed since `0000_trade_init.sql`, whose own comment says "the kind enum
+   * already carries their values, so listing a futures market later is" additive
+   * — and this method hardcoded `'spot'` anyway, so the only way a futures row
+   * reached `trade.markets` was raw SQL in a test.
    *
    * LISTING IS NOT ENABLING, and the ADR is explicit that the two are different
    * acts: "modelling an instrument is always honest; listing one you cannot settle
    * never is" (`2026-08-04-instrument-enum-authority.md`). A futures row created
    * here is quotable and readable and takes no order at all unless
-   * `TRADE_FUTURES_ENABLED` is on. `options` is accepted by the column and refused
-   * by `assertTradable` on every path; nothing here changes that.
+   * `TRADE_FUTURES_ENABLED` is on.
+   *
+   * `options` is refused until settlement fixing is configured
+   * (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European contract terms
+   * are supplied — half-listed options cannot exist (service + DB CHECK). Even
+   * when listed, `assertTradable` still refuses options orders by kind (no engine).
    */
   kind?: MarketKind;
+  /** Required when kind=options: call or put. */
+  optionType?: 'call' | 'put' | null;
+  /** v1 european only; defaults to european when kind=options. */
+  optionStyle?: 'european' | null;
+  /** Required when kind=options: strike > 0 in quote units. */
+  optionStrike?: Amount | null;
+  /** Required when kind=options: European expiry instant. */
+  optionExpiryAt?: Date | null;
 }
 
 export class TradeService {
   private readonly spotEnabled: boolean;
   private readonly futuresEnabled: boolean;
+  /** Opaque D7 fixing stamp; empty refuses options listing. */
+  private readonly optionsSettlementFixing: string;
   private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
   private readonly convertEnabled: boolean;
@@ -261,6 +284,8 @@ export class TradeService {
     // `?? false`, and the asymmetry with the line above is the whole point: a
     // deploy that forgets to mention futures does not get futures.
     this.futuresEnabled = options.futuresEnabled ?? false;
+    // Empty default — D7 unset means refuse options listing, never invent a fixing.
+    this.optionsSettlementFixing = options.optionsSettlementFixing ?? '';
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
     this.convertEnabled = options.convertEnabled ?? true;
@@ -371,6 +396,7 @@ export class TradeService {
     const assetClass = input.assetClass ?? 'crypto';
     const paper = input.paper === true;
     const status = input.status ?? 'active';
+    const kind = input.kind ?? 'spot';
     // D-S-05 / instrument-enum ADR: modelling forex/commodities is honest;
     // listing them for production trading without fiat settlement is the lie.
     // paper=true (drills) and non-active status remain allowed.
@@ -380,20 +406,37 @@ export class TradeService {
         'trade.unsettled_asset_class_listing',
       );
     }
+    // trade.options honest thin: refuse kind=options until D7 fixing is configured;
+    // require complete European terms so half-listed options cannot exist.
+    // No IV surface, no pricing model, no invented oracle numbers.
+    const optionTerms = resolveOptionsListing({
+      kind,
+      settlementFixingConfigured: this.optionsSettlementFixing,
+      optionType: input.optionType,
+      optionStyle: input.optionStyle,
+      strike: input.optionStrike,
+      expiryAt: input.optionExpiryAt,
+    });
     const rows = await this.sql<MarketRow[]>`
       INSERT INTO trade.markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
         min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-        asset_class, schedule, display_name, paper
+        asset_class, schedule, display_name, paper,
+        option_type, option_style, option_strike, option_expiry_at, settlement_fixing
       ) VALUES (
-        ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, ${input.kind ?? 'spot'},
+        ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, ${kind},
         ${formatAmount(input.tickSize)}::numeric, ${formatAmount(input.lotSize)}::numeric,
         ${formatAmount(input.minQty)}::numeric,
         ${input.maxQty == null ? null : formatAmount(input.maxQty)}::numeric,
         ${formatAmount(input.minNotional)}::numeric,
         ${status}, ${input.makerBps}, ${input.takerBps}, now(),
         ${assetClass}, ${input.schedule ?? 'crypto-24x7'},
-        ${input.displayName ?? input.symbol}, ${paper}
+        ${input.displayName ?? input.symbol}, ${paper},
+        ${optionTerms?.optionType ?? null},
+        ${optionTerms?.optionStyle ?? null},
+        ${optionTerms == null ? null : formatAmount(optionTerms.strike)}::numeric,
+        ${optionTerms?.expiryAt ?? null},
+        ${optionTerms?.settlementFixing ?? null}
       )
       ON CONFLICT (symbol) DO UPDATE SET updated_at = now()
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,

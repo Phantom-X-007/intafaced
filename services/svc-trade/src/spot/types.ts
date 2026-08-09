@@ -198,6 +198,16 @@ export type TradeErrorCode =
    * Model/paper listings remain legal; this is the production-list lie.
    */
   | 'trade.unsettled_asset_class_listing'
+  /**
+   * Options listing refused because settlement fixing is not configured (D7).
+   * `TRADE_OPTIONS_SETTLEMENT_FIXING` empty → refuse. Distinct from terms.
+   */
+  | 'trade.options_fixing_unconfigured'
+  /**
+   * Options listing refused for incomplete contract terms (half-list) or terms
+   * on a non-options kind. Schema CHECK `markets_options_terms_ck` is the same rule.
+   */
+  | 'trade.options_terms_incomplete'
   | 'trade.hold_uncovered'
   | 'trade.convert_disabled'
   | 'trade.convert_no_liquidity'
