@@ -1,0 +1,177 @@
+/**
+ * Trade public ticker → MarkSource for v22.alerts.
+ *
+ * Leverage: same HTTP surface svc-bank already marks loans against
+ * (`GET /api/v1/ticker/:symbol`, mid-of-book when two-sided, else last).
+ * No import of svc-trade, no shared table, no invented price.
+ *
+ * `kind: 'live'` means the wiring exists. Individual quotes may still return
+ * `unavailable` (unknown market, empty book, network error) — never invent.
+ */
+
+import { isValidPositivePrice, parseDecimalString } from './decimal.js';
+import type { MarkQuote, MarkSource } from './types.js';
+
+export type TradeHttpMarkOptions = {
+  readonly baseUrl: string;
+  readonly fetchImpl?: typeof fetch;
+  /** Per-request budget. Default 3s — same order as bank's ticker read. */
+  readonly timeoutMs?: number;
+  /** How long a marketId→symbol map entry is reused. */
+  readonly marketCacheMs?: number;
+};
+
+type MarketRow = {
+  readonly id?: string;
+  readonly symbol?: string;
+};
+
+type TickerRow = {
+  readonly bid?: string | null;
+  readonly ask?: string | null;
+  readonly last?: string | null;
+  readonly timestamp?: number | null;
+};
+
+/**
+ * Mid of two positive decimal strings without using JS number.
+ * Returns null when either side fails positive-price validation.
+ */
+export function midDecimalString(bid: string, ask: string): string | null {
+  if (!isValidPositivePrice(bid) || !isValidPositivePrice(ask)) return null;
+  const pb = parseDecimalString(bid);
+  const pa = parseDecimalString(ask);
+  if (!pb.ok || !pa.ok || pb.negative || pa.negative) return null;
+  const scale = Math.max(pb.frac.length, pa.frac.length);
+  const toScaled = (p: { int: string; frac: string }) => BigInt(p.int + p.frac.padEnd(scale, '0'));
+  const mid = (toScaled(pb) + toScaled(pa)) / 2n;
+  if (mid <= 0n) return null;
+  if (scale === 0) return mid.toString();
+  const raw = mid.toString().padStart(scale + 1, '0');
+  const intPart = raw.slice(0, -scale).replace(/^0+(?=\d)/, '') || '0';
+  const fracPart = raw.slice(-scale).replace(/0+$/, '');
+  return fracPart ? `${intPart}.${fracPart}` : intPart;
+}
+
+/** Prefer mid when two-sided; else last. Never invent zero or empty. */
+export function priceFromTicker(body: TickerRow): { price: string; quality: 'mid' | 'last' } | null {
+  if (body.bid && body.ask) {
+    const mid = midDecimalString(body.bid, body.ask);
+    if (mid) return { price: mid, quality: 'mid' };
+  }
+  if (body.last && isValidPositivePrice(body.last)) {
+    return { price: body.last.trim(), quality: 'last' };
+  }
+  return null;
+}
+
+/**
+ * Build a live MarkSource that reads trade's public REST.
+ *
+ * Callers only construct this when a base URL is configured. Unset URL stays on
+ * the dark port in `index.ts` so a deployment without trade does not claim live.
+ */
+export function createTradeHttpMarkSource(options: TradeHttpMarkOptions): MarkSource {
+  const doFetch = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 3_000;
+  const marketCacheMs = options.marketCacheMs ?? 60_000;
+  const base = options.baseUrl.replace(/\/+$/, '');
+
+  let symbolById: Map<string, string> | null = null;
+  let symbolsLoadedAt = 0;
+
+  async function loadSymbols(signal: AbortSignal): Promise<Map<string, string>> {
+    const now = Date.now();
+    if (symbolById && now - symbolsLoadedAt < marketCacheMs) return symbolById;
+
+    const res = await doFetch(`${base}/api/v1/markets`, { signal });
+    if (!res.ok) {
+      throw new Error(`markets HTTP ${res.status}`);
+    }
+    const body = (await res.json()) as MarketRow[];
+    const map = new Map<string, string>();
+    if (Array.isArray(body)) {
+      for (const row of body) {
+        if (typeof row?.id === 'string' && typeof row?.symbol === 'string' && row.id && row.symbol) {
+          map.set(row.id, row.symbol);
+        }
+      }
+    }
+    symbolById = map;
+    symbolsLoadedAt = now;
+    return map;
+  }
+
+  return {
+    kind: 'live',
+    async quote(marketId: string, _at?: Date): Promise<MarkQuote> {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        let symbol: string | undefined;
+        try {
+          const map = await loadSymbols(controller.signal);
+          symbol = map.get(marketId);
+        } catch {
+          return {
+            kind: 'unavailable',
+            reason: 'refused',
+            detail: 'trade markets list unreachable — refuse rather than invent',
+          };
+        }
+        if (!symbol) {
+          return {
+            kind: 'unavailable',
+            reason: 'refused',
+            detail: `no trade market for id ${marketId}`,
+          };
+        }
+
+        const path = `${base}/api/v1/ticker/${encodeURIComponent(symbol)}`;
+        let res: Response;
+        try {
+          res = await doFetch(path, { signal: controller.signal });
+        } catch {
+          return {
+            kind: 'unavailable',
+            reason: 'refused',
+            detail: 'trade ticker unreachable — refuse rather than invent',
+          };
+        }
+        if (!res.ok) {
+          return {
+            kind: 'unavailable',
+            reason: 'refused',
+            detail: `trade ticker HTTP ${res.status}`,
+          };
+        }
+
+        let body: TickerRow;
+        try {
+          body = (await res.json()) as TickerRow;
+        } catch {
+          return {
+            kind: 'unavailable',
+            reason: 'refused',
+            detail: 'trade ticker body unreadable',
+          };
+        }
+
+        const priced = priceFromTicker(body);
+        if (!priced) {
+          return {
+            kind: 'unavailable',
+            reason: 'stale',
+            detail: 'trade ticker has no usable bid/ask/last',
+          };
+        }
+
+        const at = typeof body.timestamp === 'number' && Number.isFinite(body.timestamp) ? new Date(body.timestamp) : new Date();
+
+        return { kind: 'ok', price: priced.price, at };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  };
+}

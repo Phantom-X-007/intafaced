@@ -359,8 +359,15 @@ every `ALERT_SWEEP_INTERVAL_MS`, clearing it on shutdown. The last pass is on
 **Dark mark refuse.** Evaluation is pure (`evaluatePriceAlert`) against an
 injected mark port. When the port returns unavailable (dark / stale / refused),
 the outcome is `alert.price_unavailable` and **nothing is written to the inbox**.
-A missing mark is never treated as zero and never invented. Production boots a
-dark port until a real mark feed is wired — CRUD still works; fire does not lie.
+A missing mark is never treated as zero and never invented.
+
+**Live mark when `TRADE_URL` is set.** Production injects
+`createTradeHttpMarkSource` against svc-trade's public REST — the same
+`GET /api/v1/markets` + `GET /api/v1/ticker/:symbol` surface svc-bank already
+uses for loan marks (mid when two-sided, else last; decimal strings only).
+Unset / blank `TRADE_URL` keeps the dark port: CRUD still works; fire does not
+lie. `kind: 'live'` is claimed only by that factory, never hardcoded in the
+entrypoint to look finished.
 
 `MarkSource.kind` (`dark` | `live`) is **required**, because an optional field
 with a default is how a dark source silently reads as a live one. It describes
@@ -413,6 +420,7 @@ schema refuses it.
 | `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                                                   |
 | `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                                                      |
 | `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                                                    |
+| `TRADE_URL`                             | —       | Unset ⇒ alert marks stay dark. Set ⇒ public ticker mark source (live wiring).                            |
 
 An empty string is treated as absent, because that is what `docker compose`
 interpolates an unset variable to — otherwise an unwired gateway would fail
@@ -421,16 +429,16 @@ honestly unconfigured.
 
 ## §13 sockets
 
-| Socket    | State                                                                                                                                                                                                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Email     | Adapter shipped and tested against a real HTTP server. **Waiting on credentials the owner must obtain.** Unconfigured, it refuses every message.                                                                                                                             |
-| Push      | Same. Device tokens register and confirm per user; no push credentials configured.                                                                                                                                                                                           |
-| SMS       | Same. Addresses are E.164, text is composed and capped; no SMS credentials configured.                                                                                                                                                                                       |
-| Mark feed | Sweep **mounted and running**; the port is `dark`, so every evaluation refuses `alert.price_unavailable` and both alert procedures say so. Class **C**, not B — the gap is disclosed where a user could otherwise be misled. Closing it is an owner-provisioned mark source. |
+| Socket    | State                                                                                                                                                                                                                                                                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Email     | Adapter shipped and tested against a real HTTP server. **Waiting on credentials the owner must obtain.** Unconfigured, it refuses every message.                                                                                                                                                                                               |
+| Push      | Same. Device tokens register and confirm per user; no push credentials configured.                                                                                                                                                                                                                                                             |
+| SMS       | Same. Addresses are E.164, text is composed and capped; no SMS credentials configured.                                                                                                                                                                                                                                                         |
+| Mark feed | Sweep **mounted and running**. With `TRADE_URL` set, marks read trade's public ticker (live wiring; empty book still refuses). Without it the port is `dark` and every evaluation refuses `alert.price_unavailable` with disclosure on both alert procedures. Class **C** when dark — the gap is named where a user could otherwise be misled. |
 
-None of these is a code gap. Each is a URL and a token away from working, and
-until then the in-app inbox carries every notification and the record says why
-nothing else did. The owner's list of what to obtain and where to put it:
+Email/push/SMS each need a URL and a token before they leave the platform; until
+then the in-app inbox carries every notification and the record says why nothing
+else did. The owner's list of what to obtain and where to put it:
 [`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`](../../docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md).
 
 ## Port
