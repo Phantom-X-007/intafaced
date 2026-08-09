@@ -86,8 +86,13 @@ function myFiles() {
 const { source, files: mine } = myFiles();
 
 if (mine.length === 0) {
-  console.log('  claim-check — nothing to compare (no changes on this branch, no paths given)');
-  process.exit(0);
+  // Exit 2 = cannot answer (same class as gh failure). Exit 0 used to look like
+  // "lane free" when an agent forgot to pass paths — the soft false-clear that
+  // ships agents into someone else's desk with a green checkmark.
+  console.error('  claim-check — CANNOT ANSWER: no paths given and this branch has no changes.');
+  console.error('      Pass the paths you are about to edit, e.g. `pnpm claim:check services/svc-bank`.');
+  console.error('      Not reporting "clear" — this tool has not checked anything.');
+  process.exit(2);
 }
 
 const prs = gh(['pr', 'list', '--state', 'open', '--limit', '60', '--json', 'number,title,author,headRefName,files']);
@@ -125,6 +130,11 @@ async function ownedPaths() {
     const out = [];
     for (const f of mod.FEATURES ?? []) {
       if (!f.owner) continue;
+      // `done` means the mountain already shipped. A leftover owner field is a
+      // ghost, not a live human claim — fencing agents on it is a false block
+      // (infra.ui-tokens + web.shell both sit done+owner:Nitro today).
+      // ready/wip/socket with an owner still fence; only done is ignored.
+      if (f.status === 'done') continue;
 
       // Declared paths, where a feature bothers to list them.
       const reqs = f.requires ?? [];
