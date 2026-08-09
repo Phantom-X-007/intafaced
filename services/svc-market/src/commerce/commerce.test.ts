@@ -328,6 +328,240 @@ if (!available) {
       });
       expect((await commerce.publicListings()).map((l) => l.id)).not.toContain(orphan!.id);
     });
+
+    it('resumes a crash after ledger post before settle (same purchaseId)', async () => {
+      const listing = await liveListing();
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-crash',
+        }),
+      );
+      const purchaseId = randomUUID();
+      // Simulate: claim row pending + ledger already posted, settle never ran.
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${purchaseId}, ${listing.id}, ${BUYER}, id, ${VENDOR_USER},
+               'USDT', '100'::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+      await ledger.post(
+        recipes.marketPurchase({
+          purchaseId,
+          listingId: listing.id,
+          buyerId: BUYER,
+          vendorUserId: VENDOR_USER,
+          assetId: 'USDT',
+          price: amt('100'),
+          commissionBps: 500,
+        }),
+      );
+
+      const resumed = await commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId });
+      expect(resumed.status).toBe('settled');
+      expect(resumed.ledgerTxId).toBeTruthy();
+      // Idempotent: money moved once.
+      expect(formatAmount((await ledger.balance(userAvailable(BUYER, 'USDT'))).amount)).toBe('900');
+      expect(formatAmount((await ledger.balance(userAvailable(VENDOR_USER, 'USDT'))).amount)).toBe('95');
+      expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('5');
+
+      const again = await commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId });
+      expect(again.ledgerTxId).toBe(resumed.ledgerTxId);
+    });
+
+    it('settles with explicit zero house commission (owner free rate)', async () => {
+      await approvedVendor(VENDOR_USER);
+      const free = new CommerceService(sql, vendors, ledger, { commissionBps: 0 });
+      const listing = await free.createListing({
+        userId: VENDOR_USER,
+        title: 'Free commission pack',
+        description: 'Owner set 0 bps',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '40',
+      });
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('100'),
+          rail: 'test',
+          railRef: 'buyer-seed-free',
+        }),
+      );
+      const p = await free.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: randomUUID() });
+      expect(p.status).toBe('settled');
+      expect(p.commissionBps).toBe(0);
+      expect(formatAmount((await ledger.balance(userAvailable(BUYER, 'USDT'))).amount)).toBe('60');
+      expect(formatAmount((await ledger.balance(userAvailable(VENDOR_USER, 'USDT'))).amount)).toBe('40');
+      expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('0');
+    });
+
+    it('refuses purchase of an archived listing', async () => {
+      const listing = await liveListing();
+      await commerce.archiveListing({ userId: VENDOR_USER, listingId: listing.id });
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-arch',
+        }),
+      );
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: randomUUID() })).rejects.toMatchObject({
+        code: 'market.listing_not_found',
+      });
+      expect((await commerce.publicListings()).map((l) => l.id)).not.toContain(listing.id);
+    });
+  });
+
+  describe('listings honesty residual', () => {
+    it('archive releases the listing slot so capacity returns', async () => {
+      await approvedVendor(VENDOR_USER);
+      const listing = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Temp',
+        description: 'will archive',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      expect((await vendors.slotStatus(VENDOR_USER)).held).toBe(1);
+      const archived = await commerce.archiveListing({ userId: VENDOR_USER, listingId: listing.id });
+      expect(archived.status).toBe('archived');
+      expect((await vendors.slotStatus(VENDOR_USER)).held).toBe(0);
+    });
+
+    it('create refuses when stake capacity is exhausted and leaves no orphan listing', async () => {
+      stakes.vendorSlots = 1;
+      await approvedVendor(VENDOR_USER);
+      await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Only one',
+        description: 'fills capacity',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      await expect(
+        commerce.createListing({
+          userId: VENDOR_USER,
+          title: 'Overflow',
+          description: 'no slot left',
+          offerType: 'one_time',
+          assetId: 'USDT',
+          price: '10',
+        }),
+      ).rejects.toMatchObject({ code: 'market.slots_exhausted' });
+      const countRows = await sql<Array<{ n: string }>>`
+        SELECT COUNT(*)::text AS n FROM market.listings WHERE status = 'active'
+      `;
+      expect(Number(countRows[0]?.n)).toBe(1);
+    });
+
+    it('hides subscription listings from the public catalogue until Stage C3', async () => {
+      await approvedVendor(VENDOR_USER);
+      const sub = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Sub plan',
+        description: 'monthly residual',
+        offerType: 'subscription',
+        assetId: 'USDT',
+        price: '10',
+      });
+      const oneTime = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'One-shot',
+        description: 'buy once',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      const publicIds = (await commerce.publicListings()).map((l) => l.id);
+      expect(publicIds).toContain(oneTime.id);
+      expect(publicIds).not.toContain(sub.id);
+    });
+  });
+
+  describe('Class M re-drive snapshot', () => {
+    it('settles a pending claim at the bps stored on the row even if env bps later changes', async () => {
+      await approvedVendor(VENDOR_USER);
+      const listing = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Bot pack',
+        description: 'A useful bot',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '100',
+      });
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-bps-snap',
+        }),
+      );
+      const purchaseId = randomUUID();
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${purchaseId}, ${listing.id}, ${BUYER}, id, ${VENDOR_USER},
+               'USDT', '100'::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+      // Live service now has a different rate — must not stuck or re-split.
+      const moved = new CommerceService(sql, vendors, ledger, { commissionBps: 100 });
+      const settled = await moved.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId });
+      expect(settled.status).toBe('settled');
+      expect(settled.commissionBps).toBe(500);
+      expect(formatAmount((await ledger.balance(userAvailable(BUYER, 'USDT'))).amount)).toBe('900');
+      expect(formatAmount((await ledger.balance(userAvailable(VENDOR_USER, 'USDT'))).amount)).toBe('95');
+      expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('5');
+    });
+
+    it('same purchaseId after insufficient funds stays refused (no second charge attempt)', async () => {
+      const listing = await (async () => {
+        await approvedVendor(VENDOR_USER);
+        return commerce.createListing({
+          userId: VENDOR_USER,
+          title: 'Bot pack',
+          description: 'A useful bot',
+          offerType: 'one_time',
+          assetId: 'USDT',
+          price: '100',
+        });
+      })();
+      const purchaseId = randomUUID();
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId })).rejects.toMatchObject({
+        code: 'market.insufficient_funds',
+      });
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-after-insuf',
+        }),
+      );
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId })).rejects.toMatchObject({
+        code: 'market.purchase_conflict',
+      });
+      // Fresh id still works after deposit.
+      const ok = await commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: randomUUID() });
+      expect(ok.status).toBe('settled');
+    });
   });
 
   describe('schema honesty', () => {

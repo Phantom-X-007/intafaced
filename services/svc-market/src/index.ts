@@ -44,6 +44,9 @@ await sql`SELECT 1 FROM market.vendor_slots LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM market.listings LIMIT 1`.catch(() => {
   throw new Error('market.listings is missing — run migrations before starting svc-market');
 });
+await sql`SELECT 1 FROM market.purchases LIMIT 1`.catch(() => {
+  throw new Error('market.purchases is missing — run migrations before starting svc-market');
+});
 
 const vendors = new VendorService(sql, createStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET));
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);

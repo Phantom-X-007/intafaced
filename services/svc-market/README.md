@@ -305,9 +305,14 @@ otherwise.
   listed price (vendor net + house = price).
 - **Eligibility:** catalogue and purchase re-check `listingEligibility` plus a
   live slot `ref = listingId` — never a stored `is_listed`. Create uses
-  approved + `claimSlot` (see seam above).
-- **Subscriptions:** listing `offer_type=subscription` is storable; purchase
-  refuses `market.subscription_not_built` until Stage C3 (needs product law).
+  approved + `claimSlot` (see seam above). Purchase re-checks again immediately
+  before the ledger post (stake/suspend TOCTOU close).
+- **Crash re-drive:** a pending purchase settles from the **claim snapshot**
+  (price + commission_bps on the row), not a later env rate. Settle updates only
+  while `status = 'pending'`.
+- **Subscriptions:** listing `offer_type=subscription` is storable; **public
+  catalogue omits them** until Stage C3; purchase refuses
+  `market.subscription_not_built` (needs product law).
 
 No balance column exists on `market.listings` or `market.purchases`. Price and
 commission_bps are intent records; the only balances live in svc-ledger.

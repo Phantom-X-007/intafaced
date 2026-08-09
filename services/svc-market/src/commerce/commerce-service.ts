@@ -248,12 +248,16 @@ export class CommerceService {
    * A listing without a live slot `ref = listing.id` is dropped (crash orphan
    * after insert-before-claim must not sell). Stake outages drop the row like
    * `listedVendors` — nobody rather than a 500 for the whole page.
+   *
+   * Subscription offers stay out of the shopfront until Stage C3 — purchase
+   * already refuses them; listing them would advertise an always-failing buy.
    */
   async publicListings(opts?: { limit?: number }): Promise<ListingRecord[]> {
     const limit = Math.min(opts?.limit ?? 50, 50);
     const rows = await this.sql<ListingRow[]>`
       SELECT * FROM market.listings
        WHERE status = 'active'
+         AND offer_type = 'one_time'
        ORDER BY created_at DESC
        LIMIT ${limit * 3}
     `;
@@ -277,8 +281,10 @@ export class CommerceService {
   /**
    * One-time purchase. Subscription listings refuse by name until Stage 3.
    *
-   * Order: eligibility → commission configured → claim row → post → settle.
-   * Crash after post before settle: re-drive posts the same key and finishes.
+   * Order: eligibility → commission configured → claim row → re-check sell
+   * gates → post from the claim snapshot → settle only while still pending.
+   * Crash after post before settle: re-drive posts the same key and finishes
+   * using the purchase row's price/bps (not a live config that may have changed).
    */
   async purchase(input: { buyerId: string; listingId: string; purchaseId: string }): Promise<PurchaseRecord> {
     if (!input.purchaseId?.trim()) {
@@ -301,18 +307,7 @@ export class CommerceService {
       throw new MarketError('Subscription purchase is not built yet (market.commerce Stage 3 residual)', 'market.subscription_not_built');
     }
 
-    const eligibility = await this.vendors.listingEligibility({ vendorId: listing.vendorId });
-    if (!eligibility.listed) {
-      throw new MarketError(eligibility.reason ?? 'Vendor is not eligible to sell', eligibility.code ?? 'market.vendor_not_approved');
-    }
-    // Vendor-level listed is not enough: this listing must hold its own slot.
-    // Closes the crash window where insert succeeded and claimSlot never ran.
-    if (!(await this.listingHoldsLiveSlot(listing.id, listing.vendorId))) {
-      throw new MarketError(
-        'This listing has no live slot — it cannot be sold until the vendor reclaims one',
-        'market.listing_slot_missing',
-      );
-    }
+    await this.assertListingSellable(listing);
 
     // Resolve vendor user id for the ledger leg.
     const [vendorRow] = await this.sql<Array<{ user_id: string }>>`
@@ -343,16 +338,28 @@ export class CommerceService {
       throw new MarketError(claimed.rejectionCode ?? 'Purchase previously rejected', 'market.purchase_conflict');
     }
 
+    // Re-check after claim so a stake drop / suspend between claim and post cannot sell.
+    const liveListing = await this.getListing(claimed.listingId);
+    if (!liveListing || liveListing.status !== 'active') {
+      throw new MarketError('No active listing with that id', 'market.listing_not_found');
+    }
+    await this.assertListingSellable(liveListing);
+
+    // Post only from the claim snapshot — never re-read live env bps or a
+    // price that may have changed under a different write path later.
+    const snapshotPrice = parseAmount(claimed.price);
+    const snapshotBps = claimed.commissionBps;
+
     try {
       const tx = await this.ledger.post(
         recipes.marketPurchase({
-          purchaseId: input.purchaseId,
-          listingId: listing.id,
-          buyerId: input.buyerId,
-          vendorUserId: vendorRow.user_id,
-          assetId: listing.assetId,
-          price,
-          commissionBps,
+          purchaseId: claimed.id,
+          listingId: claimed.listingId,
+          buyerId: claimed.buyerId,
+          vendorUserId: claimed.vendorUserId,
+          assetId: claimed.assetId,
+          price: snapshotPrice,
+          commissionBps: snapshotBps,
         }),
       );
 
@@ -361,13 +368,24 @@ export class CommerceService {
            SET status = 'settled',
                ledger_tx_id = ${tx.id},
                settled_at = now()
-         WHERE id = ${input.purchaseId}
+         WHERE id = ${claimed.id}
+           AND status = 'pending'
         RETURNING *
       `;
       const settled = settledRows[0];
-      if (!settled) throw new MarketError('Purchase settle returned no row', 'market.purchase_not_written');
-      return toPurchase(settled);
+      if (settled) return toPurchase(settled);
+
+      // Another resume may have settled first, or a race rejected the row.
+      const [reload] = await this.sql<PurchaseRow[]>`
+        SELECT * FROM market.purchases WHERE id = ${claimed.id}
+      `;
+      if (reload?.status === 'settled') return toPurchase(reload);
+      if (reload?.status === 'rejected') {
+        throw new MarketError(reload.rejection_code ?? 'Purchase previously rejected', 'market.purchase_conflict');
+      }
+      throw new MarketError('Purchase settle returned no row', 'market.purchase_not_written');
     } catch (err) {
+      if (err instanceof MarketError) throw err;
       const code =
         err && typeof err === 'object' && 'code' in err && typeof (err as { code: unknown }).code === 'string'
           ? (err as { code: string }).code
@@ -375,11 +393,11 @@ export class CommerceService {
       // Insufficient funds and friends — mark rejected so a retry with the same
       // id does not silently re-post after a different outcome. Ledger keys are
       // still unique so a partial post cannot double-charge.
-      if (code.includes('insufficient') || code === 'ledger.insufficient_balance') {
+      if (code.includes('insufficient') || code === 'ledger.insufficient_funds') {
         await this.sql`
           UPDATE market.purchases
              SET status = 'rejected', rejection_code = ${code}
-           WHERE id = ${input.purchaseId} AND status = 'pending'
+           WHERE id = ${claimed.id} AND status = 'pending'
         `;
         throw new MarketError('Insufficient balance for this purchase', 'market.insufficient_funds');
       }
@@ -417,6 +435,23 @@ export class CommerceService {
        LIMIT 1
     `;
     return rows.length > 0;
+  }
+
+  /**
+   * Vendor still listed + this listing still holds its own open slot.
+   * Used before claim and again immediately before ledger post (TOCTOU close).
+   */
+  private async assertListingSellable(listing: ListingRecord): Promise<void> {
+    const eligibility = await this.vendors.listingEligibility({ vendorId: listing.vendorId });
+    if (!eligibility.listed) {
+      throw new MarketError(eligibility.reason ?? 'Vendor is not eligible to sell', eligibility.code ?? 'market.vendor_not_approved');
+    }
+    if (!(await this.listingHoldsLiveSlot(listing.id, listing.vendorId))) {
+      throw new MarketError(
+        'This listing has no live slot — it cannot be sold until the vendor reclaims one',
+        'market.listing_slot_missing',
+      );
+    }
   }
 
   private async claimPurchase(input: {
