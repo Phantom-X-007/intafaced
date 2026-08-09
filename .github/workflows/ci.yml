@@ -174,6 +174,7 @@ jobs:
       TEST_DATABASE_URL_BLUEPRINT: postgres://svc_blueprint:svc_blueprint@127.0.0.1:5432/intafaced_test
       TEST_DATABASE_URL_AGENTS: postgres://svc_agents:svc_agents@127.0.0.1:5432/intafaced_test
       TEST_DATABASE_URL_NOTIFY: postgres://svc_notify:svc_notify@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_SUPPORT: postgres://svc_support:svc_support@127.0.0.1:5432/intafaced_test
       REDIS_URL: redis://127.0.0.1:6379
       NATS_URL: nats://127.0.0.1:4222
       # Same bargain as REQUIRE_POSTGRES, for the same reason. svc-protocol's
