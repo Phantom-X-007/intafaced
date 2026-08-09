@@ -63,7 +63,24 @@ function recordingLedger(opts?: { insuranceAvailable?: Amount }) {
   };
 }
 
-function fixedMark(price: string | null): MarkSource {
+/**
+ * Labelled mid quote for the suite's default money-path marks.
+ * Bare markPrice-only (no invent mid) is `markPriceOnly` below.
+ */
+function fixedMark(price: string | null): QuotedMarkSource {
+  return {
+    async markPrice() {
+      return price;
+    },
+    async quote({ marketId, symbol, at }) {
+      if (price == null || price.trim() === '') return null;
+      return { marketId, symbol, price: amt(price), asOf: at, quality: 'mid' };
+    },
+  };
+}
+
+/** Unlabelled source — money path must refuse inventing quality. */
+function markPriceOnly(price: string | null): MarkSource {
   return {
     async markPrice() {
       return price;
@@ -413,7 +430,7 @@ describe('runLiquidationTick — mark gates', () => {
   it('a source with no quote() cannot liquidate — bare markPrice must not invent mid', async () => {
     // Denon handoff §6: stamping quality:'mid' + asOf:now disarmed quality and
     // staleness. Unlabelled markPrice is darkness on the money path.
-    const { result, posts } = await tick(fixedMark('80'));
+    const { result, posts } = await tick(markPriceOnly('80'));
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.outcome).toBe('skipped_no_mark');
     expect(result.items[0]!.summary).toMatch(/no labelled quote/);
