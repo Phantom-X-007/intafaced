@@ -36,6 +36,11 @@ const schema = serviceEnvSchema
        * Malformed → fail boot (parseAccrualTierLawJson throws). Never invent rates.
        */
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: z.string().optional().default(''),
+      /**
+       * 32-byte AES-256 key (base64 or 64-char hex) for §10 KYC document store.
+       * Blank = store refuses put/get (no improvised key). Vendor integration Class X.
+       */
+      IDENTITY_KYC_DOC_KEY: z.string().optional().default(''),
     }),
   );
 

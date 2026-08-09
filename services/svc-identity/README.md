@@ -63,6 +63,8 @@ There is **no verification-provider integration** here. Approval is an operator 
 
 **`provider_ref` is never client-written.** `kyc.submit` accepts only `tier` + `jurisdiction`. A free-text `providerRef` from the user was a PII side-channel into the pointer column (§10: pointer never holds name/DOB/docs). Opaque refs are minted by the encrypted document store (or operator tools) when that store lands; until then the column stays null and `kyc.status` never returns it.
 
+**Encrypted document store (mechanism):** table `identity.kyc_documents` holds AES-256-GCM ciphertext under `IDENTITY_KYC_DOC_KEY`. Opaque ids are what `provider_ref` may point at. No user-facing procedure returns document bytes. Live vendor webhook remains Class X.
+
 ### Step-up
 
 `defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.
