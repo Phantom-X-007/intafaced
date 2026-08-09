@@ -236,7 +236,7 @@ const entryKey = (entry) => `${entry.module}:${entry.file}`;
  * ADR 2026-08-02 "ADOPT AND ADAPT": keep the controller and its business logic,
  * redirect the balance write to `ledger-client` through an adapter.
  *
- * 54 hits across 25 file/rule pairs, all of them pre-existing and all of them
+ * 53 hits across 24 file/rule pairs, all of them pre-existing and all of them
  * verified individually before being listed. Three grades of dead, weakest last
  * — and one grade that is deliberately empty:
  *
