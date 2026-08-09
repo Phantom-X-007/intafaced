@@ -55,8 +55,11 @@ class Client {
   closed: { code: number; reason: string } | null = null;
   readonly #waiters: Array<{ count: number; resolve: () => void }> = [];
 
-  constructor(url: string, headers?: Record<string, string>) {
-    this.socket = new WebSocket(url, headers ? { headers } : undefined);
+  constructor(url: string, headers?: Record<string, string>, opts?: { autoPong?: boolean }) {
+    this.socket = new WebSocket(url, {
+      ...(headers ? { headers } : {}),
+      ...(opts?.autoPong === false ? { autoPong: false } : {}),
+    });
     this.socket.on('message', (data) => {
       this.frames.push(data.toString());
       this.#settle();
@@ -200,8 +203,8 @@ describe('the websocket gateway, over a real socket', () => {
     await app.close();
   });
 
-  function connect(query: string, headers?: Record<string, string>): Client {
-    const client = new Client(`ws://${base}/stream?${query}`, headers);
+  function connect(query: string, headers?: Record<string, string>, opts?: { autoPong?: boolean }): Client {
+    const client = new Client(`ws://${base}/stream?${query}`, headers, opts);
     clients.push(client);
     return client;
   }
@@ -419,6 +422,33 @@ describe('the websocket gateway, over a real socket', () => {
 
   it('refuses an unknown channel on the upgrade', async () => {
     expect(await upgradeStatus(`ws://${base}/stream?market=${MARKET}&channel=orders`)).toBe(400);
+  });
+
+  it('terminates a public socket that stops answering pings and frees the hub seat', async () => {
+    // Rebuild gateway with a short heartbeat so the miss-pong path is testable.
+    // autoPong:false is the ws@8 contract so a dead peer cannot keep a hub seat.
+    await gateway.close('reconfigure heartbeat');
+    gateway = createWebSocketGateway({
+      server: app.server,
+      hub,
+      tradeHub,
+      heartbeatMs: 50,
+      log,
+      enabled: () => enabled,
+    });
+
+    const client = connect(`market=${MARKET}`, undefined, { autoPong: false });
+    await client.frameCount(1);
+    expect(hub.connections).toBe(1);
+
+    // Two heartbeat windows: first marks not-alive + ping; second terminates.
+    await Promise.race([client.closure(), new Promise<void>((r) => setTimeout(r, 2_000))]);
+    expect(client.closed).not.toBeNull();
+    const deadline = Date.now() + 2_000;
+    while (hub.connections !== 0 && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(hub.connections).toBe(0);
   });
 });
 
