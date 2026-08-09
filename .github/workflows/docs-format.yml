@@ -95,6 +95,9 @@ jobs:
       # The CODE half of the same gate runs in ci.yml's `gates` job, because a
       # PR with no markdown in it never reaches this workflow at all.
       # Law: S-CORE §3 · BOARD-CLEAR-PROCESS-LOOPS L0 · SWARM-MANDATE.
+      - name: value-gate self-test
+        run: pnpm value-gate:self-test
+
       - name: value gate
         env:
           VALUE_GATE_STRICT: '1'
