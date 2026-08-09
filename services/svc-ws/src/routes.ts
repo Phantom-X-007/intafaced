@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { toSnapshot, type DepthHub } from './depth/hub.js';
 import { DepthSourceError, type DepthSource } from './depth/source.js';
 import type { TradeHub } from './trade/hub.js';
+import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
 
 /**
@@ -29,6 +30,14 @@ import { withWsSpan } from './tracing.js';
  * there is no cookie, no token, and no per-caller content, so "any origin may
  * read this" is a true statement rather than a relaxation. `*` also makes the
  * browser refuse to send credentials, which is the behaviour we want.
+ *
+ * ── Bus truth on /ready and /health ─────────────────────────────────────────
+ *
+ * Depth polls matching and does not need NATS. Trade tape and private streams
+ * do. A failed bus subscribe at boot used to leave /ready fully green with a
+ * silent empty tape forever (no auto-reconnect yet). Flags `tradesBus` /
+ * `privateBus` expose that without 503'ing the instance — depth still works
+ * and remains the primary product surface for LB rotation.
  */
 
 /** Same bound as the socket's. The hub does the authoritative check. */
@@ -37,29 +46,40 @@ const MARKET_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 export interface RouteOptions {
   readonly hub: DepthHub;
   readonly tradeHub: TradeHub;
+  readonly privateHub: PrivateOrderHub;
   readonly source: DepthSource;
   readonly depthLimit: number;
   readonly serviceName: string;
   readonly upstream: string;
   readonly enabled: () => boolean;
+  /** Live JetStream subscription for public `orderFilled` tape (`tradeSub !== null`). */
+  readonly tradesBus: () => boolean;
+  /** Live JetStream subscription for private lifecycle (`privateSub !== null`). */
+  readonly privateBus: () => boolean;
 }
 
 export function registerRoutes(app: FastifyInstance, options: RouteOptions): void {
-  const { hub, tradeHub, source, depthLimit, serviceName, upstream, enabled } = options;
+  const { hub, tradeHub, privateHub, source, depthLimit, serviceName, upstream, enabled, tradesBus, privateBus } = options;
 
   app.get('/health', async () => ({
     ok: true,
     service: serviceName,
     enabled: enabled(),
-    connections: hub.connections + tradeHub.connections,
+    connections: hub.connections + tradeHub.connections + privateHub.connections,
     depthConnections: hub.connections,
     tradeConnections: tradeHub.connections,
+    privateConnections: privateHub.connections,
+    tradesBus: tradesBus(),
+    privateBus: privateBus(),
   }));
 
   /**
    * Readiness is stricter than liveness, as everywhere else in the fleet: the
    * process can be perfectly alive while the kill-switch is off, and a load
    * balancer should stop sending it connections without anyone paging.
+   *
+   * Bus down ≠ not ready. Depth is the primary surface and works without NATS.
+   * `tradesBus` / `privateBus` tell ops the tape/private fan-out is empty.
    */
   app.get('/ready', async (_req, reply) => {
     if (!enabled()) return reply.code(503).send({ ready: false, reason: 'ws.gateway flag is off' });
@@ -70,6 +90,9 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       markets: hub.knownMarkets,
       depth: hub.stats,
       trades: tradeHub.stats,
+      privateConnections: privateHub.connections,
+      tradesBus: tradesBus(),
+      privateBus: privateBus(),
     };
   });
 
