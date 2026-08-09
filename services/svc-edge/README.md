@@ -40,6 +40,7 @@ Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the live pref
 | `/api/notify`    | svc-notify    | `NOTIFY_URL`    |                                                  |
 | `/api/academy`   | svc-academy   | `ACADEMY_URL`   |                                                  |
 | `/api/support`   | svc-support   | `SUPPORT_URL`   |                                                  |
+| `/api/market`    | svc-market    | `MARKET_URL`    |                                                  |
 
 **`svc-ledger` and `svc-matching` are deliberately absent.** Both serve service-to-service HTTP behind a shared secret (#50, #55). No browser has business reaching either — `ledger.post` moves value on a module's own authority, which is exactly why no user token carries `ledger:write`. The ledger's **operator** surface is the durable `posting_freeze` via `/admin/ledger/*`, not a proxied `/api/ledger`. There is a test asserting ledger/matching never appear in the table.
 

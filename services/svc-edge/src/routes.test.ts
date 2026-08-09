@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { resolve, UPSTREAMS } from './routes.js';
 
@@ -89,6 +92,21 @@ describe('route resolution', () => {
     for (const u of UPSTREAMS) {
       expect(u.envVar, u.prefix).toMatch(/^[A-Z0-9_]+_URL$/);
       expect(u.devUrl).toMatch(/^http:\/\/localhost:\d+$/);
+    }
+  });
+});
+
+/**
+ * README route table drift was the residual that made the wall look incomplete:
+ * code forwarded /api/v1, dex, indexer, market, … while the doc listed nine rows.
+ * Pin the prefixes into the README so the next table edit fails the suite.
+ */
+describe('README route table stays honest with UPSTREAMS', () => {
+  it('lists every prefix the edge actually forwards', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const readme = readFileSync(join(here, '..', 'README.md'), 'utf8');
+    for (const u of UPSTREAMS) {
+      expect(readme, u.prefix).toContain(`| \`${u.prefix}\``);
     }
   });
 });
