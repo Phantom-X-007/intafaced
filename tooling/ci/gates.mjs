@@ -295,6 +295,15 @@ export const GATES = [
     why: 'every route killable, enforced at the door, failing closed',
   },
   {
+    id: 'screening-content',
+    script: 'tooling/ci/screening-content-scan.mjs',
+    doctrine: '§24 Lane A / Class X',
+    why:
+      'sanctions list CONTENT is counsel + Nitro human (Class X). The screening mechanism ships empty; a populated ' +
+      'default in source, env examples, or compose would invent a legal control nobody signed. Unit tests already say ' +
+      '"ships empty" — this gate re-derives it on every verify so list content cannot land as a helpful default.',
+  },
+  {
     id: 'migrations',
     script: 'tooling/ci/migration-check.mjs',
     doctrine: '§14',

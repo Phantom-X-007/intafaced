@@ -225,6 +225,13 @@ export const ENFORCED = {
     must: /kill-switch reachability/,
     note: 'enumerates required routes by name, so absence is a named miss rather than an empty iteration.',
   },
+  'screening-content': {
+    kind: 'guard',
+    must: /SCREENING CONTENT SCAN FAILED — packages\/config\/src\/screening\.ts is missing/,
+    note:
+      'Class X list-content boundary: with screening.ts gone it cannot prove the list is unshipped and refuses by name ' +
+      'rather than printing clean over nothing.',
+  },
   workspace: {
     kind: 'guard',
     must: /no service packages found, so checks 1-10 below each iterated an empty list/,
