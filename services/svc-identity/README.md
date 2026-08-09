@@ -16,7 +16,8 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `auth.login`                                           | —                         | Handle or email; requires TOTP once enrolled; recovery codes redeem once |
 | `auth.refresh`                                         | —                         | Rotates the refresh token; reuse revokes **every** session               |
 | `auth.logout` / `auth.logoutAll`                       | — / session               | Revokes one or all sessions                                              |
-| `auth.stepUp`                                          | session                   | **TOTP → 5-minute token carrying `trade:withdraw`** (not recovery codes) |
+| `auth.stepUpOptions`                                   | session                   | WebAuthn challenge for withdraw step-up (kind `step-up`, not login)      |
+| `auth.stepUp`                                          | session                   | **TOTP, recovery code, or passkey → 5-minute `trade:withdraw` token**    |
 | `totp.enrol` / `totp.confirm`                          | session                   | Two-step; secret + recovery hashes persist only on confirm               |
 | `webauthn.registerOptions` / `registerVerify`          | session                   | Enrol a passkey/security key; ES256, attestation `none`                  |
 | `webauthn.authOptions` / `authVerify`                  | —                         | Passwordless login; same session tokens, `mfa: true`                     |
@@ -38,8 +39,8 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `affiliates.myReferrer` / `myAncestors` / `myAccruals` | `identity:read`           | Self-only tree + durable accruals                                        |
 | `affiliates.freeze` / `unfreeze` / `freezes`           | `admin:write` / `read`    | Freeze ledger honesty (no pay)                                           |
 | `affiliates.treeStatus` / `node` / `members`           | `admin:read`              | Admin tree structure + roster                                            |
-| `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Commission rows; **no ledger**; rates refuse-closed without law          |
-| `affiliates.payout`                                    | `admin:write`             | **Always refuse** until §8 rates + ledger recipe (Class M / Nitro)       |
+| `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Commission rows; **no ledger**; rates refuse-closed without owner law    |
+| `affiliates.payout`                                    | `admin:write`             | Pays when owner rates published + ledger wired; refuse-closed otherwise  |
 
 HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active) · S2S sub-account ownership on internal HTTP.
 
@@ -71,7 +72,7 @@ There is **no verification-provider integration** here. Approval is an operator 
 
 `defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.
 
-A live session plus a fresh TOTP code **or** a WebAuthn step-up assertion buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no TOTP is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
+A live session plus a fresh TOTP code, a single-use recovery code, **or** a WebAuthn step-up assertion (after `auth.stepUpOptions`) buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no second factor is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
 
 **TOTP anti-replay:** each successful TOTP use (enrol confirm, login, step-up) records the matched counter in `users.totp_last_step`. A second attempt with the same or earlier step is refused as `auth.mfa_invalid`, so a captured code cannot be replayed inside the ±1-step window.
 
@@ -99,9 +100,9 @@ Modules may still call `rank.awardXp` directly — it is a `serviceProcedure` on
 
 ## Ledger
 
-**This service holds no balances and posts no ledger transactions.**
+**This service holds no balances of its own.** Sub-account revoke still soft-disables only — never posts, never sweeps (same rule as bank space archive). `sub_accounts.id` is what the ledger's `subaccount` owner type keys on.
 
-It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ one. The only connection to money is that `sub_accounts.id` is what the ledger's `subaccount` owner type keys on. `subAccounts.revoke` soft-disables only — it never posts a ledger transaction and never sweeps balances (same rule as bank space archive).
+**Affiliate payout is the one ledger write path.** When `LEDGER_URL` is set and the owner has published fee-share tiers (`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON`), `affiliates.payout` posts through existing ledger recipes (`sweepFeesToRewards` → `rewardPay`). No recipe is invented here. Without published rates or without a ledger client the procedure refuse-closes and moves nothing.
 
 ---
 

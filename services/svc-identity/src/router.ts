@@ -981,7 +981,7 @@ export function createIdentityRouter(
        * Affiliate self-view of durable commission accruals only.
        * Always scoped to ctx.principal.userId — no beneficiaryId input (foreign refuse by design).
        * Empty list when no rows / rates unpublished (never invents rates or amounts).
-       * Payout remains refuse-closed (affiliates.payout).
+       * Payout is a separate admin procedure (affiliates.payout) — refuse-closed without owner rates + ledger.
        */
       myAccruals: scopedProcedure('identity:read')
         .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
@@ -1319,7 +1319,7 @@ export function createIdentityRouter(
 
       /**
        * Slice B dry-run: fee event → commission rows using durable tree + freezes.
-       * NEVER posts ledger. Zero fee → empty rows. Payout is Class M residual.
+       * NEVER posts ledger. Zero fee → empty rows. Real payout is affiliates.payout.
        */
       accrueDryRun: scopedProcedure('admin:read')
         .input(
