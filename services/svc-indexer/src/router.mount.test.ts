@@ -153,12 +153,13 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
     // Mixed-case address must hit the same tape as the seed (case-insensitive).
     const accountFills = await caller.accountFills({ account: lowerAccount, limit: 10 });
     expect(accountFills).toHaveLength(1);
+    // #1228 stores addresses lowercased; identity is case-insensitive, wire form is lower.
     expect(accountFills[0]).toMatchObject({
       market: 'IFC-USD',
       price: '100.5',
       quantity: '1.5',
       takerSide: 'buy',
-      maker: seededAccount,
+      maker: lowerAccount,
     });
     expect(typeof accountFills[0]!.price).toBe('string');
     expect(typeof accountFills[0]!.quantity).toBe('string');
