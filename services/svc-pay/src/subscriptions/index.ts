@@ -14,9 +14,12 @@ export {
 export {
   SubscriptionService,
   assertMandateTermsUnchanged,
+  normaliseSubscriptionPath,
+  SUBSCRIPTION_PATHS,
   type MandateRecord,
   type SubscriptionRecord,
   type SubscriptionInvoiceOpener,
+  type SubscriptionPath,
   type FiringOutcome,
   type RunReport,
 } from './subscription-service.js';
