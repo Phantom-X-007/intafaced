@@ -1,10 +1,13 @@
 # svc-support
 
-Support desk for `ops.support` — tickets + knowledge base + Stage-2 operator queue.
+Support desk for `ops.support` — tickets + knowledge base + operator queue.
 
-**Stage-1:** in-memory ticket spine. No ledger posts. No refund money path.
-**Stage-2:** prioritised operator queue (`listQueue` / `next` / `claim`). Exclusive claim; no steal invent.
-Refunds are requests only; money stays in pay/ledger recipes elsewhere.
+**Durable store:** Postgres schema `support` (role `svc_support`). Memory store
+remains for unit tests only. Multi-replica claims use an atomic `UPDATE … WHERE
+assignee_id IS NULL`.
+
+No ledger posts. No refund money path. Refunds are requests only; money stays in
+pay/ledger recipes elsewhere.
 
 Doctrine: §0.6 no balances here; brand scan on KB copy; agent optional later.
 
@@ -23,25 +26,29 @@ tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
 | `support.listComments` | `support:read` / ops  | Thread for ticket           |
 | `support.setStatus`    | `support:ops`         | Operator status change      |
 | `support.listKb`       | public                | Platform i18n-keyed spine   |
-| `support.listQueue`    | `support:ops`         | Stage-2 prioritised queue   |
-| `support.next`         | `support:ops`         | Stage-2 peek next           |
-| `support.claim`        | `support:ops`         | Stage-2 exclusive claim     |
+| `support.searchKb`     | public                | Search spine by fragment    |
+| `support.getKb`        | public                | One article or null         |
+| `support.listQueue`    | `support:ops`         | Prioritised queue           |
+| `support.next`         | `support:ops`         | Peek next                   |
+| `support.claim`        | `support:ops`         | Exclusive claim (atomic)    |
 
-HTTP: `GET /health`, `GET /ready` (`stage: 2-memory-queue`).
+HTTP: `GET /health`, `GET /ready` (`stage: 3-durable-queue`, `store: postgres`).
+
+## Migrations
+
+```bash
+DATABASE_URL=postgres://svc_support:svc_support@localhost:5433/intafaced pnpm --filter @intafaced/svc-support db:migrate
+```
+
+Dev bootstrap creates role/schema via `tooling/infra/postgres-init/01-service-schemas.sql`.
+`tooling/infra/migrate-all.mjs` includes `svc-support`.
 
 ## Events
 
-**None published Stage-1/2.** Ticket create/status stay in-process until a bus
-catalog subject is accepted (events PR first). No orphan subjects.
+**None published.** Ticket create/status stay in-process until a bus catalog
+subject is accepted (events PR first). No orphan subjects.
 
 ## Ledger
 
 **No ledger recipes.** This service holds no balances and never calls
-`packages/ledger-client`. Ticket bodies may mention refunds as free text only;
-value movement remains pay/bank/ledger elsewhere.
-
-## Observability
-
-OpenTelemetry spans via `withSupportSpan` (`intafaced.money_path=false`,
-module `support`). SLO residual: one Grafana panel for ticket create rate —
-ops backlog, not a ship gate for Stage-2 memory store.
+`packages/ledger-client`.

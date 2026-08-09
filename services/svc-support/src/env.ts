@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
 /**
- * svc-support — no database, no ledger, no internal service secret.
- * Stage-1 in-memory store. Edge principal secret only.
+ * svc-support — durable tickets in Postgres (schema `support`).
+ * DATABASE_URL is required (serviceEnvSchema) so the desk survives restarts
+ * and multi-replica claims stay exclusive. No ledger. No internal service secret.
  */
 const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
   z.object({

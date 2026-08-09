@@ -140,6 +140,22 @@ export function createSupportRouter(support: SupportService) {
       return support.listKb();
     }),
 
+    /** Search platform KB spine (i18n keys). Empty q → full list. */
+    searchKb: publicProcedure
+      .input(z.object({ q: z.string().max(200).optional() }).optional())
+      .output(z.array(supportKbArticleSchema))
+      .query(async ({ input }) => {
+        return support.searchKb(input?.q ?? '');
+      }),
+
+    /** Single KB article by id — null when missing (never invent). */
+    getKb: publicProcedure
+      .input(z.object({ id: z.string().min(1).max(200) }))
+      .output(supportKbArticleSchema.nullable())
+      .query(async ({ input }) => {
+        return support.getKbArticle(input.id);
+      }),
+
     /** Stage-2 — prioritised operator queue (open/pending only). */
     listQueue: scopedProcedure('support:ops')
       .input(z.object({ limit: z.number().int().positive().max(500).optional() }).optional())
