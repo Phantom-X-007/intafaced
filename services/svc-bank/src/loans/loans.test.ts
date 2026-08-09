@@ -1283,14 +1283,15 @@ if (!available) {
         expect(pending[0]!.status).toBe('pending');
         expect(formatAmount(amt(pending[0]!.opening_collateral!))).toBe('1');
 
-        // 2. Same principal, tiny collateral the borrower can fund — would
-        //    under-collateralise the stored draw if allowed.
-        await fund(BORROWER, 'BTC', '0.01');
+        // 2. Same principal, DIFFERENT collateral that still clears LTV (2 BTC
+        //    at the test mark is under max LTV). Must refuse on term-compare —
+        //    not on LTV — or the attack path is not what we claim.
+        await fund(BORROWER, 'BTC', '2');
         await expect(
           loans.open({
             productId: product.id,
             userId: BORROWER,
-            collateralAmount: amt('0.01'),
+            collateralAmount: amt('2'),
             principal: amt('5000'),
             loanId,
             now,
@@ -1298,7 +1299,7 @@ if (!available) {
         ).rejects.toMatchObject({ code: 'bank.loan_collateral_mismatch' });
 
         expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
-        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('0.01');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('2');
         expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('100000');
       });
 
