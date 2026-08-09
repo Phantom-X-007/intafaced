@@ -196,7 +196,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     registerPrivateRest(app, privateDeps());
     await app.ready();
     const res = await app.inject({
-      method: arm.method,
+      method: arm.method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS',
       url: arm.path,
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
       payload: { symbol: 'BTC/USDT', leverage: '10' },
@@ -213,7 +213,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     registerPrivateRest(app, privateDeps());
     await app.ready();
     const res = await app.inject({
-      method: arm.method,
+      method: arm.method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS',
       url: arm.path,
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
       payload: { symbol: 'BTC/USDT', marginMode: 'cross' },

@@ -382,7 +382,7 @@ export const FEATURES = [
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
+    status: 'ready',
     dependsOn: ['trade.spot'],
     requires: [
       'services/svc-trade/src/public-rest.ts',
