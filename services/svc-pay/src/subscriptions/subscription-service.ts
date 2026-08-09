@@ -301,6 +301,39 @@ export class SubscriptionService {
   }
 
   /**
+   * Cancel a mandate immediately (SPEC §4). Cascades to active subscriptions on
+   * this mandate so the next due pass is not required for "stop charging."
+   * Does not reverse settled executions or invent a reverse-charge path.
+   */
+  async cancelMandate(mandateId: string): Promise<MandateRecord> {
+    const existing = await this.getMandate(mandateId);
+    if (existing.status === 'cancelled') return existing;
+
+    const at = this.now();
+    const rows = await this.sql<MandateRow[]>`
+      UPDATE pay.subscription_mandates
+         SET status = 'cancelled', cancelled_at = ${at}, updated_at = ${at}
+       WHERE id = ${mandateId}
+      RETURNING id, merchant_id, customer_id, asset_id, amount::text, ceiling::text,
+                cadence, starts_at, ends_at, rail_adapter, rail_mandate_ref,
+                status, cancelled_at, created_at
+    `;
+    const row = rows[0];
+    if (!row) throw new PayError(`Mandate ${mandateId} not found`, 'pay.mandate_not_found');
+    const mandate = toMandate(row);
+
+    // Immediate cascade — same effect as runner seeing inactive mandate, without
+    // waiting for next_run_at. Settled executions stay settled.
+    await this.sql`
+      UPDATE pay.subscriptions
+         SET status = 'cancelled', cancelled_at = ${at}, updated_at = ${at}
+       WHERE mandate_id = ${mandateId} AND status = 'active'
+    `;
+
+    return mandate;
+  }
+
+  /**
    * Refuse-in-code for "raise price on an existing mandate." Callers must
    * create a new mandate and re-bind; this method only exists so the refuse
    * path is named and tested.
