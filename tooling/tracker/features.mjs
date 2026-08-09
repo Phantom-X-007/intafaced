@@ -311,10 +311,16 @@ export const FEATURES = [
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['trade.spot'],
-    note: '**Partial-liquidation ladder landed #1136 (2026-08-08)** — futures/maintenance-ladder.ts, depth-referenced tiers in scaled bigint, wired through liquidation-tick.ts behind an optional dep so the old full-close path runs unchanged when absent. The gap-series proof THIS NOTE PREVIOUSLY RECORDED AS UNRUN is now run: 100→96→94→93 then a 14% gap to 80 yields [skipped_healthy, skipped_healthy, partially_liquidated, partially_liquidated, liquidated], margin drawn totals exactly 100, and a gap past the 2000 bps breaker is refused rather than traded through. STILL NOT done: no leveraged entry through the book, funding still off and owner-reserved, insurance-fund ACCOUNT choice owner-reserved (so the fund receiving the shortfall is proved only engine-side), and no margin-call grace clock — svc-trade has no transport for one and the ADR forbids starting grace without it. **Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent. **Isolated margin ONLY.** `DIRECTION` §1 and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` done-bar item 8 forbid a cross-margin path even disabled — this row advertised cross/isolated until 2026-08-07 and was wrong. **Orderable behind a flag since 2026-08-08** — `assertTradable` takes a futures order when `TRADE_FUTURES_ENABLED` is on and refuses `trade.futures_disabled` when off, which is the shipped default; orders match on the same svc-matching book (D-S-06, no second book) and settle through the ledger. STATUS STAYS `ready`, NOT `done`: orderability is one of the six things `DIRECTION` §1 calls MVP, and the other five are untouched — no leveraged entry through the book (a futures order is funded by the same full hold as a spot order), funding still off and owner-reserved, insurance fund absent, and the gap-series liquidation proof unrun. The unblocker was `c7dfb5e4`/`cc90c2f4` making the mark size-aware; before those, an orderable futures book was a self-dealing machine.',
+    requires: ['services/svc-trade/src/futures'],
+    note:
+      'CLAIM RELEASED 2026-08-09 (ghost @nitro-agent cleared — LANE-STOP-TRADE-W3 + W4 A0; no open futures PR held the path). ' +
+      'Isolated margin ONLY. Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). ' +
+      'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
+      '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery). ' +
+      'Still ready not done: leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, insurance fund ACCOUNT/policy owner-reserved, ' +
+      'Denon ladder numbers (D3), N1 profit-source capitalisation. Never invent mid/funding.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
@@ -331,20 +337,12 @@ export const FEATURES = [
     phase: '2',
     status: 'ready',
     dependsOn: ['trade.spot', 'token.staking'],
-    requires: ['services/svc-trade'],
+    requires: ['services/svc-trade/src/otc'],
     note:
-      'Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank ' +
-      'DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. ' +
-      'Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table. ' +
-      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-otc — no open PR and no branch on origin; its stage merged as #1000. ' +
-      'This one was the most expensive stale claim in the file and the reason is worth keeping. `requires: [services/svc-trade]` names the WHOLE ' +
-      'service, so while this row was owned, claim-check answered "human-claimed" for every path in svc-trade — a directory with twenty-plus ' +
-      'agent PRs merged into it during the same week. Combined with the module fallback (an owned row with `module: trade` locks ' +
-      '`services/svc-trade` even when it declares no paths), the service reported three separate human owners. ' +
-      'DELIBERATELY NOT TOUCHED in the same pass, so nobody reads this as a blanket unlock: `trade.copy` and `trade.algo` keep `owner: Nitro` ' +
-      'because their stated residual IS an owner decision — the blank §8 numbers — so the claim is describing reality, not stale. ' +
-      '`connect.venue-vault` keeps `owner: shehzad002`; it is key custody and genuinely his. Those two are why svc-trade will still read as ' +
-      'claimed after this PR, and that is correct rather than a miss.',
+      'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
+      'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
+      'Residual OWNER: §8 spreads/stake, socket.otc-mid-feed max-age (do not invent), maker-routing settle, durable quotes table. ' +
+      'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
     module: 'trade',
@@ -354,11 +352,9 @@ export const FEATURES = [
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/copy'],
     note:
-      'Owner released 2026-08-08 (axis C1 / Nitro green light). Stage #1009 (D-S-03): follow/unfollow + envelope mirror refuse; blank DIRECTION §8 ' +
-      'leader_share_bps + jurisdiction → refuse-closed (never invent rates). Product is **fee-share** (slice of house fee per SPEC-SOVEREIGN-ROUTING-AND-COPY); ' +
-      'P&L **profit-share is banned** in any form (§95 — gains %, HWM, hurdle, success fee). Code under `services/svc-trade/src/copy/**` exists with tests but is ' +
-      '**unreachable** — nothing outside `copy/` imports it; no router/env wire. Residual: mount + money bugs (exposure counter only ever rose — #1110 partial; ' +
-      'mirror lacks fill idempotency key), owner §8 numbers, on-chain session-key caps (build order §7.1). Tip re-verified a05eeb48.',
+      'Owner released 2026-08-08. Stage #1009 + money seals #1191 (concurrent fee-share cap reserve-then-post) + #1199 (fillId mirror claim). ' +
+      'Product is **fee-share** only; P&L profit-share banned (§95). Module still **unmounted** (no router/env) — deliberate until Class M mount ordered. ' +
+      'Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: mount + optional settle fillId claim + mirrored_fills migration; owner rates; session-key caps.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
@@ -378,12 +374,9 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['trade.spot'],
     note:
-      'Owner released 2026-08-08 (axis C1 / Nitro green light). D-S-04 TWAP Stage #1002 (parent=schedule, children via placeOrder, refuse blank mark/empty book). ' +
-      'TWAP stage built; ADR #1145 (paused TWAP resume disposition) merged. Scheduler `tickAllAlgos()` still **dead code** (zero callers) — do **not** claim ' +
-      'scheduler mounted until it lands; #1107 halt-on-no-authority is residual state before mount is safe. VWAP/POV still out — but **not** for missing volume ' +
-      'series: `spot/candles.ts` sums non-seeded taker fills (mm excluded both sides) and serves them at GET /api/v1/ohlcv/:symbol. Series is **thin**, blocked on ' +
-      '**market maturity** (owner call per algo ADR), not missing code. (createTwap error string still says "wait on a real volume series" — stale wording in service code.) ' +
-      'Tip re-verified a05eeb48.',
+      'Owner released 2026-08-08. D-S-04 TWAP Stage #1002 + ADR #1145 + #1193 (re-space, cancel atomicity, scheduler mounted default OFF via TRADE_ALGO_JOBS_ENABLED). ' +
+      'Create works when TRADE_ALGO_ENABLED; children fire only when jobs ON. VWAP/POV out — market maturity (owner), not missing candles. ' +
+      'Residual craft: cancel-fail still leaves parent active (W4), tickAll isolation, hydrate on mutate, principal durability socket. Tip re-verified W4.',
     requires: ['services/svc-trade/src/algo'],
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
@@ -410,12 +403,15 @@ export const FEATURES = [
     note: 'Updated 2026-08-02 A-TRADE-VENUE-OPS. NOT "via CCXT" — §27 forbids a third-party connectivity library in the money path and there is no `ccxt` in the workspace by design; we are that layer. Fabric: packages/venue-contracts + packages/venue-adapter (Binance spot public market data only; trading half deliberately not ready). Mounted in svc-trade: TRADE_VENUE_MARK_VENUE + TRADE_VENUE_MARK_SYMBOLS default empty/OFF — when set to binance-spot + marketId:symbol map, public book mid preferred for futures marks (A-TRADE-VENUE-1); optional TRADE_MM_SEED_MID_FROM_VENUE for MM mid after env map miss (A-TRADE-MM-3). Ops enable path: services/svc-trade/README.md "Venue fabric mark". Never invents mid (empty venue, unknown id, unmapped market, empty book → null). Still `ready`, not `done`: (1) one public venue only — second venue needs a real MarketDataAdapter + createVenueMarketDataAdapter id; (2) TRADING half NOT BUILT (credentials throw not_ready); (3) no live-network CI; (4) futures risk truth remains human M3. VENUE VAULT REMOVED FROM THIS DONE BAR 2026-08-08 — AND NOT AS A LOOSENED BAR, AS AN INVERTED ONE. From 2026-08-02 this note carried "Venue Vault absent" as residual (3), while `connect.venue-vault` is `phase: 5`, `status: socket`, owner @shehzad002 and `dependsOn: [venue.aggregation]` — the Vault is DOWNSTREAM of this row. A done bar that names its own dependent can never be satisfied by anyone: this row was waiting on a phase-5 socket that is waiting on this row, and the tracker cycle detector cannot see it because one leg is prose and the other is data. Six phase-2 rows (connect.latency-grading, connect.data-lake, execution.sor, execution.arbitrage, execution.market-making, execution.house-tenant) compute `blocked` behind this row, so the cost of the inversion was a phase-2 stack parked behind another developer\'s phase-5 socket. On the merits it does not belong here either: §27:761 is per-USER encrypted external API keys, HSM-backed and trade-only, so a user can trade THEIR OWN accounts on other venues. Nothing in this row touches a per-user credential — cross-venue market-data aggregation reads public books, and house routing signs with house keys. The Vault remains the hard blocker it always was under socket.dex-execution and under the external-venue half of quant.sdk (§29:787 takes its keys from the Vault, trade-only). The four residuals above are unchanged and are the real bar; this row stays `ready`, not `done`.',
   }),
   f('connect.venue-vault', 'Venue Vault — per-user external API keys, HSM-backed, withdrawal refused (§27)', {
-    module: 'trade',
     phase: '5',
     status: 'socket',
     owner: 'shehzad002',
     dependsOn: ['venue.aggregation'],
-    note: 'Law §27:761, gap-closed 2026-08-07. venue.aggregation\'s own note has admitted "Venue Vault absent" since 2026-08-02 while no row existed for it — a KEY CUSTODY SURFACE holding users\' credentials to other exchanges, with no owner. It is also the hard blocker under socket.dex-execution: quoting needs no credentials, executing does. Owner is the chain owner because this is key custody and that is where the expertise sits, NOT because it is protocol plane — the keys are for custodial venues. The split, so it is not confused later: the vault design, the key handling and the withdrawal-permission refusal are his; wiring svc-trade to a vault that exists is ordinary agent work. Non-negotiable in any design: a stored key that carries withdrawal permission is refused at registration, not filtered at use.',
+    note:
+      'Law §27:761. KEY CUSTODY — owner @shehzad002 (chain expertise, not protocol plane). Vault design + key handling + withdrawal-permission refuse = his. ' +
+      'Wiring svc-trade once a vault exists = ordinary agent work. W4 A0: removed `module: trade` so claim-check no longer invents services/svc-trade for this socket ' +
+      '(there is no vault tree under svc-trade yet; whole-service lock was a false claim-check hit). Add requires when a real path exists. ' +
+      'Non-negotiable: stored key with withdrawal permission refused at registration, not filtered at use.',
   }),
   f('connect.latency-grading', 'Latency grading — every adapter scored live, feeding routing weights (§27)', {
     module: 'trade',

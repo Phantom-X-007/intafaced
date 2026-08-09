@@ -127,17 +127,19 @@ async function ownedPaths() {
       if (!f.owner) continue;
 
       // Declared paths, where a feature bothers to list them.
-      for (const req of f.requires ?? []) out.push({ path: req, owner: f.owner, id: f.id ?? '' });
+      const reqs = f.requires ?? [];
+      for (const req of reqs) out.push({ path: req, owner: f.owner, id: f.id ?? '' });
 
-      // And the module itself. This is the load-bearing half: 21 of the 27
-      // owner-locked features declare NO `requires` at all — including
-      // trade.otc, trade.algo, bank.earn and pay.fraud, which are exactly the
-      // ones agents were wrongly dispatched into. A path-only check could
-      // never have caught them, and reported `clear` every time.
+      // Module fallback ONLY when the row names no paths. Rows that declare
+      // `requires: ['services/svc-trade/src/futures']` must not also invent
+      // `services/svc-trade` and whole-lock the service (W4 A0 / LANE-STOP-TRADE).
+      // Empty-requires owners still need the fallback — that is how trade.otc /
+      // bank.earn / pay.fraud were caught when agents were wrongly dispatched.
       //
-      // `services/svc-<module>` is the convention throughout this repo, so a
-      // locked module locks its service directory.
-      if (f.module) out.push({ path: `services/svc-${f.module}`, owner: f.owner, id: f.id ?? '' });
+      // `services/svc-<module>` is the convention throughout this repo.
+      if (f.module && reqs.length === 0) {
+        out.push({ path: `services/svc-${f.module}`, owner: f.owner, id: f.id ?? '' });
+      }
     }
     return out;
   } catch (error) {
