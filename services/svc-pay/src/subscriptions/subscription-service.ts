@@ -46,6 +46,50 @@ export interface SubscriptionRecord {
   createdAt: Date;
 }
 
+/** One firing of one subscription — merchant-visible money/ops truth. */
+export type ExecutionStatus = 'pending' | 'invoiced' | 'settled' | 'rejected' | 'skipped';
+
+export interface ExecutionRecord {
+  id: string;
+  subscriptionId: string;
+  occurrence: number;
+  amount: Amount;
+  status: ExecutionStatus;
+  paymentId: string | null;
+  rejectionCode: string | null;
+  attemptedAt: Date;
+  settledAt: Date | null;
+  createdAt: Date;
+}
+
+interface ExecutionRow {
+  id: string;
+  subscription_id: string;
+  occurrence: number;
+  amount: string;
+  status: ExecutionStatus;
+  payment_id: string | null;
+  rejection_code: string | null;
+  attempted_at: Date;
+  settled_at: Date | null;
+  created_at: Date;
+}
+
+function toExecution(r: ExecutionRow): ExecutionRecord {
+  return {
+    id: r.id,
+    subscriptionId: r.subscription_id,
+    occurrence: r.occurrence,
+    amount: parseAmount(r.amount),
+    status: r.status,
+    paymentId: r.payment_id,
+    rejectionCode: r.rejection_code,
+    attemptedAt: r.attempted_at,
+    settledAt: r.settled_at,
+    createdAt: r.created_at,
+  };
+}
+
 interface MandateRow {
   id: string;
   merchant_id: string;
@@ -331,6 +375,25 @@ export class SubscriptionService {
     `;
 
     return mandate;
+  }
+
+  /**
+   * Merchant-facing firing history. Rows already exist from the due runner;
+   * this only reads them. No dunning invent, no auto-retry, no ledger posts.
+   */
+  async listExecutions(subscriptionId: string, options: { limit?: number } = {}): Promise<ExecutionRecord[]> {
+    // Ownership: subscription must exist (caller fences merchant after).
+    await this.getSubscription(subscriptionId);
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const rows = await this.sql<ExecutionRow[]>`
+      SELECT id, subscription_id, occurrence, amount::text, status,
+             payment_id, rejection_code, attempted_at, settled_at, created_at
+        FROM pay.subscription_executions
+       WHERE subscription_id = ${subscriptionId}
+       ORDER BY occurrence DESC
+       LIMIT ${limit}
+    `;
+    return rows.map(toExecution);
   }
 
   /**
