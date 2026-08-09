@@ -17,6 +17,13 @@ export type AlgoKind = 'twap';
 
 export type AlgoStatus = 'active' | 'paused' | 'cancelled' | 'completed' | 'halted';
 
+/**
+ * Why the wall schedule was stretched past the original plan from `startedAt`.
+ * User pause and tick outage share the same re-space mechanics; the trader is
+ * owed the distinction (ADR 2026-08-08).
+ */
+export type AlgoScheduleStretchReason = 'user_pause' | 'tick_outage';
+
 /** Why a slice did not become a fill — surfaced, never silent. */
 export type AlgoMissCode =
   | 'trade.algo_no_liquidity'
@@ -67,7 +74,24 @@ export interface TwapParent {
   readonly limitPrice: Amount | null;
   readonly status: AlgoStatus;
   readonly createdAt: Date;
+  /** Immutable original start. Never re-derived as a due-time basis after stretch. */
   readonly startedAt: Date;
+  /**
+   * Earliest instant the next slice may be placed.
+   * Re-spaced from the actual place/miss/resume/outage event — not from
+   * `startedAt + index * interval` (ADR 2026-08-08: the interval is the promise).
+   */
+  readonly nextDueAt: Date;
+  /**
+   * Projected wall-clock end of the remaining schedule after last re-space.
+   * Updated on create, resume, place, miss, and tick-outage stretch.
+   */
+  readonly projectedEndsAt: Date;
+  /**
+   * Last reason the schedule was stretched past wall-clock from `startedAt`.
+   * Null until the first pause-resume or tick outage.
+   */
+  readonly scheduleStretchReason: AlgoScheduleStretchReason | null;
   readonly pausedAt: Date | null;
   readonly haltReason: string | null;
   readonly slicesPlanned: number;

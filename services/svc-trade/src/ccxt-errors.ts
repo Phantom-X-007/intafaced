@@ -199,10 +199,18 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.algo_mark_missing': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_insufficient_balance': { ccxt: 'InsufficientFunds', status: 400 },
   'trade.algo_child_refused': { ccxt: 'InvalidOrder', status: 400 },
+  /**
+   * Child cancel failed and the parent was left non-cancelled. Caller must
+   * retry cancel — not treat the algo as dead (a cancel that does not cancel
+   * is worse than a refused cancel).
+   */
+  'trade.algo_child_cancel_failed': { ccxt: 'InvalidOrder', status: 409 },
   // The schedule outlived the session that authorised it — the venue cannot act
   // on the caller's behalf, which is an availability answer, not a bad request.
   'trade.algo_principal_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /** ADR 2026-08-08: resume would more than double the order's own duration. */
+  'trade.algo_resume_extends_too_far': { ccxt: 'InvalidOrder', status: 400 },
 };
 
 /**

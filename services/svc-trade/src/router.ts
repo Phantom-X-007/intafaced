@@ -31,6 +31,31 @@ import type { OtcDeskService } from './otc/otc-service.js';
 /** Unsigned decimal string. Reuses the exchange contract's rule rather than inventing a second one. */
 const decimal = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are unsigned decimal strings with at most 18 decimal places');
 
+/** Shared TWAP parent presentation (create/get/pause/resume/cancel). */
+const algoParentOutputSchema = z.object({
+  id: z.string(),
+  symbol: z.string(),
+  side: orderSideSchema,
+  kind: z.literal('twap'),
+  totalQty: decimal,
+  durationMs: z.number().int(),
+  sliceIntervalMs: z.number().int(),
+  limitPrice: decimal.nullable(),
+  status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
+  slicesPlanned: z.number().int(),
+  nextSliceIndex: z.number().int(),
+  childrenEmitted: z.number().int(),
+  missesRecorded: z.number().int(),
+  haltReason: z.string().nullable(),
+  createdAt: z.string(),
+  startedAt: z.string(),
+  nextDueAt: z.string(),
+  /** Projected wall-clock end after last re-space (ADR 2026-08-08). */
+  projectedEndsAt: z.string(),
+  /** Distinguishes user pause from tick outage; null until first stretch. */
+  scheduleStretchReason: z.enum(['user_pause', 'tick_outage']).nullable(),
+});
+
 const marketOutput = z.object({
   id: z.string().uuid(),
   symbol: z.string(),
@@ -493,25 +518,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
             kind: z.enum(['twap']).optional(),
           }),
         )
-        .output(
-          z.object({
-            id: z.string(),
-            symbol: z.string(),
-            side: orderSideSchema,
-            kind: z.literal('twap'),
-            totalQty: decimal,
-            durationMs: z.number().int(),
-            sliceIntervalMs: z.number().int(),
-            limitPrice: decimal.nullable(),
-            status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
-            slicesPlanned: z.number().int(),
-            nextSliceIndex: z.number().int(),
-            childrenEmitted: z.number().int(),
-            missesRecorded: z.number().int(),
-            haltReason: z.string().nullable(),
-            createdAt: z.string(),
-          }),
-        )
+        .output(algoParentOutputSchema)
         .mutation(({ ctx, input }) =>
           guard(async () => {
             const parent = await trade.createTwap(ctx.principal, {
@@ -531,25 +538,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
 
       get: scopedProcedure('trade:read')
         .input(z.object({ algoId: z.string().min(1) }))
-        .output(
-          z.object({
-            id: z.string(),
-            symbol: z.string(),
-            side: orderSideSchema,
-            kind: z.literal('twap'),
-            totalQty: decimal,
-            durationMs: z.number().int(),
-            sliceIntervalMs: z.number().int(),
-            limitPrice: decimal.nullable(),
-            status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
-            slicesPlanned: z.number().int(),
-            nextSliceIndex: z.number().int(),
-            childrenEmitted: z.number().int(),
-            missesRecorded: z.number().int(),
-            haltReason: z.string().nullable(),
-            createdAt: z.string(),
-          }),
-        )
+        .output(algoParentOutputSchema)
         .query(({ ctx, input }) => guard(async () => presentAlgo(await trade.getAlgo(ctx.principal, input.algoId)))),
 
       progress: scopedProcedure('trade:read')
@@ -601,6 +590,10 @@ function presentAlgo(parent: import('./algo/index.js').TwapParent) {
     missesRecorded: parent.misses.length,
     haltReason: parent.haltReason,
     createdAt: parent.createdAt.toISOString(),
+    startedAt: parent.startedAt.toISOString(),
+    nextDueAt: parent.nextDueAt.toISOString(),
+    projectedEndsAt: parent.projectedEndsAt.toISOString(),
+    scheduleStretchReason: parent.scheduleStretchReason,
   };
 }
 

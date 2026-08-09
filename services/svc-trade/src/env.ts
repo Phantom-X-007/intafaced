@@ -66,6 +66,29 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
+       * TWAP slice scheduler (D-S-04 / trade.algo). Default OFF.
+       *
+       * Distinct from TRADE_ALGO_ENABLED: that one decides whether a user may
+       * CREATE a schedule, this one decides whether anything ever executes it.
+       * Off, a TWAP is accepted, persisted, and never places a child — which is
+       * exactly the pre-mount state, so this defaults off until an operator
+       * turns it on deliberately (denylist: only 1/true/on/yes enable).
+       *
+       * Mount is legal only with ADR 2026-08-08 re-space + cancel honesty.
+       */
+      TRADE_ALGO_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /**
+       * How often the TWAP scheduler asks the engine for the next due slice.
+       * Cap 1000ms: the engine's floor for sliceIntervalMs is 1s, so anything
+       * above 1s here can under-run a legal schedule. Refuse at boot.
+       */
+      TRADE_ALGO_JOBS_INTERVAL_MS: z.coerce.number().int().min(250).max(1_000).default(1_000),
+
+      /**
        * MAY A FUTURES MARKET ACCEPT AN ORDER? (`trade.futures` / D-S-01.)
        *
        * DEFAULT OFF, and off is a product state rather than an outage. With this

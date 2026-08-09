@@ -234,8 +234,14 @@ export type TradeErrorCode =
   | 'trade.algo_mark_missing'
   | 'trade.algo_insufficient_balance'
   | 'trade.algo_child_refused'
+  | 'trade.algo_child_cancel_failed'
   | 'trade.algo_principal_unavailable'
   | 'trade.algo_market_closed'
+  /**
+   * Resume would stretch the schedule past 2× the order's own durationMs
+   * (ADR 2026-08-08). Trader may cancel-and-recreate; parent stays paused.
+   */
+  | 'trade.algo_resume_extends_too_far'
   /** Identity S2S ownership consult failed — refuse rather than store an unvalidated id */
   | 'trade.sub_account_unavailable'
   /** Missing or foreign sub-account (existence not leaked) */
