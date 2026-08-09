@@ -117,6 +117,55 @@ export interface EvmChainProbe {
   readonly reason: string | null;
 }
 
+/**
+ * Bound the getLogs answer to the block we asked about.
+ *
+ * Asking by blockHash is reorg-safe only if we refuse answers that name a
+ * different block, a different address, or a removed log. A lying / load-
+ * balanced RPC that returns foreign logs would otherwise project them under
+ * our requested hash — the race-safe request shape without a safe response.
+ */
+export function assertLogsBoundToBlock(
+  logs: readonly RawLog[],
+  expected: { hash: Hex; venue: Address; height: number; rpcUrl: string },
+): void {
+  const wantHash = expected.hash.toLowerCase();
+  const wantVenue = expected.venue.toLowerCase();
+  for (let i = 0; i < logs.length; i++) {
+    const log = logs[i]!;
+    if (log.removed === true) {
+      throw new ChainUnavailableError(
+        'indexer.malformed_block',
+        `getLogs for ${wantHash} at ${expected.rpcUrl} returned a removed log at index ${i}. Refusing to project a log the node says is gone.`,
+      );
+    }
+    const logHash = (log.blockHash ?? '').toLowerCase();
+    if (logHash !== wantHash) {
+      throw new ChainUnavailableError(
+        'indexer.malformed_block',
+        `getLogs asked for blockHash ${wantHash} but log[${i}] carries blockHash ${log.blockHash ?? 'null'}. ` +
+          `Refusing: stapling foreign logs onto our header is exactly the reorg race the hash fetch exists to prevent.`,
+      );
+    }
+    const logAddr = (log.address ?? '').toLowerCase();
+    if (logAddr !== wantVenue) {
+      throw new ChainUnavailableError(
+        'indexer.malformed_block',
+        `getLogs filtered address ${wantVenue} but log[${i}] is from ${log.address ?? 'null'}. Refusing to project another contract's log.`,
+      );
+    }
+    if (log.blockNumber !== null && log.blockNumber !== undefined) {
+      const n = typeof log.blockNumber === 'bigint' ? Number(log.blockNumber) : Number(log.blockNumber);
+      if (Number.isFinite(n) && n !== expected.height) {
+        throw new ChainUnavailableError(
+          'indexer.malformed_block',
+          `getLogs for height ${expected.height} returned log[${i}] at height ${n}. Refusing to project it.`,
+        );
+      }
+    }
+  }
+}
+
 export class EvmChainSource implements ChainSource {
   readonly chainId: number;
   readonly rpcUrl: string;
@@ -225,7 +274,9 @@ export class EvmChainSource implements ChainSource {
    * that does not answer gets a code.
    */
   async head(): Promise<ChainHead | null> {
-    if (!this.#chainIdVerified) await this.assertChainId();
+    // Re-assert every pass. A latch would miss an endpoint that later answers for
+    // a different chain (proxy/fleet swap) while we keep stamping INDEXER_CHAIN_ID.
+    await this.assertChainId();
     await this.#verifyVenue();
 
     const block = await this.#read('head', 'indexer.chain.head', async () => this.client.getBlock({ blockTag: 'latest' }));
@@ -250,7 +301,11 @@ export class EvmChainSource implements ChainSource {
     if (!Number.isSafeInteger(height) || height < 0) {
       throw new ChainUnavailableError('indexer.malformed_block', `blockAt(${height}): height must be a non-negative integer`);
     }
-    if (!this.#chainIdVerified) await this.assertChainId();
+    await this.assertChainId();
+    // Venue code is re-read here too — not only on head(). After head() succeeds,
+    // a self-destruct / redeploy mid-batch would otherwise make getLogs return []
+    // and look like a quiet market for every remaining height.
+    await this.#verifyVenue();
 
     let header;
     try {
@@ -283,6 +338,8 @@ export class EvmChainSource implements ChainSource {
     const logs = (await this.#read(`logsFor(${hash})`, 'indexer.chain.getLogs', async () =>
       this.client.getLogs({ address: this.venue, blockHash: hash }),
     )) as unknown as RawLog[];
+    // Request shape is not enough — refuse answers that name another block.
+    assertLogsBoundToBlock(logs, { hash, venue: this.venue, height, rpcUrl: this.rpcUrl });
 
     const block: ChainBlock = {
       chainId: this.chainId,

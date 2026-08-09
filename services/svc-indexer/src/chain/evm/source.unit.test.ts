@@ -1,8 +1,9 @@
 import { createServer } from 'node:net';
 import { describe, expect, it } from 'vitest';
-import type { Address } from 'viem';
-import { EvmChainSource } from './source.js';
+import type { Address, Hex } from 'viem';
+import { EvmChainSource, assertLogsBoundToBlock } from './source.js';
 import { ChainUnavailableError } from './availability.js';
+import type { RawLog } from './decode.js';
 
 /**
  * CONSTRUCTION AND DEAD-ENDPOINT REFUSALS — always on, no anvil.
@@ -14,12 +15,15 @@ import { ChainUnavailableError } from './availability.js';
  *
  * These tests need no JSON-RPC answer:
  *   · empty URL / zero venue are pure constructor checks
- *   · a dead TCP port is enough to force `head()` through the real transport
- *     and prove the refusal is a throw, not `null`
+ *   · a dead TCP port is enough to force `head()` / `blockAt()` through the real
+ *     transport and prove the refusal is a throw, not `null`
+ *   · getLogs answer binding is pure over log shapes
  */
 
 const VENUE: Address = '0x1111111111111111111111111111111111111111';
 const ZERO: Address = '0x0000000000000000000000000000000000000000';
+const HASH: Hex = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const OTHER: Hex = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 /** A port nothing is listening on — bound to learn the number, then released. */
 async function closedPort(): Promise<number> {
@@ -37,6 +41,21 @@ async function closedPort(): Promise<number> {
       server.close(() => resolve(port));
     });
   });
+}
+
+function fakeLog(over: Partial<RawLog> = {}): RawLog {
+  return {
+    address: VENUE,
+    blockHash: HASH,
+    blockNumber: 7n,
+    data: '0x',
+    logIndex: 0,
+    removed: false,
+    topics: [],
+    transactionHash: HASH,
+    transactionIndex: 0,
+    ...over,
+  } as RawLog;
 }
 
 describe('EvmChainSource · refuse a dark chain at construct (no RPC)', () => {
@@ -97,4 +116,63 @@ describe('EvmChainSource · dead endpoint throws, never null', () => {
     }
     expect(resolved).toBe('threw');
   }, 30_000);
+
+  /**
+   * Promise: README + source.ts — failures never come back as null.
+   * head() is pinned; blockAt is the cold-start / catch-up path. If it
+   * swallowed a dead RPC into null, cold start would idle forever as
+   * "no block at startHeight yet" instead of recording chain_unreachable.
+   */
+  it('throws indexer.chain_unreachable from blockAt(0) when nothing answers', async () => {
+    const port = await closedPort();
+    const dead = new EvmChainSource({
+      chainId: 31337,
+      rpcUrl: `http://127.0.0.1:${port}`,
+      venue: VENUE,
+      requestTimeoutMs: 2_000,
+    });
+
+    await expect(dead.blockAt(0)).rejects.toMatchObject({ code: 'indexer.chain_unreachable' });
+    let resolved: unknown = 'did-not-settle';
+    try {
+      resolved = await dead.blockAt(0);
+    } catch (err) {
+      expect(err).toBeInstanceOf(ChainUnavailableError);
+      expect((err as ChainUnavailableError).code).toBe('indexer.chain_unreachable');
+      resolved = 'threw';
+    }
+    expect(resolved).toBe('threw');
+  }, 30_000);
+});
+
+describe('assertLogsBoundToBlock · getLogs answer must match the request', () => {
+  const expected = { hash: HASH, venue: VENUE, height: 7, rpcUrl: 'http://rpc.test' };
+
+  it('accepts empty logs and matching logs', () => {
+    expect(() => assertLogsBoundToBlock([], expected)).not.toThrow();
+    expect(() => assertLogsBoundToBlock([fakeLog()], expected)).not.toThrow();
+  });
+
+  it('refuses a log whose blockHash does not match the one we asked for', () => {
+    expect(() => assertLogsBoundToBlock([fakeLog({ blockHash: OTHER })], expected)).toThrow(ChainUnavailableError);
+    try {
+      assertLogsBoundToBlock([fakeLog({ blockHash: OTHER })], expected);
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'indexer.malformed_block' });
+      expect((err as Error).message).toMatch(/blockHash|foreign/i);
+    }
+  });
+
+  it('refuses a removed log the node admits is gone', () => {
+    expect(() => assertLogsBoundToBlock([fakeLog({ removed: true })], expected)).toThrow(/removed/i);
+  });
+
+  it('refuses a log from a different address than the venue filter', () => {
+    const otherVenue = '0x2222222222222222222222222222222222222222' as Address;
+    expect(() => assertLogsBoundToBlock([fakeLog({ address: otherVenue })], expected)).toThrow(/another contract/i);
+  });
+
+  it('refuses a log whose blockNumber does not match the height we asked for', () => {
+    expect(() => assertLogsBoundToBlock([fakeLog({ blockNumber: 99n })], expected)).toThrow(/height 99/i);
+  });
 });
