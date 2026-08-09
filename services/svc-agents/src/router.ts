@@ -525,6 +525,44 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
           }),
         ),
+
+      /**
+       * Settle every open (or sealed-unbilled) window on a session.
+       *
+       * Same money path as `session.close` / `runtime.settleSession` — one
+       * `feeCharge` per window, ledger-keyed, idempotent. Operator-only so a
+       * user cannot force a house sweep; `usage.settle` remains for a single
+       * known window id.
+       */
+      settleSession: scopedProcedure('admin:write', { module: 'agents' })
+        .input(z.object({ sessionId: z.string().uuid() }))
+        .output(
+          z.object({
+            assetId: z.string(),
+            settlements: z.array(
+              z.object({
+                windowId: z.string(),
+                amount: z.string(),
+                chargeKey: z.string(),
+                settled: z.boolean(),
+              }),
+            ),
+          }),
+        )
+        .mutation(({ input }) =>
+          guard(async () => {
+            const results = await runtime.settleSession(input.sessionId);
+            return {
+              assetId: feeAssetId,
+              settlements: results.map((r) => ({
+                windowId: r.windowId,
+                amount: formatAmount(r.amount),
+                chargeKey: r.chargeKey,
+                settled: r.settled,
+              })),
+            };
+          }),
+        ),
     }),
 
     /** THE USER-VISIBLE LOG (§8.2). Always the caller's own. */
