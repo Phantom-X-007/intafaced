@@ -258,7 +258,7 @@
               <router-link target="_blank" to="/about-us">{{$t("footer.gywm")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=6&id=39&cateTitle=Other">{{$t("footer.jrwm")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.jrwm")}}</router-link>
             </li>
             <li>
               <router-link target="_blank" to="/announcement/0">{{$t("footer.notice")}}</router-link>
@@ -272,16 +272,16 @@
               <span>{{$t("footer.bzzx")}}</span>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=0&cateTitle=Beginner's Guide">{{$t("footer.xszn")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.xszn")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=1&cateTitle=FAQ">{{$t("footer.cjwt")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.cjwt")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=2&cateTitle=Trading Guide">{{$t("footer.jyzn")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.jyzn")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helplist?cate=3&cateTitle=Coin info">{{$t("footer.bzzl")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.bzzl")}}</router-link>
             </li>
           </ul>
           <ul>
@@ -289,16 +289,16 @@
               <span>{{$t("footer.tkxy")}}</span>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=2&cateTitle=Terms of Service">{{$t("footer.mztk")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.mztk")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=3&cateTitle=Terms of Service">{{$t("footer.ystk")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.ystk")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=5&cateTitle=Terms of Service">{{$t("footer.fwtk")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.fwtk")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/helpdetail?cate=5&id=38&cateTitle=Terms of Service">{{$t("footer.fltk")}}</router-link>
+              <router-link target="_blank" to="/help">{{$t("footer.fltk")}}</router-link>
             </li>
           </ul>
           <!-- Contact column. The four addresses that used to sit in these

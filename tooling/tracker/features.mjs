@@ -465,7 +465,7 @@ export const FEATURES = [
       'docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md',
       'vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue',
     ],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Repointed 2026-08-03 (ADR retire-apps-web): the terminal is the vendored Vue desk, not the retired Next scaffold. On the shell today: order entry, blotter, depth and public tape against svc-edge; real OHLCV candles via assets/js/market-chart/kline.js; hotkeys #337, honesty #349, sub-account selector #358, a11y #367. NOT done: (1) no live feed — Exchange.vue hardcodes feedLive: false; (2) no runtime shape validation of edge responses; (3) desk arithmetic not yet decimal-safe on bignumber. dependsOn is ws.depth not ws.gateway so the book is not blocked on positions.',
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Terminal = vendored Vue desk (ADR retire-apps-web). On tip: depth feedLive only after snapshot (#1221); REST + UC accept float refuse (#1231); book shape messages (#1224); confirm/fill decimals (#1225); dex/protocol custodial:true refuse (#1242); shell-i18n + shell-golden gates (#1230). Residual: brand drain / depth number refuse / snapshot provenance in L11 W5. dependsOn is ws.depth not ws.gateway so the book is not blocked on positions.',
   }),
   f('web.shell', 'Product shell — the served customer surface', {
     module: 'core-ops',
