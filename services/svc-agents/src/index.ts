@@ -12,6 +12,7 @@ import { MockModelProvider } from './providers/mock.js';
 import { UpstreamModelProvider } from './providers/upstream.js';
 import type { ModelProvider } from './providers/provider.js';
 import { AgentRuntime } from './runtime.js';
+import { registerProductAgentsAtBoot } from './fleet/boot-register.js';
 import { agentsReadiness } from './readiness.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -33,9 +34,10 @@ registerProcessHooks(
 /**
  * svc-agents — the agent fleet runtime and model gateway (§8.2).
  *
- * This process is the runtime. It ships with NO agents: Navigator, Support,
- * Market Scanner and Merchant are separate work that registers guardrails
- * against this service and drives `openSession → think → act → settle`.
+ * Stage-1 product factories (navigator / support / scanner / merchant /
+ * copy-intel) are registered into `agent_definitions` at boot so metered
+ * `runSession` paths can open without a separate deploy-side seed. Portfolio /
+ * launch / risk / coach / growth remain doctrine names only until product law.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -108,6 +110,10 @@ const runtime = new AgentRuntime(sql, gateway, meter, bus, {
   meteringEnabled: env.AGENTS_METERING_ENABLED,
 });
 
+// Upsert product guardrails before the listener opens — openSession binds from
+// agent_definitions; a process with zero rows makes every runSession 404.
+const bootAgents = await registerProductAgentsAtBoot(runtime);
+
 const appRouter = createAgentsRouter({ runtime, gateway, meter, feeAssetId: env.AGENTS_FEE_ASSET_ID });
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -125,7 +131,7 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
  * work when the engine is down. What an operator must not misread:
  *   · `providerMode: mock` is not production inference
  *   · `usefulPath.available` is whether a completion can leave the process now
- *   · product agents are not registered by this service — residual says so
+ *   · productAgentsRegistered is the boot upsert count (not live inference)
  * Never a vendor name (Doctrine §0.7).
  */
 app.get('/ready', async () =>
@@ -134,6 +140,7 @@ app.get('/ready', async () =>
     providers,
     table: gateway.routingTable,
     meteringEnabled: env.AGENTS_METERING_ENABLED,
+    productAgentsRegistered: bootAgents.count,
   }),
 );
 
@@ -151,7 +158,13 @@ await app.register(fastifyTRPCPlugin, {
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
-  { port: env.HTTP_PORT, provider: env.AGENTS_PROVIDER, metering: env.AGENTS_METERING_ENABLED, tasks: gateway.routingTable.routes.length },
+  {
+    port: env.HTTP_PORT,
+    provider: env.AGENTS_PROVIDER,
+    metering: env.AGENTS_METERING_ENABLED,
+    tasks: gateway.routingTable.routes.length,
+    productAgents: bootAgents.registered,
+  },
   'svc-agents ready',
 );
 

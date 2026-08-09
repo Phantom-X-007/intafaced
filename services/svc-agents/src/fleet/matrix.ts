@@ -2,8 +2,8 @@
  * Fleet mount matrix — the honest inventory of product agents.
  *
  * Stage-1 factories + routing tasks + whether a metered `runSession` is
- * mounted on the tRPC router. Boot still registers **no** agents (see
- * README residual); this matrix is the checkable contract so a factory
+ * mounted on the tRPC router + whether boot writes the guardrail into
+ * `agent_definitions`. This matrix is the checkable contract so a factory
  * cannot land without a routing task (or the reverse) without a red test.
  */
 
@@ -26,7 +26,7 @@ export type FleetAgentRow = {
    * Pure fixtures/query paths alone do not count.
    */
   readonly runSessionMounted: boolean;
-  /** Honest residual: registered into agent_definitions at process boot. */
+  /** Whether process boot upserts this guardrail into agent_definitions. */
   readonly bootRegistered: boolean;
 };
 
@@ -41,33 +41,33 @@ export const FLEET_PRODUCT_AGENTS: readonly FleetAgentRow[] = [
     agentId: 'navigator',
     factory: () => navigatorAgentGuardrail(),
     runSessionMounted: true,
-    bootRegistered: false,
+    bootRegistered: true,
   },
   {
     agentId: 'support',
     factory: () => supportAgentGuardrail(),
     runSessionMounted: true,
-    bootRegistered: false,
+    bootRegistered: true,
   },
   {
     agentId: 'scanner',
     factory: () => scannerAgentGuardrail(),
     runSessionMounted: true,
-    bootRegistered: false,
+    bootRegistered: true,
   },
   {
     agentId: 'merchant',
     factory: () => merchantAgentGuardrail(),
-    // Stage-1 pure `watch` is mounted; metered `merchant.runSession` lands on
-    // a separate PR (fleet matrix updates when that merges).
-    runSessionMounted: false,
-    bootRegistered: false,
+    // Metered merchant.runSession on tip (#1284).
+    runSessionMounted: true,
+    bootRegistered: true,
   },
   {
     agentId: 'copy-intel',
     factory: () => copyIntelAgentGuardrail(),
+    // Pure stats on tip until metered runSession PR merges.
     runSessionMounted: false,
-    bootRegistered: false,
+    bootRegistered: true,
   },
 ] as const;
 

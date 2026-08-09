@@ -29,25 +29,26 @@ describe('fleet mount matrix', () => {
     expect(routingTasksWithoutFactory()).toEqual([]);
   });
 
-  it('router runSession mounts match the matrix claim for navigator/support/scanner', () => {
+  it('router runSession mounts match the matrix claim', () => {
     const mounted = runSessionMountsInRouterSource();
     for (const ns of expectedRunSessionNamespaces()) {
       expect(mounted).toContain(ns);
     }
-    // Merchant + copy-intel are still pure query on tip until their runSession PRs land.
-    expect(mounted).not.toContain('merchant');
+    // copy-intel metered runSession still residual on tip.
+    expect(mounted).toContain('merchant');
     expect(mounted).not.toContain('copyIntel');
   });
 
-  it('boot still registers zero product agents (honest residual)', () => {
-    expect(FLEET_PRODUCT_AGENTS.every((a) => a.bootRegistered === false)).toBe(true);
-    expect(fleetMatrixBoardCard().bootRegistered).toBe(0);
+  it('boot registers every product agent (no silent 404 on openSession)', () => {
+    expect(FLEET_PRODUCT_AGENTS.every((a) => a.bootRegistered === true)).toBe(true);
+    expect(fleetMatrixBoardCard().bootRegistered).toBe(5);
   });
 
   it('board card is reconstructable', () => {
     const card = fleetMatrixBoardCard();
     expect(card.agents).toBe(5);
-    expect(card.withRunSession).toBe(3);
+    expect(card.withRunSession).toBe(4);
+    expect(card.bootRegistered).toBe(5);
     expect(card.tasksMissingRoute).toBe(0);
   });
 
