@@ -167,7 +167,8 @@ HTTP, for the external scheduler (service credentials required; each money job h
 | `POST /internal/jobs/accrue-interest`      | earn pool daily interest                  |
 | `POST /internal/jobs/accrue-loan-interest` | loan interest capitalisation              |
 | `POST /internal/jobs/run-risk-sweep`       | mark / call / liquidate (default **off**) |
-| `POST /internal/jobs/resume-pending-loans` | crash recovery for pending opens          |
+| `POST /internal/jobs/resume-pending-loans` | crash recovery for pending loan opens     |
+| `POST /internal/jobs/resume-pending-earn`  | crash recovery for pending earn deposits  |
 
 Plus `/health` and `/ready`. Card settlement resume is tRPC-only (`ops.cardResumeSettlement`) — no HTTP twin yet.
 
