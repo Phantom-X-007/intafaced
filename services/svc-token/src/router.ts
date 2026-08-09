@@ -185,7 +185,11 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         const userId = ctx.principal.userId;
         if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
         const staked = await token.stakeOf(userId);
-        return { staked: staked.toString() };
+        // formatAmount — never Amount.toString(). The scaled bigint string
+        // (e.g. 10000 IFC → "10000000000000000000000") is what #1100 sealed
+        // out of the S2S gate; the tRPC surface must not re-open that 10^18
+        // fail-open for any edge client that parseAmounts the field.
+        return { staked: formatAmount(staked) };
       }),
 
     accessOf: scopedProcedure('token:read', { module: 'token' })
@@ -202,7 +206,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
         const access = await token.accessOf(userId);
         return {
-          staked: access.staked.toString(),
+          staked: formatAmount(access.staked),
           tier: access.tier.name,
           feeDiscountBps: access.feeDiscountBps,
         };
