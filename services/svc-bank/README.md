@@ -132,6 +132,18 @@ Interest **capitalises** (raises debt, posts nothing). Mark / margin call / liqu
 
 `ops.runAutoInvest` (`admin:treasury`) fires due rules. Kill switch: `AUTO_INVEST_ENABLED` (HTTP job parity when mounted). Card round-ups and sovereign allowance plane are not here — round-ups need the capture path; P-plane is `protocol.smart-accounts` (Shehzad).
 
+### `business` — **maker/checker partial. Not full bank-biz.**
+
+| Procedure                     | Scope                 | What it does                                                  |
+| ----------------------------- | --------------------- | ------------------------------------------------------------- |
+| `business.list` / `create`    | `bank:read` / `write` | Corporate account + spend threshold                           |
+| `business.addMember`          | `bank:write`          | admin/maker/checker roles                                     |
+| `business.proposeTransfer`    | `bank:write`          | Under threshold posts; at/above → pending dual control        |
+| `business.approve` / `reject` | `bank:write`          | Checker (not maker) decides; posts via existing transfer rail |
+| `business.pending`            | `bank:read`           | Open approvals                                                |
+
+Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-recipient payroll atomicity, dedicated org principal — not invented here.
+
 ### `ramps` — **crypto ledger half. Fiat is a socket.**
 
 | Procedure         | Scope        | Purpose                                                                |

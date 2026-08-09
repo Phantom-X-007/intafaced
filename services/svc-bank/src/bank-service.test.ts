@@ -135,7 +135,8 @@ if (!available) {
 
   beforeEach(async () => {
     await sql`
-      TRUNCATE bank.auto_invest_runs, bank.auto_invest_rules,
+      TRUNCATE bank.business_approvals, bank.business_members, bank.business_accounts,
+               bank.auto_invest_runs, bank.auto_invest_rules,
                bank.interest_accruals, bank.earn_positions, bank.earn_pools,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
                bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards,
@@ -2067,6 +2068,8 @@ if (!available) {
         'auto_invest_rules.threshold': 'a POLICY keep-amount for a threshold sweep; instruction, not a holding',
         'auto_invest_rules.amount': 'a POLICY spend for a DCA schedule; instruction, not a holding',
         'auto_invest_runs.amount': 'a RECORD of one run (settled or rejected); written once',
+        'business_accounts.spend_threshold': 'a POLICY dual-control floor; instruction, not a holding',
+        'business_approvals.amount': 'a RECORD of one proposed/approved transfer; written once',
       };
 
       const moneyColumns = columns

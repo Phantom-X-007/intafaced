@@ -228,7 +228,18 @@ export type BankErrorCode =
   | 'bank.auto_invest_invalid_threshold'
   | 'bank.auto_invest_run_failed'
   | 'bank.auto_invest_below_threshold'
-  | 'bank.auto_invest_disabled';
+  | 'bank.auto_invest_disabled'
+  // ── Business maker/checker (§31:811 partial) ───────────────────────────────
+  | 'bank.business_not_found'
+  | 'bank.business_closed'
+  | 'bank.business_not_member'
+  | 'bank.business_role_forbidden'
+  | 'bank.business_invalid_threshold'
+  | 'bank.business_invalid_name'
+  | 'bank.business_approval_not_found'
+  | 'bank.business_approval_inactive'
+  | 'bank.business_self_approve'
+  | 'bank.business_rejected';
 
 export class BankError extends Error {
   constructor(

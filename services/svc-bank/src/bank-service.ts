@@ -9,6 +9,7 @@ import { fixedPriceSource } from './loans/prices.js';
 import { CardService, type CardServiceOptions } from './cards/card-service.js';
 import { RampService, type RampServiceOptions } from './ramps/ramp-service.js';
 import { AutoInvestService, type AutoInvestServiceOptions } from './auto-invest/auto-invest-service.js';
+import { BusinessService } from './business/business-service.js';
 import type { LedgerHistory } from './analytics/ledger-history.js';
 
 /**
@@ -34,6 +35,7 @@ export interface BankServices {
   readonly cards: CardService;
   readonly ramps: RampService;
   readonly autoInvest: AutoInvestService;
+  readonly business: BusinessService;
 }
 
 export interface BankServiceOptions {
@@ -97,11 +99,22 @@ export function createBankServices(sql: Sql, ledger: LedgerClient, history: Ledg
   const ramps = new RampService(sql, ledger, options.ramps ?? {});
   // No convert port = DCA refuses rates-unset; threshold sweeps still work.
   const autoInvest = new AutoInvestService(sql, ledger, earn, spaces, options.autoInvest ?? {});
+  const business = new BusinessService(sql, spaces, transfers);
 
-  return { spaces, transfers, earn, analytics, loans, cards, ramps, autoInvest };
+  return { spaces, transfers, earn, analytics, loans, cards, ramps, autoInvest, business };
 }
 
-export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService, CardService, RampService, AutoInvestService };
+export {
+  SpaceService,
+  TransferService,
+  EarnService,
+  SpendAnalytics,
+  LoanService,
+  CardService,
+  RampService,
+  AutoInvestService,
+  BusinessService,
+};
 export { BankError, type BankErrorCode } from './errors.js';
 export { accountForSpace, type SpaceRecord, type SpaceView } from './spaces/space-service.js';
 export { planDue, occurrenceStart, dueOccurrence, type Cadence } from './transfers/schedule.js';
