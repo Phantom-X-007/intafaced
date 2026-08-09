@@ -13,6 +13,7 @@ import { CHAIN_ID } from './testing/conformance.js';
 function unlinkSuccessor(base: MemoryChainSource): ChainSource {
   let successor: ChainBlock | null = null;
   return {
+    chainId: base.chainId,
     head: () => base.head(),
     blockAt: async (height: number) => {
       const tip = await base.head();
