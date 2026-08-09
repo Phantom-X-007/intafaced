@@ -365,8 +365,12 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
 
       await expect(shallow.sync()).rejects.toBeInstanceOf(ReorgTooDeepError);
       expect(shallow.halted).not.toBeNull();
+      expect(shallow.lastError).not.toBeNull();
       // A halted indexer stops advancing rather than limping on.
       expect((await shallow.sync()).idle).toBe('halted');
+      // Idle-halted must NOT wipe lastError — status needs both halt and why.
+      expect(shallow.lastError).not.toBeNull();
+      expect(shallow.halted).not.toBeNull();
     });
 
     // ── Pruning ───────────────────────────────────────────────────────────

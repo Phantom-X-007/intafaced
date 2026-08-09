@@ -138,8 +138,11 @@ export class Indexer {
   /**
    * Why the last pass did not get anywhere, if it did not.
    *
-   * Cleared by the next pass that completes, so it describes the present rather
-   * than an incident from an hour ago that has since resolved itself.
+   * Cleared by the next pass that completes *without* being halted, so it
+   * describes the present rather than an incident from an hour ago that has
+   * since resolved itself. A pass that returns `idle: 'halted'` does NOT clear
+   * it: the deep-reorg (or other throw) that set the halt is still why the
+   * cursor is frozen, and wiping it left `status` with halt but no failure.
    */
   get lastError(): SyncFailure | null {
     return this.#lastError;
@@ -162,7 +165,11 @@ export class Indexer {
   async sync(): Promise<SyncResult> {
     try {
       const result = await this.#sync();
-      this.#lastError = null;
+      // Idle-halted is a successful return from #sync, not recovery. Keep the
+      // throw that put us here so status.lastError still names it.
+      if (result.idle !== 'halted') {
+        this.#lastError = null;
+      }
       return result;
     } catch (err) {
       const code = typeof (err as { code?: unknown }).code === 'string' ? (err as { code: string }).code : null;
