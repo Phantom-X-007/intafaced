@@ -407,7 +407,11 @@ if (selfTest) {
   // ── fetch failure is no longer swallowed ──────────────────────────────────
   {
     const plan = planStartPoint({ base: 'main', branch: 'feat/x', branchExists: false, fetchOk: false, io: movingIo() });
-    check('a failed fetch warns', plan.warnings.some((w) => w.level === 'warn' && w.code === 'FETCH_FAILED'), true);
+    check(
+      'a failed fetch warns',
+      plan.warnings.some((w) => w.level === 'warn' && w.code === 'FETCH_FAILED'),
+      true,
+    );
     check('a failed fetch still pins a SHA', plan.sha, SHA_A);
   }
 
@@ -419,8 +423,16 @@ if (selfTest) {
 
     check('a resumed branch is cut from itself, not the remote', plan.ref, 'feat/x');
     check('a resumed branch is checked out as a branch, not detached at a SHA', args.join(' '), 'worktree add C:/wt/feat-x feat/x');
-    check('a resume says out loud that it is not a fresh cut', plan.warnings.some((w) => w.code === 'RESUMED_BRANCH'), true);
-    check('a resume containing main is a note, not a warning', plan.warnings.every((w) => w.level === 'note'), true);
+    check(
+      'a resume says out loud that it is not a fresh cut',
+      plan.warnings.some((w) => w.code === 'RESUMED_BRANCH'),
+      true,
+    );
+    check(
+      'a resume containing main is a note, not a warning',
+      plan.warnings.every((w) => w.level === 'note'),
+      true,
+    );
   }
   {
     const plan = planStartPoint({ base: 'main', branch: 'feat/x', branchExists: true, fetchOk: true, io: movingIo({ ancestor: false }) });
@@ -430,7 +442,11 @@ if (selfTest) {
       plan.warnings.some((w) => w.level === 'warn' && w.code === 'BASE_NOT_DESCENDED_FROM_REMOTE'),
       true,
     );
-    check('that warning says a reset would discard commits', plan.warnings.some((w) => /DISCARD/.test(w.text)), true);
+    check(
+      'that warning says a reset would discard commits',
+      plan.warnings.some((w) => /DISCARD/.test(w.text)),
+      true,
+    );
   }
 
   // ── fresh clone with no remote-tracking ref ───────────────────────────────
@@ -482,7 +498,9 @@ if (selfTest) {
     if (!ok) failed++;
     console.log(`  ${ok ? '✓' : '✖'} ${name.padEnd(64)} want=${String(want)} got=${String(got)}`);
   }
-  console.log(failed ? `\n✖ ${failed}/${cases.length} self-test cases failed` : `\n✓ ${cases.length}/${cases.length} self-test cases passed`);
+  console.log(
+    failed ? `\n✖ ${failed}/${cases.length} self-test cases failed` : `\n✓ ${cases.length}/${cases.length} self-test cases passed`,
+  );
   process.exit(failed ? 1 : 0);
 }
 
