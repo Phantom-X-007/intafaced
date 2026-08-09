@@ -19,7 +19,7 @@
  *
  *   · there is no Dockerfile anywhere in the tree,
  *   · no compose file defines a service that builds or runs any module,
- *   · no workflow builds it (there is no JDK step in CI at all),
+ *   · no workflow builds *this* tree (framework-only compile probe is separate; wallet_rpc stays unbuilt),
  *   · the reactor pom declares a module that is absent from disk, so `mvn`
  *     cannot even resolve the build,
  *   · and the `${...}` placeholders added by the auth/secrets work stop a
@@ -2616,7 +2616,17 @@ const workflowFiles = statSync(workflowDir, { throwIfNoEntry: false })?.isDirect
 
 for (const file of workflowFiles) {
   workflowsInspected++;
-  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  const text = readFileSync(file, 'utf8');
+  const lines = text.split(/\r?\n/);
+  // Axis C2 residual: framework-only compile probe is allowed. Wallet RPC must
+  // never be the reason a JDK/Maven step appears (security review still owner-gated).
+  // A workflow is framework-only when it never mentions this tree AND only runs
+  // under 00_framework (working-directory / path filters).
+  const frameworkOnlyCompileProbe =
+    /00_framework/.test(text) &&
+    !text.includes(TREE) &&
+    !/01_wallet_rpc/.test(text) &&
+    /working-directory:\s*vendor\/upstream-exchange\/00_framework/.test(text);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // A path mention is only a break if it is in a RUN step; this gate's own
@@ -2625,12 +2635,15 @@ for (const file of workflowFiles) {
       barrierBreaks.push({ id: 'M7', where: `${relPath(file)}:${i + 1}`, detail: `a workflow references ${TREE}` });
     }
     if (/\b(mvn|mvnw|maven)\b/.test(line) && !/^\s*#/.test(line)) {
+      if (frameworkOnlyCompileProbe) {
+        continue;
+      }
       barrierBreaks.push({
         id: 'M7',
         where: `${relPath(file)}:${i + 1}`,
         detail:
-          'a Maven invocation in CI. There is no JDK step in this repo by design — the vendored Java trees are ' +
-          'never compiled here, and the wallet RPC reactor must not become the reason one appears',
+          'a Maven invocation in CI that is not a framework-only compile probe. Wallet RPC must not gain a ' +
+          'build path — owner security review is the bar (docs/OWNER-ACTIONS-WALLET-RPC-SECRETS.md §A4)',
       });
     }
   }
