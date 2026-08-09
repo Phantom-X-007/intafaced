@@ -1,5 +1,25 @@
-import { bigint, bigserial, boolean, index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  boolean,
+  customType,
+  index,
+  integer,
+  jsonb,
+  pgSchema,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { citext, createdAt, tstz, updatedAt } from '@intafaced/db';
+
+/** Postgres bytea ↔ Buffer (KYC document ciphertext / nonce). */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 
 /**
  * IDENTITY (§4.1).
@@ -97,6 +117,27 @@ export const kycRecords = identity.table(
     /** The operator queue: every record waiting on a human, oldest first. */
     index('kyc_pending_idx').on(t.status, t.createdAt),
   ],
+);
+
+/**
+ * §10 encrypted document store — bytes never land on kyc_records.
+ * Opaque id may be stored as kyc_records.provider_ref by operator tooling.
+ */
+export const kycDocuments = identity.table(
+  'kyc_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    contentType: text('content_type').notNull(),
+    byteLength: integer('byte_length').notNull(),
+    ciphertext: bytea('ciphertext').notNull(),
+    nonce: bytea('nonce').notNull(),
+    keyId: text('key_id').notNull().default('v1'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('kyc_documents_user_idx').on(t.userId, t.createdAt)],
 );
 
 /**
