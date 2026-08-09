@@ -145,7 +145,13 @@ export type PayErrorCode =
    * Payout destination kind does not match the rail (e.g. IBAN on crypto-native).
    * Refused BEFORE withdrawHold so no ledger row is left stranded.
    */
-  | 'pay.destination_kind_mismatch';
+  | 'pay.destination_kind_mismatch'
+  | 'pay.subscription_not_found'
+  | 'pay.mandate_not_found'
+  | 'pay.subscription_reconsent_required'
+  | 'pay.subscription_inactive'
+  | 'pay.mandate_inactive'
+  | 'pay.subscription_invalid';
 
 export class PayError extends Error {
   constructor(
