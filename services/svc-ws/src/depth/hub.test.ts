@@ -65,6 +65,13 @@ class FakeSource implements DepthSource {
   readonly snapshotCalls: string[] = [];
   marketCalls = 0;
   failMarkets: Error | null = null;
+  /** When set, every snapshot call rejects with this error (matching down). */
+  failSnapshot: Error | null = null;
+  /**
+   * Optional per-call override. When present for a market, the returned
+   * promise is what `#seed` awaits — used to stage seed-vs-poll races.
+   */
+  pendingSnapshots = new Map<string, Promise<DepthSnapshot>>();
 
   constructor(marketList: string[]) {
     this.marketList = marketList;
@@ -78,6 +85,9 @@ class FakeSource implements DepthSource {
 
   async snapshot(marketId: string): Promise<DepthSnapshot> {
     this.snapshotCalls.push(marketId);
+    if (this.failSnapshot) throw this.failSnapshot;
+    const pending = this.pendingSnapshots.get(marketId);
+    if (pending) return pending;
     const s = this.current.get(marketId);
     if (!s) throw new Error(`no upstream book for ${marketId}`);
     return s;
@@ -218,13 +228,31 @@ describe('DepthHub — a client can always rebuild the server’s exact book', (
     expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
   });
 
-  it('says nothing when the sequence has not moved', async () => {
+  it('says nothing when the sequence has not moved and levels are identical', async () => {
     hub.attach(MARKET, sink);
     await settle();
     const before = sink.frames.length;
 
     expect(hub.ingest(snapshot(10))).toBeNull();
     expect(sink.frames.length).toBe(before);
+  });
+
+  it('force-repairs clients when the same sequence arrives with different levels', async () => {
+    // Same sequence, different book: a continuous delta cannot fix this
+    // (fromSequence would equal sequence). Without a forced snapshot, the hub
+    // would silently hold a book no client was ever told about.
+    hub.attach(MARKET, sink);
+    await settle();
+    const before = sink.frames.length;
+
+    expect(hub.ingest(snapshot(10, [['100', '9']]))).toBeNull();
+
+    const last = sink.messages().at(-1);
+    expect(last?.type).toBe('snapshot');
+    expect(last?.sequence).toBe(10);
+    expect(last?.bids).toEqual([['100', '9']]);
+    expect(sink.frames.length).toBe(before + 1);
+    expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
   });
 
   it('never puts a JSON number where an amount belongs', async () => {
@@ -474,6 +502,8 @@ describe('DepthHub — an unknown market never reaches svc-matching', () => {
   });
 
   it('tells the client why when svc-matching cannot be reached', async () => {
+    // Registry/list failure — the market list itself cannot be loaded. That is
+    // different from depth seed failure for a known market (see below).
     const source = new FakeSource([MARKET]);
     source.failMarkets = new Error('svc-matching unreachable: connect ECONNREFUSED');
     const hub = hubFor(source);
@@ -484,6 +514,53 @@ describe('DepthHub — an unknown market never reaches svc-matching', () => {
 
     expect(sink.closed?.code).toBe(CLOSE_TRY_LATER);
     expect(sink.closed?.reason).toMatch(/ECONNREFUSED/);
+  });
+
+  it('refreshes on a miss at most once per window when the refresh window is non-zero', async () => {
+    let now = 1_000;
+    const source = new FakeSource([MARKET]);
+    source.current.set(MARKET, snapshot(10));
+    source.current.set(OTHER, snapshot(4, [['20', '1']], [['21', '1']], OTHER));
+    const hub = hubFor(source, {
+      marketsRefreshMs: 30_000,
+      clock: () => now,
+    });
+
+    // Warm the list via a known market. This sets marketsFetchedAt but must
+    // NOT burn the miss-refresh budget — a newly listed market still gets one.
+    await hub.refreshMarkets();
+    expect(hub.knownMarkets).toEqual([MARKET]);
+    expect(source.marketCalls).toBe(1);
+
+    // List grows after the warm refresh.
+    source.marketList.push(OTHER);
+    const accepted = new FakeSink();
+    hub.attach(OTHER, accepted);
+    await settle();
+
+    expect(accepted.closed).toBeNull();
+    expect(accepted.messages()[0]).toMatchObject({ type: 'snapshot', marketId: OTHER });
+    expect(source.marketCalls).toBe(2); // one miss-refresh
+
+    // A second unknown inside the same window must not re-call markets.
+    const refused = new FakeSink();
+    hub.attach('STILL-NOT-LISTED', refused);
+    await settle();
+
+    expect(refused.closed?.code).toBe(CLOSE_POLICY);
+    expect(refused.closed?.reason).toMatch(/unknown market/);
+    expect(source.marketCalls).toBe(2);
+
+    // After the window, a miss may refresh again.
+    now += 30_000;
+    source.marketList.push('LATER-LISTED');
+    source.current.set('LATER-LISTED', snapshot(1, [['1', '1']], [['2', '1']], 'LATER-LISTED'));
+    const later = new FakeSink();
+    hub.attach('LATER-LISTED', later);
+    await settle();
+
+    expect(later.closed).toBeNull();
+    expect(source.marketCalls).toBe(3);
   });
 });
 
@@ -679,5 +756,169 @@ describe('DepthHub — the listing decides, not the engine', () => {
     await expect(hub.refreshMarkets()).rejects.toThrow(/every market registry source failed/);
 
     expect(hub.knownMarkets).toEqual([LISTED]);
+  });
+
+  it('opens an empty book when the market is known but matching cannot serve depth', async () => {
+    // README: engine down → listed market opens empty book. The socket stays
+    // open; raw upstream errors do not become the close reason.
+    const source = new FakeSource([MARKET]);
+    source.failSnapshot = new Error('svc-matching unreachable: connect ECONNREFUSED');
+    const hub = hubFor(source);
+
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+    await settle();
+
+    expect(sink.closed).toBeNull();
+    expect(sink.messages()[0]).toEqual({
+      type: 'snapshot',
+      marketId: MARKET,
+      sequence: 0,
+      bids: [],
+      asks: [],
+    });
+    expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
+
+    // Matching recovers; a later successful ingest continues as a delta.
+    source.failSnapshot = null;
+    source.current.set(MARKET, snapshot(5, [['100', '2']]));
+    hub.ingest(snapshot(5, [['100', '2']]));
+
+    expect(sink.messages().at(-1)?.type).toBe('delta');
+    expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
+  });
+});
+
+describe('DepthHub — seed vs poll races and window pins', () => {
+  it('does not let a late seed regress a book the poll already advanced', async () => {
+    const source = new FakeSource([MARKET]);
+    let releaseSeed!: (s: DepthSnapshot) => void;
+    source.pendingSnapshots.set(
+      MARKET,
+      new Promise<DepthSnapshot>((resolve) => {
+        releaseSeed = resolve;
+      }),
+    );
+
+    const hub = hubFor(source);
+    // Warm the list so #open reaches #seed on the first turn (not stuck on
+    // markets refresh) — the race under test is seed vs poll, not list load.
+    await hub.refreshMarkets();
+
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+
+    // Wait until seed has actually called the source (promise in flight).
+    for (let i = 0; i < 20 && source.snapshotCalls.length === 0; i += 1) {
+      await Promise.resolve();
+    }
+    expect(source.snapshotCalls).toContain(MARKET);
+
+    // Poll wins while seed is still in flight: write a real book at seq 20.
+    hub.ingest(snapshot(20, [['100', '5']]));
+    expect(hub.bookFor(MARKET)?.sequence).toBe(20);
+
+    // Seed finally returns an older snapshot — must not overwrite.
+    releaseSeed(snapshot(5, [['99', '1']]));
+    await settle();
+
+    expect(hub.bookFor(MARKET)?.sequence).toBe(20);
+    expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
+    // Client's first frame is the post-poll book, not the stale seed.
+    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 20 });
+  });
+
+  it('turns the first real quote on an empty book@0 into a continuous delta', async () => {
+    const source = new FakeSource([MARKET]);
+    source.current.set(MARKET, snapshot(0, [], []));
+    const hub = hubFor(source);
+
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+    await settle();
+
+    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 0, bids: [], asks: [] });
+
+    hub.ingest(snapshot(1, [['100', '1']], [['101', '1']]));
+
+    const last = sink.messages().at(-1);
+    expect(last?.type).toBe('delta');
+    if (last?.type === 'delta') {
+      expect(last.fromSequence).toBe(0);
+      expect(last.sequence).toBe(1);
+    }
+    expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
+  });
+
+  it('emits a qty "0" removal when a level falls out of the top-N window', async () => {
+    // The hub streams whatever top-N the source returns. When a level leaves
+    // the window, the client must see an explicit removal — absence in a delta
+    // means "unchanged", not "gone".
+    const source = new FakeSource([MARKET]);
+    const top2: WireLevel[] = [
+      ['100', '3'],
+      ['99', '2'],
+    ];
+    source.current.set(
+      MARKET,
+      snapshot(10, top2, [
+        ['101', '1'],
+        ['102', '1'],
+      ]),
+    );
+    const hub = hubFor(source, { depthLimit: 2 });
+
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+    await settle();
+
+    // 99 falls out; 98 enters. Client book depth must stay ≤ 2 per side.
+    hub.ingest(
+      snapshot(
+        11,
+        [
+          ['100', '3'],
+          ['98', '4'],
+        ],
+        [
+          ['101', '1'],
+          ['103', '5'],
+        ],
+      ),
+    );
+
+    const delta = sink.messages().at(-1);
+    expect(delta?.type).toBe('delta');
+    if (delta?.type === 'delta') {
+      expect(delta.bids).toContainEqual(['99', '0']);
+      expect(delta.asks).toContainEqual(['102', '0']);
+    }
+
+    const book = rebuild(sink);
+    expect(book?.bids.size).toBeLessThanOrEqual(2);
+    expect(book?.asks.size).toBeLessThanOrEqual(2);
+    expect(canonical(book)).toBe(canonical(hub.bookFor(MARKET) ?? null));
+  });
+
+  it('still snapshot-first when the connect pending buffer overflows', async () => {
+    const source = new FakeSource([MARKET]);
+    source.current.set(MARKET, snapshot(10));
+    const hub = hubFor(source, { maxPendingDeltas: 1 });
+
+    const first = new FakeSink();
+    hub.attach(MARKET, first);
+    await settle();
+
+    // Second client: flood the pending buffer while its snapshot is being built.
+    const second = new FakeSink();
+    hub.attach(MARKET, second);
+    hub.ingest(snapshot(11, [['100', '2']]));
+    hub.ingest(snapshot(12, [['100', '3']]));
+    hub.ingest(snapshot(13, [['100', '4']]));
+    await settle();
+
+    expect(second.messages()[0]?.type).toBe('snapshot');
+    expect(canonical(rebuild(second))).toBe(canonical(hub.bookFor(MARKET) ?? null));
+    expect(second.closed).toBeNull();
   });
 });
