@@ -8,7 +8,6 @@ module.exports = {
         logintip: 'please log in first',
         expect: 'Look forward to expectation!',
         delete: 'Are you confirm to delete?',
-        nodata: 'No Data',
         set: 'Set',
         update: 'Modify',
         slogan: "Exchange The Best",
@@ -120,9 +119,6 @@ module.exports = {
             goSignInPlain: "Sign in",
             empty: "The endpoint answered, and there is nothing in it yet.",
             refresh: "Refresh"
-        },
-        socket: {
-            needs: "What would have to be built"
         },
         reason: {
             unreachable: {
@@ -239,6 +235,11 @@ module.exports = {
             badge: "Not built",
             missing: "What is missing",
             needed: "What would have to be built",
+            /* IxSocketPage.vue asks for `needs`; IxNoSurface.vue asks for
+               `needed`. Both render the same heading and both must resolve —
+               a second `socket:` block used to define `needs` alone, and being
+               declared first it was silently discarded by this one. */
+            needs: "What would have to be built",
             tracker: "Tracker row",
             noTracker: "None — no row plans this",
             wasCalling: "This screen used to call",
@@ -2433,7 +2434,6 @@ module.exports = {
         bzzx: 'Help',
         xsrm: " A beginner's course",
         czzn: 'Recharge Guide',
-        jyzn: 'Trade Guide',
         ptsm: 'Explain',
         fysm: 'Fees',
         fwtk: 'Service Policy',
