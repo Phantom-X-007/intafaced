@@ -28,6 +28,8 @@
    Geometry is computed once per draw and the two canvases keep a fixed size
    until the viewport actually changes.
    ========================================================================== */
+const ixMoney = require('../../assets/js/ix-money.js');
+
 export default {
   name: 'depth-graph',
   data() {
@@ -149,8 +151,8 @@ export default {
       }
 
       const peak = Math.max(
-        bids.length ? bids[bids.length - 1].total : 0,
-        asks.length ? asks[asks.length - 1].total : 0
+        bids.length ? bids[bids.length - 1].totalN : 0,
+        asks.length ? asks[asks.length - 1].totalN : 0
       );
       if (peak <= 0) {
         this.empty = true;
@@ -167,13 +169,13 @@ export default {
       /* Bids fan out to the left of the mid line, asks to the right. */
       this.bidPoints = bids.map((row, i) => ({
         x: mid - (i / Math.max(bids.length - 1, 1)) * mid,
-        y: y(row.total),
+        y: y(row.totalN),
         price: row.price,
         total: row.total
       }));
       this.askPoints = asks.map((row, i) => ({
         x: mid + (i / Math.max(asks.length - 1, 1)) * (this.width - mid),
-        y: y(row.total),
+        y: y(row.totalN),
         price: row.price,
         total: row.total
       }));
@@ -223,12 +225,22 @@ export default {
     /* Running total, built into fresh objects — the vendor mutated the response
        in place, which double-counted whenever the same payload was drawn twice. */
     cumulative(items) {
-      let total = 0;
+      /* Money strings stay strings. totalN is ONLY for pixel Y scale via toFloat. */
+      let total = '0';
       const out = [];
       for (let i = 0; i < items.length; i++) {
-        const amount = Number(items[i].amount) || 0;
-        total += amount;
-        out.push({ price: Number(items[i].price) || 0, total });
+        const price = items[i].price;
+        const amount = items[i].amount;
+        if (typeof price !== 'string' || typeof amount !== 'string') continue;
+        if (!ixMoney.isPositive(price) || !ixMoney.isPositive(amount)) continue;
+        const next = ixMoney.add(total, amount);
+        if (next === null) continue;
+        total = next;
+        out.push({
+          price: price,
+          total: total,
+          totalN: ixMoney.toFloat(total) || 0
+        });
       }
       return out;
     },
@@ -286,11 +298,11 @@ export default {
 
           ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
           ctx.fillStyle = '#6b6b6b';
-          ctx.fillText('Price', bx + 10, by + 18);
-          ctx.fillText('Total', bx + 10, by + 35);
+          ctx.fillText(this.$t('exchange.expand.price'), bx + 10, by + 18);
+          ctx.fillText(this.$t('shellResidual.volume'), bx + 10, by + 35);
           ctx.fillStyle = '#f2f2f2';
-          ctx.fillText(this.trim(point.price), bx + 56, by + 18);
-          ctx.fillText(this.trim(point.total), bx + 56, by + 35);
+          ctx.fillText(this.moneyLabel(point.price), bx + 56, by + 18);
+          ctx.fillText(this.moneyLabel(point.total), bx + 56, by + 35);
         },
         false
       );
@@ -306,9 +318,10 @@ export default {
       ctx.closePath();
     },
 
-    trim(value) {
-      const n = Number(value) || 0;
-      return n.toFixed(n >= 1000 ? 2 : 6).replace(/\.?0+$/, '');
+    /* Hover print: venue decimal string as-is. Never Number/toFixed money. */
+    moneyLabel(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      return String(value);
     },
 
     nearest(points, x) {
