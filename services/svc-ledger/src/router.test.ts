@@ -281,6 +281,20 @@ describe('operator controls', () => {
     await expect(caller.freeze({ reason: '' })).rejects.toThrow();
   });
 
+  it('demands a usable reason (≥12 chars), same floor as the operator HTTP door', async () => {
+    // "testing" is 7 characters. The old min(1) accepted it; the next operator
+    // reading posting_freeze.reason would learn nothing. Align with operator-http.
+    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'too short' })).rejects.toThrow();
+    expect(frozenWith).toBeNull();
+
+    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).resolves.toMatchObject({
+      postingEnabled: false,
+      frozenReason: 'suspected drift in USDT',
+    });
+    expect(frozenWith).toEqual({ reason: 'suspected drift in USDT', actor: USER });
+  });
+
   it('gates reconcile behind admin:treasury and reports the run', async () => {
     const open = createLedgerRouter(stubService()).createCaller(await ctx(['admin:treasury'], true));
     await expect(open.reconcile()).resolves.toMatchObject({ ok: true, accountsChecked: 3, chainLength: 7 });
