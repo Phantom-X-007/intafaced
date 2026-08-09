@@ -420,6 +420,7 @@ registerPrivateRest(app, {
       size: parseAmount(input.size),
       leverage: parseAmount(input.leverage),
       marginMode: input.marginMode,
+      clientOpenId: input.clientOpenId,
     }),
   closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
 });

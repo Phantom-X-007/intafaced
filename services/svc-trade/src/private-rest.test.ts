@@ -1447,6 +1447,34 @@ describe('private REST — mount boundary + order write path', () => {
       await app.close();
     });
 
+    it('POST /positions forwards clientOpenId (and clientPositionId alias) for retry-safe open', async () => {
+      const seen: string[] = [];
+      const app = await build(
+        deps({
+          openPosition: async (_p, input) => {
+            seen.push(input.clientOpenId ?? '');
+            return { id: 'pos-1', symbol: input.symbol } as never;
+          },
+        }),
+      );
+      const a = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '5', clientOpenId: 'intent-1' },
+      });
+      expect(a.statusCode).toBe(200);
+      const b = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '5', clientPositionId: 'intent-2' },
+      });
+      expect(b.statusCode).toBe(200);
+      expect(seen).toEqual(['intent-1', 'intent-2']);
+      await app.close();
+    });
+
     it('an unauthenticated caller is still refused first — the price check does not open a hole', async () => {
       const app = await build();
       const res = await app.inject({
