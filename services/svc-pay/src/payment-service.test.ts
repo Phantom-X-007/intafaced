@@ -1227,6 +1227,34 @@ if (!available) {
       expect(again.status).toBe('paid_out');
       expect(chain.outboundTransfers()).toHaveLength(1);
     });
+
+    /**
+     * Crypto used to accept kind:'bank' + an IBAN and hand the ref to
+     * chain.send. MemoryChain "succeeded"; live EVM failed after withdrawHold.
+     * Kind must match the rail BEFORE any ledger movement.
+     */
+    it('refuses a bank IBAN on crypto-native before any hold posts', async () => {
+      const m = await merchant(0);
+      const payment = await cryptoPayment(m.id, '12');
+      await pay.capture(payment.id);
+      const settlement = await settle(m.id, 'w-payout-iban');
+      expect(await availableOf(MERCHANT_USER)).toBe('12');
+
+      await expect(
+        pay.payoutSettlement({
+          settlementId: settlement.id,
+          railId: 'crypto-native',
+          destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
+        }),
+      ).rejects.toMatchObject({ code: 'pay.destination_kind_mismatch' });
+
+      expect(await availableOf(MERCHANT_USER)).toBe('12');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
+      expect((await pay.getSettlement(settlement.id)).status).toBe('posted');
+      expect(chain.totalSent('USDT')).toBe('0');
+      expect(chain.outboundTransfers()).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
   });
 
   // ── Doctrine and invariants ───────────────────────────────────────────────

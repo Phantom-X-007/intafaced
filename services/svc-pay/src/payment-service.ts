@@ -14,6 +14,7 @@ import {
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
 import { assertRailMayMoveValue, selectPublicCheckoutRail, type ValueMovementPolicy } from './rails/posture.js';
+import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 
 /**
@@ -139,7 +140,12 @@ export type PayErrorCode =
    */
   | 'pay.sandbox_rail_refused'
   /** Request body failed a surface-level validation (missing railAdapter, …). */
-  | 'pay.validation_failed';
+  | 'pay.validation_failed'
+  /**
+   * Payout destination kind does not match the rail (e.g. IBAN on crypto-native).
+   * Refused BEFORE withdrawHold so no ledger row is left stranded.
+   */
+  | 'pay.destination_kind_mismatch';
 
 export class PayError extends Error {
   constructor(
@@ -2065,6 +2071,18 @@ export class PayService {
         // merchant keeps their posted settlement (funds stay in available) but
         // cannot drain it while cut off — same code as createPayment.
         this.assertMerchantActive(merchant);
+
+        // Destination kind must match the rail BEFORE any hold posts. Crypto
+        // used to accept kind:'bank' + an IBAN and hand it to chain.send —
+        // MemoryChain would "succeed"; live EVM would fail after the hold.
+        try {
+          assertPayoutDestinationKind(adapter.id, input.destination);
+        } catch (err) {
+          if (err instanceof DestinationKindError) {
+            throw new PayError(err.message, err.code);
+          }
+          throw err;
+        }
 
         // The attempt number is part of the hold's business key. A refused
         // payout releases the hold, so the next attempt must not reuse the key
