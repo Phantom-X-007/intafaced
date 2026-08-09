@@ -105,6 +105,14 @@ export type PayErrorCode =
   | 'pay.refund_exceeds_captured'
   | 'pay.refund_in_flight'
   /**
+   * An explicit `refundId` already ran to `refund.reversed` (rail refused after
+   * the merchant was debited and the reverse posted). The ledger key
+   * `payment.refund:<refundId>` is spent: a re-post is a silent no-op, so
+   * reusing the id would let the rail pay out while the book does not re-debit.
+   * Caller must supply a **new** business key for a genuine second attempt.
+   */
+  | 'pay.refund_id_spent'
+  /**
    * A pending settlement window has already frozen this payment into its set.
    * Pre-settlement refunds would drain clearing under the frozen gross and let
    * a later post take another payment's funds (or stick forever). Wait for the
@@ -1540,6 +1548,24 @@ export class PayService {
           if (Number.parseInt(alreadyDone[0]?.n ?? '0', 10) > 0) {
             return { replay: true as const, view: await this.view(tx, row) };
           }
+
+          // Spent after reverse: ledger key will no-op; rail may still pay.
+          // A genuine re-attempt needs a new refundId (public REST: new
+          // Idempotency-Key → new restRefundId).
+          const spent = await tx<Array<{ n: string }>>`
+            SELECT COUNT(*)::text AS n
+              FROM pay.payment_events
+             WHERE payment_id = ${row.id}
+               AND event = 'refund.reversed'
+               AND payload->>'refundId' = ${options.refundId}
+          `;
+          if (Number.parseInt(spent[0]?.n ?? '0', 10) > 0) {
+            throw new PayError(
+              `Refund id ${options.refundId} was already used and reversed — supply a new refundId for a genuine re-attempt`,
+              'pay.refund_id_spent',
+              { refundId: options.refundId, paymentId: row.id },
+            );
+          }
         }
 
         const refundable = totals.captured - totals.refunded;
@@ -2113,12 +2139,19 @@ export class PayService {
    * G3 — release a stuck `pending` settlement so its payments can re-enter a
    * later window.
    *
-   * After freeze, if post can never succeed (desync, ops failure), payments stay
-   * marked `settlement.included` forever and no later freeze can pick them up.
-   * This is the honest ops path: mark the window `failed`, append
-   * `settlement.released` per included payment, move no ledger value.
+   * After freeze, if post can never succeed (desync), payments stay marked
+   * `settlement.included` forever and no later freeze can pick them up. This is
+   * the honest ops path: mark the window `failed`, append `settlement.released`
+   * per included payment, move no ledger value.
    *
-   * Only `pending` windows. Posted/paid_out/failed refuse.
+   * HEAL BEFORE RELEASE. Dual-book lag (ledger `merchantSettlement` posted, SQL
+   * txn rolled back) leaves the row `pending` while the merchant is already
+   * credited. Releasing then would free payments into a later window and
+   * double-credit under a new settlement key. Prefer `settleWindow` re-run —
+   * which is idempotent on `settlement:<merchant>:<window>:<asset>` — and only
+   * release when that re-run refuses as desynced (post truly cannot succeed).
+   *
+   * Only `pending` windows. Posted/paid_out/failed refuse (failed is idempotent).
    */
   async releasePendingSettlement(input: {
     settlementId: string;
@@ -2128,6 +2161,36 @@ export class PayService {
     const reason = input.reason?.trim() ?? '';
     if (!reason) {
       throw new PayError('releasePendingSettlement requires a non-empty reason', 'pay.invalid_transition');
+    }
+
+    const head = await this.sql<SettlementRow[]>`
+      SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+        FROM pay.settlements WHERE id = ${input.settlementId}
+    `;
+    const current = head[0];
+    if (!current) throw new PayError(`Settlement ${input.settlementId} not found`, 'pay.settlement_not_found');
+    if (current.status === 'failed') return toSettlement(current);
+    if (current.status !== 'pending') {
+      throw new PayError(
+        `Settlement ${current.id} is ${current.status}; only a pending settlement can be released`,
+        'pay.settlement_not_pending',
+        { settlementId: current.id, status: current.status },
+      );
+    }
+
+    // Prefer heal. settleWindow is a no-op re-post when the ledger already holds
+    // the window key; projection catches up. Only desync falls through to release.
+    try {
+      const healed = await this.settleWindow({
+        merchantId: current.merchant_id,
+        window: current.window,
+        assetId: current.asset_id,
+      });
+      if (healed.status !== 'pending') return healed;
+    } catch (err) {
+      if (!(err instanceof PayError) || err.code !== 'pay.settlement_desynced') {
+        throw err;
+      }
     }
 
     return transaction(
@@ -2141,11 +2204,8 @@ export class PayService {
         if (!row) throw new PayError(`Settlement ${input.settlementId} not found`, 'pay.settlement_not_found');
         if (row.status === 'failed') return toSettlement(row);
         if (row.status !== 'pending') {
-          throw new PayError(
-            `Settlement ${row.id} is ${row.status}; only a pending settlement can be released`,
-            'pay.settlement_not_pending',
-            { settlementId: row.id, status: row.status },
-          );
+          // Healed under us, or concurrent post finished.
+          return toSettlement(row);
         }
 
         const included = await tx<Array<{ payment_id: string }>>`

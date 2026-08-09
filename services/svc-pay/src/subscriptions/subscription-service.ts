@@ -128,6 +128,24 @@ export function assertMandateTermsUnchanged(
   }
 }
 
+/** Paths that may be stored. Anything else is refuse-closed (no silent crypto). */
+export const SUBSCRIPTION_PATHS = ['crypto_invoice', 'card'] as const;
+export type SubscriptionPath = (typeof SUBSCRIPTION_PATHS)[number];
+
+/**
+ * Default `crypto_invoice`. `card_mandate` aliases `card` (fire refuses
+ * `pay.mandate_rail_absent`). Unknown strings refuse — they used to open a
+ * crypto invoice, which is inventing a rail under a wrong name.
+ */
+export function normaliseSubscriptionPath(path: string | undefined): SubscriptionPath {
+  const raw = (path ?? 'crypto_invoice').trim();
+  if (raw === 'crypto_invoice') return 'crypto_invoice';
+  if (raw === 'card' || raw === 'card_mandate') return 'card';
+  throw new PayError(`Subscription path ${JSON.stringify(raw)} is not supported — use crypto_invoice or card`, 'pay.subscription_invalid', {
+    path: raw,
+  });
+}
+
 /**
  * Opens a payment/invoice for one occurrence. Crypto path uses this (never pull).
  * Injected so the runner does not hard-wire PayService and tests stay light.
@@ -235,7 +253,10 @@ export class SubscriptionService {
     await this.requireMerchant(mandate.merchantId);
 
     const nextRunAt = occurrenceStart(mandate.startsAt, mandate.cadence, 0);
-    const path = input.path ?? 'crypto_invoice';
+    // Allowlist only. `card_mandate` normalises to `card` (fire refuses with
+    // pay.mandate_rail_absent). Any other string used to fall through to crypto
+    // invoice open — a silent path invent.
+    const path = normaliseSubscriptionPath(input.path);
 
     const rows = await this.sql<SubRow[]>`
       INSERT INTO pay.subscriptions (
@@ -390,9 +411,10 @@ export class SubscriptionService {
         `;
 
         let executionId: string;
+        let priorPaymentId: string | null = null;
         if (claimed.length === 0) {
-          const existing = await tx<Array<{ id: string; status: string }>>`
-            SELECT id, status FROM pay.subscription_executions
+          const existing = await tx<Array<{ id: string; status: string; payment_id: string | null }>>`
+            SELECT id, status, payment_id FROM pay.subscription_executions
              WHERE subscription_id = ${sub.id} AND occurrence = ${occurrence}
              FOR UPDATE
           `;
@@ -400,12 +422,14 @@ export class SubscriptionService {
           if (!row) return { kind: 'already-fired' as const };
           if (row.status !== 'pending') return { kind: 'already-fired' as const };
           executionId = row.id;
+          priorPaymentId = row.payment_id;
         } else {
           executionId = claimed[0]!.id;
         }
 
-        // Card mandate rail not wired yet — refuse by name, leave execution rejected.
-        if (sub.path === 'card') {
+        // Only crypto_invoice opens money. Card / card_mandate / any other path
+        // refuse by name — never fall through to a crypto invoice silently.
+        if (sub.path !== 'crypto_invoice') {
           await tx`
             UPDATE pay.subscription_executions
                SET status = 'rejected', rejection_code = 'pay.mandate_rail_absent'
@@ -425,14 +449,34 @@ export class SubscriptionService {
         }
 
         try {
-          const { paymentId } = await this.openInvoice({
-            merchantId: sub.merchantId,
-            customerId: sub.customerId,
-            amount: mandate.amount,
-            assetId: mandate.assetId,
-            subscriptionId: sub.id,
-            occurrence,
-          });
+          // openInvoice commits on its own connection. A crash after that create
+          // and before this UPDATE left a pending execution + an orphan payment.
+          // Reuse any payment already tagged for this occurrence (metadata on
+          // the created event) so a re-fire never opens a second invoice.
+          let paymentId = priorPaymentId;
+          if (!paymentId) {
+            const prior = await tx<Array<{ payment_id: string }>>`
+              SELECT payment_id
+                FROM pay.payment_events
+               WHERE event = 'created'
+                 AND payload#>>'{metadata,subscriptionId}' = ${sub.id}
+                 AND payload#>>'{metadata,occurrence}' = ${String(occurrence)}
+               ORDER BY seq ASC
+               LIMIT 1
+            `;
+            paymentId = prior[0]?.payment_id ?? null;
+          }
+          if (!paymentId) {
+            const opened = await this.openInvoice({
+              merchantId: sub.merchantId,
+              customerId: sub.customerId,
+              amount: mandate.amount,
+              assetId: mandate.assetId,
+              subscriptionId: sub.id,
+              occurrence,
+            });
+            paymentId = opened.paymentId;
+          }
           await tx`
             UPDATE pay.subscription_executions
                SET status = 'invoiced', payment_id = ${paymentId}
