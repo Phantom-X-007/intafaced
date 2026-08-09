@@ -76,6 +76,47 @@ describe('parseGuardrail', () => {
   it('rejects a module that is not in the platform registry', () => {
     expect(() => parseGuardrail({ ...BASE, limits: { ...BASE.limits, allowedModules: ['casino'] } })).toThrow();
   });
+
+  it('rejects a product agent that grants a money-moving tool at parse time', () => {
+    // Soft undeclared refuse is not enough — registration must fail closed.
+    expect(() =>
+      parseGuardrail({
+        agentId: 'navigator',
+        version: 1,
+        tools: [
+          { name: 'trade.quote', module: 'trade', mode: 'read' },
+          { name: 'trade.order', module: 'trade', mode: 'write' },
+        ],
+        limits: {
+          maxActionsPerSession: 5,
+          maxOutputTokensPerCall: 512,
+          maxSpendPerSession: '1',
+          allowedModules: ['trade'],
+          allowedTasks: ['navigator.plan'],
+        },
+      }),
+    ).toThrow(/cannot grant money-moving tool "trade\.order"/);
+
+    expect(() =>
+      parseGuardrail({
+        agentId: 'merchant',
+        version: 1,
+        tools: [{ name: 'pay.route.change', module: 'pay', mode: 'write' }],
+        limits: {
+          maxActionsPerSession: 5,
+          maxOutputTokensPerCall: 512,
+          maxSpendPerSession: '0.25',
+          allowedModules: ['pay'],
+          allowedTasks: ['merchant.watch'],
+        },
+      }),
+    ).toThrow(/pay\.route\.change/);
+  });
+
+  it('still allows a test probe agent to grant trade.order (approval / budget tests)', () => {
+    expect(() => parseGuardrail(BASE)).not.toThrow();
+    expect(guardrail().tools.some((t) => t.name === 'trade.order')).toBe(true);
+  });
 });
 
 describe('evaluateToolCall', () => {
