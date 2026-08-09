@@ -32,6 +32,7 @@ export const COPY_KEYS = [
   'agents.usage.settled',
   'agents.usage.free',
   'agents.refused.tool_not_declared',
+  'agents.refused.task_not_allowed',
   'agents.refused.tool_call_limit',
   'agents.refused.module_not_allowed',
   'agents.refused.step_limit',
@@ -83,6 +84,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   // Refusals. Each names the limit that stopped the action, because "refused"
   // without a reason is indistinguishable from a fault.
   'agents.refused.tool_not_declared': 'Refused: {tool} is not in this agent’s declared toolset, so it was not run.',
+  'agents.refused.task_not_allowed': 'Refused: “{task}” is not among this agent’s allowed tasks.',
   'agents.refused.tool_call_limit': 'Refused: {tool} has already been used {limit} time(s) this session, which is its limit.',
   'agents.refused.module_not_allowed': 'Refused: this agent is not permitted to act in {module}.',
   'agents.refused.step_limit': 'Refused: this session has reached its limit of {limit} action(s).',
