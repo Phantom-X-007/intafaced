@@ -534,6 +534,56 @@ describe('authority', () => {
     ).rejects.toThrow(/pay:payout/);
   });
 
+  it('REQUIRES MFA on settlement.payout — pay:payout is INTERACTIVE_ONLY', async () => {
+    // Engine C: the scope table marks pay:payout interactive-only; until this
+    // endpoint is pinned, a stolen single-factor session could drain settlements.
+    const api = await caller(['pay:payout'], { mfa: false });
+    const err = await api.settlement
+      .payout({
+        settlementId: SETTLEMENT,
+        railId: 'card-sandbox',
+        destination: { kind: 'bank', ref: 'X' },
+      })
+      .catch((e: unknown) => e);
+
+    expect((err as { code?: string }).code).toBe('UNAUTHORIZED');
+    expect((err as Error).message).toMatch(/two-factor/i);
+    expect(stub.calls.filter((c) => c.method === 'payoutSettlement')).toHaveLength(0);
+    expect(INTERACTIVE_ONLY_SCOPES).toContain('pay:payout');
+    expect(() => assertKeyScopesAllowed(['pay:payout'])).toThrow(/interactive/i);
+  });
+
+  it('REFUSES default SESSION_SCOPES on merchant money procedures', async () => {
+    // pay:* are WITHHELD_FROM_SESSION — a normal login must never capture/refund/payout.
+    // Do not invent a grant path here; only lock the refuse.
+    const sessionScopes = [...SESSION_SCOPES];
+    expect(sessionScopes).not.toEqual(expect.arrayContaining(['pay:read', 'pay:write', 'pay:refund', 'pay:payout']));
+
+    for (const scope of sessionScopes) {
+      const api = await caller([scope]);
+      await expect(
+        api.payment.create({
+          merchantId: MERCHANT,
+          amount: '1',
+          assetId: 'USDT',
+          method: 'card',
+          railAdapter: 'card-sandbox',
+        }),
+      ).rejects.toThrow(/pay:write/);
+      await expect(api.payment.refund({ paymentId: PAYMENT, amount: '1' })).rejects.toThrow(/pay:refund/);
+      await expect(
+        api.settlement.payout({
+          settlementId: SETTLEMENT,
+          railId: 'card-sandbox',
+          destination: { kind: 'bank', ref: 'X' },
+        }),
+      ).rejects.toThrow(/pay:payout/);
+    }
+    expect(stub.calls.filter((c) => c.method === 'createPayment')).toHaveLength(0);
+    expect(stub.calls.filter((c) => c.method === 'refund')).toHaveLength(0);
+    expect(stub.calls.filter((c) => c.method === 'payoutSettlement')).toHaveLength(0);
+  });
+
   it('lets each write scope read, because seeing what you changed is implied', async () => {
     for (const scope of ['pay:write', 'pay:refund', 'pay:payout']) {
       const api = await caller([scope]);
