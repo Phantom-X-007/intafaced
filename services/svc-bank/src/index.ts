@@ -140,7 +140,9 @@ const bank = createBankServices(sql, ledger, history, {
 const cardProgramme = bank.cards.programme();
 const rampProgramme = bank.ramps.programmeInfo();
 
-export const appRouter = createBankRouter(bank);
+export const appRouter = createBankRouter(bank, {
+  scheduledTransfersEnabled: env.SCHEDULED_TRANSFERS_ENABLED,
+});
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge

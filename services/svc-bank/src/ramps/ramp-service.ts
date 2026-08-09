@@ -382,17 +382,62 @@ export class RampService {
     clientRef: string;
   }): Promise<OfframpRecord> {
     return transaction(this.sql, async (tx) => {
-      const inserted = await tx<OfframpRow[]>`
-        INSERT INTO bank.ramp_offramps (
-          id, user_id, asset_id, amount, kind, rail, destination_ref, client_ref, simulated, status
-        ) VALUES (
-          ${input.offrampId}::uuid, ${input.userId}, ${input.assetId}, ${formatAmount(input.amount)}::numeric,
-          ${input.kind}, ${input.rail}, ${input.destinationRef}, ${input.clientRef}, true, 'pending'
-        )
-        ON CONFLICT (user_id, client_ref) DO NOTHING
-        RETURNING *
+      /**
+       * Two unique keys: primary `id` and `(user_id, client_ref)`.
+       *
+       * `ON CONFLICT (user_id, client_ref)` alone left same-id / different-
+       * clientRef as a raw PG 23505 on the primary key. Resolve both keys by
+       * name as `bank.ramp_conflict` — never surface constraint codes.
+       */
+      const byId = await tx<OfframpRow[]>`
+        SELECT * FROM bank.ramp_offramps
+         WHERE id = ${input.offrampId}::uuid
+         FOR UPDATE
       `;
-      if (inserted[0]) return toOfframp(inserted[0]);
+      if (byId[0]) {
+        const existing = toOfframp(byId[0]);
+        if (offrampFactsMismatch(existing, input)) {
+          throw new BankError(
+            `Off-ramp id ${input.offrampId} was already used with different terms`,
+            'bank.ramp_conflict',
+          );
+        }
+        return existing;
+      }
+
+      try {
+        const inserted = await tx<OfframpRow[]>`
+          INSERT INTO bank.ramp_offramps (
+            id, user_id, asset_id, amount, kind, rail, destination_ref, client_ref, simulated, status
+          ) VALUES (
+            ${input.offrampId}::uuid, ${input.userId}, ${input.assetId}, ${formatAmount(input.amount)}::numeric,
+            ${input.kind}, ${input.rail}, ${input.destinationRef}, ${input.clientRef}, true, 'pending'
+          )
+          ON CONFLICT (user_id, client_ref) DO NOTHING
+          RETURNING *
+        `;
+        if (inserted[0]) return toOfframp(inserted[0]);
+      } catch (err) {
+        // Concurrent same-id insert (or any other unique on this row) — resolve, don't leak 23505.
+        if (!isUniqueViolation(err)) throw err;
+        const raced = await tx<OfframpRow[]>`
+          SELECT * FROM bank.ramp_offramps
+           WHERE id = ${input.offrampId}::uuid
+              OR (user_id = ${input.userId} AND client_ref = ${input.clientRef})
+           FOR UPDATE
+        `;
+        if (raced[0]) {
+          const existing = toOfframp(raced[0]);
+          if (offrampFactsMismatch(existing, input)) {
+            throw new BankError(
+              `Off-ramp claim collided on id ${input.offrampId} or client ref ${input.clientRef}`,
+              'bank.ramp_conflict',
+            );
+          }
+          return existing;
+        }
+        throw err;
+      }
 
       const rows = await tx<OfframpRow[]>`
         SELECT * FROM bank.ramp_offramps
@@ -400,12 +445,7 @@ export class RampService {
          FOR UPDATE
       `;
       const existing = toOfframp(rows[0]!);
-      const mismatch =
-        existing.assetId !== input.assetId ||
-        existing.amount !== input.amount ||
-        existing.destinationRef !== input.destinationRef ||
-        existing.id !== input.offrampId;
-      if (mismatch) {
+      if (offrampFactsMismatch(existing, input)) {
         throw new BankError(`Client ref ${input.clientRef} was already used for a different off-ramp`, 'bank.ramp_conflict');
       }
       return existing;
@@ -458,4 +498,31 @@ function toOfframp(row: OfframpRow): OfframpRecord {
     createdAt: row.created_at,
     settledAt: row.settled_at,
   };
+}
+
+/** Claimed row must match every client-supplied term, including both unique keys. */
+function offrampFactsMismatch(
+  existing: OfframpRecord,
+  input: {
+    offrampId: string;
+    userId: string;
+    assetId: string;
+    amount: Amount;
+    destinationRef: string;
+    clientRef: string;
+  },
+): boolean {
+  return (
+    existing.id !== input.offrampId ||
+    existing.userId !== input.userId ||
+    existing.assetId !== input.assetId ||
+    existing.amount !== input.amount ||
+    existing.destinationRef !== input.destinationRef ||
+    existing.clientRef !== input.clientRef
+  );
+}
+
+/** postgres.js surfaces PG SQLSTATE on `err.code`. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
 }

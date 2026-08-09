@@ -268,6 +268,42 @@ if (!available) {
       expect(b.id).toBe(a.id);
       expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('30');
     });
+
+    it('same offrampId with a different clientRef is bank.ramp_conflict, not raw PG 23505', async () => {
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('40'),
+        kind: 'crypto',
+        railRef: 'fund-id-conflict',
+        creditedBy: OPERATOR,
+      });
+      const id = randomUUID();
+      await ramps.offramp({
+        offrampId: id,
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('10'),
+        kind: 'crypto',
+        destinationRef: '0xout',
+        clientRef: 'first-ref',
+      });
+
+      await expect(
+        ramps.offramp({
+          offrampId: id,
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('10'),
+          kind: 'crypto',
+          destinationRef: '0xout',
+          clientRef: 'other-ref',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.ramp_conflict' });
+
+      // Balance unchanged after the conflict (only the first offramp settled).
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('30');
+    });
   });
 
   describe('conservation', () => {

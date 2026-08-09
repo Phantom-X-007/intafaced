@@ -170,8 +170,15 @@ export type BankErrorCode =
   | 'bank.fiat_ramp_socket'
   | 'bank.ramp_invalid_amount'
   | 'bank.ramp_invalid_destination'
-  /** Same (rail, railRef) or (user, clientRef) already booked with different facts. */
-  | 'bank.ramp_conflict';
+  /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */
+  | 'bank.ramp_conflict'
+  /**
+   * Standing-order runner kill switch (`SCHEDULED_TRANSFERS_ENABLED=false`).
+   *
+   * Same refusal as the HTTP job endpoint. Both surfaces must agree: an operator
+   * who flipped the flag off must not still fire due schedules via tRPC.
+   */
+  | 'bank.transfers_disabled';
 
 export class BankError extends Error {
   constructor(
