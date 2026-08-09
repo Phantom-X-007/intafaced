@@ -95,6 +95,18 @@ export function decideGrant(input: {
   };
 }
 
+/**
+ * Wire honesty after INSERT into cert_grants.
+ *
+ * Concurrent grantCert callers can both pass the pre-check `existing=null`, then
+ * only one INSERT succeeds. With ON CONFLICT DO NOTHING the loser gets zero rows
+ * and must report `alreadyGranted: true` (not a second "you just earned this").
+ * Returning false on every RETURNING path used to lie after a conflict DO UPDATE.
+ */
+export function alreadyGrantedAfterInsert(insertReturned: boolean): boolean {
+  return !insertReturned;
+}
+
 /** Pure: mark item complete; re-complete returns same timestamp (idempotent). */
 export function decideItemComplete(input: { userId: string; itemSlug: string; existing: ItemCompletionRecord | null; now?: Date }): {
   record: ItemCompletionRecord;
