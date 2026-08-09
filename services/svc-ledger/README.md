@@ -10,18 +10,31 @@
 
 Internal tRPC. Note there is no user-facing write path, and `packages/auth` has no `ledger:write` scope at all — a user moves value by asking a module to act, never by calling the ledger.
 
-| Procedure   | Scope               | Input                                       | Output                                                    |
-| ----------- | ------------------- | ------------------------------------------- | --------------------------------------------------------- |
-| `health`    | —                   | —                                           | `{ ok, service, postingEnabled }`                         |
-| `post`      | service credentials | `PostRequest` (decimal-string amounts)      | `{ txId, hash, postedAt }`                                |
-| `balance`   | `ledger:read`       | `AccountRef`                                | `{ accountId, assetId, kind, amount }`                    |
-| `balances`  | `ledger:read`       | `{ ownerType, ownerId }`                    | `Balance[]` — own account only                            |
-| `history`   | service credentials | `{ account, from, to }` — ISO, `[from, to)` | `{ txId, module, reason, direction, amount, postedAt }[]` |
-| `reconcile` | `admin:treasury`    | —                                           | `{ ok, accountsChecked, chainLength, unbalancedAssets }`  |
-| `freeze`    | `admin:treasury`    | `{ reason }`                                | `{ postingEnabled, frozenReason, frozenBy }`              |
-| `unfreeze`  | `admin:treasury`    | —                                           | `{ postingEnabled, frozenReason, frozenBy }`              |
+| Procedure   | Scope               | Input                                       | Output                                                                   |
+| ----------- | ------------------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| `health`    | —                   | —                                           | `{ ok, service, postingEnabled }`                                        |
+| `post`      | service credentials | `PostRequest` (decimal-string amounts)      | `{ txId, hash, postedAt }`                                               |
+| `balance`   | `ledger:read`       | `AccountRef`                                | `{ accountId, assetId, kind, amount }`                                   |
+| `balances`  | `ledger:read`       | `{ ownerType, ownerId }`                    | `Balance[]` — own account only                                           |
+| `history`   | service credentials | `{ account, from, to }` — ISO, `[from, to)` | `{ txId, module, reason, direction, amount, postedAt }[]`                |
+| `reconcile` | `admin:treasury`    | —                                           | `{ ok, accountsChecked, chainLength, unbalancedAssets, chainBrokenAt? }` |
+| `freeze`    | `admin:treasury`    | `{ reason }`                                | `{ postingEnabled, frozenReason, frozenBy }`                             |
+| `unfreeze`  | `admin:treasury`    | —                                           | `{ postingEnabled, frozenReason, frozenBy }`                             |
 
 HTTP: `GET /health` (liveness) · `GET /ready` — returns **503 when frozen**, so a frozen ledger leaves the load balancer rotation instead of refusing posts one by one.
+
+### Operator HTTP (`admin:treasury` + MFA on every route)
+
+tRPC procedures above are exported for their type; **nothing mounts the tRPC plugin**. Operator control reaches the process through raw Fastify routes:
+
+| Method | Path                  | Effect                                                                      |
+| ------ | --------------------- | --------------------------------------------------------------------------- |
+| `GET`  | `/operator/freeze`    | Durable `posting_freeze` row                                                |
+| `POST` | `/operator/freeze`    | Halt posting (`reason` ≥ 12 chars)                                          |
+| `POST` | `/operator/unfreeze`  | Resume posting                                                              |
+| `POST` | `/operator/reconcile` | Full three-check run (balances · chain · totalsByAsset); freezes on failure |
+
+`POST /operator/reconcile` is the on-demand path for apps/admin. A broken chain reports `chainLength` as how far verification got and names `chainBrokenAt` — never collapses a break to zero (that would look like an empty healthy book). Edge/admin must proxy this route; until they do, the scheduled job and this path are the live answers.
 
 ### `history` — a read, and the two ways it refuses
 
