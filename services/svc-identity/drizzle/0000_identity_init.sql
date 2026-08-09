@@ -143,7 +143,7 @@ CREATE INDEX IF NOT EXISTS "api_keys_user_idx" ON "identity"."api_keys" ("user_i
 -- platform. The service checks this too; the database is the backstop (§9).
 ALTER TABLE "identity"."api_keys" DROP CONSTRAINT IF EXISTS "api_keys_no_withdraw_ck";
 ALTER TABLE "identity"."api_keys" ADD CONSTRAINT "api_keys_no_withdraw_ck"
-  CHECK (NOT ("scopes" && ARRAY['trade:withdraw', 'admin:treasury', 'bank:card']));
+  CHECK (NOT ("scopes" && ARRAY['trade:withdraw', 'admin:treasury', 'bank:card', 'pay:payout']));
 
 CREATE TABLE IF NOT EXISTS "identity"."sub_accounts" (
   "id"             uuid PRIMARY KEY DEFAULT gen_random_uuid(),

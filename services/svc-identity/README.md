@@ -112,7 +112,7 @@ Kill-switch: `WEBAUTHN_ENABLED=false`. Relying party: `WEBAUTHN_RP_ID`, `WEBAUTH
 
 > The revocation is committed in a _separate_ statement, outside the transaction that detected it. Throwing from inside would roll it back, and the thief's replay would revoke nothing. There is a test for exactly this.
 
-**API keys cannot withdraw.** `trade:withdraw`, `admin:treasury`, and `bank:card` are refused on key creation by the service **and** by a database CHECK constraint. A leaked bot key must not be able to move value off the platform (§9).
+**API keys cannot withdraw.** `trade:withdraw`, `admin:treasury`, `bank:card`, and `pay:payout` are refused on key creation by the service **and** by a database CHECK constraint (`INTERACTIVE_ONLY_SCOPES`). A leaked bot key must not be able to move value off the platform (§9).
 
 **Handles are citext.** `Handle` and `handle` are the same account. Impersonation by casing is a real attack.
 

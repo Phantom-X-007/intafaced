@@ -549,6 +549,23 @@ if (!available) {
           VALUES (${session.userId}, 'x', ${'h' + Date.now()}, 'ifc_x', ARRAY['trade:withdraw'])
         `,
       ).rejects.toThrow(/api_keys_no_withdraw_ck/);
+
+      // pay:payout is interactive-only too (§9) — same CHECK must refuse it.
+      await expect(
+        auth.createApiKey({
+          userId: session.userId,
+          name: 'payout-bot',
+          scopes: ['pay:payout'],
+          grantorScopes: SESSION_SCOPES,
+        }),
+      ).rejects.toThrow(/interactive/);
+
+      await expect(
+        db.sql`
+          INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes)
+          VALUES (${session.userId}, 'pay_x', ${'hp' + Date.now()}, 'ifc_p', ARRAY['pay:payout'])
+        `,
+      ).rejects.toThrow(/api_keys_no_withdraw_ck/);
     });
 
     it('stops accepting a revoked or expired key', async () => {
