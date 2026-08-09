@@ -12,7 +12,7 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 
 | Procedure                                              | Scope                     | Notes                                                                    |
 | ------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------ |
-| `auth.register`                                        | —                         | Creates user, profile, rank row; awards 50 XP; optional `referrerId`                     |
+| `auth.register`                                        | —                         | Creates user, profile, rank row; awards 50 XP; optional `referrerId`     |
 | `auth.login`                                           | —                         | Handle or email; requires TOTP once enrolled; recovery codes redeem once |
 | `auth.refresh`                                         | —                         | Rotates the refresh token; reuse revokes **every** session               |
 | `auth.logout` / `auth.logoutAll`                       | — / session               | Revokes one or all sessions                                              |
