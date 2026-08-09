@@ -74,7 +74,7 @@ describe('registerProductAgentsAtBoot', () => {
 
   it('pure helpers cover the sealed product set', () => {
     expect(bootRegisterCoversProductIds()).toBe(true);
-    expect(bootRegisterAgentIds().sort()).toEqual([...PRODUCT_AGENT_IDS].sort());
+    expect([...bootRegisterAgentIds()].sort()).toEqual([...PRODUCT_AGENT_IDS].sort());
   });
 });
 
