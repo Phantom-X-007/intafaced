@@ -231,6 +231,13 @@ export function createIdentityRouter(
             email: z.string().email(),
             password: z.string().min(12).max(200),
             region: z.string().length(2).optional(),
+            /**
+             * Optional referrer at signup. Same law as `affiliates.attribute`
+             * (self/cycle/depth/unknown refuse loud). Blank = no edge.
+             * Account is created first; a failed attribute still leaves the user
+             * (they can fix referrer via attribute later if product allows once).
+             */
+            referrerId: z.string().uuid().optional(),
           }),
         )
         .output(sessionOutput)
@@ -239,7 +246,11 @@ export function createIdentityRouter(
             throw new TRPCError({ code: 'FORBIDDEN', message: 'Registration is not open yet' });
           }
           try {
-            const session = await auth.register({ ...input, ip: ctx.requestId });
+            const { referrerId, ...registerInput } = input;
+            const session = await auth.register({ ...registerInput, ip: ctx.requestId });
+            if (referrerId) {
+              await requireReferral().attribute({ userId: session.userId, referrerId });
+            }
             return { ...session, expiresAt: session.expiresAt.toISOString() };
           } catch (err) {
             throw toTrpcError(err);
