@@ -201,7 +201,6 @@ export function xpPolicyCountInRange(min: number, max: number): boolean {
   return n >= min && n <= max;
 }
 
-
 /**
  * Every XP policy certId must be grantable — present in CERT_CATALOG.
  * A policy without a definition is a ghost that certXpPlane would advertise.

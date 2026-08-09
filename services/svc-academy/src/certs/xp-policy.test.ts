@@ -118,7 +118,6 @@ describe('L3 wave48 xp-policy status/export', () => {
   });
 });
 
-
 describe('XP policy ↔ cert catalog consistency (no ghost priced certs)', () => {
   it('every CERT_XP_V0 certId is grantable from CERT_CATALOG', () => {
     expect(xpPolicyGhostCertIds()).toEqual([]);
