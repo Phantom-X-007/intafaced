@@ -84,7 +84,19 @@ function myFiles() {
   const working = git(['status', '--porcelain'])
     .split('\n')
     .filter(Boolean)
-    .map((l) => l.slice(3).trim());
+    .flatMap((l) => {
+      // porcelain: XY<space>path | XY<space>old -> new (rename/copy)
+      // slice(3) on "R  a -> b" left "a -> b" as a fake path — false-clear
+      // because touches never matched real files.
+      const body = l.slice(3);
+      if (body.includes(' -> ')) {
+        return body
+          .split(' -> ')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      return [body.trim()].filter(Boolean);
+    });
 
   return { source: 'this branch (committed + working tree)', files: [...new Set([...committed, ...working])] };
 }
