@@ -181,7 +181,7 @@ His agents exist so **he does not have to remember process**. Every Denon sessio
    - no balances outside ledger?
    - brand scan / custody scan clean?
 6. **Squash-merge** only with green CI. Delete branch + `pnpm wt:rm` after.
-7. **Telegram Nitro** only when: needs a product decision, main is red, or a PR waits on him (Nitro’s PR).
+7. **Telegram Nitro** only when: needs a product decision, main heal is **blocked on Class X / human** (not every red tip — claim `main-heal` and fix), or a PR waits on him (Nitro’s PR).
 
 Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-audit + doctrine**, not a second click from a non-coder.
 
@@ -195,6 +195,8 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 free and unlimited for public repositories. Spend-metering of Actions (old run-count thrift) was **deleted on 2026-08-07** — retirement note:
 [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
 **Never hold finished work back for CI cost.** There is none on this public repo. Open the PR.
+
+**Main trunk CI must finish.** `ci.yml` sets `cancel-in-progress` **false on `main` only** (true on PR refs). Swarm merge bursts must not cancel the post-merge signal that proves the tip. When tip is red: one `main-heal` lane + no product merges until green — full law in [`CONTRIBUTING.md`](CONTRIBUTING.md) §1.
 
 What survives, for reasons that were never about money:
 
