@@ -327,10 +327,11 @@ is the honest quiet case.
 Positions updates are emitted only when `trade.futures` publishes `positionUpdated`. Until then the channel is
 mounted and silent — same honesty as REST `GET /positions → []`. Never invent a position frame.
 
-## Not built
+## Not built (outside this service’s Done bar)
 
-- **Futures engine / live position publishers.** The positions _socket_ is done; non-empty updates need
-  `trade.futures` to publish `positionUpdated`.
+- **Mark-driven futures lifecycle on the positions channel.** The positions _socket_ and bus map are
+  done (`positionUpdated` fan-out). `trade.futures` already publishes on open/close; non-empty live
+  mark/funding frames stay on the trade wall. This service never invents a position frame.
 - **Aggressor side on the tape.** `orderFilled` has no side field today. Adding one is a `packages/events` PR
   (§15.2), not a silent invention here.
 - **Rate limiting.** There is none anywhere in the platform (svc-edge's README says so too). `WS_MAX_CONNECTIONS` is
