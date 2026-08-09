@@ -122,6 +122,58 @@ describe('TradeHub fan-out', () => {
     expect(sink.prints()[2]).toMatchObject({ sequence: 3, price: '102', quantity: '3' });
   });
 
+  it('forgets the recent ring when the last subscriber leaves a market', async () => {
+    hub.ingest(fill(1, MARKET, '100', '1'));
+    hub.ingest(fill(2, MARKET, '101', '2'));
+    expect(hub.recentFor(MARKET)).toHaveLength(2);
+    expect(hub.stats.markets).toBe(1);
+
+    const first = new FakeSink();
+    const detachFirst = hub.attach(MARKET, first);
+    await settle();
+    expect(first.prints()).toHaveLength(2);
+
+    const peer = new FakeSink();
+    const detachPeer = hub.attach(MARKET, peer);
+    await settle();
+    expect(peer.prints()).toHaveLength(2);
+
+    detachFirst();
+    // Peer still watching — ring stays for mid-stream joiners.
+    expect(hub.recentFor(MARKET)).toHaveLength(2);
+    expect(hub.stats.markets).toBe(1);
+
+    detachPeer();
+    // Last watcher left — ring and market count drop (reconnect gets empty replay).
+    expect(hub.recentFor(MARKET)).toHaveLength(0);
+    expect(hub.stats.markets).toBe(0);
+
+    const rejoin = new FakeSink();
+    hub.attach(MARKET, rejoin);
+    await settle();
+    expect(rejoin.prints()).toHaveLength(0);
+
+    // Fresh print after rejoin still streams; sequence can re-arrive after idle forget.
+    hub.ingest(fill(1, MARKET, '110', '1'));
+    expect(rejoin.prints()).toHaveLength(1);
+    expect(rejoin.prints()[0]).toMatchObject({ sequence: 1, price: '110' });
+  });
+
+  it('does not forget one market when another still has a subscriber', async () => {
+    hub.ingest(fill(1, MARKET, '100', '1'));
+    hub.ingest(fill(1, OTHER, '200', '1'));
+
+    const a = new FakeSink();
+    const b = new FakeSink();
+    const detachA = hub.attach(MARKET, a);
+    hub.attach(OTHER, b);
+    await settle();
+
+    detachA();
+    expect(hub.recentFor(MARKET)).toHaveLength(0);
+    expect(hub.recentFor(OTHER)).toHaveLength(1);
+  });
+
   it('public tape frames never carry order ids, account ids, house flags, or invented side', async () => {
     const print = hub.ingest(fill(1));
     expect(print).not.toBeNull();
