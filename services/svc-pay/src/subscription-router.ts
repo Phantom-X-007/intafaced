@@ -48,6 +48,19 @@ const subscriptionView = z.object({
   createdAt: z.string().datetime({ offset: true }),
 });
 
+const executionView = z.object({
+  id: z.string().uuid(),
+  subscriptionId: z.string().uuid(),
+  occurrence: z.number().int().nonnegative(),
+  amount: amountSchema,
+  status: z.enum(['pending', 'invoiced', 'settled', 'rejected', 'skipped']),
+  paymentId: z.string().uuid().nullable(),
+  rejectionCode: z.string().nullable(),
+  attemptedAt: z.string().datetime({ offset: true }),
+  settledAt: z.string().datetime({ offset: true }).nullable(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
 function toMandateOut(m: Awaited<ReturnType<SubscriptionService['getMandate']>>) {
   return {
     id: m.id,
@@ -78,6 +91,21 @@ function toSubOut(s: Awaited<ReturnType<SubscriptionService['getSubscription']>>
     cancelledAt: s.cancelledAt === null ? null : s.cancelledAt.toISOString(),
     path: s.path,
     createdAt: s.createdAt.toISOString(),
+  };
+}
+
+function toExecutionOut(e: Awaited<ReturnType<SubscriptionService['listExecutions']>>[number]) {
+  return {
+    id: e.id,
+    subscriptionId: e.subscriptionId,
+    occurrence: e.occurrence,
+    amount: formatAmount(e.amount),
+    status: e.status,
+    paymentId: e.paymentId,
+    rejectionCode: e.rejectionCode,
+    attemptedAt: e.attemptedAt.toISOString(),
+    settledAt: e.settledAt === null ? null : e.settledAt.toISOString(),
+    createdAt: e.createdAt.toISOString(),
   };
 }
 
@@ -215,6 +243,27 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
             const sub = await subscriptions.getSubscription(input.subscriptionId);
             await assertPaymentArea(ctx.principal?.userId, sub.merchantId);
             return toSubOut(sub);
+          }),
+        ),
+
+      /**
+       * Firing history for one subscription (invoice / settled / rejected).
+       * Read-only — no dunning invent, no retry.
+       */
+      listExecutions: scopedProcedure('pay:read', { module: 'pay' })
+        .input(
+          z.object({
+            subscriptionId: z.string().uuid(),
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
+        .output(z.array(executionView))
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            const sub = await subscriptions.getSubscription(input.subscriptionId);
+            await assertPaymentArea(ctx.principal?.userId, sub.merchantId);
+            const rows = await subscriptions.listExecutions(input.subscriptionId, { limit: input.limit });
+            return rows.map(toExecutionOut);
           }),
         ),
 

@@ -109,6 +109,23 @@ describe('subscription merchant surface', () => {
         calls.push('cancelSubscription');
         return subRecord({ status: 'cancelled', cancelledAt: new Date('2026-08-09T00:00:00.000Z') });
       },
+      listExecutions: async () => {
+        calls.push('listExecutions');
+        return [
+          {
+            id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            subscriptionId: SUB,
+            occurrence: 0,
+            amount: amt('10'),
+            status: 'settled' as const,
+            paymentId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            rejectionCode: null,
+            attemptedAt: new Date('2026-08-01T00:00:00.000Z'),
+            settledAt: new Date('2026-08-01T01:00:00.000Z'),
+            createdAt: new Date('2026-08-01T00:00:00.000Z'),
+          },
+        ];
+      },
     } as unknown as SubscriptionService;
 
     router = createSubscriptionRouter(subs, pay, null);
@@ -161,6 +178,22 @@ describe('subscription merchant surface', () => {
     const created = await api.subscription.create({ mandateId: MANDATE, path: 'card_mandate' });
     expect(created).toBeDefined();
     expect(calls).toContain('createSubscription');
+  });
+
+  it('owner can list executions (firing history)', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.listExecutions({ subscriptionId: SUB });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe('settled');
+    expect(rows[0]!.amount).toBe('10');
+    expect(calls).toContain('listExecutions');
+  });
+
+  it('stranger cannot list executions', async () => {
+    owner = OTHER;
+    const api = await caller(['pay:read'], USER);
+    await expect(api.subscription.listExecutions({ subscriptionId: SUB })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
+    expect(calls).not.toContain('listExecutions');
   });
 
   it('parent without payment area cannot cancel (PayFac fence)', async () => {
