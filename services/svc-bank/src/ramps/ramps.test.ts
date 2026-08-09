@@ -130,6 +130,46 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
     });
+
+    it('refuses a blank or whitespace asset before any row or ledger post', async () => {
+      await expect(
+        ramps.creditOnramp({
+          userId: USER,
+          assetId: '   ',
+          amount: amt('10'),
+          kind: 'crypto',
+          railRef: 'blank-asset-1',
+          creditedBy: OPERATOR,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.ramp_invalid_asset' });
+
+      await expect(
+        ramps.creditOnramp({
+          userId: USER,
+          assetId: '',
+          amount: amt('10'),
+          kind: 'crypto',
+          railRef: 'blank-asset-2',
+          creditedBy: OPERATOR,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.ramp_invalid_asset' });
+
+      const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
+      expect(count[0]!.n).toBe(0);
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('0');
+
+      await expect(
+        ramps.offramp({
+          offrampId: randomUUID(),
+          userId: USER,
+          assetId: ' USDT',
+          amount: amt('10'),
+          kind: 'crypto',
+          destinationRef: '0xabc',
+          clientRef: 'blank-off-1',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.ramp_invalid_asset' });
+    });
   });
 
   describe('crypto on-ramp — deposit recipe only', () => {
