@@ -16,7 +16,7 @@
  */
 
 import type { CurriculumItem, CurriculumKind, CurriculumPath } from './catalog.js';
-import { CURRICULUM_PATHS, listCurriculum } from './catalog.js';
+import { CURRICULUM_MIN_BODY_CHARS, CURRICULUM_PATHS, listCurriculum } from './catalog.js';
 import { curriculumDeepLinksVerified } from './deep-links.js';
 import { curriculumI18nStrategyHonest } from './i18n-strategy.js';
 
@@ -68,7 +68,7 @@ export function workbookLiveQuoteChecklist(
     issues.push({
       field: 'body',
       code: 'invalid',
-      message: 'Workbook must not claim a live quote/ticker — paper outlines only until trade paper path',
+      message: 'Workbook must not claim a live quote/ticker — paper drills use trade paper flags, never painted live quotes',
     });
   }
   // bid/ask/last/mid followed by a numeric price looks like a painted feed
@@ -124,11 +124,17 @@ export function brandChecklist(
       message: 'Title required; summary min 12 characters (no empty stubs painted complete)',
     });
   }
-  if (record.body.trim().length < 40 || !record.body.trimStart().startsWith('#')) {
+  if (!record.body.trimStart().startsWith('#')) {
     issues.push({
       field: 'body',
       code: 'invalid',
-      message: 'Body must be real markdown (≥40 chars, starts with # heading)',
+      message: 'Body must be real markdown (starts with # heading)',
+    });
+  } else if (record.body.trim().length < CURRICULUM_MIN_BODY_CHARS) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: `Body must clear depth floor (≥${CURRICULUM_MIN_BODY_CHARS} chars) — the old 40-char import bar let stubs re-enter`,
     });
   }
   if (record.kind === 'workbook') {
