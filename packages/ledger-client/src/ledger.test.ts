@@ -328,6 +328,53 @@ describe('INVARIANT 2 — available never goes negative', () => {
     ).toThrow(/must not carry purpose/);
   });
 
+  it('normalises purpose so padded and bare claim strings share one pot', async () => {
+    // accountPurpose trims. Without that, purpose "order:x " and "order:x" are
+    // two accounts; adapters assembling AccountRef inline skip constructors.
+    const { accountKey } = await import('./client.js');
+    const { accountPurpose } = await import('./types.js');
+    const bare = { ownerType: 'user' as const, ownerId: USER_A, assetId: 'USDT', kind: 'hold' as const, purpose: 'order:x' };
+    const padded = { ...bare, purpose: '  order:x  ' };
+    expect(accountPurpose(padded)).toBe('order:x');
+    expect(accountKey(padded)).toBe(accountKey(bare));
+
+    // Whitespace-only purpose on available collapses to the real available pot
+    // rather than opening a second balance recon cannot tell from a dual book.
+    const spacesAvailable = {
+      ownerType: 'user' as const,
+      ownerId: USER_A,
+      assetId: 'USDT',
+      kind: 'available' as const,
+      purpose: '   ',
+    };
+    const realAvailable = { ownerType: 'user' as const, ownerId: USER_A, assetId: 'USDT', kind: 'available' as const };
+    expect(accountPurpose(spacesAvailable)).toBe('');
+    expect(accountKey(spacesAvailable)).toBe(accountKey(realAvailable));
+
+    // Engine path: padded hold posts into the same pot as the bare purpose.
+    await fund(USER_A, 'USDT', '10');
+    await ledger.post({
+      idempotencyKey: 'purpose-pad-hold-1',
+      module: 'test',
+      reason: 'test',
+      entries: [
+        { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('3') },
+        { account: padded, direction: 'debit', amount: amt('3') },
+      ],
+    });
+    await ledger.post({
+      idempotencyKey: 'purpose-pad-release-1',
+      module: 'test',
+      reason: 'test',
+      entries: [
+        { account: bare, direction: 'credit', amount: amt('3') },
+        { account: userAvailable(USER_A, 'USDT'), direction: 'debit', amount: amt('3') },
+      ],
+    });
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:x')).toBe('0');
+    expect(await balanceOf(USER_A, 'USDT')).toBe('10');
+  });
+
   it('leaves the book untouched when a post is rejected', async () => {
     await fund(USER_A, 'USDT', '10');
     const before = ledger.journal().length;

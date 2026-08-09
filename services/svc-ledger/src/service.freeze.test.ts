@@ -231,10 +231,27 @@ if (!available) {
       expect(after).toMatchObject({ frozen: true, reason: 'operator: suspected drift', actor: OPERATOR });
     });
 
-    it('same attribution re-freeze is a no-op, not a fight', async () => {
+    it('same attribution re-freeze is a true no-op — stable changed_at, no second event', async () => {
+      // Promise: writeFreeze comment "Same attribution is a no-op". The old
+      // UPDATE matched same attribution and still SET changed_at = now(), so
+      // hourly recon walked "when was it frozen?" and re-fired the bus.
       await a.freeze('drift', OPERATOR);
+      const first = await a.freezeState();
       const again = await a.freeze('drift', OPERATOR);
       expect(again).toMatchObject({ frozen: true, reason: 'drift', actor: OPERATOR });
+      expect(again.changedAtPrecise).toBe(first.changedAtPrecise);
+      expect(again.changedAt.getTime()).toBe(first.changedAt.getTime());
+      expect(busA.emitted('ledgerFreezeUpdated')).toHaveLength(1);
+    });
+
+    it('thaw of an already-open book is a true no-op — no event, stable row', async () => {
+      // Book starts open (fixtures). Double thaw must not rewrite actor/time.
+      const before = await a.freezeState();
+      expect(before.frozen).toBe(false);
+      const again = await a.unfreeze(OPERATOR);
+      expect(again.frozen).toBe(false);
+      expect(again.changedAtPrecise).toBe(before.changedAtPrecise);
+      expect(busA.emitted('ledgerFreezeUpdated')).toHaveLength(0);
     });
   });
 

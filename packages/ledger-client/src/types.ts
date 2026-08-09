@@ -183,9 +183,15 @@ export interface AccountRef {
   readonly purpose?: string;
 }
 
-/** The empty-string normal form. Absent and `''` are the same account. */
+/**
+ * The empty-string normal form. Absent, `''`, and whitespace-only are the same
+ * account. Trim is load-bearing: constructors trim before stamping a purpose,
+ * but an adapter assembling an `AccountRef` inline can still pass `"order:x "`
+ * or `"   "`. Without trim here, `accountKey` and the Postgres upsert open a
+ * second pot beside the real one (P0-3 dual book, recon still green).
+ */
 export function accountPurpose(ref: AccountRef): string {
-  return ref.purpose ?? '';
+  return (ref.purpose ?? '').trim();
 }
 
 export interface Account extends AccountRef {

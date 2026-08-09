@@ -92,16 +92,19 @@ export async function readFreeze(sql: Sql): Promise<FreezeState> {
  *
  * STOP §4.2b #3: a second freeze MUST NOT silently overwrite a prior freeze's
  * reason/actor (recon hourly used to clobber an operator freeze). Same
- * attribution is a no-op; different attribution is refused. Unfreeze still
- * clears for a named actor.
+ * attribution is a **true** no-op (no `changed_at` bump, no bus re-fire);
+ * different attribution is refused. Unfreeze of an already-open book is also a
+ * true no-op — a double thaw must not rewrite actor/`changed_at` or re-emit.
  */
 export async function writeFreeze(
   sql: Sql,
   next: { frozen: true; reason: string; actor: string } | { frozen: false; actor: string },
-): Promise<FreezeState> {
+): Promise<{ state: FreezeState; switched: boolean }> {
   if (next.frozen) {
-    // Claim freeze only when currently thawed, or when attribution is identical
-    // (idempotent re-freeze). Different attribution while already frozen → refuse.
+    // Claim freeze only when currently thawed. Same attribution while already
+    // frozen used to match the WHERE and still SET changed_at = now() — that
+    // made hourly recon re-freeze walk the "when was it frozen?" clock and
+    // mint a new freezeEventKey every cycle. True no-op = no UPDATE.
     const rows = await sql<FreezeRow[]>`
       UPDATE posting_freeze
          SET frozen = true,
@@ -109,25 +112,25 @@ export async function writeFreeze(
              actor = ${next.actor},
              changed_at = now()
        WHERE id = true
-         AND (
-           frozen = false
-           OR (reason = ${next.reason} AND actor = ${next.actor})
-         )
+         AND frozen = false
       RETURNING frozen, reason, actor, changed_at, changed_at::text AS changed_at_precise
     `;
-    if (rows[0]) return toState(rows[0]);
+    if (rows[0]) return { state: toState(rows[0]), switched: true };
 
     // Nothing matched. `readFreeze` throws `ledger.uninitialised` if the row is
-    // absent, which is the honest answer for that case. If the row is present
-    // and thawed the UPDATE above would have taken it, so reaching here with
-    // `frozen = false` means another writer thawed it between the two
-    // statements — a lost race, not a missing migration. Say so.
+    // absent. If the row is present and thawed the UPDATE above would have
+    // taken it, so reaching here with `frozen = false` means another writer
+    // thawed it between the two statements — a lost race, not a missing
+    // migration. Same attribution while frozen is the true no-op path.
     const current = await readFreeze(sql);
     if (!current.frozen) {
       throw new LedgerError(
         `Freeze lost a race: the ledger was thawed by ${current.actor ?? 'unknown'} while ${next.actor} was freezing it. Retry.`,
         'ledger.freeze_raced',
       );
+    }
+    if (current.reason === next.reason && current.actor === next.actor) {
+      return { state: current, switched: false };
     }
     throw new LedgerError(
       `Ledger already frozen by ${current.actor ?? 'unknown'}: ${current.reason ?? 'no reason'} — ` +
@@ -136,16 +139,21 @@ export async function writeFreeze(
     );
   }
 
+  // Thaw only when currently frozen. Already-open → no-op (stable changed_at).
   const rows = await sql<FreezeRow[]>`
     UPDATE posting_freeze
        SET frozen = false, reason = null, actor = ${next.actor}, changed_at = now()
      WHERE id = true
+       AND frozen = true
     RETURNING frozen, reason, actor, changed_at, changed_at::text AS changed_at_precise
   `;
 
-  const row = rows[0];
-  if (!row) throw new LedgerError(MISSING, 'ledger.uninitialised');
-  return toState(row);
+  if (rows[0]) return { state: toState(rows[0]), switched: true };
+
+  const current = await readFreeze(sql);
+  // Row missing is `ledger.uninitialised` from readFreeze. Already open is the
+  // honest no-op answer for a double thaw / retry.
+  return { state: current, switched: false };
 }
 
 /**
