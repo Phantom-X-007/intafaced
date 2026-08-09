@@ -125,9 +125,63 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
     expect(fills[0]).toMatchObject({ price: '100.5', quantity: '1.5', takerSide: 'buy' });
     // Strings, not numbers — a client that wants arithmetic parses them.
     expect(typeof fills[0]!.price).toBe('string');
+    expect(typeof fills[0]!.quantity).toBe('string');
 
     const positions = await caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
     expect(positions[0]).toMatchObject({ size: '-1.5', entryPrice: '100.5' });
+    expect(typeof positions[0]!.size).toBe('string');
+    expect(typeof positions[0]!.entryPrice).toBe('string');
+  });
+
+  /**
+   * README API table residual: `markets`, `accountFills`, singular `position`.
+   * Seed already carries a fill + position for 0xAA…; prove an anonymous
+   * caller gets them with money still as decimal strings, and that the
+   * account key is case-insensitive (checksummed vs lower hex).
+   */
+  it('serves markets, accountFills and singular position with no credentials', async () => {
+    const caller = (await seeded()).createCaller(anonymous());
+    const seededAccount = '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const lowerAccount = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const emptyAccount = '0x0000000000000000000000000000000000000001';
+
+    const markets = await caller.markets();
+    expect(markets).toContain('IFC-USD');
+
+    // Mixed-case address must hit the same tape as the seed (case-insensitive).
+    const accountFills = await caller.accountFills({ account: lowerAccount, limit: 10 });
+    expect(accountFills).toHaveLength(1);
+    expect(accountFills[0]).toMatchObject({
+      market: 'IFC-USD',
+      price: '100.5',
+      quantity: '1.5',
+      takerSide: 'buy',
+      maker: seededAccount,
+    });
+    expect(typeof accountFills[0]!.price).toBe('string');
+    expect(typeof accountFills[0]!.quantity).toBe('string');
+
+    const position = await caller.position({ market: 'IFC-USD', account: lowerAccount });
+    expect(position).toMatchObject({
+      market: 'IFC-USD',
+      size: '-1.5',
+      entryPrice: '100.5',
+    });
+    expect(typeof position!.size).toBe('string');
+    expect(typeof position!.entryPrice).toBe('string');
+
+    // No row for this address → null, not an empty object or a throw.
+    await expect(caller.position({ market: 'IFC-USD', account: emptyAccount })).resolves.toBeNull();
+  });
+
+  it('book level quantities are decimal strings, not numbers', async () => {
+    const view = await (await seeded()).createCaller(anonymous()).book({ market: 'IFC-USD', depth: 10 });
+    expect(view.bids[0]).toEqual(['100', '5']);
+    expect(view.asks[0]).toEqual(['101', '2']);
+    for (const [price, qty] of [...view.bids, ...view.asks]) {
+      expect(typeof price).toBe('string');
+      expect(typeof qty).toBe('string');
+    }
   });
 
   it('answers identically for every region, because there is nothing to gate', async () => {
