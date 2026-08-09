@@ -265,7 +265,7 @@ function stubUserMoney(): MoneyStub {
     assetId: 'USDT',
     amount: amt('40'),
     rail: 'card-sandbox',
-    destination: { kind: 'bank', ref: 'DE00 1234' },
+    destination: { kind: 'bank', ref: 'DE89370400440532013000' },
     clientRef: 'w-1',
     railRef: 'po_1',
     attempts: 0,
@@ -531,7 +531,11 @@ describe('authority', () => {
   it('does not let a refunder move a settlement out of the book', async () => {
     const api = await caller(['pay:refund']);
     await expect(
-      api.settlement.payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'X' } }),
+      api.settlement.payout({
+        settlementId: SETTLEMENT,
+        railId: 'card-sandbox',
+        destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
+      }),
     ).rejects.toThrow(/pay:payout/);
   });
 
@@ -724,7 +728,7 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     stub.ownedBy(ANOTHER_USER);
     const api = await caller(['pay:payout'], { mfa: true });
     const err = await api.settlement
-      .payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'X' } })
+      .payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'GB82WEST12345698765432' } })
       .catch((e: unknown) => e);
     expect(codeOf(err)).toBe('FORBIDDEN');
     expect(stub.calls.filter((c) => c.method === 'payoutSettlement')).toHaveLength(0);
@@ -884,7 +888,7 @@ describe('withdrawal.create is the interactive, 2FA-backed path off the platform
     assetId: 'USDT',
     amount: '40',
     railId: 'card-sandbox',
-    destination: { kind: 'bank', ref: 'DE00 1234' },
+    destination: { kind: 'bank', ref: 'DE89370400440532013000' },
     clientRef: 'w-1',
   };
 
@@ -975,7 +979,7 @@ describe('withdrawal.create is the interactive, 2FA-backed path off the platform
   it('requires a destination with somewhere to send to', async () => {
     const api = await caller(['trade:withdraw'], { tier: 'basic' });
     await expect(api.withdrawal.create({ ...body, destination: { kind: 'bank', ref: '' } })).rejects.toThrow();
-    await expect(api.withdrawal.create({ ...body, destination: { kind: '', ref: 'X' } })).rejects.toThrow();
+    await expect(api.withdrawal.create({ ...body, destination: { kind: '', ref: 'GB82WEST12345698765432' } })).rejects.toThrow();
     expect(money.calls).toHaveLength(0);
   });
 

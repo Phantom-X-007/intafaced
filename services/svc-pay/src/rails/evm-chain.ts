@@ -162,15 +162,15 @@ export class EvmLiveChain implements CryptoChainPort {
   }
 
   async send(request: ChainSendRequest): Promise<{ txHash: string }> {
-    // Class M ordering: claim → broadcast → journal hash → wait receipt.
+    // Class M ordering: shape-check BEFORE claim → broadcast → journal hash → wait.
+    // isAddress after claim left a permanent __pending__ poison on a bad `to`.
     // Journaling BEFORE waitForTransactionReceipt means a crash while waiting
     // for inclusion still returns the same hash on retry instead of a second send.
-    const claimed = await this.broadcasts.claim(request.idempotencyKey);
-    if (claimed.kind === 'done') return { txHash: claimed.txHash };
-
     if (!isAddress(request.to)) {
       throw new Error(`Outbound destination is not an address: ${request.to}`);
     }
+    const claimed = await this.broadcasts.claim(request.idempotencyKey);
+    if (claimed.kind === 'done') return { txHash: claimed.txHash };
     const asset = requireAsset(this.assets, request.assetId);
     const units = toChainUnits(request.amount, asset.decimals);
     if (units <= 0n) throw new Error('Outbound amount must be positive');
