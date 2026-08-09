@@ -117,7 +117,7 @@ It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ 
 
 **TOTP — RFC 6238, implemented here.** ~60 lines of well-specified arithmetic, which lets the tests run the RFC's own published vectors. A dependency in the authentication path we cannot check against the spec is one we would be trusting blind. Constant-time comparison; ±1 step drift window.
 
-**Enrolment is two-step.** The secret is not persisted until a valid code proves the user actually scanned it — otherwise abandoning enrolment halfway locks you out.
+**Enrolment is two-step.** The secret is not written to `users.totp_secret` until a valid code proves the user actually scanned it — otherwise abandoning enrolment halfway locks you out. Pending state (secret hash + recovery hashes, 15-minute TTL, single-use take) lives in Postgres (`identity.totp_pending_enrolments`) so multi-pod start/confirm works; the base32 secret is never stored pending.
 
 **WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in Postgres (`identity.webauthn_challenges`, five-minute TTL, single-use take) so multi-pod ceremonies complete when options were issued on another instance. In-memory `ChallengeStore` remains for pure unit tests without SQL.
 

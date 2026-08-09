@@ -163,6 +163,24 @@ export const webauthnChallenges = identity.table(
 );
 
 /**
+ * Pending TOTP enrolment — durable multi-pod store (migration 0012).
+ * secret_hash only (never base32 secret). takeIfSecretHash is single-use.
+ */
+export const totpPendingEnrolments = identity.table(
+  'totp_pending_enrolments',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    secretHash: text('secret_hash').notNull(),
+    recoveryCodeHashes: jsonb('recovery_code_hashes').notNull().default([]),
+    expiresAt: tstz('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('totp_pending_enrolments_expires_idx').on(t.expiresAt)],
+);
+
+/**
  * The rank graph. svc-identity is the only writer.
  *
  * `xp` is a bigint count, not money — it never touches the ledger and is

@@ -6,6 +6,7 @@ import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashTok
 import { generateRecoveryCodes, generateSecret, matchTotpStep, totpUri } from './totp.js';
 import { encryptTotpSecret, materializeTotpSecret, parseTotpSecretKey } from './totp-crypto.js';
 import { apiKeyOriginAllowed } from './api-key-origin.js';
+import { SqlPendingTotpEnrolmentStore, type PendingTotpEnrolmentStore } from './pending-totp-store.js';
 import {
   b64urlDecode,
   b64urlEncode,
@@ -176,8 +177,11 @@ const DEFAULT_WEBAUTHN: WebAuthnConfig = {
 };
 
 export class AuthService {
-  /** Pending TOTP secret + recovery hashes until confirm (ID-P1-1). */
-  private readonly pendingTotpEnrolment = new Map<string, { secret: string; recoveryHashes: string[] }>();
+  /**
+   * Pending TOTP enrolment (secret_hash + recovery hashes) until confirm (ID-P1-1).
+   * Production: Postgres so multi-pod start/confirm works. Injectable for pure unit tests.
+   */
+  private readonly pendingTotp: PendingTotpEnrolmentStore;
 
   /** Durable when sql is present (production); injectable for pure unit tests. */
   private readonly challenges: ChallengeStorePort;
@@ -197,12 +201,14 @@ export class AuthService {
      */
     totpSecretKeyMaterial?: string,
     challenges?: ChallengeStorePort,
+    pendingTotp?: PendingTotpEnrolmentStore,
   ) {
     this.webauthn = webauthn;
     this.totpSecretKey = parseTotpSecretKey(totpSecretKeyMaterial);
     // Production path: Postgres-backed so multi-pod ceremonies complete.
     // Tests may pass ChallengeStore (in-memory) when they do not need durability.
     this.challenges = challenges ?? new SqlChallengeStore(sql, webauthn.challengeTtlMs);
+    this.pendingTotp = pendingTotp ?? new SqlPendingTotpEnrolmentStore(sql);
   }
 
   /**
@@ -522,16 +528,18 @@ export class AuthService {
 
     const secret = generateSecret();
     const recoveryCodes = generateRecoveryCodes();
-    // Hold secret + recovery hashes until confirm. Plaintext codes return once;
-    // hashes persist only after a valid TOTP proves enrolment (ID-P1-1).
-    this.pendingTotpEnrolment.set(userId, {
-      secret,
-      recoveryHashes: recoveryCodes.map((c) => hashToken(c)),
-    });
+    // Hold secret_hash + recovery hashes until confirm (durable multi-pod store).
+    // Plaintext codes return once; hashes land on the user only after a valid TOTP
+    // proves enrolment (ID-P1-1). Base32 secret is never stored pending — only hashed.
+    await this.pendingTotp.put(
+      userId,
+      hashToken(secret),
+      recoveryCodes.map((c) => hashToken(c)),
+    );
 
-    // The secret is NOT persisted yet — only a confirmed code proves the user
-    // actually scanned it. Storing it now would lock out anyone who abandoned
-    // enrolment halfway.
+    // The secret is NOT written to users.totp_secret yet — only a confirmed code
+    // proves the user actually scanned it. Storing it now would lock out anyone
+    // who abandoned enrolment halfway.
     return { secret, uri: totpUri(secret, user.email), recoveryCodes };
   }
 
@@ -539,17 +547,19 @@ export class AuthService {
     const matched = matchTotpStep(secret, code);
     if (matched === null) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
 
-    const pending = this.pendingTotpEnrolment.get(userId);
-    if (!pending || pending.secret !== secret) {
-      throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
-    }
-
-    // Never write base32 plaintext to totp_secret — refuse enrol if key missing.
+    // Never write base32 plaintext to totp_secret — refuse enrol if key missing
+    // (before take so a missing key does not burn a valid pending session).
     if (!this.totpSecretKey) {
       throw new AuthError(
         'IDENTITY_TOTP_SECRET_KEY is not set to a 32-byte key (base64 or hex) — cannot enrol TOTP',
         'auth.totp_key_missing',
       );
+    }
+
+    // Single-use take across pods; wrong secret leaves the row for a real confirm.
+    const pending = await this.pendingTotp.takeIfSecretHash(userId, hashToken(secret));
+    if (!pending) {
+      throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
     }
     const sealed = encryptTotpSecret(this.totpSecretKey, secret);
 
@@ -564,7 +574,6 @@ export class AuthService {
              updated_at = now()
        WHERE id = ${userId} AND totp_secret IS NULL
     `;
-    this.pendingTotpEnrolment.delete(userId);
 
     await this.rank.awardXp({
       userId,
