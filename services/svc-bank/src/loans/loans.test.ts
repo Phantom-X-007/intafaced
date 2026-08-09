@@ -997,10 +997,14 @@ if (!available) {
     async function fundReserve(assetId: string, value: string) {
       const payer = '99999999-9999-4999-8999-999999999999';
       await fund(payer, assetId, value);
-      await ledger.post(
-        recipes.feeCharge({ chargeId: `bank:${Math.random()}`, userId: payer, module: 'bank', mode: 'asset', assetId, amount: amt(value) }),
-      );
-      await ledger.post(recipes.loanReserveFund({ fundingId: `f:${Math.random()}`, debtAssetId: assetId, amount: amt(value) }));
+      // Fund through the service so the independent funding table records it
+      // (B-02). Direct ledger-only fundings would leave reconcile drift ≠ 0.
+      await loans.fundReserve({
+        debtAssetId: assetId,
+        fundingId: `f:${Math.random()}`,
+        amount: amt(value),
+        from: userAvailable(payer, assetId),
+      });
     }
 
     async function makeProduct(overrides: Partial<Parameters<LoanService['createProduct']>[0]> = {}) {
@@ -1019,7 +1023,8 @@ if (!available) {
     beforeEach(async () => {
       await sql`
         TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
-                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products
+                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+                 bank.loan_reserve_fundings
         RESTART IDENTITY CASCADE
       `;
       ledger = new MemoryLedger();
@@ -1911,7 +1916,7 @@ if (!available) {
 
     // ── Reconciliation ───────────────────────────────────────────────────────
 
-    it('the reserve identity holds: balance + outstanding principal == funded', async () => {
+    it('the reserve identity holds: funded − badDebt == reserve + outstanding (independent)', async () => {
       await fundReserve('USDT', '100000');
       await fund(BORROWER, 'BTC', '1');
       const product = await makeProduct();
@@ -1921,19 +1926,29 @@ if (!available) {
       expect(formatAmount(r.reserveBalance)).toBe('95000');
       expect(formatAmount(r.outstandingPrincipal)).toBe('5000');
       expect(formatAmount(r.funded)).toBe('100000');
-      // B-02: funded is still a tautology until journal aggregation exists.
-      // Drift 0 must not be readable as independent green health.
-      expect(r.independent).toBe(false);
+      // B-02: funded is the bank funding table sum — independent of the ledger reserve.
+      expect(r.independent).toBe(true);
       expect(formatAmount(r.drift)).toBe('0');
     });
 
-    it('reconcileReserve refuses to claim independent drift while funded is tautological', async () => {
+    it('reconcileReserve reports independent drift when funding table and ledger disagree', async () => {
       await fundReserve('USDT', '50000');
+      // Steal from the reserve without a funding row — drift must surface, not hide as 0.
+      await ledger.post({
+        idempotencyKey: `steal-reserve-${Math.random()}`,
+        module: 'test',
+        reason: 'adversarial-reserve-drain',
+        entries: [
+          { account: loanReserve('USDT'), direction: 'credit', amount: amt('1000') },
+          { account: userAvailable(BORROWER, 'USDT'), direction: 'debit', amount: amt('1000') },
+        ],
+      });
+
       const r = await loans.reconcileReserve('USDT');
-      expect(r.independent).toBe(false);
-      expect(formatAmount(r.drift)).toBe('0');
-      // Identity half still closes for an empty book.
-      expect(formatAmount(r.reserveBalance + r.outstandingPrincipal)).toBe(formatAmount(r.funded));
+      expect(r.independent).toBe(true);
+      expect(formatAmount(r.funded)).toBe('50000');
+      expect(formatAmount(r.reserveBalance)).toBe('49000');
+      expect(formatAmount(r.drift)).toBe('1000');
     });
 
     it('pending undrawn principal does not inflate outstanding (reserve never left)', async () => {
@@ -1949,7 +1964,8 @@ if (!available) {
       expect(formatAmount(r.outstandingPrincipal)).toBe('0');
       expect(formatAmount(r.reserveBalance)).toBe('0');
       expect(formatAmount(r.funded)).toBe('0');
-      expect(r.independent).toBe(false);
+      expect(r.independent).toBe(true);
+      expect(formatAmount(r.drift)).toBe('0');
     });
 
     it('a borrower can never see another borrower&apos;s loan through the service', async () => {

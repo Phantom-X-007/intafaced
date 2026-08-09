@@ -1527,7 +1527,43 @@ export class LoanService {
 
   // ── Reserve ────────────────────────────────────────────────────────────────
 
+  /**
+   * Fund the lending reserve: claim a bank funding row, post the recipe, settle.
+   *
+   * The row is the independent half of `reconcileReserve` (B-02). Ledger balance
+   * alone cannot prove what was funded — a tautology with outstanding. Same
+   * `fundingId` re-posts idempotently and returns the original ledger tx.
+   */
   async fundReserve(input: { debtAssetId: string; fundingId: string; amount: Amount; from?: AccountRef }): Promise<{ ledgerTxId: string }> {
+    if (input.amount <= 0n) {
+      throw new BankError('Reserve funding amount must be positive', 'bank.below_minimum');
+    }
+
+    const claimed = await this.sql<Array<{ funding_id: string; status: string; ledger_tx_id: string | null; amount: string }>>`
+      INSERT INTO bank.loan_reserve_fundings (funding_id, debt_asset_id, amount, status)
+      VALUES (${input.fundingId}, ${input.debtAssetId}, ${formatAmount(input.amount)}::numeric, 'pending')
+      ON CONFLICT (funding_id) DO NOTHING
+      RETURNING funding_id, status, ledger_tx_id, amount::text AS amount
+    `;
+
+    if (claimed.length === 0) {
+      const existing = await this.sql<Array<{ status: string; ledger_tx_id: string | null; amount: string; debt_asset_id: string }>>`
+        SELECT status, ledger_tx_id, amount::text AS amount, debt_asset_id
+          FROM bank.loan_reserve_fundings WHERE funding_id = ${input.fundingId}
+      `;
+      const row = existing[0];
+      if (!row) {
+        throw new BankError(`Funding ${input.fundingId} disappeared after a conflict`, 'bank.loan_not_found');
+      }
+      if (row.debt_asset_id !== input.debtAssetId || parseAmount(row.amount) !== input.amount) {
+        throw new BankError(`Funding ${input.fundingId} already exists on different terms`, 'bank.loan_principal_mismatch');
+      }
+      if (row.status === 'settled' && row.ledger_tx_id) {
+        return { ledgerTxId: row.ledger_tx_id };
+      }
+      // Pending retry: re-drive the post below.
+    }
+
     const posted = await this.ledger.post(
       recipes.loanReserveFund({
         fundingId: input.fundingId,
@@ -1536,19 +1572,26 @@ export class LoanService {
         ...(input.from ? { from: input.from } : {}),
       }),
     );
+
+    await this.sql`
+      UPDATE bank.loan_reserve_fundings
+         SET status = 'settled',
+             ledger_tx_id = ${posted.id},
+             settled_at = now()
+       WHERE funding_id = ${input.fundingId}
+         AND status = 'pending'
+    `;
+
     return { ledgerTxId: posted.id };
   }
 
   /**
    * THE RECONCILIATION.
    *
-   * `balance(loanReserve) + Σ(outstanding principal)` must equal everything ever
-   * funded into the reserve, less anything ever lost to bad debt. Two independent
-   * sums, computed from different places — one from the ledger, one from svc-bank's
-   * rows — and a mismatch means one of them is lying.
-   *
-   * This is what the absent `outstanding` column buys. A stored figure would make
-   * this check compare the loan table against itself.
+   * Identity: `funded − badDebt ≈ reserveBalance + outstandingPrincipal`.
+   * `funded` is the independent sum of settled `loan_reserve_fundings` rows —
+   * not reserve + outstanding (a tautology). `drift` is the residual; ops can
+   * treat a non-zero drift as a real health signal now that `independent` is true.
    */
   async reconcileReserve(debtAssetId: string): Promise<{
     reserveBalance: Amount;
@@ -1557,16 +1600,22 @@ export class LoanService {
     funded: Amount;
     drift: Amount;
     /**
-     * False until `funded` is summed from independent `loan.reserve.funded`
-     * journal (or a bank funding table). When false, `drift` is always 0 and
-     * must not be treated as a green ops health signal.
+     * True when `funded` comes from the bank funding table (independent of the
+     * reserve balance). Drift is then a real residual, not a hard-coded zero.
      */
     independent: boolean;
   }> {
     const reserve = await this.ledger.balance(loanReserve(debtAssetId));
 
     const rows = await this.sql<
-      Array<{ outstanding_principal: string; bad_debt: string; drawn: string; repaid: string; recovered: string }>
+      Array<{
+        outstanding_principal: string;
+        bad_debt: string;
+        drawn: string;
+        repaid: string;
+        recovered: string;
+        funded: string;
+      }>
     >`
       WITH open_loans AS (
         -- Only DRAWN loans. A pending row's principal never left the reserve;
@@ -1585,7 +1634,11 @@ export class LoanService {
         COALESCE((SELECT SUM(q.shortfall) FROM bank.loan_liquidations q
                    JOIN open_loans l ON l.id = q.loan_id
                   WHERE q.status = 'settled' AND q.bad_debt_ledger_tx_id IS NOT NULL), 0) AS bad_debt,
-        COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal
+        COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal,
+        COALESCE((
+          SELECT SUM(amount) FROM bank.loan_reserve_fundings
+           WHERE debt_asset_id = ${debtAssetId} AND status = 'settled'
+        ), 0) AS funded
     `;
 
     const row = rows[0]!;
@@ -1594,17 +1647,11 @@ export class LoanService {
     const recovered = parseAmount(row.recovered);
     const badDebt = parseAmount(row.bad_debt);
     const outstandingPrincipal = drawn - repaid - recovered - badDebt;
-
-    // funded / drift honesty (B-02):
-    // `funded` is currently defined as reserve + outstanding principal — a
-    // tautology, not an independent sum of `loan.reserve.funded` journal rows.
-    // True drift needs ledger journal aggregation (or a bank funding table).
-    // Until that exists: drift 0 and independent:false so ops cannot treat
-    // "drift 0" as a green health signal.
     const outstandingClamped = outstandingPrincipal < 0n ? 0n : outstandingPrincipal;
-    const funded = reserve.amount + outstandingClamped;
-    const drift = 0n;
-    const independent = false;
+    const funded = parseAmount(row.funded);
+    // Identity: funded − badDebt = reserve + outstanding  →  drift zero when healthy.
+    const drift = funded - badDebt - reserve.amount - outstandingClamped;
+    const independent = true;
 
     return {
       reserveBalance: reserve.amount,
