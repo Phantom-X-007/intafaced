@@ -346,11 +346,27 @@ export class UsageMeter {
     };
   }
 
-  /** Every window of a session that has not been settled yet. */
+  /**
+   * Every window of a session that still needs settle work.
+   *
+   * Includes:
+   *   · unsealed windows (normal path), and
+   *   · sealed windows whose ledger post never landed (`charge_tx_id IS NULL`
+   *     with a positive amount still pending).
+   *
+   * A crash between seal and post used to drop the window forever from
+   * `settleSession` / `session.close`, because only `sealed_at IS NULL` was
+   * selected. Zero-amount windows seal with a sentinel charge id and are not
+   * returned here (nothing left to bill).
+   */
   async openWindows(sessionId: string): Promise<string[]> {
     const rows = await this.sql<Array<{ window_id: string }>>`
       SELECT window_id FROM agents.usage_windows
-       WHERE session_id = ${sessionId} AND sealed_at IS NULL
+       WHERE session_id = ${sessionId}
+         AND (
+           sealed_at IS NULL
+           OR (charge_tx_id IS NULL AND charged_amount IS NOT NULL AND charged_amount > 0)
+         )
        ORDER BY window_id ASC
     `;
     return rows.map((r) => r.window_id);

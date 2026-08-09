@@ -370,6 +370,48 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('recovers a sealed-but-unbilled window on session settle (seal → post crash resume)', async () => {
+      // Crash between seal and ledger post leaves sealed_at set, charge_tx_id
+      // null, and a positive charged_amount. openWindows must still list that
+      // window so settleSession / session.close can finish the feeCharge.
+      const session = await open();
+      const call = await runtime.think({ sessionId: session.id, requestId: 'r-orphan', task: 'plan', messages: MESSAGES });
+      const windowId = call.windowId!;
+
+      // Manually seal with a known positive amount and NO charge_tx_id — the
+      // state a process death between seal and post produces.
+      const expected = usageCost(call.usage, call.route.price);
+      expect(expected).toBeGreaterThan(0n);
+      await sql`
+        UPDATE agents.usage_windows
+           SET sealed_at = now(),
+               charged_amount = ${formatAmount(expected)}::numeric,
+               charge_key = ${chargeKeyFor(session.id, windowId)},
+               charge_tx_id = NULL
+         WHERE session_id = ${session.id} AND window_id = ${windowId}
+      `;
+
+      // Before the fix, openWindows only selected sealed_at IS NULL and this
+      // would return [] — house never paid, user never charged, invisible.
+      const pending = await meter.openWindows(session.id);
+      expect(pending).toContain(windowId);
+
+      const settlements = await runtime.settleSession(session.id);
+      expect(settlements).toHaveLength(1);
+      expect(settlements[0]!.windowId).toBe(windowId);
+      expect(settlements[0]!.amount).toBe(expected);
+      expect(settlements[0]!.settled).toBe(true);
+      expect(settlements[0]!.chargeTxId).not.toBeNull();
+
+      // Idempotent resume: second settle finds nothing left.
+      expect(await meter.openWindows(session.id)).toEqual([]);
+      const again = await runtime.settleSession(session.id);
+      expect(again).toEqual([]);
+
+      expect(await houseOf()).toBe(formatAmount(expected));
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('posts under the business idempotency key §8.2 specifies', async () => {
       const session = await open();
       const call = await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
