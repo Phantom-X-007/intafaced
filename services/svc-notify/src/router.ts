@@ -245,13 +245,26 @@ export function createNotifyRouter(notify: NotifyService) {
           };
         }),
 
-      /** Confirm an address. Wrong, expired and already-spent codes are one answer. */
+      /**
+       * Confirm an address. Wrong, expired and already-spent codes are one
+       * answer (`verified: false`, `code: null`). Rate limit is a named refuse
+       * code so the client can render "try later" without inventing copy.
+       */
       verifyTarget: scopedProcedure('notify:write', { module: 'notify' })
         .input(z.object({ channel: outOfAppChannelSchema, code: z.string().regex(/^\d{6}$/) }))
-        .output(z.object({ verified: z.boolean() }))
-        .mutation(async ({ ctx, input }) => ({
-          verified: await notify.verifyTarget(ctx.principal.userId, input.channel, input.code),
-        })),
+        .output(
+          z.object({
+            verified: z.boolean(),
+            /** Set when the call was refused (rate limit). Null on success / wrong code. */
+            code: z.string().nullable(),
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          const outcome = await notify.verifyTarget(ctx.principal.userId, input.channel, input.code);
+          if (outcome.status === 'verified') return { verified: true, code: null };
+          if (outcome.status === 'refused') return { verified: false, code: outcome.code };
+          return { verified: false, code: null };
+        }),
 
       removeTarget: scopedProcedure('notify:write', { module: 'notify' })
         .input(z.object({ channel: outOfAppChannelSchema }))
