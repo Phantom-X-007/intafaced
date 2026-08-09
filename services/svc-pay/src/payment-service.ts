@@ -8,6 +8,7 @@ import {
   parseAmount,
   recipes,
   userAvailable,
+  withdrawalHoldAccount,
   type Amount,
   type LedgerClient,
 } from '@intafaced/ledger-client';
@@ -2092,10 +2093,6 @@ export class PayService {
         }
 
         const merchant = await this.getMerchant(settlement.merchantId);
-        // Money is about to leave the book for a bank or a chain. A suspended
-        // merchant keeps their posted settlement (funds stay in available) but
-        // cannot drain it while cut off — same code as createPayment.
-        this.assertMerchantActive(merchant);
 
         // Destination kind must match the rail BEFORE any hold posts. Crypto
         // used to accept kind:'bank' + an IBAN and hand it to chain.send —
@@ -2122,8 +2119,22 @@ export class PayService {
           withdrawalId: `${settlement.id}:${settlement.payoutAttempts}`,
         };
 
+        // G4: suspension must not open a NEW drain. But if withdrawHold already
+        // posted (crash between hold and rail/settle), money sits in the purpose
+        // hold — resume must finish via the same idempotent key. Refusing with
+        // merchant_inactive here strands the hold forever.
+        const openHold = (await this.ledger.balance(withdrawalHoldAccount(withdrawal.userId, withdrawal.assetId, withdrawal.withdrawalId)))
+          .amount;
+        if (openHold <= 0n) {
+          // Money is about to leave available for a bank or a chain. A suspended
+          // merchant keeps their posted settlement (funds stay in available) but
+          // cannot open a new hold while cut off — same code as createPayment.
+          this.assertMerchantActive(merchant);
+        }
+
         // Ledger first: outbound. The merchant's net leaves `available` and
-        // waits in `hold` while the rail works.
+        // waits in `hold` while the rail works. Idempotent on withdrawalId when
+        // we are finishing an already-open hold after a crash.
         await this.ledger.post(recipes.withdrawHold(withdrawal));
 
         const result = await withRailSpan(adapter.id, 'payout', async () =>

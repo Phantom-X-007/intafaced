@@ -11,6 +11,7 @@ import {
   merchantClearing,
   parseAmount as amt,
   railBoundary,
+  recipes,
   userAvailable,
   type LedgerClient,
   type PostRequest,
@@ -1216,6 +1217,68 @@ if (!available) {
       });
       expect(again.status).toBe('paid_out');
       expect(chain.outboundTransfers()).toHaveLength(1);
+    });
+
+    /**
+     * G4 — hold + suspend strand.
+     *
+     * Crash after withdrawHold leaves funds in the purpose hold while the
+     * settlement is still posted. If the merchant is then suspended, resume
+     * must finish (idempotent hold + rail + settle), not refuse with
+     * merchant_inactive and leave held > 0 forever. A brand-new payout while
+     * suspended still refuses before any NEW hold.
+     */
+    it('after withdrawHold, suspend does not strand — resume finishes the open hold', async () => {
+      const m = await merchant(0);
+      const payment = await cryptoPayment(m.id, '15');
+      await pay.capture(payment.id);
+      const settlement = await settle(m.id, 'w-payout-g4-hold');
+      expect(settlement.status).toBe('posted');
+      expect(await availableOf(MERCHANT_USER)).toBe('15');
+
+      // Simulate crash after hold: only the ledger half ran.
+      await ledger.post(
+        recipes.withdrawHold({
+          userId: MERCHANT_USER,
+          assetId: 'USDT',
+          amount: settlement.net,
+          rail: 'crypto-native',
+          withdrawalId: `${settlement.id}:0`,
+        }),
+      );
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('15');
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+
+      const paid = await pay.payoutSettlement({
+        settlementId: settlement.id,
+        railId: 'crypto-native',
+        destination: { kind: 'crypto', ref: '0xg4finish' },
+      });
+      expect(paid.status).toBe('paid_out');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+      expect(chain.totalSent('USDT')).toBe('15');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+
+      // Brand-new payout still blocked while suspended (no second hold from available).
+      // Use a second posted window that was never held.
+      await sql`UPDATE pay.merchants SET status = 'active' WHERE id = ${m.id}`;
+      const payment2 = await cryptoPayment(m.id, '7');
+      await pay.capture(payment2.id);
+      const settlement2 = await settle(m.id, 'w-payout-g4-new');
+      expect(await availableOf(MERCHANT_USER)).toBe('7');
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+      await expect(
+        pay.payoutSettlement({
+          settlementId: settlement2.id,
+          railId: 'crypto-native',
+          destination: { kind: 'crypto', ref: '0xg4blocked' },
+        }),
+      ).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
+      expect(await availableOf(MERCHANT_USER)).toBe('7');
     });
 
     /**
