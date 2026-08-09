@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Historical text below may still _mention_ thrift as what was once believed.
+
 # Post-pile audit + harden plan (live re-derived)
 
 **Date:** 2026-08-02  
@@ -133,13 +135,13 @@
 1. **Re-derive tip + open PRs every fire** (no chat SoT).
 2. **Audit before invent** — PP-1/2 first; code only when finding is real.
 3. **Collision check** path-intersect vs #346/#350/M1–M7.
-4. **One concern per PR**; thrift: local green / path filter; no push storms.
+4. **One concern per PR**; local green / path filter when docs-only. Actions thrift deleted 2026-08-07.
 5. **Class M** → self-audit + second pass; never skip doctrine.
 6. **Done = evidence** (CI link, test output, audit file) — not “we shipped a lot.”
 7. **Scoreboard honesty** same turn as status change.
 8. **Never claim go-live** without Human X.
 
-Methodology parents: Frame+ladder (`ORDER-ROUTE-FRAME…`), Board Clear constitution, ownership law (`NITRO-OWNERSHIP…`), thrift (`GITHUB-CI-SPEND-CONTROL…`).
+Methodology parents: Frame+ladder (`ORDER-ROUTE-FRAME…`), Board Clear constitution, ownership law (`NITRO-OWNERSHIP…`). Thrift retired: `GITHUB-CI-SPEND-CONTROL…` (VOID).
 
 ---
 

@@ -29,15 +29,15 @@ Denon’s bar: _order machine hardened and stable when real money flows — orde
 
 ## 1 · Implicit needs (inferred — compensate for no loop)
 
-| Surface phrase                 | Unspoken requirement                                                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| “I pick C”                     | Max agent proof so Human X is the _only_ gate, not a pile of half-residuals                         |
-| “won’t be in the loop”         | Self-prompt + Spec REQs + ordered iterations + thrift + auto-merge on green Class M                 |
-| “figure out a lot more”        | L3 = fill **and** ledger movement; L4 = cancel storm **and** idempotent place; docs plain           |
-| “without compromising quality” | STRICT fail closed; no invent; brand/secret clean; self-audit; not claim go-live                    |
-| “prompt yourself”              | Compaction-proof block §2; resume from this file not chat                                           |
-| “automatic decisions”          | Default safe: worktree · path thrift · edge principal · deposit recipes · CI stack not local Docker |
-| Peace of mind                  | One Human X checklist he can walk without git                                                       |
+| Surface phrase                 | Unspoken requirement                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| “I pick C”                     | Max agent proof so Human X is the _only_ gate, not a pile of half-residuals                             |
+| “won’t be in the loop”         | Self-prompt + Spec REQs + ordered iterations + auto-merge on green Class M                              |
+| “figure out a lot more”        | L3 = fill **and** ledger movement; L4 = cancel storm **and** idempotent place; docs plain               |
+| “without compromising quality” | STRICT fail closed; no invent; brand/secret clean; self-audit; not claim go-live                        |
+| “prompt yourself”              | Compaction-proof block §2; resume from this file not chat                                               |
+| “automatic decisions”          | Default safe: worktree · path-scoped PRs · edge principal · deposit recipes · CI stack not local Docker |
+| Peace of mind                  | One Human X checklist he can walk without git                                                           |
 
 ---
 
@@ -83,7 +83,7 @@ I9 Report: PR link · proof lines · Human X residual only.
 VERIFY
 - Local: syntax/node -c if no Docker; do not fake fleet green without STRICT CI.
 - Remote: Order-path CX-8 workflow green on PR is the seal for B-layer L3.
-- pnpm verify (or document thrift: path-only + CX-8) before claim done.
+- pnpm verify before claim done.
 
 SELF-AUDIT (Class M)
 - Money only via ledger recipes / trade hold-fill path.

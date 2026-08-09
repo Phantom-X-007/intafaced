@@ -30,7 +30,7 @@
 4. Class M: adversarial second pass before merge; carve-outs → Denon comment.
 5. Builder never grades self — spawn Verify agent.
 6. `pnpm verify` (or scoped equivalent + document why) before push.
-7. Thrift: no push storms; batch.
+7. Local green before push (fast feedback). One concern per PR. No Actions spend hold.
 8. Re-fetch tip every fire — tip moves (#278 futures etc.).
 
 ---

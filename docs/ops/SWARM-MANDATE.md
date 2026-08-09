@@ -123,10 +123,10 @@ When the primary board finish is met but the session continues (AFK / “never s
 ### AFK PR law (mandatory)
 
 **There is no PR budget and no Actions budget.** The repo is public; Actions on standard runners
-are free and unlimited. The "thrift" throttle that used to live here was **deleted 2026-08-07**
-(retirement note: [`../GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](../GITHUB-CI-SPEND-CONTROL-2026-07-31.md)).
-**Finished work is never held back to keep a run count down.** No caps, no cooling window, no
-`THRIFT_ALLOW`. GitHub is the **merge seal**, not the chat log.
+are free and unlimited. Old spend thrift was **deleted 2026-08-07**
+(retirement: [`../GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](../GITHUB-CI-SPEND-CONTROL-2026-07-31.md)).
+**Finished work is never held back for CI cost.** No caps, no cooling window, no override flags.
+GitHub is the **merge seal**, not the chat log.
 
 | Rule                    | Detail                                                                                                                                 |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |

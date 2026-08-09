@@ -2,7 +2,7 @@
 
 **Tip base:** wave15 (#846)  
 **Class:** N  
-**Board-Delta:** free implementable TRK Stage-1 deepen under thrift hard (local)
+**Board-Delta:** free implementable TRK Stage-1 deepen (local historical pack; thrift deleted 2026-08-07)
 
 ## Helpers
 
@@ -15,4 +15,4 @@
 | ops.affiliates      | `isRoot`, `depthOf`                                              |
 | ops.notifications   | `acceptedChannels`, `failedChannels`, mute `isMuted`/`muteCount` |
 
-Honesty: no money moves · empty never invents · thrift hard → no PR open this cycle.
+Honesty: no money moves · empty never invents · historical note — thrift deleted 2026-08-07; open PR when unit is done.

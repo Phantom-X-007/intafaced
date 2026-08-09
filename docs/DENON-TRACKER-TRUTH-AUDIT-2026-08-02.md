@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Historical text below may still _mention_ thrift as what was once believed.
+
 # Denon call audit — tracker as truth database
 
 **Date:** 2026-08-02  
@@ -210,7 +212,7 @@ TRACKER TRUTH (Denon 2026-08-02 — binding)
 - LIVE-LANES = who is coding which lane right now (session). Board Clear NEXT = campaign micro-sequence only.
 - Neither LIVE-LANES nor Board Clear replaces feature ownership in features.mjs.
 - Never treat “docs-only honesty later” as optional if the code PR already changed meaning.
-- CI thrift stays: local verify first, no push storms, pure docs when docs-only — thrift does NOT waive tracker claim.
+- Local verify first; pure docs when docs-only — Actions thrift deleted 2026-08-07. Never use thrift as a reason to skip tracker claim.
 - Before starting work: pnpm tracker ready + open PRs + LIVE-LANES. If free on tracker but human-owned (shehzad M1–M7 / Denon spine), do not implement.
 - If you ship code and skip tracker, you created agent-conflict debt — fix in the same session.
 ```
@@ -241,4 +243,4 @@ Pick one:
 2. **Gift Denon a honesty sweep** — one docs/chore PR: refresh `web.terminal` / `ws.gateway` notes + register or note order-route mountain; align Board Clear wording so tracker remains ownership SoT.
 3. **Harder enforcement later** — PR checklist or CI path heuristic (only if 1–2 fail).
 
-**Pick if unsure:** **2** once, then run on **1** forever. Keep thrift.
+**Pick if unsure:** **2** once, then run on **1** forever. Thrift deleted 2026-08-07 — do not restore it.

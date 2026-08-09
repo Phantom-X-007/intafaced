@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+
 # The plan for all eight axes — 2026-08-08
 
 Nine axes, as it turns out. Every number below was re-derived against `origin/main` from a worktree at that tip, then a six-lane adversarial audit was run against this document itself. What that audit changed is listed first, because two of the changes reverse a recommendation and one of them corrects a headline that was false.

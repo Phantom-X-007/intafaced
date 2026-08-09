@@ -83,7 +83,7 @@ pnpm gate             # the full §14 Definition of Done, per service
 
 A red gate is not a discussion.
 
-**Run the local equivalents green before the push that opens/updates a code PR** — local is seconds, a CI round trip is minutes. That is the only reason: the repo is **public**, so Actions on standard runners are free and unlimited and there is nothing to ration. Parallel PRs are unlimited, and finished work is never held back to keep a run count down. Never weaken a gate for any reason. (The old "Actions thrift" law was deleted 2026-08-07 — retirement note: `docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`.)
+**Run the local equivalents green before the push that opens/updates a code PR** — local is seconds, a CI round trip is minutes. That is the only reason: the repo is **public**, so Actions on standard runners are free and unlimited and there is nothing to ration. Parallel PRs are unlimited, and finished work is never held back to keep a run count down. Never weaken a gate for any reason. (Old Actions spend thrift deleted 2026-08-07 — `docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`.)
 
 ---
 

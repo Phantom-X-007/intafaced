@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](../GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+
 # Owner GitHub config — the five settings only an admin can change
 
 **Home for these findings.** They were queued 2026-08-04 inside `docs/BOARD-CLEAR-HUMAN-BLOCKERS.md`, a campaign file that is otherwise dead. They are not campaign artifacts — they are standing repo-security facts, and they outlived the campaign. Moved here 2026-08-07.
