@@ -112,6 +112,20 @@ assert(liveFlags[liveFlags.length - 1] === false, 'close clears live');
 handle.stop();
 assert(liveFlags[liveFlags.length - 1] === false, 'stop clears live');
 
+/* JSON number levels must not become book prints (same law as REST accept). */
+var cold = feed.bookFromSnapshot({
+  type: 'snapshot',
+  marketId: 'm1',
+  sequence: 1,
+  bids: [
+    [100, 2],
+    ['99', '1']
+  ],
+  asks: [['101', 3]]
+});
+assert(Object.keys(cold.bids).length === 1 && cold.bids['99'] === '1', 'number bid dropped');
+assert(Object.keys(cold.asks).length === 0, 'number ask dropped');
+
 if (failed) {
   console.error(failed + ' failed');
   process.exit(1);
