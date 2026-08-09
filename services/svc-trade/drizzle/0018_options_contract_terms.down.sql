@@ -1,4 +1,4 @@
--- Reverse 0017_options_contract_terms.sql
+-- Reverse 0018_options_contract_terms.sql
 
 ALTER TABLE "trade"."markets" DROP CONSTRAINT IF EXISTS "markets_options_terms_ck";
 

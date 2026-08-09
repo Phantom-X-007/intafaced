@@ -1,5 +1,5 @@
 -- trade.options · European contract terms + fail-closed half-list CHECK.
--- Reversal: 0017_options_contract_terms.down.sql
+-- Reversal: 0018_options_contract_terms.down.sql
 --
 -- Honest thin slice (trade.options residual, D7 still owner):
 --
