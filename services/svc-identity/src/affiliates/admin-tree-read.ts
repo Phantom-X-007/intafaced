@@ -156,11 +156,13 @@ export function buildAffiliateNodeStatus(input: {
 }
 
 /**
- * Always refuse payout. Named residual — do not invent rates or post ledger.
+ * Named refuse for the rates_unset case (test/audit helper).
+ * Production mount uses planAffiliatePayout / postAffiliatePayout; this helper
+ * never invents rates and does not post ledger.
  */
 export function refuseAffiliatePayout(): never {
   throw new AffiliatePayoutRefuseError(
-    'Affiliate payout automation is refuse-closed until owner-published fee-share rates and a ledger recipe exist',
+    'Affiliate payout is refuse-closed until the owner publishes DIRECTION §8 fee-share / IB tier rates',
     'affiliate.payout.rates_unset',
     AFFILIATE_PAYOUT_RESIDUAL,
   );

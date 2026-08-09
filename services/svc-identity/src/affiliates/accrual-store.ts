@@ -5,7 +5,8 @@ import type { CommissionRow } from './commission.js';
  * Durable Slice B accrual rows (TRK-ops.affiliates).
  *
  * Stores fee-event → commission decimal strings. Never posts ledger.
- * Slice C payout stays refuse-closed until DIRECTION §8 rates publish.
+ * Slice C payout (`payout-engine.ts`) posts only when owner rates are published
+ * and a ledger client is wired — refuse-closed otherwise, never invents rates.
  */
 
 export interface AccrualStore {

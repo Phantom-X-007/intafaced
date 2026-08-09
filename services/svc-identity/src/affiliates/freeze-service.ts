@@ -3,7 +3,7 @@ import { assertFreezeReason, FreezeError, type FreezeRecord } from './freeze-sto
 
 /**
  * Durable affiliate freeze ledger (non-pay).
- * Accrual uses frozenIds(); payout remains Class M residual.
+ * Accrual uses frozenIds(); payout skips frozen beneficiaries via the same set.
  */
 
 export class FreezeService {
