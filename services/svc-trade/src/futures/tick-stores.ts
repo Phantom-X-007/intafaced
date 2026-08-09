@@ -106,7 +106,7 @@ export function sqlFundingPeriodStore(sql: Sql): FundingPeriodStore {
       // live size changes cannot re-size the charge.
       await sql`
         INSERT INTO trade.funding_period_membership (period_id, market_id, member_position_ids, member_snapshots)
-        VALUES (${periodId}, ${marketId}, ${ids}::text[], ${sql.json(snaps)})
+        VALUES (${periodId}, ${marketId}, ${ids}::text[], ${sql.json(snaps as never)})
         ON CONFLICT (period_id) DO NOTHING
       `;
       const rows = await sql<{ member_position_ids: string[]; member_snapshots: FundingMemberSnapshot[] | null }[]>`
