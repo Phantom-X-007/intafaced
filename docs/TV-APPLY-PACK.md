@@ -2,7 +2,7 @@
 
 **Prepared:** 2026-08-09 · AFK program  
 **Track:** Advanced Charts only (not Trading Platform — execution on our platform)  
-**Product URL:** _fill after live URL frozen — see scoreboard_
+**Product URL:** https://zenyoda3.github.io/intafaced-sovereign-os/
 
 ## Contacts
 
