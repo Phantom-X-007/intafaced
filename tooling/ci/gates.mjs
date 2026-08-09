@@ -77,6 +77,14 @@ export const GATES = [
       'holding it, which is precisely why deleting the entry has to be a visible act rather than a silent one.',
   },
   {
+    id: 'path-collide-selftest',
+    script: 'tooling/scripts/path-collide.mjs',
+    args: ['--self-test'],
+    why:
+      'claim-check + swarm share touches() — a trailing-slash wall prefix used to false-clear ' +
+      'open PR collisions (L15 #1245). --self-test is pure fixtures, no gh/git. Pins the regression.',
+  },
+  {
     id: 'tracker',
     script: 'tooling/scripts/tracker.mjs',
     args: ['--check'],
