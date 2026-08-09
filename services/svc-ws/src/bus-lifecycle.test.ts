@@ -52,13 +52,14 @@ describe('bus lifecycle reconnect', () => {
 
   it('does not retry forever after stop mid-backoff', async () => {
     let calls = 0;
-    let releaseSleep: (() => void) | null = null;
+    // Box so TypeScript sees nested assignment (plain let T|null narrows to never at call site).
+    const sleepGate: { release: (() => void) | null } = { release: null };
     const lifecycle = createBusLifecycle({
       log,
       initialBackoffMs: 1_000,
       sleep: () =>
         new Promise<void>((resolve) => {
-          releaseSleep = resolve;
+          sleepGate.release = resolve;
         }),
       attempt: async () => {
         calls += 1;
@@ -71,7 +72,7 @@ describe('bus lifecycle reconnect', () => {
     expect(calls).toBe(1);
 
     const stopPromise = lifecycle.stop();
-    releaseSleep?.();
+    sleepGate.release?.();
     await stopPromise;
 
     // No further attempts after stop.
@@ -81,20 +82,20 @@ describe('bus lifecycle reconnect', () => {
   });
 
   it('closes a late success that lands after stop', async () => {
-    let resolveAttempt: ((r: BusLifecycleConnectResult) => void) | null = null;
+    const attemptGate: { resolve: ((r: BusLifecycleConnectResult) => void) | null } = { resolve: null };
     const result = ok({ tradesUp: true, privateUp: true });
     const lifecycle = createBusLifecycle({
       log,
       attempt: () =>
         new Promise((resolve) => {
-          resolveAttempt = resolve;
+          attemptGate.resolve = resolve;
         }),
     });
 
     lifecycle.start();
     const stopPromise = lifecycle.stop();
     // Resolve attempt after stop was requested.
-    resolveAttempt?.(result);
+    attemptGate.resolve?.(result);
     await stopPromise;
 
     expect(result.close).toHaveBeenCalled();
