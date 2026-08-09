@@ -77,11 +77,7 @@ describe('applyComplianceQueueDisposition — partner honesty', () => {
   });
 
   it('operator reject requires reason', () => {
-    const r = applyComplianceQueueDisposition(
-      ITEM,
-      { status: 'rejected', by: 'operator', actor: 'ops:bob', reason: '' },
-      false,
-    );
+    const r = applyComplianceQueueDisposition(ITEM, { status: 'rejected', by: 'operator', actor: 'ops:bob', reason: '' }, false);
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error('unreachable');
     expect(r.code).toBe('refuse.empty_reason');

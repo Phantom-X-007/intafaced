@@ -86,11 +86,7 @@ export interface NetworkSignalStatus {
   readonly summary: string;
 }
 
-export type NetworkAccessCode =
-  | 'allowed.network'
-  | 'denied.network_flagged'
-  | 'denied.network_unconfigured'
-  | 'denied.network_dark';
+export type NetworkAccessCode = 'allowed.network' | 'denied.network_flagged' | 'denied.network_unconfigured' | 'denied.network_dark';
 
 export type NetworkAccessDecision = {
   readonly allowed: boolean;
@@ -173,8 +169,7 @@ export function resolveNetworkSignal(
       kind: 'unknown',
       source,
       summary:
-        'network signal: DARK — partner slot is configured but no signal arrived. ' +
-        'Not "clear". Fail-closed refuses this when armed.',
+        'network signal: DARK — partner slot is configured but no signal arrived. ' + 'Not "clear". Fail-closed refuses this when armed.',
     };
   }
 
@@ -237,8 +232,7 @@ export function checkNetworkAccess(
       allowed: false,
       code: 'denied.network_unconfigured',
       signal,
-      reason:
-        'network signal fail-closed: partner not configured — refusing rather than inventing a clear path.',
+      reason: 'network signal fail-closed: partner not configured — refusing rather than inventing a clear path.',
     };
   }
 

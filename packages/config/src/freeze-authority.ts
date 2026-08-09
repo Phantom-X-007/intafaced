@@ -22,12 +22,7 @@
  * freeze path. Money movement remains ledger-only via packages/ledger-client.
  */
 
-import {
-  FLAG_REGISTRY,
-  enforcementOf,
-  type FlagDef,
-  type FlagEnforcement,
-} from './flags.js';
+import { FLAG_REGISTRY, enforcementOf, type FlagDef, type FlagEnforcement } from './flags.js';
 
 /** The sole freeze-authority flag key in the registry. */
 export const FREEZE_AUTHORITY_FLAG_KEY = 'ledger.posting' as const;
@@ -105,9 +100,7 @@ export function assertFreezeAuthority(key: string): FreezeAuthorityCheck {
       ok: false,
       key: trimmed,
       code: 'refuse.wrong_enforcement',
-      reason:
-        `freeze authority: "${trimmed}" must be operator-api (live freeze surface). ` +
-        `Got kind=${enforcement.kind}.`,
+      reason: `freeze authority: "${trimmed}" must be operator-api (live freeze surface). ` + `Got kind=${enforcement.kind}.`,
     };
   }
 

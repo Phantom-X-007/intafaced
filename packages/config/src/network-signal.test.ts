@@ -75,10 +75,7 @@ describe('resolveNetworkSignal — honesty axis', () => {
   });
 
   it('partner configured + flagged observation → flagged with kind', () => {
-    const s = resolveNetworkSignal(
-      { [NETWORK_SIGNAL_CONFIGURED_ENV]: '1' },
-      { result: 'flagged', kind: 'tor', source: 'probe-2' },
-    );
+    const s = resolveNetworkSignal({ [NETWORK_SIGNAL_CONFIGURED_ENV]: '1' }, { result: 'flagged', kind: 'tor', source: 'probe-2' });
     expect(s.declaration).toBe('flagged');
     expect(s.kind).toBe('tor');
   });
@@ -128,9 +125,9 @@ describe('checkNetworkAccess — fail-closed', () => {
 describe('status line', () => {
   it('encodes declaration and partner bit without inventing clear', () => {
     expect(networkSignalStatusLine({})).toBe('network_signal=unset partner=0 fail_closed=0 kind=none');
-    expect(
-      networkSignalStatusLine({ [NETWORK_SIGNAL_CONFIGURED_ENV]: '1', [NETWORK_SIGNAL_FAIL_CLOSED_ENV]: '1' }),
-    ).toBe('network_signal=dark partner=1 fail_closed=1 kind=unknown');
+    expect(networkSignalStatusLine({ [NETWORK_SIGNAL_CONFIGURED_ENV]: '1', [NETWORK_SIGNAL_FAIL_CLOSED_ENV]: '1' })).toBe(
+      'network_signal=dark partner=1 fail_closed=1 kind=unknown',
+    );
   });
 });
 

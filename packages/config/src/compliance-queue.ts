@@ -49,11 +49,7 @@ export type ComplianceQueueDispositionResult =
   | {
       readonly ok: false;
       readonly code:
-        | 'refuse.partner_absent'
-        | 'refuse.unknown_item'
-        | 'refuse.empty_actor'
-        | 'refuse.empty_reason'
-        | 'refuse.empty_partner_ref';
+        'refuse.partner_absent' | 'refuse.unknown_item' | 'refuse.empty_actor' | 'refuse.empty_reason' | 'refuse.empty_partner_ref';
       readonly reason: string;
     };
 
@@ -68,10 +64,7 @@ export type ComplianceQueueSnapshot = {
 /**
  * Snapshot a queue. Empty is a first-class state, not a prompt to invent rows.
  */
-export function complianceQueueSnapshot(
-  items: readonly ComplianceQueueItem[],
-  partnerConfigured: boolean,
-): ComplianceQueueSnapshot {
+export function complianceQueueSnapshot(items: readonly ComplianceQueueItem[], partnerConfigured: boolean): ComplianceQueueSnapshot {
   const empty = items.length === 0;
   const summary = empty
     ? partnerConfigured
