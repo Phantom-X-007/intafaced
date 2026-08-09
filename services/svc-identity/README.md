@@ -10,36 +10,36 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 
 ## API
 
-| Procedure                                              | Scope                     | Notes                                                                                    |
-| ------------------------------------------------------ | ------------------------- | ---------------------------------------------------------------------------------------- |
-| `auth.register`                                        | —                         | Creates user, profile, rank row; awards 50 XP                                            |
-| `auth.login`                                           | —                         | Handle or email; requires TOTP once enrolled; recovery codes redeem once                 |
-| `auth.refresh`                                         | —                         | Rotates the refresh token; reuse revokes **every** session                               |
-| `auth.logout` / `auth.logoutAll`                       | — / session               | Revokes one or all sessions                                                              |
-| `auth.stepUp`                                          | session                   | **TOTP → 5-minute token carrying `trade:withdraw`** (not recovery codes)                 |
-| `totp.enrol` / `totp.confirm`                          | session                   | Two-step; secret + recovery hashes persist only on confirm                               |
-| `webauthn.registerOptions` / `registerVerify`          | session                   | Enrol a passkey/security key; ES256, attestation `none`                                  |
-| `webauthn.authOptions` / `authVerify`                  | —                         | Passwordless login; same session tokens, `mfa: true`                                     |
-| `webauthn.list` / `remove`                              | session                   | Ids only; remove retires a lost/stolen authenticator                                     |
-| `kyc.submit`                                           | `identity:write`          | Own record only; **grants nothing**; no client `providerRef`                             |
-| `kyc.status`                                           | `identity:read`           | Own records + effective tier; never `providerRef` / `reviewedBy`                         |
-| `kyc.pending`                                          | `admin:compliance`        | Operator review queue, oldest first                                                      |
-| `kyc.approve` / `kyc.reject`                           | `admin:compliance` + MFA  | **Approval grants custodial access**                                                     |
-| `rank.get`                                             | `identity:read`           | Rank, XP, XP to next tier                                                                |
-| `rank.perks`                                           | `identity:read`           | **The hot path** — every module calls this                                               |
-| `rank.awardXp`                                         | service                   | Modules award XP here, never by writing `rank_state`                                     |
-| `apiKeys.exchange`                                     | public                    | Long-lived key → short-lived access JWT (edge-usable)                                    |
-| `apiKeys.create` / `list` / `revoke`                   | `identity:write` / `read` | Key returned once, never retrievable                                                     |
-| `compliance.freezeIdentity`                            | `admin:compliance`        | Freeze user + revoke sessions + sub-accounts + API keys                                  |
-| `compliance.unfreezeIdentity`                          | `admin:compliance`        | Thaw user only — does **not** un-revoke keys or books                                    |
-| `subAccounts.create` / `list` / `revoke`               | `identity:write` / `read` | Soft-disable only (no balance sweep)                                                     |
-| `subAccounts.assertTransferDoor`                       | `identity:write`          | Ownership-at-the-door for transfer (no default to primary)                               |
-| `affiliates.attribute`                                 | `identity:write`          | Referral edge; cycle/self/depth refused                                                  |
-| `affiliates.myReferrer` / `myAncestors` / `myAccruals` | `identity:read`           | Self-only tree + durable accruals                                                        |
-| `affiliates.freeze` / `unfreeze` / `freezes`           | `admin:write` / `read`    | Freeze ledger honesty (no pay)                                                           |
-| `affiliates.treeStatus` / `node` / `members`           | `admin:read`              | Admin tree structure + roster                                                            |
-| `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Commission rows; **no ledger**; rates refuse-closed without law                          |
-| `affiliates.payout`                                    | `admin:write`             | **Always refuse** until §8 rates + ledger recipe (Class M / Nitro)                       |
+| Procedure                                              | Scope                     | Notes                                                                    |
+| ------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------ |
+| `auth.register`                                        | —                         | Creates user, profile, rank row; awards 50 XP                            |
+| `auth.login`                                           | —                         | Handle or email; requires TOTP once enrolled; recovery codes redeem once |
+| `auth.refresh`                                         | —                         | Rotates the refresh token; reuse revokes **every** session               |
+| `auth.logout` / `auth.logoutAll`                       | — / session               | Revokes one or all sessions                                              |
+| `auth.stepUp`                                          | session                   | **TOTP → 5-minute token carrying `trade:withdraw`** (not recovery codes) |
+| `totp.enrol` / `totp.confirm`                          | session                   | Two-step; secret + recovery hashes persist only on confirm               |
+| `webauthn.registerOptions` / `registerVerify`          | session                   | Enrol a passkey/security key; ES256, attestation `none`                  |
+| `webauthn.authOptions` / `authVerify`                  | —                         | Passwordless login; same session tokens, `mfa: true`                     |
+| `webauthn.list` / `remove`                             | session                   | Ids only; remove retires a lost/stolen authenticator                     |
+| `kyc.submit`                                           | `identity:write`          | Own record only; **grants nothing**; no client `providerRef`             |
+| `kyc.status`                                           | `identity:read`           | Own records + effective tier; never `providerRef` / `reviewedBy`         |
+| `kyc.pending`                                          | `admin:compliance`        | Operator review queue, oldest first                                      |
+| `kyc.approve` / `kyc.reject`                           | `admin:compliance` + MFA  | **Approval grants custodial access**                                     |
+| `rank.get`                                             | `identity:read`           | Rank, XP, XP to next tier                                                |
+| `rank.perks`                                           | `identity:read`           | **The hot path** — every module calls this                               |
+| `rank.awardXp`                                         | service                   | Modules award XP here, never by writing `rank_state`                     |
+| `apiKeys.exchange`                                     | public                    | Long-lived key → short-lived access JWT (edge-usable)                    |
+| `apiKeys.create` / `list` / `revoke`                   | `identity:write` / `read` | Key returned once, never retrievable                                     |
+| `compliance.freezeIdentity`                            | `admin:compliance`        | Freeze user + revoke sessions + sub-accounts + API keys                  |
+| `compliance.unfreezeIdentity`                          | `admin:compliance`        | Thaw user only — does **not** un-revoke keys or books                    |
+| `subAccounts.create` / `list` / `revoke`               | `identity:write` / `read` | Soft-disable only (no balance sweep)                                     |
+| `subAccounts.assertTransferDoor`                       | `identity:write`          | Ownership-at-the-door for transfer (no default to primary)               |
+| `affiliates.attribute`                                 | `identity:write`          | Referral edge; cycle/self/depth refused                                  |
+| `affiliates.myReferrer` / `myAncestors` / `myAccruals` | `identity:read`           | Self-only tree + durable accruals                                        |
+| `affiliates.freeze` / `unfreeze` / `freezes`           | `admin:write` / `read`    | Freeze ledger honesty (no pay)                                           |
+| `affiliates.treeStatus` / `node` / `members`           | `admin:read`              | Admin tree structure + roster                                            |
+| `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Commission rows; **no ledger**; rates refuse-closed without law          |
+| `affiliates.payout`                                    | `admin:write`             | **Always refuse** until §8 rates + ledger recipe (Class M / Nitro)       |
 
 HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active) · S2S sub-account ownership on internal HTTP.
 
