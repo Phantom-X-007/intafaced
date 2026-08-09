@@ -286,6 +286,35 @@ export class SubscriptionService {
   }
 
   /**
+   * Merchant fleet list — mandates already stored; this only reads them.
+   * No charge, no cascade, no ledger. Caller fences merchant ownership.
+   */
+  async listMandates(merchantId: string, options: { status?: MandateStatus; limit?: number } = {}): Promise<MandateRecord[]> {
+    await this.requireMerchant(merchantId);
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const rows = options.status
+      ? await this.sql<MandateRow[]>`
+          SELECT id, merchant_id, customer_id, asset_id, amount::text, ceiling::text,
+                 cadence, starts_at, ends_at, rail_adapter, rail_mandate_ref,
+                 status, cancelled_at, created_at
+            FROM pay.subscription_mandates
+           WHERE merchant_id = ${merchantId} AND status = ${options.status}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<MandateRow[]>`
+          SELECT id, merchant_id, customer_id, asset_id, amount::text, ceiling::text,
+                 cadence, starts_at, ends_at, rail_adapter, rail_mandate_ref,
+                 status, cancelled_at, created_at
+            FROM pay.subscription_mandates
+           WHERE merchant_id = ${merchantId}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    return rows.map(toMandate);
+  }
+
+  /**
    * Create a subscription from an active mandate. nextRunAt = occurrence 0
    * start (or startsAt itself).
    */
@@ -324,6 +353,36 @@ export class SubscriptionService {
     const row = rows[0];
     if (!row) throw new PayError(`Subscription ${subscriptionId} not found`, 'pay.subscription_not_found');
     return toSub(row);
+  }
+
+  /**
+   * Merchant fleet list — subscriptions already stored; this only reads them.
+   * No fire, no dunning, no ledger. Caller fences merchant ownership.
+   */
+  async listSubscriptions(
+    merchantId: string,
+    options: { status?: SubscriptionStatus; limit?: number } = {},
+  ): Promise<SubscriptionRecord[]> {
+    await this.requireMerchant(merchantId);
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const rows = options.status
+      ? await this.sql<SubRow[]>`
+          SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
+                 cancelled_at, path, created_at
+            FROM pay.subscriptions
+           WHERE merchant_id = ${merchantId} AND status = ${options.status}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<SubRow[]>`
+          SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
+                 cancelled_at, path, created_at
+            FROM pay.subscriptions
+           WHERE merchant_id = ${merchantId}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    return rows.map(toSub);
   }
 
   /**

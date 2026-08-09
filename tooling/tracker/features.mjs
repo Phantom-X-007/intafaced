@@ -601,16 +601,15 @@ export const FEATURES = [
     module: 'pay',
     phase: '3',
     // Ghost clear 2026-08-09 W4: schema/schedule/lifecycle/invoice-runner on tip (#1214).
-    // Residual is watch/dunning/surface — not "schema/runner" re-ship.
-    // W10 L01: mandate.cancel surface + cascade; path allowlist sealed #1527.
-    status: 'wip',
-    owner: 'nitro-agents',
+    // W10 L01: mandate.cancel + listExecutions + path allowlist.
+    // W11 L02: merchant fleet list (mandate.list / subscription.list); claim released.
+    status: 'ready',
     dependsOn: ['pay.gateway'],
     note:
-      '**W10 L01 2026-08-09 claim:** mandate create/get/cancel + sub create/get/cancel + due runner + ' +
-      'capture→execution settled + path allowlist (card_mandate→card refuse / crypto_invoice only opens money) on tip. ' +
-      'Crypto = invoice-and-watch only (never invent pull). ' +
-      'Residual park: bounded dunning, real pre-charge notify, card mandate rail (pay.mandate_rail_absent).',
+      '**W11 L02 2026-08-09:** merchant surface on tip — mandate create/get/list/cancel, subscription create/get/list/listExecutions/cancel, ' +
+      'due runner + capture→execution settled, path allowlist (card_mandate→card refuse; only crypto_invoice opens money). ' +
+      'Crypto = invoice-and-watch only (never invent pull). Claim released (was nitro-agents wip after W10 residual-empty stop). ' +
+      'Residual park (not agent invent): bounded dunning, real pre-charge notify, card mandate rail (pay.mandate_rail_absent). ready not done.',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
