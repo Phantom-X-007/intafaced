@@ -104,7 +104,7 @@
  *   node tooling/ci/empty-denominator-gate.mjs           run it
  *   node tooling/ci/empty-denominator-gate.mjs --verbose print every verdict
  */
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -286,6 +286,21 @@ export const EXEMPT = {
       'the disk. Its denominator is the fixture count, printed on every run and asserted non-zero here, and it cannot ' +
       'reach zero without the printed count changing.',
   },
+  'worktree-selftest': {
+    proof: /✓ (\d+)\/(\d+) self-test cases passed/,
+    denom: 2,
+    reason:
+      '--self-test pins pnpm wt start-point law (SHA not ref name, fetch status, resume path) over in-memory fixtures and ' +
+      'returns before any real worktree is cut. Measured empty-tree: 30/30 green with the repo gone. Same shape as ' +
+      'worktree-gc-selftest; classified when main landed the gate (#1476) after this PR branched.',
+  },
+  'claim-check-selftest': {
+    proof: /claim-check --self-test OK/,
+    reason:
+      '--self-test is pure fixtures over realArgPaths/pathsFromPorcelainLine/prListAtCap/prFilesTruncated/touches and ' +
+      'exits before gh or git. Measured empty-tree: OK with the repo gone. Landed as a doctrine gate (#1503) after this ' +
+      'PR branched — census gap that made empty-denominator red on tip until this row.',
+  },
   'path-collide-selftest': {
     proof: /path-collide --self-test OK/,
     reason:
@@ -302,7 +317,8 @@ export const EXEMPT = {
       'over them. The repo is not its subject — it passes 13/13 with the repo absent, which is this row proving itself.',
   },
 };
-export const EXEMPT_MAX = 3;
+// Raised 3 → 5 in the same commit that classified worktree-selftest + claim-check-selftest (gates main added after branch).
+export const EXEMPT_MAX = 5;
 
 // ───────────────────────────────────────────────────────────────────────────
 // 3. BLIND — measured, printing clean over nothing, frozen as debt.
@@ -456,8 +472,14 @@ function runInEmptyTree(fix, gate, tree) {
   // `undefined` would hand the child the literal string "undefined".
   const env = { ...process.env };
   delete env.EMPTY_DENOM_GATES_MODULE;
+  // realpath: on macOS tmpdir is often /var/folders → /private/var/folders.
+  // Several self-test entries gate on `import.meta.url === pathToFileURL(argv[1])`
+  // (claim-check isDirectRun). Passing the unresolved path makes that equality
+  // false, the self-test never runs, and an EXEMPT row is mis-measured as a
+  // refusal. Linux CI has no alias; realpath is a no-op there. Measured.
+  const script = realpathSync(join(fix, gate.script));
   try {
-    const out = execFileSync(process.execPath, [join(fix, gate.script), ...(gate.args ?? [])], {
+    const out = execFileSync(process.execPath, [script, ...(gate.args ?? [])], {
       encoding: 'utf8',
       cwd,
       timeout: 180000,
