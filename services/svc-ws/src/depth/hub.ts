@@ -1,7 +1,24 @@
 import { formatAmount } from '@intafaced/ledger-client/money';
-import { bookFromSnapshot, diffDepth, type DepthBook, type DepthDelta, type DepthSnapshot, type WireLevel } from '@intafaced/market-data';
+import {
+  bookFromSnapshot,
+  diffDepth,
+  type DepthBook,
+  type DepthDelta,
+  type DepthSide,
+  type DepthSnapshot,
+  type WireLevel,
+} from '@intafaced/market-data';
 import type { MarketRegistry } from './registry.js';
 import type { DepthSource } from './source.js';
+
+/** True when both sides have the same prices with the same quantities. */
+function sidesEqual(a: DepthSide, b: DepthSide): boolean {
+  if (a.size !== b.size) return false;
+  for (const [price, qty] of a) {
+    if (b.get(price) !== qty) return false;
+  }
+  return true;
+}
 
 /**
  * THE FAN-OUT (§5.2 ws.gateway).
@@ -141,6 +158,13 @@ export class DepthHub {
 
   #knownMarkets: ReadonlySet<string> = new Set();
   #marketsFetchedAt = 0;
+  /**
+   * Last time a miss on the known-market list triggered a refresh.
+   * Separate from `#marketsFetchedAt` (timer / successful list load) so a
+   * freshly listed market still gets one refetch per window even when the
+   * cache was warmed moments ago by a different path.
+   */
+  #missRefreshAt = 0;
   #marketsInFlight: Promise<void> | null = null;
 
   /** Counters, surfaced on `/ready` so a flaky client is visible to an operator. */
@@ -238,13 +262,22 @@ export class DepthHub {
    * The cached list is refreshed lazily on a miss, at most once per refresh
    * window, so a market listed a moment ago works without waiting for the timer
    * and a flood of junk ids costs at most one upstream call per window.
+   *
+   * Miss-refresh is gated on `#missRefreshAt`, not on the last successful list
+   * load: a timer-driven or first-connect refresh must not block a miss for a
+   * market that was listed after that load.
    */
   async ensureKnownMarket(marketId: string): Promise<boolean> {
     if (this.#knownMarkets.has(marketId)) return true;
 
     const now = this.#options.clock();
-    if (this.#marketsFetchedAt !== 0 && now - this.#marketsFetchedAt < this.#options.marketsRefreshMs) return false;
+    // Already spent this window's miss-refresh budget. `marketsRefreshMs: 0`
+    // never holds (now - t < 0 is false), so every miss still refetches.
+    if (this.#missRefreshAt !== 0 && now - this.#missRefreshAt < this.#options.marketsRefreshMs) {
+      return false;
+    }
 
+    this.#missRefreshAt = now;
     await this.refreshMarkets();
     return this.#knownMarkets.has(marketId);
   }
@@ -275,7 +308,30 @@ export class DepthHub {
     const run = (async () => {
       try {
         const snapshot = await this.#source.snapshot(marketId, this.#options.depthLimit);
+        // Poll may have already written a newer book while the seed round-trip
+        // was in flight. A seed must never regress that book.
+        const existing = this.#books.get(marketId);
+        if (existing !== undefined && existing.sequence > snapshot.sequence) {
+          this.#log.warn(
+            { marketId, seedSequence: snapshot.sequence, bookSequence: existing.sequence },
+            'ws: seed snapshot older than current book — skipped',
+          );
+          return;
+        }
         this.ingest(snapshot);
+      } catch (err) {
+        // A LISTED market whose engine is unreachable opens on an empty book —
+        // the same shape as "never traded". Closing the socket with the raw
+        // upstream error confuses "matching is down" with "this is not a market"
+        // and contradicts the README: engine down → listed markets open empty.
+        // Poll will replace the empty book when matching recovers.
+        this.#log.warn(
+          { marketId, err: err instanceof Error ? err.message : String(err) },
+          'ws: depth seed failed — opening empty book; poll will replace when matching recovers',
+        );
+        if (!this.#books.has(marketId)) {
+          this.ingest({ type: 'snapshot', marketId, sequence: 0, bids: [], asks: [] });
+        }
       } finally {
         this.#seeding.delete(marketId);
       }
@@ -323,11 +379,28 @@ export class DepthHub {
       return null;
     }
 
+    if (next.sequence === previous.sequence) {
+      // Same sequence, different levels: the book we hold is wrong and a
+      // continuous delta cannot fix it (fromSequence would equal sequence).
+      // Force a repair snapshot so clients do not silently drift. Identical
+      // levels still fan out null so the lag-repair sweep still runs.
+      if (!sidesEqual(previous.bids, next.bids) || !sidesEqual(previous.asks, next.asks)) {
+        this.#log.warn(
+          { marketId: snapshot.marketId, sequence: next.sequence },
+          'ws: same-sequence level change — forcing snapshot repair',
+        );
+        this.#fanOut(next, null, true);
+      } else {
+        this.#fanOut(next, null);
+      }
+      return null;
+    }
+
     // A sequence that advanced with no visible level change still gets a delta.
     // Skipping it would leave every client behind the engine, and the NEXT real
     // delta would then gap and cost everyone a resnapshot. An empty delta is a
     // few bytes; a fleet-wide resnapshot is not.
-    const delta = next.sequence > previous.sequence ? diffDepth(previous, next) : null;
+    const delta = diffDepth(previous, next);
     this.#fanOut(next, delta);
     return delta;
   }

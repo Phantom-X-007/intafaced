@@ -288,22 +288,8 @@ const PINNED = {
   'services/svc-trade': [[1, "src/spot/matching-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"]],
 
   // 14 — services/svc-ws
+  // hub.test.ts constructor-override pins cleared 2026-08-09 (hubFor typed as Partial<DepthHubOptions>).
   'services/svc-ws': [
-    [1, "src/depth/hub.test.ts | TS2322 | Type '{}' is not assignable to type 'never'."],
-    [1, "src/depth/hub.test.ts | TS2344 | Type 'Function' does not satisfy the constraint '(...args: any) => any'."],
-    [
-      1,
-      "src/depth/hub.test.ts | TS2345 | Argument of type '{ highWaterBytes: number; maxLagTicks: number; }' is not assignable to parameter of type 'undefined'.",
-    ],
-    [
-      1,
-      "src/depth/hub.test.ts | TS2345 | Argument of type '{ maxConnections: number; }' is not assignable to parameter of type 'undefined'.",
-    ],
-    [
-      5,
-      "src/depth/hub.test.ts | TS2345 | Argument of type '{ registry: { markets: () => Promise<string[]>; }; }' is not assignable to parameter of type 'undefined'.",
-    ],
-    [1, 'src/depth/hub.test.ts | TS2698 | Spread types may only be created from object types.'],
     [1, "src/ws/co-mount.test.ts | TS2345 | Argument of type 'StubSource' is not assignable to parameter of type 'DepthSource'."],
     [
       1,
