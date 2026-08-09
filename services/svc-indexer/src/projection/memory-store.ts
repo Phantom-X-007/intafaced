@@ -99,6 +99,30 @@ export class MemoryProjectionStore implements ProjectionStore {
       throw new Error(`indexer.competing_canonical_block: height ${block.height} already holds canonical ${occupant.hash} — unwind first`);
     }
 
+    // Parent link is the store's last line of defence. The indexer checks the
+    // forward link; a second writer (or a corrupted apply) must not plant a
+    // height that does not hang off the current canonical head.
+    if (block.height > 0) {
+      const parent = this.#blocks.get(block.parentHash);
+      const head = await this.head();
+      if (head && head.height === block.height - 1 && head.hash !== block.parentHash) {
+        throw new Error(
+          `indexer.parent_mismatch: block ${block.height} claims parent ${block.parentHash} but canonical head is ${head.hash}`,
+        );
+      }
+      // Gap: applying H+2 while head is H is not a reorg repair path (that is unwind).
+      if (head && block.height > head.height + 1) {
+        throw new Error(
+          `indexer.height_gap: cannot apply height ${block.height} when canonical head is ${head.height} — fill or re-index, do not jump`,
+        );
+      }
+      // Empty store may start at any height (startHeight); only enforce parent
+      // presence when we already hold the parent height.
+      if (head && block.height === head.height + 1 && !parent) {
+        throw new Error(`indexer.parent_missing: block ${block.height} parents ${block.parentHash} which is not in the store`);
+      }
+    }
+
     this.#blocks.set(block.hash, {
       chainId: block.chainId,
       height: block.height,
