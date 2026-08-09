@@ -204,6 +204,15 @@ export const GATES = [
       'was stale. Blocking so a new hardcode cannot ship green.',
   },
   {
+    id: 'shell-golden',
+    script: 'tooling/ci/shell-golden-scan.mjs',
+    doctrine: '§14 / desk honesty',
+    why:
+      'the vendored desk keeps pure Node golden tests (depth feedLive, ix-money, book-honesty, hotkeys) next to the ' +
+      'code they protect. They only prove anything if CI runs them — a suite that only runs when an agent remembers ' +
+      'is how false Live and parseFloat regressions ship green.',
+  },
+  {
     id: 'vendor-java-money',
     script: 'tooling/ci/vendor-java-money-scan.mjs',
     doctrine: 'dual-book Option B',

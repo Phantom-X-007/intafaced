@@ -199,8 +199,8 @@ module.exports = {
 
                `snapshotSource` is provenance the reader can go and check, and
                it is also the refusal to call this feed live. The table is one
-               REST read on load: startWebsock is gone, this shell has no
-               websocket, and Exchange.vue hardcodes feedLive: false. */
+               REST read on load (not the Exchange depth stream). Exchange.vue
+               sets feedLive only after a valid depth snapshot — never bare TCP open. */
             notTraded: "Not traded",
             noneTraded: "No listed market has traded yet, so there is no last price to show.",
             snapshotSource: "Snapshot · svc-trade /api/v1/tickers",
@@ -1146,9 +1146,9 @@ module.exports = {
             high24h: "24h High",
             low24h: "24h Low",
             volume24h: "24h Volume",
-            feedConnected: "Market feed connected",
-            feedDownTitle: "Market feed is down — numbers are not live",
-            feedLive: "Live",
+            feedConnected: "Depth book is live (snapshot received)",
+            feedDownTitle: "Depth book is not live — last/24h are a REST snapshot, not a live ticker",
+            feedLive: "Depth live",
             feedDown: "No feed · not live prices",
 
             searchMarket: "Search market",

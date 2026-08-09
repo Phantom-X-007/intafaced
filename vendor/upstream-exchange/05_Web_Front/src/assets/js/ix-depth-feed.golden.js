@@ -53,6 +53,65 @@ assert(Array.isArray(plate.bids) && plate.bids[0][0] === '99', 'plate bids');
 assert(feed.streamUrl('abc').indexOf('/ws/stream?market=abc') !== -1, 'stream url');
 assert(feed.resnapshotUrl('abc') === '/ws/markets/abc/depth', 'resnapshot url');
 
+/* ── feedLive honesty: Live only after snapshot, never bare onopen ───── */
+
+function MockWS(url) {
+  this.url = url;
+  this.readyState = 0;
+  MockWS.last = this;
+}
+MockWS.last = null;
+MockWS.prototype = {
+  close: function () {
+    this.readyState = 3;
+    if (typeof this.onclose === 'function') this.onclose({});
+  }
+};
+
+var liveFlags = [];
+var statuses = [];
+var handle = feed.createDepthFeed({
+  marketId: 'm-live',
+  onBook: function () {},
+  onLive: function (v) {
+    liveFlags.push(!!v);
+  },
+  onStatus: function (s) {
+    statuses.push(s);
+  },
+  WebSocketImpl: MockWS,
+  fetchImpl: function () {
+    return Promise.reject(new Error('no fetch in golden'));
+  }
+});
+
+assert(MockWS.last != null, 'socket constructed');
+/* Open TCP — must NOT claim live. */
+if (typeof MockWS.last.onopen === 'function') MockWS.last.onopen({});
+assert(liveFlags.indexOf(true) === -1, 'onopen alone never sets live');
+assert(statuses.indexOf('open') !== -1, 'onopen records open status');
+
+/* First snapshot → live. */
+if (typeof MockWS.last.onmessage === 'function') {
+  MockWS.last.onmessage({
+    data: JSON.stringify({
+      type: 'snapshot',
+      marketId: 'm-live',
+      sequence: 1,
+      bids: [['10', '1']],
+      asks: [['11', '1']]
+    })
+  });
+}
+assert(liveFlags[liveFlags.length - 1] === true, 'snapshot sets live');
+
+/* Close → not live. */
+if (typeof MockWS.last.onclose === 'function') MockWS.last.onclose({});
+assert(liveFlags[liveFlags.length - 1] === false, 'close clears live');
+
+handle.stop();
+assert(liveFlags[liveFlags.length - 1] === false, 'stop clears live');
+
 if (failed) {
   console.error(failed + ' failed');
   process.exit(1);

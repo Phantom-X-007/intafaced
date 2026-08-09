@@ -9,6 +9,11 @@
  * Gap → caller resnapshots REST WITHOUT tearing down the socket.
  * Empty book (sequence 0, empty sides) is success, not an error.
  *
+ * HONESTY — feedLive is NOT "WebSocket TCP open".
+ * onLive(true) only after a valid depth snapshot for this marketId has been
+ * applied (WS snapshot or REST resnapshot). A socket that is open but silent
+ * must stay not-live so the desk never paints "Live" over a cold book.
+ *
  * CommonJS for golden tests + webpack require, matching ix-trade.js.
  */
 'use strict';
@@ -160,6 +165,8 @@ function createDepthFeed(opts) {
 
   function applySnapshotMsg(msg) {
     book = bookFromSnapshot(msg);
+    /* First honest live edge: we have venue depth data for this market. */
+    setLive(true);
     publish();
   }
 
@@ -234,7 +241,7 @@ function createDepthFeed(opts) {
     }
     socket.onopen = function () {
       if (closed) return;
-      setLive(true);
+      /* TCP open alone is not live data — wait for snapshot. */
       status('open');
     };
     socket.onmessage = onMessage;
