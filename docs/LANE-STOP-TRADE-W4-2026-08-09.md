@@ -18,14 +18,14 @@ Wave 3 money top-10 held. Wave 4 shipped **claim unlock + real residual breaks**
 
 ## Merged this wave (named)
 
-| PR | What a trader / operator can now rely on | Class |
-| --- | --- | --- |
-| **#1215** | `svc-trade` no longer whole-locked by ghost `trade.futures @nitro-agent` or vault `module:trade` invent; claim-check module fallback only when `requires` empty | N |
-| **#1220** | Seed production FX/commodity **cannot take a real hold** — place/convert/TWAP share `assertSettlementRails` | P |
-| **#1222** | Liquidation marks pass **position size** (relative depth floor); `initialMargin` ≠ residual after funding | M |
-| **#1223** | README: algo jobs mounted **default OFF**, not “dead code”; SIGTERM stops reconcile host | N |
-| **#1219** | Failed TWAP cancel **pauses** (no more slices); resume refused until re-cancel (`cancel_incomplete`); `tickAll` isolates parents | M |
-| **#1237** | Matching journal header honesty (replay-once ≠ live id guard) | N |
+| PR        | What a trader / operator can now rely on                                                                                                                        | Class |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| **#1215** | `svc-trade` no longer whole-locked by ghost `trade.futures @nitro-agent` or vault `module:trade` invent; claim-check module fallback only when `requires` empty | N     |
+| **#1220** | Seed production FX/commodity **cannot take a real hold** — place/convert/TWAP share `assertSettlementRails`                                                     | P     |
+| **#1222** | Liquidation marks pass **position size** (relative depth floor); `initialMargin` ≠ residual after funding                                                       | M     |
+| **#1223** | README: algo jobs mounted **default OFF**, not “dead code”; SIGTERM stops reconcile host                                                                        | N     |
+| **#1219** | Failed TWAP cancel **pauses** (no more slices); resume refused until re-cancel (`cancel_incomplete`); `tickAll` isolates parents                                | M     |
+| **#1237** | Matching journal header honesty (replay-once ≠ live id guard)                                                                                                   | N     |
 
 Re-derive merge list from `gh pr list --state merged --search "trade w4"` if tip moved.
 
@@ -33,41 +33,41 @@ Re-derive merge list from `gh pr list --state merged --search "trade w4"` if tip
 
 ## Engine A scoreboard (after wave 4)
 
-| Prio | Unit | Disposition |
-| --- | --- | --- |
-| A0 | Open trade / claim clear | **Done #1215** |
-| A1 | copy mount | **PARK** — money sealed W3; still unmounted by design |
-| A1 | OTC residual | **PARK owner** — mid max-age socket |
-| A1 | MM residual | Sealed W3 size/age; sequenced-book residual still open (not shipped) |
-| A1 | venue residual | Sealed public second venue; single-id mark mount |
-| A2 | algo OFF respect | **#1219** cancel-fail + resume gate; jobs still OFF default |
-| A2 | ccxt residual | Sealed 501s; no new hole |
-| A2 | forex thin | **#1220** place refuse on unsettled class |
-| A3 | matching falsify | **#1237** journal honesty; refuse table sealed |
-| A3 | margin-call | Sealed W3 #1211 — no invent D3 |
-| A3 | Engine B re-run | Harvest complete; new units above only |
-| A3 | stop note T* table | **This file** |
+| Prio | Unit                     | Disposition                                                          |
+| ---- | ------------------------ | -------------------------------------------------------------------- |
+| A0   | Open trade / claim clear | **Done #1215**                                                       |
+| A1   | copy mount               | **PARK** — money sealed W3; still unmounted by design                |
+| A1   | OTC residual             | **PARK owner** — mid max-age socket                                  |
+| A1   | MM residual              | Sealed W3 size/age; sequenced-book residual still open (not shipped) |
+| A1   | venue residual           | Sealed public second venue; single-id mark mount                     |
+| A2   | algo OFF respect         | **#1219** cancel-fail + resume gate; jobs still OFF default          |
+| A2   | ccxt residual            | Sealed 501s; no new hole                                             |
+| A2   | forex thin               | **#1220** place refuse on unsettled class                            |
+| A3   | matching falsify         | **#1237** journal honesty; refuse table sealed                       |
+| A3   | margin-call              | Sealed W3 #1211 — no invent D3                                       |
+| A3   | Engine B re-run          | Harvest complete; new units above only                               |
+| A3   | stop note T* table       | **This file**                                                        |
 
 ---
 
 ## Parked (honest)
 
-1. **Copy mount** — deliberate Class M + migration `copy_mirrored_fills` + §8 rates  
-2. **OTC mid age** — owner max-age  
-3. **TWAP principal durability** — socket (no mint)  
-4. **Sequenced venue book for marks** — age-on-poll incomplete  
-5. **Futures R1/R2** concurrent liq claim/lock — harvested, not shipped this wave  
-6. **Funding block-next unsettled period** — ADR residual  
+1. **Copy mount** — deliberate Class M + migration `copy_mirrored_fills` + §8 rates
+2. **OTC mid age** — owner max-age
+3. **TWAP principal durability** — socket (no mint)
+4. **Sequenced venue book for marks** — age-on-poll incomplete
+5. **Futures R1/R2** concurrent liq claim/lock — harvested, not shipped this wave
+6. **Funding block-next unsettled period** — ADR residual
 7. **leader_share_bps / leverage / venue keys** — Nitro-only
 
 ---
 
 ## Nitro must decide
 
-- **N5** reflag seed FX markets public list (paper/pending) — place path now refuses anyway  
-- **N1** `TRADE_FUTURES_PROFIT_SOURCE` capitalisation  
-- Copy mount **go** if product wants routes  
-- OTC mid max-age number  
+- **N5** reflag seed FX markets public list (paper/pending) — place path now refuses anyway
+- **N1** `TRADE_FUTURES_PROFIT_SOURCE` capitalisation
+- Copy mount **go** if product wants routes
+- OTC mid max-age number
 
 Or **none** required to leave residual safe.
 
@@ -75,10 +75,10 @@ Or **none** required to leave residual safe.
 
 ## Machine
 
-- Worktrees: `feat-trade-w4-*` under `~/projects/sovereign-worktrees/`  
-- Class M: self-audit + adversarial on #1219 / #1222  
-- Local: 26/26 `twap-engine` tests green; CI seal on merges  
-- Claim-check after #1215: `services/svc-trade` clear  
+- Worktrees: `feat-trade-w4-*` under `~/projects/sovereign-worktrees/`
+- Class M: self-audit + adversarial on #1219 / #1222
+- Local: 26/26 `twap-engine` tests green; CI seal on merges
+- Claim-check after #1215: `services/svc-trade` clear
 
 ---
 
