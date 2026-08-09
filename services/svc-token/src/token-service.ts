@@ -725,7 +725,8 @@ export class TokenService {
     if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
 
     /**
-     * T-03 residual — bind operator-typed amounts to the actual fee pots.
+     * T-03 residual — bind operator-typed amounts to the actual fee pots on
+     * FIRST claim only.
      *
      * The full §4.3 aggregation job that *reads* house fee balances and builds
      * `sources` still does not exist (`token.yield` socket). Until it does, the
@@ -735,15 +736,22 @@ export class TokenService {
      * had already moved. Fail closed **before** claim/sweep when any module's
      * houseFees balance is short of the named amount. Under-claim (leaving
      * fees in the pot) stays allowed — that is a deliberate partial window.
+     *
+     * Re-runs of an already-claimed window must NOT re-check the pot: the first
+     * run already swept it to zero, and the resume path is plan + idempotent
+     * sweep + pay. Mismatched totals still refuse via the header assert.
      */
-    for (const [module, amount] of byModule) {
-      const held = (await this.ledger.balance(houseFees(module, this.assetId))).amount;
-      if (held < amount) {
-        throw new TokenError(
-          `Module "${module}" houseFees holds ${formatAmount(held)} ${this.assetId} but this window names ` +
-            `${formatAmount(amount)} — refuse rather than underfund the plan or die mid-sweep`,
-          'token.yield_source_underfunded',
-        );
+    const alreadyClaimed = await this.readYieldWindowHeader(this.sql, input.windowId);
+    if (alreadyClaimed === null) {
+      for (const [module, amount] of byModule) {
+        const held = (await this.ledger.balance(houseFees(module, this.assetId))).amount;
+        if (held < amount) {
+          throw new TokenError(
+            `Module "${module}" houseFees holds ${formatAmount(held)} ${this.assetId} but this window names ` +
+              `${formatAmount(amount)} — refuse rather than underfund the plan or die mid-sweep`,
+            'token.yield_source_underfunded',
+          );
+        }
       }
     }
 
