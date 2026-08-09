@@ -13,7 +13,16 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import type { MarkQuality, PriceSource } from '../loans/prices.js';
 import { withMoneySpan } from '../tracing.js';
+import {
+  DEFAULT_CARD_CONVERSION_POLICY,
+  fundingFor,
+  noConversionRates,
+  quoteConversion,
+  type CardConversionPolicy,
+  type ConversionQuote,
+} from './conversion.js';
 import { cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
 
 /**
@@ -120,12 +129,55 @@ import { cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
  *   · FRAUD SCORING, velocity limits, 3-D Secure, MCC policy. All of it belongs
  *     to a rail, and none of it is simulated here — a decline in this module is
  *     always one of four named reasons and never a score.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * JUST-IN-TIME CONVERSION (§18) — WHAT IT CHANGED HERE, AND WHAT IT DID NOT
+ * ═════════════════════════════════════════════════════════════════════════════
+ *
+ * A card may now be charged in a SETTLEMENT asset that is not the asset it draws
+ * on, which is what §18's "spend pulls exact fiat equivalent via just-in-time
+ * conversion" describes and what this module previously had no way to express.
+ *
+ * WHAT DID NOT CHANGE IS THE MONEY PATH. There is still one asset on our book —
+ * the funding asset — moving available → hold → rail through the same three
+ * recipes, and this file still adds no recipe. A conversion decides the SIZE of
+ * that movement and is not a second movement; `conversion.ts` argues that at
+ * length, including why booking the counterparty's leg would be a second book.
+ *
+ * Three consequences worth having in one place:
+ *
+ *   · `authorize()` and `capture()` take amounts in the SETTLEMENT asset — the
+ *     merchant's number, which is the only number the merchant has. On a
+ *     same-asset card the two are the same asset and nothing about the call
+ *     changes.
+ *   · `card_authorizations.amount` is the FUNDING amount, because that is what
+ *     the hold, the capture and the reversal are all denominated in. A column
+ *     that sometimes meant one asset and sometimes another is how a reversal
+ *     comes to return the wrong number.
+ *   · The rate is quoted ONCE and frozen in the same transaction as the
+ *     decision. `capture()` re-reads it and never re-quotes, so a rate that
+ *     moves between the swipe and the clearing cannot settle a different number
+ *     of units than were held.
+ *
+ * And the refusal that matters most: with no rate adapter configured — which is
+ * every deployment, because this platform has no FX source — a card that needs a
+ * conversion refuses `bank.mark_missing` and writes nothing. It does not decline
+ * (a decline is an answer, and nobody answered), and it does not invent a rate.
  */
 
 export interface CardRecord {
   id: string;
   userId: string;
+  /** Which of the user's balances this card draws on. Every posting is in this asset. */
   assetId: string;
+  /**
+   * What merchants charge this card in (§18).
+   *
+   * Equal to `assetId` means no conversion, and no rate is ever consulted.
+   * Different means every authorisation is quoted at the authorisation moment,
+   * and refuses by name if no rate can be got.
+   */
+  settlementAssetId: string;
   issuer: string;
   /** TRUE MEANS NO CARD EXISTS. Carried on every surface that renders a card. */
   simulated: boolean;
@@ -136,10 +188,28 @@ export interface CardRecord {
   perAuthorizationLimit: Amount;
 }
 
+/**
+ * The rate one authorisation converted at, as it was written down.
+ *
+ * Read-only forever. Nothing re-rates an authorisation, and `capture()` reads
+ * this rather than asking the feed again — see `conversion.ts` for what breaks
+ * if it did.
+ */
+export interface ConversionRecord {
+  readonly settlementAssetId: string;
+  readonly settlementAmount: Amount;
+  readonly fundingAssetId: string;
+  readonly fundingAmount: Amount;
+  readonly rate: Amount;
+  readonly quality: MarkQuality;
+  readonly rateAsOf: Date;
+}
+
 export interface AuthorizationRecord {
   id: string;
   cardId: string;
   authorizationRef: string;
+  /** WHAT MOVES, in the card's FUNDING asset. Not the merchant's number on a converted card. */
   amount: Amount;
   merchantCategory: string | null;
   decision: 'approved' | 'declined';
@@ -147,17 +217,25 @@ export interface AuthorizationRecord {
   status: 'pending' | 'settled' | 'rejected';
   holdLedgerTxId: string | null;
   decidedAt: Date;
+  /** NULL on a same-asset card, where nothing was converted and no rate was consulted. */
+  conversion: ConversionRecord | null;
 }
 
 /** What a capture did, including the reward it could not pay. */
 export interface CaptureResult {
   authorizationId: string;
+  /** What LEFT THE BOOK, in the funding asset. On a same-asset card, also what the merchant took. */
   captured: Amount;
-  /** The unspent part of the hold, returned in the same pass. Often zero. */
+  /** The unspent part of the hold, returned in the same pass. Often zero. Funding asset. */
   returned: Amount;
   captureLedgerTxId: string;
   reversalLedgerTxId: string | null;
   cashback: CashbackOutcome;
+  /**
+   * What the merchant cleared, in their currency, and the frozen rate it
+   * converted at. NULL on a same-asset card, where the two are one number.
+   */
+  settlement: { readonly assetId: string; readonly amount: Amount; readonly rate: Amount } | null;
 }
 
 /**
@@ -181,10 +259,25 @@ export interface CardServiceOptions {
    * plausible one, so there is no default. See `noCardIssuer`.
    */
   readonly issuer?: CardIssuerAdapter;
+  /**
+   * Where a JIT conversion rate comes from — and it does not come from here.
+   *
+   * Absent means `noConversionRates`, which has no rates in it, so a card whose
+   * settlement asset differs from its funding asset refuses every authorisation
+   * by name. Same posture and the same reason as `issuer` above: this platform
+   * has no FX source, and the dangerous default is the plausible one.
+   */
+  readonly rates?: PriceSource;
+  readonly conversionPolicy?: CardConversionPolicy;
+  /** Injectable so a test can hold the staleness guards at a fixed instant. */
+  readonly clock?: () => Date;
 }
 
 export class CardService {
   private readonly issuer: CardIssuerAdapter;
+  private readonly rates: PriceSource;
+  private readonly conversionPolicy: CardConversionPolicy;
+  private readonly clock: () => Date;
 
   constructor(
     private readonly sql: Sql,
@@ -192,6 +285,9 @@ export class CardService {
     options: CardServiceOptions = {},
   ) {
     this.issuer = options.issuer ?? noCardIssuer;
+    this.rates = options.rates ?? noConversionRates;
+    this.conversionPolicy = options.conversionPolicy ?? DEFAULT_CARD_CONVERSION_POLICY;
+    this.clock = options.clock ?? (() => new Date());
   }
 
   /** What this deployment's card programme is, and whether it is real. */
@@ -212,6 +308,17 @@ export class CardService {
     cardId: string;
     userId: string;
     assetId: string;
+    /**
+     * What merchants charge this card in. Defaults to the funding asset, which
+     * is every card that existed before §18 and means no conversion at all.
+     *
+     * A card may be issued with a settlement asset nothing can currently quote.
+     * That is deliberate: asking the feed at issue time would let one transient
+     * outage refuse a card, and it would put a rate lookup on a path that moves
+     * no money. The refusal belongs on the authorisation, where the rate is
+     * actually needed and where `bank.mark_missing` says so by name.
+     */
+    settlementAssetId?: string;
     cashbackBps?: number;
     perAuthorizationLimit: Amount;
   }): Promise<CardRecord> {
@@ -219,18 +326,19 @@ export class CardService {
       throw new BankError('A card needs a positive per-authorisation limit', 'bank.card_limit_exceeded');
     }
 
+    const settlementAssetId = input.settlementAssetId ?? input.assetId;
     const handle = await this.issuer.issue({ cardId: input.cardId, userId: input.userId, assetId: input.assetId });
     const programme = this.issuer.programme;
 
     const rows = await this.sql<CardRow[]>`
-      INSERT INTO bank.cards (id, user_id, asset_id, issuer, simulated, issuer_ref, pan_tail, cashback_bps, per_authorization_limit)
+      INSERT INTO bank.cards (id, user_id, asset_id, settlement_asset_id, issuer, simulated, issuer_ref, pan_tail, cashback_bps, per_authorization_limit)
       VALUES (
-        ${input.cardId}, ${input.userId}, ${input.assetId}, ${programme.id}, ${programme.simulated},
+        ${input.cardId}, ${input.userId}, ${input.assetId}, ${settlementAssetId}, ${programme.id}, ${programme.simulated},
         ${handle.issuerRef}, ${handle.panTail}, ${input.cashbackBps ?? 0},
         ${formatAmount(input.perAuthorizationLimit)}::numeric
       )
       ON CONFLICT (issuer, issuer_ref) DO NOTHING
-      RETURNING id, user_id, asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit
+      RETURNING id, user_id, asset_id, settlement_asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit
     `;
 
     // A redelivered issue is the same card, not a second one drawing on the same
@@ -242,7 +350,7 @@ export class CardService {
 
   async card(cardId: string): Promise<CardRecord> {
     const rows = await this.sql<CardRow[]>`
-      SELECT id, user_id, asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit FROM bank.cards WHERE id = ${cardId}
+      SELECT id, user_id, asset_id, settlement_asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit FROM bank.cards WHERE id = ${cardId}
     `;
     const row = rows[0];
     if (!row) throw new BankError(`Card ${cardId} not found`, 'bank.card_not_found');
@@ -251,7 +359,7 @@ export class CardService {
 
   async cardsOf(userId: string): Promise<CardRecord[]> {
     const rows = await this.sql<CardRow[]>`
-      SELECT id, user_id, asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit FROM bank.cards WHERE user_id = ${userId} ORDER BY created_at DESC
+      SELECT id, user_id, asset_id, settlement_asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit FROM bank.cards WHERE user_id = ${userId} ORDER BY created_at DESC
     `;
     return rows.map(toCard);
   }
@@ -289,6 +397,7 @@ export class CardService {
   async authorize(input: {
     cardId: string;
     authorizationRef: string;
+    /** THE MERCHANT'S NUMBER, in the card's SETTLEMENT asset. */
     amount: Amount;
     merchantCategory?: string;
   }): Promise<AuthorizationRecord> {
@@ -296,31 +405,45 @@ export class CardService {
 
     // Idempotency, before anything else. An issuer redelivering an
     // authorisation must receive the decision it already got, and must not cause
-    // a second hold against the same purchase.
+    // a second hold against the same purchase — nor a second QUOTE, which is why
+    // this returns before the rate source is touched.
     const already = await this.authorizationByRef(card.id, input.authorizationRef);
     if (already) return already;
 
     return withMoneySpan(
       'bank.card.authorize',
-      { operation: 'card-authorize', cardId: card.id, amount: formatAmount(input.amount), assetId: card.assetId },
+      { operation: 'card-authorize', cardId: card.id, amount: formatAmount(input.amount), assetId: card.settlementAssetId },
       async (span) => {
-        const declineCode = await this.declineReason(card, input.amount);
+        // JIT CONVERSION (§18), and it happens BEFORE the decision because the
+        // decision is denominated in funding units: the limit is a ceiling on
+        // what may leave the user's balance and the balance check is a read of
+        // that balance. A rate that cannot be got throws — nothing is written,
+        // nothing moves, and no decision is recorded, because nobody made one.
+        const quote = await this.quote(card, input.amount);
+        const fundingAmount = quote ? quote.fundingAmount : input.amount;
+        span.setAttribute('intafaced.card_funding_amount', formatAmount(fundingAmount));
+
+        const declineCode = await this.declineReason(card, fundingAmount);
 
         if (declineCode) {
           span.setAttribute('intafaced.card_decision', 'declined');
-          const declined = await this.recordDecision({ card, input, decision: 'declined', declineCode });
+          const declined = await this.recordDecision({ card, input, fundingAmount, quote, decision: 'declined', declineCode });
           await this.tellIssuer(card, declined, { decision: 'declined', reason: declineCode });
           return declined;
         }
 
-        const claimed = await this.recordDecision({ card, input, decision: 'approved', declineCode: null });
+        const claimed = await this.recordDecision({ card, input, fundingAmount, quote, decision: 'approved', declineCode: null });
 
         try {
           const posted = await this.ledger.post(
             recipes.withdrawHold({
               userId: card.userId,
               assetId: card.assetId,
-              amount: input.amount,
+              // THE CLAIMED ROW'S AMOUNT, not this call's quote. A second
+              // delivery that lost the decision insert has its own quote in
+              // hand and must not hold against it — the frozen rate is the one
+              // that won, and `claimed.amount` is what it converted to.
+              amount: claimed.amount,
               // The rail label IS the programme id, so the boundary account a
               // capture lands in is greppable back to the card that made it.
               rail: card.issuer,
@@ -372,13 +495,66 @@ export class CardService {
    * is a fact somebody can check afterwards, which is the property a decline
    * needs most: a user asking "why" gets a reason, not a probability.
    */
-  private async declineReason(card: CardRecord, amount: Amount): Promise<string | null> {
+  private async declineReason(card: CardRecord, fundingAmount: Amount): Promise<string | null> {
     if (card.status !== 'active') return 'bank.card_not_active';
-    if (amount > card.perAuthorizationLimit) return 'bank.card_limit_exceeded';
+    // THE CEILING IS IN THE FUNDING ASSET, and it is checked against the
+    // CONVERTED amount. A limit denominated in the asset the card draws on is a
+    // limit on what may leave the user's balance, which is the thing a ceiling
+    // protects; a settlement-denominated limit is a spending-tier concept and
+    // belongs with tiering, which is not built here.
+    if (fundingAmount > card.perAuthorizationLimit) return 'bank.card_limit_exceeded';
 
     const balance = (await this.ledger.balance(userAvailable(card.userId, card.assetId))).amount;
-    if (balance < amount) return 'ledger.insufficient_funds';
+    if (balance < fundingAmount) return 'ledger.insufficient_funds';
     return null;
+  }
+
+  // ── The rate ───────────────────────────────────────────────────────────────
+
+  /**
+   * Quote this spend, or return null because there is nothing to quote.
+   *
+   * A same-asset card short-circuits BEFORE the rate source is touched. That is
+   * not an optimisation — it is what keeps every card that existed before §18
+   * working in a deployment that has no rate adapter, which is every deployment.
+   */
+  private async quote(card: CardRecord, settlementAmount: Amount): Promise<ConversionQuote | null> {
+    if (card.settlementAssetId === card.assetId) return null;
+
+    return quoteConversion({
+      rates: this.rates,
+      fundingAssetId: card.assetId,
+      settlementAssetId: card.settlementAssetId,
+      settlementAmount,
+      previous: await this.lastAcceptedRate(card.id),
+      now: this.clock(),
+      policy: this.conversionPolicy,
+    });
+  }
+
+  /**
+   * The last rate this card converted at — what arms the deviation breaker.
+   *
+   * DECLINED authorisations count. Their rate passed the same gate; the decline
+   * was about the user's balance or the card's ceiling, not about the number. A
+   * breaker that only looked at approvals could be walked past by printing a
+   * rate through a series of spends too large to approve.
+   *
+   * `conversion.ts` decides whether the answer is recent enough to compare
+   * against, and treats an old one as no previous rate at all rather than
+   * refusing a genuine market at a till.
+   */
+  private async lastAcceptedRate(cardId: string): Promise<{ rate: Amount; acceptedAt: Date } | null> {
+    const rows = await this.sql<Array<{ rate: string; rate_as_of: Date }>>`
+      SELECT c.rate::text AS rate, c.rate_as_of
+        FROM bank.card_conversions c
+        JOIN bank.card_authorizations a ON a.id = c.authorization_id
+       WHERE a.card_id = ${cardId}
+       ORDER BY c.created_at DESC
+       LIMIT 1
+    `;
+    const row = rows[0];
+    return row ? { rate: parseAmount(row.rate), acceptedAt: row.rate_as_of } : null;
   }
 
   /**
@@ -429,36 +605,56 @@ export class CardService {
   async capture(input: { cardId: string; authorizationRef: string; amount: Amount }): Promise<CaptureResult> {
     const card = await this.card(input.cardId);
     const authorization = await this.requireOpenAuthorization(card, input.authorizationRef);
+    const conversion = authorization.conversion;
 
-    if (input.amount <= 0n || input.amount > authorization.amount) {
+    // The ceiling is checked in the MERCHANT'S currency, because the merchant's
+    // number is what a caller passes and what a clearing file contains.
+    const authorized = conversion ? conversion.settlementAmount : authorization.amount;
+    if (input.amount <= 0n || input.amount > authorized) {
       throw new BankError(
-        `Capture of ${formatAmount(input.amount)} exceeds the authorised ${formatAmount(authorization.amount)}`,
+        `Capture of ${formatAmount(input.amount)} exceeds the authorised ${formatAmount(authorized)}`,
+        'bank.card_capture_exceeds_authorization',
+      );
+    }
+
+    // THE FROZEN RATE, RE-READ — never re-quoted. `conversion.ts` sets out what
+    // a second quote here would do to the hold. `fundingFor` is monotonic in the
+    // settlement amount, so this can never exceed what was held and equals it
+    // exactly on a full capture, which is what lets the hold account reach zero.
+    const capturedFunding = conversion ? fundingFor(input.amount, conversion.rate) : input.amount;
+    if (capturedFunding > authorization.amount) {
+      // Unreachable by the monotonicity above, and asserted rather than assumed:
+      // if it ever fires, the alternative is a capture that overdraws a hold
+      // account, which the ledger would refuse anyway but only after the row
+      // claiming it was written.
+      throw new BankError(
+        `Capture converts to ${formatAmount(capturedFunding)} against a hold of ${formatAmount(authorization.amount)}`,
         'bank.card_capture_exceeds_authorization',
       );
     }
 
     return withMoneySpan(
       'bank.card.capture',
-      { operation: 'card-capture', cardId: card.id, amount: formatAmount(input.amount), assetId: card.assetId },
+      { operation: 'card-capture', cardId: card.id, amount: formatAmount(capturedFunding), assetId: card.assetId },
       async () => {
         const captureTxId = await this.settlement({
           authorization,
           sequence: 0,
           kind: 'capture',
-          amount: input.amount,
+          amount: capturedFunding,
           post: () =>
             this.ledger.post(
               recipes.withdrawSettle({
                 userId: card.userId,
                 assetId: card.assetId,
-                amount: input.amount,
+                amount: capturedFunding,
                 rail: card.issuer,
                 withdrawalId: authorization.id,
               }),
             ),
         });
 
-        const remainder = authorization.amount - input.amount;
+        const remainder = authorization.amount - capturedFunding;
         const reversalTxId =
           remainder > 0n
             ? await this.settlement({
@@ -479,15 +675,20 @@ export class CardService {
               })
             : null;
 
-        const cashback = await this.payCashback(card, authorization, input.amount);
+        // Cashback is a share of what actually left the book, in the asset the
+        // rewards pot is funded in — the funding asset. Rating the merchant's
+        // settlement number instead would pay a reward denominated in a currency
+        // this platform holds no pot for.
+        const cashback = await this.payCashback(card, authorization, capturedFunding);
 
         return {
           authorizationId: authorization.id,
-          captured: input.amount,
+          captured: capturedFunding,
           returned: remainder,
           captureLedgerTxId: captureTxId,
           reversalLedgerTxId: reversalTxId,
           cashback,
+          settlement: conversion ? { assetId: conversion.settlementAssetId, amount: input.amount, rate: conversion.rate } : null,
         };
       },
     );
@@ -728,7 +929,13 @@ export class CardService {
 
   async authorizationsOf(cardId: string): Promise<AuthorizationRecord[]> {
     const rows = await this.sql<AuthorizationRow[]>`
-      SELECT id, card_id, authorization_ref, amount, merchant_category, decision, decline_code, status, hold_ledger_tx_id, decided_at FROM bank.card_authorizations WHERE card_id = ${cardId} ORDER BY decided_at DESC
+      SELECT a.id, a.card_id, a.authorization_ref, a.amount, a.merchant_category, a.decision, a.decline_code, a.status,
+             a.hold_ledger_tx_id, a.decided_at,
+             c.settlement_asset_id, c.settlement_amount, c.funding_asset_id, c.funding_amount, c.rate, c.rate_quality, c.rate_as_of
+        FROM bank.card_authorizations a
+        LEFT JOIN bank.card_conversions c ON c.authorization_id = a.id
+       WHERE a.card_id = ${cardId}
+       ORDER BY a.decided_at DESC
     `;
     return rows.map(toAuthorization);
   }
@@ -745,15 +952,19 @@ export class CardService {
 
   private async cardByIssuerRef(issuer: string, issuerRef: string): Promise<CardRow | undefined> {
     const rows = await this.sql<CardRow[]>`
-      SELECT id, user_id, asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit FROM bank.cards WHERE issuer = ${issuer} AND issuer_ref = ${issuerRef}
+      SELECT id, user_id, asset_id, settlement_asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit FROM bank.cards WHERE issuer = ${issuer} AND issuer_ref = ${issuerRef}
     `;
     return rows[0];
   }
 
   private async authorizationByRef(cardId: string, authorizationRef: string): Promise<AuthorizationRecord | null> {
     const rows = await this.sql<AuthorizationRow[]>`
-      SELECT id, card_id, authorization_ref, amount, merchant_category, decision, decline_code, status, hold_ledger_tx_id, decided_at FROM bank.card_authorizations
-       WHERE card_id = ${cardId} AND authorization_ref = ${authorizationRef}
+      SELECT a.id, a.card_id, a.authorization_ref, a.amount, a.merchant_category, a.decision, a.decline_code, a.status,
+             a.hold_ledger_tx_id, a.decided_at,
+             c.settlement_asset_id, c.settlement_amount, c.funding_asset_id, c.funding_amount, c.rate, c.rate_quality, c.rate_as_of
+        FROM bank.card_authorizations a
+        LEFT JOIN bank.card_conversions c ON c.authorization_id = a.id
+       WHERE a.card_id = ${cardId} AND a.authorization_ref = ${authorizationRef}
     `;
     const row = rows[0];
     return row ? toAuthorization(row) : null;
@@ -801,21 +1012,60 @@ export class CardService {
     return authorization;
   }
 
+  /**
+   * The decision and the rate it was taken at, in ONE database transaction.
+   *
+   * THE ATOMICITY IS THE FREEZE. Two deliveries of one authorisation race on
+   * `unique(card_id, authorization_ref)`; the loser gets zero rows back, writes
+   * no conversion row, and reads the winner's decision. So there is exactly one
+   * rate per purchase, it belongs to the decision that actually stands, and the
+   * two can never disagree about what a spend cost.
+   *
+   * Writing them separately would have been the bug: the loser's quote could
+   * land in `card_conversions` first, and the hold, the capture and the
+   * remainder would then be computed from a rate no decision was taken at.
+   */
   private async recordDecision(input: {
     card: CardRecord;
-    input: { authorizationRef: string; amount: Amount; merchantCategory?: string };
+    input: { authorizationRef: string; merchantCategory?: string };
+    fundingAmount: Amount;
+    quote: ConversionQuote | null;
     decision: 'approved' | 'declined';
     declineCode: string | null;
   }): Promise<AuthorizationRecord> {
-    await this.sql`
-      INSERT INTO bank.card_authorizations (card_id, authorization_ref, amount, merchant_category, decision, decline_code, status)
-      VALUES (
-        ${input.card.id}, ${input.input.authorizationRef}, ${formatAmount(input.input.amount)}::numeric,
-        ${input.input.merchantCategory ?? null}, ${input.decision}, ${input.declineCode},
-        ${input.decision === 'approved' ? 'pending' : 'rejected'}
-      )
-      ON CONFLICT (card_id, authorization_ref) DO NOTHING
-    `;
+    await transaction(
+      this.sql,
+      async (tx) => {
+        const claimed = await tx<Array<{ id: string }>>`
+          INSERT INTO bank.card_authorizations (card_id, authorization_ref, amount, merchant_category, decision, decline_code, status)
+          VALUES (
+            ${input.card.id}, ${input.input.authorizationRef}, ${formatAmount(input.fundingAmount)}::numeric,
+            ${input.input.merchantCategory ?? null}, ${input.decision}, ${input.declineCode},
+            ${input.decision === 'approved' ? 'pending' : 'rejected'}
+          )
+          ON CONFLICT (card_id, authorization_ref) DO NOTHING
+          RETURNING id
+        `;
+
+        const row = claimed[0];
+        // Lost the race, or a redelivery that slipped past the read above. The
+        // winner's rate is the rate; this call's quote is discarded unwritten.
+        if (!row || !input.quote) return;
+
+        await tx`
+          INSERT INTO bank.card_conversions (
+            authorization_id, settlement_asset_id, settlement_amount, funding_asset_id, funding_amount, rate, rate_quality, rate_as_of
+          )
+          VALUES (
+            ${row.id}, ${input.quote.settlementAssetId}, ${formatAmount(input.quote.settlementAmount)}::numeric,
+            ${input.quote.fundingAssetId}, ${formatAmount(input.quote.fundingAmount)}::numeric,
+            ${formatAmount(input.quote.rate)}::numeric, ${input.quote.quality}, ${input.quote.rateAsOf}
+          )
+        `;
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+
     return (await this.authorizationByRef(input.card.id, input.input.authorizationRef))!;
   }
 
@@ -905,6 +1155,7 @@ interface CardRow {
   id: string;
   user_id: string;
   asset_id: string;
+  settlement_asset_id: string;
   issuer: string;
   simulated: boolean;
   issuer_ref: string;
@@ -925,6 +1176,14 @@ interface AuthorizationRow {
   status: AuthorizationRecord['status'];
   hold_ledger_tx_id: string | null;
   decided_at: Date;
+  /** All NULL together, from the LEFT JOIN, when this card converts nothing. */
+  settlement_asset_id: string | null;
+  settlement_amount: string | null;
+  funding_asset_id: string | null;
+  funding_amount: string | null;
+  rate: string | null;
+  rate_quality: MarkQuality | null;
+  rate_as_of: Date | null;
 }
 
 function toCard(row: CardRow): CardRecord {
@@ -932,6 +1191,7 @@ function toCard(row: CardRow): CardRecord {
     id: row.id,
     userId: row.user_id,
     assetId: row.asset_id,
+    settlementAssetId: row.settlement_asset_id,
     issuer: row.issuer,
     simulated: row.simulated,
     issuerRef: row.issuer_ref,
@@ -954,5 +1214,37 @@ function toAuthorization(row: AuthorizationRow): AuthorizationRecord {
     status: row.status,
     holdLedgerTxId: row.hold_ledger_tx_id,
     decidedAt: row.decided_at,
+    conversion: toConversion(row),
+  };
+}
+
+/**
+ * The conversion, or null because there wasn't one.
+ *
+ * Every column is required to be present together. A row with a rate and no
+ * settlement amount is not a partially-known conversion to be patched up with
+ * defaults — it is a shape the schema's NOT NULLs make impossible, and treating
+ * it as recoverable here would hide the day one of them stopped being true.
+ */
+function toConversion(row: AuthorizationRow): ConversionRecord | null {
+  if (
+    row.settlement_asset_id === null ||
+    row.settlement_amount === null ||
+    row.funding_asset_id === null ||
+    row.funding_amount === null ||
+    row.rate === null ||
+    row.rate_quality === null ||
+    row.rate_as_of === null
+  ) {
+    return null;
+  }
+  return {
+    settlementAssetId: row.settlement_asset_id,
+    settlementAmount: parseAmount(row.settlement_amount),
+    fundingAssetId: row.funding_asset_id,
+    fundingAmount: parseAmount(row.funding_amount),
+    rate: parseAmount(row.rate),
+    quality: row.rate_quality,
+    rateAsOf: row.rate_as_of,
   };
 }

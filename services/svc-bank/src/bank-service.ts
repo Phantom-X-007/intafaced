@@ -147,7 +147,16 @@ export {
   type CardServiceOptions,
   type CaptureResult,
   type CashbackOutcome,
+  type ConversionRecord,
 } from './cards/card-service.js';
+export {
+  DEFAULT_CARD_CONVERSION_POLICY,
+  fundingFor,
+  noConversionRates,
+  quoteConversion,
+  type CardConversionPolicy,
+  type ConversionQuote,
+} from './cards/conversion.js';
 export { rampProgrammeFor, BANK_CRYPTO_LEDGER_RAIL, RAMP_SETTINGS, type RampProgramme, type RampSetting } from './ramps/rails.js';
 export { type OnrampRecord, type OfframpRecord, type RampKind, type RampServiceOptions } from './ramps/ramp-service.js';
 export { categorise, SPEND_CATEGORIES, type SpendCategory, type SpendSummary } from './analytics/spend.js';

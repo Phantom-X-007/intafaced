@@ -15,7 +15,9 @@ import {
   withdrawalHoldAccount,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import type { MarkQuality, PriceSource, QuotedMark } from '../loans/prices.js';
 import { CardService } from './card-service.js';
+import { DEFAULT_CARD_CONVERSION_POLICY, fundingFor, noConversionRates, quoteConversion } from './conversion.js';
 import { cardSim, cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
 
 /**
@@ -51,6 +53,7 @@ const BANK_INIT = readFileSync(join(here, '..', '..', 'drizzle', '0000_bank_init
 const POSITION_PENDING = readFileSync(join(here, '..', '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
 const LOANS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
 const CARDS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0003_bank_cards.sql'), 'utf8');
+const JIT_CONVERSION = readFileSync(join(here, '..', '..', 'drizzle', '0007_card_jit_conversion.sql'), 'utf8');
 
 const CARDS_DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
@@ -137,6 +140,138 @@ describe('no issuer configured means no card programme, and it refuses by name',
   });
 });
 
+describe('JIT conversion arithmetic (§18) — no rate is invented, and the rounding lands on the user', () => {
+  it('converts a settlement amount into funding units at the quoted rate', () => {
+    // 100 of the settlement asset at 50,000 settlement-per-funding = 0.002.
+    expect(formatAmount(fundingFor(amt('100'), amt('50000')))).toBe('0.002');
+    expect(formatAmount(fundingFor(amt('50000'), amt('50000')))).toBe('1');
+  });
+
+  /**
+   * CEIL, and the direction is deliberate.
+   *
+   * The rounding unit has to land on somebody. `cashbackOn` floors so a reward
+   * is never larger than the fees behind it; this ceils so the units handed to a
+   * settlement rail are never fewer than the purchase cost. Both round against
+   * the platform's optimism, which is the only rule that does not leak.
+   */
+  it('rounds UP, so a spend never leaves the rail one unit short', () => {
+    expect(fundingFor(1n, amt('3'))).toBe(1n);
+    expect(formatAmount(fundingFor(amt('10'), amt('3')))).toBe('3.333333333333333334');
+  });
+
+  /**
+   * THE PROPERTY THE HOLD ACCOUNT DEPENDS ON.
+   *
+   * A partial capture converts at the same frozen rate the authorisation did. If
+   * that could ever produce MORE funding units than the whole authorisation did,
+   * a capture would overdraw a hold account containing only the hold. It cannot,
+   * because this is monotonic — and it is EQUAL at the top, which is what makes
+   * a full capture leave that account at exactly zero.
+   */
+  it('is monotonic in the settlement amount, and exact at the full amount', () => {
+    const rate = amt('1234.5678');
+    const whole = fundingFor(amt('999.99'), rate);
+    for (const part of ['0.01', '1', '250', '999.98']) {
+      expect(fundingFor(amt(part), rate) <= whole).toBe(true);
+    }
+    expect(fundingFor(amt('999.99'), rate)).toBe(whole);
+  });
+
+  it('refuses a non-positive rate rather than treating it as a free card', () => {
+    expect(() => fundingFor(amt('100'), 0n)).toThrow(expect.objectContaining({ code: 'bank.mark_invalid' }));
+    expect(() => fundingFor(amt('100'), -1n)).toThrow(expect.objectContaining({ code: 'bank.mark_invalid' }));
+  });
+});
+
+describe('the default rate source has no rates in it, and that is the whole point', () => {
+  /**
+   * THE SIBLING OF `noCardIssuer`.
+   *
+   * There is no FX source in this platform. The shell deleted the one rate it
+   * had invented, for the reason that a fiat conversion computed from a rate we
+   * made up is a price and not a decoration. So the default returns nothing, and
+   * a card that needs a conversion refuses by name rather than quietly
+   * converting at a number somebody typed once.
+   */
+  it('returns no mark for any asset, in any quote asset', async () => {
+    expect((await noConversionRates.marks(['BTC', 'USDT', 'IFC'], 'USDT')).size).toBe(0);
+    // Not even the identity case. A same-asset card never asks, so answering
+    // "one" here could only ever serve a caller that had lost track of which
+    // asset it was converting.
+    expect((await noConversionRates.marks(['USDT'], 'USDT')).size).toBe(0);
+  });
+
+  it('makes quoteConversion refuse by name rather than return a number', async () => {
+    await expect(
+      quoteConversion({
+        rates: noConversionRates,
+        fundingAssetId: 'BTC',
+        settlementAssetId: 'USDT',
+        settlementAmount: amt('100'),
+        previous: null,
+        now: new Date('2026-08-08T12:00:00Z'),
+        policy: DEFAULT_CARD_CONVERSION_POLICY,
+      }),
+    ).rejects.toMatchObject({ code: 'bank.mark_missing' });
+  });
+
+  /**
+   * `last` IS NOT A BASIS FOR TAKING SOMEBODY'S MONEY.
+   *
+   * The same judgement `DEFAULT_MARK_POLICY` makes about liquidations, and for a
+   * sharper reason: a printed rate here does not mis-value a position, it takes
+   * the wrong number of units out of a balance and hands them to a rail.
+   */
+  it('refuses a last-trade rate and a stale rate, both by name', async () => {
+    const now = new Date('2026-08-08T12:00:00Z');
+    const quote = (quality: MarkQuality, asOf: Date) =>
+      quoteConversion({
+        rates: { marks: async () => new Map([['BTC', { assetId: 'BTC', price: amt('50000'), asOf, quality }]]) },
+        fundingAssetId: 'BTC',
+        settlementAssetId: 'USDT',
+        settlementAmount: amt('100'),
+        previous: null,
+        now,
+        policy: DEFAULT_CARD_CONVERSION_POLICY,
+      });
+
+    await expect(quote('last', now)).rejects.toMatchObject({ code: 'bank.mark_unusable' });
+    await expect(quote('mid', new Date(now.getTime() - 120_000))).rejects.toMatchObject({ code: 'bank.mark_unusable' });
+    // And the one that works, so the two above are refusals and not a broken harness.
+    expect((await quote('mid', now)).fundingAmount).toBe(amt('0.002'));
+  });
+
+  /**
+   * THE BREAKER, AND THE WINDOW THAT ARMS IT.
+   *
+   * A rate that moved further than a real market does between two spends is
+   * refused. But a card may not be used for a month, and comparing today's
+   * swipe against a rate from March would refuse a genuine market at a till —
+   * so outside the lookback the previous rate is not a comparison at all.
+   */
+  it('trips on a rate that jumped since the last spend, unless that spend is too old to compare with', async () => {
+    const now = new Date('2026-08-08T12:00:00Z');
+    const quote = (previous: { rate: bigint; acceptedAt: Date } | null) =>
+      quoteConversion({
+        rates: { marks: async () => new Map([['BTC', { assetId: 'BTC', price: amt('25000'), asOf: now, quality: 'mid' }]]) },
+        fundingAssetId: 'BTC',
+        settlementAssetId: 'USDT',
+        settlementAmount: amt('100'),
+        previous,
+        now,
+        policy: DEFAULT_CARD_CONVERSION_POLICY,
+      });
+
+    // Halved since ten minutes ago — 5,000bps against a 2,000bps breaker.
+    await expect(quote({ rate: amt('50000'), acceptedAt: new Date(now.getTime() - 600_000) })).rejects.toMatchObject({
+      code: 'bank.mark_unusable',
+    });
+    // Same move, but the comparison is a day old and means nothing.
+    expect((await quote({ rate: amt('50000'), acceptedAt: new Date(now.getTime() - 86_400_000) })).rate).toBe(amt('25000'));
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2 · THE MONEY PATH — real Postgres, real ledger postings.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -151,7 +286,7 @@ if (!available) {
   const db: TestDatabase = await createTestDatabase({
     service: 'bank',
     url: CARDS_DB_URL,
-    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION, CARDS_MIGRATION],
+    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION, CARDS_MIGRATION, JIT_CONVERSION],
   });
   const sql = db.sql;
 
@@ -165,7 +300,7 @@ if (!available) {
     let cards: CardService;
 
     beforeEach(async () => {
-      await sql`TRUNCATE bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards RESTART IDENTITY CASCADE`;
+      await sql`TRUNCATE bank.card_cashback, bank.card_settlements, bank.card_conversions, bank.card_authorizations, bank.cards RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
       cards = new CardService(sql, ledger, { issuer: cardSim() });
     });
@@ -865,6 +1000,287 @@ if (!available) {
       expect(auth.decision).toBe('approved');
       expect(await heldOn(auth.id)).toBe('10');
       expect(ledger.totalsByAsset().USDT).toBe('0');
+    });
+
+    // ── JIT conversion (§18) ─────────────────────────────────────────────────
+    //
+    // A card funded in BTC and charged in USDT. Every posting below is still a
+    // BTC posting — available → hold → rail — because a conversion decides the
+    // SIZE of one movement and is not a second movement. If any of these ever
+    // starts touching a second asset on our book, that is a second money book
+    // and `totalsByAsset` is what will say so.
+
+    describe('a card charged in one asset and funded from another', () => {
+      const NOW = new Date('2026-08-08T12:00:00Z');
+
+      /** A rate feed whose answer, quality and timestamp a test can move under the service. */
+      function movableRates(initial: { rate: string; quality?: MarkQuality; asOf?: Date }) {
+        const state = { rate: initial.rate, quality: initial.quality ?? ('mid' as MarkQuality), asOf: initial.asOf ?? NOW, calls: 0 };
+        const source: PriceSource = {
+          marks: async (assetIds) => {
+            state.calls += 1;
+            const out = new Map<string, QuotedMark>();
+            for (const assetId of assetIds) {
+              out.set(assetId, { assetId, price: amt(state.rate), asOf: state.asOf, quality: state.quality });
+            }
+            return out;
+          },
+        };
+        return { source, state };
+      }
+
+      const converting = (rates: PriceSource) => new CardService(sql, ledger, { issuer: cardSim(), rates, clock: () => NOW });
+
+      const issueConverting = async (service: CardService, limit = '1') =>
+        service.issue({
+          cardId: randomUUID(),
+          userId: HOLDER,
+          assetId: 'BTC',
+          settlementAssetId: 'USDT',
+          perAuthorizationLimit: amt(limit),
+        });
+
+      /**
+       * THE REFUSAL THIS SLICE EXISTS FOR.
+       *
+       * No rate source is configured — which is the state of every deployment,
+       * because this platform has no FX feed. The authorisation does not become
+       * a decline: a decline is an answer ("your money is not there") and
+       * nobody answered. Nothing is written and nothing moves.
+       */
+      it('refuses by name when no rate can be got, and records no decision at all', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        // Default options: `noConversionRates`. Not a mock — the shipping default.
+        const service = new CardService(sql, ledger, { issuer: cardSim() });
+        const card = await issueConverting(service);
+
+        await expect(service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') })).rejects.toMatchObject({
+          code: 'bank.mark_missing',
+        });
+
+        expect(await service.authorizationsOf(card.id)).toEqual([]);
+        const conversions = await sql<Array<{ count: string }>>`SELECT count(*)::text AS count FROM bank.card_conversions`;
+        expect(conversions[0]!.count).toBe('0');
+        // The user still has every unit they had. A refusal moves nothing.
+        expect(await availableOf(HOLDER, 'BTC')).toBe('1');
+        expect(ledger.totalsByAsset().BTC).toBe('0');
+      });
+
+      it('refuses a stale rate rather than spending on a memory', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const { source } = movableRates({ rate: '50000', asOf: new Date(NOW.getTime() - 120_000) });
+        const service = converting(source);
+        const card = await issueConverting(service);
+
+        await expect(service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') })).rejects.toMatchObject({
+          code: 'bank.mark_unusable',
+        });
+        expect(await availableOf(HOLDER, 'BTC')).toBe('1');
+      });
+
+      it('holds the CONVERTED amount in the funding asset, and nothing in the settlement asset', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const { source } = movableRates({ rate: '50000' });
+        const service = converting(source);
+        const card = await issueConverting(service);
+
+        const auth = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+        expect(auth.decision).toBe('approved');
+        // 100 USDT at 50,000 USDT per BTC.
+        expect(formatAmount(auth.amount)).toBe('0.002');
+        expect(await heldOn(auth.id, HOLDER, 'BTC')).toBe('0.002');
+        expect(await availableOf(HOLDER, 'BTC')).toBe('0.998');
+
+        // The frozen quote, readable beside the decision.
+        expect(auth.conversion).toMatchObject({ settlementAssetId: 'USDT', fundingAssetId: 'BTC', quality: 'mid' });
+        expect(formatAmount(auth.conversion!.settlementAmount)).toBe('100');
+        expect(formatAmount(auth.conversion!.rate)).toBe('50000');
+
+        // NO SECOND ASSET MOVED. The settlement currency never touches our book;
+        // the counterparty that hands it to the merchant is `socket.live-issuer`.
+        expect(ledger.totalsByAsset().BTC).toBe('0');
+        expect(ledger.totalsByAsset().USDT).toBeUndefined();
+      });
+
+      /**
+       * THE BUG THIS DESIGN EXISTS TO MAKE IMPOSSIBLE.
+       *
+       * The rate moves 40% between the swipe and the clearing. A capture that
+       * re-quoted would settle a different number of funding units than were
+       * held: too many overdraws the hold account, too few leaves it above zero
+       * with a silently wrong remainder. Either way the user is charged a rate
+       * nobody showed them, days after they agreed a price at a till.
+       */
+      it('captures at the rate the authorisation was decided on, not the rate at capture time', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const { source, state } = movableRates({ rate: '50000' });
+        const service = converting(source);
+        const card = await issueConverting(service);
+
+        const auth = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+        expect(formatAmount(auth.amount)).toBe('0.002');
+
+        // The market moves hard before the clearing file arrives.
+        state.rate = '30000';
+        const callsBefore = state.calls;
+
+        const result = await service.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+        // The feed was not asked again. Had it been, this would be 0.003334.
+        expect(state.calls).toBe(callsBefore);
+        expect(formatAmount(result.captured)).toBe('0.002');
+        expect(formatAmount(result.returned)).toBe('0');
+        expect(result.settlement).toMatchObject({ assetId: 'USDT' });
+        expect(formatAmount(result.settlement!.rate)).toBe('50000');
+
+        // THE INVARIANT, read off the account rather than added up from rows.
+        expect(await heldOn(auth.id, HOLDER, 'BTC')).toBe('0');
+        expect(ledger.totalsByAsset().BTC).toBe('0');
+      });
+
+      it('splits a partial capture at the frozen rate, and the hold still ends at zero', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const { source, state } = movableRates({ rate: '50000' });
+        const service = converting(source);
+        const card = await issueConverting(service);
+
+        const auth = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+        state.rate = '10';
+
+        // The merchant clears 40 of the 100 they authorised.
+        const result = await service.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('40') });
+
+        expect(formatAmount(result.captured)).toBe('0.0008');
+        expect(formatAmount(result.returned)).toBe('0.0012');
+        expect(await heldOn(auth.id, HOLDER, 'BTC')).toBe('0');
+        expect(await availableOf(HOLDER, 'BTC')).toBe('0.9992');
+        expect(ledger.totalsByAsset().BTC).toBe('0');
+      });
+
+      it('refuses a capture larger than the merchant authorised, in the merchant’s own currency', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const service = converting(movableRates({ rate: '50000' }).source);
+        const card = await issueConverting(service);
+        await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+        await expect(service.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100.01') })).rejects.toMatchObject({
+          code: 'bank.card_capture_exceeds_authorization',
+        });
+      });
+
+      /**
+       * IDEMPOTENCY ACROSS A RATE MOVE.
+       *
+       * An issuer redelivers an authorisation and the market has moved in
+       * between. The second delivery must return the FIRST decision at the FIRST
+       * rate — one hold, one conversion row, one purchase. A service that
+       * re-quoted on redelivery would hold twice, at two different sizes, for
+       * one swipe.
+       */
+      it('re-quotes nothing on a redelivered authorisation, and holds exactly once', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const { source, state } = movableRates({ rate: '50000' });
+        const service = converting(source);
+        const card = await issueConverting(service);
+
+        const first = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+        state.rate = '1000';
+        const second = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+        expect(second.id).toBe(first.id);
+        expect(formatAmount(second.amount)).toBe('0.002');
+        expect(formatAmount(second.conversion!.rate)).toBe('50000');
+        // ONE hold, not two, and one frozen quote.
+        expect(await heldOn(first.id, HOLDER, 'BTC')).toBe('0.002');
+        expect(await availableOf(HOLDER, 'BTC')).toBe('0.998');
+        const rows = await sql<Array<{ count: string }>>`SELECT count(*)::text AS count FROM bank.card_conversions`;
+        expect(rows[0]!.count).toBe('1');
+        expect(ledger.totalsByAsset().BTC).toBe('0');
+      });
+
+      /**
+       * THE CEILING IS ON WHAT LEAVES THE BALANCE.
+       *
+       * Checked against the CONVERTED figure, because a limit denominated in the
+       * asset the card draws on is a limit on what can leave that balance. A
+       * settlement-denominated tier limit is a different thing and is not built.
+       */
+      it('declines on the converted amount when it breaches the funding-asset ceiling', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const service = converting(movableRates({ rate: '50000' }).source);
+        // 0.001 BTC ceiling; 100 USDT converts to 0.002.
+        const card = await issueConverting(service, '0.001');
+
+        const auth = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+        expect(auth.decision).toBe('declined');
+        expect(auth.declineCode).toBe('bank.card_limit_exceeded');
+        // A decline is a decision and it gets a row — with the rate it was taken
+        // at, so "why was I declined" can be answered in the merchant's numbers.
+        expect(formatAmount(auth.conversion!.rate)).toBe('50000');
+        expect(await availableOf(HOLDER, 'BTC')).toBe('1');
+        expect(ledger.totalsByAsset().BTC).toBe('0');
+      });
+
+      /**
+       * A CARD THAT CONVERTS NOTHING NEVER ASKS.
+       *
+       * This is what keeps every card that existed before §18 working in a
+       * deployment with no rate adapter — which is every deployment. The source
+       * below throws if it is touched at all.
+       */
+      it('consults no rate source for a card charged in the asset it draws on', async () => {
+        await fund(HOLDER, 'USDT', '500');
+        const exploding: PriceSource = {
+          marks: async () => {
+            throw new Error('a same-asset card must never reach the rate source');
+          },
+        };
+        const service = new CardService(sql, ledger, { issuer: cardSim(), rates: exploding });
+        const card = await service.issue({ cardId: randomUUID(), userId: HOLDER, assetId: 'USDT', perAuthorizationLimit: amt('500') });
+
+        expect(card.settlementAssetId).toBe('USDT');
+        const auth = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+        expect(auth.decision).toBe('approved');
+        expect(auth.conversion).toBeNull();
+        expect(await heldOn(auth.id)).toBe('100');
+
+        const result = await service.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+        expect(result.settlement).toBeNull();
+        expect(await heldOn(auth.id)).toBe('0');
+        expect(ledger.totalsByAsset().USDT).toBe('0');
+      });
+
+      /**
+       * DOCTRINE §0.6, ON THE PATH THAT MOST WANTED A SECOND BOOK.
+       *
+       * A conversion is where a service starts believing it owes the user a swap
+       * and opens a table to remember it in. This asserts the opposite from the
+       * outside: after a full converted spend the books close, and the only
+       * balance-shaped fact about the card is a ledger account.
+       */
+      it('moves value only through the ledger, and holds no conversion balance anywhere', async () => {
+        await fund(HOLDER, 'BTC', '1');
+        const service = converting(movableRates({ rate: '50000' }).source);
+        const card = await issueConverting(service);
+        const auth = await service.authorize({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+        await service.capture({ cardId: card.id, authorizationRef: 'auth-1', amount: amt('100') });
+
+        expect(ledger.totalsByAsset().BTC).toBe('0');
+        expect(await heldOn(auth.id, HOLDER, 'BTC')).toBe('0');
+        expect(await availableOf(HOLDER, 'BTC')).toBe('0.998');
+
+        // Nothing on the conversion row accumulates or is revised after insert.
+        const columns = await sql<Array<{ column_name: string }>>`
+          SELECT column_name FROM information_schema.columns
+           WHERE table_schema = 'bank' AND table_name = 'card_conversions'
+        `;
+        const names = columns.map((c) => c.column_name);
+        expect(names.filter((n) => /balance|available|held|outstanding|running|total/i.test(n))).toEqual([]);
+        expect(names).not.toContain('updated_at');
+      });
     });
   });
 }
