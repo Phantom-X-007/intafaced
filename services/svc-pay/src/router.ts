@@ -651,6 +651,25 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         ),
 
       /**
+       * Merchant fleet list (ops truth). Read-only — no freeze, no payout.
+       */
+      list: scopedProcedure('pay:read', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            status: z.enum(['pending', 'posted', 'paid_out', 'failed']).optional(),
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
+        .output(z.array(settlementView))
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement');
+            return (await pay.listSettlements(input)).map(toSettlementOut);
+          }),
+        ),
+
+      /**
        * G3 — unstick a pending freeze so payments can enter a later window.
        * Moves no ledger value. Requires write (ops / merchant owner).
        */
