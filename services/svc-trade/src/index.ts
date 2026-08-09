@@ -18,6 +18,7 @@ import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
+import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
@@ -126,6 +127,23 @@ if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
 
 // Futures residual jobs — default OFF. Rate book is process-local for public REST peeks.
 // Marks: venue fabric preferred when configured, else matching depth mid — never invent.
+//
+// Funding magnitude bound (D2 / C12): when funding markets are listed the max
+// abs rate is REQUIRED at boot. No product default — unset max refuses
+// publish + settle. See futures/funding-rate-bound.ts.
+const fundingMarketIds = parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS);
+const fundingMaxAbsRate = resolveFundingMaxAbsRateForBoot({
+  fundingMarketIds,
+  maxAbsRateRaw: env.TRADE_FUTURES_FUNDING_MAX_ABS_RATE,
+});
+if (fundingMaxAbsRate) {
+  app.log.info({ fundingMaxAbsRate }, 'futures funding |rate| bound is configured');
+} else if (fundingMarketIds.length === 0) {
+  app.log.info(
+    'TRADE_FUTURES_FUNDING_MAX_ABS_RATE unset — funding markets empty; publish/settle still refuse rates until a max is set (no invented ceiling)',
+  );
+}
+
 const futuresJobs = startFuturesJobs({
   sql,
   ledger,
@@ -136,7 +154,8 @@ const futuresJobs = startFuturesJobs({
     enabled: env.TRADE_FUTURES_JOBS_ENABLED,
     liqIntervalMs: env.TRADE_FUTURES_LIQ_INTERVAL_MS,
     fundingIntervalMs: env.TRADE_FUTURES_FUNDING_INTERVAL_MS,
-    fundingMarketIds: parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS),
+    fundingMarketIds,
+    fundingMaxAbsRate,
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
 });
@@ -327,9 +346,11 @@ registerPublicRest(app, {
 });
 
 // S2S: oracle/ops publish funding rates (public GET only reflects published).
+// maxAbsRate gates absurd magnitudes before the rate book accepts them.
 registerInternalFundingRate(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   publishFundingRate: (entry) => futuresJobs.publishFundingRate(entry),
+  maxAbsRate: fundingMaxAbsRate,
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.

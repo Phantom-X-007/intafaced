@@ -334,10 +334,14 @@ services:
       # plus a restart.
       #
       # It does NOT turn futures on as a product. Funding still needs
-      # TRADE_FUTURES_JOBS_ENABLED and an explicit market list; realised profit
-      # still needs TRADE_FUTURES_PROFIT_SOURCE, which has no default on purpose
-      # (see below). This flag governs orderability and nothing else.
+      # TRADE_FUTURES_JOBS_ENABLED, an explicit market list, and
+      # TRADE_FUTURES_FUNDING_MAX_ABS_RATE (no product default — D2 residual);
+      # realised profit still needs TRADE_FUTURES_PROFIT_SOURCE, which has no
+      # default on purpose (see below). This flag governs orderability only.
       TRADE_FUTURES_ENABLED: ${TRADE_FUTURES_ENABLED:-false}
+      # Absolute max |period funding rate| — empty refuses publish/settle.
+      # Required when funding market ids are non-empty. No invented ceiling.
+      TRADE_FUTURES_FUNDING_MAX_ABS_RATE: ${TRADE_FUTURES_FUNDING_MAX_ABS_RATE:-}
       # THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM — its balance is the
       # ceiling, and a payout that would exceed it refuses rather than
       # overdrawing (docs/adr/2026-08-05-futures-risk-and-mark-law.md).

@@ -1036,6 +1036,7 @@ if (!available) {
         positions: sqlFundingPositionLoader(sql),
         periods: sqlFundingPeriodStore(sql),
         margins: sqlFundingMarginApplier(sql),
+        maxAbsRate: '1', // test fixture only — not product law (D2)
         ledger,
         now: () => NOW,
       },

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fixedFundingRateSource, isRateFresh, memoryFundingRateBook, periodIdFor } from './funding-rate-source.js';
+
+/** Test-only magnitude bound — NOT product law (D2). */
+const FIXTURE_FUNDING_MAX_ABS = '1';
 import { memoryFundingMarginApplier, memoryFundingPeriodStore, runFundingTick } from './funding-tick.js';
 import { parseAmount as amt, type PostRequest } from '@intafaced/ledger-client';
 import type { FundingOpenPosition } from './funding-settlement.js';
@@ -123,6 +126,7 @@ describe('integration: rate book → funding tick', () => {
         },
         periods: memoryFundingPeriodStore(),
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger: {
           async post(req) {
             posts.push(req);
@@ -161,6 +165,7 @@ describe('integration: rate book → funding tick', () => {
         },
         periods: memoryFundingPeriodStore(),
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger: {
           async post(req) {
             posts.push(req);
