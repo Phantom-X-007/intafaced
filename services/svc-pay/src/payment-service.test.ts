@@ -1363,7 +1363,7 @@ if (!available) {
       const paid = await pay.payoutSettlement({
         settlementId: settlement.id,
         railId: 'crypto-native',
-        destination: { kind: 'crypto', ref: '0xg4finish' },
+        destination: { kind: 'crypto', ref: '0x000000000000000000000000000000000000dEaD' },
       });
       expect(paid.status).toBe('paid_out');
       expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
@@ -1383,7 +1383,7 @@ if (!available) {
         pay.payoutSettlement({
           settlementId: settlement2.id,
           railId: 'crypto-native',
-          destination: { kind: 'crypto', ref: '0xg4blocked' },
+          destination: { kind: 'crypto', ref: '0x0000000000000000000000000000000000000001' },
         }),
       ).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
       expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
