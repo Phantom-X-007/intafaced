@@ -165,7 +165,11 @@ export class PrivateOrderHub {
           this.#evictions++;
           sub.closed = true;
           this.#subscriptions.delete(sub);
-          sub.sink.close(1008, 'client too slow');
+          // Align with depth/trade: lag is try-later (1013), not policy (1008).
+          sub.sink.close(
+            CLOSE_TRY_LATER,
+            `slow consumer: outbound buffer over ${this.#options.highWaterBytes} bytes for ${sub.lagTicks} ticks`,
+          );
           this.#log.warn({ userId: sub.userId }, 'ws-private: evicted lagging client');
         }
         continue;
