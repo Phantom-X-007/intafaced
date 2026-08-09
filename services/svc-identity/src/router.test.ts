@@ -333,6 +333,15 @@ describe('kyc.submit', () => {
     expect(stub.calls.filter((c) => c.method === 'submitKyc')).toHaveLength(0);
   });
 
+  it('strips a client-supplied providerRef — free text must not enter the pointer column', async () => {
+    const api = await caller(['identity:write']);
+    // Zod object schema strips unknown keys; body DOB/name fragments never reach submitKyc.
+    await api.kyc.submit({ tier: 'basic', jurisdiction: 'DE', providerRef: 'DOB:1990-01-01' } as never);
+    const call = stub.calls.find((c) => c.method === 'submitKyc')!;
+    expect(call.args[0]).toEqual({ userId: USER, tier: 'basic', jurisdiction: 'DE' });
+    expect(call.args[0]).not.toHaveProperty('providerRef');
+  });
+
   it('normalises the jurisdiction, because the matrix is keyed on upper case', async () => {
     const api = await caller(['identity:write']);
     await api.kyc.submit({ tier: 'basic', jurisdiction: 'de' });
