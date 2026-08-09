@@ -33,6 +33,18 @@
     "./fiat": {
       "types": "./dist/fiat.d.ts",
       "default": "./dist/fiat.js"
+    },
+    "./network-signal": {
+      "types": "./dist/network-signal.d.ts",
+      "default": "./dist/network-signal.js"
+    },
+    "./compliance-queue": {
+      "types": "./dist/compliance-queue.d.ts",
+      "default": "./dist/compliance-queue.js"
+    },
+    "./freeze-authority": {
+      "types": "./dist/freeze-authority.d.ts",
+      "default": "./dist/freeze-authority.js"
     }
   },
   "scripts": {
