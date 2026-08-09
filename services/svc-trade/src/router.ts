@@ -276,8 +276,11 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
               qty: decimal,
               price: decimal.optional(),
               timeInForce: timeInForceSchema.optional(),
-              /** Strongly recommended. Without one, a retry opens a second order. */
-              clientOrderId: z.string().min(1).max(64).optional(),
+              /**
+               * Required. Without one a retry opens a second hold under a fresh
+               * order id — the money-path equivalent of double-spend on a timeout.
+               */
+              clientOrderId: z.string().min(1).max(64),
               subAccountId: z.string().uuid().optional(),
             })
             .superRefine((order, ctx) => {

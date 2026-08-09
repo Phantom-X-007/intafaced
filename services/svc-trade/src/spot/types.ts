@@ -171,6 +171,8 @@ export type TradeErrorCode =
   | 'trade.invalid_qty'
   | 'trade.invalid_price'
   | 'trade.below_min_notional'
+  /** Place without clientOrderId — retry would open a second hold. */
+  | 'trade.client_order_id_required'
   | 'trade.no_reference_price'
   | 'trade.spot_disabled'
   /**

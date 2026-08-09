@@ -214,13 +214,14 @@ if (!available) {
 
   /** Rest a maker order through the REAL order path and return its id. */
   async function rest(service: TradeService, userId: string, market: Market, side: 'buy' | 'sell', qty: string, price: string) {
+    // clientOrderId max 64 — userId is already a UUID; do not composite past the cap.
     return service.placeOrder(principalFor(userId), {
       marketId: market.id,
       side,
       type: 'limit',
       qty: amt(qty),
       price: amt(price),
-      clientOrderId: `${userId}-${side}-${price}-${qty}-${randomUUID()}`,
+      clientOrderId: randomUUID(),
     });
   }
 

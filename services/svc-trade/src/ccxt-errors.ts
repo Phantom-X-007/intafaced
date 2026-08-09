@@ -137,6 +137,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.below_min_notional': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_invalid_qty': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_missing_id': { ccxt: 'BadRequest', status: 400 },
+  /** Place without clientOrderId — permanent fix for the request shape. */
+  'trade.client_order_id_required': { ccxt: 'InvalidOrder', status: 400 },
   /**
    * Identity S2S ownership consult failed. Retryable — same posture as
    * `trade.perks_unavailable`: we will not guess ownership while identity is down.

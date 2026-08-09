@@ -314,11 +314,11 @@ export const createOrderRequestSchema = z
     postOnly: z.boolean().optional(),
     reduceOnly: z.boolean().optional(),
     /**
-     * Caller-supplied idempotency key. Strongly recommended: a resubmitted
-     * order with the same key returns the original rather than opening a second
-     * position. Bots retry; the book must not double.
+     * Caller-supplied idempotency key. Required: a resubmitted order with the
+     * same key returns the original rather than opening a second hold. Bots
+     * retry; the book must not double.
      */
-    clientOrderId: z.string().min(1).max(64).optional(),
+    clientOrderId: z.string().min(1).max(64),
     /** Sub-account to trade from (§4.1 sub_accounts). */
     subAccountId: z.string().uuid().optional(),
   })

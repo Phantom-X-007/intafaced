@@ -186,7 +186,10 @@ export interface PlaceOrderInput {
   qty: Amount;
   price?: Amount | null;
   tif?: TimeInForce;
-  /** The retry key. Strongly recommended — without one, a retry opens a second order. */
+  /**
+   * The retry key. Required on money-path place — without one a timeout retry
+   * opens a second hold under a fresh order id.
+   */
   clientOrderId?: string;
   subAccountId?: string;
   /**
@@ -697,6 +700,12 @@ export class TradeService {
     // W4 U1: seed FX/commodity stay active in DB; place must refuse before hold.
     assertSettlementRails(market);
 
+    // Retry key is load-bearing money law (live and paper). Optional used to
+    // mint a random id so a transport timeout double-posted `order.hold:<uuid>`.
+    if (input.clientOrderId == null || input.clientOrderId.length < 1 || input.clientOrderId.length > 64) {
+      throw new TradeError('clientOrderId is required (1–64 chars) so a retry cannot open a second hold', 'trade.client_order_id_required');
+    }
+
     // Stage-1 paper isolation (academy.paper-trading): a paper market must never
     // post orderHold / tradeFill against real available balances. Live markets
     // keep the funded path below unchanged.
@@ -790,7 +799,7 @@ export class TradeService {
     // hold posted against an order id that exists nowhere is money nobody can
     // find. This way there is always a row pointing at the money, in every
     // interleaving.
-    const orderId = input.clientOrderId ? orderIdFor(userId, market.id, input.clientOrderId) : crypto.randomUUID();
+    const orderId = orderIdFor(userId, market.id, input.clientOrderId);
 
     // THE RETRY. Same client id → same order id → same row → same
     // `order.hold:<orderId>` ledger key. A retry finds the original instead of
@@ -803,7 +812,7 @@ export class TradeService {
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
         price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
       ) VALUES (
-        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId ?? null},
+        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId},
         ${input.side}, ${orderType},
         ${input.price == null ? null : formatAmount(input.price)}::numeric,
         ${formatAmount(input.qty)}::numeric, 'pending', ${tif},
@@ -889,7 +898,8 @@ export class TradeService {
     const tif: TimeInForce = input.tif ?? 'GTC';
     // Schema requires hold columns; paper posts zero amount and never ledger-posts.
     const holdAsset = input.side === 'buy' ? market.quoteAsset : market.baseAsset;
-    const orderId = input.clientOrderId ? orderIdFor(userId, market.id, input.clientOrderId) : crypto.randomUUID();
+    // Caller already required clientOrderId in placeOrder — never random here.
+    const orderId = orderIdFor(userId, market.id, input.clientOrderId as string);
     const existing = await this.findOrder(orderId);
     if (existing) return existing;
 
@@ -898,7 +908,7 @@ export class TradeService {
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
         price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
       ) VALUES (
-        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId ?? null},
+        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId as string},
         ${input.side}, ${orderType},
         ${input.price == null ? null : formatAmount(input.price)}::numeric,
         ${formatAmount(input.qty)}::numeric, 'open', ${tif},

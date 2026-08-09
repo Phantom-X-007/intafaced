@@ -275,6 +275,7 @@ describe('mapCreateOrderBody', () => {
       amount: '1',
       price: '100',
       postOnly: true,
+      clientOrderId: 'bot-po',
     });
     expect(input.tif).toBe('PO');
   });
@@ -287,6 +288,7 @@ describe('mapCreateOrderBody', () => {
         side: 'buy',
         amount: '1',
         stopPrice: '90',
+        clientOrderId: 'bot-stop',
       }),
     ).toThrow(TradeError);
   });
@@ -403,7 +405,7 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/orders',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100' },
+      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100', clientOrderId: 'auth-check' },
     });
     expect(placeRes.statusCode).toBe(401);
     expect(placed).toBe(false);
@@ -519,7 +521,7 @@ describe('private REST — mount boundary + order write path', () => {
         'x-intafaced-region': 'DE',
         'content-type': 'application/json',
       },
-      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100' },
+      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100', clientOrderId: 'forged-check' },
     });
     expect(res.statusCode).toBe(401);
     expect(placed).toBe(false);
@@ -580,7 +582,29 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/orders',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1' },
+      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', clientOrderId: 'no-price' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidOrder');
+    expect(placed).toBe(false);
+    await app.close();
+  });
+
+  it('POST /orders: 400 when clientOrderId is missing — retry would double-hold', async () => {
+    let placed = false;
+    const app = await build(
+      deps({
+        placeOrder: async () => {
+          placed = true;
+          return open;
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('InvalidOrder');
@@ -600,7 +624,14 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/orders',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', type: 'market', side: 'buy', amount: '1' },
+      // clientOrderId required at the door — without it this test only proves 400 InvalidOrder
+      payload: {
+        symbol: 'BTC/USDT',
+        type: 'market',
+        side: 'buy',
+        amount: '1',
+        clientOrderId: 'map-trade-error',
+      },
     });
     // The operator kill-switch is a temporary, venue-wide condition, so CCXT
     // `OnMaintenance` + 503 — a retryable state. It used to answer 403, which a
