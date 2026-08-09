@@ -635,4 +635,42 @@ if (!available) {
       expect(cols.some((c) => c.column_name === 'price')).toBe(true);
     });
   });
+
+  /**
+   * Unit card A2 — concurrent create wrap residual
+   * Promise: claimSlot FOR UPDATE + create rolls back orphan on claim refuse
+   * Done bar: N concurrent creates against capacity C admit exactly C active
+   * listings + C held slots; extras refuse market.slots_exhausted; no orphan active.
+   * Class P · RED first under Postgres.
+   */
+  describe('concurrent create wrap residual', () => {
+    it('concurrent creates cannot double-allocate beyond stake capacity', async () => {
+      stakes.vendorSlots = 2;
+      await approvedVendor(VENDOR_USER);
+      const results = await Promise.allSettled(
+        Array.from({ length: 6 }, (_, i) =>
+          commerce.createListing({
+            userId: VENDOR_USER,
+            title: `Listing ${i}`,
+            description: 'concurrent create wrap',
+            offerType: 'one_time',
+            assetId: 'USDT',
+            price: '10',
+          }),
+        ),
+      );
+      const ok = results.filter((r) => r.status === 'fulfilled');
+      const failed = results.filter((r) => r.status === 'rejected');
+      expect(ok).toHaveLength(2);
+      expect(failed).toHaveLength(4);
+      for (const f of failed) {
+        expect(f).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ code: 'market.slots_exhausted' }) });
+      }
+      const countRows = await sql<Array<{ n: string }>>`
+        SELECT COUNT(*)::text AS n FROM market.listings WHERE status = 'active'
+      `;
+      expect(Number(countRows[0]?.n)).toBe(2);
+      expect((await vendors.slotStatus(VENDOR_USER)).held).toBe(2);
+    });
+  });
 }

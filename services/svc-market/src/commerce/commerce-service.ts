@@ -251,6 +251,11 @@ export class CommerceService {
    *
    * Subscription offers stay out of the shopfront until Stage C3 — purchase
    * already refuses them; listing them would advertise an always-failing buy.
+   *
+   * Order is registration (`created_at ASC`), same boring rule as `listed`
+   * vendors — ranking / featured / newest-first is DIRECTION §8 and owner-only.
+   * Oldest-first also matches over-capacity prune (entitled slots keep the
+   * earliest listings).
    */
   async publicListings(opts?: { limit?: number }): Promise<ListingRecord[]> {
     const limit = Math.min(opts?.limit ?? 50, 50);
@@ -258,7 +263,7 @@ export class CommerceService {
       SELECT * FROM market.listings
        WHERE status = 'active'
          AND offer_type = 'one_time'
-       ORDER BY created_at DESC
+       ORDER BY created_at ASC, id ASC
        LIMIT ${limit * 3}
     `;
     const out: ListingRecord[] = [];

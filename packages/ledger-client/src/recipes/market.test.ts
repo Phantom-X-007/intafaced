@@ -133,4 +133,38 @@ describe('marketPurchase', () => {
     expect(formatAmount((await ledger.balance(userAvailable(VENDOR, 'USDT'))).amount)).toBe('95');
     expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('5');
   });
+
+  /**
+   * Unit card A2 — commission conservation residual (Class M adversarial).
+   * Promise: recipes/market.ts — "Vendor + house always sum exactly to the price".
+   * Done bar: for a table of prices × bps, buyer credit = sum of debit legs; no dust.
+   */
+  it('vendor net + house commission always conserve the listed price (no dust leak)', () => {
+    const prices = [1n, 3n, 7n, 999n, amt('0.01'), amt('99.99'), amt('1000'), amt('12345.678901234567')];
+    const bpsList = [0, 1, 7, 250, 333, 500, 2500, 5000, 9998];
+    for (const price of prices) {
+      for (const commissionBps of bpsList) {
+        let req;
+        try {
+          req = marketPurchase({
+            purchaseId: `p-${price}-${commissionBps}`,
+            listingId: 'l1',
+            buyerId: BUYER,
+            vendorUserId: VENDOR,
+            assetId: 'USDT',
+            price,
+            commissionBps,
+          });
+        } catch (err) {
+          // Extreme bps on tiny price may leave vendor with nothing — refuse, do not invent dust.
+          expect(err).toBeInstanceOf(InvalidEntryError);
+          continue;
+        }
+        const buyerCredit = req.entries.find((e) => e.account.ownerId === BUYER && e.direction === 'credit');
+        const debitSum = req.entries.filter((e) => e.direction === 'debit').reduce((acc, e) => acc + e.amount, 0n);
+        expect(buyerCredit!.amount).toBe(price);
+        expect(debitSum).toBe(price);
+      }
+    }
+  });
 });

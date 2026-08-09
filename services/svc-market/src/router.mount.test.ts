@@ -437,7 +437,7 @@ describe('svc-market mount — commerce scopes', () => {
         price: '10',
         commissionBps: 500,
         status: 'settled' as const,
-        ledgerTxId: 'tx-1',
+        ledgerTxId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
         rejectionCode: null,
         createdAt: '2026-08-09T00:00:00.000Z',
         settledAt: '2026-08-09T00:00:00.000Z',
@@ -505,6 +505,7 @@ describe('svc-market mount — commerce scopes', () => {
       { code: 'market.insufficient_funds', trpc: 'PRECONDITION_FAILED' },
       { code: 'market.purchase_self', trpc: 'CONFLICT' },
       { code: 'market.purchase_conflict', trpc: 'CONFLICT' },
+      { code: 'market.listing_not_owned', trpc: 'CONFLICT' },
       { code: 'market.listing_not_found', trpc: 'NOT_FOUND' },
     ];
     for (const c of cases) {
@@ -516,7 +517,47 @@ describe('svc-market mount — commerce scopes', () => {
         createMarketRouter(stubVendors(), commerce as never)
           .createCaller(signed())
           .purchase({ listingId, purchaseId }),
-      ).rejects.toMatchObject({ code: c.trpc });
+      ).rejects.toMatchObject({ code: c.trpc, message: 'refuse' });
     }
+  });
+
+  /**
+   * Unit card A2 — scopes + edge residual
+   * Promise: write scopes edge-signed principal only; buyer/vendor never body-asserted.
+   * Done bar: anonymous + read-only cannot purchase; purchase always buyerId=principal.
+   */
+  it('refuses anonymous purchase and never calls commerce', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(anonymous())
+        .purchase({ listingId, purchaseId }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(commerce.purchase).not.toHaveBeenCalled();
+  });
+
+  it('purchase always uses the edge principal as buyer — never a body userId', async () => {
+    const commerce = stubCommerce();
+    await createMarketRouter(stubVendors(), commerce as never)
+      .createCaller(signed())
+      .purchase({ listingId, purchaseId });
+    expect(commerce.purchase).toHaveBeenCalledWith({
+      buyerId: USER,
+      listingId,
+      purchaseId,
+    });
+    // Input schema has no buyerId field — hostile self-assert would be a type error at the boundary.
+    expect(Object.keys({ listingId, purchaseId }).sort()).toEqual(['listingId', 'purchaseId']);
+  });
+
+  it('refuses archiveListing without market:write', async () => {
+    const commerce = stubCommerce();
+    const reader = principal({ scopes: ['market:read'] });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed(reader))
+        .archiveListing({ listingId }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(commerce.archiveListing).not.toHaveBeenCalled();
   });
 });

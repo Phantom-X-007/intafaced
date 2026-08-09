@@ -26,25 +26,25 @@ stake numbers stay in svc-token; value moves only through `packages/ledger-clien
 tRPC under `/trpc` (edge mounts `/api/market`). Principal via edge HMAC
 (`EDGE_PRINCIPAL_SECRET`).
 
-| Procedure           | Scope          | Behaviour                                               |
-| ------------------- | -------------- | ------------------------------------------------------- |
-| `profile`           | **public**     | One listed vendor's public profile                      |
-| `listed`            | **public**     | The directory of vendors listed right now               |
-| `listings`          | **public**     | Active listings whose vendor is currently listed        |
-| `commerceProgramme` | **public**     | Whether house commission bps is configured              |
-| `applyAsVendor`     | `market:write` | Create the caller's own application (`applied`)         |
-| `mine`              | `market:read`  | The caller's own application, or `null`                 |
-| `createListing`     | `market:write` | Create a listing; claims a slot named by the listing id |
-| `archiveListing`    | `market:write` | Archive own listing; releases its slot                  |
-| `myListings`        | `market:read`  | Caller's listings                                       |
-| `purchase`          | `market:write` | One-time purchase (client `purchaseId`); Class M        |
-| `myPurchases`       | `market:read`  | Caller's purchases                                      |
-| `claimSlot`         | `market:write` | Take a listing slot, if the caller's tier has one       |
-| `releaseSlot`       | `market:write` | Give a slot back                                        |
-| `slots`             | `market:read`  | Tier, capacity, held and **usable** slots               |
-| `listApplications`  | `market:ops`   | Operator queue — undecided first, oldest first          |
-| `vet`               | `market:ops`   | Record an operator's decision and apply it              |
-| `history`           | `market:ops`   | The decision trail for one application                  |
+| Procedure           | Scope          | Behaviour                                                 |
+| ------------------- | -------------- | --------------------------------------------------------- |
+| `profile`           | **public**     | One listed vendor's public profile                        |
+| `listed`            | **public**     | The directory of vendors listed right now                 |
+| `listings`          | **public**     | Active one-time listings (registration order, not ranked) |
+| `commerceProgramme` | **public**     | Whether house commission bps is configured                |
+| `applyAsVendor`     | `market:write` | Create the caller's own application (`applied`)           |
+| `mine`              | `market:read`  | The caller's own application, or `null`                   |
+| `createListing`     | `market:write` | Create a listing; claims a slot named by the listing id   |
+| `archiveListing`    | `market:write` | Archive own listing; releases its slot                    |
+| `myListings`        | `market:read`  | Caller's listings                                         |
+| `purchase`          | `market:write` | One-time purchase (client `purchaseId`); Class M          |
+| `myPurchases`       | `market:read`  | Caller's purchases                                        |
+| `claimSlot`         | `market:write` | Take a listing slot, if the caller's tier has one         |
+| `releaseSlot`       | `market:write` | Give a slot back                                          |
+| `slots`             | `market:read`  | Tier, capacity, held and **usable** slots                 |
+| `listApplications`  | `market:ops`   | Operator queue — undecided first, oldest first            |
+| `vet`               | `market:ops`   | Record an operator's decision and apply it                |
+| `history`           | `market:ops`   | The decision trail for one application                    |
 
 HTTP: `GET /health`, `GET /ready` (`stage: commerce-one-time`, plus whether commission is configured).
 
@@ -231,6 +231,7 @@ cached `is_listed`.
 ### The order is deliberately boring
 
 `created_at ASC`, tie-broken by id. Registration order: already in the database,
+and the public `listings` catalogue uses the same registration order (not newest-first) —
 stable under pagination, and it says nothing about how good anybody is. Ranking,
 quality scoring and featured placement are reserved to the owner by
 `docs/DIRECTION-2026-07-31.md` §8, and choosing one here — even "newest first",
