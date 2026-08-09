@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryDeliveryStore, STUCK_PENDING_GRACE_MS, shouldReapDelivery } from './channel-store.js';
+import { MemoryDeliveryStore, STUCK_PENDING_GRACE_MS, reapDecision, shouldReapDelivery } from './channel-store.js';
 
 /**
  * The delivery sweep — a row that is over must stop reading as "still trying".
@@ -121,7 +121,8 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
 
     const [after] = await store.listForNotification('n7');
     expect(after?.status).toBe('abandoned');
-    expect(after?.refusalCode).toBe('channel.attempts_exhausted');
+    // Arm 2: attempts still 1 of 3 — must NOT claim attempts_exhausted.
+    expect(after?.refusalCode).toBe('channel.delivery_stuck');
     expect(after?.attempts).toBe(1);
     expect(after?.acceptedAt).toBeNull();
   });
@@ -171,7 +172,19 @@ describe('shouldReapDelivery — stuck-pending arm', () => {
     ).toBe(false);
   });
 
-  it('reaps a pending row whose lease has been dead past the bus window', () => {
+  it('reaps a pending row whose lease has been dead past the bus window as delivery_stuck', () => {
+    const decision = reapDecision(
+      {
+        status: 'pending',
+        attempts: 1,
+        leaseUntil: new Date(now.getTime() - grace),
+        updatedAt: new Date(now.getTime() - grace - 1_000),
+      },
+      3,
+      now,
+      grace,
+    );
+    expect(decision).toEqual({ reaped: true, reason: 'channel.delivery_stuck' });
     expect(
       shouldReapDelivery(
         {
@@ -185,6 +198,22 @@ describe('shouldReapDelivery — stuck-pending arm', () => {
         grace,
       ),
     ).toBe(true);
+  });
+
+  it('names attempts_exhausted when the attempt budget was actually spent', () => {
+    expect(
+      reapDecision(
+        {
+          status: 'pending',
+          attempts: 3,
+          leaseUntil: new Date(now.getTime() - 1),
+          updatedAt: new Date(now.getTime() - 1),
+        },
+        3,
+        now,
+        grace,
+      ),
+    ).toEqual({ reaped: true, reason: 'channel.attempts_exhausted' });
   });
 
   it('never reaps a live lease even past the grace wall-clock', () => {

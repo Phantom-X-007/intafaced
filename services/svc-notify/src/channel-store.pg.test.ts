@@ -270,6 +270,32 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
         attempts: 1,
       });
     });
+
+    it('arm 2 on Postgres names delivery_stuck when attempts are still below max', async () => {
+      // THE in_flight hole, executed against real SQL: one claim (attempts=1),
+      // lease dies, stuckGrace short so we do not wait 150s. Must not stamp
+      // attempts_exhausted for a budget that was never spent.
+      //
+      // Postgres rounds grace up to whole seconds (`graceSeconds = ceil(ms/1000)`).
+      // Wait lease (1s) + grace (1s) + slack so the row is actually past the
+      // dead-lease window — waiting only ~lease leaves arm 2 with zero rows.
+      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1_000 });
+      expect((await s.claim(NOTIFICATION, 'email', 3)).claimed).toBe(true);
+      await new Promise((r) => setTimeout(r, 2_500));
+
+      const [before] = await s.listForNotification(NOTIFICATION);
+      expect(before).toMatchObject({ status: 'pending', attempts: 1 });
+
+      expect(await s.reapExhausted(3, { stuckGraceMs: 1_000 })).toBeGreaterThanOrEqual(1);
+
+      const [after] = await s.listForNotification(NOTIFICATION);
+      expect(after).toMatchObject({
+        status: 'abandoned',
+        attempts: 1,
+        refusalCode: 'channel.delivery_stuck',
+      });
+      expect(after?.acceptedAt).toBeNull();
+    });
   });
 });
 
