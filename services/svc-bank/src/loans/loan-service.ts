@@ -511,26 +511,19 @@ export class LoanService {
     /**
      * THE RETRY MUST BE THE SAME LOAN, NOT JUST THE SAME ID.
      *
-     * `ON CONFLICT (id) DO NOTHING` means a retry writes nothing and `loan`
-     * becomes the FIRST call's row — carrying the FIRST call's principal. Every
-     * check above ran on `input`. `completePending` below then locks
-     * `input.collateralAmount` and draws `loan.principal`. Nothing reconciled
-     * the two, so the guard and the payout could read different numbers.
-     *
-     * The attack that gets: open loan X for 1 000 000 against 2 000 000 of
-     * collateral you do not hold. The LTV check passes on those numbers, the row
-     * persists at 1 000 000, the collateral lock fails for insufficient funds
-     * and the loan stays `pending`. Retry loan X for 1 against 2 of collateral
-     * you DO hold — LTV passes on the new numbers, the insert conflicts and does
-     * nothing, and the service locks 2 units and draws 1 000 000. Repeat until
-     * the reserve is empty.
-     *
-     * Refusing is the right shape rather than re-deriving LTV from
-     * `loan.principal`: a retry that asks for different terms is a different
-     * loan, and silently honouring the stored ones would answer a request
-     * nobody made. Same id + same principal stays idempotent, which is what the
-     * caller-supplied id is for.
+     * Order: who is asking → principal → opening collateral. Borrower first so a
+     * second caller is not answered with the first loan's stored amounts via a
+     * typed amount mismatch. Principal and collateral still refuse under-coll
+     * and principal-swap attacks once identity matches.
      */
+    if (loan.userId !== input.userId || loan.productId !== product.id) {
+      throw new BankError(
+        `Loan ${loan.id} already exists and was not opened by this request — a retry must carry the same terms. ` +
+          `Use a new loan id to open a different loan`,
+        'bank.loan_borrower_mismatch',
+      );
+    }
+
     if (loan.principal !== input.principal) {
       throw new BankError(
         `Loan ${loan.id} already exists with a principal of ${formatAmount(loan.principal)} ${loan.debtAssetId}, but this request asks for ` +
@@ -539,18 +532,6 @@ export class LoanService {
       );
     }
 
-    /**
-     * AND THE SAME OPENING COLLATERAL.
-     *
-     * Principal alone is not enough. Hold principal equal and shrink the
-     * collateral on the retry: LTV is re-checked on the new (smaller) pledge
-     * while the draw still pays the stored principal — under-collateralised
-     * lending through the same id. `opening_collateral` is snapshotted at
-     * insert for exactly this compare; live holdings may grow via addCollateral.
-     *
-     * Legacy rows without the column fall back to the seq-0 lock event when
-     * one exists; if neither figure is known we cannot refuse and must not invent.
-     */
     const storedOpening =
       loan.openingCollateral ?? (await this.collateralEvent(loan.id, 0).then((e) => (e ? parseAmount(e.amount) : null)));
     if (storedOpening !== null && storedOpening !== input.collateralAmount) {
@@ -558,32 +539,6 @@ export class LoanService {
         `Loan ${loan.id} already exists with opening collateral of ${formatAmount(storedOpening)} ${loan.collateralAssetId}, but this request asks for ` +
           `${formatAmount(input.collateralAmount)} — a retry must carry the same terms. Use a new loan id to pledge a different amount`,
         'bank.loan_collateral_mismatch',
-      );
-    }
-
-    /**
-     * AND "THE SAME TERMS" INCLUDES WHO IS ASKING.
-     *
-     * The guard above reads `loan` — the FIRST caller's row — for exactly the
-     * reason it explains, and then stops at the amount. Hold the principal
-     * equal and the rest of that reasoning still applies to the borrower: this
-     * caller's request is answered out of somebody else's loan.
-     *
-     * Active row: they are told "your loan is open", with a status, an LTV and
-     * two ledger transaction ids, having locked no collateral of their own and
-     * drawn no principal of their own. Pending row: `completePending` below
-     * drives the OTHER borrower's loan using THIS caller's collateral figure,
-     * out of the other borrower's account.
-     *
-     * The product is checked for the same reason one step down: `loan` carries
-     * the first call's asset pair and APR, while the LTV above was computed
-     * against the product named in THIS request.
-     */
-    if (loan.userId !== input.userId || loan.productId !== product.id) {
-      throw new BankError(
-        `Loan ${loan.id} already exists and was not opened by this request — a retry must carry the same terms. ` +
-          `Use a new loan id to open a different loan`,
-        'bank.loan_borrower_mismatch',
       );
     }
 
