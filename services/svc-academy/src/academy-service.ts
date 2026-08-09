@@ -3,7 +3,8 @@ import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
-import { assertScene } from './spatial/scene.js';
+import { emptyScene, parseScene } from './spatial/scene.js';
+import { decideHostSceneWrite } from './spatial/edit-policy.js';
 import {
   assertFreezeReason,
   badgeOf,
@@ -484,15 +485,40 @@ export class AcademyService {
    * not have, and half a merge is a room that renders differently for different
    * people.
    */
-  async updateScene(input: { sessionId: string; hostId: string; scene: Record<string, unknown> }): Promise<SessionRecord> {
+  async updateScene(input: {
+    sessionId: string;
+    hostId: string;
+    scene: Record<string, unknown>;
+    /** Optional optimistic concurrency token — must match server scene fingerprint. */
+    expectedFingerprint?: string;
+  }): Promise<SessionRecord & { sceneFingerprint: string }> {
     const session = await this.session(input.sessionId);
     this.assertHost(session.hostId, input.hostId, 'session');
-    const scene = assertScene(input.scene);
+
+    // DB default was historically `{}`, which is not Scene v1. Treat unreadable
+    // current state as empty v1 so reconnect/edit policy still has a SoT.
+    const currentParsed = parseScene(session.scene);
+    const current = currentParsed.ok ? currentParsed.scene : emptyScene();
+
+    const decision = decideHostSceneWrite({
+      current,
+      next: input.scene,
+      ...(input.expectedFingerprint !== undefined ? { expectedFingerprint: input.expectedFingerprint } : {}),
+    });
+    if (!decision.ok) {
+      if (decision.reason === 'conflict') {
+        throw new AcademyError(decision.message, 'academy.scene_conflict');
+      }
+      if (decision.reason === 'presence_collision') {
+        throw new AcademyError(decision.message, 'academy.scene_presence_collision');
+      }
+      throw new AcademyError(decision.message, 'academy.scene_invalid');
+    }
 
     const rows = await this.sql<SessionRow[]>`
-      UPDATE academy.sessions SET scene = ${this.sql.json(scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
+      UPDATE academy.sessions SET scene = ${this.sql.json(decision.scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
     `;
-    return toSession(rows[0]!);
+    return { ...toSession(rows[0]!), sceneFingerprint: decision.fingerprint };
   }
 
   // ── Tournament ladders Stage-1 (NO PRIZE MONEY) ────────────────────────────

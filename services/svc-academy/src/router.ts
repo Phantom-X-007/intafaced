@@ -423,6 +423,8 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
 
     case 'academy.scene_invalid':
+    case 'academy.scene_conflict':
+    case 'academy.scene_presence_collision':
     case 'academy.ambassador_invalid':
     case 'academy.residency_invalid':
       // Client sent a scene that fails Stage-1 schema or size gate /
@@ -938,12 +940,28 @@ export function createAcademyRouter(academy: AcademyService) {
       .output(sessionOut)
       .mutation(({ ctx, input }) => guard(() => academy.endSession({ sessionId: input.sessionId, hostId: ctx.principal.userId }))),
 
-    /** The 2D scene (§8.3). Host writes, everyone reads — see the service for why. */
+    /**
+     * The 2D scene (§8.3). Host writes whole scene; optional expectedFingerprint
+     * enforces concurrent-edit policy (stale host tab → conflict, not last-write-wins).
+     */
     updateScene: scopedProcedure('academy:write', { module: 'academy' })
-      .input(z.object({ sessionId: z.string().uuid(), scene: z.record(z.unknown()) }))
-      .output(sessionOut)
+      .input(
+        z.object({
+          sessionId: z.string().uuid(),
+          scene: z.record(z.unknown()),
+          expectedFingerprint: z.string().min(1).max(128).optional(),
+        }),
+      )
+      .output(sessionOut.extend({ sceneFingerprint: z.string() }))
       .mutation(({ ctx, input }) =>
-        guard(() => academy.updateScene({ sessionId: input.sessionId, hostId: ctx.principal.userId, scene: input.scene })),
+        guard(() =>
+          academy.updateScene({
+            sessionId: input.sessionId,
+            hostId: ctx.principal.userId,
+            scene: input.scene,
+            ...(input.expectedFingerprint !== undefined ? { expectedFingerprint: input.expectedFingerprint } : {}),
+          }),
+        ),
       ),
 
     // ── Ambassador programme Stage-1 (status only — NO PAY / Class M residual) ─
