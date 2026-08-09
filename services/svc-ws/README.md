@@ -253,9 +253,9 @@ returns `503` so the load balancer takes the instance out of rotation. `/health`
 still see the process is alive. The terminal renders the book as unavailable with the reason on screen — never as
 stale numbers.
 
-**Bus honesty:** if NATS subscribe fails at boot there is **no auto-reconnect** yet. `/ready` stays `200` (depth is
-primary and works without the bus) but `tradesBus` / `privateBus` are `false` so ops can see an empty tape is not
-"live and quiet" — it is unsubscribed until process restart.
+**Bus honesty:** if NATS subscribe fails at boot the process **retries with exponential backoff** (depth keeps
+serving). `/ready` stays `200` while the bus is down, but `tradesBus` / `privateBus` are `false` so ops can see an
+empty tape is not "live and quiet" — it is unsubscribed until the next successful connect.
 
 ---
 
