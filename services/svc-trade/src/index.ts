@@ -32,6 +32,9 @@ import { parseOtcDeskLawJson } from './otc/desk-law.js';
 import { createConfigOtcMidSource } from './otc/mid-source.js';
 import { OtcDeskService } from './otc/otc-service.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
+import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
+import { CopyService } from './copy/copy-service.js';
+import { SqlCopyFollowStore } from './copy/follow-store.js';
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
@@ -103,7 +106,18 @@ const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRE
 const otcMids = createConfigOtcMidSource(env.TRADE_OTC_MIDS);
 const otc = new OtcDeskService(ledger, otcStakes, { law: otcDeskLaw, midSource: otcMids });
 
-export const appRouter = createTradeRouter(trade, otc);
+// trade.copy — D-S-03 Stage product mount. Empty TRADE_COPY_* laws → refuse-closed
+// (never invent leader_share_bps or jurisdiction allowlist). Sql store needs
+// copy_follows + copy_mirrored_fills migrations; fee-share still ledger-only.
+const copyFeeShareLaw = parseCopyFeeShareLawJson(env.TRADE_COPY_FEE_SHARE_LAW);
+const copyJurisdictionLaw = parseCopyJurisdictionLawJson(env.TRADE_COPY_JURISDICTION_LAW);
+const copy = new CopyService(ledger, {
+  feeShareLaw: copyFeeShareLaw,
+  jurisdictionLaw: copyJurisdictionLaw,
+  store: new SqlCopyFollowStore(sql),
+});
+
+export const appRouter = createTradeRouter(trade, otc, copy);
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });

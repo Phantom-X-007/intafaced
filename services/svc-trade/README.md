@@ -8,13 +8,13 @@ is allowed, funds it, hands it to the engine, and turns what comes back into led
 
 **Primary shipped surface here:** `trade.spot` + mounted Convert / OTC / CCXT REST / futures-orderable path (flagged).
 
-| Surface                                     | Mount              | Default                                                                       |
-| ------------------------------------------- | ------------------ | ----------------------------------------------------------------------------- |
-| Convert                                     | tRPC `convert.*`   | ON (`TRADE_CONVERT_ENABLED`)                                                  |
-| OTC                                         | tRPC `otc.*`       | mounted; blank §8 law → refuse-closed                                         |
-| Algo TWAP create/ctrl                       | tRPC `algo.*`      | create ON; **scheduler job OFF** (`TRADE_ALGO_JOBS_ENABLED`, denylist enable) |
-| Copy                                        | `src/copy/**` only | **unmounted** (no router/env — deliberate)                                    |
-| Futures jobs / candle / MM seed / reconcile | job hosts          | **OFF**                                                                       |
+| Surface                                     | Mount            | Default                                                                       |
+| ------------------------------------------- | ---------------- | ----------------------------------------------------------------------------- |
+| Convert                                     | tRPC `convert.*` | ON (`TRADE_CONVERT_ENABLED`)                                                  |
+| OTC                                         | tRPC `otc.*`     | mounted; blank §8 law → refuse-closed                                         |
+| Algo TWAP create/ctrl                       | tRPC `algo.*`    | create ON; **scheduler job OFF** (`TRADE_ALGO_JOBS_ENABLED`, denylist enable) |
+| Copy                                        | tRPC `copy.*`    | mounted; blank §8 fee-share + jurisdiction laws → refuse-closed               |
+| Futures jobs / candle / MM seed / reconcile | job hosts        | **OFF**                                                                       |
 
 Wave-3 sealed money on tip (#1193 TWAP respace+jobs OFF, #1191/#1199 copy races, #1202–#1207 funding/insurance/reconcile, #1211 margin-call). See tracker `trade.copy` / `trade.algo` and [Not in this PR](#not-in-this-pr).
 
@@ -340,17 +340,17 @@ The service checks these; the database enforces them regardless.
 
 `trade.spot` only. §5.2 also specifies tables and behaviour that belong to other tracker features:
 
-| §5.2 item                                                               | Where it goes                                                                                                                                           |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder      | `trade.futures`                                                                                                                                         |
-| options (European, cash-settled, full collateral)                       | `trade.options`                                                                                                                                         |
-| `copy_leaders`, `copy_follows`, **fee-share** (P&L profit-share banned) | `trade.copy` — code under `src/copy/**` exists; product mount residual (unreachable from router today)                                                  |
-| `otc_quotes`, RFQ, staked-tier gate                                     | `trade.otc`                                                                                                                                             |
-| Convert one-tap                                                         | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
-| TWAP / VWAP / POV                                                       | `trade.algo`                                                                                                                                            |
-| internal market-maker bot, venue aggregation                            | `trade.mm-bot`, `venue.aggregation`                                                                                                                     |
-| CCXT REST/ws surface over this router                                   | `trade.ccxt-api`                                                                                                                                        |
-| volume aggregates per user per window feeding fee tiers                 | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already                                                               |
+| §5.2 item                                                                      | Where it goes                                                                                                                                           |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder             | `trade.futures`                                                                                                                                         |
+| options (European, cash-settled, full collateral)                              | `trade.options`                                                                                                                                         |
+| `copy_follows`, `copy_mirrored_fills`, **fee-share** (P&L profit-share banned) | `trade.copy` — tRPC `copy.follow` / `killFeeShare` / `unfollow` / `settleFeeShare` / `deskStatus`; blank `TRADE_COPY_*` laws refuse; owner rates only   |
+| `otc_quotes`, RFQ, staked-tier gate                                            | `trade.otc`                                                                                                                                             |
+| Convert one-tap                                                                | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
+| TWAP / VWAP / POV                                                              | `trade.algo`                                                                                                                                            |
+| internal market-maker bot, venue aggregation                                   | `trade.mm-bot`, `venue.aggregation`                                                                                                                     |
+| CCXT REST/ws surface over this router                                          | `trade.ccxt-api`                                                                                                                                        |
+| volume aggregates per user per window feeding fee tiers                        | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already                                                               |
 
 The `market_kind` enum already carries `futures` and `options`, so listing one later is an `INSERT`, not a
 migration.

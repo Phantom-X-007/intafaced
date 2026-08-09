@@ -7,7 +7,9 @@
  * Value moves only via ledger-client recipes when §8 rates are published.
  *
  * Follow/exposure state is durable via CopyFollowStore (Memory by default;
- * SqlCopyFollowStore for process-restart survival — residual after #1010 TWAP).
+ * production mounts SqlCopyFollowStore — needs copy_follows + copy_mirrored_fills).
+ * Product surface: tRPC `copy.*` on the trade router (follow / kill / unfollow /
+ * settleFeeShare / deskStatus). Blank §8 env laws refuse at the door.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -257,7 +259,7 @@ export class CopyService {
    * both pass a stale earningsPaid read and both move money past the cap.
    *
    * Ledger keys stay on fillId. Period boundary (D11) is not invented here —
-   * pair-lifetime counters remain as today. Module stays unmounted.
+   * pair-lifetime counters remain as today.
    * Same-fill redelivery on the mirror path is closed via claimMirrorFill.
    */
   async settleFeeShare(
