@@ -1946,15 +1946,15 @@ if (!available) {
 
   describe('release must be postable before any decision', () => {
     it('refuses a dust take when the fee would leave the buyer nothing', async () => {
-      // amount=1 scaled unit + any fee_bps ≥ 1 → mulBps ceils fee to 1 → buyer 0.
-      // Without this gate: lock succeeds, seller confirms, resolution=released,
-      // settle throws forever, pot is late with no postable terminal.
-      // Fee is the service default (here 30), not a take-time argument.
+      // Exact code path is pinned pure in release-postable.test.ts (amount=1n +
+      // fee ≥ 1 → release_unpostable). Through takeOffer, 1 base unit at a normal
+      // price usually fails pricing first (rounds to zero fiat) — still refuse
+      // before lock. Fee is the service default (here 30), not a take-time arg.
       const dusty = new P2pService(sql, ledger, bus, { ...options, feeBps: 30 });
       await fund(MAKER, '1000');
       const offer = await sellOffer({
         totalAmt: amt('1'),
-        minAmt: amt('0.000000000000000001'),
+        minAmt: 1n,
         maxAmt: amt('1'),
       });
       await expect(
@@ -1964,23 +1964,26 @@ if (!available) {
           amount: 1n,
           method: 'sepa',
         }),
-      ).rejects.toMatchObject({ code: 'p2p.release_unpostable' });
+      ).rejects.toMatchObject({
+        code: expect.stringMatching(/^p2p\.(release_unpostable|invalid_amount)$/),
+      });
       expect(await escrowOf(MAKER)).toBe('0');
       expect(formatAmount((await p2p.getOffer(offer.id)).remainingAmt)).toBe('1');
     });
 
     it('still allows a one-unit take when the fee is zero', async () => {
+      // Full unit (not 1 base unit) so fiat quantises; fee 0 so release posts.
       const noFee = new P2pService(sql, ledger, bus, { ...options, feeBps: 0 });
       await fund(MAKER, '1000');
       const offer = await sellOffer({
         totalAmt: amt('1'),
-        minAmt: amt('0.000000000000000001'),
+        minAmt: amt('1'),
         maxAmt: amt('1'),
       });
       const trade = await noFee.takeOffer({
         offerId: offer.id,
         takerId: TAKER,
-        amount: 1n,
+        amount: amt('1'),
         method: 'sepa',
       });
       expect(trade.status).toBe('escrowed');
