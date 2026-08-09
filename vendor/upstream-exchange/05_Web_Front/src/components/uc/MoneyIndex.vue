@@ -106,10 +106,19 @@ export default {
           this.focusWalletError();
           return;
         }
+        const gate = ixTrade.accept(ixTrade.schemas.balances, res.data);
+        if (!gate.ok) {
+          /* Shape failure (e.g. free as a JSON number) is unknown, never a table. */
+          this.walletError =
+            (gate.message || "The balance payload failed the shape check.") +
+            " — balances are unknown, not zero.";
+          this.focusWalletError();
+          return;
+        }
         this.walletReachable = true;
         /* `balances: {}` → no rows. That is the ledger saying this account
            holds nothing, not a fabricated table of every asset at 0.00. */
-        this.tableMoney = ixTrade.toBalanceRows(res.data).map(row => ({
+        this.tableMoney = ixTrade.toBalanceRows(gate.data).map(row => ({
           coinType: row.unit,
           balance: row.free,
           frozenBalance: row.used,
