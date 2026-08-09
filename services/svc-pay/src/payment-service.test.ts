@@ -1076,9 +1076,9 @@ if (!available) {
       expect(base.reconcile()).toEqual({ ok: true });
 
       // Posted cannot be released.
-      await expect(
-        gated.releasePendingSettlement({ settlementId: later.id, reason: 'nope' }),
-      ).rejects.toMatchObject({ code: 'pay.settlement_not_pending' });
+      await expect(gated.releasePendingSettlement({ settlementId: later.id, reason: 'nope' })).rejects.toMatchObject({
+        code: 'pay.settlement_not_pending',
+      });
     });
 
     it('refuses to settle a merchant with no fee rate and no configured default', async () => {
