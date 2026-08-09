@@ -159,19 +159,7 @@ export class PrivateOrderHub {
       if (sub.closed || sub.userId !== userId) continue;
 
       if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
-        sub.lagTicks++;
-        this.#droppedFrames++;
-        if (sub.lagTicks >= this.#options.maxLagTicks) {
-          this.#evictions++;
-          sub.closed = true;
-          this.#subscriptions.delete(sub);
-          // Align with depth/trade: lag is try-later (1013), not policy (1008).
-          sub.sink.close(
-            CLOSE_TRY_LATER,
-            `slow consumer: outbound buffer over ${this.#options.highWaterBytes} bytes for ${sub.lagTicks} ticks`,
-          );
-          this.#log.warn({ userId: sub.userId }, 'ws-private: evicted lagging client');
-        }
+        this.#noteLag(sub);
         continue;
       }
 
@@ -183,6 +171,42 @@ export class PrivateOrderHub {
         this.#subscriptions.delete(sub);
       }
     }
+  }
+
+  /**
+   * Quiet-period lag sweep. Publish-path lag only fires when events arrive for
+   * that user — a slow socket that stops draining can pin a seat forever if
+   * the market is quiet. Gateway heartbeat calls this so private matches depth:
+   * lag over high-water for maxLagTicks → 1013, seat freed.
+   */
+  sweepLag(): void {
+    for (const sub of [...this.#subscriptions]) {
+      if (sub.closed) continue;
+      if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+        this.#noteLag(sub);
+      } else {
+        sub.lagTicks = 0;
+      }
+    }
+  }
+
+  #noteLag(sub: Subscription): void {
+    sub.lagTicks++;
+    this.#droppedFrames++;
+    if (sub.lagTicks < this.#options.maxLagTicks) return;
+    this.#evictions++;
+    sub.closed = true;
+    this.#subscriptions.delete(sub);
+    // Align with depth/trade: lag is try-later (1013), not policy (1008).
+    try {
+      sub.sink.close(
+        CLOSE_TRY_LATER,
+        `slow consumer: outbound buffer over ${this.#options.highWaterBytes} bytes for ${sub.lagTicks} ticks`,
+      );
+    } catch {
+      /* already gone */
+    }
+    this.#log.warn({ userId: sub.userId }, 'ws-private: evicted lagging client');
   }
 
   async close(reason: string): Promise<void> {

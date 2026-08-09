@@ -151,6 +151,31 @@ describe('PrivateOrderHub', () => {
     expect(lagging.sent).toHaveLength(0);
   });
 
+  it('evicts a quiet lagging seat without any publish (heartbeat sweep path)', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10 });
+    const lagging = {
+      sent: [] as string[],
+      get bufferedBytes() {
+        return 100;
+      },
+      send() {
+        throw new Error('should not send');
+      },
+      closed: null as { code: number; reason: string } | null,
+      close(code: number, reason: string) {
+        this.closed = { code, reason };
+      },
+    };
+    expect(hub.attach('user-a', lagging)).not.toBeNull();
+    expect(hub.connections).toBe(1);
+    // No publish — only quiet sweeps (gateway heartbeat).
+    hub.sweepLag();
+    expect(lagging.closed).toBeNull();
+    hub.sweepLag();
+    expect(lagging.closed?.code).toBe(1013);
+    expect(hub.connections).toBe(0);
+  });
+
   it('fans positions only to the owning user on channel positions', () => {
     const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
     const alice = sink();
