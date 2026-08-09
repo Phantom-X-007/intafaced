@@ -141,21 +141,27 @@ Emission, buyback, burn and staking parameters. [`adr/2026-08-04-token-economics
 
 Recorded as **F10 LIVE** in the 2026-08-05 security review, and **frozen — not fixed** — in `wallet-rpc-auth-scan`, where `act` is the sole `RECORDED UNPROVEN` module. Remediation is `OWNER-ACTIONS-WALLET-RPC-SECRETS.md` **§A4** because the edit is inside unreviewed, never-compiled, key-handling third-party code. **I have not touched it and will not.**
 
-## 11 · `svc-bank` earn and loans idempotency — a real money defect, parked by a claim lock
+## 11 · `svc-bank` earn and loans idempotency — **WITHDRAWN 2026-08-09. Already fixed; nothing is needed from you.**
 
-Both verified live on `main`:
+**This item was wrong and I am correcting it rather than quietly deleting it.**
 
-- **earn `deposit()` has no idempotency check at all.** `ON CONFLICT (id) DO NOTHING` with no `RETURNING`, and the router accepts a **client-supplied `positionId`**. A second caller reusing a live id has their value moved into a pot keyed to them that no `withdraw` of theirs can reach, while the _first_ caller's row flips to active. **`principalOf()` vs `stakedOf()` — the README's own reconciliation proof — is false for both users at once.**
-- **loans check the amount but not the borrower.** `loan.userId` and `loan.productId` are unchecked, so on a `pending` row `completePending` drives the **other** borrower's loan using **this** caller's collateral figure.
+It claimed the earn and loans idempotency defects were live on `main` with a written fix stranded behind an owner lock on `services/svc-bank`, and asked you to release the lock or direct the lane owner. **Both defects were already closed** by `5ff7f8ba` — _"fix(bank): compare terms before treating a taken earn/loan id as a retry"_ (#1194).
 
-A complete patch with five tests exists and is parked because `services/svc-bank` is owner-locked to `@cursor-swarm-bank` and `claim-check` refuses every path under it. **This needs you to release the lock or direct the lane owner — I am not dual-editing a claimed money service.**
+Verified in the current source, by the patch’s own symbol names:
 
----
+- `services/svc-bank/src/earn/earn-service.ts:275` calls **`reuseOrRefuse(positionId, input.userId, pool.id, input.amount)`** — so a taken id is compared against user, pool and amount instead of silently no-opping.
+- `services/svc-bank/src/loans/loan-service.ts:519` checks **`loan.userId !== input.userId || loan.productId !== product.id`** and throws **`bank.loan_borrower_mismatch`** — the borrower is checked, not only the amount.
+
+**The claim lock worked exactly as designed.** I declined to dual-edit a claimed money service, the lane owner took the patch, and it landed. The mechanism did its job; my reading of it was stale.
+
+**What I got wrong, precisely:** I treated a parking note as current state. Three documents on `main` described the patch as parked, and I cited them instead of reading the code they were about. A parking note records a moment, not a condition — and this repo has already produced that failure in another form, where a stale board flipped two **CLOSED** items back to open against working code.
+
+**One thing this does not withdraw.** `bank.earn` still reads `status: 'done'` in `features.mjs`. That was false while the defect was live, and nothing about the fix landing makes the earlier claim honest in retrospect. Whether the row now genuinely meets the three-part `done` bar (REACHABLE, TESTED, NOT PROPPED UP) is worth re-checking on its own terms — but it is a tracker question for the lane owner, not a decision for you.
 
 # What I recommend you answer first
 
 **Q1 alone unblocks the most.** External-only for v1 turns `execution.sor`, `execution.arbitrage` and the external half of `execution.market-making` from blocked-on-a-ruling into ordinary engineering, and defers the hard fairness question until there is a working engine to reason about.
 
-**Then item 11** — it is the only thing on this list that is a live money defect with a written fix sitting behind a process lock.
+**Item 11 is withdrawn** — it was already fixed by #1194 before I wrote it up. See its section for what I got wrong. **Item 2 moves up.**
 
 **Then item 2**, because one sentence moves a finished service from useless to shipping.
