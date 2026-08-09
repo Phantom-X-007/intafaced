@@ -470,7 +470,6 @@ export class SubscriptionService {
   }
 
   private async maxFiredOccurrence(subscriptionId: string): Promise<number | null> {
-
     const rows = await this.sql<Array<{ m: number | null }>>`
       SELECT MAX(occurrence) AS m FROM pay.subscription_executions
        WHERE subscription_id = ${subscriptionId}
