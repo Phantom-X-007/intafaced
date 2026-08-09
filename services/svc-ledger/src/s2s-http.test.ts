@@ -9,7 +9,7 @@ import {
 } from '@intafaced/ledger-client';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
-import { handleS2sBalance, handleS2sHistory, handleS2sPost, httpError, registerS2sHttp } from './s2s-http.js';
+import { handleS2sBalance, handleS2sBalances, handleS2sHistory, handleS2sPost, httpError, registerS2sHttp } from './s2s-http.js';
 import { HISTORY_MAX_ENTRIES, HistoryTooLargeError, type HistoryEntry } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 
@@ -82,6 +82,55 @@ describe('s2s-http (graph W1-C money surface)', () => {
     const out = await handleS2sBalance(stubService(), userAvailable(USER, 'USDT'));
     expect(out.amount).toBe(formatAmount(amt('42')));
     expect(out.accountId).toBe('acct-1');
+    // available is unpurposed — empty string, not omitted, so callers can key
+    // by purpose without special-casing "field missing".
+    expect(out.purpose).toBe('');
+  });
+
+  it('surfaces purpose on balances so two holds do not re-commingle on the wire', async () => {
+    // purpose is account IDENTITY (P0-3). Without it, two order holds collapse
+    // to the same (assetId, kind) and any caller that keys that way re-merges
+    // pots the book keeps apart.
+    const out = await handleS2sBalances(
+      stubService({
+        balances: async () => [
+          {
+            account: orderHoldAccount(USER, 'USDT', 'order-a'),
+            accountId: 'hold-a',
+            amount: amt('10'),
+          },
+          {
+            account: orderHoldAccount(USER, 'USDT', 'order-b'),
+            accountId: 'hold-b',
+            amount: amt('20'),
+          },
+          {
+            account: userAvailable(USER, 'USDT'),
+            accountId: 'avail-1',
+            amount: amt('5'),
+          },
+        ],
+      }),
+      { ownerType: 'user', ownerId: USER },
+    );
+
+    expect(out).toHaveLength(3);
+    const byId = Object.fromEntries(out.map((row) => [row.accountId, row]));
+    expect(byId['hold-a']).toMatchObject({
+      assetId: 'USDT',
+      kind: 'hold',
+      purpose: 'order:order-a',
+      amount: '10',
+    });
+    expect(byId['hold-b']).toMatchObject({
+      assetId: 'USDT',
+      kind: 'hold',
+      purpose: 'order:order-b',
+      amount: '20',
+    });
+    expect(byId['avail-1']).toMatchObject({ kind: 'available', purpose: '', amount: '5' });
+    // Same asset+kind, different purpose — the whole point of this field.
+    expect(byId['hold-a']!.purpose).not.toBe(byId['hold-b']!.purpose);
   });
 });
 

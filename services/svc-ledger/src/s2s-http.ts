@@ -106,6 +106,9 @@ export async function handleS2sBalance(ledger: LedgerService, body: unknown) {
     accountId: balance.accountId,
     assetId: input.assetId,
     kind: input.kind,
+    // Purpose is account IDENTITY (P0-3). See balances mapper for why it must
+    // travel on the wire, not only inside accountId.
+    purpose: input.purpose ?? '',
     amount: formatAmount(balance.amount),
   };
 }
@@ -148,6 +151,11 @@ export async function handleS2sBalances(ledger: LedgerService, body: unknown) {
     accountId: b.accountId,
     assetId: b.account.assetId,
     kind: b.account.kind,
+    // Purpose is account IDENTITY (P0-3), not optional decoration. Two holds
+    // with different claims must not collapse to the same (assetId, kind) on
+    // the wire — callers that key by those alone would re-commingle what the
+    // book keeps apart.
+    purpose: b.account.purpose ?? '',
     amount: formatAmount(b.amount),
   }));
 }
