@@ -32,6 +32,28 @@ export class ReorgTooDeepError extends Error {
   }
 }
 
+/**
+ * Head is still on the chain, but the next block does not parent-link to it.
+ * Usually a mid-read reorg race (header and successor observed from different
+ * branches). Never a silent batch spin.
+ */
+export class ParentUnlinkError extends Error {
+  readonly code = 'indexer.parent_unlink' as const;
+
+  constructor(
+    readonly headHeight: number,
+    readonly headHash: string,
+    readonly nextHeight: number,
+    readonly nextParentHash: string,
+  ) {
+    super(
+      `Block at height ${nextHeight} does not parent-link to our head ${headHeight} (${headHash.slice(0, 10)}…): ` +
+        `observed parent ${nextParentHash.slice(0, 10)}…. Will not project it; next pass will re-probe.`,
+    );
+    this.name = 'ParentUnlinkError';
+  }
+}
+
 export interface IndexerDeps {
   readonly source: ChainSource;
   readonly store: ProjectionStore;
@@ -200,8 +222,17 @@ export class Indexer {
       // chain reorged between the two reads, or the adapter is inconsistent.
       // Both are handled the same way and neither is projected: find the fork.
       if (next.parentHash !== head.hash) {
-        blocksOrphaned += await this.#repair(head);
+        const orphaned = await this.#repair(head);
+        blocksOrphaned += orphaned;
         reorgs++;
+        // When head is still canonical, repair orphans nothing. Spinning the
+        // rest of the batch would re-read the same pair, count phantom reorgs,
+        // clear lastError on a "successful" pass, and leave /ready green while
+        // the cursor freezes. Stop this pass and surface a typed failure so the
+        // next poll retries once the mid-read race (or bad adapter) clears.
+        if (orphaned === 0) {
+          throw new ParentUnlinkError(head.height, head.hash, next.height, next.parentHash);
+        }
         continue;
       }
 

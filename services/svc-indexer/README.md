@@ -197,7 +197,7 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 
 ## Tests
 
-`pnpm --filter @intafaced/svc-indexer test` — **151 tests.** 98 need nothing at all; 27 need Postgres; 26 need a chain. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true.
+`pnpm --filter @intafaced/svc-indexer test` — **153+ tests** (count drifts with hermetic residual closes; CI is the seal). Most need nothing at all; ~27 need Postgres; ~26 need a chain. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true.
 
 | File                                | Covers                                                                                                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -212,6 +212,7 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 | `chain/evm/source.live.test.ts`     | The adapter on a real chain: parent links, real logs, 18 decimals end to end, address filtering, and every refusal — including the by-block-hash fetch  |
 | `chain/evm/reorg.live.test.ts`      | **A real chain, really forked**, on both stores: orphaned rows gone, tip-replacement caught, idempotent restart, deep-fork halt, `behindBy` staleness   |
 | `router.mount.test.ts`              | The mount boundary over real `createEdgeContext` headers: anonymous reads succeed, a forged principal confers nothing, `status` surfaces a halt         |
+| `indexer.parent-unlink.test.ts`     | Mid-read parent unlink throws once (`indexer.parent_unlink`) — never burns a green batch with a frozen cursor                                           |
 | `sovereignty.test.ts`               | §22 for every region × tier with a custodial control, and the §16.10 custody assertions listed under **Ledger**                                         |
 
 **Two implementations is the point.** A single implementation tested against itself proves the tests match the code, not that the code matches the design. The memory store is short enough to check by eye; `unwindTo` is a `DELETE` and `prune` is a `DELETE` with a correlated subquery — the kind of SQL that looks right and is off by one row.
@@ -244,7 +245,9 @@ That last mutation is the point of doing this at all. The by-block-hash fetch is
 
 ## Kill-switch
 
-`indexer.ingest` in the admin console, or `INDEXER_INGEST_ENABLED=false`.
+`INDEXER_INGEST_ENABLED=false` at process boot (or a future admin path that calls the in-process `setIngestEnabled` export).
+
+**Honesty note (2026-08-09):** the admin console registry lists `indexer.ingest`, but today that flag is **env-at-boot only** — flipping a chip in admin does not reach the running process. `setIngestEnabled` is exported for that wire; edge/admin have not called it yet. Do not claim a live console toggle until that wire exists.
 
 **Effect when off:** the ingest loop stops advancing; `status.ingestEnabled` reports it. Every read keeps serving what is already projected.
 
