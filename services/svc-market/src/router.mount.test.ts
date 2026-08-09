@@ -416,9 +416,13 @@ describe('svc-market mount — commerce scopes', () => {
     updatedAt: '2026-08-09T00:00:00.000Z',
   };
 
-  function stubCommerce() {
+  function stubCommerce(opts?: { commissionBps: number | null }) {
+    const commissionBps = opts?.commissionBps === undefined ? 500 : opts.commissionBps;
     return {
-      programme: vi.fn(() => ({ commissionBps: 500, commissionConfigured: true })),
+      programme: vi.fn(() => ({
+        commissionBps,
+        commissionConfigured: commissionBps !== null,
+      })),
       createListing: vi.fn(async () => listingRow),
       archiveListing: vi.fn(async () => ({ ...listingRow, status: 'archived' as const })),
       myListings: vi.fn(async () => [listingRow]),
@@ -484,8 +488,7 @@ describe('svc-market mount — commerce scopes', () => {
   });
 
   it('reports blank commission config on the public programme', async () => {
-    const commerce = stubCommerce();
-    commerce.programme = vi.fn(() => ({ commissionBps: null, commissionConfigured: false }));
+    const commerce = stubCommerce({ commissionBps: null });
     await expect(
       createMarketRouter(stubVendors(), commerce as never)
         .createCaller(anonymous())
