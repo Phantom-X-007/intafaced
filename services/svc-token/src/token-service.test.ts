@@ -308,6 +308,27 @@ if (!available) {
         code: 'token.stake_not_found',
       });
     });
+
+    it('refuses to unstake a pending (unfunded) claim and moves no value', async () => {
+      // The throw exists for status=pending; only the time-lock branch was
+      // executed. A pending row is a claim without ledger principal behind it —
+      // unstaking it must not invent a return of funds.
+      const stakeId = '55555555-5555-4555-8555-555555555555';
+      await sql`
+        INSERT INTO token.stakes (id, user_id, amount, tier, multiplier_bps, started_at, unlocks_at, status)
+        VALUES (
+          ${stakeId}, ${USER_A}, ${'1000'}::numeric, 'flex', 10000,
+          now(), null, 'pending'
+        )
+      `;
+
+      await expect(token.unstake(stakeId)).rejects.toMatchObject({ code: 'token.stake_locked' });
+
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stakeId}`;
+      expect(rows[0]?.status).toBe('pending');
+      expect(await balanceOf(USER_A)).toBe('0');
+      expect(await stakedOf(USER_A)).toBe('0');
+    });
   });
 
   // ── Fee discount (§4.3) ───────────────────────────────────────────────────
@@ -1154,6 +1175,62 @@ if (!available) {
     });
   });
 
+  describe('a deployment whose token_params values are invalid', () => {
+    let original: {
+      buyback_bps: string;
+      burn_split_bps: string;
+      total_supply: string;
+      halving_interval: number;
+      emission_curve: unknown;
+    };
+
+    beforeEach(async () => {
+      const rows = await sql<
+        Array<{
+          buyback_bps: string;
+          burn_split_bps: string;
+          total_supply: string;
+          halving_interval: number;
+          emission_curve: unknown;
+        }>
+      >`SELECT buyback_bps::text, burn_split_bps::text, total_supply::text, halving_interval, emission_curve FROM token.token_params WHERE id = true`;
+      original = rows[0]!;
+    });
+
+    afterEach(async () => {
+      await sql`
+        UPDATE token.token_params SET
+          buyback_bps = ${original.buyback_bps}::numeric,
+          burn_split_bps = ${original.burn_split_bps}::numeric,
+          total_supply = ${original.total_supply}::numeric,
+          halving_interval = ${original.halving_interval},
+          emission_curve = ${sql.json(original.emission_curve as never)}
+        WHERE id = true
+      `;
+    });
+
+    const dbToken = () => new TokenService(sql, ledger, bus, { ...options, loadParamsFromDb: true, feeScheduleTtlMs: 0 });
+
+    it('refuses buyback params out of bps range before any burn', async () => {
+      await sql`UPDATE token.token_params SET buyback_bps = 10001 WHERE id = true`;
+      await expect(dbToken().buybackParams()).rejects.toMatchObject({ code: 'token.params_invalid' });
+    });
+
+    it('refuses an emission_curve that is not an object before minting', async () => {
+      await sql`UPDATE token.token_params SET emission_curve = ${sql.json([] as never)} WHERE id = true`;
+      await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_invalid' });
+      const rows = await sql`SELECT epoch FROM token.emission_epochs`;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('refuses a zero halving interval before minting', async () => {
+      await sql`UPDATE token.token_params SET halving_interval = 0 WHERE id = true`;
+      await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_invalid' });
+      const rows = await sql`SELECT epoch FROM token.emission_epochs`;
+      expect(rows).toHaveLength(0);
+    });
+  });
+
   // ── Emissions ─────────────────────────────────────────────────────────────
 
   describe('emissions', () => {
@@ -1373,6 +1450,95 @@ if (!available) {
           now,
         }),
       ).rejects.toMatchObject({ code: 'token.proposal_not_allowed' });
+    });
+
+    it('refuses a stake just below the Initiate threshold', async () => {
+      await fund(USER_A, '999');
+      await token.stake({ userId: USER_A, amount: amt('999'), tier: 'flex' });
+      await expect(
+        token.createProposal({
+          kind: 'listing',
+          body: { symbol: 'X' },
+          createdBy: USER_A,
+          opensAt,
+          closesAt,
+          now,
+        }),
+      ).rejects.toMatchObject({ code: 'token.proposal_not_allowed' });
+    });
+
+    it('refuses a proposal window that does not close after it opens', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await expect(
+        token.createProposal({
+          kind: 'fee_param',
+          body: {},
+          createdBy: USER_A,
+          opensAt: closesAt,
+          closesAt: opensAt,
+          now,
+        }),
+      ).rejects.toMatchObject({ code: 'token.proposal_window' });
+    });
+
+    it('allows a vote AT opensAt and refuses AT closesAt (half-open window)', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'curriculum',
+        body: {},
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now: opensAt,
+      });
+
+      const atOpen = await token.castVote({
+        proposalId: proposal.id,
+        userId: USER_A,
+        choice: 'for',
+        now: opensAt,
+      });
+      expect(formatAmount(atOpen.weight)).toBe('1000');
+
+      await fund(USER_B, '1000');
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+      await expect(
+        token.castVote({
+          proposalId: proposal.id,
+          userId: USER_B,
+          choice: 'against',
+          now: closesAt,
+        }),
+      ).rejects.toMatchObject({ code: 'token.proposal_window' });
+    });
+
+    it('survives concurrent double-votes — one ballot, one success', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'listing',
+        body: {},
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          token
+            .castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now })
+            .then(() => 'ok' as const)
+            .catch((err: { code?: string }) => (err?.code === 'token.already_voted' ? 'voted' : 'other')),
+        ),
+      );
+
+      expect(results.filter((r) => r === 'ok')).toHaveLength(1);
+      expect(results.filter((r) => r === 'voted')).toHaveLength(7);
+      const detail = await token.getProposal(proposal.id);
+      expect(detail.tally.voterCount).toBe(1);
     });
 
     it('lets admin open a proposal without stake', async () => {
