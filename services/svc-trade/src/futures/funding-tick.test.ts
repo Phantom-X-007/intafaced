@@ -9,6 +9,9 @@ import {
 } from './funding-tick.js';
 import type { FundingOpenPosition } from './funding-settlement.js';
 
+/** Test-only magnitude bound — NOT product law (owner residual D2). */
+const FIXTURE_FUNDING_MAX_ABS = '1';
+
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 
@@ -76,6 +79,7 @@ describe('runFundingTick', () => {
         positions: positionsOf(longShort()),
         periods: memoryFundingPeriodStore(),
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger,
       },
       'm1',
@@ -96,6 +100,7 @@ describe('runFundingTick', () => {
         positions: positionsOf([]),
         periods: memoryFundingPeriodStore(),
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger,
       },
       'm1',
@@ -114,6 +119,7 @@ describe('runFundingTick', () => {
         positions: positionsOf(longShort()),
         periods,
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger,
       },
       'm1',
@@ -137,6 +143,7 @@ describe('runFundingTick', () => {
       positions: positionsOf(longShort()),
       periods,
       margins: memoryFundingMarginApplier(),
+      maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
       ledger,
     };
     await runFundingTick(deps, 'm1');
@@ -204,9 +211,12 @@ describe('runFundingTick', () => {
     const rates = fixedRate('0.0001', 'm1:period-membership-open');
 
     // Attempt 1: book is long + shortX. Posts, then crashes on settle.
-    await expect(runFundingTick({ rates, positions: positionsOf([long, shortX]), periods, margins, ledger }, 'm1')).rejects.toThrow(
-      /crashed/,
-    );
+    await expect(
+      runFundingTick(
+        { rates, positions: positionsOf([long, shortX]), periods, margins, ledger, maxAbsRate: FIXTURE_FUNDING_MAX_ABS },
+        'm1',
+      ),
+    ).rejects.toThrow(/crashed/);
     expect(seen.size).toBe(1);
     const afterFirstKeys = new Set(seen.keys());
     const onePeriod = (amt('0.0001') * ((amt('1') * amt('50000')) / 10n ** 18n)) / 10n ** 18n;
@@ -214,7 +224,10 @@ describe('runFundingTick', () => {
 
     // New short opens. Replay must NOT mint a second leg for plong.
     await expect(
-      runFundingTick({ rates, positions: positionsOf([long, shortX, shortNew]), periods, margins, ledger }, 'm1'),
+      runFundingTick(
+        { rates, positions: positionsOf([long, shortX, shortNew]), periods, margins, ledger, maxAbsRate: FIXTURE_FUNDING_MAX_ABS },
+        'm1',
+      ),
     ).rejects.toThrow(/crashed/);
 
     const newKeys = [...seen.keys()].filter((k) => !afterFirstKeys.has(k));
@@ -277,14 +290,27 @@ describe('runFundingTick', () => {
 
     // Attempt 1: full book, dies writing the marker — after the legs posted.
     await expect(
-      runFundingTick({ rates, positions: positionsOf([long, shortX, shortY]), periods: neverSettles, margins, ledger }, 'm1'),
+      runFundingTick(
+        {
+          rates,
+          positions: positionsOf([long, shortX, shortY]),
+          periods: neverSettles,
+          margins,
+          ledger,
+          maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
+        },
+        'm1',
+      ),
     ).rejects.toThrow(/crashed/);
     const afterFirst = new Set(seen.keys());
     expect(afterFirst.size).toBe(2); // long→X and long→Y
 
     // Short X closes. Attempt 2 re-plans against the book that is left.
     await expect(
-      runFundingTick({ rates, positions: positionsOf([long, shortY]), periods: neverSettles, margins, ledger }, 'm1'),
+      runFundingTick(
+        { rates, positions: positionsOf([long, shortY]), periods: neverSettles, margins, ledger, maxAbsRate: FIXTURE_FUNDING_MAX_ABS },
+        'm1',
+      ),
     ).rejects.toThrow(/crashed/);
 
     // The replay must not have invented a key the ledger had not already seen.
@@ -319,6 +345,7 @@ describe('runFundingTick', () => {
         positions: positionsOf(longShort()),
         periods,
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger,
       },
       'm1',
@@ -341,6 +368,7 @@ describe('runFundingTick', () => {
         positions: positionsOf(longShort()),
         periods,
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger,
         now: () => fixed,
       },
@@ -366,6 +394,7 @@ describe('runFundingTick', () => {
         positions: positionsOf([]),
         periods,
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger,
       },
       'm1',
@@ -390,11 +419,54 @@ describe('runFundingTick', () => {
         positions: positionsOf(longShort()),
         periods: memoryFundingPeriodStore(),
         margins: memoryFundingMarginApplier(),
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
         ledger,
         now: () => fixed,
       },
       'm1',
     );
     expect(quote).toHaveBeenCalledWith({ marketId: 'm1', at: fixed });
+  });
+
+  /**
+   * C12 done bar: rate "1000000" → no ledger movement; refuse with clear code.
+   * Fixture max is test-only, not Denon's product ceiling.
+   */
+  it('rate 1000000 posts nothing to the ledger and throws exceeds_max', async () => {
+    const { ledger, posts } = recordingLedger();
+    const margins = memoryFundingMarginApplier();
+    await expect(
+      runFundingTick(
+        {
+          rates: fixedRate('1000000', 'm1:absurd-rate'),
+          positions: positionsOf(longShort()),
+          periods: memoryFundingPeriodStore(),
+          margins,
+          maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
+          ledger,
+        },
+        'm1',
+      ),
+    ).rejects.toMatchObject({ code: 'trade.funding_rate_exceeds_max' });
+    expect(posts).toHaveLength(0);
+    expect(margins.applied()).toHaveLength(0);
+  });
+
+  it('unset maxAbsRate refuses settlement — no ledger movement', async () => {
+    const { ledger, posts } = recordingLedger();
+    await expect(
+      runFundingTick(
+        {
+          rates: fixedRate('0.0001', 'm1:no-bound'),
+          positions: positionsOf(longShort()),
+          periods: memoryFundingPeriodStore(),
+          margins: memoryFundingMarginApplier(),
+          maxAbsRate: null,
+          ledger,
+        },
+        'm1',
+      ),
+    ).rejects.toMatchObject({ code: 'trade.funding_rate_bound_unconfigured' });
+    expect(posts).toHaveLength(0);
   });
 });

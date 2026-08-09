@@ -11,6 +11,9 @@ import {
 import type { FundingLeg } from './funding-settlement.js';
 import type { PostRequest } from '@intafaced/ledger-client';
 
+/** Test-only magnitude bound — NOT product law (D2). */
+const FIXTURE_FUNDING_MAX_ABS = '1';
+
 /**
  * After funding posts, margin_current must move with the money (mega-audit #3).
  * Without this, close/liq over-release open-time margin_initial.
@@ -94,6 +97,7 @@ describe('a funding wire cannot forget the margin move', () => {
         return { id: 'tx', idempotencyKey: req.idempotencyKey } as never;
       },
     },
+    maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
   };
 
   it('does not typecheck without a margin applier', () => {
@@ -105,7 +109,7 @@ describe('a funding wire cannot forget the margin move', () => {
 
   it('moves margin on every settled tick, with no branch to skip it', async () => {
     const margins = memoryFundingMarginApplier();
-    const result = await runFundingTick({ ...enough, margins }, 'm1');
+    const result = await runFundingTick({ ...enough, margins, maxAbsRate: FIXTURE_FUNDING_MAX_ABS }, 'm1');
 
     expect(result.status).toBe('settled');
     expect(margins.applied()).toHaveLength(2);
@@ -156,6 +160,7 @@ describe('runFundingTick applies margin nets after ledger post', () => {
           },
         },
         margins,
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
       },
       'm1',
     );
@@ -201,6 +206,7 @@ describe('runFundingTick applies margin nets after ledger post', () => {
           },
         },
         margins,
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
       },
       'm1',
     );
@@ -233,6 +239,7 @@ describe('runFundingTick applies margin nets after ledger post', () => {
           },
         },
         margins,
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
       },
       'm1',
     );

@@ -26,6 +26,7 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 1000,
         fundingIntervalMs: 1000,
         fundingMarketIds: ['m1'],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     expect(handle.host.list()).toEqual([]);
@@ -57,6 +58,7 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 60_000,
         fundingIntervalMs: 60_000,
         fundingMarketIds: ['m1', 'm2'],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     const names = handle.host.list().sort();
@@ -91,6 +93,7 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 1000,
         fundingIntervalMs: 1000,
         fundingMarketIds: [],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     expect(await handle.markPrice('m1')).toBe('50000');
@@ -114,6 +117,7 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 1000,
         fundingIntervalMs: 1000,
         fundingMarketIds: [],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     expect(await handle.markPrice('m1')).toBeNull();

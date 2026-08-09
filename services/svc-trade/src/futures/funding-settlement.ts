@@ -41,6 +41,7 @@
  * number and stops the double-charge.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
+import { assertFundingRateWithinBound } from './funding-rate-bound.js';
 
 export interface FundingOpenPosition {
   positionId: string;
@@ -61,6 +62,12 @@ export interface FundingPlanInput {
    * Positive: longs pay shorts. Negative: shorts pay longs.
    */
   rate: string;
+  /**
+   * Absolute max |rate| for this period (TRADE_FUTURES_FUNDING_MAX_ABS_RATE).
+   * NO product default — null/empty refuses (unpublished bound = no charge).
+   * Owner residual D2 sets the number; this field is the mechanism only.
+   */
+  maxAbsRate: string | null;
   positions: readonly FundingOpenPosition[];
 }
 
@@ -103,8 +110,12 @@ export function fundingAmount(notional: Amount, rateAbs: Amount): Amount {
  *   (so sum of legs from a long = their full pay)
  */
 export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
+  // Zero is a completed period outcome (no transfer). Bound still applies to
+  // any non-zero rate — including the absurd `"1000000"` that used to charge
+  // 1e6 × notional with no ceiling (C12 / BUILD-STOP D2).
   const rate = parseAmount(input.rate);
   if (rate === 0n) return [];
+  assertFundingRateWithinBound(input.rate, input.maxAbsRate);
 
   const longs = input.positions.filter((p) => p.side === 'long');
   const shorts = input.positions.filter((p) => p.side === 'short');

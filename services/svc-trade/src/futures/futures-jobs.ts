@@ -41,6 +41,12 @@ export interface FuturesJobsConfig {
    * (never invent a market list).
    */
   fundingMarketIds: readonly string[];
+  /**
+   * Absolute max |period rate| (TRADE_FUTURES_FUNDING_MAX_ABS_RATE).
+   * Null refuses settle/publish application. Required at boot when
+   * fundingMarketIds non-empty — see funding-rate-bound.ts. No product default.
+   */
+  fundingMaxAbsRate: string | null;
 }
 
 export interface FuturesJobsDeps {
@@ -185,6 +191,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
           periods,
           ledger: deps.ledger,
           margins,
+          maxAbsRate: deps.config.fundingMaxAbsRate,
           now: deps.now,
         },
         marketId,

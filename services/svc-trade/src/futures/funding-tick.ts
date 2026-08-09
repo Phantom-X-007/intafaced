@@ -13,6 +13,7 @@
  */
 import type { Amount, LedgerClient, PostRequest } from '@intafaced/ledger-client';
 import { planFundingSettlement, summarizeFundingPlan, type FundingOpenPosition, type FundingLeg } from './funding-settlement.js';
+import { assertFundingRateWithinBound } from './funding-rate-bound.js';
 
 /** External period rate. Null / refuse → tick skips; never synthesize a rate. */
 export interface FundingRateQuote {
@@ -114,6 +115,13 @@ export interface FundingTickDeps {
    * below models it.
    */
   margins: FundingMarginApplier;
+  /**
+   * Absolute max |period rate| (TRADE_FUTURES_FUNDING_MAX_ABS_RATE).
+   * REQUIRED on the deps object (may be null = unconfigured).
+   * Null refuses settlement before any ledger post — unpublished bound is not
+   * a silent free pass. No product default invented here (owner residual D2).
+   */
+  maxAbsRate: string | null;
   /** Optional clock for tests. */
   now?: () => Date;
 }
@@ -178,10 +186,16 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
     return { status: 'skipped', reason: 'no_legs', periodId: quote.periodId };
   }
 
+  // Bound check before plan so an absurd rate never reaches leg construction
+  // or postLegs. assert is also inside planFundingSettlement (belt); this is
+  // the explicit money-path gate with the tick's configured max.
+  assertFundingRateWithinBound(quote.rate, deps.maxAbsRate);
+
   const legs = planFundingSettlement({
     periodId: quote.periodId,
     marketId: quote.marketId,
     rate: quote.rate,
+    maxAbsRate: deps.maxAbsRate,
     positions: members,
   });
 

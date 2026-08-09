@@ -174,6 +174,20 @@ const schema = serviceEnvSchema
       TRADE_FUTURES_FUNDING_MARKET_IDS: z.string().default(''),
 
       /**
+       * Absolute max |period funding rate| as a positive decimal string
+       * (same units as published rates — absolute, not bps).
+       *
+       * NO DEFAULT. The product ceiling is owner residual D2
+       * (`docs/BUILD-STOP-TRADE-2026-08-08.md`). Inventing e.g. "0.01" here
+       * would dress an interim number as law.
+       *
+       * Empty: publish + settlement refuse rate application (fail-closed).
+       * Non-empty funding market list without this set: boot fails.
+       * See `futures/funding-rate-bound.ts`.
+       */
+      TRADE_FUTURES_FUNDING_MAX_ABS_RATE: z.string().default(''),
+
+      /**
        * THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM, and therefore the
        * ceiling on what a winning position can be paid.
        *
