@@ -496,12 +496,14 @@ export class CommerceService {
       `;
       if (existing.length === 0) throw err;
       const row = existing[0]!;
+      // Commission bps is NOT part of the client-facing terms match: it was
+      // snapshotted on first claim. Re-drive after an env bps change must settle
+      // the original split, not stuck as purchase_conflict or re-split.
       const termsMatch =
         row.listing_id === input.listingId &&
         row.buyer_id === input.buyerId &&
         row.vendor_id === input.vendorId &&
         row.asset_id === input.assetId &&
-        row.commission_bps === input.commissionBps &&
         formatAmount(parseAmount(String(row.price))) === input.price;
       if (!termsMatch) {
         throw new MarketError(`Purchase id ${input.purchaseId} was already used with different terms`, 'market.purchase_conflict');
