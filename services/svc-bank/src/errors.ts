@@ -215,7 +215,20 @@ export type BankErrorCode =
    * Loan risk-sweep kill switch (`LOAN_RISK_SWEEP_ENABLED=false`).
    * Defaults off in production; tRPC must not liquidate past the HTTP stop.
    */
-  | 'bank.loan_risk_sweep_disabled';
+  | 'bank.loan_risk_sweep_disabled'
+  // ── Auto-invest (§31:805 / bank.auto-invest F-plane) ───────────────────────
+  /**
+   * Cross-asset DCA needs a convert rate counterparty. This service never
+   * invents §8 rates — create and run both refuse by this name when no
+   * ConvertPort is configured.
+   */
+  | 'bank.auto_invest_rate_unset'
+  | 'bank.auto_invest_not_found'
+  | 'bank.auto_invest_inactive'
+  | 'bank.auto_invest_invalid_threshold'
+  | 'bank.auto_invest_run_failed'
+  | 'bank.auto_invest_below_threshold'
+  | 'bank.auto_invest_disabled';
 
 export class BankError extends Error {
   constructor(

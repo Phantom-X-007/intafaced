@@ -91,6 +91,10 @@ function stubBank(overrides: Partial<Record<string, unknown>> = {}) {
       runRiskSweep: async () => ({ marked: 0, called: 0, liquidated: 0, cleared: 0, refused: [] }),
       ...(overrides.loans as object | undefined),
     },
+    autoInvest: {
+      runDue: async () => ({ considered: 0, settled: 0, skipped: 0, rejected: 0, failures: [] }),
+      ...(overrides.autoInvest as object | undefined),
+    },
   } as unknown as BankServices;
 }
 

@@ -163,6 +163,16 @@ const schema = serviceEnvSchema
        * plausible one, so choosing the ledger half is an act somebody performed.
        */
       BANK_RAMP_MODE: z.enum(RAMP_SETTINGS).default('none'),
+
+      /**
+       * Emergency stop for the auto-invest runner (threshold sweeps / DCA).
+       * Same posture as SCHEDULED_TRANSFERS_ENABLED: a bad pass must not keep
+       * moving value after an operator hit stop.
+       */
+      AUTO_INVEST_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
     }),
   );
 

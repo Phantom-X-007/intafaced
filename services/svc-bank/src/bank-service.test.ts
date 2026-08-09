@@ -135,7 +135,8 @@ if (!available) {
 
   beforeEach(async () => {
     await sql`
-      TRUNCATE bank.interest_accruals, bank.earn_positions, bank.earn_pools,
+      TRUNCATE bank.auto_invest_runs, bank.auto_invest_rules,
+               bank.interest_accruals, bank.earn_positions, bank.earn_pools,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
                bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards,
                bank.ramp_offramps, bank.ramp_onramps
@@ -2060,6 +2061,12 @@ if (!available) {
         // only place "how much is available" is answered.
         'ramp_onramps.amount': 'a RECORD of one on-ramp credit; written once with its ledger tx id',
         'ramp_offramps.amount': 'a RECORD of one off-ramp instruction; written once with hold+settle tx ids',
+
+        // ── Auto-invest (§31:805 F-plane) ────────────────────────────────────
+        // Rules are instructions; runs are write-once records. No running balance.
+        'auto_invest_rules.threshold': 'a POLICY keep-amount for a threshold sweep; instruction, not a holding',
+        'auto_invest_rules.amount': 'a POLICY spend for a DCA schedule; instruction, not a holding',
+        'auto_invest_runs.amount': 'a RECORD of one run (settled or rejected); written once',
       };
 
       const moneyColumns = columns

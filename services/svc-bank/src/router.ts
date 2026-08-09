@@ -93,6 +93,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.position_not_found':
       case 'bank.loan_not_found':
       case 'bank.loan_product_not_found':
+      case 'bank.auto_invest_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
       case 'bank.not_owner':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
@@ -153,6 +154,10 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.position_locked':
       case 'bank.position_pending':
       case 'bank.loan_product_closed':
+      case 'bank.auto_invest_inactive':
+      case 'bank.auto_invest_invalid_threshold':
+      case 'bank.auto_invest_run_failed':
+      case 'bank.auto_invest_below_threshold':
       // CONFLICT rather than BAD_REQUEST: the request is well-formed, it just
       // collides with a loan that already exists under that id on other terms.
       case 'bank.loan_principal_mismatch':
@@ -192,6 +197,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.cashback_pot_unfunded':
       case 'bank.no_ramp_rail':
       case 'bank.fiat_ramp_socket':
+      case 'bank.auto_invest_rate_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
 
       // Kill switches. Same 503 class as the matching HTTP job endpoints —
@@ -200,6 +206,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.interest_accrual_disabled':
       case 'bank.loan_accrual_disabled':
       case 'bank.loan_risk_sweep_disabled':
+      case 'bank.auto_invest_disabled':
         return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: err.message, cause: err });
 
       default: {
@@ -392,6 +399,8 @@ export type BankRouterOptions = {
   loanAccrualEnabled?: boolean;
   /** When false, `ops.runRiskSweep` refuses with `bank.loan_risk_sweep_disabled`. Default true. */
   loanRiskSweepEnabled?: boolean;
+  /** When false, `ops.runAutoInvest` refuses with `bank.auto_invest_disabled`. Default true. */
+  autoInvestEnabled?: boolean;
 };
 
 export function createBankRouter(bank: BankServices, options: BankRouterOptions = {}) {
@@ -399,6 +408,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   const interestAccrualEnabled = options.interestAccrualEnabled ?? true;
   const loanAccrualEnabled = options.loanAccrualEnabled ?? true;
   const loanRiskSweepEnabled = options.loanRiskSweepEnabled ?? true;
+  const autoInvestEnabled = options.autoInvestEnabled ?? true;
 
   const spaces = router({
     list: scopedProcedure('bank:read', { module: 'bank' })
@@ -1286,6 +1296,30 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         }),
       ),
 
+    /**
+     * Fire due auto-invest rules (threshold sweeps always; DCA when convert is wired).
+     * Kill-switch parity with HTTP job when one is added.
+     */
+    runAutoInvest: scopedProcedure('admin:treasury')
+      .input(z.object({ limit: z.number().int().min(1).max(10_000).optional() }))
+      .output(
+        z.object({
+          considered: z.number().int(),
+          settled: z.number().int(),
+          skipped: z.number().int(),
+          rejected: z.number().int(),
+          failures: z.array(z.object({ ruleId: z.string(), code: z.string() })),
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          if (!autoInvestEnabled) {
+            throw new BankError('auto-invest is disabled', 'bank.auto_invest_disabled');
+          }
+          return bank.autoInvest.runDue(input.limit === undefined ? {} : { limit: input.limit });
+        }),
+      ),
+
     accrueInterest: scopedProcedure('admin:treasury')
       .input(z.object({ poolId: z.string().uuid().optional(), at: z.string().datetime({ offset: true }).optional() }))
       .output(
@@ -1796,6 +1830,119 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     createdAt: z.string(),
   });
 
+  const autoInvestRuleOutput = z.object({
+    id: z.string(),
+    kind: z.enum(['threshold_sweep', 'dca']),
+    assetId: z.string(),
+    threshold: amountString.nullable(),
+    targetPoolId: z.string().nullable(),
+    buyAssetId: z.string().nullable(),
+    amount: amountString.nullable(),
+    cadence: z.enum(['daily', 'weekly', 'monthly']).nullable(),
+    nextRunAt: z.string().nullable(),
+    status: z.enum(['active', 'paused', 'cancelled']),
+    createdAt: z.string(),
+  });
+
+  function mapRule(r: Awaited<ReturnType<typeof bank.autoInvest.listRules>>[number]) {
+    return {
+      id: r.id,
+      kind: r.kind,
+      assetId: r.assetId,
+      threshold: r.threshold === null ? null : formatAmount(r.threshold),
+      targetPoolId: r.targetPoolId,
+      buyAssetId: r.buyAssetId,
+      amount: r.amount === null ? null : formatAmount(r.amount),
+      cadence: r.cadence,
+      nextRunAt: r.nextRunAt?.toISOString() ?? null,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+    };
+  }
+
+  const autoInvest = router({
+    /**
+     * List this user's auto-invest rules. Rules hold no balance — they are
+     * instructions; the ledger answers "how much".
+     */
+    list: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.array(autoInvestRuleOutput))
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const rows = await bank.autoInvest.listRules(ctx.principal.userId);
+          return rows.map(mapRule);
+        }),
+      ),
+
+    /**
+     * Same-asset threshold sweep: keep `threshold` in primary available; move
+     * excess into an earn pool of the same asset. No rate is consulted.
+     */
+    createThresholdSweep: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          assetId: z.string().min(1).max(16),
+          threshold: amountString,
+          targetPoolId: z.string().uuid(),
+        }),
+      )
+      .output(autoInvestRuleOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const rule = await bank.autoInvest.createThresholdSweep({
+            userId: ctx.principal.userId,
+            assetId: input.assetId,
+            threshold: parseAmount(input.threshold),
+            targetPoolId: input.targetPoolId,
+          });
+          return mapRule(rule);
+        }),
+      ),
+
+    /**
+     * DCA schedule. Refuses `bank.auto_invest_rate_unset` when this deployment
+     * has no convert counterparty — §8 rates are never invented here.
+     */
+    createDca: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          spendAssetId: z.string().min(1).max(16),
+          buyAssetId: z.string().min(1).max(16),
+          amount: amountString,
+          cadence: z.enum(['daily', 'weekly', 'monthly']),
+          startsAt: z.string().datetime({ offset: true }),
+        }),
+      )
+      .output(autoInvestRuleOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const rule = await bank.autoInvest.createDca({
+            userId: ctx.principal.userId,
+            spendAssetId: input.spendAssetId,
+            buyAssetId: input.buyAssetId,
+            amount: parseAmount(input.amount),
+            cadence: input.cadence,
+            startsAt: new Date(input.startsAt),
+          });
+          return mapRule(rule);
+        }),
+      ),
+
+    cancel: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ ruleId: z.string().uuid() }))
+      .output(z.object({ ok: z.literal(true) }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const rule = await bank.autoInvest.getRule(input.ruleId);
+          if (rule.userId !== ctx.principal.userId) {
+            throw new BankError('Not your auto-invest rule', 'bank.not_owner');
+          }
+          await bank.autoInvest.cancelRule(input.ruleId);
+          return { ok: true as const };
+        }),
+      ),
+  });
+
   const ramps = router({
     /** What this deployment's ramp programme is — including that it is not one. */
     programme: scopedProcedure('bank:read', { module: 'bank' })
@@ -1899,6 +2046,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     loans,
     cards,
     ramps,
+    autoInvest,
     analytics,
     ops,
   });

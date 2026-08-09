@@ -121,6 +121,17 @@ Interest **capitalises** (raises debt, posts nothing). Mark / margin call / liqu
 | ----------------- | ----------- | ----------------------------------------------------------- |
 | `analytics.spend` | `bank:read` | Outflow by category over a window, computed from the ledger |
 
+### `autoInvest` — **F-plane half. DCA refuses rates unset.**
+
+| Procedure                         | Scope        | What it does                                                                                                                |
+| --------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `autoInvest.list`                 | `bank:read`  | The user's rules. Rules hold **no balance** — instructions only                                                             |
+| `autoInvest.createThresholdSweep` | `bank:write` | Keep `threshold` in primary available; excess → earn pool (**same asset**, no rate)                                         |
+| `autoInvest.createDca`            | `bank:write` | Scheduled cross-asset buy — **refuses `bank.auto_invest_rate_unset`** until a convert port is wired. Never invents §8 rates |
+| `autoInvest.cancel`               | `bank:write` | Stop future firings. Does not reverse past runs                                                                             |
+
+`ops.runAutoInvest` (`admin:treasury`) fires due rules. Kill switch: `AUTO_INVEST_ENABLED` (HTTP job parity when mounted). Card round-ups and sovereign allowance plane are not here — round-ups need the capture path; P-plane is `protocol.smart-accounts` (Shehzad).
+
 ### `ramps` — **crypto ledger half. Fiat is a socket.**
 
 | Procedure         | Scope        | Purpose                                                                |
