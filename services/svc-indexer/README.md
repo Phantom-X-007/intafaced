@@ -50,6 +50,8 @@ HTTP: `GET /health` (liveness) · `GET /ready`.
 
 **`/ready` returns 503 when the indexer is halted**, not only when the database is down. A halted indexer has hit a reorg deeper than its retained history: it knows its book is wrong and cannot repair it. Leaving the rotation is the correct response — being unreachable costs a user nothing they cannot get from any node, and a wrong price costs them a trade.
 
+**Data procedures refuse when halted too.** `/ready` only protects callers that go through a load balancer that actually probes readiness (compose healthchecks currently probe `/health`, which is liveness). So `book` / `fills` / `accountFills` / `position` / `positions` / `markets` return `SERVICE_UNAVAILABLE` while `status` and `health` keep answering — `status.halted` is how a caller learns why. A client that only hits `book` cannot silently render a dead-branch price.
+
 **Money is a decimal string on the wire and a scaled bigint in memory**, everywhere. `formatAmount` is the only thing in the router that renders a price. Nothing constructs a `number` from an amount: an order book is nothing but sums, and a float sums `0.1 + 0.2` to something that is not `0.3`. There is a test that round-trips 18 decimal places through Postgres and back.
 
 ---

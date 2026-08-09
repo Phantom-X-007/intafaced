@@ -407,6 +407,51 @@ describe('svc-indexer mount — status is honest', () => {
     expect(status.halted).not.toBeNull();
     expect(status.halted!.reason).toMatch(/re-index/);
   });
+
+  it('refuses book/fills/positions when halted — status still answers', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const source = new MemoryChainSource(CHAIN_ID);
+    source.append([{ kind: 'book_level', logIndex: 0, market: 'IFC-USD', side: 'bid', price: '100', quantity: '5' }]);
+    for (let i = 0; i < 5; i++) source.append([]);
+
+    const indexer = new Indexer({ source, store, finalityDepth: 1, ingestEnabled: () => true, startHeight: 0 });
+    await indexer.sync();
+    // Book is still in the store after a deep halt — that is the trap: the
+    // projection was never unwound. Refusing the data path is what stops a
+    // client rendering a price from a branch that no longer exists.
+    expect((await store.book('IFC-USD', 10)).bids).toHaveLength(1);
+
+    source.reorg(0, [[], [], []]);
+    await expect(indexer.sync()).rejects.toThrow(/deeper than retained history/);
+
+    const caller = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 1,
+      ingestEnabled: () => true,
+      chainSource: 'memory',
+    }).createCaller(anonymous());
+
+    // status is the diagnostic surface — always answers.
+    await expect(caller.status()).resolves.toMatchObject({
+      halted: expect.objectContaining({ reason: expect.stringMatching(/re-index/) }),
+    });
+    // health is liveness — the process is up.
+    await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
+
+    // Every data procedure refuses. SERVICE_UNAVAILABLE, not a silent book.
+    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+  });
 });
 
 describe('svc-indexer mount — health', () => {
