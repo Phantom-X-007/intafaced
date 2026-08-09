@@ -1898,89 +1898,108 @@ export class PayService {
       async (span) => {
         const prepared = await this.prepareSettlement(input);
         if (prepared.status !== 'pending') return prepared;
-
-        const merchant = await this.getMerchant(input.merchantId);
-        // About to post gross → merchant available. Suspension mid-freeze must
-        // not finish the move; captured volume stays in clearing until reopen.
-        this.assertMerchantActive(merchant);
-
-        return transaction(
-          this.sql,
-          async (tx) => {
-            const rows = await tx<SettlementRow[]>`
-              SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
-                FROM pay.settlements WHERE id = ${prepared.id} FOR UPDATE
-            `;
-            const row = rows[0]!;
-            if (row.status !== 'pending') return toSettlement(row);
-
-            const gross = parseAmount(row.gross);
-            const fees = parseAmount(row.fees);
-
-            const included = await tx<Array<{ payment_id: string }>>`
-              SELECT payment_id FROM pay.payment_events
-               WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
-               ORDER BY payment_id
-            `;
-
-            // Re-check live nets under payment row locks before the ledger
-            // moves. The freeze promised these numbers; if a concurrent path
-            // (or an operator) changed captured/refunded, posting the frozen
-            // gross would take someone else's clearing.
-            let liveGross = 0n;
-            for (const { payment_id } of included) {
-              await lockPayment(tx, payment_id);
-              const totals = await totalsFor(tx, payment_id);
-              const net = totals.captured - totals.refunded;
-              if (net > 0n) liveGross += net;
-            }
-            if (liveGross !== gross) {
-              throw new PayError(
-                `Settlement ${row.id} frozen gross ${formatAmount(gross)} no longer matches live captured−refunded ${formatAmount(liveGross)} — refusing to post`,
-                'pay.settlement_desynced',
-                {
-                  settlementId: row.id,
-                  frozenGross: formatAmount(gross),
-                  liveGross: formatAmount(liveGross),
-                },
-              );
-            }
-
-            await this.ledger.post(
-              recipes.merchantSettlement({
-                merchantId: row.merchant_id,
-                merchantUserId: merchant.userId,
-                window: row.window,
-                assetId: row.asset_id,
-                gross,
-                fee: fees,
-              }),
-            );
-
-            await tx`
-              UPDATE pay.settlements SET status = 'posted', payout_method = 'ledger', updated_at = now()
-               WHERE id = ${row.id}
-            `;
-
-            for (const { payment_id } of included) {
-              await appendEvent(tx, payment_id, 'settled', {
-                settlementId: row.id,
-                window: row.window,
-                assetId: row.asset_id,
-              });
-              await tx`
-                UPDATE pay.payments SET status = 'settled', updated_at = now()
-                 WHERE id = ${payment_id} AND status = 'captured'
-              `;
-            }
-
-            span.setAttribute('intafaced.amount', formatAmount(parseAmount(row.net)));
-            span.setAttribute('intafaced.payments', included.length);
-            return toSettlement({ ...row, status: 'posted', payout_method: 'ledger' });
-          },
-          { isolation: 'read committed', maxAttempts: 5 },
-        );
+        return this.postPendingSettlement(prepared.id, span);
       },
+    );
+  }
+
+  /**
+   * Phase 2 of settle — post ledger + project, keyed by settlement id.
+   * Used by settleWindow and by release heal (which must not re-parse window
+   * labels — custom windows need from/to that release does not have).
+   */
+  private async postPendingSettlement(
+    settlementId: string,
+    span?: { setAttribute: (k: string, v: string | number) => void },
+  ): Promise<SettlementRecord> {
+    const head = await this.sql<SettlementRow[]>`
+      SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+        FROM pay.settlements WHERE id = ${settlementId}
+    `;
+    const current = head[0];
+    if (!current) throw new PayError(`Settlement ${settlementId} not found`, 'pay.settlement_not_found');
+    if (current.status !== 'pending') return toSettlement(current);
+
+    const merchant = await this.getMerchant(current.merchant_id);
+    // About to post gross → merchant available. Suspension mid-freeze must
+    // not finish the move; captured volume stays in clearing until reopen.
+    this.assertMerchantActive(merchant);
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements WHERE id = ${settlementId} FOR UPDATE
+        `;
+        const row = rows[0]!;
+        if (row.status !== 'pending') return toSettlement(row);
+
+        const gross = parseAmount(row.gross);
+        const fees = parseAmount(row.fees);
+
+        const included = await tx<Array<{ payment_id: string }>>`
+          SELECT payment_id FROM pay.payment_events
+           WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
+           ORDER BY payment_id
+        `;
+
+        // Re-check live nets under payment row locks before the ledger
+        // moves. The freeze promised these numbers; if a concurrent path
+        // (or an operator) changed captured/refunded, posting the frozen
+        // gross would take someone else's clearing.
+        let liveGross = 0n;
+        for (const { payment_id } of included) {
+          await lockPayment(tx, payment_id);
+          const totals = await totalsFor(tx, payment_id);
+          const net = totals.captured - totals.refunded;
+          if (net > 0n) liveGross += net;
+        }
+        if (liveGross !== gross) {
+          throw new PayError(
+            `Settlement ${row.id} frozen gross ${formatAmount(gross)} no longer matches live captured−refunded ${formatAmount(liveGross)} — refusing to post`,
+            'pay.settlement_desynced',
+            {
+              settlementId: row.id,
+              frozenGross: formatAmount(gross),
+              liveGross: formatAmount(liveGross),
+            },
+          );
+        }
+
+        await this.ledger.post(
+          recipes.merchantSettlement({
+            merchantId: row.merchant_id,
+            merchantUserId: merchant.userId,
+            window: row.window,
+            assetId: row.asset_id,
+            gross,
+            fee: fees,
+          }),
+        );
+
+        await tx`
+          UPDATE pay.settlements SET status = 'posted', payout_method = 'ledger', updated_at = now()
+           WHERE id = ${row.id}
+        `;
+
+        for (const { payment_id } of included) {
+          await appendEvent(tx, payment_id, 'settled', {
+            settlementId: row.id,
+            window: row.window,
+            assetId: row.asset_id,
+          });
+          await tx`
+            UPDATE pay.payments SET status = 'settled', updated_at = now()
+             WHERE id = ${payment_id} AND status = 'captured'
+          `;
+        }
+
+        span?.setAttribute('intafaced.amount', formatAmount(parseAmount(row.net)));
+        span?.setAttribute('intafaced.payments', included.length);
+        return toSettlement({ ...row, status: 'posted', payout_method: 'ledger' });
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
     );
   }
 
@@ -2178,14 +2197,12 @@ export class PayService {
       );
     }
 
-    // Prefer heal. settleWindow is a no-op re-post when the ledger already holds
-    // the window key; projection catches up. Only desync falls through to release.
+    // Prefer heal by settlement id (not settleWindow — custom window labels need
+    // from/to that release does not carry). Ledger re-post is idempotent on
+    // settlement:<merchant>:<window>:<asset>; projection catches up. Only
+    // desync falls through to release.
     try {
-      const healed = await this.settleWindow({
-        merchantId: current.merchant_id,
-        window: current.window,
-        assetId: current.asset_id,
-      });
+      const healed = await this.postPendingSettlement(current.id);
       if (healed.status !== 'pending') return healed;
     } catch (err) {
       if (!(err instanceof PayError) || err.code !== 'pay.settlement_desynced') {
