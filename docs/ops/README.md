@@ -25,4 +25,6 @@
 
 ## Denon hard board
 
-Platform/money tasks agents leave for Denon: [`../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md)
+**Live** invent-risk / product-complete mountains (agents babysit only): [`../DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](../DENON-HARD-PARALLEL-BOARD-2026-08-09.md) · LIVE-LANES `denon-hard-parallel`.  
+D-S factory done: [`../SPEC-FACTORY-INDEX-2026-08-04.md`](../SPEC-FACTORY-INDEX-2026-08-04.md).  
+Historical shape: [`../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](../DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).

@@ -14,7 +14,7 @@ PRE-FLIGHT (first 60s — anti-drift + free-work discovery)
 4. Never implement on main checkout — worktree only.
 5. Swarm / free work (mandatory when go all-out / AFK / parallel): docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md · pnpm swarm:freeze · pnpm swarm:status · pnpm swarm:next · docs/ops/DASHBOARD.md
 6. Denon product queue (tip): docs/REGROUP-2026-08-03.md · retire ADR: docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md
-6b. Denon hard board (agents babysit only — not free shell craft): docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
+6b. Denon hard board LIVE (agents babysit only — not free craft / not invent-risk engines): docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md · LIVE-LANES denon-hard-parallel · factory done: docs/SPEC-FACTORY-INDEX-2026-08-04.md · historical: docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
 7. FE residual: docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · tooling/frontend/residual-register.json · pnpm frontend:residual
 8. Also if present: docs/START-HERE.md · docs/VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md · docs/WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md · docs/REDUNDANT-VS-PORT-2026-08-03.md
 9. Owners: Nitro=FE/shell · Denon=spine + his open PRs (no dual-edit) · Shehzad @shehzad002=M1–M7 (babysit only).

@@ -4,7 +4,8 @@
 **Tip at land:** re-derive `origin/main`  
 **Doctrine home:** `INTAFACED_DEFINITIVE_BUILD.md` §16–§25 (two planes, INTACHAIN §17)  
 **Shehzad board:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md)  
-**Denon board:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md)  
+**Denon live board:** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 IDs · LIVE-LANES `denon-hard-parallel`)  
+**Denon historical + D-S factory origin:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) · index [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md) (18/18 done)  
 **Ownership lock:** [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md)
 
 ---
@@ -59,20 +60,23 @@ Shell freeProduct=0 does **not** mean the product is distributed. Most tracker r
 
 ## 4 · Denon — true human hard (mega board)
 
-**Full inventory:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) (~45 judgment IDs).
+**Live full inventory (2026-08-09):** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 hard IDs · SAFE START vs HOT HOLD · substance audit).  
+**Historical shape / factory origin:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).  
+**D-S-01…18:** **done on tip** — [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md). Agents implement from law; they must not invent §8 numbers.
 
-| Layer                         | What                                                                                                                                                                        |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **P0**                        | Land **his** open integrity/money PR pile · fleet real rebuild · market-id authority ADR                                                                                    |
-| **P1 Spec factory D-S-01…18** | Product law ADRs (futures/OTC/copy/algo/multi-asset/matching dual-target/pay/bank/identity/bridge/token outcomes/platform-pages IA…) — **agents implement only from these** |
-| **P2**                        | `apps/web` one-commit delete · spine abandon/resume · vendor money map seal                                                                                                 |
-| **P3**                        | Actions billing · branch protection · CODEOWNERS enforcement · shared-file thrash protocol                                                                                  |
+| Layer                   | What (live)                                                                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0 rulings**          | House desk fairness · DIRECTION §8 rates · venue set · token authority · listing/leverage/KYB grant · fee recipes · … (see parallel board §4) |
+| **P1 product-complete** | Trade/pay/bank/ops/market/agents/academy economics · Connect/Execution under law                                                              |
+| **P2 integrity**        | Promise-falsify · Java dual-book/jar · kill-switch · recipe matrix                                                                            |
+| **P3 run/security**     | Staging workflow · threat model · load test · licence NOTICE                                                                                  |
+| **P4 arch**             | Spine disposition · bridge handshake with Shehzad · tracker honesty                                                                           |
 
 Re-derive live PRs: `gh pr list --author Phantom-X-007 --state open`.
 
-**Not Denon:** shell WS client craft (spec in #727), AFK residual, TRK stamp docs, Shehzad chain.
+**Not Denon:** shell craft, wave residual micro, Shehzad chain, Class X content, dual-edit Nitro open residual PRs.
 
-**Spec mandate:** without D-S-\* law on tip, engines stay frozen or fake. His ADRs unlock the swarm.
+**Spec mandate:** D-S-\* is written. Remaining invent risk is **numbers + product-complete Done bars + new greenfield rooms** — that is the parallel board.
 
 ---
 
