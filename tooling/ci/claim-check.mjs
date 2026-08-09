@@ -114,7 +114,8 @@ if (mine.length === 0) {
   process.exit(2);
 }
 
-const prs = gh(['pr', 'list', '--state', 'open', '--limit', '60', '--json', 'number,title,author,headRefName,files']);
+const PR_LIST_LIMIT = 100;
+const prs = gh(['pr', 'list', '--state', 'open', '--limit', String(PR_LIST_LIMIT), '--json', 'number,title,author,headRefName,files']);
 
 if (prs.__error) {
   // Refuse rather than reassure. "No conflicts found" when we could not look is
@@ -122,6 +123,14 @@ if (prs.__error) {
   console.error('  claim-check — CANNOT ANSWER: `gh` failed.');
   console.error(`      ${prs.__error}`);
   console.error('      Not reporting "clear" — this tool has not checked anything.');
+  process.exit(2);
+}
+
+// Hitting the list cap means more open PRs may exist unseen — clear would be a lie.
+if (Array.isArray(prs) && prs.length >= PR_LIST_LIMIT) {
+  console.error(`  claim-check — CANNOT ANSWER: open PR list hit the cap (${PR_LIST_LIMIT}).`);
+  console.error('      Some open PRs were not inspected. Not reporting "clear".');
+  console.error('      Raise PR_LIST_LIMIT or close/merge open work, then re-run.');
   process.exit(2);
 }
 
