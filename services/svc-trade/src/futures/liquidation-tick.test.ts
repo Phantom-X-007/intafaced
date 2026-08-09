@@ -190,12 +190,21 @@ describe('runLiquidationTick', () => {
     expect(posts).toHaveLength(countAfterFirst);
   });
 
-  it('asks mark source with marketId + clock', async () => {
-    const markPrice = vi.fn(async () => '80');
+  it('asks labelled quote with marketId + clock + authorisesSize', async () => {
     const fixed = new Date('2026-07-31T12:00:00.000Z');
+    const quote = vi.fn(async ({ marketId, symbol }: { marketId: string; symbol?: string }) => ({
+      marketId,
+      symbol,
+      price: amt('80'),
+      asOf: fixed,
+      quality: 'mid' as const,
+    }));
     const { ledger } = recordingLedger();
     await runLiquidationTick({
-      marks: { markPrice },
+      marks: {
+        markPrice: async () => '80',
+        quote,
+      },
       positions: {
         async listOpen() {
           return [underwaterLong()];
@@ -207,11 +216,12 @@ describe('runLiquidationTick', () => {
       ledger,
       now: () => fixed,
     });
-    expect(markPrice).toHaveBeenCalledWith(
+    expect(quote).toHaveBeenCalledWith(
       expect.objectContaining({
         marketId: 'm1',
         symbol: 'BTC/USDT-PERP',
         at: fixed,
+        authorisesSize: amt('1'),
       }),
     );
   });
