@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import { AuthError, bearerToken, requireMfa, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
-import { MODULE_IDS, enforcementOf, isModuleId, type ModuleId } from '@intafaced/config';
+import {
+  MODULE_IDS,
+  enforcementOf,
+  isModuleId,
+  type ComplianceQueueDispositionRequest,
+  type ComplianceQueueDispositionResult,
+  type ComplianceQueueItem,
+  type ModuleId,
+} from '@intafaced/config';
+import { EdgeComplianceQueue, edgeComplianceHonesty, type EdgeComplianceHonesty } from './compliance-honesty.js';
 import type { KillSwitchAuditEntry, KillSwitchDurability, KillSwitchState } from './kill-switch.js';
 import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
 
@@ -210,6 +219,17 @@ export interface AdminApi {
   readFreeze(header: string): Promise<{ status: number; body: unknown }>;
   /** Freeze or thaw the ledger. Attribution and durability are svc-ledger's. */
   setFreeze(frozen: boolean, body: unknown, header: string): Promise<{ status: number; body: unknown }>;
+  /**
+   * Ops honesty residual (VPN/network, freeze invent, compliance queue, analytics dark).
+   * Reads env at call time so tests can inject without rebooting the process.
+   */
+  opsHonesty(): EdgeComplianceHonesty;
+  /** In-memory compliance queue snapshot (honest empty when nothing pending). */
+  complianceQueueSnapshot(): ReturnType<EdgeComplianceQueue['snapshot']>;
+  /** Open a case — never auto-invented. */
+  openComplianceCase(item: ComplianceQueueItem): ReturnType<EdgeComplianceQueue['snapshot']>;
+  /** Dispose a case — partner_cleared refuses without screening partner. */
+  disposeComplianceCase(itemId: string, request: ComplianceQueueDispositionRequest): ComplianceQueueDispositionResult;
 }
 
 export interface AdminApiDeps {
@@ -239,6 +259,9 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
   };
 
   const unreachable = { status: 503, body: { error: 'This edge is not configured to reach svc-ledger', code: 'edge.ledger_unreachable' } };
+
+  /** Process-local queue — mechanism only; full case product residual. */
+  const complianceQueue = new EdgeComplianceQueue(() => process.env);
 
   return {
     async authenticate(header) {
@@ -322,6 +345,17 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
       const payload = frozen ? freezeSchema.parse(body) : undefined;
       return deps.ledger(frozen ? '/operator/freeze' : '/operator/unfreeze', 'POST', header, payload);
     },
+
+    opsHonesty: () =>
+      edgeComplianceHonesty(process.env, {
+        queueItems: complianceQueue.snapshot().items,
+      }),
+
+    complianceQueueSnapshot: () => complianceQueue.snapshot(),
+
+    openComplianceCase: (item) => complianceQueue.open(item),
+
+    disposeComplianceCase: (itemId, request) => complianceQueue.dispose(itemId, request),
   };
 }
 
