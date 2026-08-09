@@ -251,7 +251,11 @@ export function setIngestEnabled(next: boolean): void {
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
-      indexer.stop();
+      try {
+        await indexer.stopAndDrain();
+      } catch (err) {
+        app.log.error({ err }, 'indexer drain timed out on shutdown — closing anyway');
+      }
       await app.close();
       await db.close();
       process.exit(0);

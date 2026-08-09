@@ -281,6 +281,22 @@ export class Indexer {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;
   }
+
+  /**
+   * Stop the poll timer and wait until the in-flight sync (if any) finishes.
+   * SIGTERM must call this before `db.close()` — otherwise a mid-pass apply can
+   * see the connection drop under it.
+   */
+  async stopAndDrain(timeoutMs = 30_000): Promise<void> {
+    this.stop();
+    const deadline = Date.now() + timeoutMs;
+    while (this.#running) {
+      if (Date.now() >= deadline) {
+        throw new Error(`indexer still running after ${timeoutMs}ms drain`);
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
 }
 
 function idleResult(idle: 'disabled' | 'no-chain' | 'halted', head: StoredBlock | null): SyncResult {
