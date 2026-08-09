@@ -1,5 +1,5 @@
 import type { Sql } from 'postgres';
-import type { CommissionRow } from './commission.js';
+import { DEFAULT_AFFILIATE_FEE_SOURCE_MODULE, type CommissionRow } from './commission.js';
 
 /**
  * Durable Slice B accrual rows (TRK-ops.affiliates).
@@ -7,6 +7,9 @@ import type { CommissionRow } from './commission.js';
  * Stores fee-event → commission decimal strings. Never posts ledger.
  * Slice C payout (`payout-engine.ts`) posts only when owner rates are published
  * and a ledger client is wired — refuse-closed otherwise, never invents rates.
+ *
+ * `source_module` records which ledger fee pool holds the fee so payout
+ * sweeps the right pot (trade vs pay vs identity).
  */
 
 export interface AccrualStore {
@@ -26,6 +29,7 @@ type AccrualRow = {
   commission_amount: string;
   asset: string;
   accrued_at: Date;
+  source_module: string | null;
 };
 
 function toRow(r: AccrualRow): CommissionRow {
@@ -39,6 +43,7 @@ function toRow(r: AccrualRow): CommissionRow {
     commissionAmount: r.commission_amount,
     asset: r.asset,
     accruedAt: r.accrued_at instanceof Date ? r.accrued_at : new Date(r.accrued_at),
+    sourceModule: r.source_module?.trim() || DEFAULT_AFFILIATE_FEE_SOURCE_MODULE,
   };
 }
 
@@ -76,10 +81,11 @@ export class SqlAccrualStore implements AccrualStore {
       const result = await this.sql`
         INSERT INTO affiliate_commission_accruals (
           fee_event_id, beneficiary_id, payer_id, hop, rate,
-          fee_amount, commission_amount, asset, accrued_at
+          fee_amount, commission_amount, asset, accrued_at, source_module
         ) VALUES (
           ${r.feeEventId}, ${r.beneficiaryId}, ${r.payerId}, ${r.hop}, ${r.rate},
-          ${r.feeAmount}, ${r.commissionAmount}, ${r.asset}, ${r.accruedAt}
+          ${r.feeAmount}, ${r.commissionAmount}, ${r.asset}, ${r.accruedAt},
+          ${r.sourceModule}
         )
         ON CONFLICT (fee_event_id, beneficiary_id, hop) DO NOTHING
         RETURNING id
@@ -92,7 +98,7 @@ export class SqlAccrualStore implements AccrualStore {
   async listByFeeEvent(feeEventId: string): Promise<readonly CommissionRow[]> {
     const rows = await this.sql<AccrualRow[]>`
       SELECT fee_event_id, beneficiary_id, payer_id, hop, rate,
-             fee_amount, commission_amount, asset, accrued_at
+             fee_amount, commission_amount, asset, accrued_at, source_module
         FROM affiliate_commission_accruals
        WHERE fee_event_id = ${feeEventId}
        ORDER BY hop ASC
@@ -104,7 +110,7 @@ export class SqlAccrualStore implements AccrualStore {
     const lim = Math.min(Math.max(limit, 1), 500);
     const rows = await this.sql<AccrualRow[]>`
       SELECT fee_event_id, beneficiary_id, payer_id, hop, rate,
-             fee_amount, commission_amount, asset, accrued_at
+             fee_amount, commission_amount, asset, accrued_at, source_module
         FROM affiliate_commission_accruals
        WHERE beneficiary_id = ${beneficiaryId}
        ORDER BY accrued_at DESC
