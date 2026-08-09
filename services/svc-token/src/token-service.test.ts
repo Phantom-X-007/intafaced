@@ -171,6 +171,41 @@ if (!available) {
       expect(rows[0]?.status).toBe('active');
     });
 
+    it('M-02 recovers a stake that crashed after ledger post and before activate', async () => {
+      // Crash window: pending claim + principal already in the stake account.
+      // stakeOf must stay zero until activate; retry must not double-debit.
+      await fund(USER_A, '5000');
+      const stakeId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      await sql`
+        INSERT INTO token.stakes (id, user_id, amount, tier, multiplier_bps, started_at, unlocks_at, status)
+        VALUES (
+          ${stakeId}, ${USER_A}, ${'1000'}::numeric, 'flex', 10000,
+          now(), null, 'pending'
+        )
+      `;
+      await ledger.post(
+        recipes.stake({
+          stakeId,
+          userId: USER_A,
+          assetId: 'IFC',
+          amount: amt('1000'),
+          tier: 'flex',
+        }),
+      );
+
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('4000');
+
+      const recovered = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId });
+      expect(recovered.status).toBe('active');
+      expect(recovered.id).toBe(stakeId);
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('1000');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('4000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('M-01 refuses stakeId reuse with a different amount or user', async () => {
       await fund(USER_A, '5000');
       await fund(USER_B, '5000');
@@ -303,6 +338,29 @@ if (!available) {
 
       expect(results.filter((r) => r === 'ok')).toHaveLength(1);
       expect(await balanceOf(USER_A)).toBe('1000');
+    });
+
+    it('M-04 recovers an unstake that crashed after claim and before ledger post', async () => {
+      // Crash window: status=unstaking so stakeOf already dropped the row, but
+      // principal still sits in the ledger stake account. Retry must return it
+      // exactly once and close the row.
+      await fund(USER_A, '1000');
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await sql`UPDATE token.stakes SET status = 'unstaking' WHERE id = ${stake.id} AND status = 'active'`;
+
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('0');
+
+      const closed = await token.unstake(stake.id);
+      expect(closed.status).toBe('closed');
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await stakedOf(USER_A)).toBe('0');
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+
+      await expect(token.unstake(stake.id)).rejects.toMatchObject({ code: 'token.stake_closed' });
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
     it('rejects an unknown stake', async () => {
@@ -1863,6 +1921,34 @@ if (!available) {
       });
     });
 
+    it('draft stays terminal after opensAt — no silent open, no vote (socket honesty)', async () => {
+      // §13 token.governance: draft is not a deferred open. Time passing must
+      // not invent a status flip the service never wrote.
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+
+      const draft = await token.createProposal({
+        kind: 'fee_param',
+        body: { buybackBps: 1200 },
+        createdBy: USER_A,
+        opensAt: new Date('2026-08-01T00:00:00.000Z'),
+        closesAt: new Date('2026-08-15T00:00:00.000Z'),
+        now, // 2026-07-15 — window still in the future
+      });
+      expect(draft.status).toBe('draft');
+
+      const afterOpen = new Date('2026-08-05T12:00:00.000Z');
+      const reloaded = await token.getProposal(draft.id);
+      expect(reloaded?.status).toBe('draft');
+      await expect(token.castVote({ proposalId: draft.id, userId: USER_A, choice: 'for', now: afterOpen })).rejects.toMatchObject({
+        code: 'token.proposal_not_open',
+      });
+
+      const listed = await token.listProposals({ status: 'draft' });
+      expect(listed.some((p) => p.id === draft.id)).toBe(true);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     /**
      * A refusal nothing executes is a refusal nobody has checked still fires.
      * `token.proposal_not_found` had two throw sites and no test naming it —
@@ -1951,6 +2037,43 @@ if (!available) {
 
       expect(fromTable).toBe(fromLedger);
       expect(fromTable).toBe('10000');
+    });
+
+    it('sum of active stakes equals ledger stake accounts (drift refuses the property)', async () => {
+      // A2 residual: active rows are the only stakeOf input; their principals
+      // must equal the ledger stake pots for those users. Pending and closed
+      // rows must not invent a second total.
+      await fund(USER_A, '8000');
+      await fund(USER_B, '3000');
+      const a1 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('3000'), tier: 'm3' });
+      await token.stake({ userId: USER_B, amount: amt('3000'), tier: 'flex' });
+      await token.unstake(a1.id);
+
+      const activeRows = await sql<Array<{ amount: string }>>`
+        SELECT amount FROM token.stakes WHERE status = 'active' ORDER BY id
+      `;
+      const fromTable = activeRows.reduce((acc, r) => acc + amt(r.amount), 0n);
+      const fromStakeOf = (await token.stakeOf(USER_A)) + (await token.stakeOf(USER_B));
+      const fromLedger = amt(await stakedOf(USER_A)) + amt(await stakedOf(USER_B));
+
+      expect(formatAmount(fromTable)).toBe(formatAmount(fromStakeOf));
+      expect(formatAmount(fromTable)).toBe(formatAmount(fromLedger));
+      expect(formatAmount(fromTable)).toBe('6000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('accessOf.staked matches stakeOf for the same user (hot path vs tRPC)', async () => {
+      // GET /internal/stake reads accessOf; tRPC stakeOf is self-only. Both
+      // must answer the same money figure or gates open/close on a lie.
+      await fund(USER_A, '7500');
+      await token.stake({ userId: USER_A, amount: amt('2500'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1500'), tier: 'm12' });
+
+      const stakeOf = await token.stakeOf(USER_A);
+      const access = await token.accessOf(USER_A);
+      expect(access.staked).toBe(stakeOf);
+      expect(formatAmount(access.staked)).toBe('4000');
     });
 
     it('holds no numeric balance column of its own', async () => {
