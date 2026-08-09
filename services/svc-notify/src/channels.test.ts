@@ -376,6 +376,8 @@ describe('retry policy — transient yes, permanent no', () => {
     expect(result.dispatch!.retry).toBe(false);
     const row = (await h.deliveries.listForNotification(result.notification!.id)).find((r) => r.channel === 'email')!;
     expect(row.status).toBe('abandoned');
+    // Permanent reject is not "budget spent" — name the transport reject.
+    expect(row.refusalCode).toBe('channel.transport_rejected');
     expect(row.acceptedAt).toBeNull();
   });
 

@@ -233,15 +233,18 @@ export class NotificationDispatcher {
       // row that reads as "still being retried" when nothing will retry it.
       const exhausted = claim.attempt >= this.options.maxAttempts;
       const status = retryable && !exhausted ? 'failed' : 'abandoned';
+      // Permanent gateway rejects (e.g. 422) abandon without burning more bus
+      // attempts — but the row must still name *why*, not leave refusal_code null.
+      const refusalCode = exhausted ? 'channel.attempts_exhausted' : status === 'abandoned' ? 'channel.transport_rejected' : null;
 
       await this.deliveries.settle({
         id: claim.id,
         status,
-        refusalCode: exhausted ? 'channel.attempts_exhausted' : null,
+        refusalCode,
         detail,
         attempted: true,
       });
-      return { channel, status, code: exhausted ? 'channel.attempts_exhausted' : null, detail, retryable: status === 'failed' };
+      return { channel, status, code: refusalCode, detail, retryable: status === 'failed' };
     }
   }
 }
