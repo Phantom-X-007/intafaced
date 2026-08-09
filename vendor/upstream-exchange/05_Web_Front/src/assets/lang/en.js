@@ -1214,6 +1214,8 @@ module.exports = {
             available: "Available",
             orderValue: "Order value",
             feeEst: "Fee (est.)",
+            feeUnknown: "unknown · the venue published no fee for this pair (not free)",
+            feeTakerSchedule: "{pct}% taker · venue schedule for this pair",
             placing: "Placing…",
             or: "or",
             register: "register",

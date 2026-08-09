@@ -225,7 +225,7 @@ export const GATES = [
     why:
       'a money figure on a surface that no service supplied. Was `apps/web/src/testing/fabricated-money.ts`, which had two ' +
       'consumers and dies with that app; the shell replacing it has one unit spec and no root script that runs it. ' +
-      'Enforcing, at a frozen baseline of 12 named findings that can only shrink — see BASELINE in the scan.',
+      'Baseline drained to zero — any new money-shaped template literal fails until fixed; never re-freeze.',
   },
   {
     id: 'dual-book-door',

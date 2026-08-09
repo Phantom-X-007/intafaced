@@ -1347,7 +1347,9 @@ export default {
       return '';
     },
     submitLabel() {
-      const verb = this.side === 'BUY' ? 'Buy' : 'Sell';
+      const verb = this.side === 'BUY'
+        ? this.$t('exchange.terminal.buy')
+        : this.$t('exchange.terminal.sell');
       return this.currentCoin.coin ? verb + ' ' + this.currentCoin.coin : verb;
     },
     /* Last / 24h stats: never present a cold zero as a live market print. */
@@ -1356,11 +1358,13 @@ export default {
     },
     feeLabel() {
       if (!this.feeKnown) {
-        return 'unknown · the venue published no fee for this pair (not free)';
+        return this.$t('exchange.terminal.feeUnknown');
       }
       /* symbolFee is the published TAKER rate as a decimal string ("0.001").
          pctOf multiplies in decimal — a label, not a charge. */
-      return this.pctOf(this.symbolFee, 2) + '% taker · venue schedule for this pair';
+      return this.$t('exchange.terminal.feeTakerSchedule', {
+        pct: this.pctOf(this.symbolFee, 2)
+      });
     },
     tradesEmptyLabel() {
       return bookHonesty.tradesEmptyLabel({
