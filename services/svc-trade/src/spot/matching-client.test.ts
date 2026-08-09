@@ -109,3 +109,36 @@ describe('depth — an empty book is not an unavailable engine', () => {
     expect(calls[0]).toContain('limit=1');
   });
 });
+
+describe('listOrders — non-destructive liveness', () => {
+  it('a 404 market is an empty list, not MatchingUnavailable', async () => {
+    stubFetch(new Response('not found', { status: 404 }));
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    await expect(client.listOrders(MARKET)).resolves.toEqual({ marketId: MARKET, orders: [] });
+  });
+
+  it('returns resting orders unchanged', async () => {
+    const body = {
+      marketId: MARKET,
+      orders: [
+        {
+          marketId: MARKET,
+          orderId: 'o1',
+          accountId: 'a1',
+          kind: 'book',
+          side: 'buy',
+          price: '100',
+          remaining: '1',
+          sequence: 7,
+        },
+      ],
+    };
+    const calls = stubFetch(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    await expect(client.listOrders(MARKET)).resolves.toEqual(body);
+    expect(calls[0]).toContain(`/markets/${MARKET}/orders`);
+    expect(calls[0]).not.toContain('DELETE');
+  });
+});

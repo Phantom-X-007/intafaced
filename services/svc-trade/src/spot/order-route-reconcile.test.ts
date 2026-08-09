@@ -151,10 +151,37 @@ if (!available) {
       expect(result.case).toBe('open_hold_no_engine');
       expect(result.action).toBe('released');
       expect(result.engineLive).toBe(false);
+      // List miss → cancel must not run (non-destructive probe).
+      expect(matching.cancelledOrders).toEqual([]);
+      expect(matching.listedMarkets).toContain(btcusdt.id);
       expect(await heldFor(ALICE, 'USDT', order.id)).toBe('0');
       expect(await avail(ALICE, 'USDT')).toBe('1000');
       const closed = await trade.findOrder(order.id);
       expect(closed?.status).toBe('cancelled');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('lists before cancel when engine is live (open+hold)', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'open-hold-engine-live',
+      });
+      // placeOrder seeds liveById; list must fire before cancel.
+      matching.listedMarkets.length = 0;
+      matching.cancelledOrders.length = 0;
+
+      const result = await trade.reconcileOrder(order.id);
+
+      expect(result.case).toBe('open_hold_engine_cleared');
+      expect(result.engineLive).toBe(true);
+      expect(matching.listedMarkets[0]).toBe(btcusdt.id);
+      expect(matching.cancelledOrders).toEqual([order.id]);
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('0');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
