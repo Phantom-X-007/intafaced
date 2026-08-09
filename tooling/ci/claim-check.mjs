@@ -31,17 +31,17 @@
  *
  * Exit 0 = clear on the path axis (may still warn if ownership map is incomplete).
  * Exit 1 = open-PR collision or human-claimed mountain — talk before editing.
- * Exit 2 = cannot answer (blank args, clean branch, gh/git failure, list/files cap).
+ * Exit 2 = cannot answer (blank args, clean branch, dashed junk, unmappable path,
+ *          gh/git failure, list/files cap, FEATURES shape broken).
  *
- * This is ADVISORY, deliberately. It is not wired into `verify` and it does not
- * gate a merge. A tool that blocks people gets routed around; a tool that
- * answers a question honestly in ten seconds gets used. Overlap is often
- * completely fine — two people can edit one file with a word between them. The
- * failure mode we are removing is not overlap, it is *unknowing* overlap.
+ * Interactive mode is ADVISORY (needs gh + network). The hermetic `--self-test`
+ * pack is a doctrine gate (`claim-check-selftest`) so a quiet revert of the
+ * false-clear fixtures cannot green CI. Overlap is often fine — the failure
+ * mode we remove is *unknowing* overlap.
  *
- * Sealed pack on tip (#1414): blank argv refuse · rename porcelain · PR list
- * cap · per-PR files page cap · unmapped-owner honesty. Self-test pins those
- * so a quiet revert cannot re-land a false clear (W7 L09 residual).
+ * Sealed pack (#1414 + W8 L08): blank argv refuse · dashed junk refuse · abs
+ * path → repo-relative · FEATURES array shape · rename porcelain · PR list cap ·
+ * per-PR files page cap · unmapped-owner honesty. Self-test pins pure helpers.
  */
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -51,14 +51,55 @@ import { touches } from '../scripts/path-collide.mjs';
 const PR_LIST_LIMIT = 100;
 const GH_FILES_PAGE_CAP = 100;
 
+/** Known flags — never paths. Unknown dashed tokens are junk (false-clear class). */
+const KNOWN_FLAGS = new Set(['--self-test']);
+
 const args = process.argv.slice(2);
 
-/** Pure: strip blank argv entries (false-clear residual). */
+/**
+ * Pure: strip blank + known flags; keep only path-shaped tokens.
+ * Dashed junk (`--json`, `-h`) used to become "paths" that no PR touches →
+ * exit 0 ✓ clear without checking intent (W8 L08 residual).
+ */
 export function realArgPaths(argv) {
   return (argv ?? [])
-    .filter((a) => a !== '--self-test')
     .map((a) => (typeof a === 'string' ? a.trim() : ''))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((a) => !KNOWN_FLAGS.has(a))
+    .filter((a) => !a.startsWith('-'));
+}
+
+/**
+ * Pure: did argv contain a dashed token that is not a known flag?
+ * Used so we can refuse "I checked --json" as clear rather than strip silently
+ * when mixed with real paths — silent strip of only-junk is fine (empty mine
+ * already exits 2); mixed junk is still a lie about what was checked.
+ */
+export function hasUnknownDashedArgs(argv) {
+  return (argv ?? [])
+    .map((a) => (typeof a === 'string' ? a.trim() : ''))
+    .filter(Boolean)
+    .some((a) => a.startsWith('-') && !KNOWN_FLAGS.has(a));
+}
+
+/**
+ * Pure: map an absolute / cwd-rooted path onto a repo-relative path so
+ * `touches` can match GitHub PR file lists (always relative).
+ * Returns null when the path is absolute and outside the repo root —
+ * comparing it would always miss, which is a silent false clear.
+ */
+export function toRepoRelative(p, repoRoot) {
+  if (typeof p !== 'string' || p.length === 0) return p;
+  let x = p.replace(/\\/g, '/');
+  const root = typeof repoRoot === 'string' ? repoRoot.replace(/\\/g, '/').replace(/\/+$/, '') : '';
+  if (root && (x === root || x.startsWith(`${root}/`))) {
+    x = x.slice(root.length).replace(/^\//, '');
+  }
+  // Leading "./" only — do not strip a bare absolute outside root.
+  x = x.replace(/^\.\//, '');
+  // Absolute or Windows drive left after root strip → unmappable.
+  if (x.startsWith('/') || /^[A-Za-z]:\//.test(x)) return null;
+  return x;
 }
 
 /**
@@ -100,6 +141,24 @@ function selfTest() {
   assert(realArgPaths(['', 'services/svc-bank']).join() === 'services/svc-bank', 'blank entries stripped');
   assert(realArgPaths(['--self-test']).length === 0, '--self-test is not a path');
 
+  // Dashed junk is not a path (W8 L08 false-clear: --json → exit 0 clear).
+  assert(realArgPaths(['--json']).length === 0, '--json is not a path');
+  assert(realArgPaths(['-h', 'services/svc-bank']).join() === 'services/svc-bank', 'strip -h keep path');
+  assert(hasUnknownDashedArgs(['--json']) === true, '--json is unknown dashed');
+  assert(hasUnknownDashedArgs(['--self-test']) === false, '--self-test is known');
+  assert(hasUnknownDashedArgs(['services/svc-bank']) === false, 'path is not dashed');
+
+  // Abs → repo-relative so touches matches PR lists.
+  const root = '/Users/Nitro/projects/Sovereign';
+  assert(toRepoRelative(`${root}/tooling/ci/gates.mjs`, root) === 'tooling/ci/gates.mjs', 'abs under root becomes relative');
+  assert(toRepoRelative('tooling/ci/gates.mjs', root) === 'tooling/ci/gates.mjs', 'relative unchanged');
+  assert(toRepoRelative('/etc/passwd', root) === null, 'abs outside root unmappable');
+  assert(toRepoRelative(`${root}/tooling/ci/gates.mjs`, root) !== null, 'in-repo abs mappable');
+  assert(
+    touches(toRepoRelative(`${root}/tooling/ci/gates.mjs`, root), 'tooling/ci/gates.mjs') === true,
+    'abs-normalized collides with PR relative path',
+  );
+
   // Rename porcelain: both sides must be real paths (not "a -> b" as one path).
   assert(pathsFromPorcelainLine('R  old/path.ts -> new/path.ts').join('|') === 'old/path.ts|new/path.ts', 'rename yields both paths');
   assert(pathsFromPorcelainLine(' M tooling/ci/claim-check.mjs').join() === 'tooling/ci/claim-check.mjs', 'modified path');
@@ -120,7 +179,7 @@ function selfTest() {
     process.exit(1);
   }
   console.log('claim-check --self-test OK');
-  console.log('  fixture blank argv · rename porcelain · list/files caps · trailing-slash wall');
+  console.log('  fixture blank argv · dashed junk · abs→relative · rename porcelain · list/files caps · trailing-slash wall');
   process.exit(0);
 }
 
@@ -162,7 +221,21 @@ function myFiles() {
   // without checking anything real (exit 0). Same false-clear class as empty
   // no-args — strip them so the length===0 refuse below can fire.
   if (args.length > 0) {
-    return { source: 'arguments', files: realArgPaths(args) };
+    // Dashed junk alone (or mixed) is not a path check. Refuse before we map
+    // "--json" onto an empty collision set and print ✓ clear (W8 L08).
+    if (hasUnknownDashedArgs(args)) {
+      return { source: 'arguments', files: [], dashedJunk: true };
+    }
+    const root = git(['rev-parse', '--show-toplevel']) || process.cwd();
+    const rel = [];
+    for (const raw of realArgPaths(args)) {
+      const mapped = toRepoRelative(raw, root);
+      if (mapped === null) {
+        return { source: 'arguments', files: [], unmappable: raw };
+      }
+      rel.push(mapped);
+    }
+    return { source: 'arguments', files: rel };
   }
 
   const base = git(['merge-base', 'origin/main', 'HEAD']) || 'origin/main';
@@ -177,13 +250,29 @@ function myFiles() {
   return { source: 'this branch (committed + working tree)', files: [...new Set([...committed, ...working])] };
 }
 
-const { source, files: mine } = myFiles();
+const { source, files: mine, dashedJunk, unmappable } = myFiles();
 
 // Branch-mode only: if git could not answer, refuse rather than invent "clear".
-// Path-mode does not need git for the mine set.
+// Path-mode does not need git for the mine set — except abs→relative above.
 if (source !== 'arguments' && gitFailed) {
   console.error('  claim-check — CANNOT ANSWER: `git` failed while listing this branch.');
   console.error(`      ${gitFailDetail}`);
+  console.error('      Not reporting "clear" — this tool has not checked anything.');
+  process.exit(2);
+}
+
+if (dashedJunk) {
+  console.error('  claim-check — CANNOT ANSWER: dashed flag is not a path.');
+  console.error('      Pass real paths, e.g. `pnpm claim:check services/svc-bank`.');
+  console.error('      Known flag: --self-test. Anything else starting with `-` is junk.');
+  console.error('      Not reporting "clear" — this tool has not checked anything.');
+  process.exit(2);
+}
+
+if (unmappable) {
+  console.error('  claim-check — CANNOT ANSWER: path is outside this repo (cannot match open PR files).');
+  console.error(`      ${unmappable}`);
+  console.error('      Pass a path inside the worktree, relative or absolute under the repo root.');
   console.error('      Not reporting "clear" — this tool has not checked anything.');
   process.exit(2);
 }
@@ -256,10 +345,16 @@ let ownershipError = null;
 async function ownedPaths() {
   try {
     const mod = await import(pathToFileURL(join(process.cwd(), 'tooling/tracker/features.mjs')).href);
+    // Missing or non-array FEATURES used to become `[]` via `?? []` and print
+    // full clear on the ownership axis while the tracker was broken (W8 L08).
+    if (!Array.isArray(mod.FEATURES)) {
+      ownershipError = 'FEATURES export is missing or not an array';
+      return null;
+    }
     const out = [];
     /** @type {{ id: string, owner: string, status: string }[]} */
     const unmapped = [];
-    for (const f of mod.FEATURES ?? []) {
+    for (const f of mod.FEATURES) {
       if (!f.owner) continue;
       // `done` means the mountain already shipped. A leftover owner field is a
       // ghost, not a live human claim — fencing agents on it is a false block
