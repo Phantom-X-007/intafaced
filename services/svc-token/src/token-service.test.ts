@@ -1211,20 +1211,19 @@ if (!available) {
 
     const dbToken = () => new TokenService(sql, ledger, bus, { ...options, loadParamsFromDb: true, feeScheduleTtlMs: 0 });
 
-    it('refuses buyback params out of bps range before any burn', async () => {
-      await sql`UPDATE token.token_params SET buyback_bps = 10001 WHERE id = true`;
-      await expect(dbToken().buybackParams()).rejects.toMatchObject({ code: 'token.params_invalid' });
-    });
-
     it('refuses an emission_curve that is not an object before minting', async () => {
+      // buyback_bps / halving_interval OOR are sealed by DB CHECK constraints
+      // (token_params_buyback_bps_ck, token_params_halving_positive_ck) — the
+      // UPDATE itself fails before the service can read. emission_curve is jsonb
+      // with no shape CHECK, so the service-layer params_invalid is reachable.
       await sql`UPDATE token.token_params SET emission_curve = ${sql.json([] as never)} WHERE id = true`;
       await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_invalid' });
       const rows = await sql`SELECT epoch FROM token.emission_epochs`;
       expect(rows).toHaveLength(0);
     });
 
-    it('refuses a zero halving interval before minting', async () => {
-      await sql`UPDATE token.token_params SET halving_interval = 0 WHERE id = true`;
+    it('refuses an emission_curve missing initialEpochReward before minting', async () => {
+      await sql`UPDATE token.token_params SET emission_curve = ${sql.json({ kind: 'halving' } as never)} WHERE id = true`;
       await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_invalid' });
       const rows = await sql`SELECT epoch FROM token.emission_epochs`;
       expect(rows).toHaveLength(0);
