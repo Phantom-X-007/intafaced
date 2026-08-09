@@ -13,7 +13,7 @@ import { PostgresTargetRateLimiter } from './target-rate-limit.js';
 import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
-import { AlertService } from './alerts/service.js';
+import { ALERT_SWEEP_INTERVAL_MS, AlertService, type AlertSweepReport } from './alerts/service.js';
 import { PostgresAlertStore } from './alerts/store.js';
 import type { MarkSource } from './alerts/types.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -137,6 +137,7 @@ const notify = new NotifyService(
  * invent a price.
  */
 const darkMarks: MarkSource = {
+  kind: 'dark',
   async quote() {
     return {
       kind: 'unavailable',
@@ -146,6 +147,9 @@ const darkMarks: MarkSource = {
   },
 };
 const alerts = new AlertService(new PostgresAlertStore(sql), darkMarks, notify);
+/** Last alert sweep — see the interval below. Null until the first pass completes. */
+let lastAlertSweep: AlertSweepReport | null = null;
+let lastAlertSweepAt: string | null = null;
 
 export const appRouter = createNotifyRouter(notify, alerts);
 export type AppRouter = typeof appRouter;
@@ -171,8 +175,15 @@ app.get('/ready', async () => ({
   // Observability for the stuck-pending reaper (#1187): last tick's retired count
   // and when it ran. Zero forever + null means the interval never completed.
   deliveryReap: { lastRetired: lastReapRetired, lastAt: lastReapAt },
-  // v22.alerts mark port honesty — 'dark' means evaluate refuses rather than invents.
-  alerts: { markSource: 'dark' as const },
+  // v22.alerts honesty, both halves. `markSource: dark` means every evaluation
+  // refuses rather than invents a price. `sweep` is the proof the evaluation job
+  // RUNS: a null `lastAt` means the driver never completed a pass, which is the
+  // state this service shipped in before the sweep was mounted — the surface
+  // promised evaluation and nothing evaluated.
+  alerts: {
+    ...alerts.evaluationStatus(),
+    sweep: { lastAt: lastAlertSweepAt, ...(lastAlertSweep ?? { markets: 0, fired: 0, held: 0, refused: 0, refusals: {} }) },
+  },
 }));
 
 await app.register(fastifyTRPCPlugin, {
@@ -216,6 +227,41 @@ const reaper = setInterval(() => {
     });
 }, DELIVERY_REAP_INTERVAL_MS);
 reaper.unref();
+
+/**
+ * THE ALERT SWEEP — the job path the alert surface always claimed to have.
+ *
+ * `AlertService.evaluateMarket` shipped complete, tested, and with NO CALLER.
+ * `router.ts` described it as "an internal job path"; there was no job. A user
+ * created a price watch, got `status: 'active'` back, and nothing in this process
+ * would ever look at that row again. That is D-S-13's Class B — a promise with no
+ * delivery — and it is the same failure as `bankMarginCalled`, whose consumer sat
+ * finished and parked while the borrowers it was written for went untold.
+ *
+ * WHAT IT DOES WHILE THE MARK SOURCE IS DARK: nothing, loudly. Every evaluation
+ * refuses `alert.price_unavailable`, no watch is marked fired, and no inbox row
+ * is written — a price the platform cannot source is never treated as zero and
+ * never invented. The counts land on `/ready` so "no alerts fired" is a number
+ * with a reason next to it instead of an absence.
+ *
+ * FAIL-SAFE, like the reaper. A sweep that cannot run must not take the inbox
+ * down with it, so it logs and waits for the next tick.
+ */
+const alertSweep = setInterval(() => {
+  void alerts
+    .evaluateDueAlerts()
+    .then((report) => {
+      lastAlertSweep = report;
+      lastAlertSweepAt = new Date().toISOString();
+      if (report.fired > 0) {
+        app.log.info({ ...report }, 'svc-notify alert sweep fired price watches into the notification fan-out');
+      }
+    })
+    .catch((err) => {
+      app.log.error({ err }, 'svc-notify alert sweep failed — active price watches were not evaluated on this tick');
+    });
+}, ALERT_SWEEP_INTERVAL_MS);
+alertSweep.unref();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
@@ -262,6 +308,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       clearInterval(reaper);
+      clearInterval(alertSweep);
       for (const sub of subscriptions) await sub.unsubscribe().catch(() => undefined);
       await app.close();
       await bus.close();

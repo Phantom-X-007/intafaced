@@ -129,6 +129,27 @@ const priceAlertOutput = z.object({
   createdAt: z.string(),
 });
 
+/**
+ * WHETHER A WATCH CAN FIRE — returned with the watchlist and with every watch
+ * created, not parked behind a procedure a client might not call.
+ *
+ * D-S-13 done-bar item 6: reclassifying a promise-with-no-delivery requires the
+ * disclosure to exist in code at the surface a user reads. Somebody who has just
+ * created a price watch is exactly the person entitled to know that this
+ * deployment has no mark feed and therefore nothing will cross.
+ *
+ * Codes, never sentences — clients render copy from `@intafaced/i18n` (§9), and
+ * `canFire: true` is a statement about wiring, never an SLA (§8 item 9).
+ */
+const alertEvaluationOutput = z.object({
+  markSource: z.enum(['dark', 'live']),
+  canFire: z.boolean(),
+  code: z.enum(['alert.price_unavailable']).nullable(),
+});
+
+/** The answer when this deployment has no alert service at all. */
+const NO_ALERT_SERVICE = { markSource: 'dark', canFire: false, code: 'alert.price_unavailable' } as const;
+
 function priceAlertToWire(row: PriceAlert) {
   return {
     id: row.id,
@@ -345,14 +366,24 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
 
       /**
        * v22.alerts MVP — price watchlists.
-       * Evaluation against a live mark source is an internal job path
-       * (`AlertService.evaluateMarket`); the user surface is create/list/cancel.
+       *
+       * The user surface is create / list / cancel. Evaluation is the mounted
+       * sweep (`AlertService.evaluateDueAlerts`, wired in `index.ts` — a pin test
+       * fails if that call disappears, because a watch nothing evaluates is a
+       * promise with no delivery).
+       *
+       * `evaluation` rides with the list rather than sitting behind its own
+       * procedure: a client cannot render somebody's watchlist without also
+       * receiving the fact that no watch on it can currently cross.
        */
       alerts: scopedProcedure('notify:read', { module: 'notify' })
-        .output(z.array(priceAlertOutput))
+        .output(z.object({ items: z.array(priceAlertOutput), evaluation: alertEvaluationOutput }))
         .query(async ({ ctx }) => {
-          if (!alerts) return [];
-          return (await alerts.list(ctx.principal.userId)).map(priceAlertToWire);
+          if (!alerts) return { items: [], evaluation: NO_ALERT_SERVICE };
+          return {
+            items: (await alerts.list(ctx.principal.userId)).map(priceAlertToWire),
+            evaluation: alerts.evaluationStatus(),
+          };
         }),
 
       createAlert: scopedProcedure('notify:write', { module: 'notify' })
@@ -364,7 +395,10 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
             targetPrice: z.string().min(1).max(64),
           }),
         )
-        .output(priceAlertOutput)
+        // The watch AND whether it can fire, in the same answer. A create that
+        // returned only `status: 'active'` is what let this surface promise
+        // delivery it had no path for.
+        .output(z.object({ alert: priceAlertOutput, evaluation: alertEvaluationOutput }))
         .mutation(async ({ ctx, input }) => {
           if (!alerts) {
             throw new Error('price alerts are not configured on this deployment');
@@ -375,7 +409,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
             direction: input.direction,
             targetPrice: input.targetPrice,
           });
-          return priceAlertToWire(row);
+          return { alert: priceAlertToWire(row), evaluation: alerts.evaluationStatus() };
         }),
 
       cancelAlert: scopedProcedure('notify:write', { module: 'notify' })

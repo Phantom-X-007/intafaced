@@ -24,6 +24,14 @@ export interface AlertStore {
   get(userId: string, id: string): Promise<PriceAlert | null>;
   /** Active alerts for a market — evaluation fan-in. */
   listActiveByMarket(marketId: string): Promise<readonly PriceAlert[]>;
+  /**
+   * Markets with at least one active watch.
+   *
+   * The sweep's fan-in: it must not need a list of markets from anywhere else,
+   * because a market list held outside this table is a market list that drifts
+   * and silently stops evaluating somebody's watch.
+   */
+  activeMarkets(): Promise<readonly string[]>;
   markFired(userId: string, id: string, at: Date): Promise<PriceAlert | null>;
   cancel(userId: string, id: string): Promise<PriceAlert | null>;
 }
@@ -70,6 +78,10 @@ export class MemoryAlertStore implements AlertStore {
 
   async listActiveByMarket(marketId: string): Promise<readonly PriceAlert[]> {
     return [...this.byId.values()].filter((r) => r.marketId === marketId && r.status === 'active');
+  }
+
+  async activeMarkets(): Promise<readonly string[]> {
+    return [...new Set([...this.byId.values()].filter((r) => r.status === 'active').map((r) => r.marketId))].sort();
   }
 
   async markFired(userId: string, id: string, at: Date): Promise<PriceAlert | null> {
@@ -179,6 +191,16 @@ export class PostgresAlertStore implements AlertStore {
       WHERE market_id = ${marketId} AND status = 'active'
     `;
     return rows.map(mapRow);
+  }
+
+  async activeMarkets(): Promise<readonly string[]> {
+    const rows = await this.sql<{ market_id: string }[]>`
+      SELECT DISTINCT market_id
+      FROM notify.price_alerts
+      WHERE status = 'active'
+      ORDER BY market_id
+    `;
+    return rows.map((r) => r.market_id);
   }
 
   async markFired(userId: string, id: string, at: Date): Promise<PriceAlert | null> {
