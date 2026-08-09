@@ -142,6 +142,26 @@ const schema = baseEnvSchema
        * comma-separated CIDR list.
        */
       EDGE_TRUST_PROXY: z.string().optional(),
+
+      /**
+       * Max request body bytes the edge will parse before refusing with 413.
+       *
+       * Fastify's default is ~1 MiB. An explicit env makes the budget an operator
+       * decision rather than a library constant, and keeps a hostile oversized
+       * body from being buffered into the edge process memory on the way to an
+       * upstream that would only refuse it later. The proxy re-serialises with
+       * `JSON.stringify`, so this is also the max JSON payload the edge will
+       * re-encode.
+       *
+       * Default 1 MiB matches Fastify's historical default so existing clients
+       * see no behaviour change until an operator tightens it.
+       */
+      EDGE_BODY_LIMIT_BYTES: z.coerce
+        .number()
+        .int()
+        .min(1024)
+        .max(32 * 1024 * 1024)
+        .default(1_048_576),
     }),
   );
 

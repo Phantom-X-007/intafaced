@@ -42,6 +42,9 @@ registerProcessHooks(
 const app = Fastify({
   logger: { level: env.LOG_LEVEL },
   disableRequestLogging: false,
+  // Explicit body budget — see EDGE_BODY_LIMIT_BYTES. Refuses with 413 before
+  // principal exchange or upstream work, so an oversized body is not free CPU.
+  bodyLimit: env.EDGE_BODY_LIMIT_BYTES,
   // Unset means "believe the socket, never the header". See EDGE_TRUST_PROXY in
   // env.ts: this is what decides whether `req.ip` — and therefore the throttle's
   // key — identifies a caller or identifies our own load balancer.
@@ -205,10 +208,17 @@ app.get('/ready', async () => ({
   // Throttle posture without boot logs. multiReplicaShared is always false —
   // counters are per process; do not invent a shared store on /ready.
   rateLimit: rateLimitReadiness(rateLimit),
+  // Body budget the process will accept (bytes). Count only — not a secret.
+  bodyLimitBytes: env.EDGE_BODY_LIMIT_BYTES,
   // Readiness is about the process, never about the switches: a killed module is
   // an operator's decision, and taking the edge out of the load balancer because
   // of it would remove the surface that serves cancels and reads.
-  disabledModules: killSwitches.disabledModules(),
+  //
+  // `disabledModules` is deliberately ABSENT here. `/ready` is unauthenticated
+  // and a CORS surface; publishing the halt list let any caller learn which
+  // modules an operator had killed — the same oracle the preflight ordering
+  // exists to deny (audit 2026-08-08 #5). Operators read the list from
+  // `GET /admin/status` (admin:write + MFA).
 }));
 
 // ── Operator control plane (§14.6) ─────────────────────────────────
