@@ -538,8 +538,8 @@ describe('authority', () => {
     // Engine C: the scope table marks pay:payout interactive-only; until this
     // endpoint is pinned, a stolen single-factor session could drain settlements.
     const api = await caller(['pay:payout'], { mfa: false });
-    const err = await api
-      .settlement.payout({
+    const err = await api.settlement
+      .payout({
         settlementId: SETTLEMENT,
         railId: 'card-sandbox',
         destination: { kind: 'bank', ref: 'X' },
