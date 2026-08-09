@@ -688,7 +688,7 @@ export class TokenService {
     sources: ReadonlyArray<{ module: string; amount: Amount }>;
   }): Promise<YieldRunResult> {
     /**
-     * Collapse sources by module BEFORE sweeping or planning.
+     * Collapse sources by module BEFORE claiming, sweeping or planning.
      *
      * The sweep ledger key is `token.fee.sweep:${windowId}:${module}:${asset}` —
      * one post per (window, module). Two legs for the same module used to
@@ -706,6 +706,15 @@ export class TokenService {
       byModule.set(source.module, (byModule.get(source.module) ?? 0n) + source.amount);
     }
 
+    const total = [...byModule.values()].reduce((acc, a) => acc + a, 0n);
+    if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
+
+    // CLAIM (window_id, total) + freeze who is paid BEFORE any fee sweep.
+    // An empty settlement still claims the header so a later stake cannot
+    // re-plan the same window id (0004). Sweep after claim so a re-run with a
+    // mismatched total refuses before moving more fees.
+    const plan = await this.planYieldWindow(input.windowId, total);
+
     for (const [module, amount] of byModule) {
       await this.ledger.post(
         recipes.sweepFeesToRewards({
@@ -717,17 +726,10 @@ export class TokenService {
       );
     }
 
-    const total = [...byModule.values()].reduce((acc, a) => acc + a, 0n);
-    if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
-
-    const plan = await this.planYieldWindow(input.windowId, total);
-
     if (plan.rows.length === 0) {
-      // Nothing staked when this window was planned. The revenue stays in the
-      // rewards engine for the next window rather than being stranded or
-      // returned — it is already ours. No plan row is written, so a later run
-      // once somebody IS staked plans the window then and pays it out of the
-      // revenue still sitting there.
+      // Nothing was staked when this window was claimed. The revenue sits in
+      // the rewards engine for a LATER window id. The header is the freeze —
+      // re-running this id with the same total does not invent recipients.
       return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: plan.skipped, alreadyPaid: 0 };
     }
 
@@ -786,42 +788,49 @@ export class TokenService {
   }
 
   /**
-   * WHO THIS WINDOW PAYS — decided once, then read.
+   * THAT this window was claimed, and WHO it pays — decided once, then read.
    *
-   * The recipient list used to be recomputed from `token.stakes WHERE status =
-   * 'active'` on every call, which made the method's own resumability promise
-   * false: a re-run after a new stake opened produced a LARGER list, the
-   * already-paid users' `(window, user)` keys were spent so their posts became
-   * silent no-ops, and the newcomer's key was fresh — so the newcomer was paid
-   * in full out of a window that had already been distributed to the attounit.
-   * The value came out of the rewards engine, which is a `house` account: it
-   * either drains some other window's undistributed revenue or dies mid-loop on
-   * a hard non-negative CHECK, leaving the window half paid.
+   * #1076 froze the recipient list in `yield_payouts` so a re-run after a new
+   * stake could not grow the list. It left the empty-pool case unclaimed: no
+   * payout row meant the next call looked like a first call, planned whoever
+   * was staked then, and paid them out of revenue already swept under that
+   * window id. 0004 closes that residual with a header `(window_id, total)`
+   * claimed before any sweep — an empty settlement is still a settlement.
    *
-   * Freezing the plan is the same claim-before-post shape `stake` (0001) and
-   * `recordBuyback` (0002) already use, applied to the one thing that was never
-   * claimed. It decides no economic number — it records the answer the existing
-   * pro-rata maths gives, at the moment it is first asked.
+   * Order: claim header (+ write payout instructions) → caller sweeps → pay.
+   * Same claim-before-post shape as `stake` (0001) and `recordBuyback` (0002).
    *
-   * The advisory lock covers the read-then-write: two operators invoking the
-   * same window at the same instant would otherwise both compute a plan, and
-   * `ON CONFLICT DO NOTHING` would merge two plans into one whose rows sum to
-   * more than the window swept.
+   * Decides no economic number — records the total the operator already typed
+   * and the pro-rata answer at first claim, so asking twice cannot give two
+   * answers (including the empty answer).
    */
   private async planYieldWindow(windowId: string, total: Amount): Promise<{ rows: YieldPlanRow[]; skipped: number }> {
-    const existing = await this.readYieldPlan(this.sql, windowId);
-    if (existing.length > 0) return { rows: this.assertPlanCoversTotal(windowId, existing, total), skipped: 0 };
+    const existingHeader = await this.readYieldWindowHeader(this.sql, windowId);
+    if (existingHeader !== null) {
+      this.assertWindowTotal(windowId, existingHeader, total);
+      return { rows: await this.readYieldPlan(this.sql, windowId), skipped: 0 };
+    }
 
     return transaction(
       this.sql,
       async (tx) => {
-        // Serialise planning of THIS window only. `hashtext` is stable across
+        // Serialise claim of THIS window only. `hashtext` is stable across
         // sessions, and an xact lock is released by commit or rollback alike, so
-        // a crash mid-plan cannot wedge the window.
+        // a crash mid-claim cannot wedge the window.
         await tx`SELECT pg_advisory_xact_lock(hashtext(${`token.yield:${windowId}`})::bigint)`;
 
-        const raced = await this.readYieldPlan(tx, windowId);
-        if (raced.length > 0) return { rows: this.assertPlanCoversTotal(windowId, raced, total), skipped: 0 };
+        const racedHeader = await this.readYieldWindowHeader(tx, windowId);
+        if (racedHeader !== null) {
+          this.assertWindowTotal(windowId, racedHeader, total);
+          return { rows: await this.readYieldPlan(tx, windowId), skipped: 0 };
+        }
+
+        // Header first — even when nobody is staked — so the empty answer is
+        // frozen before any fee movement and before any late joiner can appear.
+        await tx`
+          INSERT INTO token.yield_windows (window_id, total_amount)
+          VALUES (${windowId}, ${formatAmount(total)}::numeric)
+        `;
 
         const stakes = await tx<Array<{ user_id: string; amount: string; tier: StakeTier; multiplier_bps: string }>>`
           SELECT user_id, amount, tier, multiplier_bps FROM token.stakes WHERE status = 'active' ORDER BY id ASC
@@ -887,6 +896,14 @@ export class TokenService {
     );
   }
 
+  private async readYieldWindowHeader(sql: Sql, windowId: string): Promise<Amount | null> {
+    const rows = await sql<Array<{ total_amount: string }>>`
+      SELECT total_amount FROM token.yield_windows WHERE window_id = ${windowId}
+    `;
+    const row = rows[0];
+    return row ? parseAmount(row.total_amount) : null;
+  }
+
   private async readYieldPlan(sql: Sql, windowId: string): Promise<YieldPlanRow[]> {
     const rows = await sql<Array<{ user_id: string; amount: string; ledger_tx_id: string | null }>>`
       SELECT user_id, amount, ledger_tx_id FROM token.yield_payouts
@@ -898,22 +915,19 @@ export class TokenService {
   /**
    * A re-run must be the SAME window, not just the same id.
    *
-   * `sources` is operator-typed, so a re-run can name a different total — a
-   * correction, a typo, a different set of modules. Paying the frozen plan
-   * anyway would answer a request nobody made, and re-planning would pay the
-   * difference to whoever happens to be staked today. Both are worse than
-   * saying so. The same reasoning `bank.loan_principal_mismatch` makes.
+   * Compared against the HEADER total (0004), not the sum of payout rows —
+   * an empty settlement has zero payout rows but a non-zero claimed total.
+   * Paying a frozen plan (or re-planning) against a different figure would
+   * answer a request nobody made. Same reasoning as `bank.loan_principal_mismatch`.
    */
-  private assertPlanCoversTotal(windowId: string, rows: YieldPlanRow[], total: Amount): YieldPlanRow[] {
-    const planned = rows.reduce((acc, r) => acc + r.amount, 0n);
-    if (planned !== total) {
+  private assertWindowTotal(windowId: string, claimed: Amount, total: Amount): void {
+    if (claimed !== total) {
       throw new TokenError(
-        `Window ${windowId} was already planned to distribute ${formatAmount(planned)} ${this.assetId}, but this call names ` +
+        `Window ${windowId} was already claimed for ${formatAmount(claimed)} ${this.assetId}, but this call names ` +
           `${formatAmount(total)} — a re-run must carry the same revenue. Use a new window id to distribute a different amount`,
         'token.yield_window_mismatch',
       );
     }
-    return rows;
   }
 
   // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────

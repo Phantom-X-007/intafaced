@@ -267,6 +267,20 @@ export const governanceVotes = token.table(
 );
 
 /**
+ * THAT A YIELD WINDOW WAS CLAIMED — including empty settlements (0004).
+ *
+ * `yield_payouts` freezes WHO is paid. This freezes THAT a window id was taken
+ * for a given total, so an empty first run cannot be re-planned once somebody
+ * stakes. Written once; a re-run with a different total is refused.
+ */
+export const yieldWindows = token.table('yield_windows', {
+  windowId: text('window_id').primaryKey(),
+  /** Operator-typed revenue total claimed for this window. Never updated. */
+  totalAmount: amount('total_amount').notNull(),
+  claimedAt: tstz('claimed_at').notNull().defaultNow(),
+});
+
+/**
  * WHO A YIELD WINDOW PAYS — frozen at plan time (0003).
  *
  * Not a balance and not a total: one row is one INSTRUCTION, written once when
@@ -278,6 +292,9 @@ export const governanceVotes = token.table(
  * resumability promise false: a re-run after a new stake opened paid the
  * newcomer in full out of a window already distributed to the last attounit,
  * because their `(window, user)` reward key was the only one still unspent.
+ *
+ * An empty settlement writes ZERO rows here but still claims `yield_windows`
+ * (0004) so the empty answer is frozen too.
  */
 export const yieldPayouts = token.table(
   'yield_payouts',
@@ -299,4 +316,13 @@ export const yieldPayouts = token.table(
   ],
 );
 
-export const schema = { tokenParams, stakes, emissionEpochs, buybackRuns, proposals, governanceVotes, yieldPayouts };
+export const schema = {
+  tokenParams,
+  stakes,
+  emissionEpochs,
+  buybackRuns,
+  proposals,
+  governanceVotes,
+  yieldWindows,
+  yieldPayouts,
+};

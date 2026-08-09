@@ -38,6 +38,7 @@ const migration = readFileSync(join(here, '..', 'drizzle', '0000_token_init.sql'
 const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_stake_pending.sql'), 'utf8');
 const migrationBuybackClaim = readFileSync(join(here, '..', 'drizzle', '0002_buyback_window_claim.sql'), 'utf8');
 const migrationYieldPlan = readFileSync(join(here, '..', 'drizzle', '0003_yield_window_plan.sql'), 'utf8');
+const migrationYieldHeader = readFileSync(join(here, '..', 'drizzle', '0004_yield_window_header.sql'), 'utf8');
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -77,6 +78,7 @@ if (!available) {
   await sql.unsafe(migrationPending);
   await sql.unsafe(migrationBuybackClaim);
   await sql.unsafe(migrationYieldPlan);
+  await sql.unsafe(migrationYieldHeader);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -121,7 +123,7 @@ if (!available) {
   };
 
   beforeEach(async () => {
-    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts, token.yield_windows RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-token');
     token = new TokenService(sql, ledger, bus, options);
@@ -652,21 +654,53 @@ if (!available) {
       expect(await balanceOf(USER_A)).toBe('100');
     });
 
-    it('plans a window the first time somebody is actually staked', async () => {
-      // The empty-pool case is not a settled window: the revenue is still in
-      // the engine, so the window must be plannable later rather than frozen
-      // empty forever.
+    it('does not pay a staker who joined AFTER an empty window was claimed', async () => {
+      // W4 residual / 0004: empty distribute used to write no plan row, so a
+      // later stake + re-run of the same window id planned the newcomer and
+      // paid them out of revenue already swept under that id. The header freezes
+      // the empty answer; late joiners use a new window id.
       await accrueFees('trade', '100');
       const empty = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(empty.recipients).toBe(0);
+      expect(formatAmount(empty.distributed)).toBe('0');
+
+      const headers = await sql<Array<{ window_id: string; total_amount: string }>>`
+        SELECT window_id, total_amount FROM token.yield_windows WHERE window_id = 'w-later'
+      `;
+      expect(headers).toHaveLength(1);
+      expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
 
       await fund(USER_A, '1000');
       await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
 
-      const now = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
-      expect(formatAmount(now.distributed)).toBe('100');
+      const again = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(again.distributed)).toBe('0');
+      expect(again.recipients).toBe(0);
+      expect(await balanceOf(USER_A)).toBe('0');
+      // Revenue still in the engine for a NEW window id.
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
+
+      const next = await token.distributeRevenue({ windowId: 'w-later-2', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(next.distributed)).toBe('100');
       expect(await balanceOf(USER_A)).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('refuses a different total on a previously empty window', async () => {
+      await accrueFees('trade', '100');
+      await token.distributeRevenue({ windowId: 'w-empty-mismatch', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      await accrueFees('trade', '50');
+      await expect(
+        token.distributeRevenue({ windowId: 'w-empty-mismatch', sources: [{ module: 'trade', amount: amt('150') }] }),
+      ).rejects.toMatchObject({ code: 'token.yield_window_mismatch' });
+
+      // Header total frozen; no payouts invented.
+      const headers = await sql<Array<{ total_amount: string }>>`
+        SELECT total_amount FROM token.yield_windows WHERE window_id = 'w-empty-mismatch'
+      `;
+      expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
+      expect(await sql`SELECT user_id FROM token.yield_payouts WHERE window_id = 'w-empty-mismatch'`).toHaveLength(0);
     });
 
     it('leaves revenue in the rewards engine when nobody is staked', async () => {
@@ -676,6 +710,8 @@ if (!available) {
       expect(result.recipients).toBe(0);
       expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
       expect(ledger.totalsByAsset().IFC).toBe('0');
+      // Header claimed even though nobody was paid.
+      expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-empty'`).toHaveLength(1);
     });
 
     it('refuses a window with no revenue rather than posting nothing quietly', async () => {
