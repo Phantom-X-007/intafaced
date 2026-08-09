@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import { type MarketDataAdapter, VenueUnavailableError } from '@intafaced/venue-contracts';
-import {
-  healthFromGrade,
-  isGraded,
-  LatencyGradeRegistry,
-  UNMEASURED_LATENCY_MS,
-  VenueLatencyGrader,
-} from './latency.js';
+import { healthFromGrade, isGraded, LatencyGradeRegistry, UNMEASURED_LATENCY_MS, VenueLatencyGrader } from './latency.js';
 import { isRoutable, type LiquiditySource, type VenueHealth } from '../source.js';
 import { planRoute } from '../router.js';
 import type { HttpPort, HttpResponse } from './transport.js';
@@ -92,9 +86,7 @@ describe('VenueLatencyGrader', () => {
     expect(slowGrade.grade).toBe('D');
     expect(slowGrade.p95Ms).toBeGreaterThan(fastGrade.p95Ms!);
     // Ordered on the scale, not merely different.
-    expect(['A', 'B', 'C', 'D', 'F'].indexOf(slowGrade.grade!)).toBeGreaterThan(
-      ['A', 'B', 'C', 'D', 'F'].indexOf(fastGrade.grade!),
-    );
+    expect(['A', 'B', 'C', 'D', 'F'].indexOf(slowGrade.grade!)).toBeGreaterThan(['A', 'B', 'C', 'D', 'F'].indexOf(fastGrade.grade!));
   });
 
   it('grades a fast, clean venue A', () => {
