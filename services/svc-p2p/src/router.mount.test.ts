@@ -461,8 +461,55 @@ describe('svc-p2p mount — the public surface', () => {
     });
   });
 
+  it('discloses moderationReachable on health when an allowlist is configured', async () => {
+    // Clients must not imply a watcher when none is staffed — and must see true
+    // when one is, without needing a scoped procedure.
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {
+      moderatorUserIds: [USER],
+    }).createCaller(anonymous());
+    await expect(caller.health()).resolves.toEqual({
+      ok: true,
+      service: 'svc-p2p',
+      moderationReachable: true,
+    });
+  });
+
   it('serves health even when a forged principal was presented', async () => {
     // A rejected principal makes the caller anonymous, not rejected outright.
     await expect(routerFor(stubP2p()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe('svc-p2p mount — late settlements ops', () => {
+  it('refuses the late-settlements list without admin:compliance', async () => {
+    // Operator surface for committed-but-unsettled decisions. Not either party's
+    // p2p:write — that would let a party inventory the whole house's backlog.
+    let listed = 0;
+    const p2p = stubP2p({
+      listLateSettlements: async () => {
+        listed++;
+        return [];
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).ops.lateSettlements({})).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(listed).toBe(0);
+  });
+
+  it('refuses a forged principal even when it claims admin:compliance', async () => {
+    let listed = 0;
+    const p2p = stubP2p({
+      listLateSettlements: async () => {
+        listed++;
+        return [];
+      },
+    });
+    const ctx = forged(principal({ scopes: ['admin:compliance', 'p2p:write'], tier: 'full', mfa: true }));
+    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).ops.lateSettlements({})).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(listed).toBe(0);
   });
 });
