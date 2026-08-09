@@ -467,6 +467,66 @@ describe('§10 consumer idempotency', () => {
     expect(handler).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * The mark is held for an in-flight handler and for a success — NOT for a
+   * failure. Before this, `checkAndSet` marked on arrival, so a handler that
+   * threw was already recorded as processed and the redelivery was swallowed
+   * and acked: at-most-once, silently.
+   *
+   * That mattered most where a throw is the design. `svc-identity/src/events.ts`
+   * documents an XP award for an unknown user as an FK violation "which throws,
+   * which NAKs, which parks the message after `max_deliver`" — the alternative
+   * being that "XP silently vanishes, which is precisely the failure this wiring
+   * exists to end". Nothing could park while the first retry was eaten here.
+   */
+  it('re-runs a redelivered envelope whose handler threw — a failure is not a completion', async () => {
+    const store = new MemorySeenStore();
+    let attempts = 0;
+    const wrapped = idempotent(
+      async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('transient: downstream was down');
+      },
+      store,
+      'rank-recalc',
+    );
+
+    const payload = { userId: crypto.randomUUID(), sourceModule: 'academy', action: 'cert.earned', xpDelta: 500 };
+    const envelope = { subject: 'xpEarned', idempotencyKey: 'cert-retry-1' } as never;
+
+    // First delivery throws, and the throw must reach the bus so it can NAK.
+    await expect(wrapped(payload as never, envelope)).rejects.toThrow('transient');
+
+    // Redelivery actually runs the handler again.
+    await wrapped(payload as never, envelope);
+    expect(attempts).toBe(2);
+
+    // ...and now that it succeeded, a further redelivery is deduped as before.
+    await wrapped(payload as never, envelope);
+    expect(attempts).toBe(2);
+  });
+
+  it('keeps failing a handler that always throws, so it can reach the dead-letter', async () => {
+    const store = new MemorySeenStore();
+    let attempts = 0;
+    const wrapped = idempotent(
+      async () => {
+        attempts += 1;
+        throw new Error('permanent: user does not exist');
+      },
+      store,
+      'rank-recalc',
+    );
+    const envelope = { subject: 'xpEarned', idempotencyKey: 'cert-park-1' } as never;
+
+    for (let i = 0; i < 5; i++) {
+      await expect(wrapped({} as never, envelope)).rejects.toThrow('permanent');
+    }
+
+    // Every delivery reached the handler; none was silently acked on its behalf.
+    expect(attempts).toBe(5);
+  });
+
   it('scopes dedupe per consumer, so two consumers each see the event', async () => {
     const bus = new MemoryEventBus('svc-identity');
     const store = new MemorySeenStore();
