@@ -1042,11 +1042,18 @@ export class AuthService {
   // ── Sub-accounts ───────────────────────────────────────────────────────────
 
   /**
-   * Freeze identity + cascade revoke every sub-account (SPEC-SUBACCOUNTS §3).
+   * Freeze identity + cascade revoke every sub-account and every API key
+   * (SPEC-SUBACCOUNTS §3 + key kill-switch).
+   *
    * Sub-accounts are bookkeeping partitions, not compliance boundaries —
    * freeze must not leave a live partition under a frozen parent.
+   * API keys exchange already refuses non-active users, but bulk-revoking them
+   * makes freeze visible on list/revoke surfaces and closes any path that only
+   * checked `revoked` without re-reading user status.
    */
-  async freezeIdentity(userId: string): Promise<{ userId: string; status: 'frozen'; subAccountsRevoked: number }> {
+  async freezeIdentity(
+    userId: string,
+  ): Promise<{ userId: string; status: 'frozen'; subAccountsRevoked: number; apiKeysRevoked: number }> {
     return transaction(this.sql, async (tx) => {
       const users = await tx<Array<{ id: string; status: string }>>`
         SELECT id, status FROM users WHERE id = ${userId} LIMIT 1 FOR UPDATE
@@ -1062,7 +1069,17 @@ export class AuthService {
          WHERE parent_user_id = ${userId} AND revoked = false
         RETURNING id
       `;
-      return { userId, status: 'frozen' as const, subAccountsRevoked: revokedRows.length };
+      const revokedKeys = await tx<Array<{ id: string }>>`
+        UPDATE api_keys SET revoked = true
+         WHERE user_id = ${userId} AND revoked = false
+        RETURNING id
+      `;
+      return {
+        userId,
+        status: 'frozen' as const,
+        subAccountsRevoked: revokedRows.length,
+        apiKeysRevoked: revokedKeys.length,
+      };
     });
   }
 

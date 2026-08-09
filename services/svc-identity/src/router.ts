@@ -718,7 +718,7 @@ export function createIdentityRouter(
 
     /**
      * Compliance freeze of an identity (SPEC-SUBACCOUNTS §3).
-     * Cascades: user frozen + all sessions revoked + all sub-accounts revoked.
+     * Cascades: user frozen + all sessions revoked + all sub-accounts + all API keys revoked.
      */
     compliance: router({
       freezeIdentity: scopedProcedure('admin:compliance')
@@ -728,6 +728,7 @@ export function createIdentityRouter(
             userId: z.string().uuid(),
             status: z.literal('frozen'),
             subAccountsRevoked: z.number().int(),
+            apiKeysRevoked: z.number().int(),
           }),
         )
         .mutation(async ({ input }) => {

@@ -581,6 +581,25 @@ if (!available) {
 
       expect(await auth.revokeApiKey(attacker.userId, id)).toBe(false);
     });
+
+    it('freezeIdentity bulk-revokes API keys and stops exchange', async () => {
+      const session = await register();
+      const { key, id } = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      expect(await auth.verifyApiKey(key)).not.toBeNull();
+
+      const result = await auth.freezeIdentity(session.userId);
+      expect(result).toMatchObject({ userId: session.userId, status: 'frozen', apiKeysRevoked: 1 });
+
+      const listed = await auth.listApiKeys(session.userId);
+      expect(listed.find((k) => k.id === id)?.revoked).toBe(true);
+      expect(await auth.verifyApiKey(key)).toBeNull();
+      await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
+    });
   });
 
   describe('sub-accounts', () => {
@@ -612,6 +631,23 @@ if (!available) {
       `;
       expect(rows).toHaveLength(1);
       expect(rows[0]!.revoked).toBe(true);
+    });
+
+    it('freezeIdentity soft-revokes every sub-account and does not un-revoke on thaw', async () => {
+      const session = await register();
+      const a = await auth.createSubAccount(session.userId, 'a');
+      const b = await auth.createSubAccount(session.userId, 'b');
+
+      const frozen = await auth.freezeIdentity(session.userId);
+      expect(frozen.subAccountsRevoked).toBe(2);
+      const listed = await auth.listSubAccounts(session.userId);
+      expect(listed.every((s) => s.revoked)).toBe(true);
+
+      await auth.unfreezeIdentity(session.userId);
+      const afterThaw = await auth.listSubAccounts(session.userId);
+      // Explicit reopen only — freeze cascade is not a soft toggle for books.
+      expect(afterThaw.find((s) => s.id === a.id)?.revoked).toBe(true);
+      expect(afterThaw.find((s) => s.id === b.id)?.revoked).toBe(true);
     });
 
     it('will not let one user revoke another user’s sub-account', async () => {
