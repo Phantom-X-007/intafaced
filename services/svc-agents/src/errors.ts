@@ -21,6 +21,7 @@ export type AgentErrorCode =
   | 'agents.window_sealed'
   | 'agents.window_not_found'
   | 'agents.invalid_usage'
+  | 'agents.request_id_replay'
   | 'agents.refused';
 
 export class AgentError extends Error {
@@ -67,6 +68,7 @@ export const AGENT_ERROR_CODES: readonly AgentErrorCode[] = [
   'agents.window_sealed',
   'agents.window_not_found',
   'agents.invalid_usage',
+  'agents.request_id_replay',
   'agents.refused',
 ] as const;
 

@@ -330,18 +330,19 @@ if (!available) {
       expect(ledger.totalsByAsset().IFC).toBe('0');
     });
 
-    it('bills a retried completion exactly once', async () => {
+    it('bills a completion exactly once and refuses a free request-id replay', async () => {
       const session = await open();
 
       const first = await runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES });
-      const second = await runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES });
-
-      // The engine really was called twice — the caller did not get its answer
-      // the first time — but only the first call added to the bill.
-      expect(provider.callCount).toBe(2);
       expect(first.metered).toBe(true);
-      expect(second.metered).toBe(false);
-      expect(second.cost).toBe(0n);
+      expect(provider.callCount).toBe(1);
+
+      // Reusing the request id must not re-enter the engine free of charge
+      // (spend-cap bypass / unlimited unbilled inference).
+      await expect(runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES })).rejects.toMatchObject(
+        { code: 'agents.request_id_replay' },
+      );
+      expect(provider.callCount).toBe(1);
 
       const rows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
       expect(rows).toHaveLength(1);
