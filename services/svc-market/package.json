@@ -19,6 +19,7 @@
     "@intafaced/config": "workspace:*",
     "@intafaced/contracts": "workspace:*",
     "@intafaced/db": "workspace:*",
+    "@intafaced/ledger-client": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@trpc/server": "^11.0.0-rc.660",

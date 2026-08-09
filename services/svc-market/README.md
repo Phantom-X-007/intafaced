@@ -1,39 +1,50 @@
 # svc-market
 
-Vendor lifecycle for `market.vendors` (§8.7). **A user applies to be a
-marketplace vendor, an operator vets the application, an approved vendor holds
-listing slots their IFC stake tier pays for, and a stranger with no account can
-see who is listed right now.** Stage 3 completes the mountain — apply → vet →
-slot → list eligibility — with no commerce money settlement.
+Vendor lifecycle for `market.vendors` (§8.7) plus listings and one-time purchase
+for `market.commerce`. **A user applies to be a marketplace vendor, an operator
+vets the application, an approved vendor holds listing slots their IFC stake
+tier pays for, a stranger can see who is listed, a listed vendor publishes a
+priced listing, and a buyer pays via ledger recipes with a disclosed house
+commission.**
 
 Doctrine: §0.6 no balances here; §2 no SQL into another service's schema; the
-stake numbers stay in svc-token.
+stake numbers stay in svc-token; value moves only through `packages/ledger-client`.
 
 ## Stages
 
-| Stage | What it is                                                 | Built |
-| ----- | ---------------------------------------------------------- | ----- |
-| **1** | Apply → vet, with an append-only decision history          | **✓** |
-| **2** | Stake-gated listing slots, from `vendorSlots` under a lock | **✓** |
-| **3** | Public listing eligibility, feeding `market.commerce`      | **✓** |
+| Stage  | What it is                                                 | Built    |
+| ------ | ---------------------------------------------------------- | -------- |
+| **1**  | Apply → vet, with an append-only decision history          | **✓**    |
+| **2**  | Stake-gated listing slots, from `vendorSlots` under a lock | **✓**    |
+| **3**  | Public listing eligibility, feeding `market.commerce`      | **✓**    |
+| **C1** | Listing catalog (no money)                                 | **✓**    |
+| **C2** | One-time purchase + house commission (Class M)             | **✓**    |
+| **C3** | Subscriptions                                              | residual |
 
 ## API
 
 tRPC under `/trpc` (edge mounts `/api/market`). Principal via edge HMAC
 (`EDGE_PRINCIPAL_SECRET`).
 
-| Procedure          | Scope          | Behaviour                                         |
-| ------------------ | -------------- | ------------------------------------------------- |
-| `profile`          | **public**     | One listed vendor's public profile                |
-| `listed`           | **public**     | The directory of vendors listed right now         |
-| `applyAsVendor`    | `market:write` | Create the caller's own application (`applied`)   |
-| `mine`             | `market:read`  | The caller's own application, or `null`           |
-| `claimSlot`        | `market:write` | Take a listing slot, if the caller's tier has one |
-| `releaseSlot`      | `market:write` | Give a slot back                                  |
-| `slots`            | `market:read`  | Tier, capacity, held and **usable** slots         |
-| `listApplications` | `market:ops`   | Operator queue — undecided first, oldest first    |
-| `vet`              | `market:ops`   | Record an operator's decision and apply it        |
-| `history`          | `market:ops`   | The decision trail for one application            |
+| Procedure           | Scope          | Behaviour                                               |
+| ------------------- | -------------- | ------------------------------------------------------- |
+| `profile`           | **public**     | One listed vendor's public profile                      |
+| `listed`            | **public**     | The directory of vendors listed right now               |
+| `listings`          | **public**     | Active listings whose vendor is currently listed        |
+| `commerceProgramme` | **public**     | Whether house commission bps is configured              |
+| `applyAsVendor`     | `market:write` | Create the caller's own application (`applied`)         |
+| `mine`              | `market:read`  | The caller's own application, or `null`                 |
+| `createListing`     | `market:write` | Create a listing; claims a slot named by the listing id |
+| `archiveListing`    | `market:write` | Archive own listing; releases its slot                  |
+| `myListings`        | `market:read`  | Caller's listings                                       |
+| `purchase`          | `market:write` | One-time purchase (client `purchaseId`); Class M        |
+| `myPurchases`       | `market:read`  | Caller's purchases                                      |
+| `claimSlot`         | `market:write` | Take a listing slot, if the caller's tier has one       |
+| `releaseSlot`       | `market:write` | Give a slot back                                        |
+| `slots`             | `market:read`  | Tier, capacity, held and **usable** slots               |
+| `listApplications`  | `market:ops`   | Operator queue — undecided first, oldest first          |
+| `vet`               | `market:ops`   | Record an operator's decision and apply it              |
+| `history`           | `market:ops`   | The decision trail for one application                  |
 
 HTTP: `GET /health`, `GET /ready` (`stage: 3-list-eligibility`).
 
@@ -284,3 +295,23 @@ live control is the edge kill-switch, which works because `/api/market` is in
 `UPSTREAMS` (`services/svc-edge/src/routes.ts`). Nothing here reads the flags,
 and the flag registry's own comment says so out loud rather than implying
 otherwise.
+
+## Commerce money path (Class M)
+
+| Recipe           | Reason            | Accounts                                                   |
+| ---------------- | ----------------- | ---------------------------------------------------------- |
+| `marketPurchase` | `market.purchase` | buyer available → vendor available + `houseFees('market')` |
+
+- **Idempotency:** `market.purchase:<purchaseId>` (client-supplied).
+- **Commission:** `MARKET_HOUSE_COMMISSION_BPS` — **no default**. Unset refuses
+  `market.commission_not_configured` before any row or post. `0` is an explicit
+  free rate, not silence.
+- **Rounding:** floor on commission (customer favour); buyer pays exactly the
+  listed price (vendor net + house = price).
+- **Eligibility:** re-checked on every create/purchase via
+  `VendorService.listingEligibility` — never a stored `is_listed`.
+- **Subscriptions:** listing `offer_type=subscription` is storable; purchase
+  refuses `market.subscription_not_built` until Stage C3.
+
+No balance column exists on `market.listings` or `market.purchases`. Price and
+commission_bps are intent records; the only balances live in svc-ledger.

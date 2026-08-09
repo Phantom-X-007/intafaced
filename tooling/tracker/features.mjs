@@ -1229,7 +1229,13 @@ export const FEATURES = [
   f('market.commerce', 'Listings, subscriptions, purchases, house commission', {
     module: 'market',
     phase: '5',
+    status: 'wip',
+    owner: 'wave3-bank-market',
     dependsOn: ['market.vendors'],
+    note:
+      'Wave 3 2026-08-09: Stage C1+C2 in progress — listings + one-time purchase via recipes.marketPurchase + houseFees(market). ' +
+      'Blank MARKET_HOUSE_COMMISSION_BPS refuses market.commission_not_configured (owner-gated rate). Subscriptions residual. ' +
+      'Eligibility from VendorService.listingEligibility (computed, no is_listed). Class M.',
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
     owner: 'shehzad002',
