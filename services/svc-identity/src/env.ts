@@ -47,6 +47,18 @@ const schema = serviceEnvSchema
        * Dual-read still accepts legacy unprefixed plaintext until re-enrol.
        */
       IDENTITY_TOTP_SECRET_KEY: z.string().optional().default(''),
+      /**
+       * svc-ledger base URL for the ONE money path this service has: the
+       * affiliate / IB commission fan-out (§0.6 — identity stores no balances).
+       *
+       * OPTIONAL AND UNDEFAULTED, unlike the sibling services that default to
+       * `http://localhost:4001`. A default here would have svc-identity claim a
+       * ledger connection in every deployment, including ones where affiliates
+       * are off — and the payout path would then fail at post time against a
+       * host that is not there, instead of refusing up front with
+       * `affiliate.payout.ledger_unwired`. Unset is a legible state, not a gap.
+       */
+      LEDGER_URL: z.string().url().optional(),
     }),
   );
 

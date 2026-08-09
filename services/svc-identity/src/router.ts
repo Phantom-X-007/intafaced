@@ -4,13 +4,20 @@ import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
+import type { LedgerClient } from '@intafaced/ledger-client';
 import {
+  AFFILIATE_PAYOUT_RESIDUAL,
   AffiliatePayoutRefuseError,
   affiliateFreezeHonestyLine,
   affiliateMemberListStatusLine,
   affiliateTreeStatusLine,
-  refuseAffiliatePayout,
 } from './affiliates/admin-tree-read.js';
+import {
+  affiliatePayoutPlanStatusLine,
+  assertPayoutRateProvenance,
+  planAffiliatePayout,
+  postAffiliatePayout,
+} from './affiliates/payout-engine.js';
 import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
@@ -193,6 +200,14 @@ export function createIdentityRouter(
      * Default unpublished — never invent 10/5/2%.
      */
     accrualTierLaw?: AccrualTierLaw;
+    /**
+     * Slice C payout rail. Narrow on purpose — `post` is the only capability an
+     * affiliate payout needs, and a wider handle here would let this service
+     * read or reconcile balances it has no business touching (§0.6).
+     *
+     * Absent → payout plans but refuses to post (`affiliate.payout.ledger_unwired`).
+     */
+    ledger?: Pick<LedgerClient, 'post'>;
   },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
@@ -200,6 +215,7 @@ export function createIdentityRouter(
   const freeze = options.freeze;
   const accruals = options.accruals;
   const accrualTierLaw = options.accrualTierLaw ?? UNPUBLISHED_ACCRUAL_TIER_LAW;
+  const ledger = options.ledger;
 
   function requireReferral(): ReferralService {
     if (!referral) {
@@ -1217,19 +1233,85 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Class M payout — refuse-closed. DIRECTION §8 rates are owner-only;
-       * never invent fee-share bps or post ledger from this path.
+       * Slice C payout — the mechanism is here and it is REFUSE-CLOSED ON THE RATE.
+       *
+       * DIRECTION §8 rates stay owner-only, so with an unpublished law this
+       * refuses `affiliate.payout.rates_unset` and moves nothing. When the owner
+       * publishes tiers, the same path fans the durable accrual rows out across
+       * the tree through existing ledger recipes (§0.6 — no value moves outside
+       * packages/ledger-client, and no recipe is invented here).
+       *
+       * `feeEventId` is OPTIONAL IN THE SCHEMA ON PURPOSE: the rate refusal must
+       * be the one an operator sees first. Rejecting a missing field before
+       * checking the law would answer "your request is malformed" to someone
+       * whose real problem is that no rate exists.
        */
       payout: scopedProcedure('admin:write')
         .input(
           z.object({
+            feeEventId: z.string().min(1).max(120).optional(),
             beneficiaryId: z.string().uuid().optional(),
             dryRun: z.boolean().optional(),
           }),
         )
-        .mutation(async () => {
+        .mutation(async ({ input }) => {
           try {
-            refuseAffiliatePayout();
+            // Rate law first — before store, ledger, or field validation.
+            assertPayoutRateProvenance([], accrualTierLaw);
+
+            const feeEventId = input.feeEventId?.trim() ?? '';
+            if (!feeEventId) {
+              throw new AffiliatePayoutRefuseError(
+                'feeEventId is required — a payout idempotency key must be derived from the business event, never a clock',
+                'affiliate.payout.invalid',
+                AFFILIATE_PAYOUT_RESIDUAL,
+              );
+            }
+
+            const rows = await requireAccruals().listByFeeEvent(feeEventId);
+            const frozen = freeze ? await requireFreeze().frozenIds() : new Set<string>();
+
+            const plan = planAffiliatePayout({
+              feeEventId,
+              rows: input.beneficiaryId ? rows.filter((r) => r.beneficiaryId === input.beneficiaryId) : rows,
+              law: accrualTierLaw,
+              frozenBeneficiaryIds: frozen,
+            });
+
+            if (input.dryRun === true) {
+              return {
+                posted: false as const,
+                feeEventId: plan.feeEventId,
+                asset: plan.asset,
+                totalCommission: plan.totalCommission,
+                legCount: plan.legs.length,
+                beneficiaryCount: plan.beneficiaryCount,
+                idempotencyKeys: plan.legs.flatMap((l) => [l.sweep.idempotencyKey, l.payout.idempotencyKey]),
+                statusLine: affiliatePayoutPlanStatusLine(plan),
+              };
+            }
+
+            // §0.6: without a ledger client this path cannot move value, and it
+            // says so rather than pretending a plan is a payment.
+            if (!ledger) {
+              throw new AffiliatePayoutRefuseError(
+                'Affiliate payout cannot post — no ledger client is wired into this deployment',
+                'affiliate.payout.ledger_unwired',
+                AFFILIATE_PAYOUT_RESIDUAL,
+              );
+            }
+
+            const receipt = await postAffiliatePayout(ledger, plan);
+            return {
+              posted: true as const,
+              feeEventId: receipt.feeEventId,
+              asset: receipt.asset,
+              totalCommission: receipt.totalCommission,
+              legCount: receipt.legCount,
+              beneficiaryCount: receipt.beneficiaryCount,
+              idempotencyKeys: receipt.idempotencyKeys,
+              statusLine: affiliatePayoutPlanStatusLine(plan),
+            };
           } catch (err) {
             throw toTrpcError(err);
           }

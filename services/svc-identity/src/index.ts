@@ -11,6 +11,7 @@ import { ReferralService } from './affiliates/referral-service.js';
 import { FreezeService } from './affiliates/freeze-service.js';
 import { SqlAccrualStore } from './affiliates/accrual-store.js';
 import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
+import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
@@ -110,6 +111,13 @@ const accruals = new SqlAccrualStore(sql);
 /** Fail boot on malformed owner rates — never invent commission percentages. */
 const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON);
 
+/**
+ * The affiliate payout rail. Absent unless an operator configures LEDGER_URL —
+ * and payout then refuses `affiliate.payout.ledger_unwired` rather than
+ * reporting a payment it could not make.
+ */
+const ledger = env.LEDGER_URL ? createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET) : undefined;
+
 export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
   webauthnEnabled: env.WEBAUTHN_ENABLED,
@@ -117,6 +125,7 @@ export const appRouter = createIdentityRouter(auth, rank, {
   freeze,
   accruals,
   accrualTierLaw,
+  ledger,
 });
 export type AppRouter = typeof appRouter;
 
