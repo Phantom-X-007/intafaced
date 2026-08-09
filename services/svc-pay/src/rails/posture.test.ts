@@ -16,6 +16,7 @@ import {
   defaultChainFor,
   railPostureStatus,
   selectPublicCheckoutRail,
+  selectPublicCheckoutRailDetailed,
   shouldRegisterCardSandbox,
   tryLiveChainFromEnv,
 } from './posture.js';
@@ -520,6 +521,28 @@ describe('selectPublicCheckoutRail', () => {
       throw new Error('should have refused');
     } catch (err) {
       expect((err as PublicCheckoutUnavailable).reason).toBe('none-configured');
+    }
+  });
+
+  /**
+   * SPEC §5: log reason per decision. No cost/approval-rate invent — only the
+   * existing skip taxonomy. Detailed walk records every preference entry.
+   */
+  it('records the full preference walk (chosen + skip reasons, no invented scores)', () => {
+    const live = liveRail();
+    const rails = new RailRegistry([cryptoOn(new MemoryChain()), live]);
+    const decision = selectPublicCheckoutRailDetailed(rails, ['missing-rail', 'crypto-native', live.id], 'live-only');
+    expect(decision.adapter.id).toBe(live.id);
+    expect(decision.considered).toEqual([
+      { railId: 'missing-rail', outcome: 'skipped', reason: 'not-registered' },
+      { railId: 'crypto-native', outcome: 'skipped', reason: 'sandbox' },
+      { railId: live.id, outcome: 'chosen' },
+    ]);
+    // No cost / approval / geo fields on the decision — inventing those is DIRECTION §8.
+    for (const entry of decision.considered) {
+      expect(Object.keys(entry).sort()).toEqual(
+        entry.outcome === 'chosen' ? ['outcome', 'railId'].sort() : ['outcome', 'railId', 'reason'].sort(),
+      );
     }
   });
 });
