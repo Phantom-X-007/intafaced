@@ -111,6 +111,7 @@ const privateOrderHub = new PrivateOrderHub(
     highWaterBytes: env.WS_HIGH_WATER_BYTES,
     maxLagTicks: env.WS_MAX_LAG_TICKS,
     maxConnections: env.WS_MAX_CONNECTIONS,
+    maxConnectionsPerUser: env.WS_PRIVATE_MAX_CONNECTIONS_PER_USER,
   },
   app.log,
 );
