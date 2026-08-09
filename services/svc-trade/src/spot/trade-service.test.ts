@@ -820,6 +820,7 @@ if (!available) {
 
       await expect(
         trade.placeOrder(principalFor(ALICE, ['trade:read']), {
+          clientOrderId: 'auto-cli-1',
           marketId: btcusdt.id,
           side: 'buy',
           type: 'limit',
@@ -887,6 +888,7 @@ if (!available) {
 
         await expect(
           gated.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-2',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -912,6 +914,7 @@ if (!available) {
 
         await expect(
           gated.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-3',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -933,6 +936,7 @@ if (!available) {
 
         await expect(
           gated.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-4',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -951,6 +955,7 @@ if (!available) {
         await fund(ALICE, 'USDT', '1000');
         await expect(
           trade.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-5',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -990,6 +995,7 @@ if (!available) {
 
       await expect(
         off.placeOrder(principalFor(ALICE), {
+          clientOrderId: 'auto-cli-6',
           marketId: btcusdt.id,
           side: 'buy',
           type: 'limit',
@@ -1268,6 +1274,7 @@ if (!available) {
       await fund(ALICE, 'USDT', '1000');
       await expect(
         trade.placeOrder(principalFor(ALICE), {
+          clientOrderId: 'auto-cli-7',
           marketId: btcusdt.id,
           side: 'buy',
           type: 'stop_limit',
@@ -1374,9 +1381,30 @@ if (!available) {
       matching.asks = [];
 
       await expect(
-        trade.placeOrder(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', type: 'market', qty: amt('2') }),
+        trade.placeOrder(principalFor(ALICE), {
+          clientOrderId: 'auto-cli-8',
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'market',
+          qty: amt('2'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.no_reference_price' });
 
+      expect(await held(ALICE, 'USDT')).toBe('0');
+    });
+
+    it('refuses place without clientOrderId — a retry would double-hold', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      matching.asks = [['100', '5']];
+      await expect(
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'market',
+          qty: amt('1'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.client_order_id_required' });
+      expect(matching.submitted).toHaveLength(0);
       expect(await held(ALICE, 'USDT')).toBe('0');
     });
   });
