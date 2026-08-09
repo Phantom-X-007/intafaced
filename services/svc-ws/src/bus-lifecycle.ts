@@ -4,12 +4,17 @@ import type { HubLogger } from './depth/hub.js';
  * NATS / JetStream lifecycle for the trade tape + private fan-out.
  *
  * Depth keeps serving whether the bus is up or not. When connect/subscribe
- * fails at boot (or later), we retry with exponential backoff instead of
- * leaving `tradesBus` / `privateBus` false until process restart.
+ * fails **before any successful attach** (boot or pre-success retries), we
+ * retry with exponential backoff instead of leaving `tradesBus` / `privateBus`
+ * false until process restart.
  *
- * Mid-flight nats.js reconnect is the client's job once `connect` has
- * succeeded; this loop only covers "never got a subscription" — the case the
- * README previously called out as parked.
+ * Ownership split (do not blur these):
+ * - **Before first attach:** this loop owns retry + `/ready` flags.
+ * - **After first attach:** nats.js owns TCP reconnect for that connection.
+ *   `tradesBus` / `privateBus` stay true while the consumer is attached for
+ *   this process session. They are not a continuous liveness probe of the
+ *   remote NATS server. A full mid-session supervisor (drop flags + re-attach
+ *   when the connection is gone for good) is not built here — see README.
  */
 
 export interface BusLifecycleConnectResult {

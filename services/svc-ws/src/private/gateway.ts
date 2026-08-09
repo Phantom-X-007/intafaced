@@ -87,7 +87,15 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
       try {
         url = new URL(req.url ?? '/', 'http://gateway.invalid');
       } catch (err) {
+        // Destroy the socket — a bare return leaves the TCP upgrade hung until
+        // the client times out, and on co-mount a public-path parse throw used
+        // to abort this listener before we could even get here.
         log.warn({ err: String(err) }, 'ws-private: unreadable upgrade URL');
+        try {
+          reject(socket, 400, 'Bad Request');
+        } catch {
+          /* already gone */
+        }
         return;
       }
       if (url.pathname !== PRIVATE_STREAM_PATH) return;
