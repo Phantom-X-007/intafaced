@@ -28,6 +28,7 @@
    ========================================================================== */
 
 var $ = require('jquery');
+var klineOhlcv = require('../kline-ohlcv.js');
 /* Vendored Apache-2.0 standalone build — see LICENSE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
 var createChart = window.LightweightCharts.createChart;
@@ -226,50 +227,10 @@ KlineChart.prototype._loadHistory = function () {
           return;
         }
         var data = Array.isArray(response) ? response : [];
-        var bars = [];
-        for (var i = 0; i < data.length; i++) {
-          var item = data[i];
-          if (!item || item.length < 5) continue;
-          // Wire: [timestampMs, open, high, low, close, volume]. The timestamp
-          // is the bucket's OPEN time (CCXT convention) — labelling a candle
-          // with its close time shifts the whole series by one bar.
-          // OHLC must be decimal STRINGS (same law as ix-wire.candle). JSON
-          // numbers are refused, not parseFloat-laundered into the chart as
-          // "truth". Chart needs numbers only after the string gate.
-          if (
-            typeof item[1] !== 'string' ||
-            typeof item[2] !== 'string' ||
-            typeof item[3] !== 'string' ||
-            typeof item[4] !== 'string'
-          ) {
-            continue;
-          }
-          var t = item[0];
-          if (t > 1e12) t = Math.floor(t / 1000);
-          var o = parseFloat(item[1]);
-          var h = parseFloat(item[2]);
-          var l = parseFloat(item[3]);
-          var c = parseFloat(item[4]);
-          if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) continue;
-          bars.push({
-            time: t,
-            open: o,
-            high: h,
-            low: l,
-            close: c
-          });
-        }
-        bars.sort(function (a, b) {
-          return a.time - b.time;
-        });
-        // lightweight-charts requires unique ascending times
-        var deduped = [];
-        var lastT = -1;
-        for (var j = 0; j < bars.length; j++) {
-          if (bars[j].time === lastT) continue;
-          deduped.push(bars[j]);
-          lastT = bars[j].time;
-        }
+        // Wire: [timestampMs, open, high, low, close, volume]. OHLC must be
+        // decimal STRINGS (ix-wire.candle law). JSON numbers refused in kline-ohlcv.
+        // lightweight-charts needs numbers only after the string gate.
+        var deduped = klineOhlcv.barsFromHistory(data);
         self._series.setData(deduped);
         self._lastBar = deduped.length ? deduped[deduped.length - 1] : null;
         if (self._chart) self._chart.timeScale().fitContent();
