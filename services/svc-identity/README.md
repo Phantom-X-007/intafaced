@@ -28,7 +28,7 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `rank.get`                                             | `identity:read`           | Rank, XP, XP to next tier                                                |
 | `rank.perks`                                           | `identity:read`           | **The hot path** — every module calls this                               |
 | `rank.awardXp`                                         | service                   | Modules award XP here, never by writing `rank_state`                     |
-| `apiKeys.exchange`                                     | public                    | Long-lived key → short JWT; non-empty `domain_whitelist` binds Origin                    |
+| `apiKeys.exchange`                                     | public                    | Long-lived key → short JWT; non-empty `domain_whitelist` binds Origin    |
 | `apiKeys.create` / `list` / `revoke`                   | `identity:write` / `read` | Key returned once, never retrievable                                     |
 | `compliance.freezeIdentity`                            | `admin:compliance`        | Freeze user + revoke sessions + sub-accounts + API keys                  |
 | `compliance.unfreezeIdentity`                          | `admin:compliance`        | Thaw user only — does **not** un-revoke keys or books                    |
