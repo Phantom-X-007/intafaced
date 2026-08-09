@@ -164,6 +164,7 @@ app.get('/ready', async () => ({
   // Surfaced because "are we liquidating today" is the first question anyone
   // asks about this service, and it should not require reading an env file.
   loanRiskSweep: env.LOAN_RISK_SWEEP_ENABLED,
+  autoInvest: env.AUTO_INVEST_ENABLED,
   /**
    * WHETHER THIS DEPLOYMENT'S CARDS ARE REAL, ON THE READINESS ENDPOINT.
    *
@@ -338,6 +339,24 @@ app.post('/internal/jobs/resume-pending-earn', async (req, reply) => {
   return withSpan('bank.job.resumePendingEarn', async () => bank.earn.resumePending());
 });
 
+/**
+ * AUTO-INVEST RUNNER — threshold sweeps and due DCA rules.
+ *
+ * Same external-scheduler shape as standing orders: an operator-visible POST
+ * with its own kill switch, not a setInterval inside the replica. tRPC
+ * `ops.runAutoInvest` and this route share `AUTO_INVEST_ENABLED` and the same
+ * refusal code `bank.auto_invest_disabled` so neither is a back door past stop.
+ */
+app.post('/internal/jobs/run-auto-invest', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
+  if (!env.AUTO_INVEST_ENABLED) {
+    return reply.code(503).send({ error: 'auto-invest is disabled', code: 'bank.auto_invest_disabled' });
+  }
+  return withSpan('bank.job.runAutoInvest', async () => bank.autoInvest.runDue({}));
+});
+
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
@@ -356,6 +375,7 @@ app.log.info(
     port: env.HTTP_PORT,
     scheduledTransfers: env.SCHEDULED_TRANSFERS_ENABLED,
     interestAccrual: env.INTEREST_ACCRUAL_ENABLED,
+    autoInvest: env.AUTO_INVEST_ENABLED,
     // In the boot line, not only on `/ready`: the first place anyone looks after
     // a deploy is the log, and "this deployment is running a card SIMULATOR" is
     // exactly the fact that must not be discovered later from a support ticket.

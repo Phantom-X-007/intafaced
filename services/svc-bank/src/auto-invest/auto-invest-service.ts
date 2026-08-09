@@ -288,6 +288,45 @@ export class AutoInvestService {
     }
   }
 
+  /**
+   * Hold a rule without cancelling it. Reversible via `resumeRule`.
+   *
+   * The status enum has carried `paused` since the table landed; until this
+   * path wrote it, cancel was the only stop and the branch that accepted
+   * `paused` on cancel was unreachable. Same residual shape as standing-order
+   * pause before the transfer pause PR.
+   */
+  async pauseRule(ruleId: string): Promise<AutoInvestRule> {
+    const rows = await this.sql<RuleRow[]>`
+      UPDATE bank.auto_invest_rules SET status = 'paused', updated_at = now()
+       WHERE id = ${ruleId} AND status = 'active'
+       RETURNING id, user_id, kind, asset_id, threshold, target_pool_id, buy_asset_id,
+                 amount, cadence, next_run_at, status, created_at
+    `;
+    if (rows.length === 0) {
+      throw new BankError(`Auto-invest rule ${ruleId} is not pausable`, 'bank.auto_invest_inactive');
+    }
+    return toRule(rows[0]!);
+  }
+
+  /**
+   * Resume a paused rule. Does not invent a catch-up fire: the next `runDue`
+   * pass considers the rule again under normal due rules (threshold every pass;
+   * DCA when `next_run_at` is due). Past time while paused is not multi-settled.
+   */
+  async resumeRule(ruleId: string): Promise<AutoInvestRule> {
+    const rows = await this.sql<RuleRow[]>`
+      UPDATE bank.auto_invest_rules SET status = 'active', updated_at = now()
+       WHERE id = ${ruleId} AND status = 'paused'
+       RETURNING id, user_id, kind, asset_id, threshold, target_pool_id, buy_asset_id,
+                 amount, cadence, next_run_at, status, created_at
+    `;
+    if (rows.length === 0) {
+      throw new BankError(`Auto-invest rule ${ruleId} is not resumable`, 'bank.auto_invest_inactive');
+    }
+    return toRule(rows[0]!);
+  }
+
   // ── Runner ─────────────────────────────────────────────────────────────────
 
   /**

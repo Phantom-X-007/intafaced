@@ -128,9 +128,10 @@ Interest **capitalises** (raises debt, posts nothing). Mark / margin call / liqu
 | `autoInvest.list`                 | `bank:read`  | The user's rules. Rules hold **no balance** — instructions only                                                             |
 | `autoInvest.createThresholdSweep` | `bank:write` | Keep `threshold` in primary available; excess → earn pool (**same asset**, no rate)                                         |
 | `autoInvest.createDca`            | `bank:write` | Scheduled cross-asset buy — **refuses `bank.auto_invest_rate_unset`** until a convert port is wired. Never invents §8 rates |
+| `autoInvest.pause` / `resume`     | `bank:write` | Hold a rule without cancelling; resume applies normal due rules (no multi-fire invent)                                      |
 | `autoInvest.cancel`               | `bank:write` | Stop future firings. Does not reverse past runs                                                                             |
 
-`ops.runAutoInvest` (`admin:treasury`) fires due rules. Kill switch: `AUTO_INVEST_ENABLED` (HTTP job parity when mounted). Card round-ups and sovereign allowance plane are not here — round-ups need the capture path; P-plane is `protocol.smart-accounts` (Shehzad).
+`ops.runAutoInvest` (`admin:treasury`) and `POST /internal/jobs/run-auto-invest` fire due rules. Kill switch: `AUTO_INVEST_ENABLED` — same code `bank.auto_invest_disabled` on both surfaces. Card round-ups and sovereign allowance plane are not here — round-ups need the capture path; P-plane is `protocol.smart-accounts` (Shehzad).
 
 ### `business` — **maker/checker partial. Not full bank-biz.**
 
@@ -162,23 +163,24 @@ BANK_RAMP_MODE=crypto-ledger   # ledger half only; simulated: true always
 
 ### `ops` — operator only
 
-| Procedure                  | Scope            | Purpose                                                             |
-| -------------------------- | ---------------- | ------------------------------------------------------------------- |
-| `ops.runDueTransfers`      | `admin:treasury` | Fire every due standing order                                       |
-| `ops.accrueInterest`       | `admin:treasury` | One day's earn interest, one pool or all                            |
-| `ops.fundPool`             | `admin:treasury` | Move bank revenue into a pool's reserve                             |
-| `ops.fundLoanReserve`      | `admin:treasury` | Top up the debt-asset reserve loans draw from                       |
-| `ops.accrueLoanInterest`   | `admin:treasury` | Capitalise loan interest (no ledger post; unique per loan/day)      |
-| `ops.runRiskSweep`         | `admin:treasury` | Mark open loans; margin-call and liquidate past grace               |
-| `ops.resumePendingLoans`   | `admin:treasury` | Re-drive loans stuck between collateral lock and principal draw     |
-| `ops.resumePendingEarn`    | `admin:treasury` | Re-drive earn deposits stuck pending after ledger post              |
-| `ops.abandonPendingLoan`   | `admin:treasury` | Give up on a pending loan and return collateral                     |
-| `ops.cardAuthorize`        | `admin:treasury` | The authorisation "webhook" — decide, and hold if the answer is yes |
-| `ops.cardCapture`          | `admin:treasury` | The merchant took this much; the remainder of the hold goes back    |
-| `ops.cardReverse`          | `admin:treasury` | The authorisation expired or was voided; the whole hold goes back   |
-| `ops.cardResumeSettlement` | `admin:treasury` | Re-drive a claimed card capture/reversal that never reached ledger  |
-| `ops.fundCashbackPot`      | `admin:treasury` | Sweep bank revenue into the pot cashback is paid from               |
-| `ops.creditOnramp`         | `admin:treasury` | Crypto ledger-half on-ramp credit (never user-callable)             |
+| Procedure                  | Scope            | Purpose                                                               |
+| -------------------------- | ---------------- | --------------------------------------------------------------------- |
+| `ops.runDueTransfers`      | `admin:treasury` | Fire every due standing order                                         |
+| `ops.accrueInterest`       | `admin:treasury` | One day's earn interest, one pool or all                              |
+| `ops.fundPool`             | `admin:treasury` | Move bank revenue into a pool's reserve                               |
+| `ops.fundLoanReserve`      | `admin:treasury` | Top up the debt-asset reserve loans draw from                         |
+| `ops.accrueLoanInterest`   | `admin:treasury` | Capitalise loan interest (no ledger post; unique per loan/day)        |
+| `ops.runRiskSweep`         | `admin:treasury` | Mark open loans; margin-call and liquidate past grace                 |
+| `ops.resumePendingLoans`   | `admin:treasury` | Re-drive loans stuck between collateral lock and principal draw       |
+| `ops.resumePendingEarn`    | `admin:treasury` | Re-drive earn deposits stuck pending after ledger post                |
+| `ops.abandonPendingLoan`   | `admin:treasury` | Give up on a pending loan and return collateral                       |
+| `ops.cardAuthorize`        | `admin:treasury` | The authorisation "webhook" — decide, and hold if the answer is yes   |
+| `ops.cardCapture`          | `admin:treasury` | The merchant took this much; the remainder of the hold goes back      |
+| `ops.cardReverse`          | `admin:treasury` | The authorisation expired or was voided; the whole hold goes back     |
+| `ops.cardResumeSettlement` | `admin:treasury` | Re-drive a claimed card capture/reversal that never reached ledger    |
+| `ops.fundCashbackPot`      | `admin:treasury` | Sweep bank revenue into the pot cashback is paid from                 |
+| `ops.creditOnramp`         | `admin:treasury` | Crypto ledger-half on-ramp credit (never user-callable)               |
+| `ops.runAutoInvest`        | `admin:treasury` | Fire due auto-invest rules (threshold sweeps; DCA when convert wired) |
 
 These jobs are deliberately **not user-callable**: a user who can trigger "run every due transfer" or the risk sweep chooses when other people's money moves (or when their collateral is sold). `admin:treasury` is interactive-only (§4.1), so it can never be held by a long-lived API key.
 
@@ -192,6 +194,7 @@ HTTP, for the external scheduler (service credentials required; each money job h
 | `POST /internal/jobs/run-risk-sweep`       | mark / call / liquidate (default **off**) |
 | `POST /internal/jobs/resume-pending-loans` | crash recovery for pending loan opens     |
 | `POST /internal/jobs/resume-pending-earn`  | crash recovery for pending earn deposits  |
+| `POST /internal/jobs/run-auto-invest`      | auto-invest threshold sweeps / due DCA    |
 
 Plus `/health` and `/ready`. Card settlement resume is tRPC-only (`ops.cardResumeSettlement`) — no HTTP twin yet.
 
@@ -403,6 +406,7 @@ Editing a standing order cancels it and writes a new one, so the history of what
 | `INTEREST_ACCRUAL_ENABLED`                      | A reserve drained by a runaway job cannot be un-paid without asking users to return money                          |
 | `LOAN_ACCRUAL_ENABLED`                          | Loan interest capitalisation is its own flag — stopping earn payout must not stop charging borrowers               |
 | `LOAN_RISK_SWEEP_ENABLED`                       | Defaults **off**. Sells people's collateral; a fresh deploy must not liquidate until a human has checked marks     |
+| `AUTO_INVEST_ENABLED`                           | Stops threshold sweeps and DCA runs after an operator hit stop                                                     |
 | `TRANSFER_BATCH_SIZE` / `LOAN_SWEEP_BATCH_SIZE` | Bounds the blast radius of a single bad pass                                                                       |
 
 Each env job flag gates **both** the HTTP `/internal/jobs/*` endpoint **and** the matching `ops.*` tRPC mutation (same 503 / named code). tRPC is not a back door past an emergency stop.
