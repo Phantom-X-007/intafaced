@@ -25,7 +25,10 @@ import {
   xpPolicyStatusLineMatches,
   xpPolicyStatusLineConsistent,
   xpPolicyCountInRange,
+  xpPolicyCatalogConsistent,
+  xpPolicyGhostCertIds,
 } from './xp-policy.js';
+import { listCertCatalog } from './catalog.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -112,5 +115,22 @@ describe('L3 wave48 xp-policy status/export', () => {
     expect(xpPolicyStatusLineDetailed()).toContain('count=');
     expect(xpPolicyCountInRange(1, 100)).toBe(true);
     expect(xpPolicyCountInRange(100, 1)).toBe(false);
+  });
+});
+
+
+describe('XP policy ↔ cert catalog consistency (no ghost priced certs)', () => {
+  it('every CERT_XP_V0 certId is grantable from CERT_CATALOG', () => {
+    expect(xpPolicyGhostCertIds()).toEqual([]);
+    expect(xpPolicyCatalogConsistent()).toBe(true);
+    const catalogIds = new Set(listCertCatalog().map((c) => c.id));
+    for (const id of listXpPolicyCertIds()) {
+      expect(catalogIds.has(id), `ghost policy cert ${id}`).toBe(true);
+    }
+  });
+
+  it('does not advertise markets-v1 without a catalog definition', () => {
+    expect(listXpPolicyCertIds()).not.toContain('markets-v1');
+    expect(hasXpPolicy('markets-v1')).toBe(false);
   });
 });

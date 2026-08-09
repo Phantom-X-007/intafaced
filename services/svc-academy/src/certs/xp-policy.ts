@@ -10,6 +10,7 @@
  */
 
 import { certIdempotencyKey, type CertGrantRecord } from './progress.js';
+import { listCertCatalog } from './catalog.js';
 
 export type CertXpPolicy = {
   readonly certId: string;
@@ -19,8 +20,9 @@ export type CertXpPolicy = {
 
 /** v0 policy — product may retune amounts; tests pin strings. */
 export const CERT_XP_V0: readonly CertXpPolicy[] = [
+  // Only certs that exist in CERT_CATALOG. markets-v1 was a ghost — plane advertised
+  // XP for a cert nobody can grant. Add rows here only when catalog + product law land.
   { certId: 'foundations-v1', xpDelta: '100' },
-  { certId: 'markets-v1', xpDelta: '150' },
 ] as const;
 
 export function xpPolicyFor(certId: string): CertXpPolicy | null {
@@ -197,4 +199,20 @@ export function xpPolicyCountInRange(min: number, max: number): boolean {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
   const n = xpPolicyCount();
   return n >= min && n <= max;
+}
+
+
+/**
+ * Every XP policy certId must be grantable — present in CERT_CATALOG.
+ * A policy without a definition is a ghost that certXpPlane would advertise.
+ */
+export function xpPolicyCatalogConsistent(): boolean {
+  const catalogIds = new Set(listCertCatalog().map((c) => c.id));
+  return CERT_XP_V0.every((p) => catalogIds.has(p.certId));
+}
+
+/** L3 — policy cert ids missing from the grantable catalog. Empty when honest. */
+export function xpPolicyGhostCertIds(): readonly string[] {
+  const catalogIds = new Set(listCertCatalog().map((c) => c.id));
+  return CERT_XP_V0.filter((p) => !catalogIds.has(p.certId)).map((p) => p.certId);
 }
