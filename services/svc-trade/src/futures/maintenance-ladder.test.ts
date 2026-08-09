@@ -411,7 +411,25 @@ describe('planLadderLiquidation', () => {
       policy: WIDE_POLICY,
     });
     if (!decision.liquidate) throw new Error('expected a rung');
-    expect(decision.recipes[0]!.idempotencyKey).toBe('futures.loss:liq:pos-1:2026-08-08T00:00:loss');
+    // Partial rungs must include closed size in the loss id — same lifecycle
+    // liquidationId re-used across rungs would otherwise ledger-dedupe and
+    // leave margin stranded while size shrinks. Full close keeps `:loss` alone.
+    if (decision.closesPosition) {
+      expect(decision.recipes[0]!.idempotencyKey).toBe('futures.loss:liq:pos-1:2026-08-08T00:00:loss');
+    } else {
+      expect(decision.recipes[0]!.idempotencyKey).toBe(
+        `futures.loss:liq:pos-1:2026-08-08T00:00:loss:partial:${formatAmount(decision.sizeClosed)}:${formatAmount(position().size)}`,
+      );
+    }
+    const replay = planLadderLiquidation({
+      liquidationId: 'liq:pos-1:2026-08-08T00:00',
+      position: position(),
+      markPrice: amt('93'),
+      depthNotional: DEEP,
+      policy: WIDE_POLICY,
+    });
+    if (!replay.liquidate) throw new Error('expected replay rung');
+    expect(replay.recipes[0]!.idempotencyKey).toBe(decision.recipes[0]!.idempotencyKey);
   });
 
   it('summarises a skip and a rung distinguishably', () => {
