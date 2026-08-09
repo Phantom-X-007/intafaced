@@ -197,7 +197,7 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 
 ## Tests
 
-`pnpm --filter @intafaced/svc-indexer test` — **132 tests.** 79 need nothing at all; 27 need Postgres; 26 need a chain. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true.
+`pnpm --filter @intafaced/svc-indexer test` — **151 tests.** 98 need nothing at all; 27 need Postgres; 26 need a chain. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true.
 
 | File                                | Covers                                                                                                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -207,6 +207,8 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 | `chain/source.test.ts`              | Port validation — malformed hashes, duplicate log indexes, lossy prices, negative entry prices — and that `MemoryChainSource` hashes deterministically  |
 | `chain/evm/decode.test.ts`          | **The money arithmetic, hermetically.** uint256-is-the-Amount, eighteen nines, 10^30, the `numeric(38,18)` bound, market decoding, unknown topics       |
 | `chain/evm/abi.test.ts`             | The hand-written ABI against the compiled artefact — signature, topic0, **and the `indexed` flags topic0 agreement does not imply**; artefact integrity |
+| `chain/evm/availability.test.ts`    | **Always-on classifiers** — nested `ECONNREFUSED`, `isBlockNotFound`, zero address — no RPC required                                                    |
+| `chain/evm/source.unit.test.ts`     | **Always-on refusals** — empty RPC / zero venue refuse construct; dead endpoint `head()` throws `chain_unreachable`, never null                         |
 | `chain/evm/source.live.test.ts`     | The adapter on a real chain: parent links, real logs, 18 decimals end to end, address filtering, and every refusal — including the by-block-hash fetch  |
 | `chain/evm/reorg.live.test.ts`      | **A real chain, really forked**, on both stores: orphaned rows gone, tip-replacement caught, idempotent restart, deep-fork halt, `behindBy` staleness   |
 | `router.mount.test.ts`              | The mount boundary over real `createEdgeContext` headers: anonymous reads succeed, a forged principal confers nothing, `status` surfaces a halt         |
