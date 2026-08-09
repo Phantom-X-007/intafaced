@@ -224,7 +224,7 @@ The service checks these; the database enforces them regardless.
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `agents.premiumTiers` flag (`packages/config`) | Registry / admin label only — `NOT_ENFORCED` today; **nothing in svc-agents reads it**. Do not treat the flag as a live billing gate.                                                       |
 | `AGENTS_METERING_ENABLED=false`                | billing halts. **No** `usage_records` / window / feeCharge — including settle of leftover windows. Action audit still holds token counts (knowable cost without inventing a deferred bill). |
-| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close                                                                                                              |
+| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close. Boot re-register refreshes the guardrail only — it does **not** re-enable a killed agent.                   |
 
 ---
 
