@@ -131,6 +131,27 @@ export function assertSpotSurface(market: Market, surface: string): void {
 }
 
 /**
+ * PRODUCTION FOREX / COMMODITY WITHOUT FIAT RAILS MUST NOT TAKE A HOLD.
+ *
+ * listMarket already refuses NEW active non-paper forex/commodity listings
+ * (`trade.unsettled_asset_class_listing`, #1169). Migration seeds still leave
+ * six FX majors `active` + `paper=false`. Without this gate, an open-session
+ * placeOrder/convert/TWAP takes a real hold against an unfundable rail.
+ *
+ * Paper markets stay allowed (academy drills). Owner N5 may still reflag seeds;
+ * this is the place-path seal that does not invent settlement law.
+ */
+export function assertSettlementRails(market: Market): void {
+  if (market.paper) return;
+  if (market.assetClass === 'forex' || market.assetClass === 'commodity') {
+    throw new TradeError(
+      `${market.symbol} is ${market.assetClass} without fiat settlement rails — place refused (list as paper or wait for D8)`,
+      'trade.unsettled_asset_class_listing',
+    );
+  }
+}
+
+/**
  * Is the venue open at this instant?
  *
  * A separate check from `assertTradable` because it asks a different question.
