@@ -544,10 +544,12 @@ export const FEATURES = [
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    // Ghost clear 2026-08-09: owner nitro-agent + LIVE-LANES feat/pay-payfac-submerchants
+    // was #1135, MERGED 2026-08-08. No open PR. Free for residual (area enforcement on money paths).
+    status: 'ready',
+    owner: null,
     dependsOn: ['pay.psp'],
-    note: '**Sub-merchant tree landed #1135 (2026-08-08)** — merchants.parent_merchant_id (NULL = top of its own tree, nothing backfilled) plus settling_party, and pay.merchant_permission_events as an append-only journal behind a trigger. Authorization is two checks that are not the same check, both at the procedure boundary: a STRUCTURAL ancestor-or-self scope that cannot be widened, and an AREA check over descendants only; the acting node is resolved from the principal and is deliberately not on the wire. Moves no value. **The "14 permission areas" in this title has never existed anywhere** — it is one string copied between this file, coverage.yaml and the build doc; ELEVEN areas shipped, each naming a surface svc-pay actually has, and area is text not an enum so a twelfth costs one line. Fixing the number is an OWNER decision. Also found: payfac was never actually blocked by pay.psp — merchant.create has accepted mode payfac since migration 0000 and it changed nothing. STILL NOT done: the nine areas naming gateway procedures are not yet enforced there — router.ts still authorizes with a single assertMerchantOwnership userId comparison, and wiring it touches the money paths. **Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    note: '**Sub-merchant tree landed #1135 (2026-08-08)** — merchants.parent_merchant_id (NULL = top of its own tree, nothing backfilled) plus settling_party, and pay.merchant_permission_events as an append-only journal behind a trigger. Authorization is two checks that are not the same check, both at the procedure boundary: a STRUCTURAL ancestor-or-self scope that cannot be widened, and an AREA check over descendants only; the acting node is resolved from the principal and is deliberately not on the wire. Moves no value. **The "14 permission areas" in this title has never existed anywhere** — it is one string copied between this file, coverage.yaml and the build doc; ELEVEN areas shipped, each naming a surface svc-pay actually has, and area is text not an enum so a twelfth costs one line. Fixing the number is an OWNER decision. Also found: payfac was never actually blocked by pay.psp — merchant.create has accepted mode payfac since migration 0000 and it changed nothing. STILL NOT done: the nine areas naming gateway procedures are not yet enforced there — router.ts still authorizes with a single assertMerchantOwnership userId comparison, and wiring it touches the money paths. Ghost owner cleared 2026-08-09 (merged #1135, no open PR).',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
@@ -601,14 +603,19 @@ export const FEATURES = [
     module: 'pay',
     phase: '3',
     plane: 'B',
+    // Ghost clear: nitro-money-w3 / feat/pay-residual-stage3 was #1006 MERGED 2026-08-07;
+    // steps 3–5 all tip (#1006/#1014/#1024). Claim TRK-pay.public-api.md already closed.
+    // Re-claimed 2026-08-09 for edge BASE reachability residual (mount /v1 after strip).
     status: 'wip',
-    owner: 'nitro-money-w3',
+    owner: 'nitro-pay-w3',
     dependsOn: ['pay.gateway', 'identity.apikeys'],
     requires: ['services/svc-pay/src/public-rest.ts', 'services/svc-pay/src/merchant-webhooks.ts'],
     note:
-      '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M. Steps 1–2 tip (#988/#994). ' +
-      'Step 3 outbound webhooks (signing/retry/dedup/dashboard) in flight on feat/pay-residual-stage3. ' +
-      'Not Class X acquirer. Sandbox-key routing = step 4.',
+      'Steps 1–5 on tip (#988/#994/#1006/#1014/#1024). Ghost nitro-money-w3 cleared 2026-08-09 ' +
+      '(merged #1006, no open PR, no remote branch). Residual: service mounted at /api/pay/v1 while ' +
+      'edge strips /api/pay → every external REST call 404d; fix BASE=/v1, keep OpenAPI servers ' +
+      '/api/pay/v1, no preservePath. Owner grant path for pay:* still DIRECTION §8.4 (Nitro). ' +
+      'Not Class X acquirer.',
   }),
   f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
     module: 'p2p',

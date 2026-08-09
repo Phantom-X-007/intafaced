@@ -8,6 +8,31 @@ describe('route resolution', () => {
     expect(r?.path).toBe('/trpc/orders.create');
   });
 
+  /**
+   * Merchant public REST lives at edge `/api/pay/v1/*`. The pay upstream has
+   * NO preservePath, so the edge strips `/api/pay` and svc-pay must mount at
+   * `/v1/*` — not `/api/pay/v1/*`. If this ever flips to preservePath, trpc and
+   * webhooks break the other way. Contract enforced both sides: see
+   * `services/svc-pay/src/public-rest.ts` `BASE = '/v1'`.
+   */
+  it('strips /api/pay so merchant REST lands on /v1/* (svc-pay BASE contract)', () => {
+    const pay = UPSTREAMS.find((u) => u.prefix === '/api/pay');
+    expect(pay, 'pay upstream must exist').toBeDefined();
+    expect(pay?.preservePath, 'pay must strip prefix — preservePath breaks trpc/webhooks').toBeFalsy();
+
+    const rest = resolve('/api/pay/v1/payments');
+    expect(rest?.upstream.prefix).toBe('/api/pay');
+    expect(rest?.path).toBe('/v1/payments');
+
+    const openapi = resolve('/api/pay/v1/openapi.json');
+    expect(openapi?.path).toBe('/v1/openapi.json');
+
+    // Sibling mounts still strip correctly — the BASE fix must not tempt preservePath.
+    expect(resolve('/api/pay/trpc/payment.create')?.path).toBe('/trpc/payment.create');
+    expect(resolve('/api/pay/webhooks/crypto')?.path).toBe('/webhooks/crypto');
+    expect(resolve('/api/pay/checkout')?.path).toBe('/checkout');
+  });
+
   it('resolves a bare prefix to the upstream root', () => {
     expect(resolve('/api/identity')?.path).toBe('/');
   });
