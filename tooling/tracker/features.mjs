@@ -1279,10 +1279,19 @@ export const FEATURES = [
       'row set grew and silently borrow the difference from the rewards engine. ' +
       'Also refused and tested: cycles and self-referral (write time in the tree, and again at payout so a pre-fix row cannot pay), depth past the bound, ' +
       'mixed-asset fan-out, rows from another fee event, duplicate rows, frozen beneficiary (freeze applied AFTER accrual still stops the money), and an ' +
-      'unfunded fee pool (fails rather than inventing). 29 engine tests + 11 mount tests. ' +
+      'unfunded fee pool (fails rather than inventing). 31 engine tests + 12 mount tests; 12 mutations each verified to turn a named test red. ' +
+      'ONE OF THOSE MUTATIONS FOUND A REAL BUG IN THIS PR before merge: payoutKeysAreBusinessDerived allowed a uuid that `endsWith` the key on the theory that ' +
+      'a trailing id was the business one — backwards, since trailing is exactly where a generated id is appended, so `close:${id}:${randomUUID()}` passed the ' +
+      'guard clean. Replaced with a count (exactly one uuid per key, the beneficiary) plus a Date.now() segment check, and pointed a test at both shapes. ' +
       'Still NOT done beyond the rate: no caller ACCRUES from a real fee event yet — svc-trade/svc-pay do not emit affiliate fee events, so accrual rows are ' +
       'operator-supplied today. LEDGER_URL is optional and undefaulted in svc-identity, so a deployment that has not set it refuses ' +
-      '`affiliate.payout.ledger_unwired` rather than failing at post time.',
+      '`affiliate.payout.ledger_unwired` rather than failing at post time. ' +
+      'NAMED GAP FOR WHOEVER WIRES THE PRODUCER, because it will bite them and is invisible from the payout side: FeeEvent and the accrual row do NOT record ' +
+      'which module fee pool the fee landed in. A trading fee lands in houseFees("trade"), a payment fee in houseFees("pay") — payout has only ' +
+      'AFFILIATE_PAYOUT_SOURCE_MODULE = "identity" to sweep from. It is one named constant plus an overridable `sourceModule` param rather than a literal at the ' +
+      'call site, so the hedge is legible, but it IS an assumption: a real producer needs a source-module column on the accrual row, or commission gets swept ' +
+      'from a pool that never held the fee (which fails as InsufficientFunds rather than inventing — safe, but a failure). Not fixed here because inventing a ' +
+      'column shape for a producer that does not exist is the same class of guess as inventing a rate.',
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', {
     module: 'core-ops',
