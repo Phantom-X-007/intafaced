@@ -1308,7 +1308,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
     /**
      * Fire due auto-invest rules (threshold sweeps always; DCA when convert is wired).
-     * Kill-switch parity with HTTP job when one is added.
+     * Kill-switch parity with HTTP `POST /internal/jobs/run-auto-invest`.
      */
     runAutoInvest: scopedProcedure('admin:treasury')
       .input(z.object({ limit: z.number().int().min(1).max(10_000).optional() }))
@@ -1949,6 +1949,39 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           }
           await bank.autoInvest.cancelRule(input.ruleId);
           return { ok: true as const };
+        }),
+      ),
+
+    /**
+     * Hold a rule without cancelling. Runner only considers `active` rules.
+     */
+    pause: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ ruleId: z.string().uuid() }))
+      .output(autoInvestRuleOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const rule = await bank.autoInvest.getRule(input.ruleId);
+          if (rule.userId !== ctx.principal.userId) {
+            throw new BankError('Not your auto-invest rule', 'bank.not_owner');
+          }
+          return mapRule(await bank.autoInvest.pauseRule(input.ruleId));
+        }),
+      ),
+
+    /**
+     * Resume a paused rule. Next runDue pass applies normal due rules — no
+     * multi-fire invent of missed windows.
+     */
+    resume: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ ruleId: z.string().uuid() }))
+      .output(autoInvestRuleOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const rule = await bank.autoInvest.getRule(input.ruleId);
+          if (rule.userId !== ctx.principal.userId) {
+            throw new BankError('Not your auto-invest rule', 'bank.not_owner');
+          }
+          return mapRule(await bank.autoInvest.resumeRule(input.ruleId));
         }),
       ),
   });

@@ -324,3 +324,49 @@ describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => 
     expect(ran).toBe(true);
   });
 });
+
+/**
+ * Kill-switch parity for auto-invest (#1526 shape): HTTP
+ * `/internal/jobs/run-auto-invest` and tRPC `ops.runAutoInvest` share
+ * `AUTO_INVEST_ENABLED` / `bank.auto_invest_disabled`. tRPC is not a back door.
+ */
+describe('svc-bank mount — ops.runAutoInvest kill switch', () => {
+  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+
+  it('refuses with SERVICE_UNAVAILABLE / bank.auto_invest_disabled when the flag is off, and never runs', async () => {
+    let ran = false;
+    const bank = stubBank({
+      autoInvest: {
+        runDue: async () => {
+          ran = true;
+          return { considered: 1, settled: 1, skipped: 0, rejected: 0, failures: [] };
+        },
+      },
+    });
+
+    await expect(createBankRouter(bank, { autoInvestEnabled: false }).createCaller(treasury()).ops.runAutoInvest({})).rejects.toMatchObject(
+      {
+        code: 'SERVICE_UNAVAILABLE',
+        cause: { code: 'bank.auto_invest_disabled' },
+      },
+    );
+    expect(ran).toBe(false);
+  });
+
+  it('runs when the flag is on', async () => {
+    let ran = false;
+    const bank = stubBank({
+      autoInvest: {
+        runDue: async () => {
+          ran = true;
+          return { considered: 0, settled: 0, skipped: 0, rejected: 0, failures: [] };
+        },
+      },
+    });
+
+    await expect(createBankRouter(bank, { autoInvestEnabled: true }).createCaller(treasury()).ops.runAutoInvest({})).resolves.toMatchObject(
+      { considered: 0, settled: 0 },
+    );
+    expect(ran).toBe(true);
+  });
+});

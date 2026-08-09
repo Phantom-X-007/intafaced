@@ -254,7 +254,34 @@ if (!available) {
     });
   });
 
-  describe('cancel + kill switch', () => {
+  describe('cancel + pause + kill switch', () => {
+    it('pause stops fires; resume allows them again', async () => {
+      const pool = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'P',
+        aprBps: 100,
+      });
+      await fund(USER_A, 'USDT', '1000');
+      const rule = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('100'),
+        targetPoolId: pool.id,
+      });
+      const paused = await bank.autoInvest.pauseRule(rule.id);
+      expect(paused.status).toBe('paused');
+      let report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z') });
+      expect(report.considered).toBe(0);
+      expect(await availableOf(USER_A, 'USDT')).toBe('1000');
+
+      const resumed = await bank.autoInvest.resumeRule(rule.id);
+      expect(resumed.status).toBe('active');
+      report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z') });
+      expect(report.settled).toBe(1);
+      expect(await availableOf(USER_A, 'USDT')).toBe('100');
+    });
+
     it('cancel stops future fires', async () => {
       const pool = await bank.earn.createPool({
         assetId: 'USDT',
