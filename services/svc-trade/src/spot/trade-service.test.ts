@@ -1501,6 +1501,63 @@ if (!available) {
         code: 'trade.convert_disabled',
       });
     });
+
+    /**
+     * convertQuote must share assertMarketOpen with placeOrder. Without it, a
+     * Saturday EUR/USD convert still returns a price while placeOrder refuses
+     * market_closed — the user sees a fundable quote for a venue that cannot
+     * fill until Monday.
+     */
+    it('refuses convertQuote when the forex venue is shut (same gate as placeOrder)', async () => {
+      const eurusd = await trade.listMarket({
+        symbol: 'EUR/USD-CONVERT',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        tickSize: amt('0.00001'),
+        lotSize: amt('0.01'),
+        minQty: amt('0.01'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        assetClass: 'forex',
+        schedule: 'fx-global',
+        paper: true,
+      });
+
+      matching.asks = [['1.10000', '1000']];
+      matching.bids = [['1.09900', '1000']];
+
+      const saturday = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        convertEnabled: true,
+        convertSpreadBps: 10,
+        now: () => new Date('2026-01-10T12:00:00Z'),
+      });
+
+      await expect(
+        saturday.convertQuote(principalFor(ALICE), {
+          marketId: eurusd.id,
+          side: 'buy',
+          qty: amt('100'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.market_closed' });
+
+      // Mid-session: same listing, same book, open clock → quote is honest.
+      const wednesday = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        convertEnabled: true,
+        convertSpreadBps: 10,
+        now: () => new Date('2026-01-14T12:00:00Z'),
+      });
+      const quote = await wednesday.convertQuote(principalFor(ALICE), {
+        marketId: eurusd.id,
+        side: 'buy',
+        qty: amt('100'),
+      });
+      expect(quote.symbol).toBe('EUR/USD-CONVERT');
+      expect(quote.fullyFilled).toBe(true);
+    });
   });
 
   // ── OHLCV aggregation ─────────────────────────────────────────────────────
