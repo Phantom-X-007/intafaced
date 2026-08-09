@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AccountState } from '@intafaced/contracts';
 import type { AccountStateSource } from './account-state.js';
 import { listPlatformKb } from './kb-catalog.js';
-import { MemorySupportStore } from './store.js';
+import { MemorySupportStore, type SupportStore } from './store.js';
 import { SupportError, SupportService } from './support-service.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -238,6 +238,42 @@ describe('escalation carries its case file', () => {
     await support.escalate({ operatorId: OP, ticketId: t.id, reason: 'money_request', summary: 'User asks for a refund.' });
     const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
     expect(trail.at(-1)).toMatchObject({ kind: 'escalated', actorId: OP, note: 'reason:money_request citations:1' });
+  });
+
+  it('a crash after the case file and before the trail leaves neither', async () => {
+    // The residual: putCaseFile then appendEvent as two writes. A mid-flight
+    // failure left a case file with no escalated row — desk incomplete.
+    const base = new MemorySupportStore();
+    const store: SupportStore = {
+      createTicket: (i) => base.createTicket(i),
+      listByUser: (u) => base.listByUser(u),
+      listAll: () => base.listAll(),
+      findById: (id) => base.findById(id),
+      addComment: (i) => base.addComment(i),
+      listComments: (id) => base.listComments(id),
+      setStatus: (i) => base.setStatus(i),
+      claimTicket: (i) => base.claimTicket(i),
+      appendEvent: (i) => base.appendEvent(i),
+      listEvents: (id) => base.listEvents(id),
+      putCaseFile: (c) => base.putCaseFile(c),
+      putCaseFileWithEscalated: async () => {
+        throw new Error('simulated crash mid-escalation');
+      },
+      latestCaseFile: (id) => base.latestCaseFile(id),
+    };
+    const support = new SupportService(store, new FixedAccountState({ userId: USER, status: 'active', kycTier: 'basic' }));
+    const t = await support.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'S',
+      body: 'B',
+    });
+    await expect(support.escalate({ operatorId: OP, ticketId: t.id, reason: 'other', summary: 'Escalating now.' })).rejects.toThrow(
+      /simulated crash/,
+    );
+    expect(await support.getCaseFile({ operatorId: OP, ticketId: t.id })).toBeNull();
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    expect(trail.filter((e) => e.kind === 'escalated')).toHaveLength(0);
   });
 
   it('a money_request escalation moves nothing and carries no amount', async () => {

@@ -18,9 +18,13 @@ Three properties, added together because each is useless without the others.
 **Audit trail** — `support.ticket_events`. Every state change writes its own row
 in the SAME transaction, so there is no path that moves a ticket without
 recording who moved it and from what. Append-only and dense-sequenced by unique
-index in the database, not just in TypeScript. `src/lifecycle.ts` holds the
-legal moves: `closed` is terminal, `resolved → open` is a recorded reopen, and a
-self-transition is refused rather than written as a row recording no change.
+index in the database, not just in TypeScript. Claims lock the ticket row
+(`FOR UPDATE`) before writing trail `fromStatus`, so a concurrent status move
+cannot invent a second `open → pending`. Escalation writes the case file and
+the `escalated` trail row in one transaction. `src/lifecycle.ts` holds the
+legal moves; migration 0002 re-asserts the full edge table in Postgres (not
+only `closed` terminal). Self-transitions are refused rather than written as a
+row recording no change.
 
 **Account-state grounding** — `src/account-state.ts` READS
 `accountStateSchema` (`userId` + `status` + `kycTier`, three fields) from

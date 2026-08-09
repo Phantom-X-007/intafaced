@@ -68,4 +68,14 @@ describe('account state read port', () => {
     await createAccountStateClient('http://identity:4002', SECRET).stateOf('../rank/x y');
     expect(String(spy.mock.calls[0]![0])).toBe('http://identity:4002/internal/account/..%2Frank%2Fx%20y');
   });
+
+  it('a body whose userId is not the one we asked about is unread, not swapped', async () => {
+    const OTHER = '99999999-9999-4999-8999-999999999999';
+    // Valid shape, wrong account — the exact swap a misrouted identity plane
+    // or a hostile peer could return. Accepting it would ground the ticket on
+    // somebody else's freeze state.
+    stubFetch(() => json({ userId: OTHER, status: 'active', kycTier: 'none' }));
+    const client = createAccountStateClient('http://identity:4002', SECRET);
+    expect(await client.stateOf(USER)).toBeNull();
+  });
 });

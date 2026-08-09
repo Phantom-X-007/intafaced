@@ -85,33 +85,39 @@ export class SupportService implements SupportContract {
    * SOMEBODY ELSE'S TICKET AND NO SUCH TICKET ARE THE SAME ANSWER.
    */
   async getTicket(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicket> {
-    const ticket = await this.store.findById(input.ticketId);
-    const visible = ticket !== null && (input.asOperator === true || ticket.userId === input.userId);
-    if (!visible) throw ticketNotFound();
-    return ticket;
+    return withSupportSpan('support.getTicket', { op: 'getTicket', ticketId: input.ticketId }, async () => {
+      const ticket = await this.store.findById(input.ticketId);
+      const visible = ticket !== null && (input.asOperator === true || ticket.userId === input.userId);
+      if (!visible) throw ticketNotFound();
+      return ticket;
+    });
   }
 
   async comment(input: { userId: string; ticketId: string; body: string; asOperator?: boolean }): Promise<SupportComment> {
-    await this.getTicket({
-      userId: input.userId,
-      ticketId: input.ticketId,
-      asOperator: input.asOperator,
-    });
-    return this.store.addComment({
-      ticketId: input.ticketId,
-      authorId: input.userId,
-      authorRole: input.asOperator ? 'operator' : 'user',
-      body: input.body,
+    return withSupportSpan('support.comment', { op: 'comment', ticketId: input.ticketId }, async () => {
+      await this.getTicket({
+        userId: input.userId,
+        ticketId: input.ticketId,
+        asOperator: input.asOperator,
+      });
+      return this.store.addComment({
+        ticketId: input.ticketId,
+        authorId: input.userId,
+        authorRole: input.asOperator ? 'operator' : 'user',
+        body: input.body,
+      });
     });
   }
 
   async listComments(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportComment[]> {
-    await this.getTicket({
-      userId: input.userId,
-      ticketId: input.ticketId,
-      asOperator: input.asOperator,
+    return withSupportSpan('support.listComments', { op: 'listComments', ticketId: input.ticketId }, async () => {
+      await this.getTicket({
+        userId: input.userId,
+        ticketId: input.ticketId,
+        asOperator: input.asOperator,
+      });
+      return this.store.listComments(input.ticketId);
     });
-    return this.store.listComments(input.ticketId);
   }
 
   /**
@@ -128,29 +134,35 @@ export class SupportService implements SupportContract {
    *     history of `open → open` is a history nobody reads.
    */
   async setStatus(input: { operatorId: string; ticketId: string; status: SupportTicketStatus; note?: string }): Promise<SupportTicket> {
-    const result = await this.store.setStatus({
-      ticketId: input.ticketId,
-      status: input.status,
-      operatorId: input.operatorId,
-      note: input.note ?? null,
+    return withSupportSpan('support.setStatus', { op: 'setStatus', ticketId: input.ticketId }, async (span) => {
+      const result = await this.store.setStatus({
+        ticketId: input.ticketId,
+        status: input.status,
+        operatorId: input.operatorId,
+        note: input.note ?? null,
+      });
+      if (result.status === 'refuse') {
+        if (result.reason === 'not_found') throw ticketNotFound();
+        throw new SupportError(
+          `status change refused: ${result.reason}`,
+          `support.transition_${result.reason === 'same_status' ? 'same_status' : 'illegal'}`,
+        );
+      }
+      span.setAttribute('intafaced.support.ticket_id', result.ticket.id);
+      span.setAttribute('intafaced.support.to_status', result.ticket.status);
+      return result.ticket;
     });
-    if (result.status === 'refuse') {
-      if (result.reason === 'not_found') throw ticketNotFound();
-      throw new SupportError(
-        `status change refused: ${result.reason}`,
-        `support.transition_${result.reason === 'same_status' ? 'same_status' : 'illegal'}`,
-      );
-    }
-    return result.ticket;
   }
 
   /** The audit trail. Owner sees their own ticket's; operators see any. */
   async listTicketEvents(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicketEvent[]> {
-    // Visibility is decided by getTicket, which answers "somebody else's" and
-    // "no such thing" identically — so the trail cannot be used to probe for
-    // ticket ids the caller may not see.
-    await this.getTicket(input);
-    return this.store.listEvents(input.ticketId);
+    return withSupportSpan('support.listTicketEvents', { op: 'listTicketEvents', ticketId: input.ticketId }, async () => {
+      // Visibility is decided by getTicket, which answers "somebody else's" and
+      // "no such thing" identically — so the trail cannot be used to probe for
+      // ticket ids the caller may not see.
+      await this.getTicket(input);
+      return this.store.listEvents(input.ticketId);
+    });
   }
 
   /**
@@ -246,13 +258,12 @@ export class SupportService implements SupportContract {
         throw new SupportError(`escalation refused: ${built.reason}`, `support.case_file.${built.reason}`);
       }
 
-      const stored = await this.store.putCaseFile(built.caseFile);
-      await this.store.appendEvent({
-        ticketId: ticket.id,
-        kind: 'escalated',
+      // Case file + escalated trail row commit together. A crash between the
+      // two writes used to leave a case file with no trail — desk incomplete.
+      const stored = await this.store.putCaseFileWithEscalated({
+        caseFile: built.caseFile,
         actorId: input.operatorId,
-        actorRole: 'operator',
-        note: `reason:${input.reason} citations:${stored.citations.length}`,
+        note: `reason:${input.reason} citations:${built.caseFile.citations.length}`,
       });
 
       span.setAttribute('intafaced.support.ticket_id', ticket.id);
