@@ -185,6 +185,19 @@ const ALLOWLIST = [
     reason:
       'internal swarm FREEZE/report board; must list real shell paths so agents can claim work without paraphrasing territory. Not user-facing product copy. Remove once the vendor directory is renamed.',
   },
+  {
+    path: join('docs', 'paste-w6'),
+    reason:
+      'internal multi-lane paste packs for AFK agent dispatch; name the coding agent product so operators can open the right tool. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'PASTE-BUILD-WAVE-6-2026-08-09.md'),
+    reason: 'internal wave-6 paste master; same rationale as docs/paste-w6. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'COORDINATOR-PASTE-SKELETON.md'),
+    reason: 'internal coordinator paste skeleton; must show the exact agent product line operators paste. Not shipped to users.',
+  },
   // REMOVED 2026-08-05, both on the terms their own reasons set:
   //
   //   `tooling/scripts/swarm.mjs`      — existed because that file assembled the
