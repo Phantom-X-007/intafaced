@@ -11,7 +11,7 @@ var ixMoney = require('./ix-money.js');
 
 /**
  * Side empty-state copy for the order book ladder.
- * @param {{ loading?: boolean, reachable?: boolean, side?: string }} opts
+ * @param {{ loading?: boolean, reachable?: boolean, side?: string, message?: string|null }} opts
  * @returns {string}
  */
 function bookSideEmptyLabel(opts) {
@@ -20,6 +20,10 @@ function bookSideEmptyLabel(opts) {
     return 'Loading order book…';
   }
   if (!opts.reachable) {
+    /* Prefer the shape/transport detail the caller already measured. */
+    if (opts.message) {
+      return String(opts.message);
+    }
     return 'Book unavailable — market did not respond';
   }
   return opts.side === 'asks' ? 'No asks' : 'No bids';
@@ -27,7 +31,7 @@ function bookSideEmptyLabel(opts) {
 
 /**
  * Trades tape empty-state copy.
- * @param {{ loading?: boolean, reachable?: boolean }} opts
+ * @param {{ loading?: boolean, reachable?: boolean, message?: string|null }} opts
  * @returns {string}
  */
 function tradesEmptyLabel(opts) {
@@ -36,6 +40,9 @@ function tradesEmptyLabel(opts) {
     return 'Loading trades…';
   }
   if (!opts.reachable) {
+    if (opts.message) {
+      return String(opts.message);
+    }
     return 'Trades unavailable — market did not respond';
   }
   return 'No trades yet';

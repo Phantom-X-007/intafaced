@@ -49,8 +49,25 @@ assert(
   'trades unreachable'
 );
 assert(
+  h.tradesEmptyLabel({
+    loading: false,
+    reachable: false,
+    message: 'invalid_response: trades[0].price is a JSON number'
+  }) === 'invalid_response: trades[0].price is a JSON number',
+  'trades shape message beats generic unreachable'
+);
+assert(
   h.tradesEmptyLabel({ loading: false, reachable: true }) === 'No trades yet',
   'trades empty honest'
+);
+assert(
+  h.bookSideEmptyLabel({
+    loading: false,
+    reachable: false,
+    side: 'bids',
+    message: 'invalid_response: bids[0][0] is a JSON number'
+  }) === 'invalid_response: bids[0][0] is a JSON number',
+  'book shape message beats generic unreachable'
 );
 
 /* ── no fake levels ──────────────────────────────────────────────────── */

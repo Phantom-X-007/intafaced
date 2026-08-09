@@ -164,6 +164,10 @@ module.exports = {
             no_surface: {
                 title: "This is not built yet",
                 body: "The screen exists because it came with the shell. The platform has no service behind it, so there is nothing to read and nothing to show. It is not loading, it is not empty, and it is not broken — it was never built. What is missing is stated below."
+            },
+            invalid_response: {
+                title: "The answer was the wrong shape",
+                body: "The service answered, but a field failed the desk's shape check. That is not an empty book and not a transport failure — the payload cannot be trusted, so nothing from it is shown. The field path is named where the desk can print it."
             }
         },
         trade: {

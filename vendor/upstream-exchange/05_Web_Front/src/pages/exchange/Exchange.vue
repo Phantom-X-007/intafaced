@@ -1357,7 +1357,8 @@ export default {
     tradesEmptyLabel() {
       return bookHonesty.tradesEmptyLabel({
         loading: this.tradesLoading,
-        reachable: this.tradesReachable
+        reachable: this.tradesReachable,
+        message: this.tradesMessage || null
       });
     }
   },
@@ -1990,7 +1991,9 @@ export default {
       return bookHonesty.bookSideEmptyLabel({
         loading: this.bookLoading,
         reachable: this.bookReachable,
-        side: side
+        side: side,
+        /* Shape failures write gate.message here — show it, not a generic "did not respond". */
+        message: this.bookMessage || null
       });
     },
 
