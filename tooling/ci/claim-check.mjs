@@ -25,23 +25,107 @@
  * So: ask GitHub what is actually open, and compare it against what you are
  * about to touch. Ten seconds, no judgement required.
  *
- *   pnpm claim:check                      # what YOUR branch touches vs open PRs
- *   pnpm claim:check services/svc-bank    # before you start, by path
+ *   pnpm claim:check services/svc-bank    # preferred — paths you are about to edit
+ *   pnpm claim:check                      # this branch vs open PRs (exit 2 if clean / no paths)
+ *   node tooling/ci/claim-check.mjs --self-test   # hermetic fixtures, no gh/network
  *
- * Exit 0 = clear. Exit 1 = someone is in there; go and talk to them.
+ * Exit 0 = clear on the path axis (may still warn if ownership map is incomplete).
+ * Exit 1 = open-PR collision or human-claimed mountain — talk before editing.
+ * Exit 2 = cannot answer (blank args, clean branch, gh/git failure, list/files cap).
  *
  * This is ADVISORY, deliberately. It is not wired into `verify` and it does not
  * gate a merge. A tool that blocks people gets routed around; a tool that
  * answers a question honestly in ten seconds gets used. Overlap is often
  * completely fine — two people can edit one file with a word between them. The
  * failure mode we are removing is not overlap, it is *unknowing* overlap.
+ *
+ * Sealed pack on tip (#1414): blank argv refuse · rename porcelain · PR list
+ * cap · per-PR files page cap · unmapped-owner honesty. Self-test pins those
+ * so a quiet revert cannot re-land a false clear (W7 L09 residual).
  */
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { touches } from '../scripts/path-collide.mjs';
 
+const PR_LIST_LIMIT = 100;
+const GH_FILES_PAGE_CAP = 100;
+
 const args = process.argv.slice(2);
+
+/** Pure: strip blank argv entries (false-clear residual). */
+export function realArgPaths(argv) {
+  return (argv ?? [])
+    .filter((a) => a !== '--self-test')
+    .map((a) => (typeof a === 'string' ? a.trim() : ''))
+    .filter(Boolean);
+}
+
+/**
+ * Pure: porcelain status line → real path(s).
+ * Renames/copies yield both sides so touches() can match.
+ */
+export function pathsFromPorcelainLine(line) {
+  if (typeof line !== 'string' || line.length < 4) return [];
+  const body = line.slice(3);
+  if (body.includes(' -> ')) {
+    return body
+      .split(' -> ')
+      .map((s) => s.trim().replace(/^"|"$/g, ''))
+      .filter(Boolean);
+  }
+  const p = body.trim().replace(/^"|"$/g, '');
+  return p ? [p] : [];
+}
+
+/** Pure: whether a PR file list is untrustworthy (silent truncate risk). */
+export function prFilesTruncated(files, cap = GH_FILES_PAGE_CAP) {
+  return (files ?? []).length >= cap;
+}
+
+/** Pure: whether open PR list hit the inspect cap. */
+export function prListAtCap(prs, limit = PR_LIST_LIMIT) {
+  return Array.isArray(prs) && prs.length >= limit;
+}
+
+function selfTest() {
+  const fails = [];
+  const assert = (c, m) => {
+    if (!c) fails.push(m);
+  };
+
+  // Blank / whitespace argv must not invent a path to check.
+  assert(realArgPaths(['']).length === 0, 'blank string argv is not a path');
+  assert(realArgPaths(['  ', '\t']).length === 0, 'whitespace argv is not a path');
+  assert(realArgPaths(['', 'services/svc-bank']).join() === 'services/svc-bank', 'blank entries stripped');
+  assert(realArgPaths(['--self-test']).length === 0, '--self-test is not a path');
+
+  // Rename porcelain: both sides must be real paths (not "a -> b" as one path).
+  assert(pathsFromPorcelainLine('R  old/path.ts -> new/path.ts').join('|') === 'old/path.ts|new/path.ts', 'rename yields both paths');
+  assert(pathsFromPorcelainLine(' M tooling/ci/claim-check.mjs').join() === 'tooling/ci/claim-check.mjs', 'modified path');
+  assert(pathsFromPorcelainLine('R  "old x" -> "new y"').join('|') === 'old x|new y', 'quoted rename paths');
+
+  // Caps refuse silent clear.
+  assert(prListAtCap(new Array(PR_LIST_LIMIT).fill({}), PR_LIST_LIMIT) === true, 'list at cap');
+  assert(prListAtCap(new Array(PR_LIST_LIMIT - 1).fill({}), PR_LIST_LIMIT) === false, 'list under cap');
+  assert(prFilesTruncated(new Array(GH_FILES_PAGE_CAP).fill({ path: 'a' })) === true, 'files at page cap');
+  assert(prFilesTruncated(new Array(GH_FILES_PAGE_CAP - 1).fill({ path: 'a' })) === false, 'files under page cap');
+
+  // touches shared with path-collide (trailing-slash wall) still holds here.
+  assert(touches('tooling/', 'tooling/ci/claim-check.mjs') === true, 'trailing-slash wall touches child');
+
+  if (fails.length) {
+    console.error('claim-check --self-test FAIL:');
+    for (const f of fails) console.error(`  · ${f}`);
+    process.exit(1);
+  }
+  console.log('claim-check --self-test OK');
+  console.log('  fixture blank argv · rename porcelain · list/files caps · trailing-slash wall');
+  process.exit(0);
+}
+
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+if (isDirectRun && args.includes('--self-test')) selfTest();
 
 /** `gh` returns JSON on stdout; anything else means we cannot answer honestly. */
 function gh(jsonArgs) {
@@ -52,10 +136,15 @@ function gh(jsonArgs) {
   }
 }
 
+/** Git failures must not be swallowed into a silent empty mine (false clear). */
+let gitFailed = false;
+let gitFailDetail = '';
 function git(gitArgs) {
   try {
     return execFileSync('git', gitArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-  } catch {
+  } catch (error) {
+    gitFailed = true;
+    gitFailDetail = error.stderr?.toString().trim() || error.message || 'git failed';
     return '';
   }
 }
@@ -73,8 +162,7 @@ function myFiles() {
   // without checking anything real (exit 0). Same false-clear class as empty
   // no-args — strip them so the length===0 refuse below can fire.
   if (args.length > 0) {
-    const files = args.map((a) => (typeof a === 'string' ? a.trim() : '')).filter(Boolean);
-    return { source: 'arguments', files };
+    return { source: 'arguments', files: realArgPaths(args) };
   }
 
   const base = git(['merge-base', 'origin/main', 'HEAD']) || 'origin/main';
@@ -84,24 +172,21 @@ function myFiles() {
   const working = git(['status', '--porcelain'])
     .split('\n')
     .filter(Boolean)
-    .flatMap((l) => {
-      // porcelain: XY<space>path | XY<space>old -> new (rename/copy)
-      // slice(3) on "R  a -> b" left "a -> b" as a fake path — false-clear
-      // because touches never matched real files.
-      const body = l.slice(3);
-      if (body.includes(' -> ')) {
-        return body
-          .split(' -> ')
-          .map((s) => s.trim())
-          .filter(Boolean);
-      }
-      return [body.trim()].filter(Boolean);
-    });
+    .flatMap((l) => pathsFromPorcelainLine(l));
 
   return { source: 'this branch (committed + working tree)', files: [...new Set([...committed, ...working])] };
 }
 
 const { source, files: mine } = myFiles();
+
+// Branch-mode only: if git could not answer, refuse rather than invent "clear".
+// Path-mode does not need git for the mine set.
+if (source !== 'arguments' && gitFailed) {
+  console.error('  claim-check — CANNOT ANSWER: `git` failed while listing this branch.');
+  console.error(`      ${gitFailDetail}`);
+  console.error('      Not reporting "clear" — this tool has not checked anything.');
+  process.exit(2);
+}
 
 if (mine.length === 0) {
   // Exit 2 = cannot answer (same class as gh failure). Exit 0 used to look like
@@ -114,7 +199,6 @@ if (mine.length === 0) {
   process.exit(2);
 }
 
-const PR_LIST_LIMIT = 100;
 const prs = gh(['pr', 'list', '--state', 'open', '--limit', String(PR_LIST_LIMIT), '--json', 'number,title,author,headRefName,files']);
 
 if (prs.__error) {
@@ -127,7 +211,7 @@ if (prs.__error) {
 }
 
 // Hitting the list cap means more open PRs may exist unseen — clear would be a lie.
-if (Array.isArray(prs) && prs.length >= PR_LIST_LIMIT) {
+if (prListAtCap(prs, PR_LIST_LIMIT)) {
   console.error(`  claim-check — CANNOT ANSWER: open PR list hit the cap (${PR_LIST_LIMIT}).`);
   console.error('      Some open PRs were not inspected. Not reporting "clear".');
   console.error('      Raise PR_LIST_LIMIT or close/merge open work, then re-run.');
@@ -137,9 +221,8 @@ if (Array.isArray(prs) && prs.length >= PR_LIST_LIMIT) {
 // `gh pr list --json files` returns at most ~100 paths per PR (GitHub GraphQL
 // page). A PR that hits that cap may have more files we never saw — reporting
 // clear on an unlisted path is a silent false-clear (L15 A3 / W5 park).
-const GH_FILES_PAGE_CAP = 100;
 if (Array.isArray(prs)) {
-  const truncated = prs.filter((pr) => (pr.files ?? []).length >= GH_FILES_PAGE_CAP);
+  const truncated = prs.filter((pr) => prFilesTruncated(pr.files, GH_FILES_PAGE_CAP));
   if (truncated.length > 0) {
     console.error(`  claim-check — CANNOT ANSWER: ${truncated.length} open PR(s) hit the per-PR files cap (${GH_FILES_PAGE_CAP}).`);
     for (const pr of truncated.slice(0, 8)) {
