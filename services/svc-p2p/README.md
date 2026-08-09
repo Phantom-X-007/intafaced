@@ -399,13 +399,15 @@ It deliberately does **not** stop release, refund, dispute resolution, or either
 
 ---
 
-## Out of scope
+## Out of scope / residual parks (do not invent)
 
-`p2p_merchants` (§6.2's fifth table — the merchant programme: badges, limits, API access) is tracker feature `p2p.merchants` and is not built here. No half-written table was left behind for it; it arrives with its own migration.
+**Merchants (built Stage 1–2; policy still open).** The programme tables, apply/approve/suspend transitions, badge surface, and offer-ceiling **mechanism** ship in this service (`merchant-programme` · `merchant-service` · `merchant-limits`). Default policy is **no numeric ceiling** until an operator sets `P2P_OFFER_MAX_*` — inventing magnitudes here is product law, not craft residual. Stage-3 erase/pseudonymise of settled trades is owner-gated.
 
 **The method registry is empty and stays empty until an operator fills it.** That is not a gap in the mechanism — it is where the mechanism ends and researched, jurisdictional content begins. Nobody can register a payment destination in a market until `instruments.methods.register` has been called for it, and any attempt to save that as engineering work by seeding a guess would produce destinations that validate and cannot be paid.
 
-**Not encrypted at rest** — §13 socket, see the payment-instruments section above.
+**Not encrypted at rest** — §13 socket, see the payment-instruments section above. KMS envelope encryption is Class X.
+
+**Also parked (not agent free craft):** `p2p:moderate` who / scope mint · auto-ruling (law forbids; escalate-and-hold) · rank fee discount / `p2pLimitMultiplier` apply (identity + product) · chat product (`chat_thread_id` column only) · floating mark-price wire (contracts first) · apps/admin dispute console (outside wall) · outbox (events plane).
 
 ---
 
