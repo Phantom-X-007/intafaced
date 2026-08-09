@@ -8,6 +8,8 @@
  * the failure has nowhere to hide, because `reason` is a required part of the
  * section and `IxState` renders it.
  */
+import ixTrade from '../../assets/js/ix-trade.js';
+
 export default {
     computed: {
         /** The platform session's access token, or null. In memory only (config/store.js). */
@@ -26,16 +28,54 @@ export default {
          *
          * The client resolves rather than rejects, so there is no catch here on
          * purpose — a refusal is data about the system, not an exception.
+         *
+         * Optional third arg: a wire schema (or `{ schema }`). When transport
+         * is ok but the body fails shape (e.g. custodial:true on a sovereignty
+         * health), the section is `invalid_response` and data is not painted.
          */
-        load(key, promise) {
+        load(key, promise, schemaOrOpts) {
             var self = this;
+            var schema = null;
+            if (schemaOrOpts && typeof schemaOrOpts === 'object' && schemaOrOpts.schema) {
+                schema = schemaOrOpts.schema;
+            } else if (schemaOrOpts) {
+                schema = schemaOrOpts;
+            }
             this[key] = { loading: true, reason: null, message: '', data: null };
             return promise.then(function(res) {
+                if (!res.ok) {
+                    self[key] = {
+                        loading: false,
+                        reason: res.reason,
+                        message: res.message,
+                        data: null
+                    };
+                    return res;
+                }
+                if (schema) {
+                    var gate = ixTrade.accept(schema, res.data);
+                    if (!gate.ok) {
+                        self[key] = {
+                            loading: false,
+                            reason: gate.reason || 'invalid_response',
+                            message: gate.message || '',
+                            data: null
+                        };
+                        return res;
+                    }
+                    self[key] = {
+                        loading: false,
+                        reason: 'ok',
+                        message: '',
+                        data: gate.data
+                    };
+                    return res;
+                }
                 self[key] = {
                     loading: false,
-                    reason: res.ok ? 'ok' : res.reason,
-                    message: res.ok ? '' : res.message,
-                    data: res.ok ? res.data : null
+                    reason: 'ok',
+                    message: '',
+                    data: res.data
                 };
                 return res;
             });
