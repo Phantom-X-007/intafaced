@@ -22,6 +22,7 @@ import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/acti
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
+import { runMerchantWatchSession } from './merchant/session-run.js';
 import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
@@ -2365,6 +2366,139 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
           return result;
         }),
+
+      /**
+       * Stage-2 `merchant.watch` as a METERED RUN on the fleet runtime.
+       *
+       * The pure `watch` query above answers "what would the merchant say"
+       * without a session. This mutation runs the same watcher through
+       * `openSession → act → settle → closeSession`, so every metrics read is
+       * guardrail-checked and audited, and the run settles through the meter.
+       * Dark pay plane refuses before any session opens (unbilled).
+       */
+      runSession: scopedProcedure('agents:execute', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            points: z
+              .array(
+                z.object({
+                  railId: z.string().min(1).max(64),
+                  approvalRate: z.string().nullable(),
+                  attempts: z.number().int().nullable(),
+                  asOf: z.string().min(1),
+                  maxAgeMs: z.number().int().positive().max(86_400_000),
+                }),
+              )
+              .max(50),
+            threshold: z.string().optional(),
+            railAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              watchedAt: z.string(),
+              considered: z.number().int(),
+              skippedStale: z.number().int(),
+              skippedIncomplete: z.number().int(),
+              alerts: z.array(
+                z.object({
+                  railId: z.string(),
+                  approvalRate: z.string(),
+                  attempts: z.number().int(),
+                  threshold: z.string(),
+                  kind: z.literal('below_threshold'),
+                }),
+              ),
+              pointsAccepted: z.number().int(),
+              pointsRefusedByGuardrail: z.number().int(),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.merchant.empty'),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('unavailable'),
+              userMessageKey: z.literal('agents.merchant.unavailable'),
+              reason: z.enum(['stale', 'no_metrics', 'pay_plane_dark']),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['pay_plane_dark', 'no_live_metrics']),
+              userMessageKey: z.literal('agents.merchant.unavailable'),
+              pointsRefusedByGuardrail: z.number().int(),
+              metering: runMeteringOutput,
+            }),
+          ]),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            const result = await runMerchantWatchSession({
+              runtime,
+              userId: ctx.principal.userId,
+              feeAssetId,
+              plane: input.plane,
+              points: input.points,
+              ...(input.threshold === undefined ? {} : { threshold: input.threshold }),
+              ...(input.railAllowlist === undefined ? {} : { railAllowlist: input.railAllowlist }),
+              ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            });
+
+            const metering = {
+              sessionId: result.metering.sessionId,
+              billedAmount: result.metering.billedAmount,
+              assetId: result.metering.assetId,
+              sessionClosed: result.metering.sessionClosed,
+              settlements: result.metering.settlements.map((s) => ({
+                windowId: s.windowId,
+                amount: s.amount,
+                chargeKey: s.chargeKey,
+                settled: s.settled,
+              })),
+            };
+
+            if (result.status === 'ok') {
+              return {
+                status: 'ok' as const,
+                watchedAt: result.watchedAt,
+                considered: result.considered,
+                skippedStale: result.skippedStale,
+                skippedIncomplete: result.skippedIncomplete,
+                alerts: result.alerts.map((a) => ({ ...a })),
+                pointsAccepted: result.pointsAccepted,
+                pointsRefusedByGuardrail: result.pointsRefusedByGuardrail,
+                metering,
+              };
+            }
+
+            if (result.status === 'empty') {
+              return { status: 'empty' as const, userMessageKey: result.userMessageKey, metering };
+            }
+
+            if (result.status === 'unavailable') {
+              return {
+                status: 'unavailable' as const,
+                userMessageKey: result.userMessageKey,
+                reason: result.reason,
+                metering,
+              };
+            }
+
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              userMessageKey: result.userMessageKey,
+              pointsRefusedByGuardrail: result.pointsRefusedByGuardrail,
+              metering,
+            };
+          }),
+        ),
     }),
   });
 }
