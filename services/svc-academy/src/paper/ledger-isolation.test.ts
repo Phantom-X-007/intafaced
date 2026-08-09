@@ -62,7 +62,6 @@ function paperSources(): { readonly name: string; readonly text: string }[] {
     .map((name) => ({ name, text: readFileSync(join(HERE, name), 'utf8') }));
 }
 
-
 /** Router + service code that implements the paper wire surface (not under src/paper/). */
 function paperWireSurfaces(): { readonly name: string; readonly text: string }[] {
   const root = join(HERE, '..');
