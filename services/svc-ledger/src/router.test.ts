@@ -288,6 +288,31 @@ describe('operator controls', () => {
     const denied = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
     await expect(denied.reconcile()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('on a broken chain reports length-so-far, never invents green zero', async () => {
+    // The previous shape collapsed a failed chain to chainLength: 0. An empty
+    // book and a book that broke at tx 5 are not the same fact.
+    const open = createLedgerRouter(
+      stubService({
+        reconcile: async () => ({
+          ok: false,
+          ranAt: new Date('2026-08-09T00:00:00Z'),
+          balances: { ok: true, accountsChecked: 2 },
+          chain: { ok: false, brokenAt: 'tx-broken', length: 5 },
+          totals: { USDT: '0' },
+          unbalancedAssets: [],
+        }),
+      }),
+    ).createCaller(await ctx(['admin:treasury'], true));
+
+    await expect(open.reconcile()).resolves.toMatchObject({
+      ok: false,
+      accountsChecked: 2,
+      chainLength: 5,
+      chainBrokenAt: 'tx-broken',
+      unbalancedAssets: [],
+    });
+  });
 });
 
 describe('health', () => {

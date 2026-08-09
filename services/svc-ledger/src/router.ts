@@ -210,15 +210,21 @@ export function createLedgerRouter(ledger: LedgerService) {
           accountsChecked: z.number(),
           chainLength: z.number(),
           unbalancedAssets: z.array(z.string()),
+          /** Present only when the hash chain failed — where verification stopped. */
+          chainBrokenAt: z.string().optional(),
         }),
       )
       .mutation(async () => {
         const report = await ledger.reconcile();
+        // chainLength is the number of transactions that verified, even on a
+        // break — never collapse a broken chain to 0 (that looks like an empty
+        // healthy book). Same shape as POST /operator/reconcile.
         return {
           ok: report.ok,
           accountsChecked: report.balances.accountsChecked,
-          chainLength: report.chain.ok ? report.chain.length : 0,
+          chainLength: report.chain.length,
           unbalancedAssets: report.unbalancedAssets,
+          ...(!report.chain.ok && 'brokenAt' in report.chain ? { chainBrokenAt: report.chain.brokenAt } : {}),
         };
       }),
 

@@ -35,14 +35,20 @@ import type { LedgerService } from './service.js';
  * releasing it required a second redeploy. `apps/admin` has shipped a red
  * "Halt posting" button, with a typed confirmation, that set React state.
  *
- * ── Why three raw routes and not a tRPC mount ───────────────────────────────
+ * ── Why raw routes and not a tRPC mount ─────────────────────────────────────
  *
  * Mounting `appRouter` would serve the whole router, including `post`, on a
  * port. `post` is `serviceProcedure` so it would still refuse a user token —
  * but the reason svc-ledger has no HTTP router today is a deliberate one, and
- * widening the money plane's surface to reach one operator switch inverts the
- * cost. These three handlers mirror `registerS2sHttp`'s shape: explicit,
- * enumerable, one line each, and nothing reachable that is not named here.
+ * widening the money plane's surface to reach operator switches inverts the
+ * cost. These handlers mirror `registerS2sHttp`'s shape: explicit, enumerable,
+ * one line each, and nothing reachable that is not named here.
+ *
+ * Routes: GET/POST `/operator/freeze`, POST `/operator/unfreeze`,
+ * POST `/operator/reconcile`. Reconcile was the residual of the original
+ * freeze-only ship — freeze was wired first because halt is more urgent than
+ * audit, and apps/admin kept an honest-simulated reconcile button until this
+ * path existed for edge to proxy.
  *
  * ── Authentication ─────────────────────────────────────────────────────────
  *
@@ -71,6 +77,24 @@ export interface FreezeSnapshot {
   readonly reason: string | null;
   readonly actor: string | null;
   readonly changedAt: string;
+}
+
+/**
+ * On-demand reconciliation report for the operator console.
+ *
+ * Matches the three independent checks in `ledger/reconcile.ts`. Never carries
+ * a `simulated` flag — if this route answers, the book was asked. A broken
+ * chain reports `chainLength` as the number of transactions that verified
+ * before the break (and `chainBrokenAt` when known), not zero: zero looks like
+ * an empty healthy book.
+ */
+export interface ReconcileSnapshot {
+  readonly ok: boolean;
+  readonly accountsChecked: number;
+  readonly chainLength: number;
+  readonly unbalancedAssets: readonly string[];
+  readonly ranAt: string;
+  readonly chainBrokenAt?: string;
 }
 
 /** Map an `AuthError` to a status an operator console can branch on. */
@@ -156,6 +180,40 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
     guarded(async (operator) => {
       app.log.warn({ actor: operator.userId }, 'LEDGER THAW requested by operator — value movement resumes');
       return shape(await ledger.unfreeze(operator.userId));
+    }),
+  );
+
+  /**
+   * On-demand full reconciliation — balances vs replay, hash chain, totalsByAsset.
+   *
+   * Behind the same `admin:treasury` + MFA door as freeze. On failure the
+   * service freezes itself before answering (§4.2); this handler only shapes
+   * the report. It is deliberately a POST (a mutation of operator attention and
+   * potentially of freeze state), not a GET that a load balancer could cache.
+   *
+   * apps/admin and svc-edge still have to proxy this — their residual is not
+   * this service's. Until they do, the scheduled job and this route are the
+   * live paths; the console's simulated button is an honesty marker, not a
+   * substitute for the book.
+   */
+  app.post(
+    '/operator/reconcile',
+    guarded(async (operator) => {
+      app.log.info({ actor: operator.userId }, 'LEDGER RECONCILE requested by operator');
+      const report = await ledger.reconcile();
+      const snapshot: ReconcileSnapshot = {
+        ok: report.ok,
+        accountsChecked: report.balances.accountsChecked,
+        // Prefer length-so-far on a break over inventing green zero.
+        chainLength: report.chain.length,
+        unbalancedAssets: report.unbalancedAssets,
+        ranAt: report.ranAt.toISOString(),
+        ...(!report.chain.ok && 'brokenAt' in report.chain ? { chainBrokenAt: report.chain.brokenAt } : {}),
+      };
+      if (!report.ok) {
+        app.log.fatal({ actor: operator.userId, report: snapshot }, 'LEDGER RECONCILIATION FAILED via operator request — posting frozen');
+      }
+      return snapshot;
     }),
   );
 }
