@@ -9,16 +9,15 @@ import { parseAmount, type Amount } from '@intafaced/ledger-client/money';
  * design whose central property can only be observed in production is a design
  * nobody has checked.
  *
- * ── There is deliberately no EVM implementation in this PR ──────────────────
+ * ── EVM adapter lives at `evm/source.ts` ────────────────────────────────────
  *
- * SOCKET §13 (`socket.evm-rpc`). There is no EVM RPC anywhere in this stack —
- * svc-protocol already records the same gap (its `PROTOCOL_RPC_URL` points
- * outside the compose network and a clean clone has none), and there are no
- * deployed CLOB contracts for an adapter to read. Writing one now would mean
- * inventing event signatures for contracts that do not exist and shipping a
- * mock behind a production-looking name. The socket is declared instead; the
- * port is the shape the adapter must satisfy, and `MemoryChainSource` is the
- * reference implementation its conformance is judged against.
+ * SOCKET §13 `socket.evm-rpc` is closed: `EvmChainSource` walks a real JSON-RPC
+ * endpoint (read-only `PublicClient`, logs by block hash, typed refusals on
+ * dark/dead/wrong chain). What remains open is `socket.clob-contracts` — no
+ * audited production venue emits the events in `evm/abi.ts` yet; the adapter
+ * still refuses a zero venue / empty RPC / unreachable endpoint rather than
+ * inventing an empty book. `MemoryChainSource` stays the hermetic reference
+ * implementation for reorg/projection proofs that must not need a node.
  *
  * ── The one demand this port makes of any implementation ────────────────────
  *
