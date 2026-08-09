@@ -382,9 +382,14 @@ export const FEATURES = [
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
     phase: '2',
+    status: 'wip',
     dependsOn: ['trade.spot'],
-    requires: ['services/svc-trade/src/public-rest.ts', 'services/svc-trade/src/private-rest.ts'],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted (re-verified tip a05eeb48). Public: markets (paper flag + schedule/sessionOpen/hours/nextSessionChange so bots tell sim vs real and venue-shut vs exchange-down), orderbook, ticker, tickers, trades (?since= ms), ohlcv (live non-seeded fill aggregation + materialize job default OFF TRADE_CANDLE_JOBS_*; honest [] when never traded; never invent candles), funding-rate (published or NotSupported). Private (edge-signed, fail-closed): orders open/closed/:id, POST/DELETE orders (+ cancelAll), account trades/fees/balance, positions list/open/close (**caller-supplied price fields refused 400** — mark path only; old note that required exitPrice was inverted/removed). setLeverage/setMarginMode mounted as **501 NotSupported** (never silent success; tested). Edge rate limiter exists (default ON, 300/min — N4 is published contract vs edge honesty, not "no limiter"). Futures residual jobs default OFF by design. Empty books until order or trade.mm-bot seed (honest [] not 502 — #185). Private WS under ws.gateway. Residual: public paper-list policy (N3), rate-limit published vs edge (N4), mm seed ops — not missing routes.',
+    requires: [
+      'services/svc-trade/src/public-rest.ts',
+      'services/svc-trade/src/private-rest.ts',
+      'services/svc-trade/src/ccxt-capability-matrix.ts',
+    ],
+    note: 'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). Residual after matrix: public paper-list policy (N3), rate-limit published vs edge (N4), mm seed ops.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
