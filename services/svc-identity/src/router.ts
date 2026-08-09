@@ -288,15 +288,54 @@ export function createIdentityRouter(
        * `defaultScopes()` withholds `trade:withdraw` — "added only after a
        * step-up challenge" — and there was no step-up challenge anywhere in the
        * OS, which made every withdrawal surface unreachable by a real session.
-       * This is that challenge: a live session plus a fresh TOTP code buys a
-       * five-minute token that carries the scope.
+       * This is that challenge: a live session plus a fresh TOTP code **or** a
+       * WebAuthn assertion (after `stepUpOptions`) buys a five-minute token that
+       * carries the scope. Passkey-only accounts can withdraw without TOTP theatre.
        *
        * `protectedProcedure`, not `scopedProcedure`: the caller is proving a
        * second factor, not exercising a permission. Requiring a scope to ask for
        * a scope would only mean the answer was already yes.
        */
+      /**
+       * WebAuthn options for step-up (passkey withdraw). Challenge kind is
+       * `step-up` so a passwordless-login assertion cannot be reused here.
+       */
+      stepUpOptions: protectedProcedure.mutation(async ({ ctx }) => {
+        if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
+        try {
+          return await auth.startWebauthnStepUp(ctx.principal.userId);
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
       stepUp: protectedProcedure
-        .input(z.object({ totpCode: z.string().regex(/^\d{6}$/) }))
+        .input(
+          z
+            .object({
+              totpCode: z
+                .string()
+                .regex(/^\d{6}$/)
+                .optional(),
+              webauthn: z
+                .object({
+                  id: z.string().min(1),
+                  rawId: z.string().min(1),
+                  type: z.literal('public-key'),
+                  response: z.object({
+                    clientDataJSON: z.string().min(1),
+                    authenticatorData: z.string().min(1),
+                    signature: z.string().min(1),
+                    userHandle: z.string().nullish(),
+                  }),
+                  clientExtensionResults: z.record(z.unknown()).optional(),
+                })
+                .optional(),
+            })
+            .refine((v) => Boolean(v.totpCode) !== Boolean(v.webauthn), {
+              message: 'Provide exactly one of totpCode or webauthn',
+            }),
+        )
         .output(z.object({ accessToken: z.string(), expiresAt: z.string(), scopes: z.array(z.string()) }))
         .mutation(async ({ ctx, input }) => {
           try {
@@ -304,6 +343,7 @@ export function createIdentityRouter(
               userId: ctx.principal.userId,
               sessionId: ctx.principal.sid,
               totpCode: input.totpCode,
+              webauthn: input.webauthn,
             });
             return { ...elevated, expiresAt: elevated.expiresAt.toISOString() };
           } catch (err) {
