@@ -169,6 +169,8 @@ app.get('/ready', async () => ({
   // Observability for the stuck-pending reaper (#1187): last tick's retired count
   // and when it ran. Zero forever + null means the interval never completed.
   deliveryReap: { lastRetired: lastReapRetired, lastAt: lastReapAt },
+  // v22.alerts mark port honesty — 'dark' means evaluate refuses rather than invents.
+  alerts: { markSource: 'dark' as const },
 }));
 
 await app.register(fastifyTRPCPlugin, {
