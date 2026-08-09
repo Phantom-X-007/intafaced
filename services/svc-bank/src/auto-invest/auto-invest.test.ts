@@ -41,7 +41,8 @@ if (!available) {
     it('skipped', () => undefined);
   });
 } else {
-  const db: TestDatabase = await createTestDatabase({ service: 'bank-auto-invest', url: URL, migrations });
+  // service id must be a legal Postgres schema name fragment — same as other bank suites.
+  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: URL, migrations });
   const sql = db.sql;
 
   let ledger: MemoryLedger;
