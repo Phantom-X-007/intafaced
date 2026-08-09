@@ -3,8 +3,10 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryProjectionStore } from './projection/memory-store.js';
 import { MemoryChainSource, NullChainSource } from './chain/memory-source.js';
+import { ChainUnavailableError } from './chain/evm/availability.js';
+import type { ChainBlock, ChainHead, ChainSource } from './chain/source.js';
 import { Indexer } from './indexer.js';
-import { createIndexerRouter } from './router.js';
+import { createIndexerRouter, type ChainProbe } from './router.js';
 import { CHAIN_ID } from './testing/conformance.js';
 
 /**
@@ -157,8 +159,39 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
   });
 });
 
+/**
+ * Production's no-RPC probe shape (`src/index.ts` when INDEXER_RPC_URL is empty).
+ * Mounted hermetically so status honesty does not need a live node.
+ */
+function productionNullProbe(): () => Promise<ChainProbe> {
+  return async () => ({
+    kind: 'null',
+    rpcUrl: null,
+    venue: null,
+    reachable: false,
+    observedChainId: null,
+    chainHeight: null,
+    venueDeployed: false,
+    refusalCode: 'indexer.chain_not_configured',
+    reason:
+      'INDEXER_RPC_URL is not set, so this service is following no chain. Everything it serves is whatever ' +
+      'was projected before, and nothing is advancing it. (SOCKET §13 socket.evm-rpc)',
+  });
+}
+
+/** A source that throws a typed chain refusal — real Indexer path records lastError. */
+class UnreachableChainSource implements ChainSource {
+  constructor(readonly chainId: number) {}
+  async head(): Promise<ChainHead | null> {
+    throw new ChainUnavailableError('indexer.chain_unreachable', 'endpoint refused at hermetic mount test');
+  }
+  async blockAt(_height: number): Promise<ChainBlock | null> {
+    throw new ChainUnavailableError('indexer.chain_unreachable', 'endpoint refused at hermetic mount test');
+  }
+}
+
 describe('svc-indexer mount — status is honest', () => {
-  it('reports the null chain source and no head on a cold service', async () => {
+  it('behindBy is null (not zero) when no probe is wired and heights are unknown', async () => {
     const store = new MemoryProjectionStore(CHAIN_ID);
     const indexer = new Indexer({
       source: new NullChainSource(CHAIN_ID),
@@ -173,14 +206,127 @@ describe('svc-indexer mount — status is honest', () => {
       finalityDepth: 64,
       ingestEnabled: () => true,
       chainSource: 'null',
+      // no chainProbe — "nobody asked", never a quiet zero
     });
 
-    await expect(router.createCaller(anonymous()).status()).resolves.toMatchObject({
-      chainSource: 'null',
-      indexedHeight: null,
-      finalizedHeight: null,
-      halted: null,
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.chainSource).toBe('null');
+    expect(status.indexedHeight).toBeNull();
+    expect(status.finalizedHeight).toBeNull();
+    expect(status.halted).toBeNull();
+    expect(status.chain).toBeNull();
+    // Zero would read as "current". Unknown heights → null, never a default.
+    expect(status.behindBy).toBeNull();
+    expect(status.lastError).toBeNull();
+  });
+
+  it('behindBy is tip minus cursor when a probe reports both heights', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    // Cursor at 97 without walking 97 empty blocks.
+    await store.applyBlock({
+      chainId: CHAIN_ID,
+      height: 97,
+      hash: `0x${'a'.repeat(64)}`,
+      parentHash: `0x${'0'.repeat(64)}`,
+      timestamp: 1_700_000_000,
+      events: [],
     });
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'evm',
+      chainProbe: async () => ({
+        kind: 'evm',
+        rpcUrl: 'http://probe.test',
+        venue: `0x${'1'.repeat(40)}`,
+        reachable: true,
+        observedChainId: CHAIN_ID,
+        chainHeight: 100,
+        venueDeployed: true,
+        refusalCode: null,
+        reason: null,
+      }),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.indexedHeight).toBe(97);
+    expect(status.chain).toMatchObject({ kind: 'evm', chainHeight: 100, reachable: true });
+    expect(status.behindBy).toBe(3);
+  });
+
+  it('dark chain: production-shaped null probe surfaces refusal, never a quiet zero lag', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'null',
+      chainProbe: productionNullProbe(),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.chain).toMatchObject({
+      kind: 'null',
+      reachable: false,
+      chainHeight: null,
+      venueDeployed: false,
+      refusalCode: 'indexer.chain_not_configured',
+    });
+    expect(status.behindBy).toBeNull();
+    expect(status.indexedHeight).toBeNull();
+    expect(status.lastError).toBeNull();
+  });
+
+  it('puts lastError on the wire when a sync pass fails with a typed code', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const indexer = new Indexer({
+      source: new UnreachableChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    await expect(indexer.sync()).rejects.toMatchObject({ code: 'indexer.chain_unreachable' });
+    expect(indexer.lastError).toMatchObject({
+      code: 'indexer.chain_unreachable',
+      message: expect.stringContaining('hermetic mount test'),
+    });
+
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'evm',
+      chainProbe: productionNullProbe(),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.lastError).not.toBeNull();
+    expect(status.lastError).toMatchObject({
+      code: 'indexer.chain_unreachable',
+      message: expect.stringContaining('hermetic mount test'),
+    });
+    expect(typeof status.lastError!.at).toBe('string');
+    // ISO timestamp, not a Date object on the wire.
+    expect(Number.isNaN(Date.parse(status.lastError!.at))).toBe(false);
   });
 
   it('surfaces a halt, so a caller is told before it renders a price', async () => {
