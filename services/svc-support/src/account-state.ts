@@ -90,7 +90,13 @@ export function createAccountStateClient(baseUrl: string, internalSecret: string
       }
 
       const parsed = accountStateSchema.safeParse(body);
-      return parsed.success ? parsed.data : null;
+      if (!parsed.success) return null;
+      // Bind the projection to the user we asked about. A misrouted or hostile
+      // identity plane that answers with a different userId would otherwise be
+      // accepted as grounding for the ticket owner — the same failure
+      // svc-agents already refuses as account_owner_mismatch.
+      if (parsed.data.userId !== userId) return null;
+      return parsed.data;
     },
   };
 }
