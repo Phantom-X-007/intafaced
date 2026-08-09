@@ -52,6 +52,7 @@ import {
   type SeasonStatus,
   type StandingRecord,
 } from './tournaments/ladder.js';
+import { assertScoreWindowOpen } from './tournaments/season-calendar.js';
 import { freezeSeasonWithSnapshot, transitionSeason } from './tournaments/season-lifecycle.js';
 import { assertNoPrizeAttachment } from './tournaments/prize-refuse.js';
 import { validateBulkScoreWrite, type ScorePatch } from './tournaments/bulk-score.js';
@@ -774,10 +775,12 @@ export class AcademyService {
     };
   }
 
-  async setStanding(input: { seasonId: string; userId: string; score: number }): Promise<StandingRecord> {
+  async setStanding(input: { seasonId: string; userId: string; score: number; now?: Date }): Promise<StandingRecord> {
     this.assertTournamentEnabled();
     const season = await this.season(input.seasonId);
     try {
+      // Live status alone is not enough — calendar window must still be open.
+      assertScoreWindowOpen(season, input.now ?? new Date());
       assertMayWriteScore(season.status);
       assertScore(input.score);
     } catch (e) {
@@ -811,6 +814,9 @@ export class AcademyService {
       seasonStatus: season.status,
       seasonId: input.seasonId,
       patches: input.patches,
+      // Same calendar gate as setStanding — refuse bulk before any partial upserts.
+      startsAt: season.startsAt,
+      endsAt: season.endsAt,
     });
     if (gate.status === 'refuse') {
       return {

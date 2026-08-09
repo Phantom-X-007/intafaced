@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TournamentError, type SeasonRecord } from './ladder.js';
 import {
+  assertScoreWindowOpen,
   isSeasonCalendarEnded,
   listScoreWindowOpenSeasons,
   listSeasonsInCalendarWindow,
@@ -58,5 +59,25 @@ describe('tournament Stage-3 season calendar (no prizes)', () => {
 
   it('refuses blank season id', () => {
     expect(() => seasonWindowAt(season({ id: '  ', status: 'live' }))).toThrow(TournamentError);
+  });
+
+  it('assertScoreWindowOpen refuses live season after endsAt (calendar gate on write path)', () => {
+    const live = season({ status: 'live' });
+    const afterEnd = new Date('2026-09-01T00:00:00.000Z');
+    expect(() => assertScoreWindowOpen(live, afterEnd)).toThrow(TournamentError);
+    try {
+      assertScoreWindowOpen(live, afterEnd);
+    } catch (e) {
+      expect(e).toBeInstanceOf(TournamentError);
+      expect((e as TournamentError).code).toBe('academy.season_not_live');
+      expect((e as TournamentError).message).toMatch(/calendar window/i);
+    }
+    const mid = new Date('2026-08-15T12:00:00.000Z');
+    expect(() => assertScoreWindowOpen(live, mid)).not.toThrow();
+  });
+
+  it('assertScoreWindowOpen refuses non-live even inside calendar', () => {
+    const mid = new Date('2026-08-15T12:00:00.000Z');
+    expect(() => assertScoreWindowOpen(season({ status: 'frozen' }), mid)).toThrow(/frozen/i);
   });
 });

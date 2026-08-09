@@ -132,14 +132,7 @@ const PINNED = {
       2,
       "src/certs/xp-emit.test.ts | TS2345 | Argument of type '{ userId: string; certId: string; xpDelta: string; idempotencyKey: string; }' is not assignable to parameter of type 'XpEarnedIntent'.",
     ],
-    [
-      1,
-      "src/tournaments/bulk-score.test.ts | TS2345 | Argument of type '{ seasonStatus: \"frozen\"; patches: { userId: string; score: number; }[]; }' is not assignable to parameter of type '{ seasonStatus: SeasonStatus; seasonId: string; patches: readonly ScorePatch[]; }'.",
-    ],
-    [
-      1,
-      "src/tournaments/bulk-score.test.ts | TS2345 | Argument of type '{ seasonStatus: \"live\"; patches: { userId: string; score: number; }[]; }' is not assignable to parameter of type '{ seasonStatus: SeasonStatus; seasonId: string; patches: readonly ScorePatch[]; }'.",
-    ],
+    // bulk-score.test seasonId-required pins retired after calendar-gate type tighten (W6 L02).
     [
       3,
       "src/tournaments/season-lifecycle.test.ts | TS2322 | Type 'SeasonRecord' is not assignable to type '{ status: \"scheduled\"; id: string; slug: string; title: string; rulesSummary: string; startsAt: Date; endsAt: null; }'.",
