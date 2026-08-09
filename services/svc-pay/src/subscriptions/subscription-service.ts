@@ -289,10 +289,7 @@ export class SubscriptionService {
    * Merchant fleet list — mandates already stored; this only reads them.
    * No charge, no cascade, no ledger. Caller fences merchant ownership.
    */
-  async listMandates(
-    merchantId: string,
-    options: { status?: MandateStatus; limit?: number } = {},
-  ): Promise<MandateRecord[]> {
+  async listMandates(merchantId: string, options: { status?: MandateStatus; limit?: number } = {}): Promise<MandateRecord[]> {
     await this.requireMerchant(merchantId);
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
     const rows = options.status
