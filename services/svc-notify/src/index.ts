@@ -93,6 +93,9 @@ const targets = new PostgresTargetStore(sql);
 // `ack_wait`. Deriving it from the configured timeout keeps the first half true
 // when an operator changes that timeout — see DEFAULT_CLAIM_LEASE_MS.
 const deliveries = new PostgresDeliveryStore(sql, { leaseMs: env.NOTIFY_GATEWAY_TIMEOUT_MS * 2 });
+/** Last sweep result — surface on /ready so "is the stuck-pending reaper running?" is observable without log diving. */
+let lastReapRetired = 0;
+let lastReapAt: string | null = null;
 const channels = channelsFromEnv(env);
 const muteStore = new PostgresMuteStore(sql);
 const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
@@ -128,6 +131,9 @@ app.get('/ready', async () => ({
   // making a monitor parse the array to find out.
   pendingConsumers: pending,
   undeclaredPendingConsumers: pending.filter((c) => c.socket === null).length,
+  // Observability for the stuck-pending reaper (#1187): last tick's retired count
+  // and when it ran. Zero forever + null means the interval never completed.
+  deliveryReap: { lastRetired: lastReapRetired, lastAt: lastReapAt },
 }));
 
 await app.register(fastifyTRPCPlugin, {
@@ -155,6 +161,10 @@ const reaper = setInterval(() => {
   void deliveries
     .reapExhausted(env.NOTIFY_MAX_DELIVERY_ATTEMPTS)
     .then((retired) => {
+      // Always stamp the tick — zero is a successful run that found nothing, and
+      // is how an operator distinguishes "reaper healthy" from "reaper never ran".
+      lastReapRetired = retired;
+      lastReapAt = new Date().toISOString();
       if (retired > 0) {
         app.log.info(
           { retired, maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS },
