@@ -1051,9 +1051,7 @@ export class AuthService {
    * makes freeze visible on list/revoke surfaces and closes any path that only
    * checked `revoked` without re-reading user status.
    */
-  async freezeIdentity(
-    userId: string,
-  ): Promise<{ userId: string; status: 'frozen'; subAccountsRevoked: number; apiKeysRevoked: number }> {
+  async freezeIdentity(userId: string): Promise<{ userId: string; status: 'frozen'; subAccountsRevoked: number; apiKeysRevoked: number }> {
     return transaction(this.sql, async (tx) => {
       const users = await tx<Array<{ id: string; status: string }>>`
         SELECT id, status FROM users WHERE id = ${userId} LIMIT 1 FOR UPDATE
