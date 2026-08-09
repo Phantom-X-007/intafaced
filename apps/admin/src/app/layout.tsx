@@ -21,7 +21,7 @@ const inter = Inter({ subsets: ['latin'], display: 'swap', variable: '--adm-font
 
 export const metadata: Metadata = {
   title: 'INTAFACED · Operator Console',
-  description: 'Kill-switches, launch sequence, jurisdiction matrix and ledger operations.',
+  description: 'Kill-switches, launch sequence, jurisdiction matrix, ledger ops and mounted operator tools.',
   robots: { index: false, follow: false },
 };
 

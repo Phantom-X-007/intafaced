@@ -25,12 +25,13 @@ pnpm --filter @intafaced/admin typecheck
 
 ## Screens
 
-| Route           | What it does                                                                                                                                                         |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`             | Kill-switches. Every flag grouped by module, resolved at the current `LAUNCH_DROP`, with the reason it resolved that way. `ledger.posting` gets its own alarm panel. |
-| `/launch`       | The §11 drop table, plus "what would be live at drop N" resolved against a chosen drop.                                                                              |
-| `/jurisdiction` | Counsel-review status per matrix entry, the effective module × region rule grid, and a live `checkAccess()` readout.                                                 |
-| `/ledger`       | Freeze / unfreeze / reconcile. Freeze requires a written reason, a typed confirmation phrase, and an explicit acknowledgement.                                       |
+| Route           | What it does                                                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/`             | Kill-switches. Every flag grouped by module, resolved at the current `LAUNCH_DROP`, with the reason it resolved that way. `ledger.posting` gets its own alarm panel.                       |
+| `/launch`       | The §11 drop table, plus "what would be live at drop N" resolved against a chosen drop.                                                                                                    |
+| `/jurisdiction` | Counsel-review status per matrix entry, the effective module × region rule grid, and a live `checkAccess()` readout.                                                                       |
+| `/ledger`       | Freeze / unfreeze / reconcile. Freeze requires a written reason, a typed confirmation phrase, and an explicit acknowledgement.                                                             |
+| `/tools`        | Operator tools already mounted on edge `/api/*/trpc/*` (bank.ops, KYC, freeze identity, merchantState, token mint, academy). Not-wired when env missing — never local green money success. |
 
 ## Friction is proportional to blast radius
 
@@ -45,10 +46,11 @@ pnpm --filter @intafaced/admin typecheck
 
 **Module kill-switches** reach svc-edge through this console (#186 + A-P5-OPS):
 
-| Console route                 | Edge                              | Env                                                       |
-| ----------------------------- | --------------------------------- | --------------------------------------------------------- |
-| `GET/POST /api/kill-switch`   | `/admin/kill-switches`            | `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` (`admin:write` + MFA) |
-| `GET/POST /api/ledger-freeze` | `/admin/ledger/freeze` · unfreeze | `EDGE_URL` + `ADMIN_TREASURY_TOKEN` (`admin:treasury`)    |
+| Console route                  | Edge                              | Env                                                            |
+| ------------------------------ | --------------------------------- | -------------------------------------------------------------- |
+| `GET/POST /api/kill-switch`    | `/admin/kill-switches`            | `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` (`admin:write` + MFA)      |
+| `GET/POST /api/ledger-freeze`  | `/admin/ledger/freeze` · unfreeze | `EDGE_URL` + `ADMIN_TREASURY_TOKEN` (`admin:treasury`)         |
+| `GET/POST /api/operator-tools` | `/api/{module}/trpc/{procedure}`  | module tools → operator token; treasury tools → treasury token |
 
 The `/` board **loads live disabled modules** and **posts module kill/enable** with a required reason when the
 control plane status is `reachable`. Per-flag rows remain session-staged (flag store §13).
