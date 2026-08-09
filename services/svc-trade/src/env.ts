@@ -327,6 +327,24 @@ const schema = serviceEnvSchema
        */
       TRADE_OTC_MIDS: z.string().default(''),
 
+      /**
+       * Copy fee-share law (trade.copy / D-S-03). JSON or empty.
+       *
+       * Empty (default) = unpublished → refuse-closed. Never invent
+       * leader_share_bps / caps / decay — DIRECTION §8 owner-only.
+       * Published shape: {"published":true,"leaderShareBps":N,"earningsCapPerFollower":"…",
+       * "decayRoundTrips":N,"decayShareBps":N}
+       */
+      TRADE_COPY_FEE_SHARE_LAW: z.string().default(''),
+
+      /**
+       * Copy jurisdiction allowlist (trade.copy / D-S-03). JSON or empty.
+       *
+       * Empty (default) = unpublished → follow refuses. Never invent geo list.
+       * Published shape: {"published":true,"allowedRegions":["SG","…"]}
+       */
+      TRADE_COPY_JURISDICTION_LAW: z.string().default(''),
+
       /** svc-token — stakeOf for OTC staked-tier gate. */
       TOKEN_URL: z.string().url().default('http://localhost:4003'),
     }),

@@ -7,6 +7,8 @@ import { TradeError, type FillRecord, type Market, type OrderRecord } from './sp
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import type { OtcDeskService } from './otc/otc-service.js';
+import { CopyError } from './copy/errors.js';
+import type { CopyService } from './copy/copy-service.js';
 
 /**
  * svc-trade's API (§5.2).
@@ -193,6 +195,26 @@ function toTrpcError(err: unknown): TRPCError {
     }
   }
 
+  if (err instanceof CopyError) {
+    switch (err.code) {
+      case 'trade.copy_not_following':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'trade.copy_jurisdiction_blocked':
+      case 'trade.copy_self_follow':
+      case 'trade.copy_fee_share_killed':
+      case 'trade.copy_pnl_fee_forbidden':
+      case 'trade.copy_ranking_forbidden':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'trade.copy_fee_share_blank':
+      case 'trade.copy_jurisdiction_blank':
+      case 'trade.copy_law_blank':
+      case 'trade.copy_settle_refused':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      default:
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+  }
+
   if (err instanceof TradeError) {
     switch (err.code) {
       case 'trade.market_not_found':
@@ -241,7 +263,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
+export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, copy?: CopyService) {
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-trade') }))
@@ -572,6 +594,99 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
       cancel: scopedProcedure('trade:write', { module: 'trade' })
         .input(z.object({ algoId: z.string().min(1) }))
         .mutation(({ ctx, input }) => guard(async () => presentAlgo(await trade.cancelAlgo(ctx.principal, input.algoId)))),
+    }),
+
+    /**
+     * Copy trading (trade.copy / D-S-03 / SPEC-SOVEREIGN-ROUTING-AND-COPY).
+     *
+     * Follow / kill / unfollow are product-mounted. Blank DIRECTION §8 laws
+     * refuse-closed — never invent leader_share_bps or jurisdiction allowlist.
+     * Fee-share settle posts only via ledger-client when owner law is published.
+     */
+    copy: router({
+      deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
+        if (!copy) {
+          return {
+            feeSharePublished: false,
+            jurisdictionPublished: false,
+            statusLine: 'feeShare=0 residual=DIRECTION_§8_leader_share_bps jurisdiction=0 residual=DIRECTION_§8_jurisdiction',
+            residual: 'DIRECTION §8 leader_share_bps and jurisdiction list are owner-only — refuse-closed',
+          };
+        }
+        return copy.deskStatus();
+      }),
+
+      follow: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            leaderId: z.string().min(1).max(120),
+            region: z.string().min(1).max(16),
+            permittedMarkets: z.array(z.string().min(1).max(64)).min(1).max(64),
+            maxNotionalPerOrder: decimal,
+            maxAggregateExposure: decimal,
+            expiresAt: z.string().datetime(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError(
+                'Copy is refuse-closed until owner publishes DIRECTION §8 served-jurisdiction list',
+                'trade.copy_jurisdiction_blank',
+              );
+            }
+            return copy.follow(ctx.principal, input);
+          }),
+        ),
+
+      unfollow: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.unfollow(ctx.principal, input);
+          }),
+        ),
+
+      killFeeShare: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.killFeeShare(ctx.principal, input);
+          }),
+        ),
+
+      /**
+       * Attribute + settle leader fee-share for a follower fill.
+       * Blank §8 → PRECONDITION_FAILED. Never invents rates.
+       */
+      settleFeeShare: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            followId: z.string().min(1).max(64),
+            fillId: z.string().min(1).max(120),
+            assetId: z.string().min(1).max(32),
+            followerFillNotional: decimal,
+            protocolFeeBps: z.number().int().min(0).max(10_000),
+            fillFeeAmount: decimal.optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError(
+                'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+                'trade.copy_fee_share_blank',
+              );
+            }
+            return copy.settleFeeShare(ctx.principal, input);
+          }),
+        ),
     }),
   });
 }

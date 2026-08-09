@@ -352,9 +352,9 @@ export const FEATURES = [
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/copy'],
     note:
-      'Owner released 2026-08-08. Stage #1009 + money seals #1191 (concurrent fee-share cap reserve-then-post) + #1199 (fillId mirror claim). ' +
-      'Product is **fee-share** only; P&L profit-share banned (§95). Module still **unmounted** (no router/env) — deliberate until Class M mount ordered. ' +
-      'Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: mount + optional settle fillId claim + mirrored_fills migration; owner rates; session-key caps.',
+      'W10 L02 product mount 2026-08-09: tRPC copy.follow/killFeeShare/unfollow/settleFeeShare/deskStatus + TRADE_COPY_* env (blank refuse) + drizzle 0021 copy_mirrored_fills. ' +
+      'Stage #1009 + money seals #1191/#1199/#1386. Product is **fee-share** only; P&L profit-share banned (§95). ' +
+      'Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: owner rates (Nitro §8); session-key caps; auto-mirror into spot engine — not mount.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',

@@ -335,7 +335,7 @@ function rowToMirrored(row: MirroredFillRow): StoredMirrorPlan {
  * SQL store.
  *
  * Mirrored fills live in `trade.copy_mirrored_fills` (PK follow_id + fill_id).
- * Migration residual when the module mounts — unit tests use Memory.
+ * Migration: drizzle/0021_copy_mirrored_fills.sql. Unit tests use Memory.
  */
 export class SqlCopyFollowStore implements CopyFollowStore {
   constructor(private readonly sql: Sql) {}
