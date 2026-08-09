@@ -107,11 +107,11 @@ read that cannot verify entitlement must not report a vendor as listable.
 a capacity and not a balance. That is also the safest position on the bug PR #1100
 fixed — a field that is never read cannot be accidentally re-scaled.
 
-**Depends on PR #1100.** Until that merges, `/internal/stake/:userId` returns
-HTTP 500 to every caller (`AccessTier.minStake` is a bigint and Fastify's
-`JSON.stringify` fallback throws on one), so no slot can be claimed in an
-environment built without it. The fail-closed path is what makes that a refusal
-rather than a free-for-all.
+**Depends on PR #1100 (merged).** That PR fixed
+`/internal/stake/:userId` returning HTTP 500 for every caller (`AccessTier.minStake`
+was a bigint and Fastify's `JSON.stringify` fallback threw). Fail-closed still
+holds: any remaining non-2xx / unusable payload is `market.stake_unavailable`,
+not free capacity.
 
 ### Capacity cannot be oversold
 
