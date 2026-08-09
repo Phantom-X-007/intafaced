@@ -1,6 +1,6 @@
 # Ledger recipe matrix
 
-**49 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
+**50 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
 
 Generated from `src/recipes/index.ts` registry. If this table and the registry disagree, the registry wins and this file is wrong.
 
@@ -55,6 +55,7 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | `earnPoolFund`                 | `bank`     | `bank.earn.pool.funded`                                          |
 | `earnInterest`                 | `bank`     | `bank.earn.interest`                                             |
 | `subAccountTransfer`           | `identity` | `identity.sub_account.transfer`                                  |
+| `marketPurchase`               | `market`   | `market.purchase`                                                |
 
 ## Source files
 
@@ -65,6 +66,7 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | `src/recipes/loans.ts`        | collateral / draw / repay / liquidate / bad debt / reserve                                  |
 | `src/recipes/chargeback.ts`   | chargeback open / shortfall / won / recovered (owner sign-off banner; not wired to svc-pay) |
 | `src/recipes/sub-accounts.ts` | only legal cross-partition transfer                                                         |
+| `src/recipes/market.ts`       | one-time listing purchase + house commission                                                |
 
 ## Sealed notes
 
