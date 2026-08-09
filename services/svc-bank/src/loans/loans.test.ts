@@ -27,6 +27,7 @@ import {
   assertPolicyCoherent,
   dailyLoanInterest,
   daysToAccrue,
+  isMarginCallCured,
   ltvBps,
   planLiquidation,
   splitProceeds,
@@ -408,6 +409,57 @@ describe('planLiquidation', () => {
   });
 });
 
+describe('isMarginCallCured — full coll sale must not false-cure', () => {
+  const calledAt = new Date('2026-06-01T11:00:00Z');
+
+  it('clears a real recovery (LTV back below threshold with collateral held)', () => {
+    expect(
+      isMarginCallCured({
+        ladderAction: 'none',
+        debt: amt('5000'),
+        collateral: amt('1'),
+        marginCalledAt: calledAt,
+      }),
+    ).toBe(true);
+  });
+
+  it('does NOT clear when collateral is gone and residual debt remains', () => {
+    // The residual is typically unpaid interest after a closing sale whose
+    // proceeds paid some interest then booked principal shortfall to insurance.
+    // Reporting this as cured `active` is the honesty bug.
+    expect(
+      isMarginCallCured({
+        ladderAction: 'none',
+        debt: amt('40'), // residual interest
+        collateral: 0n,
+        marginCalledAt: calledAt,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not clear when the ladder still wants a margin call or liquidation', () => {
+    expect(
+      isMarginCallCured({
+        ladderAction: 'margin-call',
+        debt: amt('5000'),
+        collateral: amt('1'),
+        marginCalledAt: calledAt,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not clear a loan that was never called', () => {
+    expect(
+      isMarginCallCured({
+        ladderAction: 'none',
+        debt: amt('5000'),
+        collateral: amt('1'),
+        marginCalledAt: null,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe('the proceeds waterfall', () => {
   it('pays penalty, then interest, then principal, then the borrower', () => {
     const split = splitProceeds({
@@ -481,6 +533,28 @@ describe('the proceeds waterfall', () => {
     });
     expect(split.shortfall).toBe(0n);
     expect(formatAmount(split.principalRepaid)).toBe('100');
+  });
+
+  /**
+   * Shortfall is PRINCIPAL-only. Interest is paid first in the waterfall; when
+   * proceeds cannot cover interest, the unpaid interest is NOT folded into
+   * `shortfall` (that field feeds `loanBadDebt` → insurance → reserve, and
+   * interest never sat on the reserve). Residual interest is a real claim that
+   * must not be silently cured away after a full collateral sale.
+   */
+  it('does not book unpaid interest as reserve shortfall on a closing sale', () => {
+    const split = splitProceeds({
+      proceeds: amt('10'),
+      interestOwed: amt('50'),
+      principalOwed: amt('1000'),
+      penaltyBps: 200,
+      closesPosition: true,
+    });
+    expect(formatAmount(split.interestRepaid)).toBe('10');
+    expect(split.principalRepaid).toBe(0n);
+    expect(formatAmount(split.shortfall)).toBe('1000'); // principal only
+    // 40 of interest remains uncollected — not in shortfall.
+    expect(split.interestRepaid + split.principalRepaid + split.penalty + split.surplusToBorrower).toBe(amt('10'));
   });
 });
 
@@ -1588,6 +1662,90 @@ if (!available) {
 
         expect(sweep.liquidated).toBe(0);
         expect(sweep.refused[0]!.reason).toMatch(/No counterparty/);
+      });
+
+      /**
+       * HONESTY RESIDUAL: full collateral sale with unpaid interest remaining
+       * must NOT false-cure to healthy `active`.
+       *
+       * After the last unit of collateral is sold, `planLiquidation` returns
+       * `action: none` (nothing left to sell). The old markAndAct path treated
+       * `none` + `marginCalledAt` as "cured" and wrote status=active with zero
+       * collateral and residual interest still outstanding — an unsecured
+       * claim reported as a healthy loan.
+       *
+       * Choice (b): status stays non-active until residual interest is repaid
+       * (or a future named write-off). Interest is not pushed through
+       * `loanBadDebt` (that recipe restores the reserve; interest never sat there).
+       */
+      it('does not false-cure to active after full coll sale leaves unpaid interest', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        await fund(MM_SWEEP, 'USDT', '100000');
+        await ledger.post({
+          idempotencyKey: `seed-mm-fc-${Math.random()}`,
+          module: 'test',
+          reason: 'seed',
+          entries: [
+            { account: userAvailable(MM_SWEEP, 'USDT'), direction: 'credit', amount: amt('100000') },
+            { account: marketMaker('USDT'), direction: 'debit', amount: amt('100000') },
+          ],
+        });
+        // Insurance covers principal shortfall after the dust sale.
+        await fund(INSURANCE_FUNDER, 'USDT', '10000');
+        await ledger.post({
+          idempotencyKey: `seed-ins-fc-${Math.random()}`,
+          module: 'test',
+          reason: 'seed',
+          entries: [
+            { account: userAvailable(INSURANCE_FUNDER, 'USDT'), direction: 'credit', amount: amt('10000') },
+            { account: insuranceFund('USDT'), direction: 'debit', amount: amt('10000') },
+          ],
+        });
+
+        // Full-tranche policy so one insolvency rung exhausts collateral.
+        const product = await makeProduct({
+          aprBps: 3_650,
+          policy: { ...DEFAULT_LIQUIDATION_POLICY, maxTrancheBps: 10_000 },
+        });
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
+        // ~5 USDT interest after one day at 36.5% APR on 5000.
+        await loans.accrue({ loanId: opened.loan.id, until: new Date(now.getTime() + DAY_MS) });
+        const interestBefore = (await loans.outstanding(opened.loan.id)).interest;
+        expect(interestBefore).toBeGreaterThan(0n);
+
+        // Gap crash: 1 USDT/BTC → proceeds 1 < interest; insolvency waives grace.
+        loans = new LoanService(sql, ledger, {
+          priceSource: price('1'),
+          venue: marketMakerVenue(),
+          marginCalls: { send: async () => undefined },
+        });
+        const crash = await sweepAt(now);
+        expect(crash.liquidated).toBe(1);
+
+        const afterSale = await loans.loan(opened.loan.id);
+        expect(formatAmount(await loans.collateralOf(afterSale))).toBe('0');
+        const residual = await loans.outstanding(opened.loan.id);
+        expect(residual.interest).toBeGreaterThan(0n);
+        expect(residual.total).toBeGreaterThan(0n);
+        // Closing rung left residual debt → must not already look healthy.
+        expect(afterSale.status).not.toBe('active');
+
+        // Next mark: nothing left to sell → planLiquidation action:none.
+        // Must NOT clear to active-healthy with unsecured residual interest.
+        const next = await sweepAt(new Date(now.getTime() + 60_000));
+        expect(next.cleared).toBe(0);
+
+        const afterMark = await loans.loan(opened.loan.id);
+        expect(afterMark.status).not.toBe('active');
+        expect(afterMark.status).toBe('margin_call');
+        expect((await loans.outstanding(opened.loan.id)).interest).toBeGreaterThan(0n);
       });
 
       /** One bad mark must not stop the sweep for everybody else. */

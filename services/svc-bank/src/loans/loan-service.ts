@@ -34,6 +34,7 @@ import {
   describeLtv,
   ltvBps,
   markPortfolio,
+  isMarginCallCured,
   planLiquidation,
   splitProceeds,
   type LiquidationPolicy,
@@ -1160,7 +1161,18 @@ export class LoanService {
     `;
 
     if (rung.action === 'none') {
-      if (loan.marginCalledAt !== null) {
+      // `none` means either LTV recovered (real cure) OR collateral is exhausted
+      // with residual debt still outstanding. Only the first may clear to active.
+      // See `isMarginCallCured` / honesty residual: full coll sale with unpaid
+      // interest must not false-cure to healthy active with zero collateral.
+      if (
+        isMarginCallCured({
+          ladderAction: rung.action,
+          debt: debt.total,
+          collateral,
+          marginCalledAt: loan.marginCalledAt,
+        })
+      ) {
         // CURED. The borrower posted collateral, or repaid, or the market came
         // back. Clearing the call resets the grace clock, which is correct: a
         // borrower who cured is entitled to a fresh warning and a fresh hour
@@ -1170,6 +1182,13 @@ export class LoanService {
         `;
         await this.clearMarginCalls(loan.id, now);
         return 'cleared';
+      }
+      // Residual claim with no collateral left: stay non-active (margin_call /
+      // liquidating). Borrower can still repay interest; do not report healthy.
+      if (debt.total > 0n && collateral <= 0n && loan.status !== 'margin_call' && loan.status !== 'liquidating') {
+        await this.sql`
+          UPDATE bank.loans SET status = 'margin_call', updated_at = now() WHERE id = ${loan.id}
+        `;
       }
       return 'none';
     }
