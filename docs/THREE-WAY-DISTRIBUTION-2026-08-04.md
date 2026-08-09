@@ -131,7 +131,8 @@ Class X (mainnet keys / go-live) remains Nitro human.
 ```
 Denon — hard board REWRITTEN on tip (mega judgment list + SPEC FACTORY).
 
-Full board: https://github.com/Phantom-X-007/intafaced/blob/main/docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
+Live board: https://github.com/Phantom-X-007/intafaced/blob/main/docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md
+Historical + factory origin: https://github.com/Phantom-X-007/intafaced/blob/main/docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
 Split: https://github.com/Phantom-X-007/intafaced/blob/main/docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
 
 YOU (true human hard only — ~45 named IDs):
