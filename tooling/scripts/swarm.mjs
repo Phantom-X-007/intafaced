@@ -999,6 +999,13 @@ function renderFreezeMd(m) {
   const lines = [];
   lines.push('# FREEZE-LIVE (generated)');
   lines.push('');
+  // Committed FREEZE is a snapshot, not cold-start law. The on-disk banner was
+  // sealed as residual honesty; the generator used to omit it, so the next
+  // honest `pnpm swarm:freeze` erased the stamp (W8 L08 / #1399 class).
+  lines.push(
+    '> **STALE SNAPSHOT — not cold-start law.** Tip SHA below must match `origin/main` or regenerate: `pnpm swarm:freeze`. Numbers (free claims, Actions, worktrees) go bad in hours. Prefer live `pnpm wt:gc` over any apply line printed here.',
+  );
+  lines.push('');
   lines.push('**Do not hand-edit.** Regenerate: `pnpm swarm:freeze` (also rewrites R00–R02 + DASHBOARD) or `pnpm swarm:report`');
   lines.push('');
   lines.push(`- **Tip:** \`${m.tip}\` — ${m.tipSubject}`);
