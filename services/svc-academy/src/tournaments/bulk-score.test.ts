@@ -32,6 +32,29 @@ describe('tournament L3 bulk score (no prizes)', () => {
     expect(validateBulkScoreWrite({ seasonStatus: 'live', seasonId: 's1', patches: [] }).status).toBe('refuse');
   });
 
+  it('refuses live season after endsAt when calendar bounds provided', () => {
+    const refused = validateBulkScoreWrite({
+      seasonStatus: 'live',
+      seasonId: 's1',
+      startsAt: new Date('2026-08-01T00:00:00.000Z'),
+      endsAt: new Date('2026-08-31T00:00:00.000Z'),
+      now: new Date('2026-09-01T00:00:00.000Z'),
+      patches: [{ userId: 'u', score: 10 }],
+    });
+    expect(refused).toMatchObject({ status: 'refuse', reason: 'season_not_live' });
+    expect(refused.status === 'refuse' && refused.message).toMatch(/calendar window/i);
+
+    const ok = validateBulkScoreWrite({
+      seasonStatus: 'live',
+      seasonId: 's1',
+      startsAt: new Date('2026-08-01T00:00:00.000Z'),
+      endsAt: new Date('2026-08-31T00:00:00.000Z'),
+      now: new Date('2026-08-15T00:00:00.000Z'),
+      patches: [{ userId: 'u', score: 10 }],
+    });
+    expect(ok.status).toBe('ok');
+  });
+
   it('refuses duplicate user and bad score', () => {
     expect(
       validateBulkScoreWrite({
