@@ -998,6 +998,53 @@ if (!available) {
       expect(await auth.kycTier(session.userId)).toBe('none');
     });
 
+    it('reject writes the operator on the row and still grants nothing', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      const rejected = await auth.rejectKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+      expect(rejected.status).toBe('rejected');
+      expect(rejected.reviewedBy).toBe(operator.userId);
+      expect(rejected.reviewedAt).toBeInstanceOf(Date);
+      expect(await auth.kycTier(session.userId)).toBe('none');
+
+      // Re-reject is a no-op (same stamps), not a second write.
+      const again = await auth.rejectKycRecord({ recordId: submitted.id, reviewerId: 'other-op' });
+      expect(again.reviewedBy).toBe(operator.userId);
+      expect(again.reviewedAt?.getTime()).toBe(rejected.reviewedAt?.getTime());
+    });
+
+    it('after reject, a new submit can open a fresh pending without touching the old row', async () => {
+      const session = await register();
+      const operator = await register();
+      const first = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.rejectKycRecord({ recordId: first.id, reviewerId: operator.userId });
+
+      const second = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      expect(second.id).not.toBe(first.id);
+      expect(second.status).toBe('pending');
+      expect(await auth.kycTier(session.userId)).toBe('none');
+
+      const rows = await db.sql<Array<{ id: string; status: string }>>`
+        SELECT id, status FROM kyc_records WHERE user_id = ${session.userId} ORDER BY created_at
+      `;
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.status).sort()).toEqual(['pending', 'rejected']);
+    });
+
+    it('refuses to reject an already-approved record', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      await expect(auth.rejectKycRecord({ recordId: submitted.id, reviewerId: operator.userId })).rejects.toMatchObject({
+        code: 'auth.kyc_not_pending',
+      });
+      expect(await auth.kycTier(session.userId)).toBe('basic');
+    });
+
     it('refuses an unknown record rather than creating one', async () => {
       await expect(auth.approveKycRecord({ recordId: '00000000-0000-4000-8000-000000000000', reviewerId: 'op' })).rejects.toMatchObject({
         code: 'auth.not_found',
