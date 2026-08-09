@@ -95,11 +95,12 @@ describe('tournament L3 bulk score (no prizes)', () => {
   });
 
   it('L3 bulkAcceptedCount + bulkRefuseReason without invent', () => {
-    const bad = validateBulkScoreWrite({ seasonStatus: 'frozen', patches: [{ userId: 'a', score: 1 }] });
+    const bad = validateBulkScoreWrite({ seasonStatus: 'frozen', seasonId: 's1', patches: [{ userId: 'a', score: 1 }] });
     expect(bulkAcceptedCount(bad)).toBe(0);
     expect(bulkRefuseReason(bad)).not.toBeNull();
     const ok = validateBulkScoreWrite({
       seasonStatus: 'live',
+      seasonId: 's1',
       patches: [
         { userId: 'a', score: 1 },
         { userId: 'b', score: 2 },
