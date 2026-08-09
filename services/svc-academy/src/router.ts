@@ -35,12 +35,7 @@ import {
   type PublishedFill,
 } from './paper/simulated-result.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
-import {
-  decidePrizeIntent,
-  isPrizeRefuseClosed,
-  prizeRefuseStatusLine,
-  type PrizeIntentKind,
-} from './tournaments/prize-refuse.js';
+import { decidePrizeIntent, isPrizeRefuseClosed, prizeRefuseStatusLine, type PrizeIntentKind } from './tournaments/prize-refuse.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
