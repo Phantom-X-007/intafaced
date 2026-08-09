@@ -23,9 +23,7 @@ export const PAYOUT_DESTINATION_KINDS: Readonly<Record<string, readonly string[]
   'bank-payout': ['bank'],
 };
 
-export type DestinationKindErrorCode =
-  | 'pay.destination_kind_mismatch'
-  | 'pay.invalid_destination_ref';
+export type DestinationKindErrorCode = 'pay.destination_kind_mismatch' | 'pay.invalid_destination_ref';
 
 export class DestinationKindError extends Error {
   readonly code: DestinationKindErrorCode;
@@ -106,9 +104,7 @@ export function assertPayoutDestinationKind(railId: string, destination: { kind:
     throw new DestinationKindError(`Rail ${railId} has no declared payout destination kinds — refuse closed`);
   }
   if (!allowed.includes(kind)) {
-    throw new DestinationKindError(
-      `Rail ${railId} cannot pay out to destination kind '${kind}' (accepted: ${allowed.join(', ')})`,
-    );
+    throw new DestinationKindError(`Rail ${railId} cannot pay out to destination kind '${kind}' (accepted: ${allowed.join(', ')})`);
   }
   assertDestinationShape(kind, ref);
 }

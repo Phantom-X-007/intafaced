@@ -530,7 +530,11 @@ describe('authority', () => {
   it('does not let a refunder move a settlement out of the book', async () => {
     const api = await caller(['pay:refund']);
     await expect(
-      api.settlement.payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'GB82WEST12345698765432' } }),
+      api.settlement.payout({
+        settlementId: SETTLEMENT,
+        railId: 'card-sandbox',
+        destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
+      }),
     ).rejects.toThrow(/pay:payout/);
   });
 

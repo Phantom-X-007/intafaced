@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  assertPayoutDestinationKind,
-  DestinationKindError,
-  isEvmAddressRef,
-  isIbanRef,
-} from './payout-destination.js';
+import { assertPayoutDestinationKind, DestinationKindError, isEvmAddressRef, isIbanRef } from './payout-destination.js';
 
 /** Well-known structural-valid fixtures (not real accounts). */
 const EVM = '0x000000000000000000000000000000000000dEaD';

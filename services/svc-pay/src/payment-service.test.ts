@@ -1156,7 +1156,11 @@ if (!available) {
 
       await sql`UPDATE pay.settlements SET status = 'pending' WHERE id = ${settlement.id}`;
       await expect(
-        pay.payoutSettlement({ settlementId: settlement.id, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'GB82WEST12345698765432' } }),
+        pay.payoutSettlement({
+          settlementId: settlement.id,
+          railId: 'card-sandbox',
+          destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
+        }),
       ).rejects.toMatchObject({ code: 'pay.invalid_transition' });
     });
 
