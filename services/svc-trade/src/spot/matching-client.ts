@@ -114,10 +114,51 @@ export interface EngineDepth {
   readonly sequence: number;
 }
 
+/**
+ * Caller's view of one order for `POST /reconcile` (svc-matching wire shape).
+ * Declared here so trade never imports matching source (§15.2).
+ */
+export type CounterpartOrderState = 'pending' | 'open' | 'terminal';
+
+export interface CounterpartOrder {
+  readonly orderId: string;
+  readonly marketId: string;
+  readonly state: CounterpartOrderState;
+  /** Decimal string. */
+  readonly remaining: string;
+  /** Live hold > 0 — asserted by trade from ledger, never computed by engine. */
+  readonly funded: boolean;
+  readonly detail?: string;
+}
+
+export type ReconcileVerdict = 'clean' | 'auto' | 'refuse';
+
+export interface ReconcileFinding {
+  readonly orderId: string;
+  readonly case: string;
+  readonly verdict: ReconcileVerdict;
+  readonly engine: string;
+  readonly counterpart: string;
+  readonly reason: string;
+}
+
+export interface ReconcileReport {
+  readonly checked: number;
+  readonly agreed: number;
+  readonly findings: readonly ReconcileFinding[];
+  readonly refusals: number;
+  readonly ok: boolean;
+}
+
 export interface MatchingClient {
   submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult>;
   cancel(marketId: string, orderId: string): Promise<EngineCancelResult>;
   depth(marketId: string, limit?: number): Promise<EngineDepth>;
+  /**
+   * Non-destructive engine↔counterpart compare. Service-auth only.
+   * Returns 200 with `ok: false` on refusals — that is a report, not an outage.
+   */
+  reconcile(orders: readonly CounterpartOrder[]): Promise<ReconcileReport>;
 }
 
 export class MatchingUnavailableError extends Error {
@@ -235,6 +276,19 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       }
 
       return (await response.json()) as EngineDepth;
+    },
+
+    /**
+     * Scheduled / operator sweep. Body is the trade-side counterpart view;
+     * engine compares against resting books and writes nothing.
+     */
+    async reconcile(orders) {
+      const payload = JSON.stringify({ orders });
+      return call<ReconcileReport>('/reconcile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...authHeaders(payload) },
+        body: payload,
+      });
     },
   };
 }

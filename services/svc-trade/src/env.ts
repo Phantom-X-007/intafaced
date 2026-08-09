@@ -281,6 +281,20 @@ const schema = serviceEnvSchema
       TRADE_CANDLE_JOBS_TIMEFRAMES: z.string().default('1m'),
 
       /**
+       * Engine ↔ ledger reconcile sweep (A10 / ENGINE-LEDGER-RECONCILE-HANDOFF).
+       * Default OFF — builds counterpart view from trade.orders + hold balances,
+       * POSTs matching `/reconcile`, alerts on refuse, auto-deletes only
+       * unfunded pending. Never releases funded missing silently.
+       */
+      TRADE_RECONCILE_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** Reconcile sweep interval when enabled. Default 60s. */
+      TRADE_RECONCILE_JOBS_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
+
+      /**
        * OTC RFQ desk law (trade.otc / D-S-02). JSON or empty.
        *
        * Empty (default) = unpublished → refuse-closed. Never invent spread bps,

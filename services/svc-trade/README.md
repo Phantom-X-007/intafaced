@@ -195,6 +195,23 @@ await trade.reconcileOrder(orderId);
 // tests: src/spot/order-route-reconcile.test.ts
 ```
 
+### Scheduled engine ↔ ledger reconcile (A10)
+
+Default **OFF**. Builds the counterpart view from `trade.orders` (open/pending) + **live** hold balances, POSTs matching `POST /reconcile`, and:
+
+| Engine finding                         | Local action                              |
+| -------------------------------------- | ----------------------------------------- |
+| **refuse** (incl. open+hold no engine) | **write nothing** — warn log / alert only |
+| **auto** unfunded **pending**          | DELETE intent row only (moves no value)   |
+
+Does **not** call `reconcileOrder` (which still releases on open+hold no engine — operator single-order tool; handoff flags that risk). Env: `TRADE_RECONCILE_JOBS_ENABLED`, `TRADE_RECONCILE_JOBS_INTERVAL_MS`.
+
+```ts
+// pure + tick: src/spot/engine-ledger-reconcile.ts
+// job host:   src/spot/engine-ledger-reconcile-jobs.ts
+// tests:      src/spot/engine-ledger-reconcile.test.ts
+```
+
 ### Order-path smoke (Spec CX-8)
 
 Assembled health probe (trade + matching + ledger HTTP):
