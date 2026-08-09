@@ -28,6 +28,10 @@ export type AcademyErrorCode =
   | 'academy.curriculum_not_found'
   /** Spatial scene failed Stage-1 schema / size gate. */
   | 'academy.scene_invalid'
+  /** Concurrent host write — stale fingerprint. */
+  | 'academy.scene_conflict'
+  /** Duplicate avatar / participant / prop id in scene write. */
+  | 'academy.scene_presence_collision'
   /** Ambassador programme Stage-1. */
   | 'academy.ambassador_not_found'
   | 'academy.ambassador_already_active'
@@ -90,6 +94,8 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.host_rights_unavailable',
   'academy.curriculum_not_found',
   'academy.scene_invalid',
+  'academy.scene_conflict',
+  'academy.scene_presence_collision',
   'academy.ambassador_not_found',
   'academy.ambassador_already_active',
   'academy.ambassador_already_frozen',
