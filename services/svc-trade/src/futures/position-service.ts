@@ -730,6 +730,32 @@ export class PositionService {
          */
         const previous = readAcceptedMark(row);
 
+        /**
+         * CLOSING SETTLES AT FREEZE-TIME `accepted_mark` (Denon handoff 2026-08-09
+         * §§3–4; ADR 2026-08-07 property 2).
+         *
+         * A `closing` row means the trader already asked to leave while the feed
+         * was dark. Charging (or paying) the move that happened during our outage
+         * is mark-driven loss/gain after exit. The current mark only *triggers*
+         * settlement (feed is usable again); the exit price is the last basis we
+         * already accepted on this position. Fail closed if that basis is missing
+         * (pre-0007 rows) rather than inventing a price from the fresh mark.
+         */
+        const settlingFromClosing = row.status === 'closing';
+        let exitPrice: string;
+        if (settlingFromClosing) {
+          if (row.accepted_mark == null || row.accepted_mark.trim() === '') {
+            throw new FuturesError(
+              'closing position has no accepted_mark to settle at — refuse invent from current mark',
+              'trade.closing_basis_missing',
+              503,
+            );
+          }
+          exitPrice = formatAmount(parseAmount(row.accepted_mark));
+        } else {
+          exitPrice = formatAmount(mark.price);
+        }
+
         const plan = planClose({
           // STABLE, not per attempt. See the header — this is half the fix.
           closeId: closeIdFor(row.id),
@@ -742,7 +768,7 @@ export class PositionService {
             margin: parseAmount(row.margin_current ?? row.margin_initial),
             marginAsset: row.margin_asset,
           },
-          exitPrice: formatAmount(mark.price),
+          exitPrice,
         });
         if (!plan.close) {
           throw new FuturesError(`cannot close: ${plan.reason}`, 'trade.close_refused', 400);
@@ -750,8 +776,13 @@ export class PositionService {
 
         if (plan.profit > 0n) {
           // Money is about to leave the platform on the strength of this mark, so it
-          // has to be a mark we would seize on.
-          this.requirePayoutGrade(mark, previous, at);
+          // has to be a mark we would seize on — except when settling from
+          // `closing` at freeze-time accepted_mark: that basis was already gated
+          // when stored, and the current mid-gap mark must not re-price the exit
+          // (breaker trap / dark-period charge — Denon §§3–4).
+          if (!settlingFromClosing) {
+            this.requirePayoutGrade(mark, previous, at);
+          }
 
           /**
            * NO NAMED POT, NO PAYOUT. The deployment never chose an account for
@@ -824,6 +855,8 @@ export class PositionService {
          * basis only ever moves to a mark the platform actually settled on.
          *
          * Settling from `closing` clears `closing_reason` with the status write.
+         * `accepted_mark` records the exit we actually settled at (freeze basis
+         * when closing; current mark on ordinary open→closed).
          */
         const [closed] = await tx<PositionRow[]>`
           UPDATE trade.positions p
@@ -831,7 +864,7 @@ export class PositionService {
               closed_at = now(),
               updated_at = now(),
               closing_reason = NULL,
-              accepted_mark = ${formatAmount(mark.price)},
+              accepted_mark = ${exitPrice},
               accepted_mark_at = ${at}
           FROM trade.markets m
           WHERE p.id = ${positionId}

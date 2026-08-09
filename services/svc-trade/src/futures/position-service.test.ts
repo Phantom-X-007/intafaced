@@ -409,8 +409,9 @@ if (!available) {
   });
 
   /**
-   * Settlement at mark return — through the ordinary close path, bound, and
-   * armed breaker. Asserted on BALANCES, not status codes alone.
+   * Settlement at mark return — feed return is the trigger; exit price is the
+   * freeze-time accepted_mark (Denon handoff §§3–4). Asserted on BALANCES.
+   * A better mark while we were dark must NOT mint post-exit profit.
    */
   it('settles a closing position when the mark returns — balances move once', async () => {
     feed('50000');
@@ -427,15 +428,47 @@ if (!available) {
     await positions.close(ALICE, pos.id!);
     expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
 
+    // Better mark during outage — must not pay 1000 of post-exit profit.
     feed('51000');
     await positions.close(ALICE, pos.id!);
-    // 100000 - 5000 + 5000 + 1000 profit
-    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('101000');
-    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('9000');
+    // Margin back only: 100000 − 5000 + 5000, freeze basis = entry → flat.
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('100000');
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000');
     expect(await positions.listOpen(ALICE)).toEqual([]);
   });
 
-  it('settlement from closing still arms the deviation breaker against accepted_mark', async () => {
+  /**
+   * Denon handoff §3 reproduction: worse mark while closing must not charge
+   * the dark-period move. Exit = freeze accepted_mark, not live mark.
+   */
+  it('a closing position is not charged a worse mark that arrived during the outage', async () => {
+    feed('100');
+    await fundProfitSource('10000');
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-closing-worse',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('10'),
+    });
+    // margin = 100 (notional 1000 / lev 10). available after open = 99900.
+    marks.clear(MARKET);
+    await positions.close(ALICE, pos.id!);
+    expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
+
+    // 15% crash entirely while dark — live settle would charge 150; freeze settle = flat.
+    feed('85');
+    await positions.close(ALICE, pos.id!);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('100000');
+  });
+
+  /**
+   * Denon handoff §4: breaker trap dissolves — settling at freeze basis means
+   * there is no deviation to breach, so a huge return mark cannot trap the exit.
+   */
+  it('settlement from closing uses freeze accepted_mark so a breaker-sized return mark cannot trap', async () => {
     feed('100');
     await fundProfitSource('10000000');
     const pos = await positions.open({
@@ -448,14 +481,15 @@ if (!available) {
     });
     marks.clear(MARKET);
     await positions.close(ALICE, pos.id!);
-
-    // 100x jump — inside payout grade quality/freshness but past maxDeviationBps.
-    feed('10000');
-    await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.mark_unusable' });
     expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
+
+    // 100x jump — would refuse if we re-priced against accepted_mark. Freeze settle exits flat.
+    feed('10000');
+    await positions.close(ALICE, pos.id!);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+    // No profit minted from the jump; pot untouched.
     expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000000');
   });
-
   /**
    * The asymmetry, in the close path. A `last` mark is fine to show and not
    * fine to pay on — but it must not trap a trader in a losing position either.
