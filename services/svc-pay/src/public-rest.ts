@@ -195,7 +195,8 @@ const captureBodySchema = {
   additionalProperties: false,
   properties: {
     amount: {
-      description: 'Optional partial capture as a decimal string. Omit to capture the full authorized amount. Never a JSON number.',
+      description:
+        'Optional amount as a decimal string. If present, must equal the full authorized amount — partial capture is not supported (`pay.partial_capture_unsupported`). Omit to capture the full authorization. Never a JSON number.',
     },
   },
 } as const;
