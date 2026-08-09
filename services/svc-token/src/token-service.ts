@@ -8,6 +8,7 @@ import {
   rewardsEngine,
   burnAccount,
   houseFees,
+  InsufficientFundsError,
   type Amount,
   type LedgerClient,
 } from '@intafaced/ledger-client';
@@ -44,6 +45,12 @@ export class TokenError extends Error {
       | 'token.stake_locked'
       | 'token.stake_closed'
       | 'token.stake_conflict'
+      /**
+       * Ledger post landed (or may have) but the pending claim row is gone —
+       * post-without-claim. Caller must not invent a second stakeId; reconcile
+       * or retry is the recovery path, not a silent "active" return.
+       */
+      | 'token.stake_claim_missing'
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
@@ -228,9 +235,14 @@ export class TokenService {
    *   claim without funding cannot create an unfunded obligation.
    * - Ledger post is idempotent on `stakeId`; retry after a crash mid-flight
    *   re-posts (no-op) and activates.
-   * - If the ledger refuses (insufficient funds), the pending row is deleted
-   *   so we leave no stake record behind — same guarantee the old ledger-first
-   *   path advertised, without the crash window of "money moved, no row".
+   * - If the ledger **confirms** a refuse (insufficient funds), the pending
+   *   row is deleted so we leave no stake record behind — same guarantee the
+   *   old ledger-first path advertised, without the crash window of
+   *   "money moved, no row".
+   * - Ambiguous ledger failures (timeout, transport error after apply) must
+   *   **leave** the pending claim. Deleting on every catch creates
+   *   post-without-claim: principal locked in the stake account with no row
+   *   to unstake. The same stakeId retry is the recovery path (M-02).
    */
   async stake(input: { userId: string; amount: Amount; tier: StakeTier; stakeId?: string }): Promise<StakeRecord> {
     const stakeId = input.stakeId ?? crypto.randomUUID();
@@ -270,35 +282,66 @@ export class TokenService {
             }),
           );
         } catch (err) {
-          await this.sql`
-            DELETE FROM token.stakes WHERE id = ${claimed.id} AND status = 'pending'
-          `;
+          // Delete only on confirmed insufficient funds. Any other error may
+          // have applied under `token.stake:${id}` — keep the pending row so
+          // retry activates (M-02) instead of orphaning principal.
+          if (err instanceof InsufficientFundsError) {
+            await this.sql`
+              DELETE FROM token.stakes WHERE id = ${claimed.id} AND status = 'pending'
+            `;
+          }
           throw err;
         }
 
-        await this.sql`
+        const activated = await this.sql<
+          Array<{
+            id: string;
+            user_id: string;
+            amount: string;
+            tier: StakeTier;
+            started_at: Date;
+            unlocks_at: Date | null;
+            status: string;
+          }>
+        >`
           UPDATE token.stakes SET status = 'active' WHERE id = ${claimed.id} AND status = 'pending'
+          RETURNING id, user_id, amount, tier, started_at, unlocks_at, status
         `;
+
+        if (!activated[0]) {
+          // Concurrent activate won, or the claim was deleted under us.
+          // Never invent status:'active' for a missing row.
+          const existing = await this.getStake(claimed.id);
+          if (existing && (existing.status === 'active' || existing.status === 'unstaking' || existing.status === 'closed')) {
+            return existing;
+          }
+          throw new TokenError(
+            `Stake claim ${claimed.id} vanished after the ledger post — principal may still be in the stake account; retry the same stakeId or reconcile, do not invent a new claim`,
+            'token.stake_claim_missing',
+          );
+        }
+
+        const row = activated[0];
 
         await this.bus.publish(
           'stakeCreated',
           {
-            stakeId: claimed.id,
-            userId: claimed.userId,
-            amount: formatAmount(claimed.amount),
-            tier: claimed.tier,
-            unlocksAt: claimed.unlocksAt?.toISOString() ?? null,
+            stakeId: row.id,
+            userId: row.user_id,
+            amount: formatAmount(parseAmount(row.amount)),
+            tier: row.tier,
+            unlocksAt: row.unlocks_at?.toISOString() ?? null,
           },
-          { idempotencyKey: `token.stake:${claimed.id}` },
+          { idempotencyKey: `token.stake:${row.id}` },
         );
 
         return {
-          id: claimed.id,
-          userId: claimed.userId,
-          amount: claimed.amount,
-          tier: claimed.tier,
-          startedAt: claimed.startedAt,
-          unlocksAt: claimed.unlocksAt,
+          id: row.id,
+          userId: row.user_id,
+          amount: parseAmount(row.amount),
+          tier: row.tier,
+          startedAt: row.started_at,
+          unlocksAt: row.unlocks_at,
           status: 'active' as const,
         };
       },
@@ -672,12 +715,12 @@ export class TokenService {
    * own tests: no cron, no bus subscriber, no admin form. It runs when a human
    * holding admin:treasury + MFA calls the tRPC mutation, and otherwise never.
    *
-   * `input.sources` is therefore trusted operator input. The router validates
-   * decimal shape only; nothing here compares the claimed amount against the
-   * `houseFees` balance it says it is sweeping, so an operator can under-sweep,
-   * over-sweep or invent a windowId (audit T-03). The maths below is exact and
-   * the postings are correct — the number they are exact ABOUT is typed by a
-   * person. Describe this as an operator settlement, never as a flywheel.
+   * `input.sources` is still operator-typed (the aggregation job that *builds*
+   * sources from pots is the socket). On **first claim** each named amount is
+   * bound to the live `houseFees` pot — over-claim refuses as
+   * `token.yield_source_underfunded` before the window header (#1353 / T-03).
+   * Under-claim (leaving fees in the pot) stays allowed as a deliberate
+   * partial window. Describe this as an operator settlement, never as a flywheel.
    *
    * Each payout is its OWN ledger transaction keyed on (window, user), so a
    * crash halfway through is resumable: re-running pays only whoever was

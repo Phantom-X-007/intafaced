@@ -158,13 +158,14 @@ export const emissionEpochs = token.table('emission_epochs', {
  * One recorded burn cycle (§4.3 calls this buyback-and-burn).
  *
  * WHAT A ROW ACTUALLY MEANS TODAY. §4.3 specifies "structural, scheduled" —
- * a market-buy of revenue on the internal book, then a split. Neither half is
- * built. `tokens_bought` is a figure an operator types into `recordBuyback`
- * (router.ts:346), `revenue_total` is an unvalidated jsonb blob from the same
- * caller, and the only ledger movement the write causes is the burn leg debited
- * out of the rewards engine. Nothing is purchased, so a row here is an operator
- * assertion with a burn attached, not evidence of buy pressure. §13 socket
- * `token.buyback`.
+ * a market-buy of revenue on the internal book, then a split. The purchase half
+ * is not built. `tokens_bought` is a figure an operator types into
+ * `recordBuyback`; `revenue_total` is operator-supplied but **validated** as
+ * assetId → unsigned decimal strings before claim (not a free jsonb blob).
+ * The only ledger movement the write causes is the burn leg debited out of the
+ * rewards engine. Nothing is purchased, so a row here is an operator assertion
+ * with a burn attached, not evidence of buy pressure. Window claim happens
+ * before the burn (0002). §13 socket `token.buyback`.
  *
  * The columns still reconcile against the postings the burn caused (§4.4 exit
  * criteria) — that part holds. What they do not evidence is a buyback.

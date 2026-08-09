@@ -98,6 +98,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.stake_locked':
       case 'token.stake_closed':
       case 'token.stake_conflict':
+      case 'token.stake_claim_missing':
       case 'token.epoch_closed':
       case 'token.supply_exhausted':
       case 'token.nothing_to_distribute':
@@ -303,14 +304,15 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     //  - Nothing calls either one. No cron, no bus subscriber, no admin form.
     //    A human with admin:treasury + MFA invokes them by hand or they never
     //    run at all.
-    //  - Every figure they act on is typed by that human. `sources[].amount` is
-    //    validated for decimal SHAPE only — no code reads the houseFees balance
-    //    it claims to sweep (audit T-03) — and `tokensBought` is asserted, not
-    //    executed, because no market-buy exists in this or any other service.
+    //  - `sources[].amount` is still operator-typed (aggregation job is the
+    //    socket), but first-claim amounts are bound to live houseFees — over-
+    //    claim refuses `token.yield_source_underfunded` (#1353). `tokensBought`
+    //    is asserted, not executed — no market-buy exists. `revenueTotal` is
+    //    validated as assetId → unsigned decimals before the buyback claim.
     //
     // The maths and the ledger recipes underneath are real and tested; the
-    // automation and the input validation are the missing halves. §13 sockets
-    // `token.yield` and `token.buyback`.
+    // missing half is automation / real purchase, not pot bind or burn order.
+    // §13 sockets `token.yield` and `token.buyback`.
 
     distributeRevenue: scopedProcedure('admin:treasury')
       .input(
