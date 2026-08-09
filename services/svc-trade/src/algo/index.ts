@@ -2,9 +2,17 @@
  * Algo module public surface (D-S-04 TWAP Stage).
  * Reachability: imported by TradeService + router.
  */
-export { TwapEngine, type TwapEnginePorts, type PlaceChildRequest, type PlaceChildResult, type SliceTickResult } from './twap-engine.js';
+export {
+  TwapEngine,
+  projectTwapEndsAt,
+  type TwapEnginePorts,
+  type PlaceChildRequest,
+  type PlaceChildResult,
+  type SliceTickResult,
+} from './twap-engine.js';
 export { planTwapSlices, type TwapSlicePlan } from './schedule.js';
 export { SqlTwapParentStore, MemoryTwapParentStore, type TwapParentStore, type TwapParentRecord } from './parent-store.js';
+export { startAlgoJobs, type AlgoJobsConfig, type AlgoJobsDeps, type AlgoJobsHandle } from './algo-jobs.js';
 export {
   acceptableForAlgo,
   algoMarkMissing,
@@ -24,4 +32,5 @@ export type {
   AlgoChildRef,
   AlgoStatus,
   AlgoKind,
+  AlgoScheduleStretchReason,
 } from './types.js';

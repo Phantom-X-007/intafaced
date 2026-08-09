@@ -1,7 +1,7 @@
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { OrderSide } from '../spot/types.js';
-import type { AlgoChildRef, AlgoMiss, AlgoStatus, TwapParent } from './types.js';
+import type { AlgoChildRef, AlgoMiss, AlgoScheduleStretchReason, AlgoStatus, TwapParent } from './types.js';
 
 /**
  * Durable TWAP parent schedule store (D-S-04 residual after #1002).
@@ -93,6 +93,11 @@ function planFromJson(raw: unknown): Amount[] {
   return raw.map((s) => parseAmount(String(s)));
 }
 
+function stretchFromRow(raw: unknown): AlgoScheduleStretchReason | null {
+  if (raw === 'user_pause' || raw === 'tick_outage') return raw;
+  return null;
+}
+
 export class SqlTwapParentStore implements TwapParentStore {
   constructor(private readonly sql: Sql) {}
 
@@ -102,7 +107,8 @@ export class SqlTwapParentStore implements TwapParentStore {
       INSERT INTO algo_parents (
         id, user_id, sub_account_id, market_id, symbol, side, kind,
         total_qty, duration_ms, slice_interval_ms, limit_price,
-        status, created_at, started_at, paused_at, halt_reason,
+        status, created_at, started_at, next_due_at, projected_ends_at,
+        schedule_stretch_reason, paused_at, halt_reason,
         slices_planned, next_slice_index, plan_slices, children, misses, updated_at
       ) VALUES (
         ${p.id},
@@ -119,6 +125,9 @@ export class SqlTwapParentStore implements TwapParentStore {
         ${p.status},
         ${p.createdAt},
         ${p.startedAt},
+        ${p.nextDueAt},
+        ${p.projectedEndsAt},
+        ${p.scheduleStretchReason},
         ${p.pausedAt},
         ${p.haltReason},
         ${p.slicesPlanned},
@@ -133,6 +142,9 @@ export class SqlTwapParentStore implements TwapParentStore {
         paused_at = EXCLUDED.paused_at,
         halt_reason = EXCLUDED.halt_reason,
         next_slice_index = EXCLUDED.next_slice_index,
+        next_due_at = EXCLUDED.next_due_at,
+        projected_ends_at = EXCLUDED.projected_ends_at,
+        schedule_stretch_reason = EXCLUDED.schedule_stretch_reason,
         plan_slices = EXCLUDED.plan_slices,
         children = EXCLUDED.children,
         misses = EXCLUDED.misses,
@@ -164,6 +176,15 @@ export class SqlTwapParentStore implements TwapParentStore {
 }
 
 function rowToRecord(row: Record<string, unknown>): TwapParentRecord {
+  const startedAt = new Date(String(row.started_at));
+  const durationMs = Number(row.duration_ms);
+  const sliceIntervalMs = Number(row.slice_interval_ms);
+  const nextSliceIndex = Number(row.next_slice_index);
+  // Pre-migration rows: derive nextDueAt the old (broken) way only as a hydrate
+  // fallback — engine re-spaces on the next place/miss/resume/outage event.
+  const nextDueAt = row.next_due_at ? new Date(String(row.next_due_at)) : new Date(startedAt.getTime() + nextSliceIndex * sliceIntervalMs);
+  const projectedEndsAt = row.projected_ends_at ? new Date(String(row.projected_ends_at)) : new Date(startedAt.getTime() + durationMs);
+
   const parent: TwapParent = {
     id: String(row.id),
     userId: String(row.user_id),
@@ -173,16 +194,19 @@ function rowToRecord(row: Record<string, unknown>): TwapParentRecord {
     side: row.side as OrderSide,
     kind: 'twap',
     totalQty: parseAmount(String(row.total_qty)),
-    durationMs: Number(row.duration_ms),
-    sliceIntervalMs: Number(row.slice_interval_ms),
+    durationMs,
+    sliceIntervalMs,
     limitPrice: row.limit_price === null || row.limit_price === undefined ? null : parseAmount(String(row.limit_price)),
     status: row.status as AlgoStatus,
     createdAt: new Date(String(row.created_at)),
-    startedAt: new Date(String(row.started_at)),
+    startedAt,
+    nextDueAt,
+    projectedEndsAt,
+    scheduleStretchReason: stretchFromRow(row.schedule_stretch_reason),
     pausedAt: row.paused_at ? new Date(String(row.paused_at)) : null,
     haltReason: row.halt_reason === null || row.halt_reason === undefined ? null : String(row.halt_reason),
     slicesPlanned: Number(row.slices_planned),
-    nextSliceIndex: Number(row.next_slice_index),
+    nextSliceIndex,
     children: childrenFromJson(row.children),
     misses: missesFromJson(row.misses),
   };

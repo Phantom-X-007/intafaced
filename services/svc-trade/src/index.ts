@@ -22,6 +22,7 @@ import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
+import { startAlgoJobs } from './algo/algo-jobs.js';
 import { checkEngineSequences, describeRegressions } from './spot/sequence-guard.js';
 import { parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -239,6 +240,18 @@ const mmSeedJobs = startMmSeedJobs({
   },
 });
 
+// TWAP scheduler — default OFF. Until this runs, a created schedule persists
+// and never places a child; `tickAllAlgos` had no caller at all before it.
+// ADR 2026-08-08 re-space + cancel honesty land with this mount.
+const algoJobs = startAlgoJobs({
+  trade,
+  config: {
+    enabled: env.TRADE_ALGO_JOBS_ENABLED,
+    intervalMs: env.TRADE_ALGO_JOBS_INTERVAL_MS,
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'algo job tick failed'),
+});
+
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async (_req, reply) => {
@@ -373,6 +386,8 @@ app.log.info(
     candleJobs: candleJobs.host.list(),
     mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
     mmSeedJobs: mmSeedJobs.host.list(),
+    algoJobsEnabled: env.TRADE_ALGO_JOBS_ENABLED,
+    algoJobs: algoJobs.host.list(),
     trpc: true,
     publicRest: [
       '/api/v1/markets',
@@ -409,6 +424,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       futuresJobs.stop();
       candleJobs.stop();
       mmSeedJobs.stop();
+      algoJobs.stop();
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
       await bus.close();

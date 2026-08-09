@@ -2,7 +2,15 @@ import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { TradeError, type OrderSide } from '../spot/types.js';
 import { acceptableForAlgo, algoMarkMissing, withinPriceBand, type AlgoMarkPolicy, DEFAULT_ALGO_MARK_POLICY } from './mark-gate.js';
 import { planTwapSlices } from './schedule.js';
-import type { AlgoChildRef, AlgoMiss, AlgoMissCode, AlgoQuotedMark, CreateTwapInput, TwapParent } from './types.js';
+import type {
+  AlgoChildRef,
+  AlgoMiss,
+  AlgoMissCode,
+  AlgoQuotedMark,
+  AlgoScheduleStretchReason,
+  CreateTwapInput,
+  TwapParent,
+} from './types.js';
 
 /**
  * TWAP engine (D-S-04 v1) — schedule that emits child orders.
@@ -11,8 +19,12 @@ import type { AlgoChildRef, AlgoMiss, AlgoMissCode, AlgoQuotedMark, CreateTwapIn
  * injected `placeChild` port (TradeService.placeOrder in production).
  *
  * Cancel disposition (pinned): cancel in-flight children via `cancelChild`.
+ * Status flips to cancelled only after every child cancel succeeds.
+ *
  * Pause disposition (pinned): emit no further children; resume does not
- * re-run elapsed slices.
+ * re-run elapsed slices. Overdue slices re-space from the resume/outage
+ * instant (ADR 2026-08-08): never more than one slice per sliceIntervalMs;
+ * overdue work extends the schedule rather than bursting.
  */
 
 export interface PlaceChildRequest {
@@ -65,6 +77,11 @@ export type SliceTickResult =
   | { readonly kind: 'halted'; readonly reason: string; readonly code: AlgoMissCode }
   | { readonly kind: 'idle'; readonly reason: 'paused' | 'cancelled' | 'completed' | 'halted' | 'ahead_of_schedule' }
   | { readonly kind: 'completed' };
+
+/** Projected end from an event instant + remaining slice count (ADR formula). */
+export function projectTwapEndsAt(fromMs: number, remainingSlices: number, sliceIntervalMs: number): Date {
+  return new Date(fromMs + remainingSlices * sliceIntervalMs);
+}
 
 export class TwapEngine {
   private readonly parents = new Map<string, TwapParent>();
@@ -140,6 +157,9 @@ export class TwapEngine {
       status: 'active',
       createdAt: now,
       startedAt: now,
+      nextDueAt: now,
+      projectedEndsAt: projectTwapEndsAt(now.getTime(), plan.slices.length, input.sliceIntervalMs),
+      scheduleStretchReason: null,
       pausedAt: null,
       haltReason: null,
       slicesPlanned: plan.slices.length,
@@ -172,16 +192,36 @@ export class TwapEngine {
       throw new TradeError(`cannot resume algo in status ${parent.status}`, 'trade.algo_bad_state');
     }
     // Resume does NOT rewind nextSliceIndex — elapsed slices stay elapsed.
+    // Re-space from the resume instant (ADR 2026-08-08): overdue work extends
+    // the schedule; never catch up as a burst against startedAt.
+    const plan = this.plans.get(parentId);
+    if (!plan) throw new TradeError(`algo plan missing for ${parentId}`, 'trade.algo_not_found');
+
+    const now = this.ports.now();
+    const remaining = plan.length - parent.nextSliceIndex;
+    const projectedEndsAt = projectTwapEndsAt(now.getTime(), remaining, parent.sliceIntervalMs);
+    const spanMs = projectedEndsAt.getTime() - parent.startedAt.getTime();
+    if (spanMs > 2 * parent.durationMs) {
+      throw new TradeError(
+        `resume would more than double original duration (projected end ${projectedEndsAt.toISOString()}, started ${parent.startedAt.toISOString()}, durationMs ${parent.durationMs})`,
+        'trade.algo_resume_extends_too_far',
+      );
+    }
+
     return this.replace(parentId, {
       ...parent,
       status: 'active',
       pausedAt: null,
+      nextDueAt: now,
+      projectedEndsAt,
+      scheduleStretchReason: 'user_pause',
     });
   }
 
   /**
    * Cancel: no further children. In-flight children are cancelled (one
-   * disposition, every time).
+   * disposition, every time). Status → cancelled ONLY after every child
+   * cancel succeeds; a throw leaves the parent non-cancelled.
    */
   async cancel(userId: string, parentId: string): Promise<TwapParent> {
     const parent = this.requireOwner(userId, parentId);
@@ -190,8 +230,20 @@ export class TwapEngine {
       throw new TradeError('cannot cancel a completed algo', 'trade.algo_bad_state');
     }
 
-    for (const child of parent.children) {
-      await this.ports.cancelChild(child.orderId);
+    // Collect all child cancels before any status flip. A cancel that does not
+    // cancel is worse than a refused cancel — cancelChild must throw when an
+    // open child cannot be cancelled (principal missing, venue refuse, …).
+    const results = await Promise.allSettled(parent.children.map((child) => this.ports.cancelChild(child.orderId)));
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failures.length > 0) {
+      const first = failures[0]!.reason;
+      const message = first instanceof Error ? first.message : String(first);
+      throw new TradeError(
+        `algo cancel refused: ${failures.length} of ${parent.children.length} child cancel(s) failed — parent left ${parent.status}: ${message}`,
+        first instanceof TradeError && first.code === 'trade.algo_principal_unavailable'
+          ? 'trade.algo_principal_unavailable'
+          : 'trade.algo_child_cancel_failed',
+      );
     }
 
     return this.replace(parentId, {
@@ -223,77 +275,96 @@ export class TwapEngine {
     }
 
     const now = this.ports.now();
-    const dueAt = parent.startedAt.getTime() + parent.nextSliceIndex * parent.sliceIntervalMs;
-    if (now.getTime() < dueAt) {
+    // ADR 2026-08-08: due time is nextDueAt (re-spaced), never startedAt+index*interval.
+    if (now.getTime() < parent.nextDueAt.getTime()) {
       return { kind: 'idle', reason: 'ahead_of_schedule' };
     }
 
+    // Tick outage: active parent was overdue by more than one interval with no
+    // user pause. Record distinguishable stretch, then place at most one slice
+    // and re-space from this instant (same spacing rule as resume).
+    let working = parent;
+    const overdueBy = now.getTime() - parent.nextDueAt.getTime();
+    if (overdueBy > parent.sliceIntervalMs) {
+      const remaining = plan.length - parent.nextSliceIndex;
+      working = this.replace(parentId, {
+        ...parent,
+        scheduleStretchReason: 'tick_outage' satisfies AlgoScheduleStretchReason,
+        projectedEndsAt: projectTwapEndsAt(now.getTime(), remaining, parent.sliceIntervalMs),
+        // nextDueAt stays ≤ now so this tick may place; re-spaced after event.
+      });
+    }
+
     // Mark gate — blank/stale/invalid HALTS (D-S-04 refuse table).
-    const mark = await this.ports.markFor(parent.marketId);
+    const mark = await this.ports.markFor(working.marketId);
     if (!mark) {
-      const check = algoMarkMissing(parent.marketId);
-      return this.halt(parent, check.reason!, 'trade.algo_mark_missing');
+      const check = algoMarkMissing(working.marketId);
+      return this.halt(working, check.reason!, 'trade.algo_mark_missing');
     }
     const markOk = acceptableForAlgo(mark, now, this.markPolicy);
     if (!markOk.ok) {
       const code: AlgoMissCode = markOk.code === 'trade.algo_mark_missing' ? 'trade.algo_mark_missing' : 'trade.algo_mark_unusable';
-      return this.halt(parent, markOk.reason!, code);
+      return this.halt(working, markOk.reason!, code);
     }
 
     // Liquidity probe — empty book = miss, not invent fill.
-    const opposing = await this.ports.bestOpposingPrice(parent.marketId, parent.side);
+    const opposing = await this.ports.bestOpposingPrice(working.marketId, working.side);
     if (opposing === null) {
-      return this.recordMiss(parent, {
-        sliceIndex: parent.nextSliceIndex,
+      return this.recordMiss(working, {
+        sliceIndex: working.nextSliceIndex,
         code: 'trade.algo_no_liquidity',
-        reason: `${parent.symbol}: no opposing liquidity for slice ${parent.nextSliceIndex} — recorded miss, no fill invented`,
+        reason: `${working.symbol}: no opposing liquidity for slice ${working.nextSliceIndex} — recorded miss, no fill invented`,
         at: now,
       });
     }
 
-    if (!withinPriceBand(parent.side, opposing, parent.limitPrice)) {
-      return this.recordMiss(parent, {
-        sliceIndex: parent.nextSliceIndex,
+    if (!withinPriceBand(working.side, opposing, working.limitPrice)) {
+      return this.recordMiss(working, {
+        sliceIndex: working.nextSliceIndex,
         code: 'trade.algo_price_band',
         reason:
-          `${parent.symbol}: opposing ${formatAmount(opposing)} outside limit band ` +
-          `${parent.limitPrice === null ? 'none' : formatAmount(parent.limitPrice)} — slice skipped`,
+          `${working.symbol}: opposing ${formatAmount(opposing)} outside limit band ` +
+          `${working.limitPrice === null ? 'none' : formatAmount(working.limitPrice)} — slice skipped`,
         at: now,
       });
     }
 
-    const qty = plan[parent.nextSliceIndex]!;
-    const clientOrderId = `algo:${parent.id}:${parent.nextSliceIndex}`;
+    const qty = plan[working.nextSliceIndex]!;
+    const clientOrderId = `algo:${working.id}:${working.nextSliceIndex}`;
 
     try {
       const placed = await this.ports.placeChild({
-        parentId: parent.id,
-        sliceIndex: parent.nextSliceIndex,
+        parentId: working.id,
+        sliceIndex: working.nextSliceIndex,
         clientOrderId,
-        marketId: parent.marketId,
-        symbol: parent.symbol,
-        side: parent.side,
+        marketId: working.marketId,
+        symbol: working.symbol,
+        side: working.side,
         qty,
-        limitPrice: parent.limitPrice,
-        subAccountId: parent.subAccountId,
+        limitPrice: working.limitPrice,
+        subAccountId: working.subAccountId,
       });
 
       const child: AlgoChildRef = {
-        sliceIndex: parent.nextSliceIndex,
+        sliceIndex: working.nextSliceIndex,
         orderId: placed.orderId,
         clientOrderId,
         qty,
         placedAt: now,
       };
 
-      const next = parent.nextSliceIndex + 1;
+      const next = working.nextSliceIndex + 1;
+      const remaining = plan.length - next;
       const updated: TwapParent = {
-        ...parent,
+        ...working,
         nextSliceIndex: next,
-        children: [...parent.children, child],
-        status: next >= plan.length ? 'completed' : parent.status,
+        children: [...working.children, child],
+        // Spacing from the actual place event — not startedAt.
+        nextDueAt: new Date(now.getTime() + working.sliceIntervalMs),
+        projectedEndsAt: projectTwapEndsAt(now.getTime() + working.sliceIntervalMs, remaining, working.sliceIntervalMs),
+        status: next >= plan.length ? 'completed' : working.status,
       };
-      this.parents.set(parent.id, updated);
+      this.parents.set(working.id, updated);
       this.emitChange(updated);
       return { kind: 'placed', child };
     } catch (err) {
@@ -307,7 +378,7 @@ export class TwapEngine {
 
       // Insufficient balance mid-schedule → HALT (refuse table).
       if (code === 'trade.algo_insufficient_balance' || message.toLowerCase().includes('insufficient')) {
-        return this.halt(parent, `insufficient balance mid-schedule: ${message}`, 'trade.algo_insufficient_balance');
+        return this.halt(working, `insufficient balance mid-schedule: ${message}`, 'trade.algo_insufficient_balance');
       }
 
       // No authority to act → HALT, and do NOT consume the slice.
@@ -320,11 +391,11 @@ export class TwapEngine {
       // `completed` having placed nothing — an order silently destroyed by a
       // deploy, and "completed" is the wrong word for it.
       if (err instanceof TradeError && err.code === 'trade.algo_principal_unavailable') {
-        return this.halt(parent, message, 'trade.algo_principal_unavailable');
+        return this.halt(working, message, 'trade.algo_principal_unavailable');
       }
 
-      return this.recordMiss(parent, {
-        sliceIndex: parent.nextSliceIndex,
+      return this.recordMiss(working, {
+        sliceIndex: working.nextSliceIndex,
         code: 'trade.algo_child_refused',
         reason: `child place refused: ${message}`,
         at: now,
@@ -362,10 +433,15 @@ export class TwapEngine {
   private recordMiss(parent: TwapParent, miss: AlgoMiss): SliceTickResult {
     const plan = this.plans.get(parent.id)!;
     const next = parent.nextSliceIndex + 1;
+    const remaining = plan.length - next;
+    const now = miss.at;
     const updated: TwapParent = {
       ...parent,
       nextSliceIndex: next,
       misses: [...parent.misses, miss],
+      // Miss still consumes the slot; re-space so overdue misses do not burst.
+      nextDueAt: new Date(now.getTime() + parent.sliceIntervalMs),
+      projectedEndsAt: projectTwapEndsAt(now.getTime() + parent.sliceIntervalMs, remaining, parent.sliceIntervalMs),
       status: next >= plan.length ? 'completed' : parent.status,
     };
     this.parents.set(parent.id, updated);

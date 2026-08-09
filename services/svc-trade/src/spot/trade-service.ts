@@ -326,10 +326,20 @@ export class TradeService {
         },
         cancelChild: async (orderId) => {
           const row = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId} LIMIT 1`;
-          if (row[0] && (row[0].status === 'open' || row[0].status === 'pending')) {
-            const principal = this.algoPrincipals.get(row[0].user_id);
-            if (principal) await this.cancelOrder(principal, orderId);
+          if (!row[0]) return;
+          // Already terminal — nothing to cancel; silent success is honest.
+          if (row[0].status !== 'open' && row[0].status !== 'pending') return;
+          // A cancel that does not cancel is worse than a refused cancel.
+          // Open child without the live caller's principal must THROW so the
+          // parent stays non-cancelled (engine cancel collects failures first).
+          const principal = this.algoPrincipals.get(row[0].user_id);
+          if (!principal) {
+            throw new TradeError(
+              `cannot cancel open algo child ${orderId} without the caller's principal — install principal on cancelAlgo before engine.cancel (never mint from userId)`,
+              'trade.algo_principal_unavailable',
+            );
           }
+          await this.cancelOrder(principal, orderId);
         },
         bestOpposingPrice: async (marketId, side) => {
           const depth = await this.matching.depth(marketId, 1);
@@ -2124,6 +2134,11 @@ export class TradeService {
 
   async cancelAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
+    // Install the live caller's principal BEFORE engine.cancel so cancelChild
+    // can cancel open children after a process restart. Place still refuses
+    // without a durable principal grant (SOCKET §13) — cancel is different:
+    // the user is presenting authority right now.
+    this.algoPrincipals.set(principal.userId, principal);
     return this.algo.cancel(principal.userId, parentId);
   }
 
