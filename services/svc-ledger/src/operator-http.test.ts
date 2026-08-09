@@ -308,4 +308,89 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
     expect(ok.json()).toMatchObject({ frozen: false, reason: null, actor: null });
     await app.close();
   });
+
+  it('POST /operator/freeze demands a usable reason (≥12 chars) — same floor as tRPC', async () => {
+    let freezeCalls = 0;
+    const app = await buildApp(
+      stubService({
+        freeze: async (reason: string, actor: string) => {
+          freezeCalls += 1;
+          return { frozen: true, reason, actor, changedAt: new Date('2026-08-09T12:04:00.000Z') };
+        },
+      }),
+    );
+
+    const short = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { reason: 'too short' },
+    });
+    // Schema refuse before the service runs — an empty-looking reason must never
+    // land on the durable freeze row (#1282 floor on both doors).
+    expect(short.statusCode).toBe(400);
+    expect(freezeCalls).toBe(0);
+
+    const empty = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { reason: '' },
+    });
+    expect(empty.statusCode).toBe(400);
+    expect(freezeCalls).toBe(0);
+
+    // Twelve spaces satisfy raw min(12) but name no usable reason.
+    const spaces = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { reason: '            ' },
+    });
+    expect(spaces.statusCode).toBe(400);
+    expect(freezeCalls).toBe(0);
+
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { reason: 'suspected USDT chain drift' },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(freezeCalls).toBe(1);
+    expect(ok.json()).toMatchObject({
+      frozen: true,
+      reason: 'suspected USDT chain drift',
+    });
+    await app.close();
+  });
+
+  it('service secret / non-treasury cannot open the freeze door', async () => {
+    let freezeCalls = 0;
+    const app = await buildApp(
+      stubService({
+        freeze: async () => {
+          freezeCalls += 1;
+          throw new Error('must not run');
+        },
+      }),
+    );
+
+    const noAuth = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      payload: { reason: 'suspected USDT chain drift' },
+    });
+    expect(noAuth.statusCode).toBe(401);
+
+    const wrongScope = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await bearer(['admin:write'], true) },
+      payload: { reason: 'suspected USDT chain drift' },
+    });
+    expect(wrongScope.statusCode).toBe(403);
+    expect(freezeCalls).toBe(0);
+    await app.close();
+  });
 });

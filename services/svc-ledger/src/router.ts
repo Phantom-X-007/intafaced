@@ -246,7 +246,15 @@ export function createLedgerRouter(ledger: LedgerService) {
       // sentence the next operator can act on. `min(1)` accepted "x" and left
       // the durable row unactionable — the database only refuses empty reason,
       // not a useless one. Cap matches the HTTP schema (500).
-      .input(z.object({ reason: z.string().min(12).max(500) }))
+      .input(
+        z.object({
+          // Same floor as POST /operator/freeze — trim so spaces cannot pad min(12).
+          reason: z
+            .string()
+            .transform((s) => s.trim())
+            .pipe(z.string().min(12).max(500)),
+        }),
+      )
       .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
       .mutation(async ({ ctx, input }) => {
         const state = await ledger.freeze(input.reason, ctx.principal.userId);
