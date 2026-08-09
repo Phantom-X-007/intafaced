@@ -13,6 +13,9 @@ import { PostgresTargetRateLimiter } from './target-rate-limit.js';
 import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
+import { AlertService } from './alerts/service.js';
+import { PostgresAlertStore } from './alerts/store.js';
+import type { MarkSource } from './alerts/types.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -79,6 +82,9 @@ await sql`SELECT 1 FROM notify.channel_mutes LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM notify.target_rate_windows LIMIT 1`.catch(() => {
   throw new Error('notify.target_rate_windows is missing — run migration 0005_notify_target_rate_windows before starting svc-notify');
 });
+await sql`SELECT 1 FROM notify.price_alerts LIMIT 1`.catch(() => {
+  throw new Error('notify.price_alerts is missing — run migration 0006_notify_price_alerts before starting svc-notify');
+});
 
 // Consumer only — trade / p2p / identity / token / bank own their streams.
 // `ownedStreams: []` matches svc-ws: we never create a stream for subjects we do
@@ -119,7 +125,27 @@ const notify = new NotifyService(
   { targets, deliveries, channels, dispatcher, muteStore },
 );
 
-export const appRouter = createNotifyRouter(notify);
+/**
+ * v22.alerts mark port — default is dark.
+ *
+ * An alert compared against a price the platform cannot source must refuse
+ * rather than fire on a stale or invented number. Until a real mark feed is
+ * injected (trade public mark / owner-configured source), every evaluation
+ * returns `alert.price_unavailable`. Watchlist CRUD still works; fire does not
+ * invent a price.
+ */
+const darkMarks: MarkSource = {
+  async quote() {
+    return {
+      kind: 'unavailable',
+      reason: 'dark',
+      detail: 'no mark source configured — refuse rather than invent',
+    };
+  },
+};
+const alerts = new AlertService(new PostgresAlertStore(sql), darkMarks, notify);
+
+export const appRouter = createNotifyRouter(notify, alerts);
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
@@ -143,6 +169,8 @@ app.get('/ready', async () => ({
   // Observability for the stuck-pending reaper (#1187): last tick's retired count
   // and when it ran. Zero forever + null means the interval never completed.
   deliveryReap: { lastRetired: lastReapRetired, lastAt: lastReapAt },
+  // v22.alerts mark port honesty — 'dark' means evaluate refuses rather than invents.
+  alerts: { markSource: 'dark' as const },
 }));
 
 await app.register(fastifyTRPCPlugin, {

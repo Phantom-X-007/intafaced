@@ -150,21 +150,24 @@ rather than a green tick over silence.
 
 ## API
 
-| Procedure               | Scope          | Input                              | Output                                                                                  |
-| ----------------------- | -------------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
-| `health`                | public         | —                                  | `{ ok, service, fanoutEnabled }`                                                        |
-| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }` | `{ items, nextCursor }`                                                                 |
-| `notify.unreadCount`    | `notify:read`  | —                                  | `{ count }`                                                                             |
-| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                  | `{ marked }`                                                                            |
-| `notify.markAllRead`    | `notify:write` | —                                  | `{ marked }`                                                                            |
-| `notify.channels`       | `notify:read`  | —                                  | per-channel availability + missing env                                                  |
-| `notify.targets`        | `notify:read`  | —                                  | the caller's registered addresses                                                       |
-| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`    | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`) |
-| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                     |
-| `notify.removeTarget`   | `notify:write` | `{ channel }`                      | `{ removed }`                                                                           |
-| `notify.deliveries`     | `notify:read`  | `{ notificationId }`               | per-channel attempt + outcome                                                           |
-| `notify.mutePrefs`      | `notify:read`  | —                                  | per-channel mute flags (email/push/sms)                                                 |
-| `notify.setMute`        | `notify:write` | `{ channel, muted }`               | updated mute flags                                                                      |
+| Procedure               | Scope          | Input                                  | Output                                                                                  |
+| ----------------------- | -------------- | -------------------------------------- | --------------------------------------------------------------------------------------- |
+| `health`                | public         | —                                      | `{ ok, service, fanoutEnabled }`                                                        |
+| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }`     | `{ items, nextCursor }`                                                                 |
+| `notify.unreadCount`    | `notify:read`  | —                                      | `{ count }`                                                                             |
+| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                      | `{ marked }`                                                                            |
+| `notify.markAllRead`    | `notify:write` | —                                      | `{ marked }`                                                                            |
+| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env                                                  |
+| `notify.targets`        | `notify:read`  | —                                      | the caller's registered addresses                                                       |
+| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`        | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`) |
+| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                    | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                     |
+| `notify.removeTarget`   | `notify:write` | `{ channel }`                          | `{ removed }`                                                                           |
+| `notify.deliveries`     | `notify:read`  | `{ notificationId }`                   | per-channel attempt + outcome                                                           |
+| `notify.mutePrefs`      | `notify:read`  | —                                      | per-channel mute flags (email/push/sms)                                                 |
+| `notify.setMute`        | `notify:write` | `{ channel, muted }`                   | updated mute flags                                                                      |
+| `notify.alerts`         | `notify:read`  | —                                      | caller's price watches (v22.alerts MVP)                                                 |
+| `notify.createAlert`    | `notify:write` | `{ marketId, direction, targetPrice }` | active watch; price is a decimal string                                                 |
+| `notify.cancelAlert`    | `notify:write` | `{ id }`                               | cancel an active watch                                                                  |
 
 Every procedure is self-only via `principal.userId`. Title/body are i18n keys
 (`title_key` / `body_key`); clients render copy from `@intafaced/i18n`
@@ -314,6 +317,31 @@ boot.
 `intafaced.bank.margin_call.created` used to sit in that state; svc-bank now
 owns the bank stream and publishes margin calls. The consumer attaches when the
 stream is present — pending is no longer the steady state for that subject.
+
+## Price alerts (v22.alerts MVP)
+
+Watchlists live here: a user sets `marketId` + `above|below` + decimal-string
+`targetPrice`. Evaluation rides the same fan-out as every other notification
+(`NotifyService.create` → inbox + channels). There is no second delivery path.
+
+| Procedure            | Scope          | Effect                    |
+| -------------------- | -------------- | ------------------------- |
+| `notify.alerts`      | `notify:read`  | list the caller's watches |
+| `notify.createAlert` | `notify:write` | create an active watch    |
+| `notify.cancelAlert` | `notify:write` | cancel an active watch    |
+
+**Dark mark refuse.** Evaluation is pure (`evaluatePriceAlert`) against an
+injected mark port. When the port returns unavailable (dark / stale / refused),
+the outcome is `alert.price_unavailable` and **nothing is written to the inbox**.
+A missing mark is never treated as zero and never invented. Production boots a
+dark port until a real mark feed is wired — CRUD still works; fire does not lie.
+
+**One-shot.** Crossing marks the row `fired` and inserts one notification keyed
+`<alertId>:<markPrice>`. A redelivery cannot double-fire an already-fired watch.
+
+Out of scope for this residual (tracker + §31): funding / liquidation-proximity
+alerts, whale-flow intelligence tiers, mobile watchlist sync, owner gateway
+credentials (Class X — same as every out-of-app channel).
 
 ## Ledger
 

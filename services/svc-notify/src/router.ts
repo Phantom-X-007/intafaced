@@ -4,6 +4,8 @@ import type { NotifyService } from './notify-service.js';
 import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
+import type { AlertService } from './alerts/service.js';
+import type { PriceAlert } from './alerts/types.js';
 
 /**
  * svc-notify API — inbox, channels, and the delivery record.
@@ -116,7 +118,36 @@ function deliveryToWire(d: DeliveryRecord) {
   };
 }
 
-export function createNotifyRouter(notify: NotifyService) {
+const priceAlertOutput = z.object({
+  id: z.string().uuid(),
+  userId: z.string(),
+  marketId: z.string(),
+  direction: z.enum(['above', 'below']),
+  targetPrice: z.string(),
+  status: z.enum(['active', 'fired', 'cancelled']),
+  firedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+function priceAlertToWire(row: PriceAlert) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    marketId: row.marketId,
+    direction: row.direction,
+    targetPrice: row.targetPrice,
+    status: row.status,
+    firedAt: row.firedAt ? row.firedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/**
+ * @param alerts Optional v22.alerts MVP service. When absent, alert procedures
+ * refuse with a clear shape rather than inventing a silent empty list that
+ * pretends the feature is live.
+ */
+export function createNotifyRouter(notify: NotifyService, alerts?: AlertService) {
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-notify'), fanoutEnabled: z.boolean() }))
@@ -310,6 +341,51 @@ export function createNotifyRouter(notify: NotifyService) {
         .mutation(async ({ ctx, input }) => {
           await notify.setChannelMute(ctx.principal.userId, input.channel, input.muted);
           return notify.listMutePrefs(ctx.principal.userId);
+        }),
+
+      /**
+       * v22.alerts MVP — price watchlists.
+       * Evaluation against a live mark source is an internal job path
+       * (`AlertService.evaluateMarket`); the user surface is create/list/cancel.
+       */
+      alerts: scopedProcedure('notify:read', { module: 'notify' })
+        .output(z.array(priceAlertOutput))
+        .query(async ({ ctx }) => {
+          if (!alerts) return [];
+          return (await alerts.list(ctx.principal.userId)).map(priceAlertToWire);
+        }),
+
+      createAlert: scopedProcedure('notify:write', { module: 'notify' })
+        .input(
+          z.object({
+            marketId: z.string().min(1).max(64),
+            direction: z.enum(['above', 'below']),
+            /** Decimal string — never a JSON number. */
+            targetPrice: z.string().min(1).max(64),
+          }),
+        )
+        .output(priceAlertOutput)
+        .mutation(async ({ ctx, input }) => {
+          if (!alerts) {
+            throw new Error('price alerts are not configured on this deployment');
+          }
+          const row = await alerts.create({
+            userId: ctx.principal.userId,
+            marketId: input.marketId,
+            direction: input.direction,
+            targetPrice: input.targetPrice,
+          });
+          return priceAlertToWire(row);
+        }),
+
+      cancelAlert: scopedProcedure('notify:write', { module: 'notify' })
+        .input(z.object({ id: z.string().uuid() }))
+        .output(z.object({ cancelled: z.boolean(), alert: priceAlertOutput.nullable() }))
+        .mutation(async ({ ctx, input }) => {
+          if (!alerts) return { cancelled: false, alert: null };
+          const row = await alerts.cancel(ctx.principal.userId, input.id);
+          if (!row) return { cancelled: false, alert: null };
+          return { cancelled: row.status === 'cancelled', alert: priceAlertToWire(row) };
         }),
     }),
   });

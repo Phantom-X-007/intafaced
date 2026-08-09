@@ -120,8 +120,24 @@ export const targetRateWindows = schema.table(
   (t) => [primaryKey({ columns: [t.userId, t.channel, t.op] })],
 );
 
+/**
+ * Price-alert watchlists (v22.alerts MVP). target_price is text — decimal string.
+ * See drizzle/0006_notify_price_alerts.sql.
+ */
+export const priceAlerts = schema.table('price_alerts', {
+  id: pk(),
+  userId: text('user_id').notNull(),
+  marketId: text('market_id').notNull(),
+  direction: text('direction').$type<'above' | 'below'>().notNull(),
+  targetPrice: text('target_price').notNull(),
+  status: text('status').$type<'active' | 'fired' | 'cancelled'>().notNull().default('active'),
+  firedAt: timestamp('fired_at', { withTimezone: true, mode: 'date' }),
+  createdAt: createdAt(),
+});
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type ChannelTargetRow = typeof channelTargets.$inferSelect;
 export type DeliveryRow = typeof deliveries.$inferSelect;
 export type ChannelMuteRow = typeof channelMutes.$inferSelect;
 export type TargetRateWindowRow = typeof targetRateWindows.$inferSelect;
+export type PriceAlertRow = typeof priceAlerts.$inferSelect;
