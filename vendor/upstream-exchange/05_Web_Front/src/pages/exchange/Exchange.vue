@@ -2540,19 +2540,20 @@ export default {
       this.orderValidationError = '';
       this.liveAnnounce = '';
 
-      const amount = this.num(this.form.amount);
-      const price = this.num(this.form.price);
+      /* Confirm copy must match the wire: form strings, not float→fmt. */
+      const amountText = String(this.form.amount == null ? '' : this.form.amount).trim() || '—';
+      const priceText = String(this.form.price == null ? '' : this.form.price).trim() || '—';
 
       const side = this.side === 'BUY' ? this.$t('exchange.terminal.buy') : this.$t('exchange.terminal.sell');
       const type = this.orderType === 'MARKET_PRICE' ? this.$t('exchange.terminal.typeMarket') : this.$t('exchange.terminal.typeLimit');
       const priceLine =
         this.orderType === 'MARKET_PRICE'
           ? this.$t('exchange.terminal.confirmPriceBest')
-          : this.$t('exchange.terminal.confirmPriceLine', { price: this.fmt(price, this.baseCoinScale) + ' ' + (this.currentCoin.base || '') });
+          : this.$t('exchange.terminal.confirmPriceLine', { price: priceText + ' ' + (this.currentCoin.base || '') });
       const amountLine =
         this.amountLabel +
         ': ' +
-        this.fmt(amount, this.quoteSized ? this.baseCoinScale : this.coinScale) +
+        amountText +
         ' ' +
         (this.amountUnit || '');
       const feeLine = this.$t('exchange.terminal.feeEst') + ': ' + this.feeLabel;
