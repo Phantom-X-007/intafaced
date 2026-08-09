@@ -1392,6 +1392,113 @@ if (!available) {
       `;
       expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length);
     });
+
+    // W9-L09: #1382 shipped passkey step-up; router tests only stub AuthService.
+    // Soft-auth E2E pins the real path (challenge kind `step-up`, counter advance,
+    // trade:withdraw) so a login assertion cannot be replayed into withdraw.
+    const enrolPasskey = async (userId: string) => {
+      const authenticator = softAuthenticator();
+      const options = await auth.startWebauthnRegistration(userId);
+      await auth.confirmWebauthnRegistration(userId, authenticator.registrationResponse(options.challenge));
+      return authenticator;
+    };
+
+    it('a passkey-only account buys trade:withdraw via step-up (soft auth E2E)', async () => {
+      const session = await register();
+      // No TOTP — passkey is the only second factor (#1382 passkey-only path).
+      const authenticator = await enrolPasskey(session.userId);
+
+      const options = await auth.startWebauthnStepUp(session.userId);
+      expect(options.challenge).toBeTruthy();
+      expect(options.allowCredentials).toHaveLength(1);
+
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        webauthn: authenticator.assertionResponse(options.challenge),
+      });
+      const principal = await verifyAccessToken(elevated.accessToken, tokenConfig);
+      expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(true);
+      expect(principal.mfa).toBe(true);
+      const lifetimeSeconds = (elevated.expiresAt.getTime() - Date.now()) / 1000;
+      expect(lifetimeSeconds).toBeLessThanOrEqual(300);
+      expect(lifetimeSeconds).toBeGreaterThan(240);
+
+      // Counter advanced (cloned-authenticator detection path is live).
+      const stored = await db.sql<Array<{ webauthn_creds: Array<{ counter: number }> }>>`
+        SELECT webauthn_creds FROM users WHERE id = ${session.userId}
+      `;
+      expect(stored[0]!.webauthn_creds[0]!.counter).toBeGreaterThan(0);
+
+      // Step-up challenge is single-use.
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse(options.challenge),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
+    });
+
+    it('refuses a login assertion for withdraw step-up (kind isolation)', async () => {
+      const session = await register();
+      const handle = (await db.sql<Array<{ handle: string }>>`SELECT handle FROM users WHERE id = ${session.userId}`)[0]!.handle;
+      const authenticator = await enrolPasskey(session.userId);
+
+      // Login ceremony challenge must not elevate withdraw.
+      const loginOptions = await auth.startWebauthnAuthentication(handle);
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse(loginOptions.challenge),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
+
+      // Symmetric: step-up challenge must not mint a login session.
+      // Login path uses auth.invalid_credentials on purpose (same code as a
+      // wrong password — no ceremony-kind oracle for account enumeration).
+      const stepOptions = await auth.startWebauthnStepUp(session.userId);
+      await expect(
+        auth.confirmWebauthnAuthentication(handle, authenticator.assertionResponse(stepOptions.challenge)),
+      ).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
+    });
+
+    it('refuses passkey step-up when no security key is enrolled', async () => {
+      const session = await register();
+      await expect(auth.startWebauthnStepUp(session.userId)).rejects.toMatchObject({
+        code: 'auth.webauthn_not_enrolled',
+      });
+      const authenticator = softAuthenticator();
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse('no-ceremony'),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.webauthn_not_enrolled' });
+    });
+
+    it('refuses passkey step-up on a frozen account and a dead session', async () => {
+      const session = await register();
+      const authenticator = await enrolPasskey(session.userId);
+
+      await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
+      await expect(auth.startWebauthnStepUp(session.userId)).rejects.toMatchObject({
+        code: 'auth.account_frozen',
+      });
+      await db.sql`UPDATE users SET status = 'active' WHERE id = ${session.userId}`;
+
+      const options = await auth.startWebauthnStepUp(session.userId);
+      await auth.logoutAll(session.userId);
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse(options.challenge),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.session_invalid' });
+    });
   });
 
   describe('rank engine', () => {
