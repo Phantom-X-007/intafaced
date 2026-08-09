@@ -82,30 +82,19 @@ public class MemberEvent {
 
     }
 
+    /**
+     * Invite graph only. Upstream credited {@code member_wallet.to_released} here
+     * (setToReleased) — that is a second-book mint with no ledger recipe, invisible
+     * to vendor-java-money-scan (setBalance-only). Deleted per ADR 2026-08-04 Grade D
+     * posture: reward mints without a recipe are removed, not short-circuited.
+     */
     private void promotion(Member member1, Member member) {
         RewardPromotionSetting rewardPromotionSetting = rewardPromotionSettingService.findByType(PromotionRewardType.REGISTER);
         if (rewardPromotionSetting != null) {
-            MemberWallet memberWallet1 = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member1);
-            BigDecimal amount1 = JSONObject.parseObject(rewardPromotionSetting.getInfo()).getBigDecimal("one");
-            memberWallet1.setToReleased(BigDecimalUtils.add(memberWallet1.getToReleased(), amount1));
-            memberWalletService.save(memberWallet1);
-            RewardRecord rewardRecord1 = new RewardRecord();
-            rewardRecord1.setAmount(amount1);
-            rewardRecord1.setCoin(rewardPromotionSetting.getCoin());
-            rewardRecord1.setMember(member1);
-            rewardRecord1.setRemark(rewardPromotionSetting.getType().getCnName());
-            rewardRecord1.setType(RewardRecordType.PROMOTION);
-            rewardRecordService.save(rewardRecord1);
-            MemberTransaction memberTransaction = new MemberTransaction();
-            memberTransaction.setFee(BigDecimal.ZERO);
-            memberTransaction.setAmount(amount1);
-            memberTransaction.setSymbol(rewardPromotionSetting.getCoin().getUnit());
-            memberTransaction.setType(TransactionType.PROMOTION_AWARD);
-            memberTransaction.setMemberId(member1.getId());
-            memberTransaction.setRealFee("0");
-            memberTransaction.setDiscountFee("0");
-            memberTransaction.setCreateTime(new Date());
-            memberTransactionService.save(memberTransaction);
+            log.warn(
+                    "dual-book: registration promotion wallet mint skipped (to_released) inviter={} invitee={}",
+                    member1.getId(),
+                    member.getId());
         }
         member1.setFirstLevel(member1.getFirstLevel() + 1);
         MemberPromotion one = new MemberPromotion();
@@ -123,26 +112,10 @@ public class MemberEvent {
 
     private void promotionLevelTwo(RewardPromotionSetting rewardPromotionSetting, Member member2, Member member) {
         if (rewardPromotionSetting != null) {
-            MemberWallet memberWallet2 = memberWalletService.findByCoinAndMember(rewardPromotionSetting.getCoin(), member2);
-            BigDecimal amount2 = JSONObject.parseObject(rewardPromotionSetting.getInfo()).getBigDecimal("two");
-            memberWallet2.setToReleased(BigDecimalUtils.add(memberWallet2.getToReleased(), amount2));
-            memberWalletService.save(memberWallet2);
-            RewardRecord rewardRecord2 = new RewardRecord();
-            rewardRecord2.setAmount(amount2);
-            rewardRecord2.setCoin(rewardPromotionSetting.getCoin());
-            rewardRecord2.setMember(member2);
-            rewardRecord2.setRemark(rewardPromotionSetting.getType().getCnName());
-            rewardRecord2.setType(RewardRecordType.PROMOTION);
-            rewardRecordService.save(rewardRecord2);
-            MemberTransaction memberTransaction = new MemberTransaction();
-            memberTransaction.setFee(BigDecimal.ZERO);
-            memberTransaction.setAmount(amount2);
-            memberTransaction.setSymbol(rewardPromotionSetting.getCoin().getUnit());
-            memberTransaction.setType(TransactionType.PROMOTION_AWARD);
-            memberTransaction.setMemberId(member2.getId());memberTransaction.setRealFee("0");
-            memberTransaction.setDiscountFee("0");
-            memberTransaction.setCreateTime(new Date());
-            memberTransactionService.save(memberTransaction);
+            log.warn(
+                    "dual-book: level-two promotion wallet mint skipped (to_released) inviter={} invitee={}",
+                    member2.getId(),
+                    member.getId());
         }
         member2.setSecondLevel(member2.getSecondLevel() + 1);
         MemberPromotion two = new MemberPromotion();

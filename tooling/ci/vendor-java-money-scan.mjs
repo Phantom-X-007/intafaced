@@ -180,6 +180,14 @@ const CODE_RULES = [
     re: /\.\s*set(?:Frozen)?Balance\s*\(/g,
     reason: 'assigns a wallet balance field — Hibernate flushes a managed entity to member_wallet at commit',
   },
+  {
+    id: 'jpa-entity-to-released-mutation',
+    // member_wallet.to_released is a real column Hibernate flushes. The balance
+    // setter rule never saw it (mega-audit 2026-08-07 MemberEvent). Empty
+    // allowlist on purpose — zero hits is the only green state.
+    re: /\.\s*setToReleased\s*\(/g,
+    reason: 'assigns member_wallet.to_released — second-book credit invisible to setBalance rules',
+  },
 ];
 
 /**

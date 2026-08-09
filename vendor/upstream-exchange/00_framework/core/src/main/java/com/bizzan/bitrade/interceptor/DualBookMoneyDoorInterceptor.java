@@ -8,6 +8,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -90,14 +92,42 @@ public class DualBookMoneyDoorInterceptor implements HandlerInterceptor {
             "/order/add"
     );
 
+    /**
+     * Match against the decoded path Spring routes on, not the raw wire URI.
+     * A raw match lets {@code /member/member-wallet/recharg%65} skip the door
+     * while the controller still binds — mega-audit 2026-08-07 finding.
+     */
+    static String pathForMatch(String rawUri) {
+        if (rawUri == null) {
+            return null;
+        }
+        String decoded = rawUri;
+        try {
+            // Repeat until stable so nested encodings cannot skip once.
+            for (int i = 0; i < 3; i++) {
+                String next = URLDecoder.decode(decoded, "UTF-8");
+                if (next.equals(decoded)) {
+                    break;
+                }
+                decoded = next;
+            }
+        } catch (UnsupportedEncodingException e) {
+            // UTF-8 is required by the platform; fall through on raw.
+            decoded = rawUri;
+        } catch (IllegalArgumentException e) {
+            // Malformed percent sequence — keep the best decode we have.
+        }
+        return decoded.toLowerCase(Locale.ROOT);
+    }
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
         String uri = request.getRequestURI();
-        if (uri == null) {
+        String path = pathForMatch(uri);
+        if (path == null) {
             return true;
         }
-        String path = uri.toLowerCase(Locale.ROOT);
         for (String fragment : BLOCKED_URI_FRAGMENTS) {
             if (path.contains(fragment.toLowerCase(Locale.ROOT))) {
                 log.warn("dual-book door-kill refused money path: {}", uri);
