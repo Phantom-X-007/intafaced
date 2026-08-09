@@ -79,7 +79,7 @@ Also `GET /health` and `GET /ready`.
 | `ready`                | Process is up (schema + listen succeeded). Always true after boot.                                  |
 | `providerMode`         | `mock` (default) or `upstream`. **Mock is not production inference.**                               |
 | `providers[]`          | Logical provider ids + usable/healthy (no vendor names — §0.7).                                     |
-| `meteringEnabled`      | Billing kill-switch. Usage is still recorded when off.                                              |
+| `meteringEnabled`      | Billing kill-switch. When off: no bill; token counts stay on the action audit only.                 |
 | `fleet`                | Stage-1 matrix card (agents / runSession / bootRegistered / missing routes). Zeros if not supplied. |
 | `tasks`                | Routing task ids currently configured.                                                              |
 | `usefulPath.available` | Whether a **completion** can leave this process right now.                                          |
@@ -220,11 +220,11 @@ The service checks these; the database enforces them regardless.
 
 ## Kill-switches
 
-| Switch                                         | Effect when off                                                                                                                                     |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agents.premiumTiers` flag (`packages/config`) | metered tiers unavailable — the module-wide gate in the admin console                                                                               |
-| `AGENTS_METERING_ENABLED=false`                | billing halts. Usage is **still recorded**: turning metering off must not also destroy the ability to find out what the fleet cost while it was off |
-| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close                                                                      |
+| Switch                                         | Effect when off                                                                                                                                      |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agents.premiumTiers` flag (`packages/config`) | metered tiers unavailable — the module-wide gate in the admin console                                                                                |
+| `AGENTS_METERING_ENABLED=false`                | billing halts. **No** `usage_records` / window / feeCharge. Action audit still holds token counts (knowable cost without inventing a deferred bill). |
+| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close                                                                       |
 
 ---
 
