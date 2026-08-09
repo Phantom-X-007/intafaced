@@ -123,7 +123,7 @@ export const GATES = [
       'sole product surface, and therefore the surface most likely to show a partner name to a user. It also has no ' +
       '`.vue` in EXTENSIONS, and the shell is 70 single-file components, so removing the skip would not have covered ' +
       'it either. Takes its forbidden names by parsing brand-scan.mjs rather than restating them, so the two cannot ' +
-      'drift. Enforcing, at a frozen baseline of 8 named findings that can only shrink — see BASELINE in the scan.',
+      'drift. Baseline was drained to zero (L11 wave 5) — any new product-surface hit fails until fixed; never re-freeze.',
   },
   {
     id: 'custody',
