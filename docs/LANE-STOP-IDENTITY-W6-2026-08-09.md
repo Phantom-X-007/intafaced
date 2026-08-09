@@ -7,6 +7,7 @@ LANE: L12 IDENTITY wave 6
 shipped (merged this wave):
   #1238 TOTP code can only open the door once (Class M — tip-rebased; keeps domain whitelist + passkey step-up)
   #1272 KYC reject audit trail + re-apply (Class N)
+  #1417 TOTP secrets encrypt at rest (Class P)
 shipped earlier / already on tip (W5 banked — re-verified not re-shipped):
   #1382 passkey unlocks withdraw
   #1326 API key domain list blocks foreign origins
@@ -16,9 +17,9 @@ shipped earlier / already on tip (W5 banked — re-verified not re-shipped):
   #1280 signup referrer
   #1261 README API matrix
 in flight (open — babysit CI then merge):
-  #1417 TOTP secrets encrypt at rest (Class P; rebased with #1238 open-before-burn)
-  #1441 WebAuthn challenges in Postgres multi-pod (Class P)
-  #1448 recovery codes unlock withdraw step-up (Class M; rebased with anti-replay)
+  #1441 WebAuthn challenges in Postgres multi-pod (Class P) — Tests red on sibling svc-protocol oracle (not identity)
+  #1448 recovery codes unlock withdraw step-up (Class M; rebased with encrypt open-before-match)
+  #1453 docs stop note
 parked:
   · pending TOTP enrolment durability (multi-pod Map) — residual after encrypt
   · login/exchange rate limit — design fork edge vs identity
@@ -31,7 +32,7 @@ Nitro must decide:
   · none for merge of Class N/P/M units above
   · KYC vendor + §8 rates still Nitro-only if product wants them
   · ops: set IDENTITY_TOTP_SECRET_KEY in prod when #1417 lands (boot refuses without it)
-SAFE TO CLOSE: no — three open identity PRs still need green CI + merge; no uncommitted wall code on this agent after stop PR
+SAFE TO CLOSE: no — #1441/#1448 need green Tests; stop #1453 open; no uncommitted wall code after this PR
 tip: re-derive origin/main
 ```
 
