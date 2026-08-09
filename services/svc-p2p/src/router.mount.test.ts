@@ -537,7 +537,8 @@ describe('svc-p2p mount — offer methods shape', () => {
           price: '1',
           minAmount: '10',
           maxAmount: '100',
-          methods: [{}],
+          // TS wire type forbids bare `{}`; cast so we still prove runtime zod refuses it.
+          methods: [{} as { id: string }],
         }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(created).toBe(0);
