@@ -703,14 +703,16 @@ if (!available) {
       expect(await sql`SELECT user_id FROM token.yield_payouts WHERE window_id = 'w-empty-mismatch'`).toHaveLength(0);
     });
 
-    it('leaves revenue in the rewards engine when nobody is staked', async () => {
+    it('leaves fees in houseFees when nobody is staked (does not sweep into the engine)', async () => {
       await accrueFees('trade', '100');
       const result = await token.distributeRevenue({ windowId: 'w-empty', sources: [{ module: 'trade', amount: amt('100') }] });
 
       expect(result.recipients).toBe(0);
-      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
+      // Empty claim freezes the window id but does not move fees — a later
+      // window id with stakers can still sweep the pot.
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
       expect(ledger.totalsByAsset().IFC).toBe('0');
-      // Header claimed even though nobody was paid.
       expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-empty'`).toHaveLength(1);
     });
 

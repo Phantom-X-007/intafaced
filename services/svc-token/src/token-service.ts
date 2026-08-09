@@ -757,9 +757,19 @@ export class TokenService {
 
     // CLAIM (window_id, total) + freeze who is paid BEFORE any fee sweep.
     // An empty settlement still claims the header so a later stake cannot
-    // re-plan the same window id (0004). Sweep after claim so a re-run with a
-    // mismatched total refuses before moving more fees.
+    // re-plan the same window id (0004). Sweep only when someone is owed —
+    // otherwise fees stay in houseFees for a later window id that has stakers.
     const plan = await this.planYieldWindow(input.windowId, total);
+
+    if (plan.rows.length === 0) {
+      // Nothing was staked when this window was claimed. Do NOT sweep: moving
+      // fees into the rewards engine with no plan leaves value no later window
+      // can name without a second operator-typed amount (and a re-sweep of the
+      // same pot would underfund). Fees remain in houseFees for the next
+      // window id. The header is the freeze — re-running this id with the same
+      // total does not invent recipients or touch the pot again.
+      return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: plan.skipped, alreadyPaid: 0 };
+    }
 
     for (const [module, amount] of byModule) {
       await this.ledger.post(
@@ -770,13 +780,6 @@ export class TokenService {
           amount,
         }),
       );
-    }
-
-    if (plan.rows.length === 0) {
-      // Nothing was staked when this window was claimed. The revenue sits in
-      // the rewards engine for a LATER window id. The header is the freeze —
-      // re-running this id with the same total does not invent recipients.
-      return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: plan.skipped, alreadyPaid: 0 };
     }
 
     let distributed = 0n;
