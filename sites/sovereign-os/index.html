@@ -3,1398 +3,216 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>INTAFACED · Sovereign OS — Twelve rooms. Two planes. One economy.</title>
+    <title>INTAFACED · Sovereign OS</title>
     <meta
       name="description"
-      content="INTAFACED Sovereign OS: complete financial operating system — exchange, bank, payments, launchpad, predict, academy, token, own L1 path. One identity, one ledger, one token."
+      content="Twelve rooms. Two planes. One identity, one ledger, one token. A financial operating system built by the streets."
     />
-    <meta name="theme-color" content="#070a08" />
-    <meta property="og:title" content="INTAFACED · Sovereign OS" />
-    <meta property="og:description" content="Twelve rooms. Two planes. One economy. Built by the streets. Settled on our own L1 path." />
+    <meta name="theme-color" content="#050806" />
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" defer></script>
   </head>
   <body>
-    <div class="noise" aria-hidden="true"></div>
-    <div class="grid-bg" aria-hidden="true"></div>
-    <a class="sr-only" href="#main">Skip to content</a>
+    <div class="fx" aria-hidden="true">
+      <div class="fx-glow"></div>
+      <div class="fx-grid"></div>
+    </div>
 
-    <header class="nav">
-      <div class="wrap nav-inner">
-        <a class="brand" href="#top">INTA<span>FACED</span></a>
-        <nav class="nav-links" aria-label="Primary">
-          <a href="#trade">Trade</a>
-          <a href="#protocol">Protocol</a>
-          <a href="#p2p">P2P</a>
-          <a href="#launch">Launch</a>
-          <a href="#bank">Bank</a>
-          <a href="#predict">Predict</a>
-          <a href="#academy">Academy</a>
-          <a href="#token">Token</a>
-          <a href="#chain">Chain</a>
-        </nav>
-        <button class="nav-toggle" type="button" id="navToggle" aria-expanded="false" aria-controls="drawer">Menu</button>
-        <a class="nav-cta" href="#waitlist">CUT MY KEY</a>
-      </div>
-      <div class="wrap nav-drawer" id="drawer" hidden></div>
+    <header class="top">
+      <a class="logo" href="#top">INTA<span>FACED</span></a>
+      <nav class="links" aria-label="Primary">
+        <a href="#planes">Planes</a>
+        <a href="#rooms">Rooms</a>
+        <a href="#trade">Trade</a>
+      </nav>
+      <a class="pill" href="#key">CUT MY KEY</a>
     </header>
 
-    <main id="main">
-      <section class="hero" id="top">
-        <div class="wrap hero-grid">
-          <div class="hero-copy">
-            <p class="eyebrow">INTAFACED · SOVEREIGN OS</p>
-            <h1>WEB2 RAILS IN.<br /><em>WEB3 SETTLEMENT OUT.</em><br />INTELLIGENCE BINDING THEM.</h1>
-            <p class="hero-sub">
-              A complete financial operating system with its own Layer 1 underneath it. Twelve rooms. Two planes. One identity, one ledger,
-              one token — and one key that opens every door.
-            </p>
-            <div class="hero-actions">
-              <a class="btn btn-primary" href="#waitlist">ENTER THE CHAIN</a>
-              <a class="btn btn-ghost" href="#rooms">SEE ALL TWELVE ROOMS</a>
-            </div>
-            <div class="alt-strip" aria-label="Alternate headlines">
-              <div class="alt-line">THEY BUILT ROOMS. WE BUILT THE HOUSE. THEN WE BUILT THE GROUND UNDER IT.</div>
-              <div class="alt-line">NOT A PLATFORM ON SOMEBODY ELSE'S CHAIN. THE CHAIN.</div>
-              <div class="alt-line">BUILT BY THE STREETS. SETTLED ON OUR OWN L1.</div>
-              <div class="alt-line">ELEVEN LAYERS WAS THE PITCH. TWELVE ROOMS AND A CHAIN IS THE BUILD.</div>
-            </div>
-          </div>
-          <div class="hero-visual card-beam">
-            <div class="hv-top"><span class="live">● LIVE LOBBY</span><span>SOVEREIGN OS</span><span>RANK 00</span></div>
-            <div class="hv-title">ONE KEY · EVERY DOOR</div>
-            <div class="hv-metrics">
-              <div><b>12</b><span>ROOMS</span></div>
-              <div><b>2</b><span>PLANES</span></div>
-              <div><b>1</b><span>LEDGER</span></div>
-            </div>
-            <div class="hv-modules">
-              <span>TRADE</span><span>PROTOCOL</span><span>P2P</span><span>LAUNCH</span><span>BANK</span><span>PAY</span><span>PREDICT</span
-              ><span>ACADEMY</span><span>TOKEN</span><span>MINE</span><span>MARKET</span><span>AGENTS</span>
-            </div>
-            <div class="hv-bar"><i></i></div>
-            <p class="demo-tag">Product face for partners &amp; review · not a bank UI</p>
-          </div>
+    <main id="top">
+      <!-- HERO: Denon lines only, poster scale -->
+      <section class="hero">
+        <p class="tag">INTAFACED · SOVEREIGN OS</p>
+        <h1>
+          WEB2 RAILS IN.<br />
+          <span>WEB3 SETTLEMENT OUT.</span><br />
+          INTELLIGENCE BINDING THEM.
+        </h1>
+        <p class="sub">Twelve rooms. Two planes. One identity, one ledger, one token — and one key that opens every door.</p>
+        <div class="actions">
+          <a class="btn solid" href="#key">ENTER THE CHAIN</a>
+          <a class="btn line" href="#rooms">SEE ALL TWELVE ROOMS</a>
         </div>
-        <div class="wrap">
-          <div class="stats" aria-label="Platform scope">
-            <div class="stat"><b class="count" data-to="12">12</b><span>MODULES</span></div>
-            <div class="stat"><b class="count" data-to="28">28</b><span>PRODUCTS</span></div>
-            <div class="stat"><b class="count" data-to="30">30</b><span>REVENUE STREAMS</span></div>
-            <div class="stat"><b class="count" data-to="10">10</b><span>AI AGENTS</span></div>
-            <div class="stat"><b class="count" data-to="2">2</b><span>PLANES</span></div>
-            <div class="stat"><b class="count" data-to="1">1</b><span>CHAIN. OURS.</span></div>
-          </div>
-        </div>
+        <ul class="metrics" aria-label="Scope">
+          <li><strong data-count="12">12</strong><em>Modules</em></li>
+          <li><strong data-count="28">28</strong><em>Products</em></li>
+          <li><strong data-count="30">30</strong><em>Streams</em></li>
+          <li><strong data-count="10">10</strong><em>Agents</em></li>
+          <li><strong data-count="2">2</strong><em>Planes</em></li>
+          <li><strong>1</strong><em>Chain. Ours.</em></li>
+        </ul>
       </section>
 
-      <div class="ticker" aria-hidden="true">
-        <div class="ticker-track">
+      <div class="tape" aria-hidden="true">
+        <div class="tape-run">
           <span
-            >$4,820 CARD LDN→AMS APPROVED · AED 6,207 USDC SFO→SAO SETTLED · 4,004 SEPA FRA→DXB REROUTED · 586,691 LOS→LDN APPROVED · ESCROW
-            LOCKED TRY→USDT IST · BLOCK FINALISED · 1 BLOCK · BUYBACK EXECUTED · BURN POSTED · MERCHANT CONTRACT DEPLOYED · 0 KYB · $4,820
-            CARD LDN→AMS APPROVED · AED 6,207 USDC SFO→SAO SETTLED · 4,004 SEPA FRA→DXB REROUTED · 586,691 LOS→LDN APPROVED · ESCROW LOCKED
-            TRY→USDT IST · BLOCK FINALISED · 1 BLOCK · BUYBACK EXECUTED · BURN POSTED · MERCHANT CONTRACT DEPLOYED · 0 KYB</span
-          >
-        </div>
-      </div>
-
-      <section id="manifesto">
-        <div class="wrap">
-          <p class="kicker">I · THE MANIFESTO</p>
-          <h2>EVERY FINANCIAL PLATFORM BEFORE THIS ONE WAS BUILT BY SUITS, FOR SUITS.</h2>
-          <div class="prose">
-            <p>
-              Cold interfaces. Corporate language. Gatekeeping dressed up as compliance. And the culture — the traders, the hustlers, the
-              crews, the people actually moving money at 3am across six currencies — got filed as a risk category instead of the customer
-              base. INTAFACED flips the table. Exchange. Broker. Bank. Payments. Launchpad. Prediction markets. Marketplace. Academy. Plus
-              our own Layer 1 underneath all of it. Engineered with the energy of a AAA title instead of a quarterly report. The interface
-              feels like a lobby, not a spreadsheet. Progression feels like ranking up, not filling forms. The academy is a world you walk
-              into, not a PDF graveyard. The token is mined, earned, staked, spent and burned inside one closed economy. Black glass and
-              bright green. Poster type and a tagger's hand. Nothing here looks like a bank — that is the entire point. Virality is not a
-              marketing budget. It's a design decision. people share what looks like them
-            </p>
-          </div>
-        </div>
-      </section>
-      <section id="laws">
-        <div class="wrap">
-          <p class="kicker">THE THREE LAWS</p>
-          <h2>Three laws of the OS</h2>
-          <div class="laws">
-            <article class="law card-beam">
-              <div class="n">01</div>
-              <h3>
-                EVERYTHING IS ONE LOGIN. Trade, borrow, spend, launch, learn, earn, predict. One identity, one balance graph, one rank —
-                travelling every room and both planes.
-              </h3>
-              <p>
-                02 · EVERYTHING PAYS THE USER. Mining, staking, referral splits, copy-trade profit shares, certifications that cut your
-                fees. Participation rewarded like playtime.
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-      <section id="planes">
-        <div class="wrap">
-          <p class="kicker">II · TWO PLANES. ONE ECONOMY.</p>
-          <h2>Everyone made you choose. We refuse the trade.</h2>
-          <p class="lead">
-            Web2 gave you rails and kept the keys. Web3 gave you keys and took away the rails. We built both — and drew the line between
-            them in code.
-          </p>
-          <div class="plane-toggle" role="tablist" aria-label="Plane switcher">
-            <button type="button" class="ptab active" data-plane="fiat" aria-selected="true">FIAT PLANE</button>
-            <button type="button" class="ptab" data-plane="protocol" aria-selected="false">SOVEREIGN / PROTOCOL</button>
-          </div>
-          <p class="plane-hint">Switching planes changes who holds your keys. We show you which, always.</p>
-          <div class="planes">
-            <article class="plane fiat card-beam" data-plane-panel="fiat">
-              <h3>The Fiat Plane — we hold it, so we say so</h3>
-              <div class="prose">
-                <p>
-                  FIAT PLANE — we hold it, so we say so Custodial. Fully compliant. Trade, bank, cards, fiat processing, institutional flow.
-                </p>
-                <p>
-                  Tiered verification per jurisdiction — geo rules are config, not code Every movement is a double-entry ledger transaction.
-                  No exceptions. Three-layer custody: cold, warm, hot — multi-sig approval workflow This is what connects to money as the
-                  world currently runs it, and we take the responsibility in writing THE
-                </p>
-              </div>
-            </article>
-            <article class="plane protocol card-beam" data-plane-panel="protocol" id="protocol">
-              <h3>The Protocol Plane — you hold it, so there's nothing to ask</h3>
-              <div class="prose">
-                <p>
-                  PROTOCOL PLANE — you hold it, so there's nothing to ask Genuinely non-custodial. Zero KYC — not a loophole, an
-                  architectural fact.
-                </p>
-                <p>
-                  Self-custody smart accounts — passkey native, no seed phrase On-chain order books, contract-held collateral Platform holds
-                  session keys you grant and revoke — never withdrawal rights Optional stealth handles: one human, two unlinkable
-                  presentations Rank, Blueprint and crew travel here as zero-PII attestations THE LAW THAT BINDS THEM ZERO-KYC FOLLOWS
-                  CUSTODY. EVERYWHERE. WITHOUT EXCEPTION. If we never hold it → ships permissionless. No KYC, no KYB, no gate beyond a
-                  wallet. If we hold it → ships on the Fiat Plane with tiered verification, stated plainly on the screen. Always → every
-                  product exists in its maximum lawful sovereign form. Nothing stays custodial that can be non-custodial.
-                </p>
-                <p>
-                  AND WE DON'T JUST SAY IT An automated check called custody-scan runs on every single code change. It fails the build if a
-                  Protocol Plane service so much as imports a write path to our ledger, or if a contract grants us withdrawal power over
-                  your funds.
-                </p>
-                <p>
-                  PROVABLY NON-CUSTODIAL, OR IT DOESN'T MERGE. Sovereignty by architecture. Never by evasion. We will never ship a custodial
-                  product wearing a decentralised costume — the whole industry already tried that, and you paid for it.
-                </p>
-              </div>
-            </article>
-          </div>
-          <div class="banner">
-            ZERO-KYC FOLLOWS CUSTODY. EVERYWHERE. WITHOUT EXCEPTION.
-            <span>Your keys. Enforced by the build, not by our promise. PROVABLY NON-CUSTODIAL, OR IT DOESN'T MERGE.</span>
-          </div>
-        </div>
-      </section>
-      <section id="chain">
-        <div class="wrap">
-          <p class="kicker">III · INTACHAIN — WE BUILT THE GROUND</p>
-          <h2>An exchange on somebody else's chain is a tenant.</h2>
-          <div class="prose">
-            <p>
-              AN EXCHANGE ON SOMEBODY ELSE'S CHAIN IS A TENANT. So we're not renting. Our own Layer 1 — one chain, BFT consensus, two
-              execution domains.
-            </p>
-            <p>INTACORE — the financial engine at the chain level Not a smart contract pretending to be an exchange.</p>
-            <p>
-              Fully on-chain central limit order book, built into the protocol Price-time priority. Real tick and lot rules. Perps and spot.
-              Protocol-level margining and liquidations. One-block finality Prediction markets as a native market type INTAEVM — the
-              builder's door A full EVM environment secured by the same validators.
-            </p>
-            <p>
-              Reads INTACORE state directly Deploy against our liquidity, permissionlessly, day one Your app inherits our books
-              Permissionless spot listing for anything minted on-chain THE PATH — SEQUENCED HONESTLY, NOT SOLD AS MAGIC P0 · CONTRACTS ON
-              PROVEN RAILS — the sovereign suite ships as contracts: smart accounts, AMM pools, lending markets, on-chain P2P escrow. Value
-              in weeks. Learning in production. P1 · OUR OWN CHAIN — a native in-validator CLOB module plus a state-sharing EVM. Sovereign,
-              fast finality, our validators first. P2 · THE PERFORMANCE CORE — a Rust execution engine behind the same narrow interface. The
-              Fiat Plane matcher and INTACORE share one matching spec — one engine, two planes. P3 · PROGRESSIVE DECENTRALISATION — the
-              validator set opens on a published schedule. Token-weighted governance takes parameter control.
-            </p>
-            <p>
-              decentralisation is a roadmap with dates, not a marketing word IFC ON-CHAIN GAS — the chain runs on IFC. Every block touches
-              the asset. SECURITY BUDGET — staking secures validators. Real security, not APY theatre. ONE SUPPLY — ledger IFC and chain IFC
-              reconciled by a canonical bridge with attestations. FEE FLOW — the dominant share of chain trading fees drives a continuous
-              open-market buyback. ONE FLYWHEEL — chain fees and platform fees feed the same engine. Two planes, one economy. GOVERNANCE —
-              IFC-weighted votes take chain parameters on the published handover schedule.
-            </p>
-            <p>
-              THE TARGETS Benchmark The leader today Our target On-chain CLOB throughput ~200k orders/sec P1: 10k/s → P2: 100k+/s Perp
-              finality ~1 block ≤ 1 block Internal matching latency Top-tier CEX &lt; 5ms p99 Card auth decision Best neobank &lt; 2s incl.
-              on-chain conversion Signup → first trade Email login ≤ 3 min incl. your Blueprint Fees → token value ~97% to buyback Published
-              %, both planes, one token
-            </p>
-          </div>
-        </div>
-      </section>
-      <section id="account">
-        <div class="wrap">
-          <p class="kicker">IV · YOUR ACCOUNT IS A CONTRACT, NOT A FAVOUR</p>
-          <h2>No seed phrase. No custodian. No permission.</h2>
-          <div class="prose">
-            <p>
-              NO SEED PHRASE. NO CUSTODIAN. NO PERMISSION. PASSKEY-NATIVE — an email or a passkey creates a smart contract wallet.
-              Self-custody with none of the seed-phrase wall that kept normal people out of crypto for fifteen years. SESSION KEYS, NOT KEYS
-              — you grant scoped permissions and revoke them whenever. We never hold withdrawal rights. Enforced by the build. SOCIAL
-              RECOVERY — guardian sets, M-of-N. Losing a device isn't losing your life savings. ONE ACCOUNT, EVERYTHING — the same wallet
-              trades INTACORE, funds your card, holds your loan collateral and joins your crew vault.
-            </p>
-          </div>
-        </div>
-      </section>
-      <section id="rooms">
-        <div class="wrap">
-          <p class="kicker">V · TWELVE ROOMS. ONE HOUSE. ONE KEY.</p>
-          <h2>Twelve rooms. One house. One key.</h2>
-          <p class="lead">
-            Every module is a complete, standalone product. Live inside one and never feel a missing wall. Open from day one. Rank and stake
-            raise limits — the doors are never locked.
-          </p>
-          <div class="rooms">
-            <article class="room card-beam">
-              <code>00</code>
-              <h3>Identity Core</h3>
-              <p>One account, one verification, one rank, one wallet set — not a product you buy</p>
-            </article>
-            <article class="room card-beam">
-              <code>01</code>
-              <h3>Trade</h3>
-              <p>Spot, futures, options, OTC, convert, copy, forex — a trader never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>02</code>
-              <h3>Protocol / Dex</h3>
-              <p>Self-custody, on-chain books, zero KYC by architecture — a sovereign never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>03</code>
-              <h3>P2P</h3>
-              <p>Street rails, contract escrow, 100+ currencies — the street never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>04</code>
-              <h3>Launch</h3>
-              <p>Launchpad, meme factory, NFT, RWA, structured issuance — a creator never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>05</code>
-              <h3>Bank</h3>
-              <p>Accounts, loans, yield, cards, auto-invest, tax, payroll — a saver never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>06</code>
-              <h3>Pay</h3>
-              <p>Gateway, PSP, PayFac, routing, merchant contracts — a merchant never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>07</code>
-              <h3>Predict</h3>
-              <p>Real prediction markets on real books, on our chain — the twelfth room</p>
-            </article>
-            <article class="room card-beam">
-              <code>08</code>
-              <h3>Market</h3>
-              <p>An app store for finance: bots, tools, data, strategies — a power user never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>09</code>
-              <h3>Academy</h3>
-              <p>Live lobbies, ambassadors, curriculum, certifications — a student never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>10</code>
-              <h3>Token + Mine</h3>
-              <p>Proof-of-compute mining, staking, governance, burn — a miner never leaves it</p>
-            </article>
-            <article class="room card-beam">
-              <code>11</code>
-              <h3>Core + Agents</h3>
-              <p>The engine room and the AI workforce under everything — invisible to you</p>
-            </article>
-          </div>
-        </div>
-      </section>
-      <section id="systems">
-        <div class="wrap">
-          <p class="kicker">VI · THREE SHARED SYSTEMS</p>
-          <h2>If a feature needs a fourth, the design is wrong.</h2>
-          <div class="tabs" role="tablist" aria-label="Shared systems">
-            <button class="tab" role="tab" aria-selected="true" data-tab="s1">THE IDENTITY</button
-            ><button class="tab" role="tab" aria-selected="false" data-tab="s2">THE BALANCE</button
-            ><button class="tab" role="tab" aria-selected="false" data-tab="s3">THE TOKEN</button>
-          </div>
-          <div class="tabpanel prose active" data-panel="s1">
-            <h3>THE IDENTITY</h3>
-            <p>
-              Verify once. Trade, bank, launch, learn, sell, predict — everywhere. No repeat paperwork, ever. An Academy cert cuts your
-              trading fees. A clean P2P record raises your card limit. Copy-trade performance earns you a lobby to host. Rank earned in any
-              room counts in every room. One profile, many modes — trader, merchant, creator, student. Same person, same reputation.
-            </p>
-          </div>
-          <div class="tabpanel prose" data-panel="s2" hidden>
-            <h3>THE BALANCE</h3>
-            <p>
-              Money is never trapped in a room. Trade profit is instantly spendable on the card, stakeable in yield, or collateral on a
-              loan. No transfers. No waiting. A merchant's settlement lands in the same account they trade from. Come in any door; the money
-              works in all of them.
-            </p>
-            <p>Under it — the ledger is law:</p>
-            <p>
-              Double-entry, always. Every transaction sums to zero per asset, in one serializable database transaction. Σ debits = Σ
-              credits, or it doesn't post. No module holds a balance. Not for fees, not for rewards, not for gas. One wallet graph for the
-              entire OS. 18 decimals of precision. Money is never a floating-point number. Hash-chained. Every transaction hashes the one
-              before it. A tamper-evident book. Reconciled hourly. Snapshots must match a full entry replay to 18 decimals. A mismatch pages
-              an operator and freezes the module that diverged. Recipes only. Deposits, fills, escrow, stake, collateral, liquidation, fees,
-              rewards — approved recipes, never invented balances. No raw database writes from any service. Ever.
-            </p>
-          </div>
-          <div class="tabpanel prose" data-panel="s3" hidden>
-            <h3>THE TOKEN</h3>
-            <p>
-              One asset carrying value between every room, across both planes. Pay any fee in it for a standing discount. Every reward paid
-              in it. A fixed slice of every module's revenue buys it back.
-            </p>
-            <p>COMPETITORS CAN COPY A ROOM. THEY CANNOT COPY THE HOUSE. AND THEY CANNOT COPY THE GROUND.</p>
-          </div>
-        </div>
-      </section>
-      <section id="trade">
-        <div class="wrap">
-          <p class="kicker">VII · TRADE — THE TRADING HEART</p>
-          <h2>The trading heart</h2>
-          <div class="trade-layout">
-            <div class="prose">
-              <div class="prose">
-                <p>
-                  SPOT — full order book, limit/market/stop. All majors, full token support, custom listings at will, fiat pairs against any
-                  configurable base.
-                </p>
-                <p>FUTURES — cross and isolated margin, liquidation engine with an insurance fund, funding-rate revenue on top of fees.</p>
-                <p>
-                  OPTIONS — calls and puts with a strategy builder for spreads and hedges. Almost nobody at this tier actually runs this.
-                </p>
-                <p>PRIVATE · OTC — size without slippage. RFQ workflow, zero book impact, staked-tier and institutional access.</p>
-                <p>CONVERT — one tap, zero order-book anxiety. The door retail actually walks through.</p>
-                <p>
-                  MIRROR — copy verified leaders, mirrored automatically. Leader tiers gated by agent-audited track records, not
-                  screenshots.
-                </p>
-                <p>FOREX — FX beside crypto through integrated liquidity and payment rails. One terminal, both worlds.</p>
-                <p>MATCHING ENGINE — high-throughput, full depth, Rust-portable by design.</p>
-              </div>
-              <div class="acc-grid">
-                <details open>
-                  <summary>More</summary>
-                  <p>
-                    DEEP LIQUIDITY — internal market making from day one plus aggregated venue liquidity. Books are full on day one, not day
-                    three hundred.
-                  </p>
-                  <p>ALGO EXECUTION — TWAP, VWAP, EWAP, PVOL. Institutional execution served as a retail feature.</p>
-                  <p>SUB-ACCOUNTS — per strategy, per team, per fund, with consolidated reporting.</p>
-                  <p>
-                    PRO TERMINAL + MOBILE — desktop and native apps under our own name. Advanced charting, hotkeys, multi-book layouts.
-                    Built for people who actually trade.
-                  </p>
-                  <p>
-                    ALERTS &amp; WATCHLISTS — price, percent, volatility, funding, liquidation-proximity warnings, whale flow. Synced across
-                    terminal and phone.
-                  </p>
-                  <p>
-                    PAPER MODE — a real paper market wired into Academy workbooks and the Quant pipeline. Practice before capital, always.
-                  </p>
-                  <p>100+ LANGUAGES — every surface keyed from day one. The lobby speaks yours.</p>
-                </details>
-              </div>
-            </div>
-            <div class="terminal card-beam" aria-label="Live chart demo">
-              <div class="terminal-bar"><span class="live">● DEMO</span><span>BTC-PERP</span><span>ILLUSTRATIVE</span><span>LWC</span></div>
-              <div id="tv-demo-chart" class="chart-host"></div>
-              <p class="demo-tag">Lightweight Charts demo · not Advanced Charts · synthetic series · licence path in progress</p>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section id="execution">
-        <div class="wrap">
-          <p class="kicker">VIII · THE EXECUTION EMPIRE</p>
-          <h2>The layer no exchange ships properly.</h2>
-          <div class="prose">
-            <p>THE LAYER NO EXCHANGE SHIPS PROPERLY.</p>
-            <p>CONNECT — OUR OWN VENUE FABRIC</p>
-            <p>
-              ONE TYPED CONTRACT — markets, books, trades, funding, borrow rates, fees, account state, normalised across top-tier CEXs,
-              on-chain venues, AMMs, FX rails, and INTACORE as a first-class citizen.
-            </p>
-            <p>STREAMING-FIRST — sequenced books, gap-detected and cross-checked. Not a polling library with a bow on it.</p>
-            <p>
-              LATENCY GRADING — every adapter continuously scored on round-trip, book staleness and reject rates, feeding routing weights
-              live.
-            </p>
-            <p>VENUE VAULT — your external keys, HSM-backed and scoped. Trade-only. Withdrawal permission refused by policy.</p>
-            <p>OUR OWN DATA LAKE — every normalised tick, book and fill captured. Our moat, and the fuel for your backtests.</p>
-            <p>
-              NOTHING BORROWED — no third-party connectivity library anywhere in the money path. We built past the industry standard, not on
-              top of it.
-            </p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>Execution — The Cross-Venue Brain</summary>
-              <p>
-                SMART ORDER ROUTER — best execution across internal books, external venues and pools. Cost model covers fees, expected
-                impact, latency grade and transfer cost. Full execution reports: implementation shortfall, venue attribution.
-              </p>
-              <p>
-                ALGO ENGINE — TWAP, VWAP, EWAP, PVOL plus iceberg, sniper, pairs, spread, basis and funding-capture. Parameterised, audited,
-                resumable.
-              </p>
-              <p>
-                ARBITRAGE ENGINE — cross-exchange spot, triangular, spot-perp basis, funding-rate, cross-asset, DEX↔️CEX with pre-positioned
-                inventory both sides — no bridge-latency fantasy. PnL attributed per opportunity class.
-              </p>
-              <p>
-                MARKET-MAKING ENGINE — spread, skew and inventory-band models, cross-venue hedging, kill-switches on volatility or inventory
-                breach. The same engine that seeds our books works the street.
-              </p>
-              <p>
-                RISK SPINE — pre-trade checks per strategy, venue exposure caps, drawdown halts, a global kill-switch, every order traced
-                end to end.
-              </p>
-              <p>
-                SPEED, STATED HONESTLY — external venues are API-bound low latency and we compete hard there. True microsecond HFT exists
-                only where we own the venue. We win latency where we own the ground and breadth everywhere else.
-              </p>
-            </details>
-            <details open>
-              <summary>Quant — You Get The Same Rails The House Runs On</summary>
-              <p>
-                STRATEGY STUDIO — no-code builder: signal blocks, condition logic, execution blocks, mandatory risk blocks (position caps,
-                stop policy, drawdown halt). Guardrails pre-tuned to your Blueprint.
-              </p>
-              <p>
-                CODE SDK — TypeScript and Python against a sandboxed runtime. Event-driven on tick, book, fill, funding. Deterministic
-                replay guaranteed.
-              </p>
-              <p>
-                BACKTEST ENGINE — event-level on our own data lake with real fee, latency and slippage models. Walk-forward and Monte Carlo.
-              </p>
-              <p>
-                HONESTY ENFORCED — results ship with overfitting warnings and out-of-sample verdicts. No curve-fit marketing allowed on this
-                platform.
-              </p>
-              <p>
-                PAPER → LIVE — paper against live feeds, staged live with capital ramps, then full. The kill-switch is always visible to
-                you.
-              </p>
-              <p>HARD SANDBOXING — CPU, memory and egress capped. No raw network. Market data and orders only, through the runtime API.</p>
-              <p>
-                STRATEGY MARKETPLACE — publish as a subscription or profit share. Copy-trading generalised from people to systems, audited
-                on real risk-adjusted performance.
-              </p>
-              <p>COMPUTE TIERS — free paper and limited live; staked tiers for more strategies, faster data, priority execution.</p>
-              <p>SOVEREIGN LANE — on-chain-only strategies executed from your smart account by session key. Quant with zero KYC.</p>
-            </details>
-            <details>
-              <summary>And We Never Trade Against You With Your Own Tools.</summary>
-              <p>
-                The Throne Law: the house desk runs as a sealed private tenant — separate keys, separate namespace. Its strategies are never
-                in the product repo, never listed, never disclosed.
-              </p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="bank">
-        <div class="wrap">
-          <p class="kicker">IX · SOVEREIGN BANKING — ZERO KYC BY ARCHITECTURE</p>
-          <h2>Sovereign banking</h2>
-          <div class="prose">
-            <p>— ZERO KYC BY ARCHITECTURE</p>
-            <p>
-              Every feature you expect from a modern bank. No custodian means no identity requirement — not because we found a loophole,
-              because there's nobody to ask.
-            </p>
-            <p>
-              VAULTS — smart-account balances with banking-grade UX. Named spaces, scheduled transfers, multi-asset. Spend analytics
-              computed from chain data, never from a profile of you.
-            </p>
-            <p>
-              SWAP — one-tap convert, smart-routed across books and pools, executed from your own account by session key. Fiat display,
-              crypto settlement.
-            </p>
-            <p>
-              LOANS — on-chain lending markets. Collateral in contracts, never our ledger. Borrow stables against BTC, ETH or IFC with no
-              application and no identity — the collateral IS the underwriting.
-            </p>
-            <p>
-              LIQUIDATIONS — permissionless keepers plus a protocol backstop. Oracle-marked, portfolio-aware LTV. Predictable, auditable,
-              sleepless.
-            </p>
-            <p>
-              EARN — on-chain sources only on this plane: validator staking, lending supply, LP fees, protocol real-yield share. No
-              custodial pool ever masquerades as DeFi here.
-            </p>
-            <p>
-              TREASURY YIELD — tokenised T-bill vaults. Your cash earns treasury yield, self-custodied — beating every neobank savings rate
-              with a sentence that's actually true.
-            </p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>
-                AUTO-INVEST — DCA on any asset or basket, any cadence. Card round-ups sweeping spare change into yield. Threshold sweeps:
-                anything over X moves to earn.
-              </p>
-              <p>PAY ANYONE — handle-based transfers, payment requests, split bills, all contract transfers. Venmo UX, zero custodian.</p>
-              <p>
-                FIAT BRIDGE — need real money in or out without touching the compliant plane? Non-custodial P2P with contract escrow. Your
-                counterparty pays their own bank rail. We never touch the fiat leg.
-              </p>
-            </details>
-            <details open>
-              <summary>And On The Fiat Plane — The Full Custodial Bank</summary>
-              <p>MULTI-CURRENCY ACCOUNTS — fiat and crypto, full banking UX. One balance graph shared with the trading engine.</p>
-              <p>
-                CRYPTO LOANS — real-time portfolio-aware LTV, automated margin calls, transparent liquidation thresholds, daily interest
-                accrual.
-              </p>
-              <p>EARN &amp; STAKING — flexible and fixed pools. Native staking pays a share of real platform revenue.</p>
-              <p>FIAT ON/OFF RAMP — all major currencies in and out. The bridge between both worlds.</p>
-              <p>DEFI MODULES — P2P lending, advanced staking strategies, curated integrations.</p>
-              <p>
-                TAX ENGINE — OURS, NOT VENDORED — trades, P2P, card spend-disposals, on-chain activity, mining income, staking rewards. Lot
-                accounting per jurisdiction, realised and unrealised views, export packs. Nothing to re-import — that's the entire
-                advantage.
-              </p>
-            </details>
-            <details>
-              <summary>The Sovereign Card — Engineered So It Can'T Be Rugged</summary>
-              <p>
-                Every anonymous card program in history died the same way: the issuer held the float, the program got shut down, and users'
-                money went with it. Not here.
-              </p>
-              <p>
-                SELF-CUSTODY FUNDED — funds stay in your smart account until the authorization moment. The swipe pulls the exact fiat
-                equivalent by just-in-time conversion. A program shutdown strands zero user funds.
-              </p>
-              <p>
-                FRICTION-TIERING, NOT COMPLIANCE-SKIPPING — minimal-verification low-limit tier where the issuer's jurisdiction lawfully
-                allows it; limits step up with verification. This is why the card is still alive in year three.
-              </p>
-              <p>
-                VIRTUAL + PHYSICAL — instant virtual issuance, wallet provisioning, branded plastic and metal tiers shipped worldwide.
-                Real-time limits, freeze, category locks.
-              </p>
-              <p>THE CARD IS THE FLEX — tier tracks your rank across both planes. Cashback in IFC, on-chain, every swipe.</p>
-              <p>ADAPTER-ISOLATED — the issuer is a swappable module. The funding contract is ours, and permanent.</p>
-              <p>
-                SUB-2-SECOND AUTH — authorization webhook → balance check → conversion at spend → approve. Inside two seconds, including the
-                chain.
-              </p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="rails">
-        <div class="wrap">
-          <p class="kicker">X · SOVEREIGN RAILS — TWO LANES, ONE DASHBOARD</p>
-          <h2>Sovereign rails</h2>
-          <div class="prose">
-            <p>— TWO LANES, ONE DASHBOARD</p>
-            <p>LANE A — PERMISSIONLESS. ZERO KYB. NO APPLICATION.</p>
-            <p>
-              Merchant mode is deploying a contract to your own smart account. One tap. No underwriting, no waiting — because we are never
-              in the flow of funds.
-            </p>
-            <p>Acceptance address, auto-split rules, optional auto-convert to stables</p>
-            <p>Buyer pays merchant directly; the contract handles splits and conversion</p>
-            <p>Payment links, hosted checkout, QR, invoices, subscriptions via allowances you grant</p>
-            <p>100+ assets via router; settlement instant, final, self-custodied</p>
-            <p>Protocol fee taken in-stream at a published rate → straight to the buyback</p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>No vertical gate exists on this lane. There's no counterparty here to impose one.</p>
-              <p>A DM becomes a sale with zero onboarding.</p>
-            </details>
-            <details open>
-              <summary>Lane B — In-House Fiat Processing. 100% Our Stack.</summary>
-              <p>
-                Our own gateway, PSP core, PayFac trees, routing engine, fraud engine, checkout builder, analytics. Not a wrapper on someone
-                else's processor.
-              </p>
-              <p>BRANDED GATEWAY — our domain, checkout and portal. Zero third-party branding anywhere, down to the API error messages.</p>
-              <p>PSP MODE — own the merchant and the margin. Digital onboarding, custom pricing per merchant or vertical.</p>
-              <p>PAYFAC MODE — sub-merchant empires, role-based access across 14 permission areas, full settlement control.</p>
-              <p>SMART ROUTING — by geography, card type, risk and live approval-rate performance. Fewer declines, more revenue.</p>
-              <p>DUAL SETTLEMENT — to bank or straight to crypto. Cross-border payouts worldwide.</p>
-              <p>LIVE IN A DAY, NOT A QUARTER — and we say plainly that KYB exists here. No bank connects an anonymous processor.</p>
-            </details>
-            <details>
-              <summary>Across Both Lanes</summary>
-              <p>
-                MULTI-CHANNEL CHECKOUT — card rails, the major 400M-wallet network, crypto in 100+ assets, external wallets, guest checkout
-                with no account required.
-              </p>
-              <p>MERCHANT ONBOARDING — three steps: email, verification, payment setup. Tiered limits that scale with volume.</p>
-              <p>
-                API-FIRST — named keys, scoped permissions, webhooks, domain whitelisting, full sandbox. Authorize, capture, track,
-                reconcile.
-              </p>
-              <p>
-                FRAUD &amp; RISK — scoring, chargeback reduction, decline-recovery tooling, approval-rate optimisation, with the Merchant
-                Agent watching every account.
-              </p>
-              <p>
-                CHECKOUT BUILDER — buyer fields, fee routing, discounts, shipping profiles, redirects. Configured without touching code.
-              </p>
-              <p>SUBSCRIPTIONS — recurring billing for SaaS, memberships and commerce, across card and crypto rails.</p>
-              <p>
-                HIGH-RISK READY — forex, gaming, travel, coaching, digital goods, marketplaces. The verticals mainstream processors fear are
-                home turf.
-              </p>
-              <p>
-                REVENUE ANALYTICS — real-time volume, fees, merchant performance, chargeback rates, with export. The dashboard sub-merchants
-                brag about.
-              </p>
-              <p>COMMERCE PLUGINS — drop-in for the major storefront platforms.</p>
-              <p>PAYMENT LINKS — no-code links and hosted branded checkout. A merchant can accept without a website.</p>
-              <p>
-                MERCHANT MODE FOR ANYONE — any user flips a switch and accepts crypto in 100+ assets with instant conversion. Commerce as a
-                native feature of the account.
-              </p>
-              <p>
-                RAIL ADAPTERS — every external rail behind one interface. Issuer risk is a swappable module. The platform never depends on a
-                partner to function.
-              </p>
-            </details>
-            <details>
-              <summary>Every Lane A Merchant Can Graduate To Lane B.</summary>
-              <p>One dashboard. Two rails. No PSP on earth offers that.</p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="p2p">
-        <div class="wrap">
-          <p class="kicker">XI · P2P — WHERE BANKING RAILS FAIL, P2P WINS</p>
-          <h2>P2P</h2>
-          <div class="prose">
-            <p>— WHERE BANKING RAILS FAIL, P2P WINS</p>
-            <p>
-              Direct user-to-user trading with smart-contract escrow, 100+ fiat currencies, and any payment method two humans agree on. The
-              on-ramp for Turkey, Southeast Asia, Africa and LATAM — and the mouth of the whole funnel. P2P today, the exchange tomorrow,
-              the card next week, the academy next month.
-            </p>
-            <p>DIRECT TRADING — makers set price and methods; takers choose. No intermediary position, no hidden spread against you.</p>
-            <p>
-              ESCROW, YOUR CHOICE OF PLANE — contract escrow on the sovereign side, ledger escrow on the compliant side. Your call, not
-              ours.
-            </p>
-            <p>
-              MODERATED DISPUTES — evidence upload, deadline tracking, a human at the end. No path strands funds — tested to destruction.
-            </p>
-            <p>100+ FIAT CURRENCIES — if it has a currency code, it trades here.</p>
-            <p>ANY PAYMENT METHOD — bank transfer, mobile money, e-wallets, cash. The parties choose; the platform protects.</p>
-            <p>
-              REPUTATION — completion rate, average release time, dispute history, on the same rank graph as the rest of the OS. A spotless
-              P2P record raises your card limit.
-            </p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>MERCHANT PROGRAMME — verified badges, elevated limits, API access. The street's market makers, formalised.</p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="launch">
-        <div class="wrap">
-          <p class="kicker">XII · LAUNCH — WHERE CULTURE MINTS</p>
-          <h2>Launch</h2>
-          <div class="prose">
-            <p>— WHERE CULTURE MINTS</p>
-            <p>
-              Anyone can mint: a meme, a token, a collection, a tokenised building. Every asset lists instantly on our books — so launch
-              volume is exchange volume, and meme season is our season.
-            </p>
-            <p>MEME FACTORY — name, ticker, supply, art. A live market in minutes, contracts and liquidity handled by the Launch Agent.</p>
-            <p>
-              TOKEN LAUNCHPAD — presale or fair launch, vesting enforced by contract, investor dashboards, allocation tiers gated by stake.
-            </p>
-            <p>CUSTOM ASSET CREATION — multi-chain, supply, parameters and distribution fully configurable.</p>
-            <p>INSTANT LISTING — no external process, no gatekeeper, no waiting room.</p>
-            <p>
-              FUNDRAISING — structured raises with milestones, vesting and investor management, connected straight to a capital audience.
-            </p>
-            <p>
-              NFT MARKETPLACE — mint, buy, sell, auction, royalties enforced on-chain, collections cross-promoted through Academy lobbies.
-            </p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>
-                RWA TOKENISATION — property, commodities, equity, fund interests, wired into our own capital and fund infrastructure as
-                licensing activates.
-              </p>
-              <p>STRUCTURED ISSUANCE — wrapped assets, synthetics, structured products. Full lifecycle from issuance to redemption.</p>
-              <p>BONDING-CURVE OPTION — fair price discovery before book listing.</p>
-            </details>
-            <details open>
-              <summary>The Trust Layer — The Anti-Rug Architecture</summary>
-              <p>ENFORCED LP LOCKS with a public countdown. Not a promise in a Telegram group.</p>
-              <p>VESTING PROOFS on team allocations rendered on every token page.</p>
-              <p>DEPLOYER REPUTATION — an on-chain history score on every creator. Rugs are forever.</p>
-              <p>
-                PRE-LISTING RISK FLAGS — the Launch Agent flags patterns before a market opens. Honest-market badges gate cross-promotion.
-              </p>
-              <p>in meme season, trust is the moat</p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="predict">
-        <div class="wrap">
-          <p class="kicker">XIII · PREDICT — THE TWELFTH ROOM</p>
-          <h2>Predict</h2>
-          <div class="prose">
-            <p>— THE TWELFTH ROOM</p>
-            <p>
-              NATIVE MARKET TYPE — binary, categorical and scalar markets traded as outcome shares on a CLOB, not an AMM approximation. Same
-              engine, real depth.
-            </p>
-            <p>
-              RESOLUTION WITH SKIN IN IT — oracle adapters, designated reporters, IFC-staked dispute escalation with bond slashing on bad
-              reports.
-            </p>
-            <p>FULLY SOVEREIGN — trade from your smart account. Zero KYC by architecture, geo-gated on the front end where law requires.</p>
-            <p>
-              WIRED INTO THE OS — Academy runs prediction leagues on real infrastructure. The Scanner surfaces mispricings. The Quant SDK
-              gets prediction feeds.
-            </p>
-            <p>CREATOR MARKETS — permissioned at launch, then governance-opened. Creation and resolution fees feed the one buyback.</p>
-            <p>CULTURE ENGINE — every market is a shareable card. Every resolution is a moment.</p>
-          </div>
-        </div>
-      </section>
-      <section id="crew">
-        <div class="wrap">
-          <p class="kicker">XIV · CREW VAULTS &amp; LEGACY VAULTS</p>
-          <h2>Crew &amp; legacy vaults</h2>
-          <div class="prose">
-            <h3 class="subh">&amp; LEGACY VAULTS</h3>
-            <p>CREW VAULTS — SQUAD MONEY</p>
-            <p>
-              Your crew becomes a financial unit. A shared multi-sig treasury with member share tracking, proposal-and-threshold spending,
-              crew-owned strategies deployed through Quant, shared goals rendered live in your lobby, split rules on exit. Tournament prize
-              pools pay straight into the vault.
-            </p>
-            <p>The social layer becomes a balance sheet. No competitor has squad money.</p>
-            <p>LEGACY VAULTS — INHERITANCE, SOLVED</p>
-            <p>
-              Self-custody's unsolved problem, built as a trust product: time-locked inheritance on smart accounts, guardian sets with
-              social recovery, inactivity-triggered succession with challenge windows, staged release schedules for heirs, zero-PII
-              attestation-based claims.
-            </p>
-            <p>Serious money can finally live sovereign for decades.</p>
-          </div>
-        </div>
-      </section>
-      <section id="business">
-        <div class="wrap">
-          <p class="kicker">XV · BUSINESS BANKING &amp; PAYROLL</p>
-          <h2>Business banking &amp; payroll</h2>
-          <div class="prose">
-            <h3 class="subh">&amp; PAYROLL</h3>
-            <p>CORPORATE ACCOUNTS on the same ledger. Multi-user roles with maker/checker approval workflows and spend thresholds.</p>
-            <p>TEAM EXPENSE CARDS — per-card limits, category locks, receipt capture. Freeze from your phone.</p>
-            <p>
-              CRYPTO PAYROLL — scheduled multi-recipient payouts in a stables/fiat mix, contractor self-onboarding, payslip records. Payroll
-              to sovereign vaults means a borderless team gets paid in minutes — and the recipients give us nothing.
-            </p>
-            <p>INVOICING wired straight into Pay. An invoice becomes a link; a link becomes settlement.</p>
-            <p>ACCOUNTING EXPORTS plus the tax engine reading the same ledger. Nothing to reconcile by hand.</p>
-            <p>ATOMIC RUNS — a payroll run completes for everyone or nobody. Tested as a money path, because it is one.</p>
-          </div>
-        </div>
-      </section>
-      <section id="blueprint">
-        <div class="wrap">
-          <p class="kicker">XVI · THE SOVEREIGN BLUEPRINT</p>
-          <h2>Onboarding is not a form. It is the first flex.</h2>
-          <div class="blueprint-grid">
-            <div class="prose">
-              <div class="prose">
-                <p>ONBOARDING IS NOT A FORM. IT'S THE FIRST FLEX.</p>
-                <p>
-                  Before your first trade you complete your Sovereign Blueprint — a short conversational session, voice or text, run by our
-                  own Neural Engine. It reads how you decide, how you carry risk, how you learn, how you run in a crew. Then the entire OS
-                  bends around you.
-                </p>
-                <p>
-                  THE REVEAL — decision style, risk temperament, energy rhythm, learning mode, natural crew role, as a designed shareable
-                  card. The first screenshot people post.
-                </p>
-                <p>
-                  SMART MATCHING — a crew of complementary blueprints. Compatibility computed, not guessed. Strangers become a unit in week
-                  one.
-                </p>
-                <p>
-                  CREW ARCHITECTURE — shared XP, crew leaderboards, crew lobbies, crew challenges in seasonal tournaments. Belonging
-                  engineered from the first session.
-                </p>
-                <p>FITTED MENTORS — an aggressive scalper doesn't get coached by a patient swing trader. Fit compounds learning speed.</p>
-                <p>YOUR CURRICULUM — pacing, format and order tuned to how you actually absorb.</p>
-                <p>
-                  AGENT PERSONALISATION — every agent speaks in your register and defaults to your risk temperament. The OS feels like it
-                  knows you, because it does.
-                </p>
-              </div>
-              <div class="acc-grid">
-                <details open>
-                  <summary>More</summary>
-                  <p>
-                    LOBBY &amp; CONTENT ROUTING — sessions, specialist rooms and feeds all route through the Blueprint. The right room finds
-                    the right person.
-                  </p>
-                  <p>
-                    PORTABLE, ZERO-PII — issued as an on-chain attestation carrying no personal data. A no-KYC user on the Protocol Plane
-                    still carries earned rank, crew and perks.
-                  </p>
-                  <p>OWNED &amp; PRIVATE — exportable, deletable. Intelligence in service of the person, never surveillance of them.</p>
-                  <p>the OS knows you before your first trade</p>
-                  <p>Nobody starts alone. The cold-start problem of every community — solved at signup.</p>
-                </details>
-              </div>
-            </div>
-            <aside class="blueprint-card card-beam" aria-label="Blueprint card mock">
-              <div class="bp-top"><span>SOVEREIGN BLUEPRINT</span><span class="bp-rank">RANK · FOUNDING</span></div>
-              <div class="bp-name">YOUR IDENTITY CARD</div>
-              <div class="bp-grid">
-                <div><b>DECISION</b><span>Aggressive clarity</span></div>
-                <div><b>RISK</b><span>Controlled fire</span></div>
-                <div><b>ENERGY</b><span>Night session</span></div>
-                <div><b>CREW</b><span>Caller / scout</span></div>
-              </div>
-              <div class="bp-bar"><span></span></div>
-              <p class="demo-tag">Designed to be posted · first screenshot people share</p>
-            </aside>
-          </div>
-        </div>
-      </section>
-      <section id="agents">
-        <div class="wrap">
-          <p class="kicker">XVII · AGENTS — A WORKFORCE, NOT A CHATBOT</p>
-          <h2>Agents</h2>
-          <div class="prose">
-            <p>— A WORKFORCE, NOT A CHATBOT</p>
-            <p>Every platform ships a chatbot. We ship a fleet.</p>
-            <p>
-              THE NAVIGATOR — always on, every screen, both planes. "Move half my USDT to yield." "Show my PnL this month." "Book me into
-              tonight's futures lobby." Voice or text, 100+ languages.
-            </p>
-            <p>
-              PORTFOLIO — watches allocation 24/7, flags concentration, proposes rebalances, back-tests, auto-executes inside your
-              guardrails with full logs.
-            </p>
-            <p>
-              MARKET SCANNER — momentum, volume anomalies, whale flow, funding skew, meme velocity on socials. Ranked signals pushed by
-              tier.
-            </p>
-            <p>
-              COPY-INTEL — audits leaders on real risk-adjusted performance, drawdown honesty, style drift. Protects followers from lucky
-              gamblers dressed as traders.
-            </p>
-            <p>
-              LAUNCH — tokenomics templates, contract deployment, listing checklist, launch-day liquidity plan. A meme idea to a live market
-              in under an hour.
-            </p>
-            <p>MERCHANT — approval rates, routing proposals, dispute drafts, settlement cash-flow forecasts.</p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>
-                RISK &amp; COMPLIANCE — real-time monitoring, sanctions screening, anomaly detection, automated report drafting. A machine
-                that never sleeps.
-              </p>
-              <p>
-                SUPPORT — first-line resolution across every product, grounded in your live account state. Escalates to a human with a
-                complete case file attached.
-              </p>
-              <p>
-                ACADEMY COACH — a personal tutor reading the same Blueprint: adaptive pacing, weak-spot drills, certification tracking.
-                Nobody learns alone.
-              </p>
-              <p>GROWTH — campaign experiments, brand-voice drafting, affiliate quality scoring, which cultural moment to ride next.</p>
-              <p>
-                ON-CHAIN EXECUTION — agents execute on INTACORE via session keys you grant, under the same guardrail law. The first
-                agent-native chain UX.
-              </p>
-            </details>
-            <details open>
-              <summary>Agentic Law</summary>
-              <p>PERMISSIONED AUTONOMY — agents act only inside limits you set.</p>
-              <p>TOTAL TRANSPARENCY — every action logged. Every log visible to you.</p>
-              <p>MODEL-AGNOSTIC CORE — best engine per task, swappable without rebuilds. No single dependency in the intelligence layer.</p>
-              <p>
-                THEY EARN THEIR KEEP — premium capability is a subscription and a stake unlock. AI is a product here, not a cost centre.
-              </p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="academy">
-        <div class="wrap">
-          <p class="kicker">XVIII · ACADEMY — LOBBIES, NOT LECTURES</p>
-          <h2>Academy</h2>
-          <div class="prose">
-            <p>— LOBBIES, NOT LECTURES</p>
-            <p>
-              Forget course portals. Drop into rooms where verified ambassadors sit streaming live — running charts, breaking down trades,
-              taking questions, flexing setups.
-            </p>
-            <p>
-              LIVE SESSION LOBBIES — market opens, live trading, launch-day watch parties, post-mortems. Capacity tiers: free, staked,
-              invite-only penthouse.
-            </p>
-            <p>
-              SPATIAL META LAYER — navigable rooms with avatars, a stage, chat, shared charts. Presence matters — you see who's in the room
-              and who's ranked what. Headset-ready.
-            </p>
-            <p>
-              AMBASSADOR RESIDENCIES — paid per session in IFC plus subscription revenue share, with displayed rank. A status economy that
-              recruits itself.
-            </p>
-            <p>
-              SPECIALIST ROOMS — the futures room, the options room, the meme-launch war room, the forex desk, the DeFi lab, the merchant
-              clinic.
-            </p>
-            <p>CREW SESSIONS — private lobbies, shared goals, leaderboards, challenges. The squad levels up together.</p>
-            <p>STREAM-NATIVE — every session clippable. One good live call outperforms any ad campaign.</p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>
-                EVENTS &amp; TOURNAMENTS — trading competitions, paper leagues, launch-prediction games, seasonal events with token prize
-                pools and card-tier upgrades.
-              </p>
-              <p>
-                STRUCTURED PATHS — beginner to professional: spot, futures, options, DeFi, technical analysis, risk, portfolio construction,
-                market psychology — sequenced by your Blueprint.
-              </p>
-              <p>
-                PLAYBOOKS — a proprietary twenty-playbook library: setups, entry and exit rules, risk parameters, position sizing.
-                Actionable, never academic.
-              </p>
-              <p>WORKBOOKS — hands-on exercises in simulated environments wired to real paper markets. Practice before capital, always.</p>
-              <p>CERTIFICATION RANKS — badges that unlock real benefits: fee discounts, higher follower caps, hosting rights.</p>
-              <p>VIDEO LIBRARY + AI COACH — a full media layer and a coach reading the same profile as the matching engine.</p>
-              <p>COMMUNITY &amp; MENTORSHIP — matched crews, boards, and a leader pipeline that turns students into ambassadors.</p>
-              <p>
-                ACCESS MODEL — a real free tier, premium subs, staked lobbies, ambassador subs. The door is never locked; the penthouse is
-                earned.
-              </p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="market">
-        <div class="wrap">
-          <p class="kicker">XIX · MARKET — WE CURATE, THEY BUILD, EVERYONE EATS</p>
-          <h2>Market</h2>
-          <div class="prose">
-            <p>— WE CURATE, THEY BUILD, EVERYONE EATS</p>
-            <p>TRADING TOOLS &amp; BOTS — algorithmic bots, signal services, analytics plugged into our APIs.</p>
-            <p>DEFI INTEGRATIONS — vetted yield aggregators, liquidity optimisers, bridges. Advanced DeFi without the tab-hopping.</p>
-            <p>COMPLIANCE VENDORS — identity, AML and monitoring for sub-merchants and operators.</p>
-            <p>PAYMENT EXTENSIONS — regional connectors, alternative-method plugins, checkout customisations.</p>
-            <p>SECURITY &amp; CUSTODY — hardware-wallet integrations, institutional custody add-ons, insurance, audit services.</p>
-            <p>DATA &amp; ANALYTICS — market data feeds, sentiment engines, on-chain analytics, tax reporting, portfolio tooling.</p>
-            <p>ADVISORY SERVICES — legal, regulatory, tax and launch advisory.</p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>PARTNER INTEGRATIONS — accounting, CRM, community tooling, marketing stacks by API.</p>
-              <p>
-                VENDOR MODEL — apply, get vetted, get listed. Listing fees, commissions, premium placement, slots partly gated by stake.
-              </p>
-              <p>The platform stops being a product and becomes an economy.</p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="token">
-        <div class="wrap">
-          <p class="kicker">XX · THE TOKEN — THE BLOODSTREAM</p>
-          <h2>The token</h2>
-          <div class="prose">
-            <p>— THE BLOODSTREAM</p>
-            <p>Not a bolt-on. The coordination mechanism of the whole OS, across both planes.</p>
-            <p>
-              FEE CURRENCY — pay any fee (trading, withdrawal, listing, card FX) in IFC for a standing discount on a published decay
-              schedule. Constant transactional demand from day one.
-            </p>
-            <p>
-              ACCESS TIERS — staked balances gate launchpad allocations, premium lobbies, OTC access, copy-leader status, vendor slots,
-              compute tiers. Stake to open the rooms that matter.
-            </p>
-            <p>
-              PROOF-OF-COMPUTE MINING — matrix-multiplication proof-of-work. A single gaming rig through datacenter silicon. Fair-launch
-              distribution that builds a mining army before any listing.
-            </p>
-            <p>
-              REAL YIELD — single-sided staking pays a share of actual platform revenue. Flexible, 3-month, 12-month multipliers. Not
-              emissions theatre.
-            </p>
-            <p>VALIDATOR SECURITY — staking secures INTACHAIN. A real security budget.</p>
-            <p>
-              GOVERNANCE — votes on listings, fee parameters, curriculum priorities, treasury grants and chain parameters. The community
-              steers; the core executes.
-            </p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>GAS &amp; SETTLEMENT — chain gas, internal transfers, deployments, mints. Every action on the OS touches the asset.</p>
-              <p>
-                REWARDS ENGINE — card cashback, rank milestone drops, academy bounties, lobby attendance, referral splits, all in IFC.
-                Earning feels like playing.
-              </p>
-              <p>
-                BURN &amp; BUYBACK — a fixed percentage of all platform revenue and the dominant share of chain trading fees market-buy the
-                token. Part burns permanently, part refills rewards. Structural, not promised.
-              </p>
-            </details>
-            <details open>
-              <summary>Distribution</summary>
-              <p>Allocation Share Mechanics</p>
-              <p>Mining emissions 35% Proof-of-compute, 6-year curve</p>
-              <p>Ecosystem rewards 20% Rank drops, cashback, bounties, lobbies</p>
-              <p>Treasury 15% Grants, liquidity — governance controlled</p>
-              <p>Team &amp; founders 12% 4-year vest, 1-year cliff</p>
-              <p>Liquidity 8% Books + pools at generation</p>
-              <p>Strategic partners 6% Ambassadors, market makers</p>
-              <p>Public round 4% Run on our own launchpad</p>
-              <p>Team is 12% and vests four years behind a one-year cliff. There is no 40% insider bag here.</p>
-            </details>
-            <details>
-              <summary>Mining Spec</summary>
-              <p>ALGORITHM — matrix-multiplication PoW. GPU-optimal, ASIC-resistant at launch, adjacent to useful compute.</p>
-              <p>HARDWARE — consumer GPUs through datacenter silicon. Fleet operators welcome — pool software ships with the platform.</p>
-              <p>
-                POOLS — native infrastructure with a rewards distribution engine built in. Solo and pooled, live dashboards, payout
-                automation.
-              </p>
-              <p>SCHEDULE — halvings every 18 months, difficulty retargets per epoch. Every parameter published before ignition.</p>
-              <p>WHY — miners are day-one community: they hold, stake, vote, defend the narrative. Mining is marketing that pays us.</p>
-            </details>
-            <details>
-              <summary>The Flywheel</summary>
-              <p>
-                More users → more fees → bigger buyback and richer yield → hotter allocations and a fatter rewards engine → more users.
-                Mining seeds the army before listing. The Blueprint binds them into crews. The Academy turns crews into real traders. Real
-                traders make the volume that funds the whole loop. Both planes feed one buyback.
-              </p>
-              <p>all roads feed one economy</p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="core">
-        <div class="wrap">
-          <p class="kicker">XXI · CORE — THE ENGINE ROOM</p>
-          <h2>Core</h2>
-          <div class="prose">
-            <p>— THE ENGINE ROOM</p>
-            <p>SUPPORT DESK — tickets and knowledge base with AI first-line and human escalation carrying a full case file.</p>
-            <p>CRM &amp; OPERATIONS — customer relationships, team management, project engine, finance fused with live revenue.</p>
-            <p>
-              COMPLIANCE — per-jurisdiction KYC tiers, geo-blocking, VPN and Tor detection at the edge. Launch markets are a toggle, not a
-              rebuild.
-            </p>
-            <p>ANALYTICS WAREHOUSE — volume, cohorts, funnels, exports, for us and for every merchant and vendor.</p>
-            <p>
-              AFFILIATE &amp; IB NETWORK — multi-tier commission trees with sub-trees and payout automation straight through the ledger.
-            </p>
-            <p>REFERRALS — token-paid, tracked, wired to the waitlist rank system.</p>
-            <p>MARKETING ENGINE — campaign tooling with the Growth Agent inside it.</p>
-          </div>
-          <div class="acc-grid">
-            <details open>
-              <summary>More</summary>
-              <p>MINING POOL OPS — solo and pooled, share validation, live dashboards, automated payouts.</p>
-              <p>CUSTODY OPERATIONS — three layers, cold/warm/hot, with a multi-sig approval workflow.</p>
-              <p>PORTFOLIO SUITE — see everything, optimise anything, across both planes.</p>
-              <p>SITE BUILDER — drag-and-drop pages with live asset APIs, custom domains, SSL.</p>
-              <p>SOCIAL PROMOTION — one-tap share with tracked attribution on every surface.</p>
-              <p>DEVELOPER PLATFORM — public REST APIs, webhooks, scoped keys, docs, full sandbox. Build on us.</p>
-              <p>MOBILE APPS — iOS and Android under our own company name. Zero third-party attribution anywhere.</p>
-              <p>
-                ADMIN &amp; KILL-SWITCHES — listings, fee params, jurisdiction matrix, treasury ops, buyback runs, per-module kill-switches.
-              </p>
-              <p>OBSERVABILITY — every ledger recipe, order and payment traced end to end, SLO dashboards per module.</p>
-            </details>
-            <details open>
-              <summary>Security &amp; Privacy</summary>
-              <p>
-                AUTH — our own service. Short-lived tokens with rotating refresh, TOTP and hardware-key 2FA. No third-party auth dependency
-                — sovereignty starts at login.
-              </p>
-              <p>WITHDRAWAL DEFENCE — allow-lists, delay tiers, device fingerprints, scoped rate limits.</p>
-              <p>PII ISOLATION — identity documents in a separate encrypted store. Services get status flags, never documents.</p>
-              <p>
-                NO ADS. NO DATA RESALE. EVER. — the business model is fees, and it's written into the engineering law, not buried in a
-                privacy page.
-              </p>
-              <p>
-                NO IDENTITY GRAPH FOR SALE — the indexer serves aggregates; sovereign analytics compute client-side. We never sell who you
-                are.
-              </p>
-              <p>STEALTH HANDLES — on the Protocol Plane: one human, two unlinkable presentations.</p>
-            </details>
-          </div>
-        </div>
-      </section>
-      <section id="streams">
-        <div class="wrap">
-          <p class="kicker">XXII · THIRTY STREAMS. ONE ECONOMY.</p>
-          <h2>Thirty streams. One economy.</h2>
-          <div class="prose">
-            <div class="prose">
-              <p>. ONE ECONOMY.</p>
-              <p>Layer Stream Layer Stream</p>
-              <p>Trade Maker/taker fees Academy Premium, certs, lobbies</p>
-              <p>Trade Withdrawal fees Mine Pool fees</p>
-              <p>Pro Fees + funding rates Agents Premium agent subscriptions</p>
-              <p>Mirror Subscriptions + profit share Listings Third-party coin listings</p>
-              <p>Private Spread + desk fee Quant Subscriptions &amp; compute tiers</p>
-              <p>P2P Escrow / service fee Quant Strategy-marketplace commissions</p>
-            </div>
-            <div class="acc-grid">
-              <details open>
-                <summary>More</summary>
-                <p>Protocol Swap + LP fees Execution OMS fees on external-venue flow</p>
-                <p>Launch Listing + % of raise House desk Proprietary PnL (private line)</p>
-                <p>Meme Create, list, volume Biz Payroll &amp; business subscriptions</p>
-                <p>NFT Marketplace fee Tax Report tiers</p>
-                <p>Lend Interest spread Predict Trading, creation, resolution fees</p>
-                <p>Yield Margin on rewards Legacy Vault premiums</p>
-                <p>Bank Card issue, FX, interchange Infra White-label setup + rev-share</p>
-                <p>Pay Processing MDR Infra Ramp widget fees</p>
-                <p>Pay Sub-merchant markup Market Listings + commissions</p>
-                <p>
-                  One user touching three products is worth more than three users touching one — and the OS is engineered to make that the
-                  default path.
-                </p>
-              </details>
-              <details open>
-                <summary>Infra — The Os Itself Is For Sale</summary>
-                <p>RAMP WIDGET — embeddable on/off-ramp and checkout for third-party apps. Their users, our rails, revenue shared.</p>
-                <p>
-                  WHITE-LABEL — hosted exchange-in-a-box through full OS licensing. Your brand, our engine. And every white-label instance
-                  feeds the same buyback — our competitors' infrastructure bill becomes our token's demand.
-                </p>
-              </details>
-            </div>
-          </div>
-          <div class="stream-grid" aria-hidden="true">
-            <div class="stream-pill">STREAM 01</div>
-            <div class="stream-pill">STREAM 02</div>
-            <div class="stream-pill">STREAM 03</div>
-            <div class="stream-pill">STREAM 04</div>
-            <div class="stream-pill">STREAM 05</div>
-            <div class="stream-pill">STREAM 06</div>
-            <div class="stream-pill">STREAM 07</div>
-            <div class="stream-pill">STREAM 08</div>
-            <div class="stream-pill">STREAM 09</div>
-            <div class="stream-pill">STREAM 10</div>
-            <div class="stream-pill">STREAM 11</div>
-            <div class="stream-pill">STREAM 12</div>
-            <div class="stream-pill">STREAM 13</div>
-            <div class="stream-pill">STREAM 14</div>
-            <div class="stream-pill">STREAM 15</div>
-            <div class="stream-pill">STREAM 16</div>
-            <div class="stream-pill">STREAM 17</div>
-            <div class="stream-pill">STREAM 18</div>
-            <div class="stream-pill">STREAM 19</div>
-            <div class="stream-pill">STREAM 20</div>
-            <div class="stream-pill">STREAM 21</div>
-            <div class="stream-pill">STREAM 22</div>
-            <div class="stream-pill">STREAM 23</div>
-            <div class="stream-pill">STREAM 24</div>
-            <div class="stream-pill">STREAM 25</div>
-            <div class="stream-pill">STREAM 26</div>
-            <div class="stream-pill">STREAM 27</div>
-            <div class="stream-pill">STREAM 28</div>
-            <div class="stream-pill">STREAM 29</div>
-            <div class="stream-pill">STREAM 30</div>
-          </div>
-        </div>
-      </section>
-      <section id="never">
-        <div class="wrap">
-          <p class="kicker">XXIII · WHAT WE WILL NEVER DO</p>
-          <h2>Hard rules. Not slogans.</h2>
-          <ul class="never">
-            <li>NEVER HOLD A BALANCE OUTSIDE THE LEDGER. Not for fees. Not for rewards. Not for gas.</li>
-            <li>NEVER STORE MONEY IN A FLOATING-POINT NUMBER. Exact, or it doesn't post.</li>
-            <li>NEVER SHIP A CUSTODIAL PRODUCT DRESSED AS DECENTRALISED. The custody boundary is a build check, not a claim.</li>
-            <li>NEVER CALL SOMETHING DONE BECAUSE IT LOOKS DONE. Nothing temporary survives the phase it was born in.</li>
-            <li>NEVER DRESS A ROADMAP AS A RELEASE. If it isn't live, the screen says so.</li>
-            <li>NEVER TRADE OUR ALPHA AGAINST YOU. The house desk is a sealed tenant.</li>
-            <li>NEVER SELL YOU, YOUR DATA, OR YOUR IDENTITY GRAPH. No ads. No resale. Ever.</li>
-            <li>NEVER DEPEND ON A PARTNER TO FUNCTION. Every external rail is an adapter. Lose one, swap it, keep running.</li>
-            <li>NEVER MAKE YOU THE PRODUCT. You're the account holder. That used to mean something. Here it still does.</li>
-          </ul>
-        </div>
-      </section>
-      <section id="drop">
-        <div class="wrap">
-          <p class="kicker">XXIV · THE DROP</p>
-          <h2>Not a fintech announcement. A game release.</h2>
-          <p class="lead">Not a fintech announcement. A game release.</p>
-          <div class="timeline">
-            <div class="step card-beam">
-              <div class="ph">0</div>
-              <div>
-                <h3>
-                  THE TEASE — cryptic drops, no product shots. Waitlist opens with referral-ranked queue positions. Mining testnet ignites;
-                  the miners become the first evangelists.
-                </h3>
-                <p></p>
-              </div>
-            </div>
-            <div class="step card-beam">
-              <div class="ph">I</div>
-              <div>
-                <h3>
-                  THE BLUEPRINT DROP — Blueprint cards flood socials. Crews form before the doors fully open. Founding-member badges mint.
-                  Token paper publishes.
-                </h3>
-                <p></p>
-              </div>
-            </div>
-            <div class="step card-beam">
-              <div class="ph">II</div>
-              <div>
-                <h3>
-                  THE LOBBY PREVIEW — invite-only sessions with founding ambassadors. Clips travel. Mining mainnet at full ignition. Card
-                  tiers revealed.
-                </h3>
-                <p></p>
-              </div>
-            </div>
-            <div class="step card-beam">
-              <div class="ph">III</div>
-              <div>
-                <h3>SOFT LAUNCH — ranked waves admitted. The Meme Factory opens; the first hundred launches are marketing that pays us.</h3>
-                <p></p>
-              </div>
-            </div>
-            <div class="step card-beam">
-              <div class="ph">IV</div>
-              <div>
-                <h3>
-                  THE PUBLIC DROP — 24-hour lobby marathon. Trading tournament with a token prize pool. Season-one ambassadors. Token
-                  generation event.
-                </h3>
-                <p></p>
-              </div>
-            </div>
-            <div class="step card-beam">
-              <div class="ph">V</div>
-              <div>
-                <h3>
-                  THE SEASONS — quarterly themes, new lobbies, new specialists, limited card skins. Always a reason to come back. Always
-                  something to clip.
-                </h3>
-                <p>
-                  CULTURAL LEVERS AMBASSADORS ARE THE STRATEGY — residencies, revenue share, displayed rank instead of one-off shoutouts.
-                  They build here because they own upside here. EVERY SURFACE IS CLIP-READY — Blueprint cards, lobbies, leaderboards, launch
-                  counters, resolutions, card unboxin
-                </p>
-              </div>
-            </div>
-          </div>
-          <div class="prose" style="margin-top: 1.5rem">
-            <ul>
-              <li>CULTURAL LEVERS</li>
-            </ul>
-            <p>
-              AMBASSADORS ARE THE STRATEGY — residencies, revenue share, displayed rank instead of one-off shoutouts. They build here
-              because they own upside here. EVERY SURFACE IS CLIP-READY — Blueprint cards, lobbies, leaderboards, launch counters,
-              resolutions, card unboxings. Design for the screenshot — the screenshot does the marketing. REGION-FIRST — Turkey, Southeast
-              Asia, Africa, LATAM with local ambassadors. Depth beats breadth. THE BRAND LIVES WHERE YOU ALREADY DO — music, anime and
-              street-culture collaborations on drops and card skins.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section class="close" id="waitlist">
-        <div class="wrap">
-          <p class="kicker">CLOSE</p>
-          <h2>THE INFRASTRUCTURE IS READY.<br />THE CULTURE IS WAITING.<br />THE DROP IS COMING.</h2>
-          <p>see you in the lobby</p>
-          <p class="hero-sub" style="margin-inline: auto">CUT MY KEY — We open in ranked waves. Refer and move up. Rank carries forever.</p>
-          <a class="btn btn-primary" href="mailto:hello@intafaced.com?subject=CUT%20MY%20KEY%20%2F%20Sovereign%20OS%20waitlist"
-            >CUT MY KEY</a
-          >
-          <form id="waitlistForm">
-            <label class="sr-only" for="email">Email</label>
-            <input id="email" type="email" required placeholder="you@domain.com" autocomplete="email" />
-            <button type="submit">GET IN THE QUEUE</button>
-            <p class="form-note">Position is earned, not bought. Opens mail to hello@intafaced.com</p>
-          </form>
-        </div>
-      </section>
-
-      <div class="ticker closing" aria-hidden="true">
-        <div class="ticker-track">
-          <span
-            >ONE IDENTITY · ONE LEDGER · ONE TOKEN · TWO PLANES · TWELVE ROOMS · NEVER HALF DONE · ONE IDENTITY · ONE LEDGER · ONE TOKEN ·
-            TWO PLANES · TWELVE ROOMS · NEVER HALF DONE ·
+            >$4,820 CARD LDN→AMS APPROVED · AED 6,207 USDC SETTLED · ESCROW LOCKED · BLOCK FINALISED · BUYBACK EXECUTED · BURN POSTED · 0
+            KYB · $4,820 CARD LDN→AMS APPROVED · AED 6,207 USDC SETTLED · ESCROW LOCKED · BLOCK FINALISED · BUYBACK EXECUTED · BURN POSTED ·
+            0 KYB ·
           </span>
         </div>
       </div>
+
+      <!-- MANIFESTO: distilled -->
+      <section class="block manifesto">
+        <div class="rail">
+          <p class="k">Manifesto</p>
+          <h2>Built by the streets.<br />Not by suits.</h2>
+        </div>
+        <div class="copy">
+          <p>
+            Every financial platform before this one was built by suits, for suits. The people actually moving money at 3am got filed as a
+            risk category.
+          </p>
+          <p>
+            <strong>INTAFACED flips the table.</strong> Exchange. Broker. Bank. Payments. Launchpad. Predict. Academy. Plus our own Layer 1
+            path underneath.
+          </p>
+          <p class="punch">Nothing here looks like a bank — that is the entire point. People share what looks like them.</p>
+        </div>
+      </section>
+
+      <!-- LAWS -->
+      <section class="block laws">
+        <p class="k">Three laws</p>
+        <div class="law-grid">
+          <article>
+            <span>01</span>
+            <h3>Everything is one login</h3>
+            <p>Trade, borrow, spend, launch, learn, earn. One identity. One rank. Every room.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3>Everything pays the user</h3>
+            <p>Mining. Staking. Referrals. Certs that cut fees. Participation gets rewarded.</p>
+          </article>
+          <article>
+            <span>03</span>
+            <h3>Everything feeds the token</h3>
+            <p>Every fee, launch, lobby, swipe, block. The community holds the upside.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- PLANES: visual dual -->
+      <section class="block planes" id="planes">
+        <div class="planes-head">
+          <p class="k">Two planes · one economy</p>
+          <h2>We refuse the trade-off.</h2>
+          <p class="hint">Switching planes changes who holds your keys. We show you which, always.</p>
+        </div>
+        <div class="plane-switch" role="tablist" aria-label="Planes">
+          <button type="button" class="on" data-plane="fiat" aria-selected="true">Fiat plane</button>
+          <button type="button" data-plane="proto" aria-selected="false">Protocol plane</button>
+        </div>
+        <div class="plane-panels">
+          <article class="plane show" data-panel="fiat" id="panel-fiat">
+            <header>
+              <p>We hold it — so we say so</p>
+              <h3>Fiat plane</h3>
+            </header>
+            <ul>
+              <li>Custodial. Fully compliant. Trade, bank, cards, institutional flow.</li>
+              <li>Double-entry ledger on every movement. No exceptions.</li>
+              <li>Cold / warm / hot custody with multi-sig workflow.</li>
+            </ul>
+          </article>
+          <article class="plane" data-panel="proto" id="panel-proto" hidden>
+            <header>
+              <p>You hold it — so there’s nothing to ask</p>
+              <h3>Protocol plane</h3>
+            </header>
+            <ul>
+              <li>Non-custodial by architecture. Zero KYC is not a loophole.</li>
+              <li>Passkey smart accounts. Session keys you grant and revoke.</li>
+              <li>We never hold withdrawal rights — enforced by the build.</li>
+            </ul>
+          </article>
+        </div>
+        <p class="law-banner">ZERO-KYC FOLLOWS CUSTODY · PROVABLY NON-CUSTODIAL OR IT DOESN’T MERGE</p>
+      </section>
+
+      <!-- ROOMS: names only -->
+      <section class="block rooms" id="rooms">
+        <div class="rooms-head">
+          <p class="k">Twelve rooms · one house · one key</p>
+          <h2>Separate rooms.<br />One empire.</h2>
+        </div>
+        <div class="room-grid">
+          <a class="room" href="#trade"><i>00</i><b>Identity</b></a>
+          <a class="room hot" href="#trade"><i>01</i><b>Trade</b></a>
+          <a class="room" href="#planes"><i>02</i><b>Protocol</b></a>
+          <a class="room" href="#rooms"><i>03</i><b>P2P</b></a>
+          <a class="room" href="#rooms"><i>04</i><b>Launch</b></a>
+          <a class="room" href="#rooms"><i>05</i><b>Bank</b></a>
+          <a class="room" href="#rooms"><i>06</i><b>Pay</b></a>
+          <a class="room" href="#rooms"><i>07</i><b>Predict</b></a>
+          <a class="room" href="#rooms"><i>08</i><b>Market</b></a>
+          <a class="room" href="#rooms"><i>09</i><b>Academy</b></a>
+          <a class="room" href="#rooms"><i>10</i><b>Token + Mine</b></a>
+          <a class="room" href="#rooms"><i>11</i><b>Core + Agents</b></a>
+        </div>
+      </section>
+
+      <!-- TRADE: product proof for TV -->
+      <section class="block trade" id="trade">
+        <div class="trade-copy">
+          <p class="k">Trade · the heart</p>
+          <h2>Pro terminal energy.<br />Not a spreadsheet.</h2>
+          <p>
+            Spot. Futures. Options. OTC. Convert. Copy. Forex. Advanced charting for people who actually trade — drawings, indicators,
+            multi-layout analysis.
+          </p>
+          <p class="note">Demo chart below uses open Lightweight Charts. Advanced Charts licence path in progress.</p>
+        </div>
+        <div class="terminal">
+          <div class="t-bar">
+            <span class="dot"></span>
+            <span>BTC-PERP</span>
+            <span class="dim">CROSS</span>
+            <span class="dim">DEMO</span>
+          </div>
+          <div id="chart" class="chart"></div>
+          <div class="t-foot">
+            <span>Mark 67,412.2</span>
+            <span class="up">+2.4%</span>
+            <span class="dim">Illustrative series</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- CLOSE -->
+      <section class="block end" id="key">
+        <p class="k">The drop</p>
+        <h2>
+          THE INFRASTRUCTURE IS READY.<br />
+          THE CULTURE IS WAITING.<br />
+          <span>THE DROP IS COMING.</span>
+        </h2>
+        <p class="sub">see you in the lobby</p>
+        <a class="btn solid big" href="mailto:hello@intafaced.com?subject=CUT%20MY%20KEY">CUT MY KEY</a>
+        <p class="fine">Ranked waves. Refer and move up. Rank carries forever.</p>
+      </section>
     </main>
 
-    <footer>
-      <div class="wrap foot-grid">
-        <div>
-          <a class="brand" href="#top">INTA<span>FACED</span></a>
-          <p>Twelve rooms. Two planes. One economy.</p>
-          <p class="foot-meta">SEPARATE ROOMS · ONE HOUSE · ONE KEY</p>
-          <p class="foot-meta">ALL ROADS FEED ONE ECONOMY</p>
-          <p class="foot-meta">PROVABLY NON-CUSTODIAL OR IT DOESN'T MERGE</p>
-        </div>
-        <div>
-          <p class="foot-meta">NAV</p>
-          <p class="foot-nav">TRADE · PROTOCOL · P2P · LAUNCH · BANK · PAY · PREDICT · QUANT · ACADEMY · TOKEN · CHAIN</p>
-        </div>
-        <div>
-          <p class="foot-meta">CONTACT</p>
-          <p><a href="mailto:hello@intafaced.com">hello@intafaced.com</a></p>
-          <p class="foot-meta" style="margin-top: 0.75rem">TV apply surface · Advanced Charts path</p>
-        </div>
+    <footer class="foot">
+      <div>
+        <a class="logo" href="#top">INTA<span>FACED</span></a>
+        <p>Twelve rooms. Two planes. One economy.</p>
       </div>
+      <p class="fine">Separate rooms. One house. One key.</p>
+      <p class="fine"><a href="mailto:hello@intafaced.com">hello@intafaced.com</a></p>
     </footer>
+
     <script src="./main.js" defer></script>
   </body>
 </html>
