@@ -119,7 +119,11 @@ const schema = baseEnvSchema
        */
       WS_MAX_LAG_TICKS: z.coerce.number().int().min(1).default(20),
 
-      /** Sockets per replica. A public port needs a ceiling that is not RAM. */
+      /**
+       * Max open sockets **per hub** on this replica (depth, trade tape, and
+       * private each get their own ceiling of this size — not a single
+       * process-wide sum). A public port needs a ceiling that is not RAM.
+       */
       WS_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(5_000),
 
       /**
