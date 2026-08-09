@@ -137,6 +137,38 @@ if (!available) {
       ).rejects.toMatchObject({ code: CHECK_VIOLATION });
     });
 
+    /**
+     * 0011 used bare `btrim(purpose)` — space only. Client `String.trim()` also
+     * strips tab/CR/LF/NBSP. Raw SQL could open `order:x\t` beside `order:x`
+     * while recon stayed green (P0-3 dual book). 0012 closes that belt.
+     */
+    it('REFUSES tab-padded lock purpose — not just space (0012 JS-trim belt)', async () => {
+      await expect(
+        db.sql`
+          INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
+          VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, ${'order:x\t'})
+        `,
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    });
+
+    it('REFUSES tab-only lock purpose — names nothing after JS trim', async () => {
+      await expect(
+        db.sql`
+          INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
+          VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, ${'\t\t\t'})
+        `,
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    });
+
+    it('REFUSES NBSP-padded lock purpose (U+00A0 dual pot)', async () => {
+      await expect(
+        db.sql`
+          INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
+          VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, ${'order:x\u00a0'})
+        `,
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    });
+
     it('REFUSES purpose on available — fungible pot must stay one row', async () => {
       // Same failure class as assertAvailableUnpurposed on the TypeScript path.
       await expect(

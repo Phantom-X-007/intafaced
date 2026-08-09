@@ -186,9 +186,13 @@ export interface AccountRef {
 /**
  * The empty-string normal form. Absent, `''`, and whitespace-only are the same
  * account. Trim is load-bearing: constructors trim before stamping a purpose,
- * but an adapter assembling an `AccountRef` inline can still pass `"order:x "`
- * or `"   "`. Without trim here, `accountKey` and the Postgres upsert open a
- * second pot beside the real one (P0-3 dual book, recon still green).
+ * but an adapter assembling an `AccountRef` inline can still pass `"order:x "`,
+ * `"order:x\t"`, or `"   "`. Without trim here, `accountKey` and the Postgres
+ * upsert open a second pot beside the real one (P0-3 dual book, recon still green).
+ *
+ * DB belt: migration 0012 refuses the same dual-book pads on raw SQL
+ * (space/tab/CR/LF/VT/FF/NBSP). JS `.trim()` may strip a broader Unicode set;
+ * that is fine — client remains the stricter door on the TypeScript path.
  */
 export function accountPurpose(ref: AccountRef): string {
   return (ref.purpose ?? '').trim();

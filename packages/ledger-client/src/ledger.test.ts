@@ -331,12 +331,20 @@ describe('INVARIANT 2 — available never goes negative', () => {
   it('normalises purpose so padded and bare claim strings share one pot', async () => {
     // accountPurpose trims. Without that, purpose "order:x " and "order:x" are
     // two accounts; adapters assembling AccountRef inline skip constructors.
+    // Space pads were the 0011 class; tab/NBSP are the 0012 dual-book class
+    // (DB bare btrim was space-only until 0012).
     const { accountKey } = await import('./client.js');
     const { accountPurpose } = await import('./types.js');
     const bare = { ownerType: 'user' as const, ownerId: USER_A, assetId: 'USDT', kind: 'hold' as const, purpose: 'order:x' };
     const padded = { ...bare, purpose: '  order:x  ' };
+    const tabPadded = { ...bare, purpose: 'order:x\t' };
+    const nbspPadded = { ...bare, purpose: 'order:x\u00a0' };
     expect(accountPurpose(padded)).toBe('order:x');
+    expect(accountPurpose(tabPadded)).toBe('order:x');
+    expect(accountPurpose(nbspPadded)).toBe('order:x');
     expect(accountKey(padded)).toBe(accountKey(bare));
+    expect(accountKey(tabPadded)).toBe(accountKey(bare));
+    expect(accountKey(nbspPadded)).toBe(accountKey(bare));
 
     // Whitespace-only purpose on available collapses to the real available pot
     // rather than opening a second balance recon cannot tell from a dual book.
@@ -347,9 +355,12 @@ describe('INVARIANT 2 — available never goes negative', () => {
       kind: 'available' as const,
       purpose: '   ',
     };
+    const tabsAvailable = { ...spacesAvailable, purpose: '\t\t\t' };
     const realAvailable = { ownerType: 'user' as const, ownerId: USER_A, assetId: 'USDT', kind: 'available' as const };
     expect(accountPurpose(spacesAvailable)).toBe('');
+    expect(accountPurpose(tabsAvailable)).toBe('');
     expect(accountKey(spacesAvailable)).toBe(accountKey(realAvailable));
+    expect(accountKey(tabsAvailable)).toBe(accountKey(realAvailable));
 
     // Engine path: padded hold posts into the same pot as the bare purpose.
     await fund(USER_A, 'USDT', '10');

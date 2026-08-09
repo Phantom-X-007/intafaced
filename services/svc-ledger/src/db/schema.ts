@@ -230,12 +230,14 @@ export const accounts = ledger.table(
      * `legacy:<the row's own id>`, which name the row rather than the claim it
      * secures — see 0008 for why that is worse than an empty purpose.
      *
-     * 0011: purpose must equal `btrim(purpose)` so padded claims cannot open a
+     * 0011: purpose must equal trimmed form so padded claims cannot open a
      * second pot beside the trimmed identity; `available` must store `''` only.
+     * 0012: pad set is space/tab/CR/LF/VT/FF/NBSP — not bare `btrim()` (space
+     * only). Mirrors the dual-book pads client `String.trim()` collapses.
      */
     check(
       'accounts_lock_purposed_ck',
-      sql`(kind = 'available' AND purpose = '') OR (kind <> 'available' AND purpose = btrim(purpose) AND length(purpose) > 0 AND purpose NOT LIKE 'legacy:%')`,
+      sql`(kind = 'available' AND purpose = '') OR (kind <> 'available' AND purpose = btrim(purpose, E' \\t\\n\\r\\v\\f' || chr(160)) AND length(purpose) > 0 AND purpose NOT LIKE 'legacy:%')`,
     ),
     /**
      * Every `owner_id` is drawn from the space its `owner_type` declares (0005).
