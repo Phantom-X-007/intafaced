@@ -63,7 +63,24 @@ function recordingLedger(opts?: { insuranceAvailable?: Amount }) {
   };
 }
 
-function fixedMark(price: string | null): MarkSource {
+/**
+ * Labelled mid quote for the suite's default money-path marks.
+ * Bare markPrice-only (no invent mid) is `markPriceOnly` below.
+ */
+function fixedMark(price: string | null): QuotedMarkSource {
+  return {
+    async markPrice() {
+      return price;
+    },
+    async quote({ marketId, symbol, at }) {
+      if (price == null || price.trim() === '') return null;
+      return { marketId, symbol, price: amt(price), asOf: at, quality: 'mid' };
+    },
+  };
+}
+
+/** Unlabelled source — money path must refuse inventing quality. */
+function markPriceOnly(price: string | null): MarkSource {
   return {
     async markPrice() {
       return price;
@@ -173,12 +190,21 @@ describe('runLiquidationTick', () => {
     expect(posts).toHaveLength(countAfterFirst);
   });
 
-  it('asks mark source with marketId + clock', async () => {
-    const markPrice = vi.fn(async () => '80');
+  it('asks labelled quote with marketId + clock + authorisesSize', async () => {
     const fixed = new Date('2026-07-31T12:00:00.000Z');
+    const quote = vi.fn(async ({ marketId, symbol }: { marketId: string; symbol?: string }) => ({
+      marketId,
+      symbol,
+      price: amt('80'),
+      asOf: fixed,
+      quality: 'mid' as const,
+    }));
     const { ledger } = recordingLedger();
     await runLiquidationTick({
-      marks: { markPrice },
+      marks: {
+        markPrice: async () => '80',
+        quote,
+      },
       positions: {
         async listOpen() {
           return [underwaterLong()];
@@ -190,11 +216,12 @@ describe('runLiquidationTick', () => {
       ledger,
       now: () => fixed,
     });
-    expect(markPrice).toHaveBeenCalledWith(
+    expect(quote).toHaveBeenCalledWith(
       expect.objectContaining({
         marketId: 'm1',
         symbol: 'BTC/USDT-PERP',
         at: fixed,
+        authorisesSize: amt('1'),
       }),
     );
   });
@@ -410,10 +437,14 @@ describe('runLiquidationTick — mark gates', () => {
     expect(posts).toEqual([]);
   });
 
-  it('a source with no quote() still works — the gate is added, nothing is removed', async () => {
-    const { result, posts } = await tick(fixedMark('80'));
-    expect(result.liquidated).toBe(1);
-    expect(posts.length).toBeGreaterThan(0);
+  it('a source with no quote() cannot liquidate — bare markPrice must not invent mid', async () => {
+    // Denon handoff §6: stamping quality:'mid' + asOf:now disarmed quality and
+    // staleness. Unlabelled markPrice is darkness on the money path.
+    const { result, posts } = await tick(markPriceOnly('80'));
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_no_mark');
+    expect(result.items[0]!.summary).toMatch(/no labelled quote/);
+    expect(posts).toEqual([]);
   });
 });
 
