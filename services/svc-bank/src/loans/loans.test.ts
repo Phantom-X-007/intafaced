@@ -62,6 +62,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const BANK_INIT = readFileSync(join(here, '..', '..', 'drizzle', '0000_bank_init.sql'), 'utf8');
 const POSITION_PENDING = readFileSync(join(here, '..', '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
 const LOANS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
+const OPENING_COLLATERAL = readFileSync(join(here, '..', '..', 'drizzle', '0008_loan_opening_collateral.sql'), 'utf8');
+const RESERVE_FUNDINGS = readFileSync(join(here, '..', '..', 'drizzle', '0009_loan_reserve_fundings.sql'), 'utf8');
 
 const LOANS_DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
@@ -957,7 +959,7 @@ if (!available) {
   const db: TestDatabase = await createTestDatabase({
     service: 'bank',
     url: LOANS_DB_URL,
-    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION],
+    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION, OPENING_COLLATERAL, RESERVE_FUNDINGS],
   });
   const sql = db.sql;
 
