@@ -353,4 +353,240 @@ describe('CopyService', () => {
 
     expect(await store.getPeriodStats(key)).toEqual({ earningsPaid: parseAmount('100'), roundTrips: 42 });
   });
+
+  /**
+   * CONCURRENT settleFeeShare must not breach earningsCapPerFollower.
+   *
+   * Reachable break (pre-fix): two settlers both read earningsPaid=0, both
+   * attribute a full share under cap, both post (different fillIds → different
+   * ledger business keys → both move money), both write counters. Cap breached;
+   * ledger records the over-payment. Assertions are BALANCES, not response codes.
+   */
+  it('concurrent settleFeeShare never pays more than earningsCapPerFollower', async () => {
+    const cap = '1';
+    const tightCap: CopyFeeShareLaw = {
+      published: true,
+      leaderShareBps: 5_000,
+      earningsCapPerFollower: cap,
+      decayRoundTrips: 100,
+      decayShareBps: 1_000,
+    };
+    const ledger = new MemoryLedger();
+    // Seed enough house trade fees that a double-pay would succeed in the ledger
+    // if the counter race let both through (each intended share ≈ 5 under this
+    // notional; cap only admits 1 total).
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('1000'),
+        rail: 'test',
+        railRef: 'copy-race-seed',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'race-seed-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+      }),
+    );
+
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: tightCap,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    // notional 10000, fee 10 bps → protocol fee 10; share 50% → 5 intended each.
+    // Cap is 1 — without atomic reserve both concurrent settlers pay 1 → total 2.
+    const settle = (fillId: string) =>
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId,
+        assetId: 'USDT',
+        followerFillNotional: '10000',
+        protocolFeeBps: 10,
+      });
+
+    const results = await Promise.all([settle('fill-race-a'), settle('fill-race-b')]);
+    const settledCount = results.filter((r) => r.settled).length;
+    expect(settledCount).toBe(1);
+    expect(results.filter((r) => !r.settled).every((r) => r.skippedReason === 'cap_reached')).toBe(true);
+
+    const leaderBal = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+    expect(leaderBal).toBe(parseAmount(cap));
+    expect(leaderBal <= parseAmount(cap)).toBe(true);
+
+    const stats = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(stats.earningsPaid).toBe(parseAmount(cap));
+    // Both attempts count as round-trips (decay still advances on the skip).
+    expect(stats.roundTrips).toBe(2);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('eight concurrent settles still hold the earnings cap', async () => {
+    const cap = '1';
+    const tightCap: CopyFeeShareLaw = {
+      published: true,
+      leaderShareBps: 5_000,
+      earningsCapPerFollower: cap,
+      decayRoundTrips: 1000,
+      decayShareBps: 1_000,
+    };
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('5000'),
+        rail: 'test',
+        railRef: 'copy-race8-seed',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'race8-seed-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('500'),
+      }),
+    );
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: tightCap,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        svc.settleFeeShare(principal, {
+          followId: follow.followId,
+          fillId: `fill-race8-${i}`,
+          assetId: 'USDT',
+          followerFillNotional: '10000',
+          protocolFeeBps: 10,
+        }),
+      ),
+    );
+    expect(results.filter((r) => r.settled)).toHaveLength(1);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(parseAmount(cap));
+    expect((await store.getPeriodStats(`${LEADER}:${FOLLOWER}`)).earningsPaid).toBe(parseAmount(cap));
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('reserve rolls back when ledger post fails — cap headroom restored', async () => {
+    const cap = '10';
+    const feeLaw: CopyFeeShareLaw = {
+      published: true,
+      leaderShareBps: 5_000,
+      earningsCapPerFollower: cap,
+      decayRoundTrips: 100,
+      decayShareBps: 1_000,
+    };
+    // Empty house fees → sweep/payout fails; reservation must release.
+    const ledger = new MemoryLedger();
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: feeLaw,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId: 'fill-ledger-fail',
+        assetId: 'USDT',
+        followerFillNotional: '10000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toBeTruthy();
+
+    const stats = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    // Round-trip still counted; earnings reservation released.
+    expect(stats.earningsPaid).toBe(0n);
+    expect(stats.roundTrips).toBe(1);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+  });
+
+  /**
+   * Concurrent mirrors near the aggregate cap must not both clear a stale read.
+   * maxAggregate=150; two concurrent notionals of 100 would overshoot to 200
+   * under read-modify-write setExposure — atomic add admits only one.
+   */
+  it('concurrent planMirrorForFollow never exceeds maxAggregateExposure', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT', 'ETH-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '150',
+      expiresAt: futureExpiry,
+    });
+
+    const attempts = await Promise.allSettled([
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '100',
+      }),
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        marketId: 'ETH-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '100',
+      }),
+    ]);
+
+    const fulfilled = attempts.filter((a) => a.status === 'fulfilled');
+    const rejected = attempts.filter((a) => a.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: 'trade.copy_cap_exceeded' });
+
+    const exposure = await store.getExposure(follow.followId);
+    expect(exposure).toBe(parseAmount('100'));
+    expect(exposure <= parseAmount('150')).toBe(true);
+  });
 });

@@ -8,12 +8,24 @@ import type { CopyFollow } from './follows.js';
  * Process Maps lose follows/exposure on restart. This store keeps the envelope
  * + open exposure so a restarted process resumes the same parent state.
  * §8 rates stay refuse-closed in CopyService — this never invents them.
+ *
+ * Cap-critical counters use atomic reserve/add primitives so concurrent
+ * settleFeeShare / planMirrorForFollow cannot over-pay or over-expose.
  */
 
 export interface CopyPeriodStats {
   readonly earningsPaid: Amount;
   readonly roundTrips: number;
 }
+
+/** Result of atomically claiming leader fee-share headroom under the period cap. */
+export type ReserveEarningsResult = {
+  readonly reserved: Amount;
+  readonly newPaid: Amount;
+  readonly roundTrips: number;
+};
+
+export type AddExposureResult = { readonly ok: true; readonly newExposure: Amount } | { readonly ok: false; readonly current: Amount };
 
 export interface CopyFollowStore {
   saveFollow(follow: CopyFollow, exposure?: Amount): Promise<void>;
@@ -23,10 +35,54 @@ export interface CopyFollowStore {
   listFollows(): Promise<CopyFollow[]>;
   getExposure(followId: string): Promise<Amount>;
   setExposure(followId: string, amount: Amount): Promise<void>;
+  /**
+   * Atomically add `delta` to exposure when `current + delta <= maxAggregate`.
+   * Concurrent mirrors cannot both clear a near-cap check.
+   */
+  addExposureIfUnderCap(followId: string, delta: Amount, maxAggregate: Amount): Promise<AddExposureResult>;
   getPeriodStats(pairKey: string): Promise<CopyPeriodStats>;
   setPeriodStats(pairKey: string, stats: CopyPeriodStats): Promise<void>;
+  /**
+   * Atomically claim up to `amount` of remaining cap headroom and +1 round-trip.
+   * `reserved = min(amount, max(cap - paid, 0))`. Always increments round-trips
+   * (including when reserved is 0) so decay still advances on cap skips.
+   */
+  reserveEarnings(pairKey: string, amount: Amount, cap: Amount): Promise<ReserveEarningsResult>;
+  /**
+   * Roll back a prior reserve after ledger post failure. Does not undo
+   * round-trips — the attempt still counted for decay.
+   */
+  releaseEarnings(pairKey: string, amount: Amount): Promise<void>;
   /** Drop a pair's churn counters — used when the follow itself goes away. */
   clearPeriodStats(pairKey: string): Promise<void>;
+}
+
+/**
+ * Per-key async mutex — serialises reserve/add critical sections on Memory.
+ * Promise-chain: each caller awaits the previous, then holds until done.
+ */
+function createExclusiveQueue() {
+  const tails = new Map<string, Promise<void>>();
+  return async function exclusive<T>(key: string, fn: () => Promise<T> | T): Promise<T> {
+    const prev = tails.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    tails.set(
+      key,
+      prev.then(
+        () => gate,
+        () => gate,
+      ),
+    );
+    await prev.catch(() => {});
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  };
 }
 
 /** In-memory store — default for unit tests and single-process dev. */
@@ -34,6 +90,7 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   private readonly follows = new Map<string, CopyFollow>();
   private readonly exposure = new Map<string, Amount>();
   private readonly period = new Map<string, CopyPeriodStats>();
+  private readonly exclusive = createExclusiveQueue();
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
     this.follows.set(follow.followId, follow);
@@ -63,12 +120,49 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     this.exposure.set(followId, amount);
   }
 
+  async addExposureIfUnderCap(followId: string, delta: Amount, maxAggregate: Amount): Promise<AddExposureResult> {
+    return this.exclusive(`exp:${followId}`, () => {
+      const current = this.exposure.get(followId) ?? 0n;
+      if (delta < 0n) {
+        return { ok: false as const, current };
+      }
+      const next = current + delta;
+      if (next > maxAggregate) {
+        return { ok: false as const, current };
+      }
+      this.exposure.set(followId, next);
+      return { ok: true as const, newExposure: next };
+    });
+  }
+
   async getPeriodStats(pairKey: string): Promise<CopyPeriodStats> {
     return this.period.get(pairKey) ?? { earningsPaid: 0n, roundTrips: 0 };
   }
 
   async setPeriodStats(pairKey: string, stats: CopyPeriodStats): Promise<void> {
     this.period.set(pairKey, stats);
+  }
+
+  async reserveEarnings(pairKey: string, amount: Amount, cap: Amount): Promise<ReserveEarningsResult> {
+    return this.exclusive(`per:${pairKey}`, () => {
+      const cur = this.period.get(pairKey) ?? { earningsPaid: 0n, roundTrips: 0 };
+      const remaining = cap > cur.earningsPaid ? cap - cur.earningsPaid : 0n;
+      const want = amount > 0n ? amount : 0n;
+      const reserved = want <= remaining ? want : remaining;
+      const newPaid = cur.earningsPaid + reserved;
+      const roundTrips = cur.roundTrips + 1;
+      this.period.set(pairKey, { earningsPaid: newPaid, roundTrips });
+      return { reserved, newPaid, roundTrips };
+    });
+  }
+
+  async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
+    if (amount <= 0n) return;
+    await this.exclusive(`per:${pairKey}`, () => {
+      const cur = this.period.get(pairKey) ?? { earningsPaid: 0n, roundTrips: 0 };
+      const nextPaid = cur.earningsPaid > amount ? cur.earningsPaid - amount : 0n;
+      this.period.set(pairKey, { earningsPaid: nextPaid, roundTrips: cur.roundTrips });
+    });
   }
 
   async clearPeriodStats(pairKey: string): Promise<void> {
@@ -191,6 +285,28 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     `;
   }
 
+  async addExposureIfUnderCap(followId: string, delta: Amount, maxAggregate: Amount): Promise<AddExposureResult> {
+    if (delta < 0n) {
+      const current = await this.getExposure(followId);
+      return { ok: false, current };
+    }
+    const deltaStr = formatAmount(delta);
+    const maxStr = formatAmount(maxAggregate);
+    const rows = await this.sql<Array<{ exposure: string }>>`
+      UPDATE copy_follows
+         SET exposure = exposure + ${deltaStr}::numeric,
+             updated_at = now()
+       WHERE follow_id = ${followId}
+         AND exposure + ${deltaStr}::numeric <= ${maxStr}::numeric
+      RETURNING exposure::text
+    `;
+    const row = rows[0];
+    if (row) {
+      return { ok: true, newExposure: parseAmount(String(row.exposure)) };
+    }
+    return { ok: false, current: await this.getExposure(followId) };
+  }
+
   async getPeriodStats(pairKey: string): Promise<CopyPeriodStats> {
     const rows = await this.sql<Array<{ earnings_paid: string; round_trips: number }>>`
       SELECT earnings_paid::text, round_trips
@@ -214,6 +330,50 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         earnings_paid = EXCLUDED.earnings_paid,
         round_trips = EXCLUDED.round_trips,
         updated_at = now()
+    `;
+  }
+
+  async reserveEarnings(pairKey: string, amount: Amount, cap: Amount): Promise<ReserveEarningsResult> {
+    // Transaction: row lock + claim headroom + bump round-trips. Concurrent
+    // settlers serialise here so paid + reserved never exceeds cap.
+    return await this.sql.begin(async (tx) => {
+      await tx`
+        INSERT INTO copy_period_stats (pair_key, earnings_paid, round_trips, updated_at)
+        VALUES (${pairKey}, 0, 0, now())
+        ON CONFLICT (pair_key) DO NOTHING
+      `;
+      const rows = await tx<Array<{ earnings_paid: string; round_trips: number }>>`
+        SELECT earnings_paid::text, round_trips
+          FROM copy_period_stats
+         WHERE pair_key = ${pairKey}
+         FOR UPDATE
+      `;
+      const row = rows[0]!;
+      const paid = parseAmount(String(row.earnings_paid));
+      const remaining = cap > paid ? cap - paid : 0n;
+      const want = amount > 0n ? amount : 0n;
+      const reserved = want <= remaining ? want : remaining;
+      const newPaid = paid + reserved;
+      const roundTrips = row.round_trips + 1;
+      await tx`
+        UPDATE copy_period_stats
+           SET earnings_paid = ${formatAmount(newPaid)},
+               round_trips = ${roundTrips},
+               updated_at = now()
+         WHERE pair_key = ${pairKey}
+      `;
+      return { reserved, newPaid, roundTrips };
+    });
+  }
+
+  async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
+    if (amount <= 0n) return;
+    const amountStr = formatAmount(amount);
+    await this.sql`
+      UPDATE copy_period_stats
+         SET earnings_paid = GREATEST(earnings_paid - ${amountStr}::numeric, 0),
+             updated_at = now()
+       WHERE pair_key = ${pairKey}
     `;
   }
 
