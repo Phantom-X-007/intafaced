@@ -150,21 +150,21 @@ rather than a green tick over silence.
 
 ## API
 
-| Procedure               | Scope          | Input                              | Output                                  |
-| ----------------------- | -------------- | ---------------------------------- | --------------------------------------- |
-| `health`                | public         | —                                  | `{ ok, service, fanoutEnabled }`        |
-| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }` | `{ items, nextCursor }`                 |
-| `notify.unreadCount`    | `notify:read`  | —                                  | `{ count }`                             |
-| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                  | `{ marked }`                            |
-| `notify.markAllRead`    | `notify:write` | —                                  | `{ marked }`                            |
-| `notify.channels`       | `notify:read`  | —                                  | per-channel availability + missing env  |
-| `notify.targets`        | `notify:read`  | —                                  | the caller's registered addresses       |
-| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`    | `{ status, channel, code, expiresAt }`  |
-| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                | `{ verified }`                          |
-| `notify.removeTarget`   | `notify:write` | `{ channel }`                      | `{ removed }`                           |
-| `notify.deliveries`     | `notify:read`  | `{ notificationId }`               | per-channel attempt + outcome           |
-| `notify.mutePrefs`      | `notify:read`  | —                                  | per-channel mute flags (email/push/sms) |
-| `notify.setMute`        | `notify:write` | `{ channel, muted }`               | updated mute flags                      |
+| Procedure               | Scope          | Input                              | Output                                                                                  |
+| ----------------------- | -------------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
+| `health`                | public         | —                                  | `{ ok, service, fanoutEnabled }`                                                        |
+| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }` | `{ items, nextCursor }`                                                                 |
+| `notify.unreadCount`    | `notify:read`  | —                                  | `{ count }`                                                                             |
+| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                  | `{ marked }`                                                                            |
+| `notify.markAllRead`    | `notify:write` | —                                  | `{ marked }`                                                                            |
+| `notify.channels`       | `notify:read`  | —                                  | per-channel availability + missing env                                                  |
+| `notify.targets`        | `notify:read`  | —                                  | the caller's registered addresses                                                       |
+| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`    | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`) |
+| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                     |
+| `notify.removeTarget`   | `notify:write` | `{ channel }`                      | `{ removed }`                                                                           |
+| `notify.deliveries`     | `notify:read`  | `{ notificationId }`               | per-channel attempt + outcome                                                           |
+| `notify.mutePrefs`      | `notify:read`  | —                                  | per-channel mute flags (email/push/sms)                                                 |
+| `notify.setMute`        | `notify:write` | `{ channel, muted }`               | updated mute flags                                                                      |
 
 Every procedure is self-only via `principal.userId`. Title/body are i18n keys
 (`title_key` / `body_key`); clients render copy from `@intafaced/i18n`
@@ -229,9 +229,22 @@ true.** The claim retires a spent row when a later redelivery arrives — but a
 message that reaches the attempt ceiling and `max_deliver` together is parked by
 JetStream, and no later redelivery arrives. A one-minute sweep
 (`reapExhausted`, wired in `index.ts`) retires those rows on the same predicate
-the claim uses, so a row nobody is retrying stops reading as `pending` whether or
-not the bus ever comes back. It writes only a failure — never an attempt, never
-an acceptance — and never touches a row whose claim lease is still live.
+the claim uses, **and** retires stuck-`pending` rows whose claim lease has been
+dead longer than the bus redelivery window (`STUCK_PENDING_GRACE_MS` =
+maxDeliver × ack_wait). That second arm closes the hole where `in_flight` naks
+burn `max_deliver` without raising `attempts`, so the attempts-ceiling arm never
+fires and the row would otherwise sit `pending` forever. It writes only a failure
+— never an attempt, never an acceptance — and never touches a row whose claim
+lease is still live.
+
+**Register / verify rate limits.** Per `userId`+channel sliding windows (default
+3 registers / 10 verifies per 15 minutes). Named refuse codes, not silent drops.
+In-memory per process — multi-replica residual is roughly N× the budget until a
+shared counter lands.
+
+**Consent footer.** Out-of-app bodies from `renderNotification` append
+`notify.channel.footer` (catalog). Verification messages do not (address is still
+unconfirmed).
 
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
 `<loanId>` — a loan can be called, cured and called again, and the second call is

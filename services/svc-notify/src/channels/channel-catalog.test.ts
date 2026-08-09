@@ -34,6 +34,8 @@ describe('L3 wave54 channel catalog honesty', () => {
     expect(channelCatalogSizeInRange(5, 1)).toBe(false);
     expect(refusalCodeCount()).toBe(allRefusalCodes().length);
     expect(allRefusalCodes()).toContain('channel.muted');
+    expect(allRefusalCodes()).toContain('channel.register_rate_limited');
+    expect(allRefusalCodes()).toContain('channel.verify_rate_limited');
     expect(OUT_OF_APP_CHANNELS).toHaveLength(3);
   });
 });

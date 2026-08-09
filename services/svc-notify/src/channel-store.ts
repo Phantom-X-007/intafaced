@@ -67,6 +67,40 @@ export const DEFAULT_CLAIM_LEASE_MS = 15_000;
  */
 export const DELIVERY_REAP_INTERVAL_MS = 60_000;
 
+/**
+ * How long after a claim lease dies we wait before abandoning a still-`pending`
+ * row even when `attempts < maxAttempts`.
+ *
+ * WHY THIS EXISTS
+ *
+ * The `in_flight` path returns retryable WITHOUT incrementing `attempts` —
+ * deliberately, so two replicas do not stack a double send. Each such pass
+ * still burns one bus delivery. With bus `maxDeliver` 5 and
+ * `NOTIFY_MAX_DELIVERY_ATTEMPTS` 3, sustained lease contention burns every bus
+ * delivery while `attempts` stays at 1–2. JetStream then parks the message, and
+ * the attempts-ceiling arm of `reapExhausted` never fires. The row sits
+ * `pending` forever — the exact lie the sweep exists to remove, reached through
+ * a different door (closeout: LANE-CLOSEOUT-OPS-2026-08-08).
+ *
+ * Bound: bus default `maxDeliver` (5) × `ack_wait` (30s) = 150s. After the
+ * lease has been dead that long, the bus cannot still be retrying in a way that
+ * would reclaim the row — any redelivery that was coming would already have
+ * arrived and reclaimed. Waiting that window is how we know nobody is coming
+ * back, without throwing away a retry the user is still owed.
+ *
+ * Paired with `DEFAULT_CLAIM_LEASE_MS` / the configured lease: a live lease is
+ * never touched; only dead leases past this grace are candidates.
+ */
+export const STUCK_PENDING_GRACE_MS = 5 * 30_000;
+
+export interface ReapExhaustedOptions {
+  /**
+   * Override for the stuck-pending grace (tests with a driven clock). Production
+   * uses `STUCK_PENDING_GRACE_MS`.
+   */
+  readonly stuckGraceMs?: number;
+}
+
 export interface DeliveryRecord {
   id: string;
   notificationId: string;
@@ -135,7 +169,8 @@ export interface DeliveryStore {
   settle(input: SettleInput): Promise<void>;
   listForNotification(notificationId: string): Promise<DeliveryRecord[]>;
   /**
-   * Retire rows that have run out of attempts and that nobody owns.
+   * Retire rows that have run out of attempts — or out of anyone who will try —
+   * and that nobody owns.
    *
    * WHY THIS EXISTS AS A SWEEP AND NOT ONLY INSIDE `claim`
    *
@@ -154,10 +189,18 @@ export interface DeliveryStore {
    * that says `pending` while nothing is retrying it is the service telling the
    * person whose collateral is at risk that help is still on the way.
    *
-   * The predicate is deliberately the same one `claim` retires on, so the sweep
-   * writes only what the next claim would have written and never more:
-   *   • `attempts >= maxAttempts` — `claim` would refuse to re-own it
-   *   • settled `failed`, or `pending` with no live lease — nobody is mid-send
+   * TWO ARMS (either is enough to retire)
+   *
+   *   1. Attempts-ceiling (what `claim` would retire on a later redelivery):
+   *      `attempts >= maxAttempts` AND (settled `failed`, or `pending` with no
+   *      live lease).
+   *
+   *   2. Stuck-pending with a dead lease past the bus redelivery window:
+   *      `status = pending`, at least one claim was taken, lease is null or
+   *      expired, and the lease has been dead longer than `STUCK_PENDING_GRACE_MS`
+   *      (bus maxDeliver × ack_wait). This closes the hole where `in_flight`
+   *      naks burn `max_deliver` without raising `attempts`, so arm 1 never
+   *      fires — see `STUCK_PENDING_GRACE_MS`.
    *
    * A live lease is never touched. That row has an owner who is about to settle
    * it, possibly as `accepted`.
@@ -166,7 +209,7 @@ export interface DeliveryStore {
    * `accepted_at`: this only ever moves a row from "still being tried" to the
    * truth, which is that it is over.
    */
-  reapExhausted(maxAttempts: number): Promise<number>;
+  reapExhausted(maxAttempts: number, opts?: ReapExhaustedOptions): Promise<number>;
 }
 
 export interface UpsertTargetInput {
@@ -287,14 +330,12 @@ export class MemoryDeliveryStore implements DeliveryStore {
     return [...this.byId.values()].filter((r) => r.notificationId === notificationId).sort((a, b) => a.channel.localeCompare(b.channel));
   }
 
-  async reapExhausted(maxAttempts: number): Promise<number> {
+  async reapExhausted(maxAttempts: number, opts: ReapExhaustedOptions = {}): Promise<number> {
     const now = this.now();
+    const graceMs = opts.stuckGraceMs ?? STUCK_PENDING_GRACE_MS;
     let retired = 0;
     for (const record of this.byId.values()) {
-      if (record.attempts < maxAttempts) continue;
-      if (record.status !== 'pending' && record.status !== 'failed') continue;
-      const ownerMidSend = record.status === 'pending' && record.leaseUntil !== null && record.leaseUntil.getTime() > now.getTime();
-      if (ownerMidSend) continue;
+      if (!shouldReapDelivery(record, maxAttempts, now, graceMs)) continue;
       record.status = 'abandoned';
       record.refusalCode = 'channel.attempts_exhausted';
       record.leaseUntil = null;
@@ -303,6 +344,39 @@ export class MemoryDeliveryStore implements DeliveryStore {
     }
     return retired;
   }
+}
+
+/**
+ * Pure predicate for both memory and Postgres reapers — one decision table.
+ *
+ * See `DeliveryStore.reapExhausted` and `STUCK_PENDING_GRACE_MS` for the law.
+ * Exported so unit tests can assert the edge cases without driving a store.
+ */
+export function shouldReapDelivery(
+  record: Pick<DeliveryRecord, 'status' | 'attempts' | 'leaseUntil' | 'updatedAt'>,
+  maxAttempts: number,
+  now: Date,
+  stuckGraceMs: number = STUCK_PENDING_GRACE_MS,
+): boolean {
+  if (record.status !== 'pending' && record.status !== 'failed') return false;
+
+  const nowMs = now.getTime();
+  const leaseLive = record.status === 'pending' && record.leaseUntil !== null && record.leaseUntil.getTime() > nowMs;
+  if (leaseLive) return false;
+
+  // Arm 1 — attempts ceiling: claim would refuse to re-own; settle as abandoned.
+  if (record.attempts >= maxAttempts) return true;
+
+  // Arm 2 — stuck pending: lease dead longer than the bus could still retry.
+  // `failed` with attempts left is still owed a redelivery — leave it alone.
+  if (record.status !== 'pending') return false;
+  if (record.attempts < 1) return false;
+
+  // Lease dead-since: when lease_until is known, use it; when null (legacy /
+  // pre-migration), fall back to updated_at so a never-leased pending row is
+  // not reaped the instant it appears.
+  const deadSinceMs = record.leaseUntil !== null ? record.leaseUntil.getTime() : record.updatedAt.getTime();
+  return nowMs - deadSinceMs >= stuckGraceMs;
 }
 
 export class MemoryTargetStore implements TargetStore {
@@ -510,24 +584,40 @@ export class PostgresDeliveryStore implements DeliveryStore {
     return rows.map(fromDeliveryPg);
   }
 
-  async reapExhausted(maxAttempts: number): Promise<number> {
-    // One statement, the same shape as the retire branch in `claim`. Two
-    // replicas sweeping at once is harmless: `status` is in the WHERE clause,
-    // so the second finds nothing left to retire.
+  async reapExhausted(maxAttempts: number, opts: ReapExhaustedOptions = {}): Promise<number> {
+    // One statement covering both arms of `shouldReapDelivery`. Two replicas
+    // sweeping at once is harmless: `status` is in the WHERE clause, so the
+    // second finds nothing left to retire.
     //
-    // The pending arm matches `deliveries_lease_idx` — partial on
-    // `status = 'pending' AND lease_until IS NOT NULL` — which until now was an
-    // index no query used.
+    // Arm 1 (attempts ceiling) matches what `claim` retires on a later
+    // redelivery. Arm 2 (stuck pending past bus redelivery grace) is the
+    // in_flight / max_deliver hole — see `STUCK_PENDING_GRACE_MS`.
+    const graceSeconds = Math.max(1, Math.ceil((opts.stuckGraceMs ?? STUCK_PENDING_GRACE_MS) / 1000));
     const rows = await this.sql<{ id: string }[]>`
       UPDATE notify.deliveries
          SET status = 'abandoned',
              refusal_code = 'channel.attempts_exhausted',
              lease_until = NULL,
              updated_at = now()
-       WHERE attempts >= ${maxAttempts}
-         AND (
-           status = 'failed'
-           OR (status = 'pending' AND (lease_until IS NULL OR lease_until <= now()))
+       WHERE (
+           -- Arm 1: attempts spent, nobody mid-send
+           (
+             attempts >= ${maxAttempts}
+             AND (
+               status = 'failed'
+               OR (status = 'pending' AND (lease_until IS NULL OR lease_until <= now()))
+             )
+           )
+           OR
+           -- Arm 2: pending, claimed at least once, lease dead past bus window
+           (
+             status = 'pending'
+             AND attempts >= 1
+             AND (
+               (lease_until IS NOT NULL AND lease_until <= now() - (${graceSeconds}::text || ' seconds')::interval)
+               OR (lease_until IS NULL AND updated_at <= now() - (${graceSeconds}::text || ' seconds')::interval)
+             )
+           )
          )
       RETURNING id
     `;

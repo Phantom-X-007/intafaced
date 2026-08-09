@@ -142,6 +142,8 @@ export function allRefusalCodes(): readonly RefusalCode[] {
     'channel.disabled',
     'channel.muted',
     'channel.attempts_exhausted',
+    'channel.register_rate_limited',
+    'channel.verify_rate_limited',
   ];
 }
 
@@ -179,7 +181,17 @@ export type RefusalCode =
   /** User muted this non-critical channel (preference law). Critical never mutes. */
   | 'channel.muted'
   /** Attempted the configured maximum times and never succeeded. Terminal by policy. */
-  | 'channel.attempts_exhausted';
+  | 'channel.attempts_exhausted'
+  /**
+   * Too many `registerTarget` calls for this user+channel in the window.
+   * Stops unlimited SMS/email verification traffic (billing + abuse).
+   */
+  | 'channel.register_rate_limited'
+  /**
+   * Too many `verifyTarget` guesses for this user+channel in the window.
+   * A 6-digit code with a long TTL is brute-forceable without this.
+   */
+  | 'channel.verify_rate_limited';
 
 /** A channel declining before it attempted anything. Terminal — never retried. */
 export class ChannelRefusal extends Error {

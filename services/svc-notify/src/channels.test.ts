@@ -12,6 +12,7 @@ import { ChannelDeliveryError, type NotificationChannel, type OutboundMessage } 
 import { normaliseLocale, renderNotification, renderVerification } from './channels/render.js';
 import { subscribeNotificationEvents } from './events.js';
 import { MemoryMuteStore } from './preferences/mute.js';
+import { TargetRateLimiter } from './target-rate-limit.js';
 
 /**
  * THE HONESTY TESTS.
@@ -568,9 +569,66 @@ describe('addresses are confirmed before anything is sent to them', () => {
     const h = harness(registry([new SpyChannel('email')]));
     await h.notify.registerTarget({ userId: USER, channel: 'email', address: 'new@example.com', locale: 'en' });
 
-    expect(await h.notify.verifyTarget(USER, 'email', '000000')).toBe(false);
+    expect(await h.notify.verifyTarget(USER, 'email', '000000')).toEqual({ status: 'rejected' });
     const targets = await h.notify.listTargets(USER);
     expect(targets[0]?.verifiedAt).toBeNull();
+  });
+
+  it('refuses register when the per-user rate limit is spent — no extra SMS', async () => {
+    const email = new SpyChannel('email');
+    const limiter = new TargetRateLimiter({
+      register: { max: 2, windowMs: 60_000 },
+      verify: { max: 50, windowMs: 60_000 },
+    });
+    const store = new MemoryNotifyStore();
+    const targets = new MemoryTargetStore();
+    const deliveries = new MemoryDeliveryStore();
+    const channels = registry([email]);
+    const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
+      maxAttempts: 3,
+      outOfAppEnabled: true,
+    });
+    const notify = new NotifyService(
+      store,
+      { fanoutEnabled: true, verifyTtlMinutes: 15, targetRateLimiter: limiter },
+      { targets, deliveries, channels, dispatcher },
+    );
+
+    expect((await notify.registerTarget({ userId: USER, channel: 'email', address: 'a@example.com', locale: 'en' })).status).toBe('sent');
+    expect((await notify.registerTarget({ userId: USER, channel: 'email', address: 'b@example.com', locale: 'en' })).status).toBe('sent');
+    const third = await notify.registerTarget({ userId: USER, channel: 'email', address: 'c@example.com', locale: 'en' });
+    expect(third).toMatchObject({ status: 'refused', code: 'channel.register_rate_limited' });
+    // The gateway must not have been asked a third time.
+    expect(email.sent).toHaveLength(2);
+  });
+
+  it('refuses verify when the per-user rate limit is spent — named code, not silent false', async () => {
+    const limiter = new TargetRateLimiter({
+      register: { max: 50, windowMs: 60_000 },
+      verify: { max: 2, windowMs: 60_000 },
+    });
+    const email = new SpyChannel('email');
+    const store = new MemoryNotifyStore();
+    const targets = new MemoryTargetStore();
+    const deliveries = new MemoryDeliveryStore();
+    const channels = registry([email]);
+    const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
+      maxAttempts: 3,
+      outOfAppEnabled: true,
+    });
+    const notify = new NotifyService(
+      store,
+      { fanoutEnabled: true, verifyTtlMinutes: 15, targetRateLimiter: limiter },
+      { targets, deliveries, channels, dispatcher },
+    );
+    await notify.registerTarget({ userId: USER, channel: 'email', address: 'new@example.com', locale: 'en' });
+
+    expect(await notify.verifyTarget(USER, 'email', '000000')).toEqual({ status: 'rejected' });
+    expect(await notify.verifyTarget(USER, 'email', '000001')).toEqual({ status: 'rejected' });
+    expect(await notify.verifyTarget(USER, 'email', '000002')).toEqual({
+      status: 'refused',
+      code: 'channel.verify_rate_limited',
+    });
   });
 
   it('un-confirms a target when its address changes', async () => {
@@ -741,9 +799,12 @@ describe('out-of-app copy comes from the same catalog as the screen', () => {
     expect(rendered.title).toBe('Margin call on your loan');
     expect(rendered.body).toContain('0.0415');
     expect(rendered.body).toContain('BTC');
+    // Consent footer is catalog copy, not dead code — must ride on every out-of-app body.
+    expect(rendered.footer).toBe('You are receiving this because you confirmed this address for account alerts.');
+    expect(rendered.body).toContain(rendered.footer!);
     // A raw key reaching a user is the failure this asserts against.
     expect(rendered.body).not.toContain('notify.bank');
-    expect(rendered.body).not.toContain('{');
+    expect(rendered.body).not.toMatch(/\{[a-zA-Z]/);
   });
 
   it('stamps the message with the language it is actually in, not the one requested', () => {
@@ -761,6 +822,9 @@ describe('out-of-app copy comes from the same catalog as the screen', () => {
     // The copy is English either way — the fix is to the label, not the words.
     const rendered = renderVerification('ar', '123456', 10);
     expect(rendered.title).toBe('Confirm this address');
+    // Verification must NOT claim consent — the address is unconfirmed.
+    expect(rendered.footer).toBeNull();
+    expect(rendered.body).not.toContain('confirmed this address');
   });
 
   it('has a catalog entry for every title and body key the consumers use', async () => {

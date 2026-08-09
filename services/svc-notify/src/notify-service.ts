@@ -7,6 +7,7 @@ import { ChannelRefusal, type OutOfAppChannel, type RefusalCode } from './channe
 import { normaliseLocale, renderVerification } from './channels/render.js';
 import { withNotifySpan } from './tracing.js';
 import type { ChannelMutePrefs, MuteStore, MuteableChannel } from './preferences/mute.js';
+import { TargetRateLimiter } from './target-rate-limit.js';
 
 /**
  * svc-notify — event-driven fan-out (ops.notifications).
@@ -38,10 +39,21 @@ export type RegisterOutcome =
   | { status: 'refused'; channel: OutOfAppChannel; code: RefusalCode; expiresAt: Date }
   | { status: 'failed'; channel: OutOfAppChannel; detail: string; expiresAt: Date };
 
+/**
+ * Verify outcomes. `refused` is rate-limit (named code); `rejected` is wrong /
+ * expired / spent code — one answer on purpose so existence is not leaked.
+ */
+export type VerifyOutcome = { status: 'verified' } | { status: 'rejected' } | { status: 'refused'; code: RefusalCode };
+
 export interface NotifyServiceOptions {
   readonly fanoutEnabled: boolean;
   /** Minutes a confirmation code stays valid. Optional so inbox-only callers stay terse. */
   readonly verifyTtlMinutes?: number;
+  /**
+   * Optional rate limiter for register/verify. Production always wires one;
+   * tests may inject a tight window or omit (a default limiter is created).
+   */
+  readonly targetRateLimiter?: TargetRateLimiter;
 }
 
 const DEFAULT_VERIFY_TTL_MINUTES = 15;
@@ -66,11 +78,16 @@ function newCode(): string {
 }
 
 export class NotifyService {
+  private readonly targetRateLimiter: TargetRateLimiter;
+
   constructor(
     private readonly store: NotifyStore,
     private readonly options: NotifyServiceOptions = { fanoutEnabled: true },
     private readonly deps?: NotifyServiceDeps,
-  ) {}
+  ) {
+    // Always on: unlimited verify/register is the hole, not an opt-in feature.
+    this.targetRateLimiter = options.targetRateLimiter ?? new TargetRateLimiter();
+  }
 
   get fanoutEnabled(): boolean {
     return this.options.fanoutEnabled;
@@ -180,10 +197,23 @@ export class NotifyService {
       span.setAttribute('intafaced.notify.channel', input.channel);
       if (!this.deps) throw new Error('svc-notify was constructed without channel dependencies');
 
-      const locale = normaliseLocale(input.locale);
-      const code = newCode();
       const ttlMinutes = this.options.verifyTtlMinutes ?? DEFAULT_VERIFY_TTL_MINUTES;
       const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
+
+      // Rate limit BEFORE upsert/send so a flood neither rotates the code nor
+      // bills the gateway. Named code — not a silent drop.
+      if (!this.targetRateLimiter.tryTake(input.userId, input.channel, 'register')) {
+        span.setAttribute('intafaced.notify.rate_limited', true);
+        return {
+          status: 'refused',
+          channel: input.channel,
+          code: 'channel.register_rate_limited',
+          expiresAt,
+        };
+      }
+
+      const locale = normaliseLocale(input.locale);
+      const code = newCode();
 
       await this.deps.targets.upsert({
         userId: input.userId,
@@ -226,14 +256,24 @@ export class NotifyService {
     });
   }
 
-  /** Confirm an address. Wrong, expired and already-spent codes are all one answer. */
-  async verifyTarget(userId: string, channel: OutOfAppChannel, code: string): Promise<boolean> {
+  /**
+   * Confirm an address. Wrong, expired and already-spent codes are all
+   * `rejected`. Rate limit is `refused` with a named code so a client can tell
+   * "try later" from "wrong code" without learning whether a code exists.
+   */
+  async verifyTarget(userId: string, channel: OutOfAppChannel, code: string): Promise<VerifyOutcome> {
     return withNotifySpan('notify.verifyTarget', { op: 'verifyTarget' }, async (span) => {
       span.setAttribute('intafaced.notify.channel', channel);
-      if (!this.deps) return false;
+      if (!this.deps) return { status: 'rejected' };
+
+      if (!this.targetRateLimiter.tryTake(userId, channel, 'verify')) {
+        span.setAttribute('intafaced.notify.rate_limited', true);
+        return { status: 'refused', code: 'channel.verify_rate_limited' };
+      }
+
       const verified = await this.deps.targets.markVerified(userId, channel, hashCode(code), new Date());
       span.setAttribute('intafaced.notify.verified', verified);
-      return verified;
+      return verified ? { status: 'verified' } : { status: 'rejected' };
     });
   }
 
