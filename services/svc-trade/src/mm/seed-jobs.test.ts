@@ -5,7 +5,11 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadMmSeedLastRun, parseMmSeedMids, parseMmSeedTargets, saveMmSeedLastRun, startMmSeedJobs } from './seed-jobs.js';
-import { MM_MATCHING_ACCOUNT_ID } from './seed-market.js';
+import { MM_MATCHING_ACCOUNT_ID, type SeedTradableMarket } from './seed-market.js';
+
+/** Active spot catalog row — same gate inputs placeOrder uses. */
+const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT', kind: 'spot', status: 'active' };
+const marketForActive = (): SeedTradableMarket => ACTIVE_SPOT;
 
 class JobStubMatching implements Pick<MatchingClient, 'submit' | 'depth' | 'cancel'> {
   readonly submitted: Array<{ marketId: string; request: EngineSubmitRequest }> = [];
@@ -115,6 +119,7 @@ describe('startMmSeedJobs', () => {
       ledger: new MemoryLedger(),
       matching: new JobStubMatching(),
       midSource: () => '100',
+      marketFor: marketForActive,
       config: {
         enabled: false,
         intervalMs: 1000,
@@ -132,6 +137,7 @@ describe('startMmSeedJobs', () => {
       ledger: new MemoryLedger(),
       matching: new JobStubMatching(),
       midSource: () => '100',
+      marketFor: marketForActive,
       config: {
         enabled: true,
         intervalMs: 1000,
@@ -157,6 +163,7 @@ describe('startMmSeedJobs', () => {
         ledger,
         matching,
         midSource: () => '100',
+        marketFor: marketForActive,
         config: {
           enabled: true,
           intervalMs: 20,
@@ -199,6 +206,7 @@ describe('startMmSeedJobs', () => {
         ledger,
         matching,
         midSource: () => '100',
+        marketFor: marketForActive,
         config: {
           enabled: true,
           intervalMs: 20,
@@ -236,6 +244,7 @@ describe('startMmSeedJobs', () => {
         ledger,
         matching,
         midSource: () => null,
+        marketFor: marketForActive,
         config: {
           enabled: true,
           intervalMs: 20,
@@ -248,6 +257,87 @@ describe('startMmSeedJobs', () => {
         onResult: (_id, result) => {
           try {
             expect('skipped' in result && result.skipped).toBe('missing_mid');
+            expect(matching.submitted).toHaveLength(0);
+            h.stop();
+            resolve();
+          } catch (e) {
+            h.stop();
+            reject(e);
+          }
+        },
+      });
+      setTimeout(() => {
+        h.stop();
+        reject(new Error('tick timeout'));
+      }, 2000);
+    });
+  });
+
+  it('skips when marketFor returns null — no invent-active, no submit', async () => {
+    const matching = new JobStubMatching();
+    const ledger = new MemoryLedger();
+
+    await new Promise<void>((resolve, reject) => {
+      const h = startMmSeedJobs({
+        ledger,
+        matching,
+        midSource: () => '100',
+        marketFor: () => null,
+        config: {
+          enabled: true,
+          intervalMs: 20,
+          halfSpreadBps: 100,
+          stepBps: 0,
+          levels: 1,
+          qtyPerLevel: '1',
+          targets: [{ marketId: 'btc-usdt', baseAsset: 'BTC', quoteAsset: 'USDT' }],
+        },
+        onResult: (_id, result) => {
+          try {
+            expect('skipped' in result && result.skipped).toBe('market_unknown');
+            expect(matching.submitted).toHaveLength(0);
+            h.stop();
+            resolve();
+          } catch (e) {
+            h.stop();
+            reject(e);
+          }
+        },
+      });
+      setTimeout(() => {
+        h.stop();
+        reject(new Error('tick timeout'));
+      }, 2000);
+    });
+  });
+
+  it('job refuses halted market — no matching.submit (assertTradable via seedMarket)', async () => {
+    const matching = new JobStubMatching();
+    const ledger = new MemoryLedger();
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'USDT', amount: amt('10000'), seedId: 'jh' }));
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('100'), seedId: 'jh-b' }));
+
+    await new Promise<void>((resolve, reject) => {
+      const h = startMmSeedJobs({
+        ledger,
+        matching,
+        midSource: () => '100',
+        marketFor: () => ({ symbol: 'BTC/USDT', kind: 'spot', status: 'halted' }),
+        config: {
+          enabled: true,
+          intervalMs: 20,
+          halfSpreadBps: 100,
+          stepBps: 0,
+          levels: 1,
+          qtyPerLevel: '1',
+          targets: [{ marketId: 'btc-usdt', baseAsset: 'BTC', quoteAsset: 'USDT' }],
+        },
+        onResult: (_id, result) => {
+          try {
+            expect('ok' in result && !result.ok).toBe(true);
+            if ('ok' in result && !result.ok) {
+              expect(result.reason).toBe('trade.market_not_tradable');
+            }
             expect(matching.submitted).toHaveLength(0);
             h.stop();
             resolve();
@@ -280,6 +370,7 @@ describe('startMmSeedJobs', () => {
         ledger,
         matching,
         midSource: () => '100',
+        marketFor: marketForActive,
         config: {
           enabled: true,
           intervalMs: 25,
