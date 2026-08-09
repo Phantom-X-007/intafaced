@@ -327,6 +327,43 @@ if (!available) {
       await expect(auth.confirmTotpEnrolment(session.userId, secret, '000000')).rejects.toMatchObject({ code: 'auth.mfa_invalid' });
     });
 
+    it('completes enrolment when start and confirm hit different AuthService instances (multi-pod)', async () => {
+      // Two services share SQL + key — models two identity pods behind a LB.
+      const authB = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
+      const session = await register();
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+
+      // Pending must not live only in pod-A process memory.
+      await authB.confirmTotpEnrolment(session.userId, secret, totp(secret));
+
+      const after = await db.sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM users WHERE id = ${session.userId}
+      `;
+      expect(after[0]!.totp_secret).toMatch(/^enc:v1:/);
+
+      // Pending is single-use — second confirm fails closed.
+      await expect(authB.confirmTotpEnrolment(session.userId, secret, totpNext(secret))).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+    });
+
+    it('wrong secret on confirm does not burn a legitimate pending enrolment', async () => {
+      const session = await register();
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+      const wrongSecret = secret === 'A'.repeat(32) ? 'B'.repeat(32) : 'A'.repeat(32);
+
+      await expect(auth.confirmTotpEnrolment(session.userId, wrongSecret, totp(wrongSecret))).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      // Real secret still works after the mismatch attempt.
+      await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
+      const after = await db.sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM users WHERE id = ${session.userId}
+      `;
+      expect(after[0]!.totp_secret).toMatch(/^enc:v1:/);
+    });
+
     it('then requires the code at login, and marks the session mfa', async () => {
       const handle = unique();
       const session = await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
