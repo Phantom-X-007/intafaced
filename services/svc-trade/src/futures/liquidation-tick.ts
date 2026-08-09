@@ -324,8 +324,12 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
      * missing mark into a price — on a perp, valuing a missing mark at zero
      * does not misprice one position, it liquidates every one of them.
      */
+    // W4 R5: pass position size so depth-backed marks apply the relative
+    // floor (authorisesSize). Omitting it re-opens the size-blind liq path
+    // that close already sealed — absolute dust floor alone is not enough.
+    const authorisesSize = parseAmount(row.size);
     const quoted = deps.marks.quote
-      ? await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at })
+      ? await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at, authorisesSize })
       : await legacyQuote(deps.marks, row, at);
 
     if (quoted === UNREADABLE) {
