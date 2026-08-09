@@ -1592,6 +1592,49 @@ if (!available) {
       expect(matching.submitted).toHaveLength(0);
     });
 
+    /**
+     * Convert M-03 sell half. Buy already binds maxAvgPrice into the engine
+     * protection ceiling. Without the sell floor, re-quote can pass at 99 and
+     * a pure market sell still print at 50 when the book moves — the user
+     * never accepted 50. Bound maxAvgPrice becomes an IOC limit floor.
+     */
+    it('binds convert maxAvgPrice into the engine as a sell floor (M-03)', async () => {
+      await fund(ALICE, 'BTC', '5');
+      matching.bids = [['100', '10']];
+      matching.asks = [['101', '10']];
+
+      await trade.convertExecute(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'sell',
+        qty: amt('1'),
+        clientConvertId: 'sell-floor-1',
+        maxAvgPrice: amt('99'),
+      });
+
+      expect(matching.submitted).toHaveLength(1);
+      expect(matching.submitted[0]!.request).toMatchObject({
+        type: 'limit',
+        side: 'sell',
+        price: '99',
+        tif: 'IOC',
+      });
+    });
+
+    it('refuses execute when maxAvgPrice is breached on a sell', async () => {
+      await fund(ALICE, 'BTC', '5');
+      matching.bids = [['50', '10']];
+      await expect(
+        trade.convertExecute(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'sell',
+          qty: amt('1'),
+          clientConvertId: 'too-cheap',
+          maxAvgPrice: amt('90'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.convert_price_moved' });
+      expect(matching.submitted).toHaveLength(0);
+    });
+
     it('honours the convert kill-switch', async () => {
       trade = new TradeService(sql, ledger, matching, perks, bus, { convertEnabled: false });
       await expect(trade.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') })).rejects.toMatchObject({

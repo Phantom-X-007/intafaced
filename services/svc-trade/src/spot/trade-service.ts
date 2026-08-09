@@ -196,6 +196,13 @@ export interface PlaceOrderInput {
    */
   maxProtectionPrice?: Amount | null;
   /**
+   * Optional floor on a market-sell execution price (convert M-03 sell half).
+   * When set, the order is submitted as a marketable IOC *limit* at this price
+   * so the engine cannot fill below the bound the user already accepted on the
+   * re-quote. Without it, a market sell stays pure market (hold is base qty).
+   */
+  minProtectionPrice?: Amount | null;
+  /**
    * Seed/mm honesty (SD-2). Only accepted when `seedPlaceEnabled` is on.
    * Flagged orders are excluded from public volume / tape (SD-3).
    */
@@ -550,9 +557,12 @@ export class TradeService {
           qty: input.qty,
           tif: 'IOC',
           clientOrderId: `convert:${input.clientConvertId}`,
-          // Bind convert maxAvgPrice into funding/engine protection (M-03), not
-          // only the live re-quote gate above.
+          // Bind convert maxAvgPrice into the engine (M-03), not only the live
+          // re-quote gate above. Buy → ceiling; sell → floor. Without the sell
+          // half the engine can fill a pure market *below* the avg the user
+          // already accepted, between re-quote and match.
           maxProtectionPrice: input.side === 'buy' ? (input.maxAvgPrice ?? null) : null,
+          minProtectionPrice: input.side === 'sell' ? (input.maxAvgPrice ?? null) : null,
         });
         span.setAttribute('intafaced.order_id', order.id);
         span.setAttribute('intafaced.order_status', order.status);
@@ -727,7 +737,9 @@ export class TradeService {
      *   · market buy — a protection price derived from the best ask, and the
      *                  order is submitted as a marketable IOC limit there, so
      *                  the engine cannot fill above what was held.
-     *   · market sell— none needed; the hold is base quantity, exactly.
+     *   · market sell— hold is base quantity (no funding price). Optional
+     *                  `minProtectionPrice` still becomes an engine floor so
+     *                  convert (M-03) cannot fill worse than the accepted avg.
      */
     let fundingPrice: Amount | null = null;
     let protectionPrice: Amount | null = null;
@@ -747,6 +759,14 @@ export class TradeService {
       }
       assertNotional(market, protectionPrice, input.qty);
       fundingPrice = protectionPrice;
+    } else if (input.minProtectionPrice != null) {
+      // Market sell with an execution floor (convert M-03). Hold stays base qty
+      // — fundingPrice remains null — but the engine path uses this floor.
+      if (input.minProtectionPrice <= 0n) {
+        throw new TradeError('minProtectionPrice must be positive', 'trade.invalid_price');
+      }
+      assertPrice(market, input.minProtectionPrice);
+      protectionPrice = input.minProtectionPrice;
     }
 
     // A market SELL holds base quantity, so `holdFor` ignores the price on that
@@ -2237,14 +2257,18 @@ export class TradeService {
     // only ever matches funded orders" true for an order type that has no price
     // of its own. FOK is preserved because it is a different promise to the
     // caller, and the engine keeps it either way.
-    if (orderType === 'market' && input.side === 'buy') {
+    //
+    // A market SELL with `minProtectionPrice` is the convert M-03 sell half:
+    // same shape (marketable IOC limit), floor rather than ceiling, so the
+    // engine cannot print below the avg the user already accepted.
+    if (orderType === 'market' && protectionPrice != null) {
       return {
         orderId,
         accountId: userId,
         type: 'limit',
-        side: 'buy',
+        side: input.side,
         qty: formatAmount(input.qty),
-        price: formatAmount(protectionPrice as Amount),
+        price: formatAmount(protectionPrice),
         stopPrice: null,
         tif: tif === 'FOK' ? 'FOK' : 'IOC',
       };
