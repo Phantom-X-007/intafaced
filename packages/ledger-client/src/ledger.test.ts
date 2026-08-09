@@ -284,6 +284,50 @@ describe('INVARIANT 2 — available never goes negative', () => {
     ).toThrow(/legacy:/);
   });
 
+  it('refuses a whitespace-only lock purpose — same failure class as empty', () => {
+    // Spaces are truthy and length > 0, but they name no claim. Two holds with
+    // purpose "   " share one identity and re-commingle (P0-3).
+    expect(() =>
+      assertValidPost({
+        idempotencyKey: 'whitespace-purpose-test',
+        module: 'test',
+        reason: 'test',
+        entries: [
+          { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('1') },
+          {
+            account: { ownerType: 'user', ownerId: USER_A, assetId: 'USDT', kind: 'collateral', purpose: '   ' },
+            direction: 'debit',
+            amount: amt('1'),
+          },
+        ],
+      }),
+    ).toThrow(/no purpose/);
+  });
+
+  it('refuses purpose on available — available stays fungible', () => {
+    // A purposed available opens a second pot beside the real one; recon still
+    // greens while the user has two balances and can only see one.
+    expect(() =>
+      assertValidPost({
+        idempotencyKey: 'available-purpose-test',
+        module: 'test',
+        reason: 'test',
+        entries: [
+          {
+            account: { ownerType: 'user', ownerId: USER_A, assetId: 'USDT', kind: 'available', purpose: 'split' },
+            direction: 'credit',
+            amount: amt('1'),
+          },
+          {
+            account: { ownerType: 'module', ownerId: 'treasury', assetId: 'USDT', kind: 'available' },
+            direction: 'debit',
+            amount: amt('1'),
+          },
+        ],
+      }),
+    ).toThrow(/must not carry purpose/);
+  });
+
   it('leaves the book untouched when a post is rejected', async () => {
     await fund(USER_A, 'USDT', '10');
     const before = ledger.journal().length;

@@ -24,8 +24,8 @@ export function userAvailable(userId: string, assetId: string): AccountRef {
  * inventing a purpose string, which is worth having to justify.
  */
 export function userHold(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userHold requires a purpose (P0-3) — e.g. `order:<id>` or `withdraw:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'hold', purpose };
+  if (!purpose?.trim()) throw new Error('userHold requires a purpose (P0-3) — e.g. `order:<id>` or `withdraw:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'hold', purpose: purpose.trim() };
 }
 
 /** Value reserved for one open order. Drawn down on fill, returned on cancel or expiry. */
@@ -43,8 +43,8 @@ export function withdrawalHoldAccount(userId: string, assetId: string, withdrawa
  * one pot per (user, asset) lets trade B fund trade A's release.
  */
 export function userEscrow(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userEscrow requires a purpose (L3-4) — e.g. `trade:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'escrow', purpose };
+  if (!purpose?.trim()) throw new Error('userEscrow requires a purpose (L3-4) — e.g. `trade:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'escrow', purpose: purpose.trim() };
 }
 
 /** Escrow pot for one P2P trade. */
@@ -57,8 +57,8 @@ export function tradeEscrowAccount(sellerId: string, assetId: string, tradeId: s
  * positions must not share a pot or each other's principal.
  */
 export function userStake(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userStake requires a purpose (L1/L3-5) — e.g. `token:stake:<id>` or `bank:earn:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'stake', purpose };
+  if (!purpose?.trim()) throw new Error('userStake requires a purpose (L1/L3-5) — e.g. `token:stake:<id>` or `bank:earn:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'stake', purpose: purpose.trim() };
 }
 
 /** Token staking pot for one stake row. */
@@ -90,8 +90,8 @@ export function earnStakeAccount(userId: string, assetId: string, positionId: st
  * common one.
  */
 export function userCollateral(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userCollateral requires a purpose (P0-3) — e.g. `loan:<id>` or `position:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'collateral', purpose };
+  if (!purpose?.trim()) throw new Error('userCollateral requires a purpose (P0-3) — e.g. `loan:<id>` or `position:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'collateral', purpose: purpose.trim() };
 }
 
 /** Collateral securing ONE loan (§8.1). Released only when that loan is settled. */
@@ -171,8 +171,8 @@ export function marketMaker(assetId: string): AccountRef {
 
 /** House hold FOR ONE PURPOSE (mm-bot order reservations). */
 export function houseHold(ownerId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('houseHold requires a purpose — e.g. `order:<id>`');
-  return { ownerType: 'house', ownerId, assetId, kind: 'hold', purpose };
+  if (!purpose?.trim()) throw new Error('houseHold requires a purpose — e.g. `order:<id>`');
+  return { ownerType: 'house', ownerId, assetId, kind: 'hold', purpose: purpose.trim() };
 }
 
 /** Market-maker reservation for one seed/open order. */

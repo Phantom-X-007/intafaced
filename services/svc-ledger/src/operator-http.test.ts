@@ -340,6 +340,16 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
     expect(empty.statusCode).toBe(400);
     expect(freezeCalls).toBe(0);
 
+    // Twelve spaces satisfy raw min(12) but name no usable reason.
+    const spaces = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { reason: '            ' },
+    });
+    expect(spaces.statusCode).toBe(400);
+    expect(freezeCalls).toBe(0);
+
     const ok = await app.inject({
       method: 'POST',
       url: '/operator/freeze',

@@ -68,8 +68,12 @@ const freezeSchema = z.object({
    * Required, and required to be useful. The database's own check constraint
    * refuses an unattributed freeze; this refuses an unexplained one, because
    * `reason` is what the next operator reads before deciding whether to thaw.
+   * Trim first so twelve spaces cannot satisfy `min(12)` with no readable text.
    */
-  reason: z.string().min(12).max(500),
+  reason: z
+    .string()
+    .transform((s) => s.trim())
+    .pipe(z.string().min(12).max(500)),
 });
 
 export interface FreezeSnapshot {

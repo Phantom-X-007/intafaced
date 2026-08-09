@@ -193,7 +193,9 @@ export function assertPurposedLocks(entries: readonly EntryInput[]): void {
 function assertPurposedLockKinds(entries: readonly EntryInput[], kinds: readonly string[], label: string, doctrine: string): void {
   for (const entry of entries) {
     if (!kinds.includes(entry.account.kind)) continue;
-    const purpose = entry.account.purpose ?? '';
+    // Trim: spaces-only is the same failure class as empty — two holds with
+    // purpose "   " share one identity key and re-commingle (P0-3).
+    const purpose = (entry.account.purpose ?? '').trim();
     if (purpose.length === 0) {
       throw new InvalidEntryError(
         `${label} account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} has no purpose — ` +
@@ -210,6 +212,25 @@ function assertPurposedLockKinds(entries: readonly EntryInput[], kinds: readonly
         `${label} account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} ` +
           `uses forbidden purpose "${purpose}" — the legacy: prefix was a one-time migration stamp, not a claim ` +
           `(migration 0008 / ${doctrine})`,
+      );
+    }
+  }
+}
+
+/**
+ * `available` is fungible with itself — a purpose on it opens a second pot
+ * beside the real available balance (same owner+asset, different purpose key).
+ * Sum-to-zero and recon still green; the user simply has two balances and can
+ * only see one. Lock pots carry purpose; available must not.
+ */
+export function assertAvailableUnpurposed(entries: readonly EntryInput[]): void {
+  for (const entry of entries) {
+    if (entry.account.kind !== 'available') continue;
+    const purpose = entry.account.purpose;
+    if (purpose != null && purpose.trim().length > 0) {
+      throw new InvalidEntryError(
+        `available account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} ` +
+          `must not carry purpose "${purpose}" — available is fungible; only lock pots name a claim (P0-3 / §4.2)`,
       );
     }
   }
@@ -284,6 +305,7 @@ export function assertValidPost(request: PostRequest): void {
   assertBalanced(request.entries);
   assertPairedLocks(request.entries);
   assertPurposedLocks(request.entries);
+  assertAvailableUnpurposed(request.entries);
 }
 
 /** Total absolute value moved, per asset — used for metrics and fee reporting. */
