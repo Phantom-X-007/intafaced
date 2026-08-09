@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import {
   applyDelta,
   bookFromSnapshot,
+  TRADE_PRINT_PUBLIC_KEYS,
   type DepthBook,
   type DepthMessage,
   type DepthSnapshot,
@@ -291,21 +292,33 @@ describe('the websocket gateway, over a real socket', () => {
     expect(closed.reason).toBe('gateway shutting down');
   });
 
-  it('streams public trade prints on channel=trades', async () => {
+  it('streams public trade prints on channel=trades — no order/account ids, no invented side', async () => {
+    const makerOrderId = '11111111-1111-1111-1111-111111111111';
+    const takerOrderId = '22222222-2222-2222-2222-222222222222';
+    const makerAccountId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const takerAccountId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
     tradeHub.ingest({
       marketId: MARKET,
-      makerOrderId: '11111111-1111-1111-1111-111111111111',
-      takerOrderId: '22222222-2222-2222-2222-222222222222',
+      makerOrderId,
+      takerOrderId,
       price: '30100.5',
       qty: '0.1',
       sequence: 50,
       ts: '2026-07-29T12:00:00.000Z',
-    });
+      // Residual: private / inventable fields must not cross the gateway wire.
+      makerAccountId,
+      takerAccountId,
+      house: true,
+      side: 'buy',
+    } as never);
 
     const client = connect(`market=${MARKET}&channel=trades`);
     await client.frameCount(1);
 
-    const print = JSON.parse(client.frames[0]!) as TradePrint;
+    const wire = client.frames[0]!;
+    const print = JSON.parse(wire) as TradePrint;
+    expect(Object.keys(print).sort()).toEqual([...TRADE_PRINT_PUBLIC_KEYS].sort());
     expect(print).toEqual({
       type: 'trade',
       marketId: MARKET,
@@ -314,8 +327,20 @@ describe('the websocket gateway, over a real socket', () => {
       quantity: '0.1',
       ts: '2026-07-29T12:00:00.000Z',
     });
-    expect(client.frames[0]).not.toContain('makerOrderId');
-    expect(client.frames[0]).not.toContain('11111111');
+    expect(print).not.toHaveProperty('side');
+    for (const secret of [
+      makerOrderId,
+      takerOrderId,
+      makerAccountId,
+      takerAccountId,
+      'makerOrderId',
+      'takerOrderId',
+      'makerAccountId',
+      'takerAccountId',
+    ]) {
+      expect(wire).not.toContain(secret);
+    }
+    expect(wire).not.toMatch(/"side"/);
 
     tradeHub.ingest({
       marketId: MARKET,
@@ -323,9 +348,13 @@ describe('the websocket gateway, over a real socket', () => {
       qty: '0.2',
       sequence: 51,
       ts: '2026-07-29T12:00:01.000Z',
-    });
+      side: 'sell',
+    } as never);
     await client.frameCount(2);
-    expect(JSON.parse(client.frames[1]!) as TradePrint).toMatchObject({ type: 'trade', sequence: 51, quantity: '0.2' });
+    const live = JSON.parse(client.frames[1]!) as TradePrint;
+    expect(live).toMatchObject({ type: 'trade', sequence: 51, quantity: '0.2' });
+    expect(live).not.toHaveProperty('side');
+    expect(Object.keys(live).sort()).toEqual([...TRADE_PRINT_PUBLIC_KEYS].sort());
   });
 
   it('refuses an unknown channel on the upgrade', async () => {
