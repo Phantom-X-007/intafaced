@@ -1301,8 +1301,16 @@ export const FEATURES = [
     note:
       'GHOST OWNER CLEARED 2026-08-09 wave 3: was `wip` @nitro-agent with no open PR when wave started; residual built and merged as #1187 (stuck-pending reap, ' +
       'register/verify rate limits, consent footer). Prior: liquidation fan-out #1116, multi-channel adapters, delivery honesty (accepted≠delivered). ' +
-      '**MUST NOT flip to done:** out-of-app channels refuse channel.not_configured until Class X gateway credentials (owner). In-app delivers. ' +
-      'Residual: multi-replica rate-limit budget N×, operator delivery outcomes view, more event consumers (optional).',
+      '**Wave 4 #1504 (2026-08-09)**: closed a declared-but-unwired surface — AlertService.evaluateMarket was complete, tested and had NO CALLER while ' +
+      'router.ts called it "an internal job path" (D-S-13 Class B: createAlert returned status active for a watch nothing would ever evaluate). Sweep now ' +
+      'mounted on an interval fanning in from activeMarkets(), reported on /ready; MarkSource.kind required so a dark port cannot read as live; both alert ' +
+      'procedures carry evaluation {markSource,canFire,code} so the gap is disclosed in code (Class C). Also mount.reachable.test.ts — the tRPC mount over ' +
+      'a real socket; nothing in the repo had ever exercised fastifyTRPCPlugin, and createCaller stays green on a mount that was never registered. ' +
+      '**MUST NOT flip to done:** out-of-app channels refuse channel.not_configured until Class X gateway credentials (owner), and the alert mark feed is ' +
+      'dark for the same reason. In-app DELIVERS. email/push/sms transports are wired and proven against a real HTTP server (gateway-wire.test.ts counts at ' +
+      'the server) but cannot deliver without owner-provisioned credentials — wired to refuse, never to pretend. ' +
+      'Residual: operator delivery outcomes view, more event consumers (optional), owner mark source before any watch can fire. ' +
+      '(Multi-replica rate-limit N× already closed by migration 0005 + PostgresTargetRateLimiter.)',
   }),
   f('v22.alerts', 'Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31)', {
     module: 'notify',
