@@ -111,6 +111,7 @@ export type PayErrorCode =
    * same settlement key would disagree with the ledger idempotency key.
    */
   | 'pay.settlement_desynced'
+  | 'pay.settlement_not_pending'
   | 'pay.rail_declined'
   | 'pay.rail_failed'
   | 'pay.rail_amount_mismatch'
@@ -1970,8 +1971,16 @@ export class PayService {
              AND p.currency = ${input.assetId}
              AND p.status = 'captured'
              AND NOT EXISTS (
+               -- Frozen into a settlement that has not been released. A released
+               -- inclusion (ops path after desync) is eligible for a later window.
                SELECT 1 FROM pay.payment_events s
                 WHERE s.payment_id = p.id AND s.event = 'settlement.included'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pay.payment_events r
+                     WHERE r.payment_id = s.payment_id
+                       AND r.event = 'settlement.released'
+                       AND r.payload->>'settlementId' = s.payload->>'settlementId'
+                  )
              )
              AND EXISTS (
                SELECT 1 FROM pay.payment_events c
@@ -2047,6 +2056,71 @@ export class PayService {
         }
 
         return toSettlement(row);
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  /**
+   * G3 — release a stuck `pending` settlement so its payments can re-enter a
+   * later window.
+   *
+   * After freeze, if post can never succeed (desync, ops failure), payments stay
+   * marked `settlement.included` forever and no later freeze can pick them up.
+   * This is the honest ops path: mark the window `failed`, append
+   * `settlement.released` per included payment, move no ledger value.
+   *
+   * Only `pending` windows. Posted/paid_out/failed refuse.
+   */
+  async releasePendingSettlement(input: {
+    settlementId: string;
+    /** Free-text ops reason (journaled; required so silent cancels are impossible). */
+    reason: string;
+  }): Promise<SettlementRecord> {
+    const reason = input.reason?.trim() ?? '';
+    if (!reason) {
+      throw new PayError('releasePendingSettlement requires a non-empty reason', 'pay.invalid_transition');
+    }
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements WHERE id = ${input.settlementId} FOR UPDATE
+        `;
+        const row = rows[0];
+        if (!row) throw new PayError(`Settlement ${input.settlementId} not found`, 'pay.settlement_not_found');
+        if (row.status === 'failed') return toSettlement(row);
+        if (row.status !== 'pending') {
+          throw new PayError(
+            `Settlement ${row.id} is ${row.status}; only a pending settlement can be released`,
+            'pay.settlement_not_pending',
+            { settlementId: row.id, status: row.status },
+          );
+        }
+
+        const included = await tx<Array<{ payment_id: string }>>`
+          SELECT payment_id FROM pay.payment_events
+           WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
+           ORDER BY payment_id
+        `;
+
+        for (const { payment_id } of included) {
+          await appendEvent(tx, payment_id, 'settlement.released', {
+            settlementId: row.id,
+            window: row.window,
+            assetId: row.asset_id,
+            reason,
+          });
+        }
+
+        await tx`
+          UPDATE pay.settlements SET status = 'failed', updated_at = now()
+           WHERE id = ${row.id}
+        `;
+
+        return toSettlement({ ...row, status: 'failed' });
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );

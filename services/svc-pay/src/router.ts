@@ -662,6 +662,21 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             return toSettlementOut(settlement);
           }),
         ),
+
+      /**
+       * G3 — unstick a pending freeze so payments can enter a later window.
+       * Moves no ledger value. Requires write (ops / merchant owner).
+       */
+      release: scopedProcedure('pay:write', { module: 'pay' })
+        .input(z.object({ settlementId: z.string().uuid(), reason: z.string().min(1) }))
+        .output(settlementView)
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const settlement = await pay.getSettlement(input.settlementId);
+            await assertMerchantOwner(pay, ctx.principal?.userId, settlement.merchantId);
+            return toSettlementOut(await pay.releasePendingSettlement(input));
+          }),
+        ),
     }),
 
     /**
@@ -982,6 +997,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.refund_in_flight':
       case 'pay.settlement_in_flight':
       case 'pay.settlement_desynced':
+      case 'pay.settlement_not_pending':
         return 'CONFLICT' as const;
       case 'pay.withdrawal_not_found':
         return 'NOT_FOUND' as const;

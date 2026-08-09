@@ -977,6 +977,111 @@ if (!available) {
       expect(formatAmount((await base.balance(userAvailable(MERCHANT_USER, 'USDT'))).amount)).toBe('0');
     });
 
+    /**
+     * G3 — stuck pending has an ops release path.
+     *
+     * Freeze a window, leave it pending (by forcing status after freeze via the
+     * desync residual: post refused, row stays pending with settlement.included).
+     * releasePendingSettlement → failed + settlement.released. A later window
+     * can then settle the same payment. Same window key stays failed.
+     */
+    it('releases a stuck pending settlement so payments can re-enter a later window', async () => {
+      const base = new MemoryLedger();
+      const gate = { blockSettle: true };
+      const ledgerProxy: LedgerClient = {
+        post: async (request: PostRequest) => {
+          if (gate.blockSettle && request.reason === 'pay.settled') {
+            throw new Error('simulated ledger outage during settlement post');
+          }
+          return base.post(request);
+        },
+        balance: (ref) => base.balance(ref),
+        balances: (ownerType, ownerId) => base.balances(ownerType, ownerId),
+        getTx: (txId) => base.getTx(txId),
+        getTxByKey: (key) => base.getTxByKey(key),
+      };
+      const gated = new PayService(sql, ledgerProxy, rails);
+
+      const m = await gated.createMerchant({ userId: MERCHANT_USER, pricing: { feeBps: 0 } });
+      const payment = await gated.createPayment({
+        merchantId: m.id,
+        amount: amt('55'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+      await gated.authorize(payment.id);
+      await gated.capture(payment.id);
+
+      await expect(
+        gated.settleWindow({
+          merchantId: m.id,
+          window: 'w-g3-stuck',
+          assetId: 'USDT',
+          from: new Date(Date.now() - 24 * 3600_000),
+          to: new Date(Date.now() + 24 * 3600_000),
+        }),
+      ).rejects.toThrow(/simulated ledger outage/);
+
+      const stuck = await gated.getSettlement(
+        (
+          await sql<Array<{ id: string }>>`
+            SELECT id FROM pay.settlements WHERE merchant_id = ${m.id} AND "window" = 'w-g3-stuck'
+          `
+        )[0]!.id,
+      );
+      expect(stuck.status).toBe('pending');
+
+      // Without release, a later window cannot pick up the payment (included lock).
+      gate.blockSettle = false;
+      await expect(
+        gated.settleWindow({
+          merchantId: m.id,
+          window: 'w-g3-later',
+          assetId: 'USDT',
+          from: new Date(Date.now() - 24 * 3600_000),
+          to: new Date(Date.now() + 24 * 3600_000),
+        }),
+      ).rejects.toMatchObject({ code: 'pay.nothing_to_settle' });
+
+      const released = await gated.releasePendingSettlement({
+        settlementId: stuck.id,
+        reason: 'ops: desync after freeze — re-settle under new window',
+      });
+      expect(released.status).toBe('failed');
+      const history = await gated.history(payment.id);
+      expect(history.map((e) => e.event)).toContain('settlement.released');
+
+      // Same window stays failed (unique key) — not reopened.
+      const same = await gated.settleWindow({
+        merchantId: m.id,
+        window: 'w-g3-stuck',
+        assetId: 'USDT',
+        from: new Date(Date.now() - 24 * 3600_000),
+        to: new Date(Date.now() + 24 * 3600_000),
+      });
+      expect(same.status).toBe('failed');
+
+      // Later window freezes + posts the released payment.
+      const later = await gated.settleWindow({
+        merchantId: m.id,
+        window: 'w-g3-later',
+        assetId: 'USDT',
+        from: new Date(Date.now() - 24 * 3600_000),
+        to: new Date(Date.now() + 24 * 3600_000),
+      });
+      expect(later.status).toBe('posted');
+      expect(formatAmount(later.gross)).toBe('55');
+      expect(formatAmount((await base.balance(userAvailable(MERCHANT_USER, 'USDT'))).amount)).toBe('55');
+      expect(base.reconcile()).toEqual({ ok: true });
+
+      // Posted cannot be released.
+      await expect(gated.releasePendingSettlement({ settlementId: later.id, reason: 'nope' })).rejects.toMatchObject({
+        code: 'pay.settlement_not_pending',
+      });
+    });
+
     it('refuses to settle a merchant with no fee rate and no configured default', async () => {
       await sql`
         INSERT INTO pay.merchants (user_id, mode, pricing, status)
