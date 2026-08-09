@@ -1456,10 +1456,12 @@ if (!available) {
       ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
 
       // Symmetric: step-up challenge must not mint a login session.
+      // Login path uses auth.invalid_credentials on purpose (same code as a
+      // wrong password — no ceremony-kind oracle for account enumeration).
       const stepOptions = await auth.startWebauthnStepUp(session.userId);
       await expect(
         auth.confirmWebauthnAuthentication(handle, authenticator.assertionResponse(stepOptions.challenge)),
-      ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
+      ).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
     });
 
     it('refuses passkey step-up when no security key is enrolled', async () => {
