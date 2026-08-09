@@ -21,6 +21,7 @@ import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
+import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
 import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
@@ -2290,6 +2291,163 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
           return result;
         }),
+
+      /**
+       * Stage-2 `copy_intel.stats` as a METERED RUN on the fleet runtime.
+       *
+       * Pure `buildStats` answers without a session. This mutation runs the
+       * same builder through `openSession → act → settle → closeSession` so
+       * every leader read is guardrail-checked and audited. Dark copy plane
+       * refuses before any session opens (unbilled). Never invents fee share.
+       */
+      runSession: scopedProcedure('agents:execute', { module: 'agents' })
+        .input(
+          z.object({
+            plane: z.enum(['live', 'dark']),
+            fixtures: z
+              .array(
+                z.object({
+                  leaderId: z.string().min(1).max(64),
+                  realisedPnl: z.string().nullable(),
+                  closedTrades: z.number().int().nullable(),
+                  winningTrades: z.number().int().nullable(),
+                  windowStart: z.string().min(1),
+                  windowEnd: z.string().min(1),
+                  source: z.string().min(1).max(64),
+                }),
+              )
+              .max(50),
+            leaderAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            now: z.string().datetime().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              stats: z.array(
+                z.object({
+                  leaderId: z.string(),
+                  realisedPnl: z.string(),
+                  closedTrades: z.number().int(),
+                  winRate: z.string(),
+                  windowStart: z.string(),
+                  windowEnd: z.string(),
+                }),
+              ),
+              audit: z.array(
+                z.object({
+                  id: z.string(),
+                  writtenAt: z.string(),
+                  source: z.string(),
+                  leaderId: z.string(),
+                  stat: z.object({
+                    leaderId: z.string(),
+                    realisedPnl: z.string(),
+                    closedTrades: z.number().int(),
+                    winRate: z.string(),
+                    windowStart: z.string(),
+                    windowEnd: z.string(),
+                  }),
+                  provenance: z.object({
+                    fixture: z.literal(true),
+                    source: z.string(),
+                    windowStart: z.string(),
+                    windowEnd: z.string(),
+                  }),
+                }),
+              ),
+              skippedIncomplete: z.number().int(),
+              fixturesAccepted: z.number().int(),
+              fixturesRefusedByGuardrail: z.number().int(),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.copy_intel.empty'),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('unavailable'),
+              userMessageKey: z.literal('agents.copy_intel.unavailable'),
+              reason: z.enum(['no_data', 'invalid_window', 'copy_plane_dark']),
+              metering: runMeteringOutput,
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['copy_plane_dark', 'no_live_leaders']),
+              userMessageKey: z.literal('agents.copy_intel.unavailable'),
+              fixturesRefusedByGuardrail: z.number().int(),
+              metering: runMeteringOutput,
+            }),
+          ]),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            const result = await runCopyIntelStatsSession({
+              runtime,
+              userId: ctx.principal.userId,
+              feeAssetId,
+              plane: input.plane,
+              fixtures: input.fixtures,
+              ...(input.leaderAllowlist === undefined ? {} : { leaderAllowlist: input.leaderAllowlist }),
+              ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            });
+
+            const metering = {
+              sessionId: result.metering.sessionId,
+              billedAmount: result.metering.billedAmount,
+              assetId: result.metering.assetId,
+              sessionClosed: result.metering.sessionClosed,
+              settlements: result.metering.settlements.map((s) => ({
+                windowId: s.windowId,
+                amount: s.amount,
+                chargeKey: s.chargeKey,
+                settled: s.settled,
+              })),
+            };
+
+            if (result.status === 'ok') {
+              return {
+                status: 'ok' as const,
+                skippedIncomplete: result.skippedIncomplete,
+                fixturesAccepted: result.fixturesAccepted,
+                fixturesRefusedByGuardrail: result.fixturesRefusedByGuardrail,
+                stats: result.stats.map((s) => ({ ...s })),
+                audit: result.audit.map((a) => ({
+                  id: a.id,
+                  writtenAt: a.writtenAt,
+                  source: a.source,
+                  leaderId: a.leaderId,
+                  stat: { ...a.stat },
+                  provenance: { ...a.provenance },
+                })),
+                metering,
+              };
+            }
+
+            if (result.status === 'empty') {
+              return { status: 'empty' as const, userMessageKey: result.userMessageKey, metering };
+            }
+
+            if (result.status === 'unavailable') {
+              return {
+                status: 'unavailable' as const,
+                userMessageKey: result.userMessageKey,
+                reason: result.reason,
+                metering,
+              };
+            }
+
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              userMessageKey: result.userMessageKey,
+              fixturesRefusedByGuardrail: result.fixturesRefusedByGuardrail,
+              metering,
+            };
+          }),
+        ),
     }),
 
     /**

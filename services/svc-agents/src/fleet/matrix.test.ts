@@ -29,14 +29,12 @@ describe('fleet mount matrix', () => {
     expect(routingTasksWithoutFactory()).toEqual([]);
   });
 
-  it('router runSession mounts match the matrix claim', () => {
+  it('router runSession mounts match the matrix claim for all five product agents', () => {
     const mounted = runSessionMountsInRouterSource();
     for (const ns of expectedRunSessionNamespaces()) {
       expect(mounted).toContain(ns);
     }
-    // copy-intel metered runSession still residual on tip.
-    expect(mounted).toContain('merchant');
-    expect(mounted).not.toContain('copyIntel');
+    expect(mounted).toEqual(['copyIntel', 'merchant', 'navigator', 'scanner', 'support'].sort());
   });
 
   it('boot registers every product agent (no silent 404 on openSession)', () => {
@@ -47,7 +45,7 @@ describe('fleet mount matrix', () => {
   it('board card is reconstructable', () => {
     const card = fleetMatrixBoardCard();
     expect(card.agents).toBe(5);
-    expect(card.withRunSession).toBe(4);
+    expect(card.withRunSession).toBe(5);
     expect(card.bootRegistered).toBe(5);
     expect(card.tasksMissingRoute).toBe(0);
   });

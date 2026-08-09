@@ -65,8 +65,8 @@ export const FLEET_PRODUCT_AGENTS: readonly FleetAgentRow[] = [
   {
     agentId: 'copy-intel',
     factory: () => copyIntelAgentGuardrail(),
-    // Pure stats on tip until metered runSession PR merges.
-    runSessionMounted: false,
+    // Metered copyIntel.runSession (this PR).
+    runSessionMounted: true,
     bootRegistered: true,
   },
 ] as const;
