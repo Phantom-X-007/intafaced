@@ -629,6 +629,103 @@ export const merchantWebhookDeliveries = pay.table(
   ],
 );
 
+// ── Subscriptions (SPEC §4) — schema only; runner/charge land later ──────────
+
+export const subscriptionCadenceEnum = pay.enum('subscription_cadence', ['daily', 'weekly', 'monthly']);
+export const mandateStatusEnum = pay.enum('mandate_status', ['active', 'cancelled', 'expired']);
+export const subscriptionStatusEnum = pay.enum('subscription_status', ['active', 'paused', 'cancelled', 'completed']);
+export const subscriptionExecutionStatusEnum = pay.enum('subscription_execution_status', [
+  'pending',
+  'settled',
+  'rejected',
+  'skipped',
+  'invoiced',
+]);
+
+/**
+ * Authorised recurring agreement. Amount/ceiling are instructions — immutable
+ * after insert. Raise price = new mandate + re-consent (service layer).
+ */
+export const subscriptionMandates = pay.table(
+  'subscription_mandates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    customerId: text('customer_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    amount: amount('amount').notNull(),
+    ceiling: amount('ceiling'),
+    cadence: subscriptionCadenceEnum('cadence').notNull(),
+    startsAt: tstz('starts_at').notNull(),
+    endsAt: tstz('ends_at'),
+    railAdapter: text('rail_adapter'),
+    railMandateRef: text('rail_mandate_ref'),
+    status: mandateStatusEnum('status').notNull().default('active'),
+    cancelledAt: tstz('cancelled_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('subscription_mandates_merchant_idx').on(t.merchantId), index('subscription_mandates_customer_idx').on(t.customerId)],
+);
+
+/**
+ * Schedule handle over a mandate. nextRunAt is an index only — firings are
+ * subscription_executions. path defaults to crypto_invoice (never auto-pull).
+ */
+export const subscriptions = pay.table(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mandateId: uuid('mandate_id')
+      .notNull()
+      .references(() => subscriptionMandates.id),
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    customerId: text('customer_id').notNull(),
+    nextRunAt: tstz('next_run_at').notNull(),
+    status: subscriptionStatusEnum('status').notNull().default('active'),
+    cancelledAt: tstz('cancelled_at'),
+    path: text('path').notNull().default('crypto_invoice'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('subscriptions_due_idx').on(t.status, t.nextRunAt),
+    index('subscriptions_merchant_idx').on(t.merchantId),
+    index('subscriptions_mandate_idx').on(t.mandateId),
+  ],
+);
+
+/**
+ * One firing of one subscription. unique(subscription_id, occurrence) is the
+ * double-fire guard — same law as bank.transfer_executions.
+ */
+export const subscriptionExecutions = pay.table(
+  'subscription_executions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id),
+    occurrence: integer('occurrence').notNull(),
+    amount: amount('amount').notNull(),
+    status: subscriptionExecutionStatusEnum('status').notNull().default('pending'),
+    paymentId: uuid('payment_id').references(() => payments.id),
+    ledgerTxId: text('ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    attemptedAt: tstz('attempted_at').notNull().defaultNow(),
+    settledAt: tstz('settled_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('subscription_executions_occurrence_idx').on(t.subscriptionId, t.occurrence),
+    index('subscription_executions_status_idx').on(t.status),
+  ],
+);
+
 export const schema = {
   merchants,
   merchantPermissionEvents,
@@ -644,4 +741,7 @@ export const schema = {
   restIdempotency,
   merchantWebhookEndpoints,
   merchantWebhookDeliveries,
+  subscriptionMandates,
+  subscriptions,
+  subscriptionExecutions,
 };
