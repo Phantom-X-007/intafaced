@@ -1,4 +1,5 @@
 import { createHash, createPublicKey, randomBytes, verify as cryptoVerify, type KeyObject } from 'node:crypto';
+import type { Sql } from 'postgres';
 import { decodeCbor, encodeCbor, mapGet, type CborValue } from './cbor.js';
 
 /**
@@ -104,36 +105,48 @@ export function b64urlDecode(input: string): Buffer {
 
 // ── challenge store ──────────────────────────────────────────────────────────
 
-interface ChallengeEntry {
+export type ChallengeKind = 'registration' | 'authentication' | 'step-up';
+
+export interface ChallengeEntry {
   challenge: string;
   userId: string | null;
-  kind: 'registration' | 'authentication' | 'step-up';
+  kind: ChallengeKind;
   expiresAt: number;
 }
 
 /**
- * In-process challenge store.
+ * Ceremony challenge port — put once, take once, refuse after TTL.
  *
- * A multi-instance deploy needs a shared store (Redis). That is a later
- * wiring job, not a reason to leave WebAuthn unshipped — the ceremony is
- * correct either way, and a single-instance identity pod is the current shape.
+ * Production uses {@link SqlChallengeStore} (Postgres) so register-on-pod-A /
+ * verify-on-pod-B works. Pure unit tests keep the in-memory {@link ChallengeStore}.
  */
-export class ChallengeStore {
+export interface ChallengeStorePort {
+  put(kind: ChallengeKind, challenge: string, userId: string | null, ttlMs?: number): Promise<void>;
+  take(challenge: string, kind: ChallengeKind): Promise<ChallengeEntry | null>;
+}
+
+/**
+ * In-process challenge store (single pod / pure unit tests).
+ *
+ * Multi-instance deploys must use {@link SqlChallengeStore} — an in-process
+ * Map is invisible across pods, so verify fails closed with "missing challenge".
+ */
+export class ChallengeStore implements ChallengeStorePort {
   private readonly entries = new Map<string, ChallengeEntry>();
 
   constructor(private readonly ttlMs: number = DEFAULT_TTL_MS) {}
 
-  put(kind: ChallengeEntry['kind'], challenge: string, userId: string | null): void {
+  async put(kind: ChallengeKind, challenge: string, userId: string | null, ttlMs: number = this.ttlMs): Promise<void> {
     this.prune();
     this.entries.set(challenge, {
       challenge,
       userId,
       kind,
-      expiresAt: Date.now() + this.ttlMs,
+      expiresAt: Date.now() + ttlMs,
     });
   }
 
-  take(challenge: string, kind: ChallengeEntry['kind']): ChallengeEntry | null {
+  async take(challenge: string, kind: ChallengeKind): Promise<ChallengeEntry | null> {
     this.prune();
     const entry = this.entries.get(challenge);
     if (!entry) return null;
@@ -156,6 +169,59 @@ export class ChallengeStore {
     }
   }
 }
+
+/**
+ * Postgres-backed challenge store — shared across identity pods.
+ *
+ * Table: identity.webauthn_challenges (migration 0011). take() is single-use
+ * (DELETE … RETURNING). Expired rows are pruned on put/take and never accepted.
+ */
+export class SqlChallengeStore implements ChallengeStorePort {
+  constructor(
+    private readonly sql: Sql,
+    private readonly ttlMs: number = DEFAULT_TTL_MS,
+  ) {}
+
+  async put(kind: ChallengeKind, challenge: string, userId: string | null, ttlMs: number = this.ttlMs): Promise<void> {
+    await this.prune();
+    const expiresAt = new Date(Date.now() + ttlMs);
+    await this.sql`
+      INSERT INTO webauthn_challenges (challenge, kind, user_id, expires_at)
+      VALUES (${challenge}, ${kind}, ${userId}, ${expiresAt})
+      ON CONFLICT (challenge) DO UPDATE SET
+        kind = EXCLUDED.kind,
+        user_id = EXCLUDED.user_id,
+        expires_at = EXCLUDED.expires_at
+    `;
+  }
+
+  async take(challenge: string, kind: ChallengeKind): Promise<ChallengeEntry | null> {
+    await this.prune();
+    // Consume first (single-use), then validate kind + expiry — matches in-memory.
+    const rows = await this.sql<Array<{ challenge: string; kind: ChallengeKind; user_id: string | null; expires_at: Date }>>`
+      DELETE FROM webauthn_challenges
+       WHERE challenge = ${challenge}
+      RETURNING challenge, kind, user_id, expires_at
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    if (row.kind !== kind) return null;
+    const expiresAt = row.expires_at instanceof Date ? row.expires_at.getTime() : new Date(row.expires_at).getTime();
+    if (expiresAt < Date.now()) return null;
+    return {
+      challenge: row.challenge,
+      kind: row.kind,
+      userId: row.user_id,
+      expiresAt,
+    };
+  }
+
+  private async prune(): Promise<void> {
+    await this.sql`DELETE FROM webauthn_challenges WHERE expires_at < now()`;
+  }
+}
+
+export { DEFAULT_TTL_MS as CHALLENGE_DEFAULT_TTL_MS };
 
 // ── options ──────────────────────────────────────────────────────────────────
 

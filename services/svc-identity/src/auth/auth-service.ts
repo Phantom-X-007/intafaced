@@ -9,7 +9,7 @@ import { apiKeyOriginAllowed } from './api-key-origin.js';
 import {
   b64urlDecode,
   b64urlEncode,
-  ChallengeStore,
+  SqlChallengeStore,
   createAuthenticationOptions,
   createRegistrationOptions,
   generateChallenge,
@@ -20,6 +20,7 @@ import {
 import type {
   AuthenticationOptionsJSON,
   AuthenticationResponseJSON,
+  ChallengeStorePort,
   RegistrationOptionsJSON,
   RegistrationResponseJSON,
   StoredWebAuthnCredential,
@@ -178,7 +179,8 @@ export class AuthService {
   /** Pending TOTP secret + recovery hashes until confirm (ID-P1-1). */
   private readonly pendingTotpEnrolment = new Map<string, { secret: string; recoveryHashes: string[] }>();
 
-  private readonly challenges = new ChallengeStore();
+  /** Durable when sql is present (production); injectable for pure unit tests. */
+  private readonly challenges: ChallengeStorePort;
   private readonly webauthn: WebAuthnConfig;
   /** 32-byte AES key for totp_secret at rest; null if IDENTITY_TOTP_SECRET_KEY unset/invalid. */
   private readonly totpSecretKey: Buffer | null;
@@ -194,9 +196,13 @@ export class AuthService {
      * Optional so unit/router mocks stay thin; production passes env.IDENTITY_TOTP_SECRET_KEY.
      */
     totpSecretKeyMaterial?: string,
+    challenges?: ChallengeStorePort,
   ) {
     this.webauthn = webauthn;
     this.totpSecretKey = parseTotpSecretKey(totpSecretKeyMaterial);
+    // Production path: Postgres-backed so multi-pod ceremonies complete.
+    // Tests may pass ChallengeStore (in-memory) when they do not need durability.
+    this.challenges = challenges ?? new SqlChallengeStore(sql, webauthn.challengeTtlMs);
   }
 
   /**
@@ -574,9 +580,10 @@ export class AuthService {
   /**
    * Step 1 of enrolment: options for `navigator.credentials.create()`.
    *
-   * The challenge is held in-process until `confirmWebauthnRegistration`
-   * consumes it. Mirrors TOTP — nothing is persisted until the ceremony proves
-   * the authenticator holds the private key.
+   * The challenge is held in the durable challenge store until
+   * `confirmWebauthnRegistration` consumes it (single-use, TTL). Mirrors TOTP —
+   * nothing is persisted on the user until the ceremony proves the authenticator
+   * holds the private key. Multi-pod: put/take share Postgres.
    */
   async startWebauthnRegistration(userId: string): Promise<RegistrationOptionsJSON> {
     const rows = await this.sql<Array<{ email: string; handle: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
@@ -587,7 +594,7 @@ export class AuthService {
 
     const existing = asCredentialList(user.webauthn_creds);
     const challenge = generateChallenge();
-    this.challenges.put('registration', challenge, userId);
+    await this.challenges.put('registration', challenge, userId);
 
     return createRegistrationOptions(this.webauthn, { id: userId, name: user.email, displayName: user.handle }, existing, challenge);
   }
@@ -606,7 +613,7 @@ export class AuthService {
     const clientChallenge = readClientChallenge(response.response.clientDataJSON);
     if (!clientChallenge) throw new AuthError('Invalid WebAuthn response', 'auth.webauthn_invalid');
 
-    const held = this.challenges.take(clientChallenge, 'registration');
+    const held = await this.challenges.take(clientChallenge, 'registration');
     if (!held || held.userId !== userId) {
       throw new AuthError('WebAuthn challenge expired or already used', 'auth.webauthn_invalid');
     }
@@ -661,8 +668,9 @@ export class AuthService {
     const creds = user && user.status === 'active' ? asCredentialList(user.webauthn_creds) : [];
 
     // Challenge is bound to the user when we found one; otherwise it is stored
-    // against null and can never issue a session.
-    this.challenges.put('authentication', challenge, user?.status === 'active' ? user.id : null);
+    // against null and can never issue a session. Durable store so another pod
+    // can complete the assertion.
+    await this.challenges.put('authentication', challenge, user?.status === 'active' ? user.id : null);
 
     return createAuthenticationOptions(this.webauthn, creds, challenge);
   }
@@ -689,7 +697,7 @@ export class AuthService {
     const clientChallenge = readClientChallenge(response.response.clientDataJSON);
     if (!clientChallenge) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
 
-    const held = this.challenges.take(clientChallenge, 'authentication');
+    const held = await this.challenges.take(clientChallenge, 'authentication');
     if (!held || held.userId !== user.id) {
       throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
     }
@@ -775,7 +783,7 @@ export class AuthService {
       throw new AuthError('No security key enrolled', 'auth.webauthn_not_enrolled');
     }
     const challenge = generateChallenge();
-    this.challenges.put('step-up', challenge, userId);
+    await this.challenges.put('step-up', challenge, userId);
     return createAuthenticationOptions(this.webauthn, creds, challenge);
   }
 
@@ -1203,7 +1211,7 @@ export class AuthService {
       const response = input.webauthn!;
       const clientChallenge = readClientChallenge(response.response.clientDataJSON);
       if (!clientChallenge) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
-      const held = this.challenges.take(clientChallenge, 'step-up');
+      const held = await this.challenges.take(clientChallenge, 'step-up');
       if (!held || held.userId !== input.userId) {
         throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
       }
