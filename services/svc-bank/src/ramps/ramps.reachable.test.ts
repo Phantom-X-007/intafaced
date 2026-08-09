@@ -169,5 +169,27 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ message: expect.stringMatching(/No bank ramp programme/) });
     });
+
+    /**
+     * Residual closeout gap: the gate was real in code but unasserted end-to-end.
+     * A holder with only bank:write must not be able to credit an on-ramp — that
+     * is operator surface (`admin:treasury`), because a user who can invent a
+     * deposit invents money.
+     */
+    it('refuses ops.creditOnramp for a user session without admin:treasury', async () => {
+      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+      });
+      const user = createBankRouter(bank).createCaller(signed(principal()));
+      await expect(
+        user.ops.creditOnramp({
+          userId: HOLDER,
+          assetId: 'USDT',
+          amount: '1',
+          kind: 'crypto',
+          railRef: `user-try-${randomUUID()}`,
+        }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
   });
 }
