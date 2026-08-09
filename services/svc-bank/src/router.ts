@@ -156,6 +156,7 @@ function toTrpcError(err: unknown): TRPCError {
       // CONFLICT rather than BAD_REQUEST: the request is well-formed, it just
       // collides with a loan that already exists under that id on other terms.
       case 'bank.loan_principal_mismatch':
+      case 'bank.loan_collateral_mismatch':
       // The same class for the borrower half and for earn. All three name only
       // the id the caller already holds — never who the existing record belongs
       // to — so FORBIDDEN would be both wrong and more disclosing.
