@@ -272,7 +272,7 @@ primary and works without the bus) but `tradesBus` / `privateBus` are `false` so
 | `WS_MARKETS_REFRESH_MS`               | `30000`                 | market-list cache window                                  |
 | `WS_HIGH_WATER_BYTES`                 | `1048576`               | socket buffer above which a client is lagging             |
 | `WS_MAX_LAG_TICKS`                    | `20`                    | consecutive lagging ticks before disconnect               |
-| `WS_MAX_CONNECTIONS`                  | `5000`                  | sockets per replica                                       |
+| `WS_MAX_CONNECTIONS`                  | `5000`                  | max sockets **per hub** (depth, tape, private each)       |
 | `WS_PRIVATE_MAX_CONNECTIONS_PER_USER` | `16`                    | private stream only; one user cannot fill the replica     |
 | `WS_HEARTBEAT_MS`                     | `30000`                 | ping cadence; a socket that misses a pong is terminated   |
 | `WS_TRADE_RECENT_LIMIT`               | `50`                    | recent prints kept per market and replayed on connect     |

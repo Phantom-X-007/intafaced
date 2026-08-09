@@ -277,3 +277,56 @@ describe('TradeHub fan-out', () => {
     expect(hub.connections).toBe(0);
   });
 });
+
+// Capacity honesty: WS_MAX_CONNECTIONS is per-hub, not process-wide.
+// (Pin lives next to TradeHub so depth/private can keep their own seats.)
+describe('per-hub capacity (not process-wide)', () => {
+  it('a full trade hub does not prevent a separate depth hub from accepting', async () => {
+    const { DepthHub, CLOSE_TRY_LATER } = await import('../depth/hub.js');
+    class Stub {
+      async markets() {
+        return ['BTC-USDT'];
+      }
+      async snapshot(marketId: string) {
+        return { type: 'snapshot' as const, marketId, sequence: 1, bids: [], asks: [] };
+      }
+    }
+    const depth = new DepthHub(new Stub(), {
+      depthLimit: 50,
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 1,
+    });
+    const trade = new TradeHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 1,
+      recentLimit: 10,
+      ensureKnownMarket: async () => true,
+    });
+    const closed: Array<{ code: number; reason: string }> = [];
+    const sink = () => ({
+      bufferedBytes: 0,
+      send: () => undefined,
+      close: (code: number, reason: string) => {
+        closed.push({ code, reason });
+      },
+    });
+    // Each hub independently holds one seat.
+    depth.attach('BTC-USDT', sink());
+    trade.attach('BTC-USDT', sink());
+    expect(depth.connections).toBe(1);
+    expect(trade.connections).toBe(1);
+
+    // Second attach on either hub is capacity-refused (1013) without stealing the other hub's seat.
+    closed.length = 0;
+    trade.attach('BTC-USDT', sink());
+    depth.attach('BTC-USDT', sink());
+    expect(closed).toEqual([
+      { code: CLOSE_TRY_LATER, reason: 'gateway at capacity' },
+      { code: CLOSE_TRY_LATER, reason: 'gateway at capacity' },
+    ]);
+    expect(depth.connections).toBe(1);
+    expect(trade.connections).toBe(1);
+  });
+});
