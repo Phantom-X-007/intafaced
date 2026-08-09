@@ -105,8 +105,14 @@ describe('TradeHub fan-out', () => {
   });
 
   it('replays recent prints on connect, then streams live ones', async () => {
+    // Holder builds the ring; mid-stream joiner gets replay, then live.
+    const holder = new FakeSink();
+    hub.attach(MARKET, holder);
+    await settle();
+
     hub.ingest(fill(1, MARKET, '100', '1'));
     hub.ingest(fill(2, MARKET, '101', '2'));
+    expect(holder.prints()).toHaveLength(2);
 
     const sink = new FakeSink();
     hub.attach(MARKET, sink);
@@ -122,15 +128,22 @@ describe('TradeHub fan-out', () => {
     expect(sink.prints()[2]).toMatchObject({ sequence: 3, price: '102', quantity: '3' });
   });
 
+  it('does not grow the recent ring while a market has no watchers', () => {
+    expect(hub.ingest(fill(1, MARKET, '100', '1'))).toBeNull();
+    expect(hub.ingest(fill(2, MARKET, '101', '2'))).toBeNull();
+    expect(hub.recentFor(MARKET)).toHaveLength(0);
+    expect(hub.stats.markets).toBe(0);
+  });
+
   it('forgets the recent ring when the last subscriber leaves a market', async () => {
+    const first = new FakeSink();
+    const detachFirst = hub.attach(MARKET, first);
+    await settle();
+
     hub.ingest(fill(1, MARKET, '100', '1'));
     hub.ingest(fill(2, MARKET, '101', '2'));
     expect(hub.recentFor(MARKET)).toHaveLength(2);
     expect(hub.stats.markets).toBe(1);
-
-    const first = new FakeSink();
-    const detachFirst = hub.attach(MARKET, first);
-    await settle();
     expect(first.prints()).toHaveLength(2);
 
     const peer = new FakeSink();
@@ -148,6 +161,10 @@ describe('TradeHub fan-out', () => {
     expect(hub.recentFor(MARKET)).toHaveLength(0);
     expect(hub.stats.markets).toBe(0);
 
+    // Unwatched prints after leave do not re-pin a ring for nobody.
+    expect(hub.ingest(fill(99, MARKET, '199', '9'))).toBeNull();
+    expect(hub.recentFor(MARKET)).toHaveLength(0);
+
     const rejoin = new FakeSink();
     hub.attach(MARKET, rejoin);
     await settle();
@@ -160,14 +177,14 @@ describe('TradeHub fan-out', () => {
   });
 
   it('does not forget one market when another still has a subscriber', async () => {
-    hub.ingest(fill(1, MARKET, '100', '1'));
-    hub.ingest(fill(1, OTHER, '200', '1'));
-
     const a = new FakeSink();
     const b = new FakeSink();
     const detachA = hub.attach(MARKET, a);
     hub.attach(OTHER, b);
     await settle();
+
+    hub.ingest(fill(1, MARKET, '100', '1'));
+    hub.ingest(fill(1, OTHER, '200', '1'));
 
     detachA();
     expect(hub.recentFor(MARKET)).toHaveLength(0);
@@ -175,15 +192,15 @@ describe('TradeHub fan-out', () => {
   });
 
   it('public tape frames never carry order ids, account ids, house flags, or invented side', async () => {
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+    await settle();
+
     const print = hub.ingest(fill(1));
     expect(print).not.toBeNull();
     // Hub return value is the same strip the wire gets.
     expect(Object.keys(print!).sort()).toEqual([...TRADE_PRINT_PUBLIC_KEYS].sort());
     expect(print).not.toHaveProperty('side');
-
-    const sink = new FakeSink();
-    hub.attach(MARKET, sink);
-    await settle();
 
     expect(sink.frames).toHaveLength(1);
     const onWire = expectPublicTapeFrame(sink.frames[0]!);
@@ -235,6 +252,10 @@ describe('TradeHub fan-out', () => {
   });
 
   it('bounds the recent ring; stored history is public keys only (no order/account ids)', async () => {
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+    await settle();
+
     for (let i = 1; i <= 8; i += 1) hub.ingest(fill(i));
 
     const recent = hub.recentFor(MARKET);
@@ -290,23 +311,23 @@ describe('TradeHub fan-out', () => {
       },
     });
 
-    hub.ingest(fill(1));
     const sink = new FakeSink();
     hub.attach(MARKET, sink);
-
+    // Pending sub is a watcher — print lands in the ring for flush, not live twice.
     hub.ingest(fill(2));
     release();
     await settle();
     await settle();
 
-    expect(sink.prints().map((p) => p.sequence)).toEqual([1, 2]);
+    expect(sink.prints().map((p) => p.sequence)).toEqual([2]);
   });
 
   it('amounts on the wire are decimal strings, never JSON numbers', async () => {
-    hub.ingest(fill(1, MARKET, '30000.5', '1.25'));
     const sink = new FakeSink();
     hub.attach(MARKET, sink);
     await settle();
+
+    hub.ingest(fill(1, MARKET, '30000.5', '1.25'));
 
     const raw = sink.frames[0]!;
     // JSON numbers for price/qty would appear without quotes.

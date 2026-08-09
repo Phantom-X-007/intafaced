@@ -2,6 +2,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { PRIVATE_STREAM_PATH } from '../private/gateway.js';
 import type { TradeHub } from '../trade/hub.js';
 
 /**
@@ -128,7 +129,8 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
     const url = new URL(request.url ?? '/', 'http://gateway.invalid');
     // Co-mounted with private gateway: Node fires every upgrade listener.
     // Only ignore the private path so private auth can run; other paths still 404.
-    if (url.pathname === '/private/stream') return;
+    // Shared constant — string drift would 404 private before auth ever runs.
+    if (url.pathname === PRIVATE_STREAM_PATH) return;
     if (url.pathname !== STREAM_PATH) return reject(socket, 404, 'Not Found');
 
     if (!enabled()) return reject(socket, 503, 'Service Unavailable');
