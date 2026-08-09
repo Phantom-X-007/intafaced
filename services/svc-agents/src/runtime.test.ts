@@ -455,19 +455,28 @@ if (!available) {
       expect(await houseOf()).toBe('0');
     });
 
-    it('records usage even when billing is switched off, so the cost is still knowable', async () => {
+    it('keeps the audit when billing is off, and never writes usage_records or a charge', async () => {
       const unbilled = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
       const session = await unbilled.openSession({ userId: USER_A, agentId: 'probe' });
       const result = await unbilled.think({ sessionId: session.id, requestId: 'r-off', task: 'plan', messages: MESSAGES });
 
-      // Nothing was metered into a billing window…
+      // Kill-switch: no bill window, no ledger post, no usage_records row.
       expect(result.metered).toBe(false);
+      expect(result.windowId).toBeNull();
       expect(await balanceOf(USER_A)).toBe('1000');
-      // …but the action, its token counts and its model are all on the record.
+      expect(await houseOf()).toBe('0');
+      expect(await unbilled.settleSession(session.id)).toEqual([]);
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+      const windows = await sql`SELECT window_id FROM agents.usage_windows WHERE session_id = ${session.id}`;
+      expect(windows).toHaveLength(0);
+
+      // Audit still holds token counts — "what did the fleet cost while off".
       const log = await unbilled.sessionLog(session.id);
       const completion = log.find((a) => a.kind === 'completion')!;
       expect(completion.inputTokens).toBe(BigInt(result.usage.inputTokens));
       expect(completion.outputTokens).toBe(BigInt(result.usage.outputTokens));
+      expect(completion.cost).toBe(0n);
     });
 
     it('keeps each user’s meter to themselves', async () => {
