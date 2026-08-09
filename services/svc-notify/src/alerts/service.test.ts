@@ -15,6 +15,10 @@ function harness(mark: MarkQuote) {
   // out-of-app dispatch is the same path as every other bus consumer.
   const notify = new NotifyService(notifyStore, { fanoutEnabled: true });
   const marks: MarkSource = {
+    // A fake that CAN quote is `live` — `kind` describes the wiring, and a test
+    // source answering `{ kind: 'ok' }` while claiming to be dark would be the
+    // same lie in the other direction.
+    kind: mark.kind === 'ok' ? 'live' : 'dark',
     async quote() {
       return mark;
     },

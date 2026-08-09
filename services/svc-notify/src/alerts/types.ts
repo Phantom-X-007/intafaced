@@ -43,8 +43,25 @@ export type MarkQuote =
   | { readonly kind: 'ok'; readonly price: string; readonly at: Date }
   | { readonly kind: 'unavailable'; readonly reason: 'dark' | 'stale' | 'refused'; readonly detail?: string };
 
-/** Injected port — svc-notify never reads trade tables (§2). */
+/**
+ * Injected port — svc-notify never reads trade tables (§2).
+ *
+ * `kind` is CONFIGURATION, not momentary availability, and it is required rather
+ * than optional on purpose.
+ *
+ *   dark   nothing is wired. Every quote is `unavailable`, so no watch this
+ *          deployment holds can ever fire, and the user surface has to say so.
+ *   live   a real feed is wired. Individual quotes may still come back
+ *          `unavailable` (stale, refused) — `live` is a claim about the wiring,
+ *          never a promise about the next quote.
+ *
+ * It is required because the alternative — an optional field defaulting to one of
+ * the two — is how a dark source silently claims to be live. A new mark source
+ * must state which it is, and the type system asks the question at the only
+ * moment anyone can answer it.
+ */
 export type MarkSource = {
+  readonly kind: 'dark' | 'live';
   quote(marketId: string, at?: Date): Promise<MarkQuote>;
 };
 

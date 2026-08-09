@@ -169,6 +169,16 @@ rather than a green tick over silence.
 | `notify.createAlert`    | `notify:write` | `{ marketId, direction, targetPrice }` | active watch; price is a decimal string                                                 |
 | `notify.cancelAlert`    | `notify:write` | `{ id }`                               | cancel an active watch                                                                  |
 
+**Mounted, and proven mounted.** `router.mount.test.ts` proves authorisation
+through `createCaller`, which is the right tool for that job and blind to a
+different one: it invokes procedures in-process, so it stays green on a service
+whose HTTP mount was never registered, sits at the wrong prefix, or was wired to a
+context factory that ignores the edge signature.
+`mount.reachable.test.ts` assembles the mount the way `index.ts` does — same
+plugin, same prefix, same context factory — **listens on a real socket** and asks
+over the wire. This service's own history is a complete consumer nobody wired, so
+"is it reachable" is asked by a request, not by reading code.
+
 Every procedure is self-only via `principal.userId`. Title/body are i18n keys
 (`title_key` / `body_key`); clients render copy from `@intafaced/i18n`
 (`notify.*` keys). `notify.deliveries` is user-facing on purpose: if a margin
@@ -328,17 +338,39 @@ Watchlists live here: a user sets `marketId` + `above|below` + decimal-string
 `targetPrice`. Evaluation rides the same fan-out as every other notification
 (`NotifyService.create` → inbox + channels). There is no second delivery path.
 
-| Procedure            | Scope          | Effect                    |
-| -------------------- | -------------- | ------------------------- |
-| `notify.alerts`      | `notify:read`  | list the caller's watches |
-| `notify.createAlert` | `notify:write` | create an active watch    |
-| `notify.cancelAlert` | `notify:write` | cancel an active watch    |
+| Procedure            | Scope          | Effect                                            |
+| -------------------- | -------------- | ------------------------------------------------- |
+| `notify.alerts`      | `notify:read`  | the caller's watches **+ whether one can fire**   |
+| `notify.createAlert` | `notify:write` | create a watch, returned with the same disclosure |
+| `notify.cancelAlert` | `notify:write` | cancel an active watch                            |
+
+**Evaluation is a mounted sweep, and it used to be nothing at all.**
+`evaluateMarket` shipped complete and tested with **no caller**: this file and
+`router.ts` both called it "an internal job path" and there was no job. A user
+created a watch, got `status: 'active'`, and nothing ever looked at the row again
+— D-S-13 Class B, the same shape as `bankMarginCalled` parking with a finished
+consumer. `AlertService.evaluateDueAlerts` now fans in from `activeMarkets()` (so
+a watch on a market nobody enumerated is still evaluated) and `index.ts` drives it
+every `ALERT_SWEEP_INTERVAL_MS`, clearing it on shutdown. The last pass is on
+`/ready`; a null `lastAt` means the driver never ran.
 
 **Dark mark refuse.** Evaluation is pure (`evaluatePriceAlert`) against an
 injected mark port. When the port returns unavailable (dark / stale / refused),
 the outcome is `alert.price_unavailable` and **nothing is written to the inbox**.
 A missing mark is never treated as zero and never invented. Production boots a
 dark port until a real mark feed is wired — CRUD still works; fire does not lie.
+
+`MarkSource.kind` (`dark` | `live`) is **required**, because an optional field
+with a default is how a dark source silently reads as a live one. It describes
+wiring, not weather: a `live` feed may still answer `unavailable` on any given
+quote.
+
+**The disclosure rides with the data.** Both read and create return
+`evaluation: { markSource, canFire, code }`, so a client cannot render somebody's
+watchlist — or confirm a watch they just created — without also receiving the fact
+that nothing on it can currently cross. `canFire: true` says the wiring is not
+missing and **nothing more**: delivery is best-effort on every channel (§8) and
+there is no SLA here.
 
 **One-shot.** Crossing marks the row `fired` and inserts one notification keyed
 `<alertId>:<markPrice>`. A redelivery cannot double-fire an already-fired watch.
@@ -384,11 +416,12 @@ honestly unconfigured.
 
 ## §13 sockets
 
-| Socket | State                                                                                                                                            |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Email  | Adapter shipped and tested against a real HTTP server. **Waiting on credentials the owner must obtain.** Unconfigured, it refuses every message. |
-| Push   | Same. Device tokens register and confirm per user; no push credentials configured.                                                               |
-| SMS    | Same. Addresses are E.164, text is composed and capped; no SMS credentials configured.                                                           |
+| Socket    | State                                                                                                                                                                                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Email     | Adapter shipped and tested against a real HTTP server. **Waiting on credentials the owner must obtain.** Unconfigured, it refuses every message.                                                                                                                             |
+| Push      | Same. Device tokens register and confirm per user; no push credentials configured.                                                                                                                                                                                           |
+| SMS       | Same. Addresses are E.164, text is composed and capped; no SMS credentials configured.                                                                                                                                                                                       |
+| Mark feed | Sweep **mounted and running**; the port is `dark`, so every evaluation refuses `alert.price_unavailable` and both alert procedures say so. Class **C**, not B — the gap is disclosed where a user could otherwise be misled. Closing it is an owner-provisioned mark source. |
 
 None of these is a code gap. Each is a URL and a token away from working, and
 until then the in-app inbox carries every notification and the record says why
