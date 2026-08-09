@@ -143,6 +143,7 @@ export function allRefusalCodes(): readonly RefusalCode[] {
     'channel.muted',
     'channel.attempts_exhausted',
     'channel.transport_rejected',
+    'channel.delivery_stuck',
     'channel.register_rate_limited',
     'channel.verify_rate_limited',
   ];
@@ -189,6 +190,14 @@ export type RefusalCode =
    * Detail still carries the gateway wording.
    */
   | 'channel.transport_rejected'
+  /**
+   * A pending row whose claim lease has been dead longer than the bus could still
+   * redeliver, retired by the stuck-pending reaper arm. Distinct from
+   * `attempts_exhausted`: attempts may still be below max (the in_flight path
+   * burns bus deliveries without raising attempts). Status is still abandoned;
+   * the code says *why* nobody is coming back.
+   */
+  | 'channel.delivery_stuck'
   /**
    * Too many `registerTarget` calls for this user+channel in the window.
    * Stops unlimited SMS/email verification traffic (billing + abuse).

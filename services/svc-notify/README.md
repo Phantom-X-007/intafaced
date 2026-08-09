@@ -235,7 +235,10 @@ maxDeliver × ack_wait). That second arm closes the hole where `in_flight` naks
 burn `max_deliver` without raising `attempts`, so the attempts-ceiling arm never
 fires and the row would otherwise sit `pending` forever. It writes only a failure
 — never an attempt, never an acceptance — and never touches a row whose claim
-lease is still live.
+lease is still live. The refusal code names which arm fired:
+`channel.attempts_exhausted` when the attempt budget was spent, and
+`channel.delivery_stuck` when the bus window elapsed with attempts still left
+(so a row with attempts 1 of 3 never pretends the budget was exhausted).
 
 **Register / verify rate limits.** Per `userId`+channel sliding windows (default
 3 registers / 10 verifies per 15 minutes). Named refuse codes, not silent drops.

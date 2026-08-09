@@ -335,9 +335,10 @@ export class MemoryDeliveryStore implements DeliveryStore {
     const graceMs = opts.stuckGraceMs ?? STUCK_PENDING_GRACE_MS;
     let retired = 0;
     for (const record of this.byId.values()) {
-      if (!shouldReapDelivery(record, maxAttempts, now, graceMs)) continue;
+      const decision = reapDecision(record, maxAttempts, now, graceMs);
+      if (!decision.reaped) continue;
       record.status = 'abandoned';
-      record.refusalCode = 'channel.attempts_exhausted';
+      record.refusalCode = decision.reason;
       record.leaseUntil = null;
       record.updatedAt = now;
       retired += 1;
@@ -352,31 +353,57 @@ export class MemoryDeliveryStore implements DeliveryStore {
  * See `DeliveryStore.reapExhausted` and `STUCK_PENDING_GRACE_MS` for the law.
  * Exported so unit tests can assert the edge cases without driving a store.
  */
+/** Why a reaper arm would abandon a row — or null if it must leave it alone. */
+export type ReapDecision =
+  { readonly reaped: true; readonly reason: 'channel.attempts_exhausted' | 'channel.delivery_stuck' } | { readonly reaped: false };
+
+/**
+ * Pure decision for both memory and Postgres reapers — one table.
+ *
+ * Arm 1 wins when both could match (attempts spent AND stuck): the attempt
+ * budget is the accurate story. Arm 2 is only for rows that still have
+ * attempts left but nobody is coming back to spend them.
+ */
+export function reapDecision(
+  record: Pick<DeliveryRecord, 'status' | 'attempts' | 'leaseUntil' | 'updatedAt'>,
+  maxAttempts: number,
+  now: Date,
+  stuckGraceMs: number = STUCK_PENDING_GRACE_MS,
+): ReapDecision {
+  if (record.status !== 'pending' && record.status !== 'failed') return { reaped: false };
+
+  const nowMs = now.getTime();
+  const leaseLive = record.status === 'pending' && record.leaseUntil !== null && record.leaseUntil.getTime() > nowMs;
+  if (leaseLive) return { reaped: false };
+
+  // Arm 1 — attempts ceiling: claim would refuse to re-own; settle as abandoned.
+  if (record.attempts >= maxAttempts) {
+    return { reaped: true, reason: 'channel.attempts_exhausted' };
+  }
+
+  // Arm 2 — stuck pending: lease dead longer than the bus could still retry.
+  // `failed` with attempts left is still owed a redelivery — leave it alone.
+  if (record.status !== 'pending') return { reaped: false };
+  if (record.attempts < 1) return { reaped: false };
+
+  // Lease dead-since: when lease_until is known, use it; when null (legacy /
+  // pre-migration), fall back to updated_at so a never-leased pending row is
+  // not reaped the instant it appears.
+  const deadSinceMs = record.leaseUntil !== null ? record.leaseUntil.getTime() : record.updatedAt.getTime();
+  if (nowMs - deadSinceMs >= stuckGraceMs) {
+    return { reaped: true, reason: 'channel.delivery_stuck' };
+  }
+  return { reaped: false };
+}
+
+/** @deprecated Prefer `reapDecision(...).reaped` — kept so existing call sites compile. */
 export function shouldReapDelivery(
   record: Pick<DeliveryRecord, 'status' | 'attempts' | 'leaseUntil' | 'updatedAt'>,
   maxAttempts: number,
   now: Date,
   stuckGraceMs: number = STUCK_PENDING_GRACE_MS,
 ): boolean {
-  if (record.status !== 'pending' && record.status !== 'failed') return false;
-
-  const nowMs = now.getTime();
-  const leaseLive = record.status === 'pending' && record.leaseUntil !== null && record.leaseUntil.getTime() > nowMs;
-  if (leaseLive) return false;
-
-  // Arm 1 — attempts ceiling: claim would refuse to re-own; settle as abandoned.
-  if (record.attempts >= maxAttempts) return true;
-
-  // Arm 2 — stuck pending: lease dead longer than the bus could still retry.
-  // `failed` with attempts left is still owed a redelivery — leave it alone.
-  if (record.status !== 'pending') return false;
-  if (record.attempts < 1) return false;
-
-  // Lease dead-since: when lease_until is known, use it; when null (legacy /
-  // pre-migration), fall back to updated_at so a never-leased pending row is
-  // not reaped the instant it appears.
-  const deadSinceMs = record.leaseUntil !== null ? record.leaseUntil.getTime() : record.updatedAt.getTime();
-  return nowMs - deadSinceMs >= stuckGraceMs;
+  return reapDecision(record, maxAttempts, now, stuckGraceMs).reaped;
 }
 
 export class MemoryTargetStore implements TargetStore {
@@ -593,10 +620,16 @@ export class PostgresDeliveryStore implements DeliveryStore {
     // redelivery. Arm 2 (stuck pending past bus redelivery grace) is the
     // in_flight / max_deliver hole — see `STUCK_PENDING_GRACE_MS`.
     const graceSeconds = Math.max(1, Math.ceil((opts.stuckGraceMs ?? STUCK_PENDING_GRACE_MS) / 1000));
+    // Arm 1 wins the CASE when both arms match: attempts spent is the true story.
+    // Arm 2 alone writes channel.delivery_stuck so a row with attempts=1 of 3
+    // does not claim "attempts exhausted".
     const rows = await this.sql<{ id: string }[]>`
       UPDATE notify.deliveries
          SET status = 'abandoned',
-             refusal_code = 'channel.attempts_exhausted',
+             refusal_code = CASE
+               WHEN attempts >= ${maxAttempts} THEN 'channel.attempts_exhausted'
+               ELSE 'channel.delivery_stuck'
+             END,
              lease_until = NULL,
              updated_at = now()
        WHERE (
@@ -613,6 +646,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
            (
              status = 'pending'
              AND attempts >= 1
+             AND attempts < ${maxAttempts}
              AND (
                (lease_until IS NOT NULL AND lease_until <= now() - (${graceSeconds}::text || ' seconds')::interval)
                OR (lease_until IS NULL AND updated_at <= now() - (${graceSeconds}::text || ' seconds')::interval)
