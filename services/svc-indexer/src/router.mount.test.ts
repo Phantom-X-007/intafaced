@@ -319,6 +319,51 @@ describe('svc-indexer mount — status is honest', () => {
     expect(status.behindBy).toBe(3);
   });
 
+  /**
+   * Tip can be below the cursor after a shortening reorg race (or a lagging
+   * probe). Zero-clamping would lie as "current". Pin the signed subtraction.
+   */
+  it('behindBy is negative when the probe tip is below the cursor', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    await store.applyBlock({
+      chainId: CHAIN_ID,
+      height: 97,
+      hash: `0x${'a'.repeat(64)}`,
+      parentHash: `0x${'0'.repeat(64)}`,
+      timestamp: 1_700_000_000,
+      events: [],
+    });
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'evm',
+      chainProbe: async () => ({
+        kind: 'evm',
+        rpcUrl: 'http://probe.test',
+        venue: `0x${'1'.repeat(40)}`,
+        reachable: true,
+        observedChainId: CHAIN_ID,
+        chainHeight: 90,
+        venueDeployed: true,
+        refusalCode: null,
+        reason: null,
+      }),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.indexedHeight).toBe(97);
+    expect(status.behindBy).toBe(-7);
+  });
+
   it('dark chain: production-shaped null probe surfaces refusal, never a quiet zero lag', async () => {
     const store = new MemoryProjectionStore(CHAIN_ID);
     const indexer = new Indexer({
