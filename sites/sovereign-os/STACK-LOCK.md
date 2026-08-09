@@ -29,3 +29,12 @@
 ## Kill list
 
 Aceternity purple demos, three equal SaaS cards as identity, payments cal.com primary, Advanced Charts package, three.js.
+
+## V2 additions (audit fix)
+
+- Lightweight Charts 4.2.0 via unpkg CDN (Apache-2.0) for TRADE demo only
+- Beam border cards (Magic UI-style pattern, re-themed lime)
+- CSS marquee tickers (max 2: open + close)
+- Plane toggle, systems tabs, blueprint card, stream pills
+- Noise + grid ambient layers
+- Full Denon section map I–XXIV via content.json generator
