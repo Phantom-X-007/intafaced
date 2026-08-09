@@ -36,13 +36,17 @@ registerProcessHooks(
  * Two things start here that are not optional, and both are the same promise
  * from different ends:
  *
- *   · the TIMEOUT sweep, which resolves any trade whose deadline has passed;
+ *   · the TIMEOUT sweep, which acts on any trade whose deadline has passed
+ *     (re-drive / refund / open dispute / escalate-and-rearm — never auto-rule
+ *     a disputed release; that holds until a human moderator decides);
  *   · the SETTLEMENT sweep, which posts any resolution that was decided but
- *     not yet acted on.
+ *     not yet acted on (decide-then-post; late is OK, unexecuted is not).
  *
- * Between them, no trade can sit in escrow indefinitely and no decision can go
- * unexecuted. If this process does not run the sweeps, escrow eventually
- * strands — so they are started before the HTTP listener, not after.
+ * Together they keep funds from stranding without a path: every non-disputed
+ * live clock eventually disposes or re-drives; every committed decision is
+ * re-posted until stamped. Disputed escrow is held on purpose until a natural
+ * person rules. If this process does not run the sweeps, the other states can
+ * strand — so they are started before the HTTP listener, not after.
  */
 
 const sql = postgres(env.DATABASE_URL, {
