@@ -40,16 +40,34 @@ elif [ -x "$REPO_ROOT/node_modules/.bin/prettier" ]; then
 fi
 
 if [ -n "$PRETTIER" ]; then
-  if ! (CDPATH= cd -- "$TOP" && "$PRETTIER" --check "**/*.{ts,tsx,mjs,js,md,json,yml,yaml}"); then
-    cat >&2 <<'MSG'
+  # Format only files this push introduces vs origin/main. Full-tree prettier
+  # on ~4k files hung agent pushes for minutes (L15 wave 4) and was routinely
+  # --no-verify'd — which is how #471 red-trunked. Scoped check is the same
+  # gate with a usable runtime. Only files in this push are checked.
+  RANGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse origin/main 2>/dev/null || true)
+  FILES=""
+  if [ -n "$RANGE_BASE" ]; then
+    FILES=$(git diff --name-only --diff-filter=ACMR "$RANGE_BASE"...HEAD 2>/dev/null | grep -E '\.(ts|tsx|mjs|js|md|json|yml|yaml)$' || true)
+  fi
+  WT_FILES=$(git diff --name-only --diff-filter=ACMR HEAD 2>/dev/null | grep -E '\.(ts|tsx|mjs|js|md|json|yml|yaml)$' || true)
+  STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null | grep -E '\.(ts|tsx|mjs|js|md|json|yml|yaml)$' || true)
+  ALL_FILES=$(printf '%s\n%s\n%s\n' "$FILES" "$WT_FILES" "$STAGED" | sort -u | grep -v '^$' || true)
+  if [ -z "$ALL_FILES" ]; then
+    echo "format:check — no matching files in push range; skip"
+  else
+    echo "Checking formatting on push range..."
+    if ! (CDPATH= cd -- "$TOP" && echo "$ALL_FILES" | tr '\n' '\0' | xargs -0 "$PRETTIER" --check); then
+      cat >&2 <<'MSG'
 
   ✖ format:check failed — refuse push.
 
     Fix: prettier --write on the named files (or pnpm format from a full install).
     This is the gate that failed when #471 merged before CI (swarm.mjs).
+    Only files in this push are checked (not the whole tree).
 
 MSG
-    exit 1
+      exit 1
+    fi
   fi
 elif command -v pnpm >/dev/null 2>&1; then
   if ! (CDPATH= cd -- "$TOP" && pnpm format:check); then

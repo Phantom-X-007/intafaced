@@ -85,6 +85,9 @@ jobs:
       - name: Doctrine gates (the same list `pnpm verify` runs)
         run: pnpm gates
 
+      - name: worktree-gc self-test
+        run: node tooling/scripts/worktree-gc.mjs --self-test
+
       # THE STAMP-MILL GATE, CODE HALF — and deliberately NOT inside gates.mjs.
       #
       # It lived only on `docs-format.yml`, which fires only on markdown. Its
