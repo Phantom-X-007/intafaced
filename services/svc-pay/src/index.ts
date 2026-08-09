@@ -150,6 +150,9 @@ for (const { railId } of env.PAY_CHECKOUT_RAILS) {
  */
 const merchantWebhooks = new MerchantWebhookService(new PostgresMerchantWebhookStore(sql));
 
+/** Set after SubscriptionService boots — afterPaymentEvent watch half. */
+let subscriptionWatch: SubscriptionService | null = null;
+
 const pay = new PayService(sql, ledger, rails, {
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
   valueMovement: railPosture.policy,
@@ -164,6 +167,10 @@ const pay = new PayService(sql, ledger, rails, {
   maxOpenSessionsPerLink: env.PAY_CHECKOUT_MAX_OPEN_SESSIONS,
   afterPaymentEvent: async (event) => {
     await merchantWebhooks.enqueue(event);
+    // Watch half of invoice-and-watch (SPEC §4): capture settles the execution.
+    if (subscriptionWatch && event.type === 'payment.captured') {
+      await subscriptionWatch.markExecutionSettledForPayment(event.payment.id);
+    }
   },
 });
 
@@ -331,6 +338,7 @@ const subscriptions = new SubscriptionService(
     return { paymentId: payment.id };
   },
 );
+subscriptionWatch = subscriptions;
 
 function requireService(req: { headers: Record<string, string | string[] | undefined> }): boolean {
   return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;

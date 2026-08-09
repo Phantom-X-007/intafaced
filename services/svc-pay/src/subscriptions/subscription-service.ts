@@ -7,7 +7,8 @@ import { CADENCES, occurrenceStart, planDue, type Cadence } from './schedule.js'
 /**
  * SUBSCRIPTION LIFECYCLE (SPEC §4) — create / cancel / re-consent refuse.
  *
- * No charge runner here. No ledger posts. Crypto path never pulls.
+ * Due-runner opens invoices (crypto_invoice); never pulls on-chain.
+ * No ledger posts here. Watch marks execution settled on payment capture.
  *
  * Done bar slice: mandate exists, cancel is immediate, price raise without a
  * new mandate is refused by code (`pay.subscription_reconsent_required`).
@@ -434,7 +435,7 @@ export class SubscriptionService {
           });
           await tx`
             UPDATE pay.subscription_executions
-               SET status = 'invoiced', payment_id = ${paymentId}, settled_at = now()
+               SET status = 'invoiced', payment_id = ${paymentId}
              WHERE id = ${executionId}
           `;
           return { kind: 'invoiced' as const };
@@ -450,6 +451,22 @@ export class SubscriptionService {
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
+  }
+
+  /**
+   * Watch half of invoice-and-watch: when the opened payment captures, the
+   * matching execution moves invoiced → settled. Idempotent. No ledger posts.
+   * Unmatched payment ids are a no-op (not every payment is a subscription invoice).
+   */
+  async markExecutionSettledForPayment(paymentId: string): Promise<{ updated: boolean }> {
+    const rows = await this.sql<Array<{ id: string }>>`
+      UPDATE pay.subscription_executions
+         SET status = 'settled', settled_at = now()
+       WHERE payment_id = ${paymentId}
+         AND status = 'invoiced'
+       RETURNING id
+    `;
+    return { updated: rows.length > 0 };
   }
 
   private async maxFiredOccurrence(subscriptionId: string): Promise<number | null> {
