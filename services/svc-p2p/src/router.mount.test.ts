@@ -458,6 +458,7 @@ describe('svc-p2p mount — the public surface', () => {
       ok: true,
       service: 'svc-p2p',
       moderationReachable: false,
+      offerLimitsConfigured: false,
     });
   });
 
@@ -471,6 +472,26 @@ describe('svc-p2p mount — the public surface', () => {
       ok: true,
       service: 'svc-p2p',
       moderationReachable: true,
+      offerLimitsConfigured: false,
+    });
+  });
+
+  it('discloses offerLimitsConfigured on health when ceilings are armed', async () => {
+    // Same honesty pattern as moderationReachable: a badge must not imply a
+    // higher limit while env ceilings are unset. Health is public so probes
+    // never need a scoped read to learn the posture.
+    const { parseAmount } = await import('@intafaced/ledger-client');
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {
+      offerLimits: {
+        standardMaxAmount: parseAmount('1000'),
+        merchantMaxAmount: parseAmount('5000'),
+      },
+    }).createCaller(anonymous());
+    await expect(caller.health()).resolves.toEqual({
+      ok: true,
+      service: 'svc-p2p',
+      moderationReachable: false,
+      offerLimitsConfigured: true,
     });
   });
 
@@ -542,5 +563,88 @@ describe('svc-p2p mount — offer methods shape', () => {
         }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(created).toBe(0);
+  });
+});
+
+describe('svc-p2p mount — merchants offer-limits honest API', () => {
+  it('refuses offerLimits without p2p:read', async () => {
+    const ctx = signed(principal({ scopes: [] }));
+    await expect(createP2pRouter(stubP2p(), stubInstruments()).createCaller(ctx).merchants.offerLimits()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('returns unconfigured posture without inventing magnitudes', async () => {
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const wire = await createP2pRouter(stubP2p(), stubInstruments()).createCaller(ctx).merchants.offerLimits();
+    expect(wire).toEqual({
+      standardMax: null,
+      merchantMax: null,
+      configured: false,
+      summary: expect.stringMatching(/NONE CONFIGURED/),
+    });
+  });
+
+  it('returns armed ceilings as decimal strings', async () => {
+    const { parseAmount } = await import('@intafaced/ledger-client');
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const wire = await createP2pRouter(stubP2p(), stubInstruments(), undefined, {
+      offerLimits: {
+        standardMaxAmount: parseAmount('1000'),
+        merchantMaxAmount: parseAmount('5000'),
+      },
+    })
+      .createCaller(ctx)
+      .merchants.offerLimits();
+    expect(wire).toEqual({
+      standardMax: '1000',
+      merchantMax: '5000',
+      configured: true,
+      summary: expect.stringContaining('1000'),
+    });
+  });
+
+  it('myOfferCeiling refuses when the programme is not wired', async () => {
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    await expect(createP2pRouter(stubP2p(), stubInstruments()).createCaller(ctx).merchants.myOfferCeiling()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
+  it('myOfferCeiling puts approved merchants on the merchant band', async () => {
+    const { parseAmount } = await import('@intafaced/ledger-client');
+    const merchants = {
+      get: async (userId: string) =>
+        userId === USER
+          ? {
+              userId: USER,
+              status: 'approved' as const,
+              appliedCompletionRate: 0.99,
+              appliedTradesTotal: 50,
+              appliedAt: new Date('2026-01-01T00:00:00.000Z'),
+              decidedAt: new Date('2026-01-02T00:00:00.000Z'),
+            }
+          : null,
+    };
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const ceiling = await createP2pRouter(
+      stubP2p(),
+      stubInstruments(),
+      undefined,
+      {
+        offerLimits: {
+          standardMaxAmount: parseAmount('1000'),
+          merchantMaxAmount: parseAmount('5000'),
+        },
+      },
+      merchants as never,
+    )
+      .createCaller(ctx)
+      .merchants.myOfferCeiling();
+    expect(ceiling).toEqual({
+      maxAmount: '5000',
+      band: 'merchant',
+      merchantStatus: 'approved',
+    });
   });
 });

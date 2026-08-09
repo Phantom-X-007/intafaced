@@ -95,6 +95,57 @@ export function checkOfferLimit(input: {
   return { withinLimit: false, reason: `${over} for this account.${route}` };
 }
 
+/** True when at least one ceiling is set. Mirror of `moderationReachable` for limits. */
+export function limitsConfigured(policy: OfferLimitPolicy): boolean {
+  return policy.standardMaxAmount !== null || policy.merchantMaxAmount !== null;
+}
+
+/**
+ * Deployment posture on the wire — decimal strings or null (unlimited).
+ *
+ * Boot logs already print this via `describeLimits`. The API must too: a client
+ * that only learns a ceiling exists by getting refused is not an honest surface,
+ * and an operator dashboard that scrapes process logs is not a product API.
+ * Numbers still come only from env; this never invents magnitudes.
+ */
+export function limitsOnWire(policy: OfferLimitPolicy): {
+  standardMax: string | null;
+  merchantMax: string | null;
+  configured: boolean;
+  summary: string;
+} {
+  const posture = describeLimits(policy);
+  return {
+    standardMax: policy.standardMaxAmount === null ? null : formatAmount(policy.standardMaxAmount),
+    merchantMax: policy.merchantMaxAmount === null ? null : formatAmount(policy.merchantMaxAmount),
+    configured: limitsConfigured(policy),
+    summary: posture.summary,
+  };
+}
+
+/**
+ * The ceiling that binds THIS maker right now, as the client should show it.
+ *
+ * `band` is which policy slot applied — not a badge claim. An applicant still
+ * under review is on the standard band even though they have a merchant row.
+ */
+export function ceilingOnWire(
+  status: MerchantStatus | null,
+  policy: OfferLimitPolicy,
+): {
+  maxAmount: string | null;
+  band: 'standard' | 'merchant';
+  merchantStatus: MerchantStatus | null;
+} {
+  const band: 'standard' | 'merchant' = status !== null && isActiveMerchant(status) ? 'merchant' : 'standard';
+  const ceiling = limitFor(status, policy);
+  return {
+    maxAmount: ceiling === null ? null : formatAmount(ceiling),
+    band,
+    merchantStatus: status,
+  };
+}
+
 /** One line for the boot log, so a deployment states which posture it is in. */
 export function describeLimits(policy: OfferLimitPolicy): { level: 'info' | 'warn'; summary: string } {
   if (policy.standardMaxAmount === null && policy.merchantMaxAmount === null) {

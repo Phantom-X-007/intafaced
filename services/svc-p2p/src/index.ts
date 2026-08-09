@@ -8,7 +8,7 @@ import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { parseAmount } from '@intafaced/ledger-client';
 import { createLedgerClient } from './ledger-client.js';
-import { describeLimits } from './merchant-limits.js';
+import { describeLimits, limitsConfigured } from './merchant-limits.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { MerchantService } from './merchant-service.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
@@ -134,7 +134,7 @@ const moderatorUserIds = parseModeratorUserIds(env.P2P_MODERATOR_USER_IDS);
  */
 const merchants: MerchantService = new MerchantService(sql, p2p);
 
-export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds }, merchants);
+export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds, offerLimits }, merchants);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -147,11 +147,14 @@ app.get('/health', async () => ({
   ok: true,
   service: env.SERVICE_NAME,
   moderationReachable: moderatorUserIds.length > 0,
+  /** False until env ceilings arm Stage 2 — badge must not imply a higher limit when none is set. */
+  offerLimitsConfigured: limitsConfigured(offerLimits),
 }));
 app.get('/ready', async () => ({
   ready: true,
   tradingEnabled: env.P2P_TRADING_ENABLED,
   moderationReachable: moderatorUserIds.length > 0,
+  offerLimitsConfigured: limitsConfigured(offerLimits),
 }));
 
 /**

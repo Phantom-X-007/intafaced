@@ -15,12 +15,18 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
+import { ceilingOnWire, limitsConfigured, limitsOnWire, NO_OFFER_LIMITS, type OfferLimitPolicy } from './merchant-limits.js';
 import { isActiveMerchant } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
 export type P2pRouterOptions = {
   /** Natural-person ids from `P2P_MODERATOR_USER_IDS`. Empty = unconfigured. */
   moderatorUserIds?: readonly string[];
+  /**
+   * Offer ceilings by merchant standing (TRK-p2p.merchants Stage 2).
+   * Unset / empty = unlimited = pre-Stage-2 behaviour. Never invent magnitudes.
+   */
+  offerLimits?: OfferLimitPolicy;
 };
 
 /**
@@ -350,6 +356,7 @@ export function createP2pRouter(
   merchants?: MerchantService,
 ) {
   const moderatorUserIds = options.moderatorUserIds ?? [];
+  const offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
 
   /**
    * The programme, or an honest refusal.
@@ -384,6 +391,26 @@ export function createP2pRouter(
     decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
   });
   const moderationReachable = isModerationConfigured(moderatorUserIds);
+  const offerLimitsConfigured = limitsConfigured(offerLimits);
+
+  const offerLimitsOutput = z.object({
+    /** Largest ordinary maxAmt, or null when unlimited. Decimal string. */
+    standardMax: z.string().nullable(),
+    /** Largest approved-merchant maxAmt, or null when unlimited. Decimal string. */
+    merchantMax: z.string().nullable(),
+    /** False until at least one of the env ceilings is set. */
+    configured: z.boolean(),
+    /** Same sentence the boot log prints — operator-readable posture. */
+    summary: z.string(),
+  });
+
+  const myOfferCeilingOutput = z.object({
+    /** Ceiling that binds this caller right now, or null when unlimited. */
+    maxAmount: z.string().nullable(),
+    /** Which policy slot applied — applicant/suspended stay on standard. */
+    band: z.enum(['standard', 'merchant']),
+    merchantStatus: z.enum(['applied', 'approved', 'rejected', 'suspended', 'withdrawn']).nullable(),
+  });
 
   /**
    * The owner's own instruments, mapped for the wire.
@@ -412,12 +439,19 @@ export function createP2pRouter(
           service: z.literal('svc-p2p'),
           /** False until `P2P_MODERATOR_USER_IDS` names at least one person. */
           moderationReachable: z.boolean(),
+          /**
+           * False until `P2P_OFFER_MAX_STANDARD` / `P2P_OFFER_MAX_MERCHANT` arms
+           * a ceiling. Same honesty pattern as moderationReachable: clients must
+           * not imply the merchant badge buys a higher limit when none is set.
+           */
+          offerLimitsConfigured: z.boolean(),
         }),
       )
       .query(() => ({
         ok: true,
         service: 'svc-p2p' as const,
         moderationReachable,
+        offerLimitsConfigured,
       })),
 
     /**
@@ -1189,6 +1223,34 @@ export function createP2pRouter(
           guard(async () => {
             const record = await requireMerchants().get(requireUser(ctx));
             return record ? toMerchantOut(record) : null;
+          }),
+        ),
+
+      /**
+       * Deployment offer ceilings (TRK-p2p.merchants Stage 2 honest API).
+       *
+       * Policy, not standing: any reader with `p2p:read` can see what the
+       * house has armed. Null maxes mean unlimited — the badge buys nothing
+       * until an operator sets env. Magnitudes are never invented here.
+       */
+      offerLimits: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(offerLimitsOutput)
+        .query(() => limitsOnWire(offerLimits)),
+
+      /**
+       * The ceiling that binds the CALLER right now.
+       *
+       * Combines standing (from the programme) with the deployment policy so
+       * a maker can show "you may offer up to X" before they type a size that
+       * will refuse. Never applied → standard band; approved → merchant band.
+       */
+      myOfferCeiling: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(myOfferCeilingOutput)
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            const userId = requireUser(ctx);
+            const record = await requireMerchants().get(userId);
+            return ceilingOnWire(record?.status ?? null, offerLimits);
           }),
         ),
 
