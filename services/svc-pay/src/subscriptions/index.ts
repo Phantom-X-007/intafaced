@@ -1,7 +1,5 @@
 /**
- * Subscriptions — schedule arithmetic + lifecycle (no charge runner yet).
- *
- * Crypto path is invoice-and-watch only (protocol forbids pull signatures).
+ * Subscriptions — schedule + lifecycle + due runner (invoice path, no pull).
  */
 export {
   CADENCES,
@@ -13,4 +11,12 @@ export {
   type Cadence,
   type DuePlan,
 } from './schedule.js';
-export { SubscriptionService, assertMandateTermsUnchanged, type MandateRecord, type SubscriptionRecord } from './subscription-service.js';
+export {
+  SubscriptionService,
+  assertMandateTermsUnchanged,
+  type MandateRecord,
+  type SubscriptionRecord,
+  type SubscriptionInvoiceOpener,
+  type FiringOutcome,
+  type RunReport,
+} from './subscription-service.js';

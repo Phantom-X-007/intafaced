@@ -151,7 +151,9 @@ export type PayErrorCode =
   | 'pay.subscription_reconsent_required'
   | 'pay.subscription_inactive'
   | 'pay.mandate_inactive'
-  | 'pay.subscription_invalid';
+  | 'pay.subscription_invalid'
+  | 'pay.subscription_driver_absent'
+  | 'pay.mandate_rail_absent';
 
 export class PayError extends Error {
   constructor(
