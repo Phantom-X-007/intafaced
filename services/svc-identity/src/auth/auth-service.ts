@@ -1145,8 +1145,8 @@ export class AuthService {
   // ── Step-up ────────────────────────────────────────────────────────────────
 
   /**
-   * Trade a live session plus a fresh TOTP code for a SHORT-LIVED token that
-   * carries `trade:withdraw`.
+   * Trade a live session plus a fresh TOTP (or single-use recovery) code for a
+   * SHORT-LIVED token that carries `trade:withdraw`.
    *
    * This exists because `defaultScopes()` deliberately withholds
    * `trade:withdraw` — "added only after a step-up challenge" — and until now
@@ -1157,6 +1157,10 @@ export class AuthService {
    * Three things make the elevated token weaker than a normal one, and all three
    * matter: it lasts five minutes, it is bound to the session that asked for it,
    * and it is only issued to an account that actually has a second factor.
+   *
+   * Recovery codes (XXXXX-XXXXX) are accepted on the same `totpCode` field as
+   * login: TOTP first so a live authenticator never burns a recovery hash;
+   * else single-use redeem. Lost authenticator can still elevate withdraw.
    */
   async stepUp(input: { userId: string; sessionId: string; totpCode?: string; webauthn?: AuthenticationResponseJSON }): Promise<{
     accessToken: string;
@@ -1190,11 +1194,16 @@ export class AuthService {
       if (!user.totp_secret) {
         throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
       }
-      // Burn the step before issuing trade:withdraw — a captured code must not
-      // buy a second elevation inside the validity window.
-      // Open enc:v1: column first so matchTotpStep sees base32.
-      const secret = this.openTotpSecretColumn(user.totp_secret);
-      await this.consumeTotpCode(input.userId, secret, input.totpCode!);
+      // Same order as login: open enc:v1: → TOTP burn first, else recovery redeem.
+      // Recovery never mints trade:withdraw without burning a second-factor proof.
+      const secret = this.openTotpSecretColumn(user.totp_secret!);
+      const matched = matchTotpStep(secret, input.totpCode!);
+      if (matched !== null) {
+        await this.consumeTotpCode(input.userId, secret, input.totpCode!);
+      } else {
+        const redeemed = await this.tryRedeemRecoveryCode(input.userId, input.totpCode!);
+        if (!redeemed) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+      }
     } else {
       const creds = asCredentialList(user.webauthn_creds);
       if (creds.length === 0) {
