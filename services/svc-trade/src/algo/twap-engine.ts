@@ -27,6 +27,9 @@ import type {
  * overdue work extends the schedule rather than bursting.
  */
 
+/** haltReason when cancel partially failed — resume refused until re-cancel. */
+export const CANCEL_INCOMPLETE_HALT = 'cancel_incomplete';
+
 export interface PlaceChildRequest {
   readonly parentId: string;
   readonly sliceIndex: number;
@@ -191,6 +194,15 @@ export class TwapEngine {
     if (parent.status !== 'paused') {
       throw new TradeError(`cannot resume algo in status ${parent.status}`, 'trade.algo_bad_state');
     }
+    // W4 C1 adversarial: cancel-fail parks the parent as paused with
+    // haltReason cancel_incomplete. Resume must not re-arm placement while
+    // open children may still be live — force re-cancel first.
+    if (parent.haltReason === CANCEL_INCOMPLETE_HALT) {
+      throw new TradeError(
+        'cannot resume after a partial cancel — call cancel again until every child is cancelled',
+        'trade.algo_cancel_incomplete',
+      );
+    }
     // Resume does NOT rewind nextSliceIndex — elapsed slices stay elapsed.
     // Re-space from the resume instant (ADR 2026-08-08): overdue work extends
     // the schedule; never catch up as a burst against startedAt.
@@ -242,17 +254,18 @@ export class TwapEngine {
       // `active` — the next job tick would place more children under a stop
       // that already failed once. Pause so tick idles; retry cancel later.
       // (Still not `cancelled` until every child cancel succeeds — that half
-      // stays sealed from #1193.)
-      if (parent.status === 'active') {
+      // stays sealed from #1193.) haltReason marks cancel-incomplete so resume
+      // cannot re-arm placement while children may still be live.
+      if (parent.status === 'active' || parent.status === 'paused') {
         this.replace(parentId, {
           ...parent,
           status: 'paused',
           pausedAt: this.ports.now(),
-          scheduleStretchReason: 'user_pause',
+          haltReason: CANCEL_INCOMPLETE_HALT,
         });
       }
       throw new TradeError(
-        `algo cancel refused: ${failures.length} of ${parent.children.length} child cancel(s) failed — parent left paused (no further slices until re-cancel succeeds): ${message}`,
+        `algo cancel refused: ${failures.length} of ${parent.children.length} child cancel(s) failed — parent left paused (re-cancel required; resume refused): ${message}`,
         first instanceof TradeError && first.code === 'trade.algo_principal_unavailable'
           ? 'trade.algo_principal_unavailable'
           : 'trade.algo_child_cancel_failed',

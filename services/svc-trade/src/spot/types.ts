@@ -252,6 +252,7 @@ export type TradeErrorCode =
    * (ADR 2026-08-08). Trader may cancel-and-recreate; parent stays paused.
    */
   | 'trade.algo_resume_extends_too_far'
+  | 'trade.algo_cancel_incomplete'
   /** Identity S2S ownership consult failed — refuse rather than store an unvalidated id */
   | 'trade.sub_account_unavailable'
   /** Missing or foreign sub-account (existence not leaked) */

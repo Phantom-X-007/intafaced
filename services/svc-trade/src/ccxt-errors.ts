@@ -220,6 +220,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.algo_market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /** ADR 2026-08-08: resume would more than double the order's own duration. */
   'trade.algo_resume_extends_too_far': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.algo_cancel_incomplete': { ccxt: 'InvalidOrder', status: 409 },
 };
 
 /**
