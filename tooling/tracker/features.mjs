@@ -642,20 +642,14 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
-      'CLAIMED 2026-08-07 nitro money/ops wave 3 — feat/p2p-disputes-stage (D-S-08 residual). ' +
-      'STAGE SHIPPED in svc-p2p: moderation reachability via `P2P_MODERATOR_USER_IDS` (natural-person allowlist) so a ' +
-      'real session with `p2p:read` can call `disputes.list` / `disputes.resolve` when named; empty allowlist ' +
-      'honest-refuses with `p2p.moderation_unreachable` (PRECONDITION_FAILED) rather than sitting forever behind ' +
-      '`admin:compliance` that SESSION_SCOPES withholds. `disputes.open` and health/ready disclose `moderationReachable`. ' +
-      'admin:compliance still counts when a principal holds it (tests / future operator grant). No fake auto-ruling; ' +
-      'timer still escalate-and-hold only. ' +
-      'NOT done: apps/admin dispute console still absent; `p2p:moderate` scope split remains OWNER sign-off ' +
-      '(DIRECTION §3) and is deliberately not minted here. Prior honesty note (2026-08-06 corrected from false `done`) stands for the gap this stage closed.',
+      'GHOST OWNER CLEARED 2026-08-09 L03 W4: was wip @nitro-agent with stage already on main (#1007). ' +
+      'STAGE SHIPPED: `P2P_MODERATOR_USER_IDS` allowlist; empty → `p2p.moderation_unreachable`; list/evidence/escalate-and-hold; ' +
+      'no machine adjudication. STILL not done (owner/product): apps/admin dispute console; `p2p:moderate` scope mint ' +
+      '(DIRECTION §3). Agents may not invent who moderates or auto-ruling.',
   }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', {
     module: 'p2p',
@@ -668,20 +662,18 @@ export const FEATURES = [
   f('p2p.payment-instruments', 'Payment instruments — where the buyer actually pays', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/instrument-service.ts'],
-    note: "A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
+    note: "GHOST OWNER CLEARED 2026-08-09 L03 W4 (mechanism on main #428). Residual is operator content + Class X KMS, not craft. A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
   }),
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['p2p.reputation'],
     requires: ['services/svc-p2p'],
-    note: 'Stage 1 of 3 shipped (TRK-p2p.merchants DoD): p2p_merchants + append-only p2p_merchant_events (trigger-enforced), apply/approve/reject/suspend/reinstate/withdraw state machine with actor rules, and eligibility from EARNED reputation so a fresh account cannot borrow merchant trust. tRPC: merchants.me/submitApplication/withdraw (self) + decide/history (admin:compliance). Membership only — no balance, no custody; escrow still moves value through ledger recipes (§0.6). Eligibility thresholds are a policy object with a conservative default because tier ladder + numeric limits are open product law (spec §5). STILL OPEN for done: Stage 2 limits enforced on offer create + badge on public profile; Stage 3 merchant API keys/scopes/rate limits, or an explicit cut of the API to a later row.',
+    note: 'GHOST OWNER CLEARED 2026-08-09 L03 W4. Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings mechanism on main. Standing read per offer create; only approved gets merchant ceiling; env P2P_OFFER_MAX_STANDARD/MERCHANT unset = unlimited = pre-Stage-2 behaviour (numbers are owner product law, not invented). reputation.get exposes merchant:boolean|null for counterparty badge. Stage 3 merchant API keys/scopes/rate limits EXPLICITLY CUT 2026-08-09 L03 W4 — identity.apikeys already owns named keys; dual-writing a second key plane inside svc-p2p is refused. STILL wip for tracker done: owner must either set ceiling env (or confirm unlimited is the product choice) and accept the Stage 3 cut. Eligibility thresholds remain conservative defaults (spec §5).',
   }),
 
   f('api.gateway', 'Public API — ONE gateway in front of trade, pay and data (§9)', {
