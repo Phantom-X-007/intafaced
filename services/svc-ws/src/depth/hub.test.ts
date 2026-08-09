@@ -72,6 +72,8 @@ class FakeSource implements DepthSource {
    * promise is what `#seed` awaits — used to stage seed-vs-poll races.
    */
   pendingSnapshots = new Map<string, Promise<DepthSnapshot>>();
+  /** When set, `markets()` awaits this before returning — concurrent miss tests. */
+  marketsGate: Promise<void> | null = null;
 
   constructor(marketList: string[]) {
     this.marketList = marketList;
@@ -80,6 +82,7 @@ class FakeSource implements DepthSource {
   async markets(): Promise<readonly string[]> {
     this.marketCalls += 1;
     if (this.failMarkets) throw this.failMarkets;
+    if (this.marketsGate) await this.marketsGate;
     return this.marketList;
   }
 
@@ -445,8 +448,8 @@ describe('DepthHub — backpressure: degrade, then disconnect', () => {
     const first = new FakeSink();
     const second = new FakeSink();
 
-    small.attach(MARKET, first);
-    small.attach(MARKET, second);
+    expect(small.attach(MARKET, first)).not.toBeNull();
+    expect(small.attach(MARKET, second)).toBeNull();
     await settle();
 
     expect(second.closed?.code).toBe(CLOSE_TRY_LATER);
@@ -514,6 +517,45 @@ describe('DepthHub — an unknown market never reaches svc-matching', () => {
 
     expect(sink.closed?.code).toBe(CLOSE_TRY_LATER);
     expect(sink.closed?.reason).toMatch(/ECONNREFUSED/);
+  });
+
+  it('concurrent miss-refreshes share one list load — neither gets a false unknown', async () => {
+    let release!: () => void;
+    const source = new FakeSource([MARKET]);
+    source.current.set(MARKET, snapshot(10));
+    source.current.set(OTHER, snapshot(4, [['20', '1']], [['21', '1']], OTHER));
+    const hub = hubFor(source, { marketsRefreshMs: 30_000, clock: () => 1_000 });
+
+    // Warm with MARKET only (no gate).
+    await hub.refreshMarkets();
+    expect(hub.knownMarkets).toEqual([MARKET]);
+    expect(source.marketCalls).toBe(1);
+
+    // Next list load is gated so two concurrent misses pile onto one in-flight refresh.
+    source.marketsGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    source.marketList.push(OTHER);
+
+    const a = new FakeSink();
+    const b = new FakeSink();
+    hub.attach(OTHER, a);
+    hub.attach(OTHER, b);
+    await settle();
+    // Still waiting on the shared list load — must not have false-unknowned either.
+    expect(a.closed).toBeNull();
+    expect(b.closed).toBeNull();
+
+    release();
+    await settle();
+    await settle();
+
+    expect(a.closed).toBeNull();
+    expect(b.closed).toBeNull();
+    expect(a.messages()[0]).toMatchObject({ type: 'snapshot', marketId: OTHER });
+    expect(b.messages()[0]).toMatchObject({ type: 'snapshot', marketId: OTHER });
+    // Warm + one shared miss-refresh (not two independent refuses).
+    expect(source.marketCalls).toBe(2);
   });
 
   it('refreshes on a miss at most once per window when the refresh window is non-zero', async () => {
@@ -591,8 +633,8 @@ describe('DepthHub — book lifecycle', () => {
 
     const first = new FakeSink();
     const second = new FakeSink();
-    const detachFirst = hub.attach(MARKET, first);
-    const detachSecond = hub.attach(MARKET, second);
+    const detachFirst = hub.attach(MARKET, first)!;
+    const detachSecond = hub.attach(MARKET, second)!;
     await settle();
 
     detachFirst();
@@ -610,7 +652,7 @@ describe('DepthHub — book lifecycle', () => {
 
     // Detached before the upstream round trip came back. The seed still lands a
     // book; nothing must be left watching nothing.
-    const detach = hub.attach(MARKET, new FakeSink());
+    const detach = hub.attach(MARKET, new FakeSink())!;
     detach();
     await settle();
 

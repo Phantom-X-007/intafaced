@@ -214,10 +214,15 @@ export class DepthHub {
    * not have to await anything before it can wire up `close`. The snapshot is
    * produced on a later turn, and the buffering above is what makes that safe.
    */
-  attach(marketId: string, sink: DepthSink): () => void {
+  /**
+   * Register a sink. Returns detach, or `null` when at capacity (sink already
+   * closed with 1013). Callers that open real sockets must terminate on null —
+   * same fail-closed shape as the private hub (no half-open with zero frames).
+   */
+  attach(marketId: string, sink: DepthSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
       sink.close(CLOSE_TRY_LATER, 'gateway at capacity');
-      return () => undefined;
+      return null;
     }
 
     const sub: Subscription = { marketId, sink, pending: [], lagTicks: 0, lagging: false, closed: false };
@@ -270,15 +275,36 @@ export class DepthHub {
   async ensureKnownMarket(marketId: string): Promise<boolean> {
     if (this.#knownMarkets.has(marketId)) return true;
 
+    // Join an in-flight list load first. Concurrent misses must share that
+    // refresh — otherwise the second caller hits the budget path and gets a
+    // false "unknown market" while the first is still fetching a list that
+    // already includes the id.
+    if (this.#marketsInFlight) {
+      await this.#marketsInFlight;
+      if (this.#knownMarkets.has(marketId)) return true;
+    }
+
     const now = this.#options.clock();
     // Already spent this window's miss-refresh budget. `marketsRefreshMs: 0`
     // never holds (now - t < 0 is false), so every miss still refetches.
+    // If a refresh is somehow still in flight, join it rather than refuse.
     if (this.#missRefreshAt !== 0 && now - this.#missRefreshAt < this.#options.marketsRefreshMs) {
+      if (this.#marketsInFlight) {
+        await this.#marketsInFlight;
+        return this.#knownMarkets.has(marketId);
+      }
       return false;
     }
 
     this.#missRefreshAt = now;
-    await this.refreshMarkets();
+    try {
+      await this.refreshMarkets();
+    } catch (err) {
+      // A failed list load is not "we checked and it is not a market" — clear
+      // the budget so the next miss can retry instead of lying for the window.
+      this.#missRefreshAt = 0;
+      throw err;
+    }
     return this.#knownMarkets.has(marketId);
   }
 

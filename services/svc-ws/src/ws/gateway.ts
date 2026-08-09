@@ -151,13 +151,23 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
     if (channel === null) return reject(socket, 400, 'Bad Request');
 
     wss.handleUpgrade(request, socket, head, (ws) => {
+      const detach = channel === 'trades' ? tradeHub.attach(marketId, sinkFor(ws)) : hub.attach(marketId, sinkFor(ws));
+      // Capacity refuse closes the sink inside attach — terminate so the client
+      // never sits half-open with zero frames (mirrors private gateway).
+      if (!detach) {
+        try {
+          ws.terminate();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
       alive.add(ws);
       ws.on('pong', () => alive.add(ws));
       // Inbound frames are dropped without being parsed. See the header.
       ws.on('message', () => undefined);
       ws.on('error', () => ws.terminate());
-
-      const detach = channel === 'trades' ? tradeHub.attach(marketId, sinkFor(ws)) : hub.attach(marketId, sinkFor(ws));
       ws.on('close', detach);
     });
   };
