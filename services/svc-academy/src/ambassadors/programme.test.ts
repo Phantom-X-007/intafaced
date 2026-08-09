@@ -49,6 +49,31 @@ describe('MemoryAmbassadorProgramme L3 (no pay)', () => {
     expect(() => desk.appoint({ userId: u, appointedBy: op })).toThrow(AmbassadorProgrammeError);
   });
 
+  it('re-appoint of frozen row refuses — freeze audit is not erased via appoint', () => {
+    const desk = new MemoryAmbassadorProgramme();
+    const u = '11111111-1111-4111-8111-111111111111';
+    const op = '22222222-2222-4222-8222-222222222222';
+    desk.appoint({ userId: u, appointedBy: op, now: new Date('2026-08-05T00:00:00Z') });
+    desk.freeze({ userId: u, frozenBy: op, reason: 'policy hold' });
+    const frozen = desk.get(u)!;
+    expect(frozen.freezeReason).toBe('policy hold');
+    expect(frozen.frozenBy).toBe(op);
+    try {
+      desk.appoint({ userId: u, appointedBy: '33333333-3333-4333-8333-333333333333' });
+      expect.unreachable('appoint must refuse frozen');
+    } catch (e) {
+      expect(e).toBeInstanceOf(AmbassadorProgrammeError);
+      expect((e as AmbassadorProgrammeError).code).toBe('academy.ambassador_already_frozen');
+      expect((e as Error).message).toMatch(/unfreeze/i);
+    }
+    // Freeze audit still present after refused re-appoint.
+    const still = desk.get(u)!;
+    expect(still.status).toBe('frozen');
+    expect(still.freezeReason).toBe('policy hold');
+    expect(still.frozenBy).toBe(op);
+    expect(still.frozenAt).toEqual(frozen.frozenAt);
+  });
+
   it('L3 badgesOf + activeCount without invent', () => {
     const desk = new MemoryAmbassadorProgramme();
     const u = '11111111-1111-4111-8111-111111111111';

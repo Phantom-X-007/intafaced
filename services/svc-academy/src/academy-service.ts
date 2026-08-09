@@ -919,13 +919,20 @@ export class AcademyService {
   }
 
   /**
-   * Operator appoint. Idempotent re-appoint of a frozen row reactivates.
+   * Operator appoint. New row only, or refuse.
    * Already-active is refused so double-click does not rewrite appointed_by silently.
+   * Frozen is refused so freeze audit is not erased — use unfreezeAmbassador.
    */
   async appointAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
     const existing = await this.ambassadorOf(input.userId);
     if (existing?.status === 'active') {
       throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
+    }
+    if (existing?.status === 'frozen') {
+      throw new AcademyError(
+        `Ambassador ${input.userId} is frozen — unfreeze to restore the badge (re-appoint would erase freeze audit)`,
+        'academy.ambassador_already_frozen',
+      );
     }
 
     const rows = await this.sql<
@@ -949,8 +956,24 @@ export class AcademyService {
         frozen_by = NULL,
         freeze_reason = NULL,
         updated_at = now()
+      WHERE academy.ambassadors.status IS DISTINCT FROM 'frozen'
+        AND academy.ambassadors.status IS DISTINCT FROM 'active'
       RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
     `;
+    if (!rows[0]) {
+      // Concurrent freeze/active won the race — re-read and refuse honestly.
+      const again = await this.ambassadorOf(input.userId);
+      if (again?.status === 'frozen') {
+        throw new AcademyError(
+          `Ambassador ${input.userId} is frozen — unfreeze to restore the badge (re-appoint would erase freeze audit)`,
+          'academy.ambassador_already_frozen',
+        );
+      }
+      if (again?.status === 'active') {
+        throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
+      }
+      throw new AcademyError(`Could not appoint ambassador ${input.userId}`, 'academy.ambassador_invalid');
+    }
     return this.toAmbassador(rows[0]!);
   }
 
