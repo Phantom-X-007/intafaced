@@ -172,7 +172,10 @@ jobs:
       - name: Deployed commit must already be on main
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=0 origin main
+          # The checkout above is fetch-depth: 0, so the repository is already
+          # unshallow; this only needs the `main` ref itself, which a dispatch on
+          # another branch does not fetch.
+          git fetch --no-tags origin main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::$GITHUB_SHA is not an ancestor of origin/main — only reviewed, merged commits may be deployed to staging"
             exit 1
@@ -237,12 +240,20 @@ jobs:
       # `secrets.GITHUB_TOKEN` is the run's own short-lived token, scoped by the
       # `permissions:` block above and revoked when the job ends. It is not a
       # stored credential and there is nothing for the owner to provision.
+      # EVERY `${{ }}` VALUE IS BOUND TO AN ENV VAR, NOT INTERPOLATED INTO THE
+      # SCRIPT — here and in every other step of this workflow. `${{ }}` is
+      # substituted as TEXT before the shell ever sees the script, so a value
+      # containing `"; curl …` becomes a command rather than a string. `actor`
+      # and `repository` are constrained by GitHub and are not the dangerous
+      # ones; the habit is what keeps the dangerous ones safe, and it means the
+      # threat model can make one claim about the whole file instead of eleven.
       - name: Log in to the GitHub container registry
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
         run: |
           set -euo pipefail
-          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
       # Two images, because the deployment unit is two images: the monorepo
       # runtime that every service and both apps share, and the vendored trading
@@ -257,10 +268,13 @@ jobs:
       # reference may not.
       - name: Build and push, by digest
         id: build
+        env:
+          IMAGE_REPO: ${{ github.repository }}
+          DEPLOY_SHA: ${{ needs.preflight.outputs.sha }}
         run: |
           set -euo pipefail
-          repo=$(printf '%s' "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          sha="${{ needs.preflight.outputs.sha }}"
+          repo=$(printf '%s' "$IMAGE_REPO" | tr '[:upper:]' '[:lower:]')
+          sha="$DEPLOY_SHA"
 
           app_ref="ghcr.io/${repo}/app:${sha}"
           shell_ref="ghcr.io/${repo}/vendor-shell:${sha}"
@@ -500,11 +514,21 @@ jobs:
             *) echo "intafaced/app:dev resolves to $got, not ${APP_DIGEST} — refusing to start"; exit 1 ;;
           esac
 
-          echo "── APP_ENV must be staging, and compose must agree"
+          echo "── APP_ENV must be staging"
+          # Compose gives the SHELL environment precedence over the `.env` file,
+          # so exporting APP_ENV here wins over whatever the host's `.env` says.
+          # That is the ADR's fail-closed switch, and this asserts it arrived.
+          #
+          # AND WE DELIBERATELY DO NOT RUN `docker compose config` TO DOUBLE-CHECK
+          # IT. That command renders the FULLY RESOLVED fleet configuration —
+          # every interpolated `${VAR}`, which on a real staging host means the
+          # edge secret, the internal service secret, the database password and
+          # every pay-rail key. Rendering that inside a CI-driven session, one
+          # stray `echo` or `set -x` away from the job log, is precisely the
+          # env-dump disclosure this workflow's threat model spends a section on.
+          # A confirmation worth having is not worth materialising every secret
+          # in the fleet to get.
           [ "${APP_ENV}" = "staging" ] || { echo "APP_ENV is ${APP_ENV}, not staging"; exit 1; }
-          resolved=$(APP_ENV=staging docker compose -f docker-compose.apps.yml config \
-            | grep -m1 -E '^\s+APP_ENV:' | awk '{print $2}' | tr -d '"')
-          [ "$resolved" = "staging" ] || { echo "compose resolved APP_ENV to '$resolved' — the host .env is overriding policy"; exit 1; }
 
           echo "── up"
           APP_ENV=staging docker compose -f docker-compose.apps.yml up -d --no-build --remove-orphans
@@ -516,6 +540,16 @@ jobs:
       # containers are created; it does not wait for a service to answer. A
       # deploy that reports success on container creation is the "route exists"
       # failure this repo has a doctrine section about.
+      #
+      # Read via `docker inspect --format` over `compose ps -q`, not
+      # `compose ps --format '{{…}}'`. Compose v2 only promises `table` and
+      # `json` for `ps --format`, and `json` would need `jq` on the staging host,
+      # which is not something this workflow gets to assume. `docker inspect`
+      # takes a Go template on every version anyone has, and it also exposes the
+      # exit code — which `migrate` needs, because that container is SUPPOSED to
+      # exit, and it is supposed to exit ZERO. A migration that failed and left
+      # the fleet waiting is the single most important thing for this step to
+      # catch, and "exited" alone cannot tell the two apart.
       - name: Every container is healthy
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
@@ -527,19 +561,45 @@ jobs:
           ssh $ssh_opts "$STAGING_SSH_USER@$STAGING_SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd "$HOME/intafaced-staging"
+
+          report() {
+            for id in $(docker compose -f docker-compose.apps.yml ps -aq); do
+              docker inspect "$id" --format \
+                '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}'
+            done
+          }
+
           for _ in $(seq 1 60); do
-            bad=$(docker compose -f docker-compose.apps.yml ps --format '{{.Name}} {{.State}} {{.Health}}' \
-              | awk '$2 != "running" && $2 != "exited" { print } $3 == "unhealthy" { print }' || true)
-            starting=$(docker compose -f docker-compose.apps.yml ps --format '{{.Health}}' | grep -c starting || true)
-            if [ -z "$bad" ] && [ "$starting" = "0" ]; then
+            pending=0
+            broken=''
+            while read -r line; do
+              [ -n "$line" ] || continue
+              case "$line" in
+                *' status=running '*' health=healthy') ;;
+                *' status=running '*' health=none') ;;
+                *' status=exited exit=0 '*) ;;
+                *' health=starting') pending=1 ;;
+                *' status=created '*|*' status=restarting '*) pending=1 ;;
+                *) broken="${broken}${line}"$'\n' ;;
+              esac
+            done <<< "$(report)"
+
+            if [ -z "$broken" ] && [ "$pending" -eq 0 ]; then
               echo "fleet healthy"
-              docker compose -f docker-compose.apps.yml ps
+              report
               exit 0
+            fi
+            if [ -n "$broken" ]; then
+              echo "containers in a terminal bad state:"
+              printf '%s' "$broken"
+              report
+              exit 1
             fi
             sleep 10
           done
-          echo "fleet did not become healthy"
-          docker compose -f docker-compose.apps.yml ps
+
+          echo "fleet did not become healthy within the timeout"
+          report
           exit 1
           REMOTE
 
