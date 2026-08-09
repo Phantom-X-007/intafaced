@@ -1,7 +1,16 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import type { EventBus } from '@intafaced/events';
-import { formatAmount, parseAmount, recipes, rewardsEngine, burnAccount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  formatAmount,
+  parseAmount,
+  recipes,
+  rewardsEngine,
+  burnAccount,
+  houseFees,
+  type Amount,
+  type LedgerClient,
+} from '@intafaced/ledger-client';
 import {
   ACCESS_TIERS,
   STAKE_TIERS,
@@ -38,6 +47,12 @@ export class TokenError extends Error {
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
+      /**
+       * Operator named a fee-source amount larger than the houseFees balance
+       * for that module (audit T-03 residual). Refuse before claim/sweep so
+       * the plan total cannot exceed value that can actually move.
+       */
+      | 'token.yield_source_underfunded'
       /**
        * A window id that is already planned, re-run naming a different revenue
        * total. The frozen plan and the new figure cannot both be right, and
@@ -708,6 +723,29 @@ export class TokenService {
 
     const total = [...byModule.values()].reduce((acc, a) => acc + a, 0n);
     if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
+
+    /**
+     * T-03 residual — bind operator-typed amounts to the actual fee pots.
+     *
+     * The full §4.3 aggregation job that *reads* house fee balances and builds
+     * `sources` still does not exist (`token.yield` socket). Until it does, the
+     * operator types the figure. That used to mean an over-claim could pass
+     * service validation and die mid-sweep on a ledger non-negative check —
+     * after the window header was already claimed, or after earlier modules
+     * had already moved. Fail closed **before** claim/sweep when any module's
+     * houseFees balance is short of the named amount. Under-claim (leaving
+     * fees in the pot) stays allowed — that is a deliberate partial window.
+     */
+    for (const [module, amount] of byModule) {
+      const held = (await this.ledger.balance(houseFees(module, this.assetId))).amount;
+      if (held < amount) {
+        throw new TokenError(
+          `Module "${module}" houseFees holds ${formatAmount(held)} ${this.assetId} but this window names ` +
+            `${formatAmount(amount)} — refuse rather than underfund the plan or die mid-sweep`,
+          'token.yield_source_underfunded',
+        );
+      }
+    }
 
     // CLAIM (window_id, total) + freeze who is paid BEFORE any fee sweep.
     // An empty settlement still claims the header so a later stake cannot

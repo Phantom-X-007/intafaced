@@ -101,6 +101,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.epoch_closed':
       case 'token.supply_exhausted':
       case 'token.nothing_to_distribute':
+      case 'token.yield_source_underfunded':
       case 'token.params_missing':
       case 'token.params_invalid':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });

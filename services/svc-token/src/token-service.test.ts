@@ -720,6 +720,25 @@ if (!available) {
       });
     });
 
+    it('refuses a fee source larger than the houseFees pot before claiming the window', async () => {
+      // T-03 residual: operator-typed sources used to skip the balance check.
+      // Over-claim then either underfunded the plan or died mid-sweep after the
+      // header was already claimed. Fail closed on the pot that actually holds
+      // the fees — under-claim (leaving fees behind) is still allowed.
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '50');
+
+      await expect(
+        token.distributeRevenue({ windowId: 'w-overclaim', sources: [{ module: 'trade', amount: amt('100') }] }),
+      ).rejects.toMatchObject({ code: 'token.yield_source_underfunded' });
+
+      // No header claimed, no fees moved.
+      expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-overclaim'`).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('50');
+      expect(await balanceOf(USER_A)).toBe('0');
+    });
+
     it('drains the source module fee account', async () => {
       await fund(USER_A, '1000');
       await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
