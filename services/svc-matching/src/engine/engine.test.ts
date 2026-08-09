@@ -119,6 +119,23 @@ describe('the journal comes first', () => {
     expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'cancel']);
   });
 
+  /**
+   * W5 — cancel of a never-traded market must not create a phantom book.
+   * Depth already used existingBook; cancel used book() and stored empties that
+   * then appeared in GET /markets and survived journal replay.
+   */
+  it('cancel on an unknown market does not create a book or journal entry', async () => {
+    const { journal, engine } = build();
+    const ghost = 'NEVER-TRADED-MARKET';
+
+    const result = await engine.cancel(ghost, uuid());
+
+    expect(result.cancelled).toBe(false);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.markets).not.toContain(ghost);
+    expect(journal.length).toBe(0);
+  });
+
   it('does not journal an input the kill-switch refused', async () => {
     const { journal, bus, engine } = build({ enabled: false });
 
