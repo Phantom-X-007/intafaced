@@ -94,6 +94,7 @@ A user who can call the thing that credits their own balance does not need to de
 | --------------- | --------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `card-sandbox`  | `sandbox`, permanently      | a `Map` in `card-sandbox.ts`                                                                  | `po_<settlementId>` — a string this file invented             |
 | `crypto-native` | derived from the chain port | `EvmLiveChain` when configured; else `MemoryChain` (dev) / `UnconfiguredChain` (staging/prod) | a real `txHash` on a live chain; `0xout…` / refusal otherwise |
+| `bank-payout`   | `absent`, permanently       | nothing — sponsor bank / licence is a commercial socket                                       | never succeeds; `pay.rail_not_live` before any hold           |
 
 **Live crypto-native** is wired when all of these are set:
 

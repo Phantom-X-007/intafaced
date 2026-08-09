@@ -12,6 +12,7 @@ export * from './chain-port.js';
 export * from './posture.js';
 export * from './crypto-native.js';
 export * from './card-sandbox.js';
+export * from './bank-payout.js';
 export * from './broadcast-store.js';
 export * from './evm-assets.js';
 export * from './evm-chain.js';
