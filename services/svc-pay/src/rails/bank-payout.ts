@@ -44,6 +44,7 @@ export class BankPayoutAbsentAdapter implements RailAdapter {
   health(): RailHealth {
     return {
       healthy: false,
+      latencyMs: 0,
       lastUpdate: this.lastContact,
       reason: 'bank-payout has nothing configured — sponsor bank / licence required (socket.psp-partners). Every call refuses.',
     };
