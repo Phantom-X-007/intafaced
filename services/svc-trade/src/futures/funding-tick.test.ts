@@ -211,9 +211,12 @@ describe('runFundingTick', () => {
     const rates = fixedRate('0.0001', 'm1:period-membership-open');
 
     // Attempt 1: book is long + shortX. Posts, then crashes on settle.
-    await expect(runFundingTick({ rates, positions: positionsOf([long, shortX]), periods, margins, ledger, maxAbsRate: FIXTURE_FUNDING_MAX_ABS }, 'm1')).rejects.toThrow(
-      /crashed/,
-    );
+    await expect(
+      runFundingTick(
+        { rates, positions: positionsOf([long, shortX]), periods, margins, ledger, maxAbsRate: FIXTURE_FUNDING_MAX_ABS },
+        'm1',
+      ),
+    ).rejects.toThrow(/crashed/);
     expect(seen.size).toBe(1);
     const afterFirstKeys = new Set(seen.keys());
     const onePeriod = (amt('0.0001') * ((amt('1') * amt('50000')) / 10n ** 18n)) / 10n ** 18n;
@@ -221,7 +224,10 @@ describe('runFundingTick', () => {
 
     // New short opens. Replay must NOT mint a second leg for plong.
     await expect(
-      runFundingTick({ rates, positions: positionsOf([long, shortX, shortNew]), periods, margins, ledger, maxAbsRate: FIXTURE_FUNDING_MAX_ABS }, 'm1'),
+      runFundingTick(
+        { rates, positions: positionsOf([long, shortX, shortNew]), periods, margins, ledger, maxAbsRate: FIXTURE_FUNDING_MAX_ABS },
+        'm1',
+      ),
     ).rejects.toThrow(/crashed/);
 
     const newKeys = [...seen.keys()].filter((k) => !afterFirstKeys.has(k));
