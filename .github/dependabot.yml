@@ -102,6 +102,10 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # Spring Cloud train names (Edgware/Hoxton/…) are not semver majors — Dependabot
+      # will still open Edgware→Hoxton as a "version update". That is a Boot 2.x generation
+      # jump on a Boot 1.5 tree (L16 closed #1143/#1147). Human-only.
+      - dependency-name: 'org.springframework.cloud:spring-cloud-dependencies'
 
   - package-ecosystem: 'maven'
     directory: '/vendor/upstream-exchange/01_wallet_rpc'
@@ -122,3 +126,7 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
+      # Spring Cloud train names (Edgware/Hoxton/…) are not semver majors — Dependabot
+      # will still open Edgware→Hoxton as a "version update". That is a Boot 2.x generation
+      # jump on a Boot 1.5 tree (L16 closed #1143/#1147). Human-only.
+      - dependency-name: 'org.springframework.cloud:spring-cloud-dependencies'
