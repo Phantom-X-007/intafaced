@@ -38,6 +38,7 @@ const migration = readFileSync(join(here, '..', 'drizzle', '0000_token_init.sql'
 const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_stake_pending.sql'), 'utf8');
 const migrationBuybackClaim = readFileSync(join(here, '..', 'drizzle', '0002_buyback_window_claim.sql'), 'utf8');
 const migrationYieldPlan = readFileSync(join(here, '..', 'drizzle', '0003_yield_window_plan.sql'), 'utf8');
+const migrationYieldHeader = readFileSync(join(here, '..', 'drizzle', '0004_yield_window_header.sql'), 'utf8');
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -77,6 +78,7 @@ if (!available) {
   await sql.unsafe(migrationPending);
   await sql.unsafe(migrationBuybackClaim);
   await sql.unsafe(migrationYieldPlan);
+  await sql.unsafe(migrationYieldHeader);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -121,7 +123,7 @@ if (!available) {
   };
 
   beforeEach(async () => {
-    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts, token.yield_windows RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-token');
     token = new TokenService(sql, ledger, bus, options);
@@ -652,36 +654,90 @@ if (!available) {
       expect(await balanceOf(USER_A)).toBe('100');
     });
 
-    it('plans a window the first time somebody is actually staked', async () => {
-      // The empty-pool case is not a settled window: the revenue is still in
-      // the engine, so the window must be plannable later rather than frozen
-      // empty forever.
+    it('does not pay a staker who joined AFTER an empty window was claimed', async () => {
+      // W4 residual / 0004: empty distribute used to write no plan row, so a
+      // later stake + re-run of the same window id planned the newcomer.
+      // Header freezes the empty answer. Fees still sweep into the engine
+      // (buyback and residual scheduling); late joiners need a NEW window id
+      // with NEW fees — the frozen id never invents recipients.
       await accrueFees('trade', '100');
       const empty = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(empty.recipients).toBe(0);
+      expect(formatAmount(empty.distributed)).toBe('0');
+
+      const headers = await sql<Array<{ window_id: string; total_amount: string }>>`
+        SELECT window_id, total_amount FROM token.yield_windows WHERE window_id = 'w-later'
+      `;
+      expect(headers).toHaveLength(1);
+      expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
 
       await fund(USER_A, '1000');
       await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
 
-      const now = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
-      expect(formatAmount(now.distributed)).toBe('100');
+      const again = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(again.distributed)).toBe('0');
+      expect(again.recipients).toBe(0);
+      expect(await balanceOf(USER_A)).toBe('0');
+
+      // New window needs its own fees in houseFees (first window already swept).
+      await accrueFees('trade', '100');
+      const next = await token.distributeRevenue({ windowId: 'w-later-2', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(next.distributed)).toBe('100');
       expect(await balanceOf(USER_A)).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
-    it('leaves revenue in the rewards engine when nobody is staked', async () => {
+    it('refuses a different total on a previously empty window', async () => {
+      await accrueFees('trade', '100');
+      await token.distributeRevenue({ windowId: 'w-empty-mismatch', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      await accrueFees('trade', '50');
+      await expect(
+        token.distributeRevenue({ windowId: 'w-empty-mismatch', sources: [{ module: 'trade', amount: amt('150') }] }),
+      ).rejects.toMatchObject({ code: 'token.yield_window_mismatch' });
+
+      // Header total frozen; no payouts invented.
+      const headers = await sql<Array<{ total_amount: string }>>`
+        SELECT total_amount FROM token.yield_windows WHERE window_id = 'w-empty-mismatch'
+      `;
+      expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
+      expect(await sql`SELECT user_id FROM token.yield_payouts WHERE window_id = 'w-empty-mismatch'`).toHaveLength(0);
+    });
+
+    it('sweeps into the rewards engine when nobody is staked and freezes the window id', async () => {
       await accrueFees('trade', '100');
       const result = await token.distributeRevenue({ windowId: 'w-empty', sources: [{ module: 'trade', amount: amt('100') }] });
 
       expect(result.recipients).toBe(0);
       expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
       expect(ledger.totalsByAsset().IFC).toBe('0');
+      expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-empty'`).toHaveLength(1);
     });
 
     it('refuses a window with no revenue rather than posting nothing quietly', async () => {
       await expect(token.distributeRevenue({ windowId: 'w-zero', sources: [] })).rejects.toMatchObject({
         code: 'token.nothing_to_distribute',
       });
+    });
+
+    it('refuses a fee source larger than the houseFees pot before claiming the window', async () => {
+      // T-03 residual: operator-typed sources used to skip the balance check.
+      // Over-claim then either underfunded the plan or died mid-sweep after the
+      // header was already claimed. Fail closed on the pot that actually holds
+      // the fees — under-claim (leaving fees behind) is still allowed.
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '50');
+
+      await expect(
+        token.distributeRevenue({ windowId: 'w-overclaim', sources: [{ module: 'trade', amount: amt('100') }] }),
+      ).rejects.toMatchObject({ code: 'token.yield_source_underfunded' });
+
+      // No header claimed, no fees moved.
+      expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-overclaim'`).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('50');
+      expect(await balanceOf(USER_A)).toBe('0');
     });
 
     it('drains the source module fee account', async () => {
@@ -1485,6 +1541,48 @@ if (!available) {
       const next = await token.mintNextEpoch();
       expect(next.epoch).toBe(1);
       await expect(token.mintEpoch(1)).rejects.toMatchObject({ code: 'token.epoch_closed' });
+    });
+
+    it('resumes an open claim with the snapshotted reward after a crash mid-flight', async () => {
+      // Simulate: claim written, ledger post happened, close never ran.
+      const reward = DEFAULT_EMISSION_PARAMS.initialEpochReward;
+      await sql`
+        INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
+        VALUES (0, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
+      `;
+      await ledger.post(recipes.mintEmission({ epoch: 0, assetId: 'IFC', amount: reward, destination: rewardsEngine('IFC') }));
+
+      // Retune would change epochReward(0) if we recomputed — prove we do not.
+      const resumed = await token.mintEpoch(0);
+      expect(resumed.minted).toBe(reward);
+
+      const rows = await sql<Array<{ closed: boolean; mined_amount: string; scheduled_amount: string }>>`
+        SELECT closed, mined_amount, scheduled_amount FROM token.emission_epochs WHERE epoch = 0
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.closed).toBe(true);
+      expect(amt(rows[0]!.mined_amount)).toBe(reward);
+      expect(amt(rows[0]!.scheduled_amount)).toBe(reward);
+      // Ledger post was idempotent — balance is one reward, not two.
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe(formatAmount(reward));
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('open claim reserves supply so a concurrent epoch cannot under-book the ceiling', async () => {
+      // Claim epoch 0 open at full reward without closing — ceiling must count it.
+      const reward = DEFAULT_EMISSION_PARAMS.initialEpochReward;
+      await sql`
+        INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
+        VALUES (0, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
+      `;
+
+      // Cap equals one epoch reward. Epoch 1 must refuse even though 0 is not closed.
+      const tight = new TokenService(sql, ledger, bus, {
+        ...options,
+        emission: { ...DEFAULT_EMISSION_PARAMS, maxSupply: reward },
+      });
+      await expect(tight.mintEpoch(1)).rejects.toMatchObject({ code: 'token.supply_exhausted' });
+      expect(await sql`SELECT epoch FROM token.emission_epochs WHERE epoch = 1`).toHaveLength(0);
     });
   });
 

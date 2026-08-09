@@ -1,7 +1,16 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import type { EventBus } from '@intafaced/events';
-import { formatAmount, parseAmount, recipes, rewardsEngine, burnAccount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  formatAmount,
+  parseAmount,
+  recipes,
+  rewardsEngine,
+  burnAccount,
+  houseFees,
+  type Amount,
+  type LedgerClient,
+} from '@intafaced/ledger-client';
 import {
   ACCESS_TIERS,
   STAKE_TIERS,
@@ -38,6 +47,12 @@ export class TokenError extends Error {
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
+      /**
+       * Operator named a fee-source amount larger than the houseFees balance
+       * for that module (audit T-03 residual). Refuse before claim/sweep so
+       * the plan total cannot exceed value that can actually move.
+       */
+      | 'token.yield_source_underfunded'
       /**
        * A window id that is already planned, re-run naming a different revenue
        * total. The frozen plan and the new figure cannot both be right, and
@@ -688,7 +703,7 @@ export class TokenService {
     sources: ReadonlyArray<{ module: string; amount: Amount }>;
   }): Promise<YieldRunResult> {
     /**
-     * Collapse sources by module BEFORE sweeping or planning.
+     * Collapse sources by module BEFORE claiming, sweeping or planning.
      *
      * The sweep ledger key is `token.fee.sweep:${windowId}:${module}:${asset}` —
      * one post per (window, module). Two legs for the same module used to
@@ -706,6 +721,46 @@ export class TokenService {
       byModule.set(source.module, (byModule.get(source.module) ?? 0n) + source.amount);
     }
 
+    const total = [...byModule.values()].reduce((acc, a) => acc + a, 0n);
+    if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
+
+    /**
+     * T-03 residual — bind operator-typed amounts to the actual fee pots on
+     * FIRST claim only.
+     *
+     * The full §4.3 aggregation job that *reads* house fee balances and builds
+     * `sources` still does not exist (`token.yield` socket). Until it does, the
+     * operator types the figure. That used to mean an over-claim could pass
+     * service validation and die mid-sweep on a ledger non-negative check —
+     * after the window header was already claimed, or after earlier modules
+     * had already moved. Fail closed **before** claim/sweep when any module's
+     * houseFees balance is short of the named amount. Under-claim (leaving
+     * fees in the pot) stays allowed — that is a deliberate partial window.
+     *
+     * Re-runs of an already-claimed window must NOT re-check the pot: the first
+     * run already swept it to zero, and the resume path is plan + idempotent
+     * sweep + pay. Mismatched totals still refuse via the header assert.
+     */
+    const alreadyClaimed = await this.readYieldWindowHeader(this.sql, input.windowId);
+    if (alreadyClaimed === null) {
+      for (const [module, amount] of byModule) {
+        const held = (await this.ledger.balance(houseFees(module, this.assetId))).amount;
+        if (held < amount) {
+          throw new TokenError(
+            `Module "${module}" houseFees holds ${formatAmount(held)} ${this.assetId} but this window names ` +
+              `${formatAmount(amount)} — refuse rather than underfund the plan or die mid-sweep`,
+            'token.yield_source_underfunded',
+          );
+        }
+      }
+    }
+
+    // CLAIM (window_id, total) + freeze who is paid BEFORE any fee sweep.
+    // An empty settlement still claims the header so a later stake cannot
+    // re-plan the same window id (0004). Sweep after claim so a re-run with a
+    // mismatched total refuses before moving more fees.
+    const plan = await this.planYieldWindow(input.windowId, total);
+
     for (const [module, amount] of byModule) {
       await this.ledger.post(
         recipes.sweepFeesToRewards({
@@ -717,17 +772,13 @@ export class TokenService {
       );
     }
 
-    const total = [...byModule.values()].reduce((acc, a) => acc + a, 0n);
-    if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
-
-    const plan = await this.planYieldWindow(input.windowId, total);
-
     if (plan.rows.length === 0) {
-      // Nothing staked when this window was planned. The revenue stays in the
-      // rewards engine for the next window rather than being stranded or
-      // returned — it is already ours. No plan row is written, so a later run
-      // once somebody IS staked plans the window then and pays it out of the
-      // revenue still sitting there.
+      // Nothing was staked when this window was claimed. Fees are swept into
+      // the rewards engine (same as before 0004) so buyback/other paths that
+      // draw on the engine still see them. The header freezes this window id —
+      // re-running it does not invent recipients. A later window id with
+      // stakers needs its own sources (and fees in houseFees); residual in
+      // the engine is the operator's to schedule (§13 socket token.yield).
       return { windowId: input.windowId, distributed: 0n, recipients: 0, skipped: plan.skipped, alreadyPaid: 0 };
     }
 
@@ -786,42 +837,49 @@ export class TokenService {
   }
 
   /**
-   * WHO THIS WINDOW PAYS — decided once, then read.
+   * THAT this window was claimed, and WHO it pays — decided once, then read.
    *
-   * The recipient list used to be recomputed from `token.stakes WHERE status =
-   * 'active'` on every call, which made the method's own resumability promise
-   * false: a re-run after a new stake opened produced a LARGER list, the
-   * already-paid users' `(window, user)` keys were spent so their posts became
-   * silent no-ops, and the newcomer's key was fresh — so the newcomer was paid
-   * in full out of a window that had already been distributed to the attounit.
-   * The value came out of the rewards engine, which is a `house` account: it
-   * either drains some other window's undistributed revenue or dies mid-loop on
-   * a hard non-negative CHECK, leaving the window half paid.
+   * #1076 froze the recipient list in `yield_payouts` so a re-run after a new
+   * stake could not grow the list. It left the empty-pool case unclaimed: no
+   * payout row meant the next call looked like a first call, planned whoever
+   * was staked then, and paid them out of revenue already swept under that
+   * window id. 0004 closes that residual with a header `(window_id, total)`
+   * claimed before any sweep — an empty settlement is still a settlement.
    *
-   * Freezing the plan is the same claim-before-post shape `stake` (0001) and
-   * `recordBuyback` (0002) already use, applied to the one thing that was never
-   * claimed. It decides no economic number — it records the answer the existing
-   * pro-rata maths gives, at the moment it is first asked.
+   * Order: claim header (+ write payout instructions) → caller sweeps → pay.
+   * Same claim-before-post shape as `stake` (0001) and `recordBuyback` (0002).
    *
-   * The advisory lock covers the read-then-write: two operators invoking the
-   * same window at the same instant would otherwise both compute a plan, and
-   * `ON CONFLICT DO NOTHING` would merge two plans into one whose rows sum to
-   * more than the window swept.
+   * Decides no economic number — records the total the operator already typed
+   * and the pro-rata answer at first claim, so asking twice cannot give two
+   * answers (including the empty answer).
    */
   private async planYieldWindow(windowId: string, total: Amount): Promise<{ rows: YieldPlanRow[]; skipped: number }> {
-    const existing = await this.readYieldPlan(this.sql, windowId);
-    if (existing.length > 0) return { rows: this.assertPlanCoversTotal(windowId, existing, total), skipped: 0 };
+    const existingHeader = await this.readYieldWindowHeader(this.sql, windowId);
+    if (existingHeader !== null) {
+      this.assertWindowTotal(windowId, existingHeader, total);
+      return { rows: await this.readYieldPlan(this.sql, windowId), skipped: 0 };
+    }
 
     return transaction(
       this.sql,
       async (tx) => {
-        // Serialise planning of THIS window only. `hashtext` is stable across
+        // Serialise claim of THIS window only. `hashtext` is stable across
         // sessions, and an xact lock is released by commit or rollback alike, so
-        // a crash mid-plan cannot wedge the window.
+        // a crash mid-claim cannot wedge the window.
         await tx`SELECT pg_advisory_xact_lock(hashtext(${`token.yield:${windowId}`})::bigint)`;
 
-        const raced = await this.readYieldPlan(tx, windowId);
-        if (raced.length > 0) return { rows: this.assertPlanCoversTotal(windowId, raced, total), skipped: 0 };
+        const racedHeader = await this.readYieldWindowHeader(tx, windowId);
+        if (racedHeader !== null) {
+          this.assertWindowTotal(windowId, racedHeader, total);
+          return { rows: await this.readYieldPlan(tx, windowId), skipped: 0 };
+        }
+
+        // Header first — even when nobody is staked — so the empty answer is
+        // frozen before any fee movement and before any late joiner can appear.
+        await tx`
+          INSERT INTO token.yield_windows (window_id, total_amount)
+          VALUES (${windowId}, ${formatAmount(total)}::numeric)
+        `;
 
         const stakes = await tx<Array<{ user_id: string; amount: string; tier: StakeTier; multiplier_bps: string }>>`
           SELECT user_id, amount, tier, multiplier_bps FROM token.stakes WHERE status = 'active' ORDER BY id ASC
@@ -887,6 +945,14 @@ export class TokenService {
     );
   }
 
+  private async readYieldWindowHeader(sql: Sql, windowId: string): Promise<Amount | null> {
+    const rows = await sql<Array<{ total_amount: string }>>`
+      SELECT total_amount FROM token.yield_windows WHERE window_id = ${windowId}
+    `;
+    const row = rows[0];
+    return row ? parseAmount(row.total_amount) : null;
+  }
+
   private async readYieldPlan(sql: Sql, windowId: string): Promise<YieldPlanRow[]> {
     const rows = await sql<Array<{ user_id: string; amount: string; ledger_tx_id: string | null }>>`
       SELECT user_id, amount, ledger_tx_id FROM token.yield_payouts
@@ -898,22 +964,19 @@ export class TokenService {
   /**
    * A re-run must be the SAME window, not just the same id.
    *
-   * `sources` is operator-typed, so a re-run can name a different total — a
-   * correction, a typo, a different set of modules. Paying the frozen plan
-   * anyway would answer a request nobody made, and re-planning would pay the
-   * difference to whoever happens to be staked today. Both are worse than
-   * saying so. The same reasoning `bank.loan_principal_mismatch` makes.
+   * Compared against the HEADER total (0004), not the sum of payout rows —
+   * an empty settlement has zero payout rows but a non-zero claimed total.
+   * Paying a frozen plan (or re-planning) against a different figure would
+   * answer a request nobody made. Same reasoning as `bank.loan_principal_mismatch`.
    */
-  private assertPlanCoversTotal(windowId: string, rows: YieldPlanRow[], total: Amount): YieldPlanRow[] {
-    const planned = rows.reduce((acc, r) => acc + r.amount, 0n);
-    if (planned !== total) {
+  private assertWindowTotal(windowId: string, claimed: Amount, total: Amount): void {
+    if (claimed !== total) {
       throw new TokenError(
-        `Window ${windowId} was already planned to distribute ${formatAmount(planned)} ${this.assetId}, but this call names ` +
+        `Window ${windowId} was already claimed for ${formatAmount(claimed)} ${this.assetId}, but this call names ` +
           `${formatAmount(total)} — a re-run must carry the same revenue. Use a new window id to distribute a different amount`,
         'token.yield_window_mismatch',
       );
     }
-    return rows;
   }
 
   // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────
@@ -1235,26 +1298,71 @@ export class TokenService {
       );
     }
 
+    // Claim COMMITS before the ledger post — same shape as `stake` / buyback.
+    // Wrapping claim+post in one Postgres transaction would roll back the row
+    // on process death after the post, under-booking the ceiling again.
+    const claimed = await this.claimEmissionEpoch(epoch);
+
+    try {
+      await this.ledger.post(recipes.mintEmission({ epoch, assetId: this.assetId, amount: claimed.reward, destination }));
+    } catch (err) {
+      // Nothing moved. Drop the open claim so a later curve retune is not
+      // blocked by a reservation that never funded — same guarantee stake
+      // gives its pending row on insufficient funds.
+      await this.sql`
+        DELETE FROM token.emission_epochs WHERE epoch = ${epoch} AND closed = false
+      `;
+      throw err;
+    }
+
+    await this.sql`
+      UPDATE token.emission_epochs
+         SET closed = true, mined_amount = ${formatAmount(claimed.reward)}::numeric
+       WHERE epoch = ${epoch} AND closed = false
+    `;
+
+    return { epoch, minted: claimed.reward };
+  }
+
+  /**
+   * Claim an epoch open with a snapshotted scheduled amount, or resume one.
+   *
+   * CLAIM-BEFORE-POST (W4 residual / L13 A1). Previous order was post → insert
+   * closed row. A crash between those left real supply on the ledger with no
+   * `emission_epochs` row, so `SUM(mined_amount)` under-booked the ceiling and a
+   * retune could mint past the cap. A retry also re-read today's `token_params`
+   * and could disagree with the amount the first post already spent on its
+   * ledger key.
+   *
+   * Open claims set `mined_amount = scheduled_amount` so the ceiling reserves
+   * the supply before the irreversible post. Resume never recomputes reward
+   * from a possibly retuned curve.
+   */
+  private async claimEmissionEpoch(epoch: number): Promise<{ reward: Amount }> {
     const emission = await this.emissionParams();
     return transaction(
       this.sql,
       async (tx) => {
-        // Mints are rare — a cron tick or an operator — and the ceiling below
-        // has to read every epoch row, so serialise them rather than reason
-        // about two concurrent mints each reading a total that excludes the
-        // other. Released by commit or rollback alike.
         await tx`SELECT pg_advisory_xact_lock(hashtext(${`token.mint:${this.assetId}`})::bigint)`;
 
-        const rows = await tx<Array<{ epoch: number; closed: boolean }>>`
-          SELECT epoch, closed FROM token.emission_epochs WHERE epoch = ${epoch} FOR UPDATE
+        const rows = await tx<Array<{ epoch: number; closed: boolean; scheduled_amount: string }>>`
+          SELECT epoch, closed, scheduled_amount
+            FROM token.emission_epochs WHERE epoch = ${epoch} FOR UPDATE
         `;
-        if (rows[0]?.closed) throw new TokenError(`Epoch ${epoch} is already closed`, 'token.epoch_closed');
+        const existing = rows[0];
+        if (existing?.closed) {
+          throw new TokenError(`Epoch ${epoch} is already closed`, 'token.epoch_closed');
+        }
+        if (existing) {
+          // Resume open claim: never recompute from a possibly retuned curve.
+          const reward = parseAmount(existing.scheduled_amount);
+          if (reward <= 0n) throw new TokenError('Emission schedule is exhausted', 'token.supply_exhausted');
+          return { reward };
+        }
 
         const reward = epochReward(epoch, emission);
         if (reward <= 0n) throw new TokenError('Emission schedule is exhausted', 'token.supply_exhausted');
 
-        // Guard the cap independently of the curve: a mis-tuned parameter must
-        // not be able to mint past max supply.
         const cumulative = cumulativeEmission(epoch, emission);
         if (cumulative > emission.maxSupply) {
           throw new TokenError('Emission would exceed max supply', 'token.supply_exhausted');
@@ -1279,9 +1387,10 @@ export class TokenService {
          * own schedule, never the total against the cap.
          *
          * The book cannot be retuned. `SUM(mined_amount)` is what this service
-         * actually told the ledger to create, and it is the only figure the
-         * ceiling can honestly be measured against — "inflation cannot be
-         * un-minted" is precisely why this must refuse BEFORE the post.
+         * has claimed or closed — open claims reserve supply the same way a
+         * closed row does — and it is the only figure the ceiling can honestly
+         * be measured against — "inflation cannot be un-minted" is precisely
+         * why this must refuse BEFORE the post.
          */
         const [emitted] = await tx<Array<{ total: string }>>`
           SELECT COALESCE(SUM(mined_amount), 0) AS total FROM token.emission_epochs
@@ -1295,15 +1404,12 @@ export class TokenService {
           );
         }
 
-        await this.ledger.post(recipes.mintEmission({ epoch, assetId: this.assetId, amount: reward, destination }));
-
         await tx`
           INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
-          VALUES (${epoch}, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, true)
-          ON CONFLICT (epoch) DO UPDATE SET mined_amount = EXCLUDED.mined_amount, closed = true
+          VALUES (${epoch}, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
         `;
 
-        return { epoch, minted: reward };
+        return { reward };
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
