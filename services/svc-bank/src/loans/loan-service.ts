@@ -136,6 +136,12 @@ export interface LoanRecord {
   quoteAssetId: string;
   aprBps: number;
   principal: Amount;
+  /**
+   * Collateral pledged at open, snapshotted once — a TERM, not a live balance.
+   * Live holdings are ledger + `loan_collateral_events`. Null only on legacy
+   * rows opened before this column existed.
+   */
+  openingCollateral: Amount | null;
   status: 'pending' | 'active' | 'margin_call' | 'liquidating' | 'repaid' | 'liquidated';
   drawLedgerTxId: string | null;
   openedAt: Date;
@@ -490,10 +496,11 @@ export class LoanService {
 
     const inserted = await this.sql<Array<Record<string, unknown>>>`
       INSERT INTO bank.loans (
-        id, product_id, user_id, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, principal, opened_at
+        id, product_id, user_id, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, principal, opening_collateral, opened_at
       ) VALUES (
         ${loanId}, ${product.id}, ${input.userId}, ${product.debtAssetId}, ${product.collateralAssetId},
-        ${product.quoteAssetId}, ${product.aprBps}, ${formatAmount(input.principal)}::numeric, ${now}
+        ${product.quoteAssetId}, ${product.aprBps}, ${formatAmount(input.principal)}::numeric,
+        ${formatAmount(input.collateralAmount)}::numeric, ${now}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING *
@@ -529,6 +536,28 @@ export class LoanService {
         `Loan ${loan.id} already exists with a principal of ${formatAmount(loan.principal)} ${loan.debtAssetId}, but this request asks for ` +
           `${formatAmount(input.principal)} — a retry must carry the same terms. Use a new loan id to borrow a different amount`,
         'bank.loan_principal_mismatch',
+      );
+    }
+
+    /**
+     * AND THE SAME OPENING COLLATERAL.
+     *
+     * Principal alone is not enough. Hold principal equal and shrink the
+     * collateral on the retry: LTV is re-checked on the new (smaller) pledge
+     * while the draw still pays the stored principal — under-collateralised
+     * lending through the same id. `opening_collateral` is snapshotted at
+     * insert for exactly this compare; live holdings may grow via addCollateral.
+     *
+     * Legacy rows without the column fall back to the seq-0 lock event when
+     * one exists; if neither figure is known we cannot refuse and must not invent.
+     */
+    const storedOpening =
+      loan.openingCollateral ?? (await this.collateralEvent(loan.id, 0).then((e) => (e ? parseAmount(e.amount) : null)));
+    if (storedOpening !== null && storedOpening !== input.collateralAmount) {
+      throw new BankError(
+        `Loan ${loan.id} already exists with opening collateral of ${formatAmount(storedOpening)} ${loan.collateralAssetId}, but this request asks for ` +
+          `${formatAmount(input.collateralAmount)} — a retry must carry the same terms. Use a new loan id to pledge a different amount`,
+        'bank.loan_collateral_mismatch',
       );
     }
 
@@ -1540,7 +1569,12 @@ export class LoanService {
       Array<{ outstanding_principal: string; bad_debt: string; drawn: string; repaid: string; recovered: string }>
     >`
       WITH open_loans AS (
-        SELECT id, principal FROM bank.loans WHERE debt_asset_id = ${debtAssetId}
+        -- Only DRAWN loans. A pending row's principal never left the reserve;
+        -- counting it as outstanding inflates the identity and makes an empty
+        -- book look funded by undrawn intentions.
+        SELECT id, principal FROM bank.loans
+         WHERE debt_asset_id = ${debtAssetId}
+           AND drawn_at IS NOT NULL
       )
       SELECT
         COALESCE((SELECT SUM(principal) FROM open_loans), 0) AS drawn,
@@ -1718,6 +1752,7 @@ function toProduct(row: Record<string, unknown>): LoanProductRecord {
 }
 
 function toLoan(row: Record<string, unknown>): LoanRecord {
+  const openingRaw = row.opening_collateral;
   return {
     id: String(row.id),
     productId: String(row.product_id),
@@ -1727,6 +1762,7 @@ function toLoan(row: Record<string, unknown>): LoanRecord {
     quoteAssetId: String(row.quote_asset_id),
     aprBps: Number(row.apr_bps),
     principal: parseAmount(String(row.principal)),
+    openingCollateral: openingRaw === null || openingRaw === undefined ? null : parseAmount(String(openingRaw)),
     status: row.status as LoanRecord['status'],
     drawLedgerTxId: row.draw_ledger_tx_id === null ? null : String(row.draw_ledger_tx_id),
     openedAt: row.opened_at as Date,

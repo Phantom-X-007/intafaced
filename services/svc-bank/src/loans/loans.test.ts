@@ -1246,6 +1246,87 @@ if (!available) {
         expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('100000');
       });
 
+      /**
+       * Hold principal equal and shrink the collateral on the retry: LTV is
+       * re-checked on the dust pledge while the draw still pays the stored
+       * principal. Same family as principal_mismatch — "same terms" includes
+       * the opening pledge amount.
+       */
+      it('refuses a retry that changes the opening collateral, instead of locking the new amount against the old principal', async () => {
+        const product = await makeProduct();
+        await fundReserve('USDT', '100000');
+        const loanId = '3fa85f64-5717-4562-b3fc-2c963f66afb1';
+
+        // 1. Open for 5 000 against 1 BTC the borrower does not hold. Row
+        //    persists with opening_collateral=1; lock fails; pending.
+        await expect(
+          loans.open({
+            productId: product.id,
+            userId: BORROWER,
+            collateralAmount: amt('1'),
+            principal: amt('5000'),
+            loanId,
+            now,
+          }),
+        ).rejects.toThrow(BankError);
+
+        const pending = await sql<Array<{ status: string; opening_collateral: string | null }>>`
+          SELECT status, opening_collateral::text AS opening_collateral FROM bank.loans WHERE id = ${loanId}
+        `;
+        expect(pending[0]!.status).toBe('pending');
+        expect(pending[0]!.opening_collateral).toBe('1');
+
+        // 2. Same principal, tiny collateral the borrower can fund — would
+        //    under-collateralise the stored draw if allowed.
+        await fund(BORROWER, 'BTC', '0.01');
+        await expect(
+          loans.open({
+            productId: product.id,
+            userId: BORROWER,
+            collateralAmount: amt('0.01'),
+            principal: amt('5000'),
+            loanId,
+            now,
+          }),
+        ).rejects.toMatchObject({ code: 'bank.loan_collateral_mismatch' });
+
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('0.01');
+        expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('100000');
+      });
+
+      it('refuses a hostile collateral swap after the loan is already active', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        const loanId = '3fa85f64-5717-4562-b3fc-2c963f66afb2';
+
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          loanId,
+          now,
+        });
+        expect(opened.loan.status).toBe('active');
+
+        await expect(
+          loans.open({
+            productId: product.id,
+            userId: BORROWER,
+            collateralAmount: amt('2'),
+            principal: amt('5000'),
+            loanId,
+            now,
+          }),
+        ).rejects.toMatchObject({ code: 'bank.loan_collateral_mismatch' });
+
+        // Original position untouched.
+        expect(formatAmount(await loans.collateralOf(opened.loan))).toBe('1');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
+      });
+
       it('still lets an unchanged retry re-drive the same loan', async () => {
         // The guard must not cost idempotency, which is the whole point of a
         // caller-supplied loan id.
@@ -1853,6 +1934,22 @@ if (!available) {
       expect(formatAmount(r.drift)).toBe('0');
       // Identity half still closes for an empty book.
       expect(formatAmount(r.reserveBalance + r.outstandingPrincipal)).toBe(formatAmount(r.funded));
+    });
+
+    it('pending undrawn principal does not inflate outstanding (reserve never left)', async () => {
+      // Reserve empty so open locks collateral and fails the draw — status pending.
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+      await loans
+        .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+        .catch(() => undefined);
+
+      const r = await loans.reconcileReserve('USDT');
+      // No draw happened; outstanding must stay zero even though a loan row names 5000.
+      expect(formatAmount(r.outstandingPrincipal)).toBe('0');
+      expect(formatAmount(r.reserveBalance)).toBe('0');
+      expect(formatAmount(r.funded)).toBe('0');
+      expect(r.independent).toBe(false);
     });
 
     it('a borrower can never see another borrower&apos;s loan through the service', async () => {
