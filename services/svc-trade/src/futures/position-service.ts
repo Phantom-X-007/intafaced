@@ -250,7 +250,20 @@ export class PositionService {
     authorisesSize: Amount | null,
   ): Promise<{ ok: true; mark: FuturesQuotedMark } | { ok: false; reason: ClosingReason; detail: string }> {
     const request: MarkRequest = { marketId, symbol, at, ...(authorisesSize != null ? { authorisesSize } : {}) };
-    const quoted = this.deps.marks.quote ? await this.deps.marks.quote(request) : await this.legacyQuote(request);
+    /**
+     * Money paths require a LABELLED quote. An unlabelled `markPrice` string
+     * must not be stamped `quality: 'mid'` (Denon handoff §6) — that invents a
+     * liquidation/payout quality and disarms staleness. Missing `quote()` is
+     * darkness, not a mid.
+     */
+    if (!this.deps.marks.quote) {
+      return {
+        ok: false,
+        reason: 'trade.mark_missing',
+        detail: `${marketId}: mark source has no labelled quote() — refuse inventing quality from bare markPrice`,
+      };
+    }
+    const quoted = await this.deps.marks.quote(request);
 
     if (!quoted) {
       return { ok: false, reason: 'trade.mark_missing', detail: markMissing(marketId).reason! };
@@ -277,23 +290,6 @@ export class PositionService {
       );
     }
     return got.mark;
-  }
-
-  /**
-   * A source that predates `quote()` still gives a price and nothing else. Read
-   * it as `mid` observed now — which is exactly what `markPrice` has always
-   * implied — rather than inventing a quality it never claimed.
-   */
-  private async legacyQuote(request: MarkRequest): Promise<FuturesQuotedMark | null> {
-    const price = await this.deps.marks.markPrice(request);
-    if (price == null || price.trim() === '') return null;
-    let parsed: Amount;
-    try {
-      parsed = parseAmount(price);
-    } catch {
-      return null;
-    }
-    return { marketId: request.marketId, symbol: request.symbol, price: parsed, asOf: request.at, quality: 'mid' };
   }
 
   /**

@@ -29,13 +29,7 @@ import {
   summarizeLadder,
   type FuturesLadderPolicy,
 } from './maintenance-ladder.js';
-import {
-  DEFAULT_FUTURES_MARK_POLICY,
-  MARK_INVALID,
-  acceptableForLiquidation,
-  type FuturesQuotedMark,
-  type MarkPolicy,
-} from './mark-policy.js';
+import { DEFAULT_FUTURES_MARK_POLICY, acceptableForLiquidation, type FuturesQuotedMark, type MarkPolicy } from './mark-policy.js';
 import { breakerBasis, type AcceptedMarkStore } from './accepted-mark.js';
 import { INSURANCE_UNDERFUNDED, checkInsuranceBound } from './insurance-bound.js';
 
@@ -69,16 +63,19 @@ export interface MarkRequest {
   authorisesSize?: Amount;
 }
 
-/** External mark for one market. Null → skip that position (never invent). */
+/**
+ * External mark for one market.
+ *
+ * `markPrice` may feed screens. **Money paths (this tick, position close/open)
+ * require `quote()`** — a labelled FuturesQuotedMark. An unlabelled bare string
+ * must not be stamped `quality: 'mid'` (Denon handoff §6).
+ */
 export interface MarkSource {
   markPrice(input: MarkRequest): Promise<string | null>;
   /**
-   * The same mark, LABELLED — price, observation time, and how it was derived.
-   *
-   * Optional so every existing adapter still satisfies `MarkSource`. A source
-   * that provides it gets the `mark-policy.ts` gates applied here, with a
-   * stated reason instead of a bare null; a source that does not is limited to
-   * whatever gating it does internally.
+   * LABELLED mark — price, observation time, and how it was derived.
+   * Optional on the type so display adapters stay simple; the liquidation tick
+   * and position money paths refuse when it is absent rather than invent mid.
    */
   quote?(input: MarkRequest): Promise<FuturesQuotedMark | null>;
 }
@@ -290,35 +287,6 @@ export interface LiquidationTickResult {
 /**
  * "The source handed back something that is not a price."
  *
- * Distinct from `null`, which means "the source has no price right now". A
- * source that returns `"abc"` is broken, and a broken source is not the same
- * event as a quiet one — it used to reach `planLiquidation` and come back as
- * `invalid_mark`, having already skipped every gate on the way.
- */
-const UNREADABLE = Symbol('trade.mark_unreadable');
-
-/**
- * A source that predates `quote()` gives a price and nothing else. Read it as
- * `mid` observed now — what `markPrice` has always implied, and the same
- * reading `position-service.ts` gives it — rather than inventing a quality it
- * never claimed, or skipping the gates because it never claimed one.
- */
-async function legacyQuote(
-  marks: MarkSource,
-  row: LiquidationPositionRow,
-  at: Date,
-): Promise<FuturesQuotedMark | null | typeof UNREADABLE> {
-  const price = await marks.markPrice({ marketId: row.marketId, symbol: row.symbol, at });
-  if (price == null || price.trim() === '') return null;
-  let parsed: Amount;
-  try {
-    parsed = parseAmount(price);
-  } catch {
-    return UNREADABLE;
-  }
-  return { marketId: row.marketId, symbol: row.symbol, price: parsed, asOf: at, quality: 'mid' };
-}
-
 /**
  * Scan open positions once; liquidate those the planner says are underwater
  * given external marks only.
@@ -342,40 +310,29 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
     /**
      * THE GATE, BEFORE ANYTHING IS SEIZED.
      *
-     * Every mark — labelled or legacy — is judged by `acceptableForLiquidation`:
-     * quality, the tighter liquidation staleness limit, and the deviation
-     * breaker. `last` never passes under the default policy, so a market with no
-     * two-sided quote cannot be liquidated at all: the position sits and an
-     * operator looks at it.
+     * Only a LABELLED quote enters the gate. Stamping bare `markPrice` as
+     * `quality: 'mid'` used to invent a liquidation quality and set `asOf: now`,
+     * disarming quality + staleness (Denon handoff §6). Missing `quote()` is
+     * darkness — skip, never invent.
      *
-     * THE LEGACY BRANCH GOES THROUGH THE SAME GATE. It used to hand
-     * `markPrice`'s bare string straight to the planner, which meant a
-     * `MarkSource` without `quote()` was seizing positions with no breaker at
-     * all — the same hole in a second costume. An unlabelled price is read as
-     * `mid` observed now, which is exactly what `markPrice` has always implied
-     * (`position-service.ts` reads it the same way), and then it is gated.
-     *
-     * Either way, ABSENT IS NOT ZERO. There is no branch below that turns a
-     * missing mark into a price — on a perp, valuing a missing mark at zero
-     * does not misprice one position, it liquidates every one of them.
+     * ABSENT IS NOT ZERO. There is no branch below that turns a missing mark
+     * into a price — on a perp, valuing a missing mark at zero does not
+     * misprice one position, it liquidates every one of them.
      */
     // W4 R5: pass position size so depth-backed marks apply the relative
     // floor (authorisesSize). Omitting it re-opens the size-blind liq path
     // that close already sealed — absolute dust floor alone is not enough.
     const authorisesSize = parseAmount(row.size);
-    const quoted = deps.marks.quote
-      ? await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at, authorisesSize })
-      : await legacyQuote(deps.marks, row, at);
-
-    if (quoted === UNREADABLE) {
+    if (!deps.marks.quote) {
       items.push({
         positionId: row.positionId,
-        outcome: 'skipped_mark_unusable',
-        reason: MARK_INVALID,
-        summary: `${row.marketId}: mark source returned a value that is not a price`,
+        outcome: 'skipped_no_mark',
+        reason: 'no_labelled_quote',
+        summary: `${row.marketId}: mark source has no labelled quote() — refuse inventing quality from bare markPrice`,
       });
       continue;
     }
+    const quoted = await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at, authorisesSize });
     if (!quoted) {
       items.push({ positionId: row.positionId, outcome: 'skipped_no_mark', reason: 'no_mark' });
       continue;

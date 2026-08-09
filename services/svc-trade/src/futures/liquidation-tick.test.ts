@@ -410,10 +410,14 @@ describe('runLiquidationTick — mark gates', () => {
     expect(posts).toEqual([]);
   });
 
-  it('a source with no quote() still works — the gate is added, nothing is removed', async () => {
+  it('a source with no quote() cannot liquidate — bare markPrice must not invent mid', async () => {
+    // Denon handoff §6: stamping quality:'mid' + asOf:now disarmed quality and
+    // staleness. Unlabelled markPrice is darkness on the money path.
     const { result, posts } = await tick(fixedMark('80'));
-    expect(result.liquidated).toBe(1);
-    expect(posts.length).toBeGreaterThan(0);
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_no_mark');
+    expect(result.items[0]!.summary).toMatch(/no labelled quote/);
+    expect(posts).toEqual([]);
   });
 });
 
