@@ -186,6 +186,13 @@ export function decodeVenueLog(log: RawLog): ChainEvent | null {
         quantity: bigint;
         takerSide: number;
       };
+      // A trade of zero is not a trade. Book levels may be empty (qty 0);
+      // fills may not. Refuse here with a named field rather than letting
+      // assertValidBlock throw later as a generic bad_amount the ingest loop
+      // treats like a transient store failure.
+      if (args.quantity <= 0n) {
+        throw new ChainDataError(`fill quantity must be positive, got ${args.quantity}`, 'indexer.bad_amount');
+      }
       return {
         kind: 'fill',
         logIndex,

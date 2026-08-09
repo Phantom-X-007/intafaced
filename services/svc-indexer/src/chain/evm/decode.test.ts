@@ -141,6 +141,17 @@ describe('svc-indexer · EVM decode — money', () => {
     expect(event).toMatchObject({ quantity: '0' });
     expect(formatAmount(0n)).toBe('0');
   });
+
+  /** A fill of zero is not a trade — refuse at the decoder, not later. */
+  it('refuses a fill with zero quantity at decode time', () => {
+    expect(() => decodeVenueLogs([fillLog(10n ** 18n, 0n, 0)])).toThrow(/fill quantity must be positive/);
+    try {
+      decodeVenueLogs([fillLog(10n ** 18n, 0n, 0)]);
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as { code?: string }).code).toBe('indexer.bad_amount');
+    }
+  });
 });
 
 describe('svc-indexer · EVM decode — market symbols', () => {
