@@ -244,7 +244,9 @@ That last mutation is the point of doing this at all. The by-block-hash fetch is
 
 ## Kill-switch
 
-`indexer.ingest` in the admin console, or `INDEXER_INGEST_ENABLED=false`.
+`INDEXER_INGEST_ENABLED=false` at process boot (or a future admin path that calls the in-process `setIngestEnabled` export).
+
+**Honesty note:** the admin console registry lists `indexer.ingest`, but today that flag is **env-at-boot only** — flipping a chip in admin does not reach the running process. `setIngestEnabled` is exported for that wire; edge/admin have not called it yet.
 
 **Effect when off:** the ingest loop stops advancing; `status.ingestEnabled` reports it. Every read keeps serving what is already projected.
 
