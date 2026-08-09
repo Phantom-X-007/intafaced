@@ -652,11 +652,7 @@ export class TransferService {
     );
   }
 
-  private async fireOccurrenceInner(
-    schedule: ScheduleRecord,
-    occurrence: number,
-    now: Date,
-  ): Promise<FiringOutcome> {
+  private async fireOccurrenceInner(schedule: ScheduleRecord, occurrence: number, now: Date): Promise<FiringOutcome> {
     // Same product gates as a one-off transfer. A self-imposed lock or archive
     // must stop the standing order too — bare `get` used to bypass them and
     // drain a space the user had locked for rent.
@@ -693,16 +689,13 @@ export class TransferService {
           executionId = claimed[0]!.id;
         }
 
-        let from: Awaited<ReturnType<SpaceService["get"]>>;
-        let to: Awaited<ReturnType<SpaceService["get"]>>;
+        let from: Awaited<ReturnType<SpaceService['get']>>;
+        let to: Awaited<ReturnType<SpaceService['get']>>;
         try {
           from = await this.spaces.resolveForDebit(schedule.fromSpaceId, now);
           to = await this.spaces.resolveForCredit(schedule.toSpaceId);
         } catch (err) {
-          if (
-            err instanceof BankError &&
-            (err.code === 'bank.space_locked' || err.code === 'bank.space_archived')
-          ) {
+          if (err instanceof BankError && (err.code === 'bank.space_locked' || err.code === 'bank.space_archived')) {
             await tx`
               UPDATE bank.transfer_executions
                  SET status = 'rejected', rejection_code = ${err.code}
