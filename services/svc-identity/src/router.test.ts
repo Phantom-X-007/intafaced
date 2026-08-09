@@ -151,6 +151,14 @@ function stubServices(): Stub {
       mfaRequired: false,
     })),
     listWebauthnCredentials: record('listWebauthnCredentials', () => [{ credentialId: 'cred-1', createdAt: '2026-07-28T09:00:00.000Z' }]),
+    register: record('register', () => ({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      expiresAt: new Date('2026-07-28T09:15:00.000Z'),
+      sessionId: SESSION,
+      userId: USER,
+      mfaRequired: false,
+    })),
   } as unknown as AuthService;
 
   const rank = {
@@ -592,6 +600,71 @@ describe('apiKeys.exchange turns a key into an edge-usable access token', () => 
     const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
     const err = await api.apiKeys.exchange({ key: 'ifc_wrong' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('UNAUTHORIZED');
+  });
+});
+
+// ── Register + optional referrer ─────────────────────────────────────────────
+
+describe('auth.register optional referrerId', () => {
+  const REFERRER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  it('registers without a referrer and does not call attribute', async () => {
+    const attributeCalls: unknown[] = [];
+    const referral = {
+      attribute: async (input: { userId: string; referrerId: string }) => {
+        attributeCalls.push(input);
+        return { userId: input.userId, referrerId: input.referrerId, attributedAt: new Date() };
+      },
+    } as unknown as import('./affiliates/referral-service.js').ReferralService;
+
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, referral }).createCaller(await ctx([]));
+    const session = await api.auth.register({
+      handle: 'newbie',
+      email: 'newbie@example.com',
+      password: 'correct horse battery staple',
+    });
+    expect(session.userId).toBe(USER);
+    expect(attributeCalls).toHaveLength(0);
+  });
+
+  it('attributes after register when referrerId is supplied', async () => {
+    const attributeCalls: Array<{ userId: string; referrerId: string }> = [];
+    const referral = {
+      attribute: async (input: { userId: string; referrerId: string }) => {
+        attributeCalls.push(input);
+        return { userId: input.userId, referrerId: input.referrerId, attributedAt: new Date() };
+      },
+    } as unknown as import('./affiliates/referral-service.js').ReferralService;
+
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, referral }).createCaller(await ctx([]));
+    await api.auth.register({
+      handle: 'newbie',
+      email: 'newbie@example.com',
+      password: 'correct horse battery staple',
+      referrerId: REFERRER,
+    });
+    expect(attributeCalls).toEqual([{ userId: USER, referrerId: REFERRER }]);
+  });
+
+  it('refuses self-referral at register (loud)', async () => {
+    const { ReferralError } = await import('./affiliates/referral-tree.js');
+    const referral = {
+      attribute: async () => {
+        throw new ReferralError('Self-referral is refused', 'referral.self');
+      },
+    } as unknown as import('./affiliates/referral-service.js').ReferralService;
+
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, referral }).createCaller(await ctx([]));
+    const err = await api.auth
+      .register({
+        handle: 'newbie',
+        email: 'newbie@example.com',
+        password: 'correct horse battery staple',
+        referrerId: USER,
+      })
+      .catch((e: unknown) => e);
+    // referral.self maps to CONFLICT (same family as cycle / already_set).
+    expect(codeOf(err)).toBe('CONFLICT');
   });
 });
 
