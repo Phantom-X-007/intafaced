@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
-import { assertTestDatabase } from '@intafaced/db';
+import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import {
   MemoryLedger,
@@ -77,19 +77,9 @@ const SECRET = 'svc-pay-test-secret-at-least-32-characters';
 const MERCHANT_USER = '11111111-1111-4111-8111-111111111111';
 const OTHER_USER = '22222222-2222-4222-8222-222222222222';
 
-async function reachable(): Promise<boolean> {
-  const probe = postgres(URL, { max: 1, connect_timeout: 3, onnotice: () => undefined });
-  try {
-    await probe`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end({ timeout: 2 });
-  }
-}
-
-const available = await reachable();
+// Shared journalled probe — not a private catch-false that CI counts as pass.
+// #346 long since merged; the private-probe debt lifts with this one line.
+const available = await postgresAvailable(URL);
 
 if (!available) {
   describe.skip('svc-pay (Postgres unavailable — start docker compose)', () => {
