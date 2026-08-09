@@ -161,6 +161,9 @@ describe('evaluateCompletion', () => {
     expect(evaluateCompletion(guardrail(), state(), attempt({ task: 'scanner.rank' }), 'IFC')).toMatchObject({
       allowed: false,
       code: 'agents.task_not_allowed',
+      // Dedicated key — must not reuse tool_not_declared for a task refuse.
+      userMessageKey: 'agents.refused.task_not_allowed',
+      userMessageParams: { task: 'scanner.rank' },
     });
   });
 

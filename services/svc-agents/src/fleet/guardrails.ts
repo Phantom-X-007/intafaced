@@ -303,7 +303,7 @@ export function evaluateCompletion(
   if (!session.allowed) return session;
 
   if (!guardrail.limits.allowedTasks.includes(attempt.task)) {
-    return refuse('agents.task_not_allowed', 'agents.refused.tool_not_declared', { tool: attempt.task });
+    return refuse('agents.task_not_allowed', 'agents.refused.task_not_allowed', { task: attempt.task });
   }
 
   if (attempt.maxOutputTokens > guardrail.limits.maxOutputTokensPerCall) {
