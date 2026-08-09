@@ -126,6 +126,14 @@ describe('subscription merchant surface', () => {
           },
         ];
       },
+      listMandates: async () => {
+        calls.push('listMandates');
+        return [mandateRecord()];
+      },
+      listSubscriptions: async () => {
+        calls.push('listSubscriptions');
+        return [subRecord()];
+      },
     } as unknown as SubscriptionService;
 
     router = createSubscriptionRouter(subs, pay, null);
@@ -194,6 +202,38 @@ describe('subscription merchant surface', () => {
     const api = await caller(['pay:read'], USER);
     await expect(api.subscription.listExecutions({ subscriptionId: SUB })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
     expect(calls).not.toContain('listExecutions');
+  });
+
+  it('owner can list mandates for a merchant', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.mandate.list({ merchantId: MERCHANT });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(MANDATE);
+    expect(rows[0]!.amount).toBe('10');
+    expect(calls).toContain('listMandates');
+  });
+
+  it('stranger cannot list mandates', async () => {
+    owner = OTHER;
+    const api = await caller(['pay:read'], USER);
+    await expect(api.mandate.list({ merchantId: MERCHANT })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
+    expect(calls).not.toContain('listMandates');
+  });
+
+  it('owner can list subscriptions for a merchant', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.list({ merchantId: MERCHANT, status: 'active' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(SUB);
+    expect(rows[0]!.path).toBe('crypto_invoice');
+    expect(calls).toContain('listSubscriptions');
+  });
+
+  it('stranger cannot list subscriptions', async () => {
+    owner = OTHER;
+    const api = await caller(['pay:read'], USER);
+    await expect(api.subscription.list({ merchantId: MERCHANT })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
+    expect(calls).not.toContain('listSubscriptions');
   });
 
   it('parent without payment area cannot cancel (PayFac fence)', async () => {

@@ -7,7 +7,7 @@ import type { SubscriptionService } from './subscriptions/subscription-service.j
 import type { Cadence } from './subscriptions/schedule.js';
 
 /**
- * Merchant subscription surface — mandate + subscription create/get/cancel.
+ * Merchant subscription surface — mandate + subscription create/get/list/cancel.
  *
  * Invoice runner and capture-watch stay internal (jobs / payment events).
  * This router does not pull on-chain and does not invent dunning.
@@ -197,6 +197,29 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
         ),
 
       /**
+       * Merchant fleet list (ops truth). Read-only — no charge, no cascade.
+       */
+      list: scopedProcedure('pay:read', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            status: z.enum(['active', 'cancelled', 'expired']).optional(),
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
+        .output(z.array(mandateView))
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            await assertPaymentArea(ctx.principal?.userId, input.merchantId);
+            const rows = await subscriptions.listMandates(input.merchantId, {
+              status: input.status,
+              limit: input.limit,
+            });
+            return rows.map(toMandateOut);
+          }),
+        ),
+
+      /**
        * Immediate mandate cancel (SPEC §4). Cascades to active subscriptions.
        * Does not reverse settled executions.
        */
@@ -243,6 +266,29 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
             const sub = await subscriptions.getSubscription(input.subscriptionId);
             await assertPaymentArea(ctx.principal?.userId, sub.merchantId);
             return toSubOut(sub);
+          }),
+        ),
+
+      /**
+       * Merchant fleet list (ops truth). Read-only — no fire, no dunning.
+       */
+      list: scopedProcedure('pay:read', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            status: z.enum(['active', 'paused', 'cancelled', 'completed']).optional(),
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
+        .output(z.array(subscriptionView))
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            await assertPaymentArea(ctx.principal?.userId, input.merchantId);
+            const rows = await subscriptions.listSubscriptions(input.merchantId, {
+              status: input.status,
+              limit: input.limit,
+            });
+            return rows.map(toSubOut);
           }),
         ),
 
