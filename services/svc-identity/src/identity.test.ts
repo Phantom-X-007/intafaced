@@ -163,7 +163,9 @@ if (!available) {
 
   const bus = new MemoryEventBus('svc-identity');
   const rank = new RankService(db.sql, bus);
-  const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig);
+  // 32-byte test key so confirmTotpEnrolment can seal secrets at rest.
+  const totpSecretKeyMaterial = randomBytes(32).toString('base64');
+  const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
   await rank.seedTiers();
 
   let counter = 0;
@@ -313,7 +315,10 @@ if (!available) {
       const after = await db.sql<Array<{ totp_secret: string | null }>>`
         SELECT totp_secret FROM users WHERE id = ${session.userId}
       `;
-      expect(after[0]!.totp_secret).toBe(secret);
+      // Sealed at rest — never store base32 plaintext in the column.
+      expect(after[0]!.totp_secret).not.toBe(secret);
+      expect(after[0]!.totp_secret).toMatch(/^enc:v1:/);
+      expect(after[0]!.totp_secret).not.toContain(secret);
     });
 
     it('rejects a wrong confirmation code', async () => {

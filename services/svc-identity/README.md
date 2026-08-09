@@ -65,6 +65,8 @@ There is **no verification-provider integration** here. Approval is an operator 
 
 **Encrypted document store (mechanism):** table `identity.kyc_documents` holds AES-256-GCM ciphertext under `IDENTITY_KYC_DOC_KEY`. Opaque ids are what `provider_ref` may point at. No user-facing procedure returns document bytes. Live vendor webhook remains Class X.
 
+**TOTP secret at rest:** `users.totp_secret` is AES-256-GCM sealed (`enc:v1:…`) under `IDENTITY_TOTP_SECRET_KEY` (32-byte base64 or 64-char hex). Enrol refuses without the key; prod boot refuses if missing. Dual-read still accepts legacy unprefixed plaintext until re-enrol.
+
 ### Step-up
 
 `defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.

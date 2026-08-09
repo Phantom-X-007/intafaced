@@ -4,6 +4,7 @@ import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, 
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
 import { generateRecoveryCodes, generateSecret, matchTotpStep, totpUri } from './totp.js';
+import { encryptTotpSecret, materializeTotpSecret, parseTotpSecretKey } from './totp-crypto.js';
 import { apiKeyOriginAllowed } from './api-key-origin.js';
 import {
   b64urlDecode,
@@ -75,7 +76,12 @@ export class AuthError extends Error {
       /** Transfer door: partition is soft-revoked. */
       | 'auth.sub_account_revoked'
       /** Transfer door: from and to name the same partition. */
-      | 'auth.sub_account_same',
+      | 'auth.sub_account_same'
+      /**
+       * TOTP encrypt-at-rest key missing/invalid. Enrol refuses rather than
+       * writing base32 plaintext to users.totp_secret (IDENTITY_TOTP_SECRET_KEY).
+       */
+      | 'auth.totp_key_missing',
   ) {
     super(message);
     this.name = 'AuthError';
@@ -174,6 +180,8 @@ export class AuthService {
 
   private readonly challenges = new ChallengeStore();
   private readonly webauthn: WebAuthnConfig;
+  /** 32-byte AES key for totp_secret at rest; null if IDENTITY_TOTP_SECRET_KEY unset/invalid. */
+  private readonly totpSecretKey: Buffer | null;
 
   constructor(
     private readonly sql: Sql,
@@ -181,8 +189,27 @@ export class AuthService {
     private readonly rank: RankService,
     private readonly tokens: TokenConfig & { refreshTtlSeconds: number },
     webauthn: WebAuthnConfig = DEFAULT_WEBAUTHN,
+    /**
+     * Raw env material for TOTP secret encrypt-at-rest (base64 or 64-char hex).
+     * Optional so unit/router mocks stay thin; production passes env.IDENTITY_TOTP_SECRET_KEY.
+     */
+    totpSecretKeyMaterial?: string,
   ) {
     this.webauthn = webauthn;
+    this.totpSecretKey = parseTotpSecretKey(totpSecretKeyMaterial);
+  }
+
+  /**
+   * Resolve column value to base32 for verifyTotp.
+   * Dual-read: enc:v1: decrypts; unprefixed = legacy plaintext (one release).
+   */
+  private openTotpSecretColumn(stored: string): string {
+    try {
+      return materializeTotpSecret(this.totpSecretKey, stored);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'TOTP secret unreadable';
+      throw new AuthError(msg, 'auth.mfa_invalid');
+    }
   }
 
   // ── Registration ───────────────────────────────────────────────────────────
@@ -257,9 +284,11 @@ export class AuthService {
       if (!input.totpCode) throw new AuthError('Two-factor code required', 'auth.mfa_required');
       // Prefer TOTP (and burn the step). Only when the code is not a valid TOTP
       // do we try a recovery code — so a live TOTP never burns a recovery hash.
-      const totpMatch = matchTotpStep(user.totp_secret, input.totpCode);
+      // Column may be enc:v1: — open before matching.
+      const secret = this.openTotpSecretColumn(user.totp_secret);
+      const totpMatch = matchTotpStep(secret, input.totpCode);
       if (totpMatch !== null) {
-        await this.consumeTotpCode(user.id, user.totp_secret, input.totpCode);
+        await this.consumeTotpCode(user.id, secret, input.totpCode);
         mfa = true;
       } else {
         const redeemed = await this.tryRedeemRecoveryCode(user.id, input.totpCode);
@@ -509,11 +538,20 @@ export class AuthService {
       throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
     }
 
+    // Never write base32 plaintext to totp_secret — refuse enrol if key missing.
+    if (!this.totpSecretKey) {
+      throw new AuthError(
+        'IDENTITY_TOTP_SECRET_KEY is not set to a 32-byte key (base64 or hex) — cannot enrol TOTP',
+        'auth.totp_key_missing',
+      );
+    }
+    const sealed = encryptTotpSecret(this.totpSecretKey, secret);
+
     // Seed totp_last_step with the confirm code so that same code cannot be
     // immediately reused for login / step-up inside the same window.
     await this.sql`
       UPDATE users
-         SET totp_secret = ${secret},
+         SET totp_secret = ${sealed},
              totp_enrolled_at = now(),
              totp_last_step = ${matched.toString()},
              recovery_code_hashes = ${this.sql.json(pending.recoveryHashes as never)},
@@ -1154,7 +1192,9 @@ export class AuthService {
       }
       // Burn the step before issuing trade:withdraw — a captured code must not
       // buy a second elevation inside the validity window.
-      await this.consumeTotpCode(input.userId, user.totp_secret, input.totpCode!);
+      // Open enc:v1: column first so matchTotpStep sees base32.
+      const secret = this.openTotpSecretColumn(user.totp_secret);
+      await this.consumeTotpCode(input.userId, secret, input.totpCode!);
     } else {
       const creds = asCredentialList(user.webauthn_creds);
       if (creds.length === 0) {
