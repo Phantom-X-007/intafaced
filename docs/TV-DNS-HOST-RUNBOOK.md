@@ -2,16 +2,25 @@
 
 ## Target
 
-`trade.intafaced.com` → static site in `sites/sovereign-os/`
+`trade.intafaced.com` → static site in `sites/sovereign-os/` (monorepo SoT)
 
-## Host options (priority)
+## Live now (interim — no Nitro DNS required)
 
-1. **Cloudflare Pages / any static host** with custom domain
-2. **GitHub Pages** from this repo path or `gh-pages` branch
-3. **Interim:** jsDelivr / rawgit-style CDN from public GitHub branch (HTTPS)
-4. **Interim:** cloudflared quick tunnel for emergency review only
+| Item       | Value                                                                        |
+| ---------- | ---------------------------------------------------------------------------- |
+| Public URL | https://zenyoda3.github.io/intafaced-sovereign-os/                           |
+| Host       | GitHub Pages on mirror `ZenYoda3/intafaced-sovereign-os`                     |
+| Monorepo   | `Phantom-X-007/intafaced` → `sites/sovereign-os/**` on main                  |
+| Sync rule  | After monorepo site edits, re-publish mirror or point Pages at monorepo path |
 
-## DNS records (when Nitro has registrar)
+## Host options (priority for cutover)
+
+1. **Cloudflare Pages / any static host** with custom domain, root = `sites/sovereign-os`
+2. **GitHub Pages** from monorepo path or dedicated `gh-pages` branch of site folder only
+3. **Keep interim** ZenYoda3 Pages until custom domain ready
+4. **Emergency only:** cloudflared quick tunnel for private review (not apply URL)
+
+## DNS records (when Nitro has registrar — Class X)
 
 | Type  | Name  | Value           |
 | ----- | ----- | --------------- |
@@ -23,6 +32,6 @@ Apex `intafaced.com` payments site: **do not modify** except adding subdomain.
 
 Host-managed cert; force HTTPS.
 
-## AFK note
+## AFK / agent note
 
-If custom domain not available overnight, freeze a **public HTTPS preview** on scoreboard and leave this runbook for DNS cutover (one human action).
+Custom domain is **optional**. Agent finish line is public HTTPS + pack-ready. Inventing or purchasing host/DNS without Nitro is banned (Class X).

@@ -1,120 +1,99 @@
 # TV Program — AFK Overnight Contract (2026-08-09)
 
-**Status:** ACTIVE · GO received (“Run the TV program AFK”)  
-**Coordinator:** this agent session · single writer for site code  
-**Worktree:** `/Users/Nitro/projects/sovereign-worktrees/tv-sovereign-os-site` · branch `feat/tv-sovereign-os-apply-site`  
-**Runbook:** [`TRADINGVIEW-PROGRAM-ORDERED-METHODOLOGY-2026-08-09.md`](../TRADINGVIEW-PROGRAM-ORDERED-METHODOLOGY-2026-08-09.md)  
-**Scoreboard:** [`TV-SITE-SCOREBOARD.md`](TV-SITE-SCOREBOARD.md)
+**Status:** COMPLETE · banked on `main` via #1597 · W11 L08 residual closed  
+**Coordinator:** AFK overnight session (site single-writer) + W11 L08 honesty pass  
+**Monorepo SoT:** `sites/sovereign-os/**`  
+**Scoreboard:** [`TV-SITE-SCOREBOARD.md`](TV-SITE-SCOREBOARD.md)  
+**Apply pack:** [`../TV-APPLY-PACK.md`](../TV-APPLY-PACK.md)  
+**DNS runbook:** [`../TV-DNS-HOST-RUNBOOK.md`](../TV-DNS-HOST-RUNBOOK.md)
 
 ---
 
-## 0 · Meta-prompt (agents re-read every wave)
+## 0 · Outcome (do not re-open as ACTIVE)
 
-You are finishing the **TradingView Advanced Charts apply path** for Nitro (non-technical operator). He is AFK. He will **not** answer taste questions, pick options, or run commands.
+North star met for agent-owned waves:
 
-**North star:** Public good-quality Sovereign OS page live on HTTPS → apply pack complete with that URL → he only returns to a finished packet (or one human credential line if truly blocked).
+1. Live public HTTPS serves the site (interim Pages URL)
+2. W4 QA checklist green on scoreboard
+3. Apply pack has URL + blurbs + contacts
+4. Scoreboard W0–W4 DONE; W5 = PACK-READY-HUMAN-CLICK
+5. Site package on monorepo `main` (#1597)
 
-**Quality:** Professional dark + lime terminal/lobby energy. Good ≠ perfect. Ship.
+**Still human-only (not agent reopen triggers):**
 
-**Laws:** Denon copy is word SoT. No payments-primary story. No Advanced Charts binary pre-grant. No vendor brand names. Marketing site ≠ product shell. Internet leverage over freehand. No dual writers on site package.
+- Nitro: optional DNS `trade.intafaced.com` (Class X)
+- Denon/Nitro: entity name pick + TradingView form submit (W5 click)
 
-**Stop condition (only then message “FINISHED”):**
-
-1. Live public HTTPS URL serves the site (custom domain preferred; stable preview allowed if DNS blocked)
-2. W4 QA checklist 100% in scoreboard
-3. Apply pack file has URL + blurbs + contacts filled
-4. Scoreboard W0–W4 DONE; W5 = SUBMITTED or PACK-READY-HUMAN-CLICK with exact next action
-5. Branch pushed; PR open if thrift/CI allows
-
-**Do not stop for:** polish, second opinions, missing entity name (use best-known entity note in pack), missing Denon legal name (use email + “Denon / technical contact”).
-
-**May mark BLOCKED only if:** no path to any public HTTPS URL after all deploy attempts (document attempts). Then still leave site complete in repo.
-
-**W6 post-grant charts:** NOT in this overnight finish line.
+**W6 post-grant charts:** NOT in this finish line.
 
 ---
 
-## 1 · Unspoken needs (hard constraints)
+## 1 · Hard constraints (still law for any future site edit)
 
-| ID  | Need                     | Enforcement                                              |
-| --- | ------------------------ | -------------------------------------------------------- |
-| U1  | Zero oversight overnight | No questions mid-run; defaults locked                    |
-| U2  | Compact chat on return   | One FINISHED packet + scoreboard + URL                   |
-| U3  | Actually finishes        | Exit gates machine-checkable                             |
-| U4  | Not slop                 | DESIGN locks + ban list in build                         |
-| U5  | Fast TV bar              | Compress copy; full rooms named                          |
-| U6  | Parallel safe            | W1/W2/W3 parallel; W4 single writer                      |
-| U7  | Subagents if used        | Full brief + exit artifact path; no shared write on site |
-| U8  | DNS may be human         | Preview URL OK; DNS runbook left                         |
-| U9  | Form submit may be human | Pack-ready is agent done for W5 if no TV login           |
-| U10 | State in files           | Scoreboard + contract always current                     |
-
----
-
-## 2 · Wave exit gates (must fill scoreboard)
-
-| Wave | DONE means                                                         |
-| ---- | ------------------------------------------------------------------ |
-| W0   | Copy bank + PRODUCT + DESIGN + claims + this contract + scoreboard |
-| W1   | STACK-LOCK.md in sites package                                     |
-| W2   | Host/DNS runbook; deploy method chosen                             |
-| W3   | TV-APPLY-PACK.md skeleton                                          |
-| W4   | Live URL + QA checklist all yes + screenshots paths                |
-| W5   | Submitted OR pack-ready with one human click path                  |
+| ID  | Need                     | Enforcement                                           |
+| --- | ------------------------ | ----------------------------------------------------- |
+| U1  | Zero oversight overnight | No questions mid-run; defaults locked                 |
+| U2  | Compact chat on return   | One FINISHED packet + scoreboard + URL                |
+| U3  | Actually finishes        | Exit gates machine-checkable                          |
+| U4  | Not slop                 | DESIGN locks + ban list in build                      |
+| U5  | Fast TV bar              | Compress copy; full rooms named                       |
+| U6  | Parallel safe            | Single writer on `sites/sovereign-os/**`              |
+| U7  | Subagents if used        | Full brief + exit artifact path; no dual site writers |
+| U8  | DNS may be human         | Preview URL OK; DNS runbook left                      |
+| U9  | Form submit may be human | Pack-ready is agent done for W5 if no TV login        |
+| U10 | State in files           | Scoreboard + this contract always current             |
 
 ---
 
-## 3 · Defaults (no questions)
+## 2 · Wave exit gates (historical — all met)
+
+| Wave | DONE means                                                         | Status                 |
+| ---- | ------------------------------------------------------------------ | ---------------------- |
+| W0   | Copy bank + PRODUCT + DESIGN + claims + this contract + scoreboard | DONE                   |
+| W1   | STACK-LOCK.md in sites package                                     | DONE                   |
+| W2   | Host/DNS runbook; deploy method chosen                             | DONE                   |
+| W3   | TV-APPLY-PACK.md                                                   | DONE                   |
+| W4   | Live URL + QA checklist all yes                                    | DONE                   |
+| W5   | Submitted OR pack-ready with one human click path                  | PACK-READY-HUMAN-CLICK |
+
+---
+
+## 3 · Defaults (frozen)
 
 | Item               | Default                                                                                           |
 | ------------------ | ------------------------------------------------------------------------------------------------- |
 | Subdomain target   | `trade.intafaced.com`                                                                             |
-| Interim public URL | Host preview / Pages / tunnel — whatever works first for HTTPS public                             |
+| Interim public URL | https://zenyoda3.github.io/intafaced-sovereign-os/                                                |
 | Entity on pack     | “Gate into Sensorium or Nitrogenics — confirm at submit” + email gateofsensorium@gmail.com        |
 | Tech contact       | Denon · gateofsensorium@gmail.com                                                                 |
 | Legal contact      | Same until named                                                                                  |
 | Stack              | Static site (HTML/CSS/JS) in `sites/sovereign-os` — zero monorepo pnpm dependency for reliability |
-| CTA                | `#waitlist` / mailto hello@intafaced.com style — not payments cal.com primary                     |
-| Chart              | No Advanced Charts; optional CSS terminal mock only                                               |
+| CTA                | `#waitlist` / mailto hello@intafaced.com — not payments cal.com primary                           |
+| Chart              | No Advanced Charts; CSS terminal mock only                                                        |
+| Path fence         | Never dual-write `05_Web_Front` / HUMAN product shell                                             |
 
 ---
 
-## 4 · Subagent policy
+## 4 · Path fence (attack surface)
 
-| Job              | Subagent?                                                              | Output                      |
-| ---------------- | ---------------------------------------------------------------------- | --------------------------- |
-| W0 docs          | Coordinator                                                            | files                       |
-| W4 site build    | Coordinator single writer (or one general-purpose with exclusive path) | sites/sovereign-os/\*\*     |
-| Apply pack prose | Can parallel                                                           | docs/TV-APPLY-PACK.md       |
-| DNS research     | Can parallel read-only                                                 | docs/TV-DNS-HOST-RUNBOOK.md |
-| Never            | Two writers on index.html                                              | —                           |
+| Allowed                                   | Banned                                  |
+| ----------------------------------------- | --------------------------------------- |
+| `sites/sovereign-os/**`                   | `vendor/**/05_Web_Front/**` shell craft |
+| `docs/TV-*` · `docs/ops/TV-*` · copy bank | Invent prod DNS without Nitro           |
+| Docs-only host runbook                    | Advanced Charts binary pre-grant        |
+|                                           | Payments cal.com as primary CTA         |
 
 ---
 
-## 5 · FINISHED packet shape (only message Nitro needs)
+## 5 · FINISHED packet (operator)
 
 ```
 FINISHED — TV apply site
-URL: …
+URL: https://zenyoda3.github.io/intafaced-sovereign-os/
 QA: green
-Apply pack: path
-PR: …
-You: (nothing | one line DNS | one line submit)
+Apply pack: docs/TV-APPLY-PACK.md
+PR: #1597 merged (monorepo SoT)
+You: optional DNS trade.intafaced.com · entity confirm + TV form submit
 ```
 
----
-
-## 6 · Gaps closed
-
-| Gap                     | Fill                                              |
-| ----------------------- | ------------------------------------------------- |
-| Frontend HOLD           | Lifted by GO                                      |
-| pnpm missing in env     | Static site; no pnpm                              |
-| Detached main checkout  | Worktree branch                                   |
-| No vercel/wrangler      | Try GH pages / cloudflared / raw deploy; document |
-| Entity ambiguous        | Pack notes both; submit-time pick                 |
-| Denon full name missing | Email + role                                      |
-| Perfect vs good         | Ship rule in methodology                          |
-| Overnight crash         | Scoreboard + contract resume from last DONE wave  |
-
-_Contract active._
+_Contract COMPLETE — do not re-activate without a new product promise._

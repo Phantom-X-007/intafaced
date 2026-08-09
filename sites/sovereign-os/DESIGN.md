@@ -10,7 +10,7 @@
 
 - `--void`: #070a08
 - `--panel`: #0d1210
-- `--line`: #1a2420
+- `--line`: #1e2a24
 - `--ink`: #e8f0ea
 - `--muted`: #8a9a90
 - `--lime`: #b8ff3c

@@ -49,4 +49,12 @@ None (Denon).
 
 ## After submit
 
-Log confirmation date/ref in `docs/ops/TV-SITE-SCOREBOARD.md`.
+Log confirmation date/ref in `docs/ops/TV-SITE-SCOREBOARD.md` (flip W5 → SUBMITTED).
+
+## Monorepo / URL truth (W11 L08)
+
+| Layer         | Truth                                                                   |
+| ------------- | ----------------------------------------------------------------------- |
+| Product code  | `sites/sovereign-os/**` on monorepo `main` (#1597)                      |
+| Public URL    | https://zenyoda3.github.io/intafaced-sovereign-os/ (interim Pages)      |
+| Custom domain | `trade.intafaced.com` — Nitro Class X optional; see TV-DNS-HOST-RUNBOOK |
