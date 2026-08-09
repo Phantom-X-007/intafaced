@@ -240,15 +240,15 @@ The three `withdraw*` recipes serve **both** outbound paths — a merchant payou
 
 ### Idempotency keys — all business keys, never random
 
-| Key                                                       | Governs                                                                  |
-| --------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `payment.capture:<paymentId>`                             | A payment is captured once, however many times the webhook is delivered. |
-| `payment.refund:<refundId>`                               | One refund, one posting. `<refundId>` defaults to `<paymentId>:<n>`.     |
-| `payment.refund.reverse:<refundId>`                       | The reversal of that refund.                                             |
-| `settlement:<merchantId>:<window>:<assetId>`              | A window settles once, per asset.                                        |
-| `withdraw.hold\|settle\|reverse:<settlementId>:<attempt>` | One merchant payout attempt.                                             |
-| `withdraw.hold\|settle\|reverse:<withdrawalId>:<attempt>` | One user withdrawal attempt.                                             |
-| `deposit:<rail>:<railRef>`                                | A rail reference is credited once, however often it is redelivered.      |
+| Key                                                       | Governs                                                                                                                                    |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `payment.capture:<paymentId>`                             | A payment is captured once, however many times the webhook is delivered.                                                                   |
+| `payment.refund:<paymentId>:<refundId>`                   | One refund, one posting. Namespaced by payment so merchant ids do not collide across payments. `<refundId>` defaults to `<paymentId>:<n>`. |
+| `payment.refund.reverse:<paymentId>:<refundId>`           | The reversal of that refund.                                                                                                               |
+| `settlement:<merchantId>:<window>:<assetId>`              | A window settles once, per asset.                                                                                                          |
+| `withdraw.hold\|settle\|reverse:<settlementId>:<attempt>` | One merchant payout attempt.                                                                                                               |
+| `withdraw.hold\|settle\|reverse:<withdrawalId>:<attempt>` | One user withdrawal attempt.                                                                                                               |
+| `deposit:<rail>:<railRef>`                                | A rail reference is credited once, however often it is redelivered.                                                                        |
 
 > **Why the asset is in the settlement key.** §6.1's settlement is keyed on merchant and window. A merchant taking USDT and BTC on the same day has two settlements, and without the asset in the key the second would find the first's transaction, return it, and strand a whole currency's takings in clearing. The `settlements` table carries an `asset_id` column for the same reason: `gross`/`fees`/`net` are meaningless without one.
 

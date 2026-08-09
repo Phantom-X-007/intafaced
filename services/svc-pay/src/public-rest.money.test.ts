@@ -423,7 +423,7 @@ if (!available) {
       });
 
       expect(await clearingOf(m.id)).toBe('90');
-      expect(keysMatching('payment.refund:')).toEqual(['payment.refund:merchant-refund-77']);
+      expect(keysMatching('payment.refund:')).toEqual([`payment.refund:${id}:merchant-refund-77`]);
     });
 
     it('same body refundId with a different amount conflicts — no silent success', async () => {
@@ -472,7 +472,8 @@ if (!available) {
       expect(await clearingOf(m.id)).toBe('90');
       expect(new Set(keysMatching('payment.refund:')).size).toBe(1);
       const keys = keysMatching('payment.refund:');
-      expect(keys[0]).toMatch(new RegExp(`^payment\.refund:rest:${id}:`));
+      // Namespaced by paymentId first, then rest:<paymentId>:<digest>.
+      expect(keys[0]).toMatch(new RegExp(`^payment\\.refund:${id}:rest:${id}:`));
     });
   });
 
