@@ -1823,14 +1823,24 @@ if (!available) {
       const a = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
       const b = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
 
-      // Move 10 units from trade A's pot into trade B's pot. Seller-level totals
-      // still match the sum of the trade amounts; per-trade pots do not.
+      // Move 10 units from trade A's pot into trade B's pot via available
+      // (ledger refuses pot→pot without an available counter-entry). Seller
+      // totals still match the sum of the trade amounts; per-trade pots do not.
       await ledger.post({
-        idempotencyKey: `test.cross-trade-theft:${a.id}:${b.id}`,
+        idempotencyKey: `test.cross-trade-theft:out:${a.id}`,
         module: 'p2p',
         reason: 'test.cross_trade_theft',
         entries: [
           { account: tradeEscrowAccount(MAKER, ASSET, a.id), direction: 'credit', amount: amt('10') },
+          { account: userAvailable(MAKER, ASSET), direction: 'debit', amount: amt('10') },
+        ],
+      });
+      await ledger.post({
+        idempotencyKey: `test.cross-trade-theft:in:${b.id}`,
+        module: 'p2p',
+        reason: 'test.cross_trade_theft',
+        entries: [
+          { account: userAvailable(MAKER, ASSET), direction: 'credit', amount: amt('10') },
           { account: tradeEscrowAccount(MAKER, ASSET, b.id), direction: 'debit', amount: amt('10') },
         ],
       });
