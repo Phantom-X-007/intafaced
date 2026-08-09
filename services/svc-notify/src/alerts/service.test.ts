@@ -106,3 +106,106 @@ describe('AlertService — rides notify fan-out, refuses dark marks', () => {
     expect((await alerts.list('u1'))[0]!.status).toBe('active');
   });
 });
+
+describe('AlertService — fire only when the inbox can receive it', () => {
+  /**
+   * Unit card — markFired-before-notify burns the watch under kill / crash
+   * 1. Promise: README price alerts — cross marks fired AND inserts one
+   *    notification; fan-out kill writes nothing (fanout-off-pin); notify.create
+   *    recovers crash-after-insert by re-fanning (notify-service.ts)
+   * 2. Break: evaluateMarket called markFired then fireNotification — under
+   *    NOTIFY_FANOUT_ENABLED=false create is a pure no-op AFTER status is
+   *    already fired → user sees fired + empty inbox, one-shot never retries.
+   *    Same if create throws after mark.
+   * 3. Done bar: fire notification first; markFired only when an inbox row
+   *    exists or was recovered (dispatch/notification); fanout-off leaves active
+   * 4. Class N
+   * 5. Paths: services/svc-notify/src/alerts/**
+   * 6. RED: this suite
+   * 7. Collision: none on wall
+   */
+  it('fan-out kill leaves a crossed watch active with an empty inbox', async () => {
+    const notifyStore = new MemoryNotifyStore();
+    const notify = new NotifyService(notifyStore, { fanoutEnabled: false });
+    const marks: MarkSource = {
+      kind: 'live',
+      async quote() {
+        return { kind: 'ok', price: '100.5', at: new Date() };
+      },
+    };
+    const alerts = new AlertService(new MemoryAlertStore(), marks, notify);
+    await alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+
+    const report = await alerts.evaluateMarket('BTC-USD');
+    expect(report.results[0]!.outcome.kind).toBe('fire');
+    expect(report.results[0]!.notificationId).toBeNull();
+    // Must still be active so a later pass (fan-out back on) can deliver.
+    expect((await alerts.list('u1'))[0]!.status).toBe('active');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
+
+  it('create throw leaves the watch active so the next sweep can retry', async () => {
+    const notifyStore = new MemoryNotifyStore();
+    const notify = {
+      create: async () => {
+        throw new Error('simulated crash mid-fire');
+      },
+    } as unknown as NotifyService;
+    const marks: MarkSource = {
+      kind: 'live',
+      async quote() {
+        return { kind: 'ok', price: '100.5', at: new Date() };
+      },
+    };
+    const alerts = new AlertService(new MemoryAlertStore(), marks, notify);
+    await alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+
+    await expect(alerts.evaluateMarket('BTC-USD')).rejects.toThrow(/simulated crash/);
+    expect((await alerts.list('u1'))[0]!.status).toBe('active');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
+
+  it('when fan-out returns, a previously crossed watch still fires once', async () => {
+    const notifyStore = new MemoryNotifyStore();
+    const alertStore = new MemoryAlertStore();
+    const marks: MarkSource = {
+      kind: 'live',
+      async quote() {
+        return { kind: 'ok', price: '100.5', at: new Date() };
+      },
+    };
+    const alertsKilled = new AlertService(alertStore, marks, new NotifyService(notifyStore, { fanoutEnabled: false }));
+    await alertsKilled.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+    await alertsKilled.evaluateMarket('BTC-USD');
+    expect((await alertsKilled.list('u1'))[0]!.status).toBe('active');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+
+    // Same watch store, fan-out re-enabled — the blocked cross must still land once.
+    const alertsLive = new AlertService(alertStore, marks, new NotifyService(notifyStore, { fanoutEnabled: true }));
+    const report = await alertsLive.evaluateMarket('BTC-USD');
+    expect(report.results[0]!.outcome.kind).toBe('fire');
+    expect(report.results[0]!.notificationId).toBeTruthy();
+    expect((await alertsLive.list('u1'))[0]!.status).toBe('fired');
+    expect(await notifyStore.unreadCount('u1')).toBe(1);
+
+    // One-shot holds after recovery.
+    const again = await alertsLive.evaluateMarket('BTC-USD');
+    expect(again.results).toHaveLength(0);
+    expect(await notifyStore.unreadCount('u1')).toBe(1);
+  });
+});

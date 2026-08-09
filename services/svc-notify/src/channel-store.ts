@@ -49,10 +49,8 @@ export type DeliveryStatus =
  *
  * `index.ts` derives it from the configured gateway timeout for that reason
  * rather than taking this default, which only covers callers that build a store
- * by hand. An operator who raises `NOTIFY_GATEWAY_TIMEOUT_MS` to its 30s ceiling
- * puts the two bounds in genuine conflict: an attempt that may run as long as
- * `ack_wait` will always be redelivered mid-flight, and no lease length fixes
- * that. Keep the gateway timeout well under 30s.
+ * by hand. The env schema caps the timeout at `MAX_GATEWAY_TIMEOUT_MS` (25s)
+ * so every legal value still has a covering lease under `ack_wait`.
  */
 export const DEFAULT_CLAIM_LEASE_MS = 15_000;
 
@@ -71,18 +69,28 @@ export const BUS_ACK_WAIT_MS = 30_000;
 export const CLAIM_LEASE_ACK_SLACK_MS = 5_000;
 
 /**
+ * Hard ceiling on `NOTIFY_GATEWAY_TIMEOUT_MS`.
+ *
+ * Equals the claim-lease ceiling (`ack_wait − slack`). Above this, no lease
+ * length can both (a) outlast one gateway attempt and (b) stay under bus
+ * `ack_wait` for reclaim. The env schema used to allow 30s — then
+ * `claimLeaseMsFromGatewayTimeout(30_000)` returned 25s and a slow attempt
+ * could still be mid-POST when a replica reclaimed the same delivery row
+ * (double free SMS). Cap the env so every legal timeout has a covering lease.
+ */
+export const MAX_GATEWAY_TIMEOUT_MS = BUS_ACK_WAIT_MS - CLAIM_LEASE_ACK_SLACK_MS;
+
+/**
  * Production claim-lease length from the gateway timeout.
  *
  * At least long enough for one attempt (`timeout × 2` covers the attempt plus
  * settle). At most under bus `ack_wait` so a dead holder never blocks reclaim
- * for a full redelivery window. An operator who raises the gateway timeout to
- * its 30s ceiling used to get `lease = 60s` and silent double-nak thrash —
- * the min() clamp stops that lie.
+ * for a full redelivery window. Paired with `MAX_GATEWAY_TIMEOUT_MS`: every
+ * legal timeout yields `lease ≥ timeout` and `lease < ack_wait`.
  */
 export function claimLeaseMsFromGatewayTimeout(gatewayTimeoutMs: number): number {
   const fromTimeout = Math.max(1, Math.floor(gatewayTimeoutMs) * 2);
-  const ceiling = BUS_ACK_WAIT_MS - CLAIM_LEASE_ACK_SLACK_MS;
-  return Math.min(fromTimeout, ceiling);
+  return Math.min(fromTimeout, MAX_GATEWAY_TIMEOUT_MS);
 }
 
 /**

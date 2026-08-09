@@ -1,6 +1,5 @@
 /**
- * Per-user+channel sliding-window rate limits for address registration and
- * verification codes.
+ * Per-user+channel rate limits for address registration and verification codes.
  *
  * WHY
  *
@@ -15,11 +14,15 @@
  *
  * Two implementations share one interface:
  *
- *   MemoryTargetRateLimiter     process-local; unit tests and single-process
- *                               harnesses. Not production.
+ *   MemoryTargetRateLimiter     process-local **sliding** window; unit tests
+ *                               and single-process harnesses. Not production.
  *   PostgresTargetRateLimiter   one row per (user, channel, op) with
- *                               SELECT … FOR UPDATE. Two replicas share the
- *                               budget — the multi-replica residual after #1187.
+ *                               SELECT … FOR UPDATE and a **fixed** window
+ *                               (`window_start` + `hit_count`). Two replicas
+ *                               share the budget — the multi-replica residual
+ *                               after #1187. Fixed (not sliding) so the shared
+ *                               row stays one claim; boundary burst ≤ ~2× max
+ *                               across adjacent windows, never N× per pod.
  *
  * Named refuse codes (not a generic 429 body) so the client can render "try
  * later" without inventing copy: `channel.register_rate_limited` /
@@ -113,7 +116,7 @@ export class MemoryTargetRateLimiter implements TargetRateLimiterPort {
 export class TargetRateLimiter extends MemoryTargetRateLimiter {}
 
 /**
- * Shared sliding window in Postgres. Two service processes that share this
+ * Shared fixed window in Postgres. Two service processes that share this
  * table cannot both take past `max` for the same user+channel+op.
  */
 export class PostgresTargetRateLimiter implements TargetRateLimiterPort {

@@ -253,12 +253,14 @@ lease is still live. The refusal code names which arm fired:
 `channel.delivery_stuck` when the bus window elapsed with attempts still left
 (so a row with attempts 1 of 3 never pretends the budget was exhausted).
 
-**Register / verify rate limits.** Per `userId`+channel sliding windows (default
-3 registers / 10 verifies per 15 minutes). Named refuse codes, not silent drops.
-Production stores the window in Postgres (`notify.target_rate_windows`, migration
-`0005`) and claims it with `SELECT … FOR UPDATE`, so two replicas share one
-budget rather than each holding an N× in-process counter. Unit tests may still
-inject the memory limiter.
+**Register / verify rate limits.** Per `userId`+channel, default 3 registers /
+10 verifies per 15 minutes. Named refuse codes, not silent drops. Production
+uses a **fixed** window in Postgres (`notify.target_rate_windows`, migration
+`0005`) claimed with `SELECT … FOR UPDATE`, so two replicas share one budget
+rather than each holding an N× in-process counter. Unit tests may inject the
+memory limiter, which is a true sliding window — prod is fixed so the shared
+row stays simple; a burst exactly on the reset edge can spend up to ~2× max
+across two adjacent windows, not N× per pod.
 
 **Consent footer.** Out-of-app bodies from `renderNotification` append
 `notify.channel.footer` (catalog). Verification messages do not (address is still
@@ -372,8 +374,11 @@ that nothing on it can currently cross. `canFire: true` says the wiring is not
 missing and **nothing more**: delivery is best-effort on every channel (§8) and
 there is no SLA here.
 
-**One-shot.** Crossing marks the row `fired` and inserts one notification keyed
-`<alertId>:<markPrice>`. A redelivery cannot double-fire an already-fired watch.
+**One-shot.** Crossing inserts one notification keyed `<alertId>:<markPrice>`,
+then marks the row `fired`. Order is deliberate: mark-before-notify used to burn
+a watch under fan-out kill or a crash mid-create (status `fired`, empty inbox,
+no retry). Notify first; only retire the watch when create produced or recovered
+a row. A redelivery reuses the same key and cannot double-send.
 
 Out of scope for this residual (tracker + §31): funding / liquidation-proximity
 alerts, whale-flow intelligence tiers, mobile watchlist sync, owner gateway
@@ -399,15 +404,15 @@ schema refuses it.
 
 ## Environment
 
-| Variable                                | Default | Notes                                                                  |
-| --------------------------------------- | ------- | ---------------------------------------------------------------------- |
-| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_URL`   | —       | Unset ⇒ the channel refuses `channel.not_configured`.                  |
-| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_TOKEN` | —       | ≥16 chars. A URL without a token refuses to boot: it is an open relay. |
-| `NOTIFY_REQUIRED_CHANNELS`              | —       | Subset of `email,push,sms`, or `none`. **Mandatory in staging/prod.**  |
-| `NOTIFY_GATEWAY_TIMEOUT_MS`             | `5000`  | Budget for one gateway call.                                           |
-| `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                 |
-| `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                    |
-| `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                  |
+| Variable                                | Default | Notes                                                                                                    |
+| --------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_URL`   | —       | Unset ⇒ the channel refuses `channel.not_configured`.                                                    |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_TOKEN` | —       | ≥16 chars. A URL without a token refuses to boot: it is an open relay.                                   |
+| `NOTIFY_REQUIRED_CHANNELS`              | —       | Subset of `email,push,sms`, or `none`. **Mandatory in staging/prod.**                                    |
+| `NOTIFY_GATEWAY_TIMEOUT_MS`             | `5000`  | Budget for one gateway call. Max **25000** (claim-lease ceiling) so a lease always outlasts one attempt. |
+| `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                                                   |
+| `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                                                      |
+| `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                                                    |
 
 An empty string is treated as absent, because that is what `docker compose`
 interpolates an unset variable to — otherwise an unwired gateway would fail
