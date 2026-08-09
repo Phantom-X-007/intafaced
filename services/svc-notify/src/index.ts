@@ -5,7 +5,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { PostgresNotifyStore } from './store.js';
-import { DELIVERY_REAP_INTERVAL_MS, PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
+import { claimLeaseMsFromGatewayTimeout, DELIVERY_REAP_INTERVAL_MS, PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
 import { PostgresMuteStore } from './preferences/mute-store.js';
@@ -100,9 +100,11 @@ const bus = await JetStreamEventBus.connect({
 const store = new PostgresNotifyStore(sql);
 const targets = new PostgresTargetStore(sql);
 // The claim lease has to outlast one gateway attempt and stay under the bus
-// `ack_wait`. Deriving it from the configured timeout keeps the first half true
-// when an operator changes that timeout — see DEFAULT_CLAIM_LEASE_MS.
-const deliveries = new PostgresDeliveryStore(sql, { leaseMs: env.NOTIFY_GATEWAY_TIMEOUT_MS * 2 });
+// `ack_wait`. `claimLeaseMsFromGatewayTimeout` keeps both bounds when an
+// operator raises NOTIFY_GATEWAY_TIMEOUT_MS toward the 30s ceiling.
+const deliveries = new PostgresDeliveryStore(sql, {
+  leaseMs: claimLeaseMsFromGatewayTimeout(env.NOTIFY_GATEWAY_TIMEOUT_MS),
+});
 /** Last sweep result — surface on /ready so "is the stuck-pending reaper running?" is observable without log diving. */
 let lastReapRetired = 0;
 let lastReapAt: string | null = null;

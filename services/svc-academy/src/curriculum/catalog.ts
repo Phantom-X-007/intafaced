@@ -1102,10 +1102,10 @@ export function emptyPathCountAtMost(n: number): boolean {
 // ── Depth surface (TRK-academy.curriculum) ──────────────────────────────────
 //
 // The count gate in import-pipeline.ts answers "are there 20 playbooks and 3
-// workbooks". It cannot answer "is any of it worth reading" — its body rule is
-// 40 characters and a leading heading, which a three-bullet stub satisfies.
-// These two surfaces answer the second question, and they answer it by naming
-// the items that fall short rather than by asserting that none do.
+// workbooks". Depth answers "is any of it worth reading" against
+// CURRICULUM_MIN_BODY_CHARS (900). Import validation uses the same floor so a
+// thin body cannot re-enter. Both surfaces name thinSlugs rather than asserting
+// that none fall short.
 
 /**
  * The body length below which an item is reported thin.

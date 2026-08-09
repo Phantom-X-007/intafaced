@@ -132,14 +132,7 @@ const PINNED = {
       2,
       "src/certs/xp-emit.test.ts | TS2345 | Argument of type '{ userId: string; certId: string; xpDelta: string; idempotencyKey: string; }' is not assignable to parameter of type 'XpEarnedIntent'.",
     ],
-    [
-      1,
-      "src/tournaments/bulk-score.test.ts | TS2345 | Argument of type '{ seasonStatus: \"frozen\"; patches: { userId: string; score: number; }[]; }' is not assignable to parameter of type '{ seasonStatus: SeasonStatus; seasonId: string; patches: readonly ScorePatch[]; }'.",
-    ],
-    [
-      1,
-      "src/tournaments/bulk-score.test.ts | TS2345 | Argument of type '{ seasonStatus: \"live\"; patches: { userId: string; score: number; }[]; }' is not assignable to parameter of type '{ seasonStatus: SeasonStatus; seasonId: string; patches: readonly ScorePatch[]; }'.",
-    ],
+    // bulk-score.test seasonId-required pins retired after calendar-gate type tighten (W6 L02).
     [
       3,
       "src/tournaments/season-lifecycle.test.ts | TS2322 | Type 'SeasonRecord' is not assignable to type '{ status: \"scheduled\"; id: string; slug: string; title: string; rulesSummary: string; startsAt: Date; endsAt: null; }'.",
@@ -288,22 +281,8 @@ const PINNED = {
   'services/svc-trade': [[1, "src/spot/matching-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"]],
 
   // 14 — services/svc-ws
-  // hub.test.ts constructor-override pins cleared 2026-08-09 (hubFor typed as Partial<DepthHubOptions>).
-  'services/svc-ws': [
-    [1, "src/ws/co-mount.test.ts | TS2345 | Argument of type 'StubSource' is not assignable to parameter of type 'DepthSource'."],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2353 | Object literal may only specify known properties, and 'log' does not exist in type 'PrivateOrderHubOptions'.",
-    ],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2353 | Object literal may only specify known properties, and 'log' does not exist in type 'TradeHubOptions'.",
-    ],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2416 | Property 'snapshot' in type 'StubSource' is not assignable to the same property in base type 'DepthSource'.",
-    ],
-  ],
+  // co-mount StubSource/hub-ctor pins cleared 2026-08-09 (#1342 typecheck-clean rewrite).
+  'services/svc-ws': [],
 };
 
 // ── Plumbing ────────────────────────────────────────────────────────────────

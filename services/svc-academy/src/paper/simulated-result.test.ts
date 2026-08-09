@@ -79,7 +79,10 @@ describe('valuation uses trade-published prices and refuses to invent one', () =
     const v = valueSimulatedDrill([
       fill({ fillId: 'f-1', side: 'buy', price: '100', size: '2' }),
       fill({ fillId: 'f-2', side: 'sell', price: '110', size: '2' }),
+      // same body twice must not inflate fillCount or PnL
+      fill({ fillId: 'f-1', side: 'buy', price: '100', size: '2' }),
     ]);
+    expect(v.fillCount).toBe(2);
 
     expect(v.boughtSize).toBe('2');
     expect(v.soldSize).toBe('2');
@@ -91,6 +94,11 @@ describe('valuation uses trade-published prices and refuses to invent one', () =
     expect(v.totalPnl).toBe('20');
     expect(v.markUnavailable).toBe(false);
     expect(isValuationComplete(v)).toBe(true);
+    // Nested seal: peel parent and valuation still cannot look like live money
+    expect(v.simulated).toBe(true);
+    expect(v.realLedger).toBe(false);
+    expect(v.withdrawable).toBe(false);
+    expect(v.venue).toBe('paper');
   });
 
   it('averages several buys at their own published prices', () => {
@@ -102,6 +110,15 @@ describe('valuation uses trade-published prices and refuses to invent one', () =
 
     expect(v.averageBuyPrice).toBe('110');
     expect(v.realisedPnl).toBe('40'); // (130 - 110) × 2
+  });
+
+  it('refuses the same fillId published twice with conflicting trade data', () => {
+    expect(() =>
+      valueSimulatedDrill([
+        fill({ fillId: 'f-1', side: 'buy', price: '100', size: '1' }),
+        fill({ fillId: 'f-1', side: 'buy', price: '200', size: '1' }),
+      ]),
+    ).toThrow(AcademyError);
   });
 
   it('carries decimals no float could — 0.1 + 0.2 stays 0.3', () => {

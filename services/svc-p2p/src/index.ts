@@ -152,7 +152,7 @@ app.get('/ready', async () => ({
 
 /**
  * Doctrine §0.6, as an endpoint. Compares this service's view of what is in
- * escrow against the ledger's, per (seller, asset). Drift here is an operator
+ * escrow against the ledger's, per trade. Drift here is an operator
  * alarm, not a metric — it means a trade's terms and its value disagree.
  */
 app.get('/internal/escrow-integrity', async (req, reply) => {

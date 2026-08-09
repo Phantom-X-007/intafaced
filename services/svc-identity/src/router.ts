@@ -129,6 +129,9 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.sub_account_denied':
     case 'auth.sub_account_revoked':
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+    case 'auth.totp_key_missing':
+      // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
 }
 
@@ -300,9 +303,10 @@ export function createIdentityRouter(
        * `defaultScopes()` withholds `trade:withdraw` — "added only after a
        * step-up challenge" — and there was no step-up challenge anywhere in the
        * OS, which made every withdrawal surface unreachable by a real session.
-       * This is that challenge: a live session plus a fresh TOTP code **or** a
-       * WebAuthn assertion (after `stepUpOptions`) buys a five-minute token that
-       * carries the scope. Passkey-only accounts can withdraw without TOTP theatre.
+       * This is that challenge: a live session plus a fresh TOTP / recovery code
+       * **or** a WebAuthn assertion (after `stepUpOptions`) buys a five-minute
+       * token that carries the scope. Passkey-only accounts can withdraw without
+       * TOTP theatre; lost authenticator can still step up via recovery codes.
        *
        * `protectedProcedure`, not `scopedProcedure`: the caller is proving a
        * second factor, not exercising a permission. Requiring a scope to ask for
@@ -325,9 +329,10 @@ export function createIdentityRouter(
         .input(
           z
             .object({
+              // 6-digit TOTP or single-use recovery (XXXXX-XXXXX), same field as login.
               totpCode: z
                 .string()
-                .regex(/^\d{6}$/)
+                .regex(/^(\d{6}|[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5})$/)
                 .optional(),
               webauthn: z
                 .object({

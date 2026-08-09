@@ -253,31 +253,32 @@ returns `503` so the load balancer takes the instance out of rotation. `/health`
 still see the process is alive. The terminal renders the book as unavailable with the reason on screen — never as
 stale numbers.
 
-**Bus honesty:** if NATS subscribe fails at boot there is **no auto-reconnect** yet. `/ready` stays `200` (depth is
-primary and works without the bus) but `tradesBus` / `privateBus` are `false` so ops can see an empty tape is not
-"live and quiet" — it is unsubscribed until process restart.
+**Bus honesty:** if NATS subscribe fails at boot the process **retries with exponential backoff** (depth keeps
+serving). `/ready` stays `200` while the bus is down, but `tradesBus` / `privateBus` are `false` so ops can see an
+empty tape is not "live and quiet" — it is unsubscribed until the next successful connect.
 
 ---
 
 ## Configuration
 
-| Variable                | Default                 | Notes                                                     |
-| ----------------------- | ----------------------- | --------------------------------------------------------- |
-| `HTTP_PORT`             | `4014`                  | every port 4000–4013 is taken                             |
-| `MATCHING_URL`          | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent    |
-| `TRADE_URL`             | `http://localhost:4004` | svc-trade's public market **listing**; no credential      |
-| `NATS_URL`              | `nats://localhost:4222` | bus for `orderFilled` trade tape only                     |
-| `WS_DEPTH_LIMIT`        | `50`                    | levels per side, for both snapshot and delta              |
-| `WS_POLL_INTERVAL_MS`   | `250`                   | one GET per subscribed market per tick                    |
-| `WS_MARKETS_REFRESH_MS` | `30000`                 | market-list cache window                                  |
-| `WS_HIGH_WATER_BYTES`   | `1048576`               | socket buffer above which a client is lagging             |
-| `WS_MAX_LAG_TICKS`      | `20`                    | consecutive lagging ticks before disconnect               |
-| `WS_MAX_CONNECTIONS`    | `5000`                  | sockets per replica                                       |
-| `WS_HEARTBEAT_MS`       | `30000`                 | ping cadence; a socket that misses a pong is terminated   |
-| `WS_TRADE_RECENT_LIMIT` | `50`                    | recent prints kept per market and replayed on connect     |
-| `WS_TRADES_DURABLE`     | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance  |
-| `WS_GATEWAY_ENABLED`    | `true`                  | kill-switch (env / restart / SIGTERM — not edge admin)    |
-| `JWT_ACCESS_SECRET`     | _(unset)_               | optional; only `/private/stream` — public path ignores it |
+| Variable                              | Default                 | Notes                                                     |
+| ------------------------------------- | ----------------------- | --------------------------------------------------------- |
+| `HTTP_PORT`                           | `4014`                  | every port 4000–4013 is taken                             |
+| `MATCHING_URL`                        | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent    |
+| `TRADE_URL`                           | `http://localhost:4004` | svc-trade's public market **listing**; no credential      |
+| `NATS_URL`                            | `nats://localhost:4222` | bus for `orderFilled` trade tape only                     |
+| `WS_DEPTH_LIMIT`                      | `50`                    | levels per side, for both snapshot and delta              |
+| `WS_POLL_INTERVAL_MS`                 | `250`                   | one GET per subscribed market per tick                    |
+| `WS_MARKETS_REFRESH_MS`               | `30000`                 | market-list cache window                                  |
+| `WS_HIGH_WATER_BYTES`                 | `1048576`               | socket buffer above which a client is lagging             |
+| `WS_MAX_LAG_TICKS`                    | `20`                    | consecutive lagging ticks before disconnect               |
+| `WS_MAX_CONNECTIONS`                  | `5000`                  | max sockets **per hub** (depth, tape, private each)       |
+| `WS_PRIVATE_MAX_CONNECTIONS_PER_USER` | `16`                    | private stream only; one user cannot fill the replica     |
+| `WS_HEARTBEAT_MS`                     | `30000`                 | ping cadence; a socket that misses a pong is terminated   |
+| `WS_TRADE_RECENT_LIMIT`               | `50`                    | recent prints kept per market and replayed on connect     |
+| `WS_TRADES_DURABLE`                   | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance  |
+| `WS_GATEWAY_ENABLED`                  | `true`                  | kill-switch (env / restart / SIGTERM — not edge admin)    |
+| `JWT_ACCESS_SECRET`                   | _(unset)_               | optional; only `/private/stream` — public path ignores it |
 
 ### Isolation (what this process holds)
 

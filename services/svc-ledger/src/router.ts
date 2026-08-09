@@ -51,6 +51,10 @@ const balanceOutput = z.object({
   accountId: z.string(),
   assetId: z.string(),
   kind: z.string(),
+  // Purpose is account IDENTITY (P0-3), not optional decoration. Two holds with
+  // different claims must not collapse to the same (assetId, kind) on the wire —
+  // callers that key by those alone would re-commingle what the book keeps apart.
+  purpose: z.string(),
   amount: z.string(),
 });
 
@@ -114,6 +118,7 @@ export function createLedgerRouter(ledger: LedgerService) {
           accountId: balance.accountId,
           assetId: input.assetId,
           kind: input.kind,
+          purpose: input.purpose ?? '',
           amount: formatAmount(balance.amount),
         };
       }),
@@ -132,6 +137,7 @@ export function createLedgerRouter(ledger: LedgerService) {
           accountId: b.accountId,
           assetId: b.account.assetId,
           kind: b.account.kind,
+          purpose: b.account.purpose ?? '',
           amount: formatAmount(b.amount),
         }));
       }),

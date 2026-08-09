@@ -1779,8 +1779,11 @@ if (!available) {
         // rule.
         'loan_products.min_principal': 'a POLICY floor on a single draw; no money path writes it',
         'loans.principal': 'the amount DRAWN at open; recorded once, never revised — interest lives in its own table',
+        'loans.opening_collateral':
+          'the opening PLEDGE amount at open — a TERM for id-reuse compares, write-once; live holdings are ledger + collateral events',
         'loans.last_mark_price': 'a PRICE, not a holding — what one unit of collateral was worth at the last accepted mark',
         'loan_collateral_events.amount': 'a RECORD of one completed lock or release; written once with its ledger tx id',
+        'loan_reserve_fundings.amount': 'a RECORD of one successful reserve fund post; the independent half of reconcileReserve (B-02)',
         'loan_interest_accruals.principal_basis': 'the debt one day was computed against; a SNAPSHOT so that day is re-derivable',
         'loan_interest_accruals.interest_amount': "a RECORD of one day's charge; summing the table is the lifetime figure",
         'loan_repayments.interest_amount': 'a RECORD of one completed repayment; written once',

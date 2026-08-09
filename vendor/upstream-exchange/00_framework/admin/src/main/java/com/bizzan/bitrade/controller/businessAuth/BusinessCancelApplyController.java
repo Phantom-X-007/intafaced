@@ -116,70 +116,12 @@ public class BusinessCancelApplyController extends BaseController {
             @RequestParam(value = "id") Long id,
             @RequestParam(value = "success") BooleanEnum success,
             @RequestParam(value = "reason", defaultValue = "") String reason) {
-        BusinessCancelApply businessCancelApply = businessCancelApplyService.findById(id);
-        Member member = businessCancelApply.getMember();
-        List<BusinessAuthApply> businessAuthApplyList = businessAuthApplyService.findByMemberAndCertifiedBusinessStatus(member, VERIFIED);
-        if (businessAuthApplyList == null || businessAuthApplyList.size() < 1) {
-            return error("data exception,businessAuthApply not exist。。。。");
-        }
-        BusinessAuthApply businessAuthApply = businessAuthApplyList.get(0);
-        /**
-         * 处理 取消申请 日志
-         */
-        businessCancelApply.setHandleTime(DateUtil.getCurrentDate());
-        businessCancelApply.setDepositRecordId(businessAuthApply.getDepositRecordId());
-        businessCancelApply.setDetail(reason);
-
-        if (success == BooleanEnum.IS_TRUE) {
-
-            businessCancelApply.setStatus(RETURN_SUCCESS);
-            businessCancelApplyService.save(businessCancelApply);
-
-            //取消商家认证 审核通过
-            //member.setCertifiedBusinessStatus(RETURN_SUCCESS);//未认证
-            member.setCertifiedBusinessStatus(NOT_CERTIFIED);
-            member.setMemberLevel(MemberLevelEnum.REALNAME);
-            memberService.save(member);
-
-            List<DepositRecord> depositRecordList = depositRecordService.findByMemberAndStatus(member, DepositStatusEnum.PAY);
-            if (depositRecordList != null && depositRecordList.size() > 0) {
-                BigDecimal deposit = BigDecimal.ZERO;
-
-                /**
-                 * 更改保证金记录
-                 */
-                for (DepositRecord depositRecord : depositRecordList) {
-                    depositRecord.setStatus(DepositStatusEnum.GET_BACK);
-                    deposit = deposit.add(depositRecord.getAmount());
-                    depositRecordService.save(depositRecord);
-                }
-
-                /**
-                 * 退回保证金
-                 */
-                if (businessAuthApplyList != null && businessAuthApplyList.size() > 0) {
-                    MemberWallet memberWallet = memberWalletService.findByCoinUnitAndMemberId(businessAuthApply.getBusinessAuthDeposit().getCoin().getUnit(), member.getId());
-                    memberWallet.setBalance(memberWallet.getBalance().add(deposit));
-                    // memberWallet.setFrozenBalance(memberWallet.getFrozenBalance().subtract(deposit));
-                    memberWalletService.save(memberWallet);
-                }
-            }
-            /**
-             * 更改认证申请状态
-             */
-            return MessageResult.success(msService.getMessage("PASS_THE_AUDIT"), reason);
-        } else {
-            //审核不通过，商家 维持已认证状态
-            //member.setCertifiedBusinessStatus(RETURN_FAILED);
-            member.setCertifiedBusinessStatus(VERIFIED);
-            member.setMemberLevel(MemberLevelEnum.IDENTIFICATION);
-            memberService.save(member);
-
-            businessCancelApply.setStatus(RETURN_FAILED);
-            businessCancelApplyService.save(businessCancelApply);
-
-            return MessageResult.success(msService.getMessage("AUDIT_DOES_NOT_PASS"), reason);
-        }
+        // Dual-book Option B — admin has no compose service, so the 410 door never
+        // executes. Cancel-approve credited the deposit back via setBalance + save.
+        // ADR 2026-08-04: agents may throw where only a door stood.
+        // Queue if ever re-enabled: ledger recipe escrowRelease (not Java book).
+        throw new IllegalStateException(
+                "admin business-cancel deposit return is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
 
     /**

@@ -5,6 +5,7 @@ import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
+import { parseTotpSecretKey } from './auth/totp-crypto.js';
 import { RankService } from './rank/rank-service.js';
 import { ReferralService } from './affiliates/referral-service.js';
 import { FreezeService } from './affiliates/freeze-service.js';
@@ -39,7 +40,13 @@ registerProcessHooks(
  * rank_state. Until this consumer existed they reached nothing — see ./events.ts.
  */
 
-if (env.APP_ENV === 'prod') await assertArgon2Available();
+if (env.APP_ENV === 'prod') {
+  await assertArgon2Available();
+  // TOTP secrets must not sit base32-plaintext in prod; refuse boot without key.
+  if (!parseTotpSecretKey(env.IDENTITY_TOTP_SECRET_KEY)) {
+    throw new Error('IDENTITY_TOTP_SECRET_KEY is required in prod (32-byte AES key as base64 or 64-char hex)');
+  }
+}
 
 const sql = postgres(env.DATABASE_URL, {
   max: env.DATABASE_POOL_MAX,
@@ -94,6 +101,7 @@ const auth = new AuthService(
       .map((s) => s.trim())
       .filter(Boolean),
   },
+  env.IDENTITY_TOTP_SECRET_KEY,
 );
 
 const referral = new ReferralService(sql);

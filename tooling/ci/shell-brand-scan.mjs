@@ -279,32 +279,9 @@ function* walk(dir) {
  *
  * @type {Record<string, { fp: string, note: string }[]>}
  */
-const BASELINE = {
-  // Two comments naming the dev-server's own container, which we named after
-  // the upstream. Ours to rename, and the cheapest row here to clear.
-  'config/index.js': [
-    { fp: '39116c6aa904', note: 'upstream vendor identity inside a container name we coined' },
-    { fp: '39116c6aa904', note: 'the same container name, second comment' },
-  ],
-  // The package manifest: the upstream module prefix as our package name, and
-  // the upstream author's contact address — which is itself separately banned,
-  // because support mail must never point at a stranger.
-  'package.json': [
-    { fp: '8ce4e4253be9', note: 'upstream module prefix, used as the package name' },
-    { fp: '92f3f711f238', note: 'upstream author contact address' },
-  ],
-  // The lockfile echoes the manifest name twice; it clears when the name does.
-  'package-lock.json': [
-    { fp: '8ce4e4253be9', note: 'upstream module prefix, echoed from the manifest' },
-    { fp: '8ce4e4253be9', note: 'the same, in the lockfile root package entry' },
-  ],
-  // The README title and its subtitle. The title is the occurrence the
-  // repo-wide `\b` anchors cannot see at all — see the header.
-  'README.md': [
-    { fp: 'd0f277dfe7b7', note: 'upstream project name in the README title' },
-    { fp: 'd0f277dfe7b7', note: 'upstream project name in the README subtitle' },
-  ],
-};
+/* Queue drained 2026-08-09 (L11 wave 5): package/README/config renames.
+   A new product-surface hit must be fixed, never re-frozen here. */
+const BASELINE = {};
 
 // ── Run ────────────────────────────────────────────────────────────────────
 

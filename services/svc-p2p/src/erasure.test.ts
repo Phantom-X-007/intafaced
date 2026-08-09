@@ -25,6 +25,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'), 'utf8');
 const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
+const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -58,6 +59,7 @@ if (!available) {
     await tx.unsafe(migration);
     await tx.unsafe(instrumentsMigration);
     await tx.unsafe(disputeRulingMigration);
+    await tx.unsafe(lateSettleErrorMigration);
   });
 
   const instruments = new InstrumentService(sql);

@@ -28,8 +28,12 @@ import { P2pError, type P2pService } from './p2p-service.js';
  *
  * Membership is not a balance and grants no custody. Escrow still moves every
  * coin through `ledger-client` recipes exactly as it does for an ordinary
- * trader (§0.6). This mountain stops at "who is in the programme"; limits
- * ENFORCEMENT is Stage 2 and reads this table.
+ * trader (§0.6). Stage 1 is membership; Stage 2 (offer ceilings) lives in
+ * `merchant-limits.ts` and reads this table. Stage 3 — merchant API keys /
+ * scopes / rate limits — is deliberately NOT built here: named API keys
+ * already live in identity.apikeys, and inventing a second key plane inside
+ * svc-p2p would dual-write credentials. Cut from this mountain's done bar;
+ * a later row may wire programme standing into that key plane if product asks.
  */
 
 export interface MerchantRecord {

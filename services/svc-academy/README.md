@@ -112,17 +112,16 @@ tRPC, mounted at `/trpc`, reached through svc-edge at `/api/academy` (port 4016)
 
 #### Depth, and why there is a surface for it
 
-`curriculumInventory` answers _are there 20 playbooks and 3 workbooks_. Its
-validation floor is 40 characters and a leading heading — which a three-bullet
-stub clears, and for a long time did: every item on the spine passed while the
-median body was 258 characters. Counting is not reading.
+`curriculumInventory` answers _are there 20 playbooks and 3 workbooks_. Counting
+is not reading: an older 40-character stub gate once let every spine item pass
+while the median body was 258 characters. That gate is gone.
 
-`curriculumDepth` answers the second question against an editorial floor
-(`CURRICULUM_MIN_BODY_CHARS`), and it answers by returning `thinSlugs` — naming
-what falls short rather than asserting that nothing does. `allDeep` is true only
-when the list is empty. Bodies are English (`en`); other locales fall back and
-report `fellBack: true` via `curriculumItemLocalized` — a translation is never
-invented.
+`curriculumDepth` and the import pipeline both use the editorial floor
+`CURRICULUM_MIN_BODY_CHARS` (**900** characters). Depth returns `thinSlugs` —
+naming what falls short rather than asserting that nothing does. `allDeep` is
+true only when the list is empty. Bodies are English (`en`); other locales fall
+back and report `fellBack: true` via `curriculumItemLocalized` — a translation
+is never invented.
 
 ### Certifications → XP (`academy.certs`)
 

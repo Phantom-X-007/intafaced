@@ -27,6 +27,14 @@ import type { RoutingTable } from './gateway/routing.js';
 
 export type ProviderMode = 'mock' | 'upstream';
 
+/** Honest fleet mount inventory on `/ready` — never invents product agents. */
+export interface FleetReadinessCard {
+  readonly agents: number;
+  readonly withRunSession: number;
+  readonly bootRegistered: number;
+  readonly tasksMissingRoute: number;
+}
+
 export interface AgentsReadinessInput {
   readonly providerMode: ProviderMode;
   readonly providers: readonly ModelProvider[];
@@ -34,6 +42,11 @@ export interface AgentsReadinessInput {
   readonly meteringEnabled: boolean;
   /** Count of product agents upserted at boot into agent_definitions (0 = residual). */
   readonly productAgentsRegistered?: number;
+  /**
+   * Fleet matrix board card (Stage-1 factories + runSession mounts + boot flag).
+   * When omitted, `/ready` reports zeros — never invents a five-agent fleet.
+   */
+  readonly fleet?: FleetReadinessCard;
   readonly now?: Date;
 }
 
@@ -70,6 +83,11 @@ export interface AgentsReadiness {
   readonly tasks: readonly string[];
   /** Product guardrails written at boot — not the same as live inference. */
   readonly productAgentsRegistered: number;
+  /**
+   * Stage-1 fleet matrix snapshot. Zeros mean "not supplied" / residual, not
+   * "five agents are live". Mount honesty stays in `fleet/matrix.ts` tests.
+   */
+  readonly fleet: FleetReadinessCard;
   readonly usefulPath: UsefulPathStatus;
 }
 
@@ -118,6 +136,12 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
   }
 
   const productAgentsRegistered = input.productAgentsRegistered ?? 0;
+  const fleet: FleetReadinessCard = input.fleet ?? {
+    agents: 0,
+    withRunSession: 0,
+    bootRegistered: 0,
+    tasksMissingRoute: 0,
+  };
 
   // Mock mode always carries an honesty residual even when the path works: the
   // engine answers, but it is not production inference. Upstream mode drops
@@ -140,6 +164,7 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     meteringEnabled: input.meteringEnabled,
     tasks,
     productAgentsRegistered,
+    fleet,
     usefulPath: {
       available: usefulTask !== null,
       task: usefulTask,

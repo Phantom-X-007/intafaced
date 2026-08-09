@@ -847,6 +847,39 @@ export class VendorService {
   }
 
   /**
+   * Which open listing slots still count under the CURRENT stake capacity.
+   *
+   * Stage 3 deliberately leaves over-held rows open after unstake (no bus).
+   * Vendor-level listed stays true while usable ≥ 1. Commerce must decide
+   * which listings stay sellable: oldest open slot first (`claimed_at ASC`),
+   * cap = usable. Excess refs refuse with `market.listing_over_capacity`.
+   *
+   * Throws `market.stake_unavailable` the same way `listingEligibility` does —
+   * "we could not check" is not a vendor finding.
+   */
+  async entitledListingRefs(vendorId: string): Promise<Set<string>> {
+    const [row] = await this.sql<VendorRow[]>`
+      SELECT id, user_id, display_name, description, status, created_at, updated_at
+        FROM market.vendors WHERE id = ${vendorId}
+    `;
+    if (!row || row.status !== 'approved') return new Set();
+
+    const entitlement = await this.stakes.entitlementOf(row.user_id);
+    const slots = await this.sql<Array<{ ref: string | null }>>`
+      SELECT ref FROM market.vendor_slots
+       WHERE vendor_id = ${vendorId} AND released_at IS NULL
+       ORDER BY claimed_at ASC
+    `;
+    const usable = usableSlots({ status: row.status, capacity: entitlement.vendorSlots }, { open: slots.length });
+    const out = new Set<string>();
+    for (const s of slots) {
+      if (out.size >= usable) break;
+      if (s.ref) out.add(s.ref);
+    }
+    return out;
+  }
+
+  /**
    * What an unauthenticated visitor sees — `null` unless the vendor is listed.
    *
    * ONE `null` FOR EVERY REASON. Unknown id, never approved, suspended, holds no

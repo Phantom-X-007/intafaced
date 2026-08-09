@@ -65,13 +65,15 @@ There is **no verification-provider integration** here. Approval is an operator 
 
 **Encrypted document store (mechanism):** table `identity.kyc_documents` holds AES-256-GCM ciphertext under `IDENTITY_KYC_DOC_KEY`. Opaque ids are what `provider_ref` may point at. No user-facing procedure returns document bytes. Live vendor webhook remains Class X.
 
+**TOTP secret at rest:** `users.totp_secret` is AES-256-GCM sealed (`enc:v1:…`) under `IDENTITY_TOTP_SECRET_KEY` (32-byte base64 or 64-char hex). Enrol refuses without the key; prod boot refuses if missing. Dual-read still accepts legacy unprefixed plaintext until re-enrol.
+
 ### Step-up
 
 `defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.
 
 A live session plus a fresh TOTP code **or** a WebAuthn step-up assertion buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no TOTP is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
 
-> **Known gap, not introduced here:** a TOTP code is accepted anywhere in its validity window, so a captured code can be replayed within it. That is true of `auth.login` too and is platform-wide; fixing it means tracking a last-used counter per user and belongs in its own PR rather than being solved on one endpoint.
+**TOTP anti-replay:** each successful TOTP use (enrol confirm, login, step-up) records the matched counter in `users.totp_last_step`. A second attempt with the same or earlier step is refused as `auth.mfa_invalid`, so a captured code cannot be replayed inside the ±1-step window.
 
 ---
 
@@ -117,7 +119,7 @@ It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ 
 
 **Enrolment is two-step.** The secret is not persisted until a valid code proves the user actually scanned it — otherwise abandoning enrolment halfway locks you out.
 
-**WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in-process with a five-minute TTL — multi-instance identity needs a shared store later; the ceremony does not.
+**WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in Postgres (`identity.webauthn_challenges`, five-minute TTL, single-use take) so multi-pod ceremonies complete when options were issued on another instance. In-memory `ChallengeStore` remains for pure unit tests without SQL.
 
 Kill-switch: `WEBAUTHN_ENABLED=false`. Relying party: `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` (comma-separated origins).
 

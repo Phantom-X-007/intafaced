@@ -89,6 +89,28 @@ describe('PrivateOrderHub', () => {
     expect(hub.connections).toBe(1);
   });
 
+  it('refuses a user past per-user cap while another user still attaches', () => {
+    const hub = new PrivateOrderHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 100,
+      maxConnectionsPerUser: 2,
+    });
+    const a1 = sink();
+    const a2 = sink();
+    const a3 = sink();
+    const b1 = sink();
+    expect(hub.attach('user-a', a1)).not.toBeNull();
+    expect(hub.attach('user-a', a2)).not.toBeNull();
+    expect(hub.attach('user-a', a3)).toBeNull();
+    expect(a3.closed?.code).toBe(1013);
+    expect(a3.closed?.reason).toMatch(/too many private connections/i);
+    expect(hub.connections).toBe(2);
+
+    expect(hub.attach('user-b', b1)).not.toBeNull();
+    expect(hub.connections).toBe(3);
+  });
+
   it('reconnect after detach gets no replay of past orders (push-only)', () => {
     const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
     const first = sink();
@@ -124,7 +146,8 @@ describe('PrivateOrderHub', () => {
     hub.attach('user-a', lagging);
     hub.publish(update('user-a'));
     hub.publish(update('user-a'));
-    expect(lagging.closed?.code).toBe(1008);
+    expect(lagging.closed?.code).toBe(1013);
+    expect(lagging.closed?.reason).toMatch(/slow consumer/i);
     expect(lagging.sent).toHaveLength(0);
   });
 
@@ -207,7 +230,8 @@ describe('PrivateOrderHub', () => {
     hub.publishPosition(position);
     hub.publishPosition(position);
 
-    expect(lagging.closed?.code).toBe(1008);
+    expect(lagging.closed?.code).toBe(1013);
+    expect(lagging.closed?.reason).toMatch(/slow consumer/i);
     expect(healthy.sent).toHaveLength(2);
     expect(JSON.parse(healthy.sent[0]!).channel).toBe('positions');
   });

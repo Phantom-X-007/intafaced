@@ -119,10 +119,10 @@ const schema = serviceEnvSchema
        * The NUMBER is an operator decision, not an engineering one: it trades
        * the ability to adjudicate a late appeal against holding personal data
        * we no longer need, and where a market imposes its own retention rule
-       * that rule wins. The default is set well clear of the 7-day dispute SLA
-       * (P2P_DISPUTE_BACKSTOP_SECONDS) so a purge can never race an open
-       * appeal; the floor below enforces that relationship rather than trusting
-       * it.
+       * that rule wins. The default is set well clear of the default 7-day
+       * dispute SLA. The cross-field check after this object enforces that
+       * retention (in seconds) is never shorter than `P2P_DISPUTE_SLA_SECONDS`,
+       * so a purge cannot race an open appeal even if both knobs are retuned.
        */
       P2P_INSTRUMENT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3_650).default(90),
 
@@ -138,7 +138,22 @@ const schema = serviceEnvSchema
        */
       P2P_MODERATOR_USER_IDS: z.string().default(''),
     }),
-  );
+  )
+  .superRefine((value, ctx) => {
+    // Audit P4 (2026-08-08): a 60-day SLA with a 30-day retention floor was a
+    // valid config before this check, and the purge then raced open appeals.
+    const retentionSeconds = value.P2P_INSTRUMENT_RETENTION_DAYS * 24 * 60 * 60;
+    if (retentionSeconds < value.P2P_DISPUTE_SLA_SECONDS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_INSTRUMENT_RETENTION_DAYS'],
+        message:
+          `P2P_INSTRUMENT_RETENTION_DAYS (${value.P2P_INSTRUMENT_RETENTION_DAYS}d = ${retentionSeconds}s) ` +
+          `must be at least P2P_DISPUTE_SLA_SECONDS (${value.P2P_DISPUTE_SLA_SECONDS}s), ` +
+          `or a purge can race an open dispute appeal.`,
+      });
+    }
+  });
 
 export const env = loadEnv(schema);
 export type Env = typeof env;

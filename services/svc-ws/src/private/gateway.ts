@@ -68,10 +68,16 @@ function tokenFrom(url: URL, headers: IncomingMessage['headers']): string | null
 
 export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOptions): PrivateWebSocketGateway {
   const { server, hub, heartbeatMs, log, enabled, tokens } = options;
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024 });
-  let live = 0;
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024, perMessageDeflate: false });
 
-  server.on('upgrade', (req, socket, head) => {
+  /**
+   * Sockets that have not answered the last ping. Same contract as the public
+   * gateway: a client that stops ponging is not a subscriber, it is hub work
+   * for nobody — TCP will not tell us for minutes, so we terminate.
+   */
+  const alive = new WeakSet<WebSocket>();
+
+  const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
     void (async () => {
       try {
         const host = req.headers.host ?? 'localhost';
@@ -115,26 +121,23 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           // Capacity refuse closes the sink inside attach — never announce ready
           // for a subscription the hub did not take (fail-closed, no false start).
           if (!detach) {
+            // sink.close may race the client open; terminate so the client always
+            // sees a hard end and does not sit half-open with zero ready frames.
+            try {
+              ws.terminate();
+            } catch {
+              /* ignore */
+            }
             return;
           }
 
-          live++;
-          let cleaned = false;
-          const heartbeat = setInterval(() => {
-            if (ws.readyState === ws.OPEN) ws.ping();
-          }, heartbeatMs);
-          const cleanup = () => {
-            if (cleaned) return;
-            cleaned = true;
-            clearInterval(heartbeat);
-            detach();
-            live = Math.max(0, live - 1);
-          };
-
-          ws.on('close', cleanup);
-          ws.on('error', cleanup);
+          alive.add(ws);
+          ws.on('pong', () => alive.add(ws));
           // Inbound frames are ignored — private stream is push-only, same as public.
           ws.on('message', () => undefined);
+          ws.on('error', () => ws.terminate());
+          // terminate() still emits close — free the hub seat.
+          ws.on('close', detach);
 
           try {
             ws.send(JSON.stringify({ channel: 'orders', type: 'ready', userId }));
@@ -154,13 +157,38 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         }
       }
     })();
-  });
+  };
+
+  server.on('upgrade', onUpgrade);
+
+  /**
+   * A socket that stopped answering is not a private subscriber — it still holds
+   * a hub seat and keeps the process computing frames for nobody. Mirror public
+   * `/stream`: miss one pong window → terminate.
+   */
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!alive.has(ws)) {
+        ws.terminate();
+        continue;
+      }
+      alive.delete(ws);
+      try {
+        ws.ping();
+      } catch {
+        ws.terminate();
+      }
+    }
+  }, heartbeatMs);
+  heartbeat.unref?.();
 
   return {
     get connections() {
-      return live;
+      return wss.clients.size;
     },
     async close(reason: string) {
+      clearInterval(heartbeat);
+      server.off('upgrade', onUpgrade);
       await hub.close(reason);
       for (const client of wss.clients) {
         try {

@@ -56,9 +56,13 @@ export interface AgentRuntimeOptions {
   /** Asset metered usage is billed in. */
   readonly feeAssetId: string;
   /**
-   * Operator kill-switch for billing (§14 admin controls). When off, usage is
-   * still RECORDED — turning metering off must not also turn off the ability to
-   * find out what the fleet cost while it was off.
+   * Operator kill-switch for billing (§14 admin controls).
+   *
+   * When off: no `usage_records` row, no usage window, no `feeCharge`. The
+   * completion still lands on the action audit with token counts so operators
+   * can see what the fleet spent while billing was dark. Restoring
+   * `usage_records` while metering is off is a product ruling — do not invent
+   * a silent dual-write path that would re-price later under a different rate.
    */
   readonly meteringEnabled?: boolean;
 }

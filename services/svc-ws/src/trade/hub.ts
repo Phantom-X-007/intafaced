@@ -106,7 +106,22 @@ export class TradeHub {
     return () => {
       sub.closed = true;
       this.#subscriptions.delete(sub);
+      this.#forgetIdleMarket(marketId);
     };
+  }
+
+  /**
+   * Drop the recent ring and dedupe set when nobody is watching a market.
+   * Depth forgets idle books the same way — keeping tape history forever would
+   * pin memory for every market that ever printed, even after the last client left.
+   * A later reconnect replays empty (honest), not a stale multi-hour buffer.
+   */
+  #forgetIdleMarket(marketId: string): void {
+    for (const s of this.#subscriptions) {
+      if (!s.closed && s.marketId === marketId) return;
+    }
+    this.#recent.delete(marketId);
+    this.#seen.delete(marketId);
   }
 
   async #open(sub: Subscription): Promise<void> {
@@ -217,6 +232,7 @@ export class TradeHub {
     } catch {
       /* already gone */
     }
+    this.#forgetIdleMarket(sub.marketId);
   }
 
   closeAll(code: number, reason: string): void {

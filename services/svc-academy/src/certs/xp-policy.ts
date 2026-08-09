@@ -5,8 +5,9 @@
  * `intafaced.identity.xp.earned`. Does NOT post ledger money. Does NOT invent
  * perk tables — perks remain identity rank SoT.
  *
- * Emit path residual: wire to bus when academy owns publish of xpEarned;
- * this module only names the payload so double-award is impossible.
+ * Emit path is live: `xp-publish.ts` + `grantCert` publish the intent. This
+ * module only names the payload so double-award is impossible (same key +
+ * identity ON CONFLICT). Unpriced certs publish nothing rather than invent XP.
  */
 
 import { certIdempotencyKey, type CertGrantRecord } from './progress.js';

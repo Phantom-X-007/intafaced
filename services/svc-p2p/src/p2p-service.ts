@@ -122,6 +122,11 @@ export type P2pErrorCode =
   | 'p2p.merchant_reason_required'
   | 'p2p.merchant_transition_invalid'
   | 'p2p.offer_limit_exceeded'
+  // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
+  | 'p2p.invalid_fee_bps'
+  // amount - ceil(fee) would leave the buyer with nothing — ledger refuses the
+  // release recipe forever after a decision would strand the pot as late.
+  | 'p2p.release_unpostable'
   // Deployment has no moderator allowlist and the caller does not hold
   // admin:compliance — the queue exists but nobody can authenticate into it.
   | 'p2p.moderation_unreachable'
@@ -159,6 +164,28 @@ export class P2pError extends Error {
   ) {
     super(message);
     this.name = 'P2pError';
+  }
+}
+
+/**
+ * A release must leave the buyer a positive leg after the house fee.
+ *
+ * `mulBps` ceils: amount = 1 scaled unit with any fee_bps ≥ 1 yields fee = 1 and
+ * buyer = 0. The ledger recipe then throws InvalidEntryError. If we wrote
+ * resolution=released first, settle would fail forever and the pot would sit
+ * as "late" with no postable terminal. Refuse before the decision (and at take,
+ * before any inventory is reserved).
+ */
+export function assertReleasePostable(amount: Amount, feeBps: number): void {
+  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+    throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+  }
+  const fee = mulBps(amount, feeBps);
+  if (amount - fee <= 0n) {
+    throw new P2pError(
+      `Trade amount is too small for a ${feeBps} bps fee — after the fee the buyer would receive nothing. Raise the size or set fee to 0.`,
+      'p2p.release_unpostable',
+    );
   }
 }
 
@@ -496,7 +523,11 @@ export class P2pService {
     options: P2pServiceOptions,
   ) {
     this.instruments = options.instruments;
-    this.feeBps = options.feeBps ?? 0;
+    const feeBps = options.feeBps ?? 0;
+    if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+      throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+    }
+    this.feeBps = feeBps;
     this.deadlines = options.deadlines ?? DEFAULT_DEADLINES;
     this.xpPolicy = options.xp ?? DEFAULT_XP_POLICY;
     this.tradingEnabled = options.tradingEnabled ?? true;
@@ -667,6 +698,56 @@ export class P2pService {
     return toOffer(rows[0]);
   }
 
+  /**
+   * Pause an active offer — hide remaining liquidity without closing.
+   *
+   * The schema has always carried `paused` as a distinct status (not a flag): a
+   * paused offer is invisible on the board and cannot be taken, but open trades
+   * against it continue and the maker can resume. Closing withdraws inventory
+   * permanently; pausing is the reversible cousin the enum promised and the
+   * API never exposed.
+   */
+  async pauseOffer(offerId: string, makerId: string): Promise<OfferRecord> {
+    const rows = await this.sql<OfferRow[]>`
+      UPDATE p2p.offers SET status = 'paused', updated_at = now()
+       WHERE id = ${offerId} AND maker_id = ${makerId} AND status = 'active'
+      RETURNING *
+    `;
+    if (!rows[0]) {
+      const existing = await this.getOffer(offerId);
+      if (existing.makerId !== makerId) throw new P2pError('Only the maker can pause an offer', 'p2p.not_a_party');
+      if (existing.status === 'paused') return existing;
+      if (existing.status === 'closed') {
+        throw new P2pError(`Offer ${offerId} is closed and cannot be paused`, 'p2p.offer_not_active');
+      }
+      throw new P2pError(`Offer ${offerId} is ${existing.status} and cannot be paused`, 'p2p.offer_not_active');
+    }
+    return toOffer(rows[0]);
+  }
+
+  /**
+   * Resume a paused offer onto the board. Closed stays closed — re-list is a
+   * new offer, not a resume of one the maker already withdrew.
+   */
+  async resumeOffer(offerId: string, makerId: string): Promise<OfferRecord> {
+    this.assertTradingEnabled();
+    const rows = await this.sql<OfferRow[]>`
+      UPDATE p2p.offers SET status = 'active', updated_at = now()
+       WHERE id = ${offerId} AND maker_id = ${makerId} AND status = 'paused'
+      RETURNING *
+    `;
+    if (!rows[0]) {
+      const existing = await this.getOffer(offerId);
+      if (existing.makerId !== makerId) throw new P2pError('Only the maker can resume an offer', 'p2p.not_a_party');
+      if (existing.status === 'active') return existing;
+      if (existing.status === 'closed') {
+        throw new P2pError(`Offer ${offerId} is closed and cannot be resumed`, 'p2p.offer_not_active');
+      }
+      throw new P2pError(`Offer ${offerId} is ${existing.status} and cannot be resumed`, 'p2p.offer_not_active');
+    }
+    return toOffer(rows[0]);
+  }
+
   // ── Taking an offer → escrowLock (§6.2) ────────────────────────────────────
 
   /**
@@ -701,8 +782,12 @@ export class P2pService {
     takerId: string;
     amount: Amount;
     method: string;
-    /** Overrides the service default — e.g. after applying a rank fee discount (§4.1). */
-    feeBps?: number;
+    /**
+     * No per-take fee override. Fee is the service default only (`P2P_FEE_BPS` /
+     * constructor). Rank discounts (§4.1) are product law not yet wired — when
+     * they land, they must change the service fee policy, not a caller field
+     * that lets a hostile take set fee to zero.
+     */
     tradeId?: string;
   }): Promise<TradeRecord> {
     this.assertTradingEnabled();
@@ -730,7 +815,6 @@ export class P2pService {
     takerId: string;
     amount: Amount;
     method: string;
-    feeBps?: number;
   }): Promise<TradeRecord> {
     // Read the offer once, unlocked, purely to decide whether a reference price
     // is needed. Fetching a mark price is a network call; holding the offer's
@@ -816,7 +900,12 @@ export class P2pService {
           const now = await txNow(tx);
           const deadlineAt = deadlineFor('created', now, this.deadlines);
           const deadlines = withDeadline({}, 'created', deadlineAt);
-          const feeBps = input.feeBps ?? this.feeBps;
+          // Fee is constructor/`P2P_FEE_BPS` only — never a take-time argument.
+          // Integer range already validated in the constructor.
+          const feeBps = this.feeBps;
+          // Before inventory moves: a dust take that cannot post a release would
+          // lock value into a trade that can never settle.
+          assertReleasePostable(input.amount, feeBps);
 
           await tx`
             UPDATE p2p.offers
@@ -1011,6 +1100,9 @@ export class P2pService {
       if (trade.sellerId !== actorId) {
         throw new P2pError('Only the seller can confirm the fiat was received', 'p2p.not_the_seller');
       }
+      // Defense in depth: take already refuses unpostable dust, but a trade row
+      // could predate the gate or arrive via a future writer.
+      assertReleasePostable(trade.amount, trade.feeBps);
       await this.recordDecision({ tradeId, to: 'released', resolution: 'released', reason: 'seller.confirmed' });
       return this.settle(tradeId);
     });
@@ -1382,6 +1474,13 @@ export class P2pService {
       );
     }
 
+    // Release path must post; refuse before the ruling transaction if the fee
+    // would zero the buyer leg (same dust trap as confirmFiatReceived).
+    if (input.resolution === 'release') {
+      const trade = await this.getTrade(input.tradeId);
+      assertReleasePostable(trade.amount, trade.feeBps);
+    }
+
     return withMoneySpan(
       'p2p.resolveDispute',
       {
@@ -1583,6 +1682,16 @@ export class P2pService {
    * responsibility.
    */
   async settle(tradeId: string): Promise<TradeRecord> {
+    try {
+      return await this.settleOnce(tradeId);
+    } catch (err) {
+      // Durable reason for late pots — survives process restart; cleared on stamp.
+      await this.persistSettleFailure(tradeId, err);
+      throw err;
+    }
+  }
+
+  private async settleOnce(tradeId: string): Promise<TradeRecord> {
     const trade = await this.getTrade(tradeId);
 
     if (!trade.resolution) throw new P2pError(`Trade ${tradeId} has no recorded resolution to settle`, 'p2p.escrow_missing');
@@ -1635,10 +1744,34 @@ export class P2pService {
     await this.announceSettlement(trade, fee);
 
     const rows = await this.sql<TradeRow[]>`
-      UPDATE p2p.p2p_trades SET settled_at = now() WHERE id = ${tradeId} AND settled_at IS NULL
+      UPDATE p2p.p2p_trades
+         SET settled_at = now(),
+             last_settle_error = NULL,
+             last_settle_error_at = NULL
+       WHERE id = ${tradeId} AND settled_at IS NULL
       RETURNING *
     `;
     return rows[0] ? toTrade(rows[0]) : await this.getTrade(tradeId);
+  }
+
+  /**
+   * Write the last settle failure onto the late row. Never throws: a secondary
+   * write failure must not mask the original settle error the caller needs.
+   */
+  private async persistSettleFailure(tradeId: string, err: unknown): Promise<void> {
+    const message = (err instanceof Error ? err.message : String(err)).slice(0, 2000);
+    try {
+      await this.sql`
+        UPDATE p2p.p2p_trades
+           SET last_settle_error = ${message},
+               last_settle_error_at = now()
+         WHERE id = ${tradeId}
+           AND resolved_at IS NOT NULL
+           AND settled_at IS NULL
+      `;
+    } catch {
+      // best-effort — the throw from settle still surfaces
+    }
   }
 
   private async announceSettlement(trade: TradeRecord, fee: Amount): Promise<void> {
@@ -1933,6 +2066,9 @@ export class P2pService {
       resolutionReason: string | null;
       resolvedAt: Date;
       ageSeconds: number;
+      /** Last settle failure if any attempt ran; null if not yet re-driven. */
+      lastSettleError: string | null;
+      lastSettleErrorAt: Date | null;
     }>
   > {
     const lim = Math.min(Math.max(limit, 1), 200);
@@ -1943,9 +2079,12 @@ export class P2pService {
         resolution: TradeResolution | null;
         resolution_reason: string | null;
         resolved_at: Date;
+        last_settle_error: string | null;
+        last_settle_error_at: Date | null;
       }>
     >`
-      SELECT id, status, resolution, resolution_reason, resolved_at
+      SELECT id, status, resolution, resolution_reason, resolved_at,
+             last_settle_error, last_settle_error_at
         FROM p2p.p2p_trades
        WHERE resolved_at IS NOT NULL AND settled_at IS NULL
        ORDER BY resolved_at ASC
@@ -1954,6 +2093,12 @@ export class P2pService {
     const nowMs = now.getTime();
     return rows.map((r) => {
       const resolvedAt = r.resolved_at instanceof Date ? r.resolved_at : new Date(r.resolved_at);
+      const lastSettleErrorAt =
+        r.last_settle_error_at == null
+          ? null
+          : r.last_settle_error_at instanceof Date
+            ? r.last_settle_error_at
+            : new Date(r.last_settle_error_at);
       return {
         tradeId: r.id,
         status: r.status,
@@ -1961,6 +2106,8 @@ export class P2pService {
         resolutionReason: r.resolution_reason,
         resolvedAt,
         ageSeconds: Math.max(0, Math.floor((nowMs - resolvedAt.getTime()) / 1000)),
+        lastSettleError: r.last_settle_error,
+        lastSettleErrorAt,
       };
     });
   }
@@ -2026,18 +2173,22 @@ export class P2pService {
   /**
    * DOCTRINE §0.6, as a query.
    *
-   * "How much is in P2P escrow" has two independent answers: sum the trades
-   * this service believes hold escrow, and read the ledger's `escrow` accounts.
-   * They must agree per (seller, asset). That they CAN be compared is the whole
-   * reason value lives in the ledger and only terms live here.
+   * "How much is in P2P escrow" has two independent answers: this service's
+   * trade terms, and the ledger's per-trade escrow pots. They must agree
+   * **per trade**. Aggregating by (seller, asset) first would hide
+   * equal-and-opposite cross-trade theft — the pots are purpose-keyed for a
+   * reason, and the alarm has to use the same grain.
    *
    * A trade that is decided but not yet settled still holds escrow — the post
    * has not happened — so it counts on this side too.
    */
   async escrowIntegrity(): Promise<
-    { ok: true } | { ok: false; drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> }
+    | { ok: true }
+    | {
+        ok: false;
+        drift: Array<{ tradeId: string; sellerId: string; asset: string; expected: string; actual: string }>;
+      }
   > {
-    // Per-trade pots (L3-4). Aggregate-by-seller would hide cross-trade theft.
     const rows = await this.sql<Array<{ id: string; seller_id: string; asset: string; amount: string }>>`
       SELECT id, seller_id, asset, amount
         FROM p2p.p2p_trades
@@ -2045,26 +2196,17 @@ export class P2pService {
           OR (resolution IN ('released', 'refunded') AND settled_at IS NULL)
     `;
 
-    const bySeller = new Map<string, { expected: bigint; actual: bigint; sellerId: string; asset: string }>();
-
+    const drift: Array<{ tradeId: string; sellerId: string; asset: string; expected: string; actual: string }> = [];
     for (const row of rows) {
-      const key = `${row.seller_id}\0${row.asset}`;
-      const expectedPart = parseAmount(row.amount);
-      const actualPart = (await this.ledger.balance(tradeEscrowAccount(row.seller_id, row.asset, row.id))).amount;
-      const cur = bySeller.get(key) ?? { expected: 0n, actual: 0n, sellerId: row.seller_id, asset: row.asset };
-      cur.expected += expectedPart;
-      cur.actual += actualPart;
-      bySeller.set(key, cur);
-    }
-
-    const drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> = [];
-    for (const row of bySeller.values()) {
-      if (row.expected !== row.actual) {
+      const expected = parseAmount(row.amount);
+      const actual = (await this.ledger.balance(tradeEscrowAccount(row.seller_id, row.asset, row.id))).amount;
+      if (expected !== actual) {
         drift.push({
-          sellerId: row.sellerId,
+          tradeId: row.id,
+          sellerId: row.seller_id,
           asset: row.asset,
-          expected: formatAmount(row.expected),
-          actual: formatAmount(row.actual),
+          expected: formatAmount(expected),
+          actual: formatAmount(actual),
         });
       }
     }

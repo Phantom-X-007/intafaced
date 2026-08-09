@@ -591,13 +591,16 @@ export const FEATURES = [
   f('pay.subscriptions', 'Recurring — card and crypto', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-pay-w3',
+    // Ghost clear 2026-08-09 W4: schema/schedule/lifecycle/invoice-runner on tip (#1214).
+    // Residual is watch/dunning/surface — not "schema/runner" re-ship.
+    status: 'ready',
+    owner: null,
     dependsOn: ['pay.gateway'],
     note:
-      '**Wave 3 2026-08-09:** schedule arithmetic transplanted from svc-bank (S1 pure). ' +
-      'Crypto = invoice-and-watch only (protocol FORBIDDEN_SIGNATURES). Card mandate later. ' +
-      'Not auto-pull. Residual: schema/executions, lifecycle, runner, dunning.',
+      '**Wave 4 2026-08-09 ghost clear:** mandate+schedule+lifecycle+due invoice runner on tip (#1214). ' +
+      'Crypto = invoice-and-watch only (protocol FORBIDDEN_SIGNATURES — never invent pull). ' +
+      'Residual: payment→execution settled watch, bounded dunning, merchant surface, pre-charge notify. ' +
+      'Card mandate rail absent (pay.mandate_rail_absent).',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
@@ -609,18 +612,15 @@ export const FEATURES = [
     module: 'pay',
     phase: '3',
     plane: 'B',
-    // Ghost clear: nitro-money-w3 / feat/pay-residual-stage3 was #1006 MERGED 2026-08-07;
-    // steps 3–5 all tip (#1006/#1014/#1024). Claim TRK-pay.public-api.md already closed.
-    // Re-claimed 2026-08-09 for edge BASE reachability residual (mount /v1 after strip).
-    status: 'wip',
-    owner: 'nitro-pay-w3',
+    // Ghost clear W4 2026-08-09: edge BASE #1181 on tip (mount /v1). No dual-write residual.
+    status: 'ready',
+    owner: null,
     dependsOn: ['pay.gateway', 'identity.apikeys'],
     requires: ['services/svc-pay/src/public-rest.ts', 'services/svc-pay/src/merchant-webhooks.ts'],
     note:
-      'Steps 1–5 on tip (#988/#994/#1006/#1014/#1024). Ghost nitro-money-w3 cleared 2026-08-09 ' +
-      '(merged #1006, no open PR, no remote branch). Residual: service mounted at /api/pay/v1 while ' +
-      'edge strips /api/pay → every external REST call 404d; fix BASE=/v1, keep OpenAPI servers ' +
-      '/api/pay/v1, no preservePath. Owner grant path for pay:* still DIRECTION §8.4 (Nitro). ' +
+      'Steps 1–5 + edge BASE on tip (#988/#994/#1006/#1014/#1024/#1181). ' +
+      'Ghost nitro-pay-w3 cleared 2026-08-09 W4 (BASE residual sealed; no open owner session). ' +
+      'Residual honesty: pay:* grant path still DIRECTION §8.4 (Nitro — never invent). ' +
       'Not Class X acquirer.',
   }),
   f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
@@ -642,20 +642,14 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
-      'CLAIMED 2026-08-07 nitro money/ops wave 3 — feat/p2p-disputes-stage (D-S-08 residual). ' +
-      'STAGE SHIPPED in svc-p2p: moderation reachability via `P2P_MODERATOR_USER_IDS` (natural-person allowlist) so a ' +
-      'real session with `p2p:read` can call `disputes.list` / `disputes.resolve` when named; empty allowlist ' +
-      'honest-refuses with `p2p.moderation_unreachable` (PRECONDITION_FAILED) rather than sitting forever behind ' +
-      '`admin:compliance` that SESSION_SCOPES withholds. `disputes.open` and health/ready disclose `moderationReachable`. ' +
-      'admin:compliance still counts when a principal holds it (tests / future operator grant). No fake auto-ruling; ' +
-      'timer still escalate-and-hold only. ' +
-      'NOT done: apps/admin dispute console still absent; `p2p:moderate` scope split remains OWNER sign-off ' +
-      '(DIRECTION §3) and is deliberately not minted here. Prior honesty note (2026-08-06 corrected from false `done`) stands for the gap this stage closed.',
+      'GHOST OWNER CLEARED 2026-08-09 L03 W4: was wip @nitro-agent with stage already on main (#1007). ' +
+      'STAGE SHIPPED: `P2P_MODERATOR_USER_IDS` allowlist; empty → `p2p.moderation_unreachable`; list/evidence/escalate-and-hold; ' +
+      'no machine adjudication. STILL not done (owner/product): apps/admin dispute console; `p2p:moderate` scope mint ' +
+      '(DIRECTION §3). Agents may not invent who moderates or auto-ruling.',
   }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', {
     module: 'p2p',
@@ -668,20 +662,18 @@ export const FEATURES = [
   f('p2p.payment-instruments', 'Payment instruments — where the buyer actually pays', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/instrument-service.ts'],
-    note: "A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
+    note: "GHOST OWNER CLEARED 2026-08-09 L03 W4 (mechanism on main #428). Residual is operator content + Class X KMS, not craft. A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
   }),
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['p2p.reputation'],
     requires: ['services/svc-p2p'],
-    note: 'Stage 1 of 3 shipped (TRK-p2p.merchants DoD): p2p_merchants + append-only p2p_merchant_events (trigger-enforced), apply/approve/reject/suspend/reinstate/withdraw state machine with actor rules, and eligibility from EARNED reputation so a fresh account cannot borrow merchant trust. tRPC: merchants.me/submitApplication/withdraw (self) + decide/history (admin:compliance). Membership only — no balance, no custody; escrow still moves value through ledger recipes (§0.6). Eligibility thresholds are a policy object with a conservative default because tier ladder + numeric limits are open product law (spec §5). STILL OPEN for done: Stage 2 limits enforced on offer create + badge on public profile; Stage 3 merchant API keys/scopes/rate limits, or an explicit cut of the API to a later row.',
+    note: 'GHOST OWNER CLEARED 2026-08-09 L03 W4. Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings mechanism on main. Standing read per offer create; only approved gets merchant ceiling; env P2P_OFFER_MAX_STANDARD/MERCHANT unset = unlimited = pre-Stage-2 behaviour (numbers are owner product law, not invented). reputation.get exposes merchant:boolean|null for counterparty badge. Stage 3 merchant API keys/scopes/rate limits EXPLICITLY CUT 2026-08-09 L03 W4 — identity.apikeys already owns named keys; dual-writing a second key plane inside svc-p2p is refused. STILL wip for tracker done: owner must either set ceiling env (or confirm unlimited is the product choice) and accept the Stage 3 cut. Eligibility thresholds remain conservative defaults (spec §5).',
   }),
 
   f('api.gateway', 'Public API — ONE gateway in front of trade, pay and data (§9)', {
@@ -974,42 +966,32 @@ export const FEATURES = [
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
     dependsOn: ['agents.gateway'],
-    note: '**W5 honesty 2026-08-09:** metered runSession on tip (#1150 family); product boot register in flight (#1336). Money-write tools ungrantable at parse (#1300). STILL NOT done: tool inputs remain caller-supplied fixtures — not live trade/identity allowlisted data. Not tracker done until live grounded env (owner Class X allowlists).',
+    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession (#1150), boot-register (#1336), money-scope pin (#1339), money-write ungrantable (#1300). STILL NOT done: live trade/identity allowlisted tool inputs (Class X). Not tracker done until live grounded env.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
     dependsOn: ['agents.gateway', 'ops.support'],
-    note: '**W5 honesty 2026-08-09:** metered runSession + money denylist on tip. STILL NOT done: live ops.support KB plane + ticket ownership path in production env. Not tracker done until grounded env.',
+    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession, boot-register, money denylist. STILL NOT done: live ops.support KB plane in production env. Not tracker done until grounded env.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
     dependsOn: ['agents.gateway', 'trade.spot'],
-    note: '**W5 honesty 2026-08-09:** metered runSession on tip (#1114 family); dark plane refuses unbilled; boot register in flight (#1336); i18n tier_closed keys in flight (#1337). STILL NOT done: tickers are caller fixtures, not allowlisted live spot data. Not tracker done until allowlisted live data path (owner Class X).',
+    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession (#1114), dark refuse unbilled, boot-register (#1336), i18n parity (#1337). STILL NOT done: allowlisted live spot tickers (Class X). Not tracker done until live data path.',
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
     dependsOn: ['agents.gateway', 'pay.routing'],
-    note: '**W5 honesty 2026-08-09:** metered merchant.runSession on tip (#1284); dark pay plane refuses invent rates. STILL NOT done: live pay metrics allowlist. Not tracker done until live pay plane.',
+    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered merchant.runSession (#1284), dark pay refuse invent rates, boot-register. STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane.',
   }),
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
     dependsOn: ['agents.gateway', 'trade.copy'],
-    note: '**W5 honesty 2026-08-09:** metered copyIntel.runSession PR #1285 (CI blocked on unrelated pay fixture #1314). STILL NOT done: live trade.copy leader plane. Not tracker done until live leaders allowlist.',
+    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered copyIntel.runSession (#1285), dark copy refuse, boot-register. STILL NOT done: live trade.copy leader plane (Class X). Not tracker done until live leaders allowlist.',
   }),
   f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
     module: 'academy',
@@ -1224,12 +1206,23 @@ export const FEATURES = [
       'usable:0 instantly — that is how DoD clause 5 holds with no event. NO suspension POLICY was added: releasing on a ' +
       'transition an operator recorded is not deciding it. ' +
       'PR #1100 (stake endpoint serialization) and #1109 (Stage 1) are on main — the earlier note that they were unmerged is stale. ' +
-      'Org-vs-user left as per-user on purpose (adding org_id later is a nullable column plus a backfill). market.commerce still open.',
+      'Org-vs-user left as per-user on purpose (adding org_id later is a nullable column plus a backfill). market.commerce C1+C2 done #1189; C3 subscriptions residual.',
   }),
   f('market.commerce', 'Listings, subscriptions, purchases, house commission', {
     module: 'market',
     phase: '5',
+    status: 'done',
     dependsOn: ['market.vendors'],
+    requires: ['services/svc-market'],
+    note:
+      'C1+C2 ON MAIN 2026-08-09 — #1189 (listings + one-time purchase + house commission Class M). ' +
+      'Money only via recipes.marketPurchase → houseFees(market); blank MARKET_HOUSE_COMMISSION_BPS refuses ' +
+      'market.commission_not_configured (never invents free commission; 0 only when owner sets). ' +
+      'Crash re-drive settles from claim snapshot (not live env bps). Over-capacity after unstake: oldest-first ' +
+      'entitledListingRefs; excess refuse market.listing_over_capacity. Concurrent createListing cannot oversell ' +
+      'slots (claimSlot FOR UPDATE + orphan rollback). Catalogue registration order (ASC) — ranking DIRECTION §8 owner. ' +
+      'RESIDUAL / PARK: C3 subscriptions (period/past-due/cancel/access law — Nitro); commission bps value (Nitro env); ' +
+      'ranking/featured. Purchase of subscription refuse market.subscription_not_built; public catalogue hides them.',
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
     owner: 'shehzad002',

@@ -576,59 +576,11 @@ public class ApproveController {
     @Transactional(rollbackFor = Exception.class)
     public MessageResult certifiedBusiness(@SessionAttribute(SESSION_MEMBER) AuthMember user, String json,
                                            @RequestParam Long businessAuthDepositId) {
-        Member member = memberService.findOne(user.getId());
-        //只有未认证和认证失败的用户，可以发起认证申请
-        isTrue(member.getCertifiedBusinessStatus().equals(CertifiedBusinessStatus.NOT_CERTIFIED)
-                ||member.getCertifiedBusinessStatus().equals(CertifiedBusinessStatus.FAILED), msService.getMessage("REPEAT_APPLICATION"));
-        isTrue(member.getMemberLevel().equals(MemberLevelEnum.REALNAME), msService.getMessage("NO_REAL_NAME"));
-        //hasText(member.getEmail(), msService.getMessage("NOT_BIND_EMAIL"));
-        List<BusinessAuthDeposit> depositList=businessAuthDepositService.findAllByStatus(CommonStatus.NORMAL);
-        //如果当前有启用的保证金类型，必须选择一种保证金才可以申请商家认证
-        BusinessAuthDeposit businessAuthDeposit=null;
-        if(depositList!=null&&depositList.size()>0){
-            if(businessAuthDepositId==null){
-                return MessageResult.error("must select a kind of business auth deposit");
-            }
-            boolean flag=false;
-            for(BusinessAuthDeposit deposit:depositList){
-                if(deposit.getId().equals(businessAuthDepositId)){
-                    businessAuthDeposit=deposit;
-                    flag=true;
-                }
-            }
-            if(!flag){
-                return MessageResult.error("business auth deposit is not found");
-            }
-            MemberWallet memberWallet=memberWalletService.findByCoinUnitAndMemberId(businessAuthDeposit.getCoin().getUnit(),member.getId());
-            if(memberWallet.getBalance().compareTo(businessAuthDeposit.getAmount())<0){
-                return MessageResult.error("您的余额不足");
-            }
-            //冻结保证金需要的金额
-            memberWallet.setBalance(memberWallet.getBalance().subtract(businessAuthDeposit.getAmount()));
-            memberWallet.setFrozenBalance(memberWallet.getFrozenBalance().add(businessAuthDeposit.getAmount()));
-        }
-        //申请记录
-        BusinessAuthApply businessAuthApply=new BusinessAuthApply();
-        businessAuthApply.setCreateTime(new Date());
-        businessAuthApply.setAuthInfo(json);
-        businessAuthApply.setCertifiedBusinessStatus(CertifiedBusinessStatus.AUDITING);
-        businessAuthApply.setMember(member);
-        //不一定会有保证金策略
-        if(businessAuthDeposit!=null){
-            businessAuthApply.setBusinessAuthDeposit(businessAuthDeposit);
-            businessAuthApply.setAmount(businessAuthDeposit.getAmount());
-        }
-        businessAuthApplyService.create(businessAuthApply);
-
-        member.setCertifiedBusinessApplyTime(new Date());
-        member.setCertifiedBusinessStatus(CertifiedBusinessStatus.AUDITING);
-        CertifiedBusinessInfo certifiedBusinessInfo = new CertifiedBusinessInfo();
-        certifiedBusinessInfo.setCertifiedBusinessStatus(member.getCertifiedBusinessStatus());
-        certifiedBusinessInfo.setEmail(member.getEmail());
-        certifiedBusinessInfo.setMemberLevel(member.getMemberLevel());
-        MessageResult result = MessageResult.success();
-        result.setData(certifiedBusinessInfo);
-        return result;
+        // Dual-book Option B — freezes deposit available→frozen on MemberWallet.
+        // Ucenter has a 410 door for this URI, but body kill matches admin Grade C.
+        // ADR 2026-08-04. Queue: ledger recipe escrowLock (not Java book).
+        throw new IllegalStateException(
+                "business-auth deposit freeze is disabled: Java shell must not move balances (INTAFACED dual-book)");
     }
 
     @RequestMapping("/business-auth-deposit/list")

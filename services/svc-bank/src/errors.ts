@@ -64,6 +64,16 @@ export type BankErrorCode =
    */
   | 'bank.loan_principal_mismatch'
   /**
+   * A retry reused a loan id but changed the opening collateral amount.
+   *
+   * Sibling of `bank.loan_principal_mismatch`. Principal alone is not "same
+   * terms": after a failed first lock the row still holds the first principal,
+   * and a retry that names less collateral can pass LTV on the new figure then
+   * lock dust while the draw still pays the original principal. Same id must
+   * mean the same pledge.
+   */
+  | 'bank.loan_collateral_mismatch'
+  /**
    * A retry reused a loan id that belongs to a different borrower, or names a
    * different product.
    *
@@ -175,6 +185,12 @@ export type BankErrorCode =
    */
   | 'bank.fiat_ramp_socket'
   | 'bank.ramp_invalid_amount'
+  /**
+   * Asset id is blank or not a usable crypto ledger symbol. The crypto half
+   * does not invent an allowlist of commercial pairs — that is product law —
+   * but it refuses the empty / whitespace shape before a row or deposit posts.
+   */
+  | 'bank.ramp_invalid_asset'
   | 'bank.ramp_invalid_destination'
   /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */
   | 'bank.ramp_conflict'

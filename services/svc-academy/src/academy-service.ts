@@ -4,7 +4,7 @@ import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client
 import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
 import { emptyScene, parseScene } from './spatial/scene.js';
-import { decideHostSceneWrite } from './spatial/edit-policy.js';
+import { decideHostSceneWrite, sceneFingerprint } from './spatial/edit-policy.js';
 import {
   assertFreezeReason,
   badgeOf,
@@ -52,8 +52,11 @@ import {
   type SeasonStatus,
   type StandingRecord,
 } from './tournaments/ladder.js';
-import { transitionSeason } from './tournaments/season-lifecycle.js';
+import { assertScoreWindowOpen } from './tournaments/season-calendar.js';
+import { freezeSeasonWithSnapshot, transitionSeason } from './tournaments/season-lifecycle.js';
 import { assertNoPrizeAttachment } from './tournaments/prize-refuse.js';
+import { validateBulkScoreWrite, type ScorePatch } from './tournaments/bulk-score.js';
+import type { FreezeStandingsSnapshot } from './tournaments/season-lifecycle.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
@@ -118,6 +121,11 @@ export interface SessionRecord {
   streamProvider: string | null;
   streamRoom: string | null;
   scene: Record<string, unknown>;
+  /**
+   * Optimistic concurrency token for host scene writes.
+   * Always present on read so clients can supply expectedFingerprint without re-hashing.
+   */
+  sceneFingerprint: string;
 }
 
 interface RoomRow {
@@ -155,18 +163,24 @@ const toRoom = (row: RoomRow): RoomRecord => ({
   hostId: row.host_id,
 });
 
-const toSession = (row: SessionRow): SessionRecord => ({
-  id: row.id,
-  roomId: row.room_id,
-  title: row.title,
-  hostId: row.host_id,
-  status: row.status,
-  startsAt: row.starts_at,
-  endsAt: row.ends_at,
-  streamProvider: row.stream_provider,
-  streamRoom: row.stream_room,
-  scene: row.scene,
-});
+const toSession = (row: SessionRow): SessionRecord => {
+  // Unreadable DB default `{}` → empty v1 fingerprint (same SoT as updateScene).
+  const parsed = parseScene(row.scene);
+  const scene = parsed.ok ? parsed.scene : emptyScene();
+  return {
+    id: row.id,
+    roomId: row.room_id,
+    title: row.title,
+    hostId: row.host_id,
+    status: row.status,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    streamProvider: row.stream_provider,
+    streamRoom: row.stream_room,
+    scene: row.scene,
+    sceneFingerprint: sceneFingerprint(scene),
+  };
+};
 
 export interface AcademyServiceOptions {
   /** Operational ceiling on a room's own capacity — see env.ts. */
@@ -685,6 +699,41 @@ export class AcademyService {
     } catch (e) {
       this.mapTournamentErr(e);
     }
+
+    // live→frozen: durable ranked snapshot (rank+score only, no prize invent).
+    if (current.status === 'live' && input.status === 'frozen') {
+      const standingRows = await this.sql<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+        SELECT season_id, user_id, score, updated_at FROM academy.tournament_standings
+         WHERE season_id = ${input.seasonId}
+      `;
+      let snapshot: FreezeStandingsSnapshot;
+      try {
+        const frozen = freezeSeasonWithSnapshot(
+          current,
+          standingRows.map((r) => ({
+            seasonId: r.season_id,
+            userId: r.user_id,
+            score: r.score,
+            updatedAt: r.updated_at,
+          })),
+        );
+        snapshot = frozen.snapshot;
+      } catch (e) {
+        this.mapTournamentErr(e);
+      }
+      const standingsJson = snapshot.standings.map((s) => ({
+        rank: s.rank,
+        userId: s.userId,
+        score: s.score,
+        updatedAt: s.updatedAt.toISOString(),
+      }));
+      await this.sql`
+        INSERT INTO academy.tournament_freeze_snapshots (season_id, frozen_at, standings)
+        VALUES (${input.seasonId}, ${snapshot.frozenAt}, ${this.sql.json(standingsJson as never)})
+        ON CONFLICT (season_id) DO NOTHING
+      `;
+    }
+
     const rows = await this.sql<
       Array<{
         id: string;
@@ -704,10 +753,34 @@ export class AcademyService {
     return this.toSeason(rows[0]!);
   }
 
-  async setStanding(input: { seasonId: string; userId: string; score: number }): Promise<StandingRecord> {
+  /** Read durable freeze audit snapshot (null when season never frozen on this path). */
+  async freezeSnapshot(seasonId: string): Promise<{
+    seasonId: string;
+    frozenAt: Date;
+    standings: { rank: number; userId: string; score: number; updatedAt: string }[];
+  } | null> {
+    this.assertTournamentEnabled();
+    await this.season(seasonId);
+    const rows = await this.sql<Array<{ season_id: string; frozen_at: Date; standings: unknown }>>`
+      SELECT season_id, frozen_at, standings FROM academy.tournament_freeze_snapshots
+       WHERE season_id = ${seasonId}
+    `;
+    const r = rows[0];
+    if (!r) return null;
+    const standings = r.standings as { rank: number; userId: string; score: number; updatedAt: string }[];
+    return {
+      seasonId: r.season_id,
+      frozenAt: r.frozen_at,
+      standings: [...standings],
+    };
+  }
+
+  async setStanding(input: { seasonId: string; userId: string; score: number; now?: Date }): Promise<StandingRecord> {
     this.assertTournamentEnabled();
     const season = await this.season(input.seasonId);
     try {
+      // Live status alone is not enough — calendar window must still be open.
+      assertScoreWindowOpen(season, input.now ?? new Date());
       assertMayWriteScore(season.status);
       assertScore(input.score);
     } catch (e) {
@@ -721,6 +794,43 @@ export class AcademyService {
     `;
     const r = rows[0]!;
     return { seasonId: r.season_id, userId: r.user_id, score: r.score, updatedAt: r.updated_at };
+  }
+
+  /**
+   * Operator bulk score write — Stage-2 L3 residual on the wire.
+   * Pure `validateBulkScoreWrite` owns refuse rules (live-only, no empty, no
+   * dup user, score bounds). Then each accepted patch uses the same upsert as
+   * setStanding. No prize fields, no invent scores.
+   */
+  async bulkSetStandings(input: {
+    seasonId: string;
+    patches: readonly ScorePatch[];
+  }): Promise<
+    { ok: true; accepted: number; standings: StandingRecord[] } | { ok: false; reason: string; message: string; badUserId?: string }
+  > {
+    this.assertTournamentEnabled();
+    const season = await this.season(input.seasonId);
+    const gate = validateBulkScoreWrite({
+      seasonStatus: season.status,
+      seasonId: input.seasonId,
+      patches: input.patches,
+      // Same calendar gate as setStanding — refuse bulk before any partial upserts.
+      startsAt: season.startsAt,
+      endsAt: season.endsAt,
+    });
+    if (gate.status === 'refuse') {
+      return {
+        ok: false,
+        reason: gate.reason,
+        message: gate.message,
+        ...(gate.badUserId !== undefined ? { badUserId: gate.badUserId } : {}),
+      };
+    }
+    const standings: StandingRecord[] = [];
+    for (const p of gate.patches) {
+      standings.push(await this.setStanding({ seasonId: input.seasonId, userId: p.userId, score: p.score }));
+    }
+    return { ok: true, accepted: standings.length, standings };
   }
 
   async standings(seasonId: string): Promise<RankedStanding[]> {
@@ -826,13 +936,20 @@ export class AcademyService {
   }
 
   /**
-   * Operator appoint. Idempotent re-appoint of a frozen row reactivates.
+   * Operator appoint. New row only, or refuse.
    * Already-active is refused so double-click does not rewrite appointed_by silently.
+   * Frozen is refused so freeze audit is not erased — use unfreezeAmbassador.
    */
   async appointAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
     const existing = await this.ambassadorOf(input.userId);
     if (existing?.status === 'active') {
       throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
+    }
+    if (existing?.status === 'frozen') {
+      throw new AcademyError(
+        `Ambassador ${input.userId} is frozen — unfreeze to restore the badge (re-appoint would erase freeze audit)`,
+        'academy.ambassador_already_frozen',
+      );
     }
 
     const rows = await this.sql<
@@ -856,8 +973,24 @@ export class AcademyService {
         frozen_by = NULL,
         freeze_reason = NULL,
         updated_at = now()
+      WHERE academy.ambassadors.status IS DISTINCT FROM 'frozen'
+        AND academy.ambassadors.status IS DISTINCT FROM 'active'
       RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
     `;
+    if (!rows[0]) {
+      // Concurrent freeze/active won the race — re-read and refuse honestly.
+      const again = await this.ambassadorOf(input.userId);
+      if (again?.status === 'frozen') {
+        throw new AcademyError(
+          `Ambassador ${input.userId} is frozen — unfreeze to restore the badge (re-appoint would erase freeze audit)`,
+          'academy.ambassador_already_frozen',
+        );
+      }
+      if (again?.status === 'active') {
+        throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
+      }
+      throw new AcademyError(`Could not appoint ambassador ${input.userId}`, 'academy.ambassador_invalid');
+    }
     return this.toAmbassador(rows[0]!);
   }
 
@@ -1169,8 +1302,11 @@ export class AcademyService {
 
   async enrollCertPath(input: { userId: string; pathSlug: string }): Promise<EnrollmentRecord> {
     const pathSlug = input.pathSlug.trim().toLowerCase();
-    if (!pathSlug || pathSlug.length > 64) {
-      throw new AcademyError('Invalid path slug', 'academy.cert_invalid');
+    // Blueprint paths only — enroll is a bookmark, not a grant gate, but any
+    // free-text pathSlug would invent a fourth curriculum axis on the wire.
+    const BLUEPRINT_PATHS = new Set(['foundations', 'markets', 'builder', 'sovereign']);
+    if (!pathSlug || pathSlug.length > 64 || !BLUEPRINT_PATHS.has(pathSlug)) {
+      throw new AcademyError('pathSlug must be one of foundations | markets | builder | sovereign', 'academy.cert_invalid');
     }
     const rows = await this.sql<Array<{ user_id: string; path_slug: string; enrolled_at: Date }>>`
       INSERT INTO academy.cert_enrollments (user_id, path_slug, enrolled_at)

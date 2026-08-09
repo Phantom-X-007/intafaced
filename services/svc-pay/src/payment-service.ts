@@ -70,6 +70,12 @@ export type PayErrorCode =
   | 'pay.merchant_not_found'
   /** The principal does not own this merchant. One rule, in merchant-ownership.ts. */
   | 'pay.merchant_forbidden'
+  /**
+   * Principal is in the subject's PayFac tree but lacks the named permission area.
+   * Distinct from merchant_forbidden so a parent that was never granted refund
+   * does not look like a stranger.
+   */
+  | 'pay.submerchant_permission_denied'
   | 'pay.merchant_inactive'
   | 'pay.merchant_pricing_invalid'
   /** KYB transition refused (wrong status, or stub decide blocked under live-only). */

@@ -194,6 +194,7 @@ export class RampService {
     if (input.amount <= 0n) {
       throw new BankError('On-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
+    assertRampAssetId(input.assetId);
     const rail = assertCryptoRamp(this.programme);
 
     return withMoneySpan(
@@ -247,6 +248,7 @@ export class RampService {
     if (input.amount <= 0n) {
       throw new BankError('Off-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
+    assertRampAssetId(input.assetId);
     if (!input.destinationRef.trim()) {
       throw new BankError('Off-ramp destination is required', 'bank.ramp_invalid_destination');
     }
@@ -492,6 +494,23 @@ function toOfframp(row: OfframpRow): OfframpRecord {
     createdAt: row.created_at,
     settledAt: row.settled_at,
   };
+}
+
+/**
+ * Asset id shape gate — not a commercial allowlist.
+ *
+ * Empty / whitespace would post a ledger deposit under a nonsense asset and
+ * look "successful". A full allowlist of pairs is product law (Nitro); until
+ * that exists we only refuse the shapes that cannot be a real asset id.
+ */
+function assertRampAssetId(assetId: string): void {
+  const trimmed = assetId.trim();
+  if (!trimmed || trimmed !== assetId) {
+    throw new BankError(
+      'Ramp asset id must be a non-empty crypto symbol with no leading or trailing whitespace',
+      'bank.ramp_invalid_asset',
+    );
+  }
 }
 
 /** Claimed row must match every client-supplied term, including both unique keys. */

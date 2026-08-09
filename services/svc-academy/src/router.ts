@@ -22,6 +22,7 @@ import { curriculumBodyForLocale, curriculumI18nStrategyLine } from './curriculu
 import {
   drillProgress,
   isDrillComplete,
+  listPaperFillRefs,
   remainingStepIds,
   replayPaperDrill,
   startPaperDrillForCatalogItem,
@@ -36,6 +37,7 @@ import {
 } from './paper/simulated-result.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
 import { decidePrizeIntent, isPrizeRefuseClosed, prizeRefuseStatusLine, type PrizeIntentKind } from './tournaments/prize-refuse.js';
+import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -97,6 +99,8 @@ const sessionOut = z.object({
   /** Null when no SFU is configured — the lobby still runs as text and presence. */
   streamProvider: z.string().nullable(),
   scene: z.record(z.unknown()),
+  /** Always on read — client supplies this as expectedFingerprint on updateScene. */
+  sceneFingerprint: z.string().min(1),
 });
 
 const curriculumSummaryOut = z.object({
@@ -243,6 +247,12 @@ const publishedFillIn = z.object({
 });
 
 const simulatedValuationOut = z.object({
+  // Nested seal — valuation alone cannot be read as live money if parent seal stripped
+  simulated: z.literal(true),
+  venue: z.literal(SIMULATED_VENUE),
+  realLedger: z.literal(false),
+  withdrawable: z.literal(false),
+  disclaimer: z.string().min(1),
   fillCount: z.number().int(),
   boughtSize: z.string(),
   soldSize: z.string(),
@@ -766,9 +776,28 @@ export function createAcademyRouter(academy: AcademyService) {
 
           const run = replayed.run;
           const progress = drillProgress(run);
+          // Value the post-attach run, not the raw input array. attachPaperFillRef
+          // already de-dupes fillId and refuses conflicting re-sends; valuing
+          // input.fills would re-inflate PnL when a client double-posts the same id.
+          // Incomplete refs (id-only) never reach valuation — publishedFillIn on
+          // the wire requires side/price/size, and uniquePublishedFills refuses
+          // conflicts that slip past attach.
+          const fillsForValue: PublishedFill[] = listPaperFillRefs(run).flatMap((ref) => {
+            if (ref.side !== 'buy' && ref.side !== 'sell') return [];
+            if (typeof ref.price !== 'string' || typeof ref.size !== 'string') return [];
+            return [
+              {
+                fillId: ref.fillId,
+                marketId: ref.marketId,
+                side: ref.side,
+                price: ref.price,
+                size: ref.size,
+              },
+            ];
+          });
           // Throws `academy.paper_price_unavailable` rather than valuing a fill
-          // whose price nobody published.
-          const valuation = valueSimulatedDrill(input.fills as readonly PublishedFill[], input.markPrice);
+          // whose price nobody published (or a conflicting fillId pair).
+          const valuation = valueSimulatedDrill(fillsForValue, input.markPrice);
 
           const sealed = assertSealedSimulated(
             sealSimulated({
@@ -1158,6 +1187,30 @@ export function createAcademyRouter(academy: AcademyService) {
       .mutation(({ input }) => guard(() => academy.setSeasonStatus(input))),
 
     /**
+     * Durable freeze audit — ranked standings at live→frozen (no prize fields).
+     * Null when the season was never frozen through setSeasonStatus.
+     */
+    freezeSnapshot: scopedProcedure('admin:read', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid() }))
+      .output(
+        z
+          .object({
+            seasonId: z.string().uuid(),
+            frozenAt: z.date(),
+            standings: z.array(
+              z.object({
+                rank: z.number().int().positive(),
+                userId: z.string(),
+                score: z.number().int(),
+                updatedAt: z.string(),
+              }),
+            ),
+          })
+          .nullable(),
+      )
+      .query(({ input }) => guard(() => academy.freezeSnapshot(input.seasonId))),
+
+    /**
      * Class N/M honesty — IFC prize pools refuse-closed on the wire.
      * Pure helpers already refuse; this mounts them so operators never see a
      * success path that invents pool amounts. No amount fields on the output.
@@ -1228,6 +1281,61 @@ export function createAcademyRouter(academy: AcademyService) {
       .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))
       .output(standingOut.omit({ rank: true }))
       .mutation(({ input }) => guard(() => academy.setStanding(input))),
+
+    /**
+     * Bulk score staging on the wire (was pure-only residual).
+     * Live season only; empty/dup/bad score refuse closed. No prize invent.
+     */
+    bulkSetStandings: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          seasonId: z.string().uuid(),
+          patches: z.array(z.object({ userId: z.string().uuid(), score: z.number().int() })).max(500),
+        }),
+      )
+      .output(
+        z.discriminatedUnion('ok', [
+          z.object({
+            ok: z.literal(true),
+            accepted: z.number().int().nonnegative(),
+            statusLine: z.string(),
+            standings: z.array(standingOut.omit({ rank: true })),
+          }),
+          z.object({
+            ok: z.literal(false),
+            reason: z.string(),
+            message: z.string(),
+            statusLine: z.string(),
+            badUserId: z.string().optional(),
+          }),
+        ]),
+      )
+      .mutation(({ input }) =>
+        guard(async () => {
+          const result = await academy.bulkSetStandings(input);
+          if (!result.ok) {
+            return {
+              ok: false as const,
+              reason: result.reason,
+              message: result.message,
+              statusLine: `ok=0 accepted=0 refused=1 reason=${result.reason}`,
+              ...(result.badUserId !== undefined ? { badUserId: result.badUserId } : {}),
+            };
+          }
+          return {
+            ok: true as const,
+            accepted: result.accepted,
+            statusLine: bulkScoreStatusLine(
+              validateBulkScoreWrite({
+                seasonStatus: 'live',
+                seasonId: input.seasonId,
+                patches: input.patches,
+              }),
+            ),
+            standings: result.standings,
+          };
+        }),
+      ),
 
     // ── Certifications (progress + grants + XP emit — NO PAY) ─────────────────
     //

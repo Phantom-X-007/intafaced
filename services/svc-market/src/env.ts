@@ -19,11 +19,10 @@ import { edgeEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } fr
  * `docker-compose.apps.yml` is what `tooling/ci/compose-secret-parity.mjs`
  * checks, and the svc-academy block there records why that gate exists.
  *
- * THERE IS STILL NO `LEDGER_URL`, and that absence is unchanged by Stage 2.
- * `market.vendors` moves no value — purchases and house commission are
- * `market.commerce` (§0.6). The stake endpoint returns amounts alongside the
- * tier and this service reads none of them (`stake-source.ts`), so no credential
- * here can reach anything that moves value.
+ * `LEDGER_URL` arrived with market.commerce. Vendors still move no value; only
+ * the purchase path posts recipes. `MARKET_HOUSE_COMMISSION_BPS` has NO default —
+ * unset means refuse-closed (`market.commission_not_configured`). Setting `0` is
+ * an explicit free-commission decision by the owner, not silence.
  */
 const schema = serviceEnvSchema
   .merge(edgeEnvSchema)
@@ -36,6 +35,18 @@ const schema = serviceEnvSchema
 
       /** svc-token's internal address — the source of `vendorSlots` for listing slots. */
       TOKEN_URL: z.string().url().default('http://localhost:4003'),
+
+      /** svc-ledger — purchase settlement only. */
+      LEDGER_URL: z.string().url().default('http://localhost:4001'),
+
+      /**
+       * House commission in basis points (0..9999). Optional on purpose:
+       * missing → refuse every purchase. Do not invent a platform rate.
+       */
+      MARKET_HOUSE_COMMISSION_BPS: z.preprocess(
+        (v) => (v === undefined || v === null || v === '' ? undefined : v),
+        z.coerce.number().int().min(0).max(9_999).optional(),
+      ),
     }),
   );
 

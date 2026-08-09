@@ -136,6 +136,12 @@ export interface LoanRecord {
   quoteAssetId: string;
   aprBps: number;
   principal: Amount;
+  /**
+   * Collateral pledged at open, snapshotted once — a TERM, not a live balance.
+   * Live holdings are ledger + `loan_collateral_events`. Null only on legacy
+   * rows opened before this column existed.
+   */
+  openingCollateral: Amount | null;
   status: 'pending' | 'active' | 'margin_call' | 'liquidating' | 'repaid' | 'liquidated';
   drawLedgerTxId: string | null;
   openedAt: Date;
@@ -490,10 +496,11 @@ export class LoanService {
 
     const inserted = await this.sql<Array<Record<string, unknown>>>`
       INSERT INTO bank.loans (
-        id, product_id, user_id, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, principal, opened_at
+        id, product_id, user_id, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, principal, opening_collateral, opened_at
       ) VALUES (
         ${loanId}, ${product.id}, ${input.userId}, ${product.debtAssetId}, ${product.collateralAssetId},
-        ${product.quoteAssetId}, ${product.aprBps}, ${formatAmount(input.principal)}::numeric, ${now}
+        ${product.quoteAssetId}, ${product.aprBps}, ${formatAmount(input.principal)}::numeric,
+        ${formatAmount(input.collateralAmount)}::numeric, ${now}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING *
@@ -504,26 +511,19 @@ export class LoanService {
     /**
      * THE RETRY MUST BE THE SAME LOAN, NOT JUST THE SAME ID.
      *
-     * `ON CONFLICT (id) DO NOTHING` means a retry writes nothing and `loan`
-     * becomes the FIRST call's row — carrying the FIRST call's principal. Every
-     * check above ran on `input`. `completePending` below then locks
-     * `input.collateralAmount` and draws `loan.principal`. Nothing reconciled
-     * the two, so the guard and the payout could read different numbers.
-     *
-     * The attack that gets: open loan X for 1 000 000 against 2 000 000 of
-     * collateral you do not hold. The LTV check passes on those numbers, the row
-     * persists at 1 000 000, the collateral lock fails for insufficient funds
-     * and the loan stays `pending`. Retry loan X for 1 against 2 of collateral
-     * you DO hold — LTV passes on the new numbers, the insert conflicts and does
-     * nothing, and the service locks 2 units and draws 1 000 000. Repeat until
-     * the reserve is empty.
-     *
-     * Refusing is the right shape rather than re-deriving LTV from
-     * `loan.principal`: a retry that asks for different terms is a different
-     * loan, and silently honouring the stored ones would answer a request
-     * nobody made. Same id + same principal stays idempotent, which is what the
-     * caller-supplied id is for.
+     * Order: who is asking → principal → opening collateral. Borrower first so a
+     * second caller is not answered with the first loan's stored amounts via a
+     * typed amount mismatch. Principal and collateral still refuse under-coll
+     * and principal-swap attacks once identity matches.
      */
+    if (loan.userId !== input.userId || loan.productId !== product.id) {
+      throw new BankError(
+        `Loan ${loan.id} already exists and was not opened by this request — a retry must carry the same terms. ` +
+          `Use a new loan id to open a different loan`,
+        'bank.loan_borrower_mismatch',
+      );
+    }
+
     if (loan.principal !== input.principal) {
       throw new BankError(
         `Loan ${loan.id} already exists with a principal of ${formatAmount(loan.principal)} ${loan.debtAssetId}, but this request asks for ` +
@@ -532,29 +532,13 @@ export class LoanService {
       );
     }
 
-    /**
-     * AND "THE SAME TERMS" INCLUDES WHO IS ASKING.
-     *
-     * The guard above reads `loan` — the FIRST caller's row — for exactly the
-     * reason it explains, and then stops at the amount. Hold the principal
-     * equal and the rest of that reasoning still applies to the borrower: this
-     * caller's request is answered out of somebody else's loan.
-     *
-     * Active row: they are told "your loan is open", with a status, an LTV and
-     * two ledger transaction ids, having locked no collateral of their own and
-     * drawn no principal of their own. Pending row: `completePending` below
-     * drives the OTHER borrower's loan using THIS caller's collateral figure,
-     * out of the other borrower's account.
-     *
-     * The product is checked for the same reason one step down: `loan` carries
-     * the first call's asset pair and APR, while the LTV above was computed
-     * against the product named in THIS request.
-     */
-    if (loan.userId !== input.userId || loan.productId !== product.id) {
+    const storedOpening =
+      loan.openingCollateral ?? (await this.collateralEvent(loan.id, 0).then((e) => (e ? parseAmount(e.amount) : null)));
+    if (storedOpening !== null && storedOpening !== input.collateralAmount) {
       throw new BankError(
-        `Loan ${loan.id} already exists and was not opened by this request — a retry must carry the same terms. ` +
-          `Use a new loan id to open a different loan`,
-        'bank.loan_borrower_mismatch',
+        `Loan ${loan.id} already exists with opening collateral of ${formatAmount(storedOpening)} ${loan.collateralAssetId}, but this request asks for ` +
+          `${formatAmount(input.collateralAmount)} — a retry must carry the same terms. Use a new loan id to pledge a different amount`,
+        'bank.loan_collateral_mismatch',
       );
     }
 
@@ -1498,7 +1482,43 @@ export class LoanService {
 
   // ── Reserve ────────────────────────────────────────────────────────────────
 
+  /**
+   * Fund the lending reserve: claim a bank funding row, post the recipe, settle.
+   *
+   * The row is the independent half of `reconcileReserve` (B-02). Ledger balance
+   * alone cannot prove what was funded — a tautology with outstanding. Same
+   * `fundingId` re-posts idempotently and returns the original ledger tx.
+   */
   async fundReserve(input: { debtAssetId: string; fundingId: string; amount: Amount; from?: AccountRef }): Promise<{ ledgerTxId: string }> {
+    if (input.amount <= 0n) {
+      throw new BankError('Reserve funding amount must be positive', 'bank.below_minimum');
+    }
+
+    const claimed = await this.sql<Array<{ funding_id: string; status: string; ledger_tx_id: string | null; amount: string }>>`
+      INSERT INTO bank.loan_reserve_fundings (funding_id, debt_asset_id, amount, status)
+      VALUES (${input.fundingId}, ${input.debtAssetId}, ${formatAmount(input.amount)}::numeric, 'pending')
+      ON CONFLICT (funding_id) DO NOTHING
+      RETURNING funding_id, status, ledger_tx_id, amount::text AS amount
+    `;
+
+    if (claimed.length === 0) {
+      const existing = await this.sql<Array<{ status: string; ledger_tx_id: string | null; amount: string; debt_asset_id: string }>>`
+        SELECT status, ledger_tx_id, amount::text AS amount, debt_asset_id
+          FROM bank.loan_reserve_fundings WHERE funding_id = ${input.fundingId}
+      `;
+      const row = existing[0];
+      if (!row) {
+        throw new BankError(`Funding ${input.fundingId} disappeared after a conflict`, 'bank.loan_not_found');
+      }
+      if (row.debt_asset_id !== input.debtAssetId || parseAmount(row.amount) !== input.amount) {
+        throw new BankError(`Funding ${input.fundingId} already exists on different terms`, 'bank.loan_principal_mismatch');
+      }
+      if (row.status === 'settled' && row.ledger_tx_id) {
+        return { ledgerTxId: row.ledger_tx_id };
+      }
+      // Pending retry: re-drive the post below.
+    }
+
     const posted = await this.ledger.post(
       recipes.loanReserveFund({
         fundingId: input.fundingId,
@@ -1507,19 +1527,26 @@ export class LoanService {
         ...(input.from ? { from: input.from } : {}),
       }),
     );
+
+    await this.sql`
+      UPDATE bank.loan_reserve_fundings
+         SET status = 'settled',
+             ledger_tx_id = ${posted.id},
+             settled_at = now()
+       WHERE funding_id = ${input.fundingId}
+         AND status = 'pending'
+    `;
+
     return { ledgerTxId: posted.id };
   }
 
   /**
    * THE RECONCILIATION.
    *
-   * `balance(loanReserve) + Σ(outstanding principal)` must equal everything ever
-   * funded into the reserve, less anything ever lost to bad debt. Two independent
-   * sums, computed from different places — one from the ledger, one from svc-bank's
-   * rows — and a mismatch means one of them is lying.
-   *
-   * This is what the absent `outstanding` column buys. A stored figure would make
-   * this check compare the loan table against itself.
+   * Identity: `funded − badDebt ≈ reserveBalance + outstandingPrincipal`.
+   * `funded` is the independent sum of settled `loan_reserve_fundings` rows —
+   * not reserve + outstanding (a tautology). `drift` is the residual; ops can
+   * treat a non-zero drift as a real health signal now that `independent` is true.
    */
   async reconcileReserve(debtAssetId: string): Promise<{
     reserveBalance: Amount;
@@ -1528,19 +1555,30 @@ export class LoanService {
     funded: Amount;
     drift: Amount;
     /**
-     * False until `funded` is summed from independent `loan.reserve.funded`
-     * journal (or a bank funding table). When false, `drift` is always 0 and
-     * must not be treated as a green ops health signal.
+     * True when `funded` comes from the bank funding table (independent of the
+     * reserve balance). Drift is then a real residual, not a hard-coded zero.
      */
     independent: boolean;
   }> {
     const reserve = await this.ledger.balance(loanReserve(debtAssetId));
 
     const rows = await this.sql<
-      Array<{ outstanding_principal: string; bad_debt: string; drawn: string; repaid: string; recovered: string }>
+      Array<{
+        outstanding_principal: string;
+        bad_debt: string;
+        drawn: string;
+        repaid: string;
+        recovered: string;
+        funded: string;
+      }>
     >`
       WITH open_loans AS (
-        SELECT id, principal FROM bank.loans WHERE debt_asset_id = ${debtAssetId}
+        -- Only DRAWN loans. A pending row's principal never left the reserve;
+        -- counting it as outstanding inflates the identity and makes an empty
+        -- book look funded by undrawn intentions.
+        SELECT id, principal FROM bank.loans
+         WHERE debt_asset_id = ${debtAssetId}
+           AND drawn_at IS NOT NULL
       )
       SELECT
         COALESCE((SELECT SUM(principal) FROM open_loans), 0) AS drawn,
@@ -1551,7 +1589,11 @@ export class LoanService {
         COALESCE((SELECT SUM(q.shortfall) FROM bank.loan_liquidations q
                    JOIN open_loans l ON l.id = q.loan_id
                   WHERE q.status = 'settled' AND q.bad_debt_ledger_tx_id IS NOT NULL), 0) AS bad_debt,
-        COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal
+        COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal,
+        COALESCE((
+          SELECT SUM(amount) FROM bank.loan_reserve_fundings
+           WHERE debt_asset_id = ${debtAssetId} AND status = 'settled'
+        ), 0) AS funded
     `;
 
     const row = rows[0]!;
@@ -1560,17 +1602,11 @@ export class LoanService {
     const recovered = parseAmount(row.recovered);
     const badDebt = parseAmount(row.bad_debt);
     const outstandingPrincipal = drawn - repaid - recovered - badDebt;
-
-    // funded / drift honesty (B-02):
-    // `funded` is currently defined as reserve + outstanding principal — a
-    // tautology, not an independent sum of `loan.reserve.funded` journal rows.
-    // True drift needs ledger journal aggregation (or a bank funding table).
-    // Until that exists: drift 0 and independent:false so ops cannot treat
-    // "drift 0" as a green health signal.
     const outstandingClamped = outstandingPrincipal < 0n ? 0n : outstandingPrincipal;
-    const funded = reserve.amount + outstandingClamped;
-    const drift = 0n;
-    const independent = false;
+    const funded = parseAmount(row.funded);
+    // Identity: funded − badDebt = reserve + outstanding  →  drift zero when healthy.
+    const drift = funded - badDebt - reserve.amount - outstandingClamped;
+    const independent = true;
 
     return {
       reserveBalance: reserve.amount,
@@ -1718,6 +1754,7 @@ function toProduct(row: Record<string, unknown>): LoanProductRecord {
 }
 
 function toLoan(row: Record<string, unknown>): LoanRecord {
+  const openingRaw = row.opening_collateral;
   return {
     id: String(row.id),
     productId: String(row.product_id),
@@ -1727,6 +1764,7 @@ function toLoan(row: Record<string, unknown>): LoanRecord {
     quoteAssetId: String(row.quote_asset_id),
     aprBps: Number(row.apr_bps),
     principal: parseAmount(String(row.principal)),
+    openingCollateral: openingRaw === null || openingRaw === undefined ? null : parseAmount(String(openingRaw)),
     status: row.status as LoanRecord['status'],
     drawLedgerTxId: row.draw_ledger_tx_id === null ? null : String(row.draw_ledger_tx_id),
     openedAt: row.opened_at as Date,

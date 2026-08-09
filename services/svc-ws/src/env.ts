@@ -119,8 +119,18 @@ const schema = baseEnvSchema
        */
       WS_MAX_LAG_TICKS: z.coerce.number().int().min(1).default(20),
 
-      /** Sockets per replica. A public port needs a ceiling that is not RAM. */
+      /**
+       * Max open sockets **per hub** on this replica (depth, trade tape, and
+       * private each get their own ceiling of this size — not a single
+       * process-wide sum). A public port needs a ceiling that is not RAM.
+       */
       WS_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(5_000),
+
+      /**
+       * Private `/private/stream` only: max open sockets per authenticated user
+       * on this replica. Stops one principal from filling `WS_MAX_CONNECTIONS`.
+       */
+      WS_PRIVATE_MAX_CONNECTIONS_PER_USER: z.coerce.number().int().min(1).default(16),
 
       /** Ping cadence. A socket that misses a pong is dead and is terminated. */
       WS_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(30_000),

@@ -1149,6 +1149,11 @@ module.exports = {
             feedConnected: "Depth book is live (snapshot received)",
             feedDownTitle: "Depth book is not live — last/24h are a REST snapshot, not a live ticker",
             feedLive: "Depth live",
+            impactBookUnknown: "book unknown",
+            impactNoDepth: "no depth",
+            impactAvg: "avg",
+            impactPartial: "partial",
+            impactPartialBook: "partial book",
             feedDown: "No feed · not live prices",
 
             searchMarket: "Search market",

@@ -41,6 +41,12 @@ const schema = serviceEnvSchema
        * Blank = store refuses put/get (no improvised key). Vendor integration Class X.
        */
       IDENTITY_KYC_DOC_KEY: z.string().optional().default(''),
+      /**
+       * 32-byte AES-256 key (base64 or 64-char hex) for users.totp_secret at rest.
+       * Blank = TOTP enrol refuses (no plaintext write). Prod boot refuses if missing.
+       * Dual-read still accepts legacy unprefixed plaintext until re-enrol.
+       */
+      IDENTITY_TOTP_SECRET_KEY: z.string().optional().default(''),
     }),
   );
 

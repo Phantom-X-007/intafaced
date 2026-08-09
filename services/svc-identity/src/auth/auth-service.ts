@@ -3,12 +3,13 @@ import { transaction } from '@intafaced/db';
 import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, type TokenConfig } from '@intafaced/auth';
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
-import { generateRecoveryCodes, generateSecret, totpUri, verifyTotp } from './totp.js';
+import { generateRecoveryCodes, generateSecret, matchTotpStep, totpUri } from './totp.js';
+import { encryptTotpSecret, materializeTotpSecret, parseTotpSecretKey } from './totp-crypto.js';
 import { apiKeyOriginAllowed } from './api-key-origin.js';
 import {
   b64urlDecode,
   b64urlEncode,
-  ChallengeStore,
+  SqlChallengeStore,
   createAuthenticationOptions,
   createRegistrationOptions,
   generateChallenge,
@@ -19,6 +20,7 @@ import {
 import type {
   AuthenticationOptionsJSON,
   AuthenticationResponseJSON,
+  ChallengeStorePort,
   RegistrationOptionsJSON,
   RegistrationResponseJSON,
   StoredWebAuthnCredential,
@@ -75,7 +77,12 @@ export class AuthError extends Error {
       /** Transfer door: partition is soft-revoked. */
       | 'auth.sub_account_revoked'
       /** Transfer door: from and to name the same partition. */
-      | 'auth.sub_account_same',
+      | 'auth.sub_account_same'
+      /**
+       * TOTP encrypt-at-rest key missing/invalid. Enrol refuses rather than
+       * writing base32 plaintext to users.totp_secret (IDENTITY_TOTP_SECRET_KEY).
+       */
+      | 'auth.totp_key_missing',
   ) {
     super(message);
     this.name = 'AuthError';
@@ -172,8 +179,11 @@ export class AuthService {
   /** Pending TOTP secret + recovery hashes until confirm (ID-P1-1). */
   private readonly pendingTotpEnrolment = new Map<string, { secret: string; recoveryHashes: string[] }>();
 
-  private readonly challenges = new ChallengeStore();
+  /** Durable when sql is present (production); injectable for pure unit tests. */
+  private readonly challenges: ChallengeStorePort;
   private readonly webauthn: WebAuthnConfig;
+  /** 32-byte AES key for totp_secret at rest; null if IDENTITY_TOTP_SECRET_KEY unset/invalid. */
+  private readonly totpSecretKey: Buffer | null;
 
   constructor(
     private readonly sql: Sql,
@@ -181,8 +191,31 @@ export class AuthService {
     private readonly rank: RankService,
     private readonly tokens: TokenConfig & { refreshTtlSeconds: number },
     webauthn: WebAuthnConfig = DEFAULT_WEBAUTHN,
+    /**
+     * Raw env material for TOTP secret encrypt-at-rest (base64 or 64-char hex).
+     * Optional so unit/router mocks stay thin; production passes env.IDENTITY_TOTP_SECRET_KEY.
+     */
+    totpSecretKeyMaterial?: string,
+    challenges?: ChallengeStorePort,
   ) {
     this.webauthn = webauthn;
+    this.totpSecretKey = parseTotpSecretKey(totpSecretKeyMaterial);
+    // Production path: Postgres-backed so multi-pod ceremonies complete.
+    // Tests may pass ChallengeStore (in-memory) when they do not need durability.
+    this.challenges = challenges ?? new SqlChallengeStore(sql, webauthn.challengeTtlMs);
+  }
+
+  /**
+   * Resolve column value to base32 for verifyTotp.
+   * Dual-read: enc:v1: decrypts; unprefixed = legacy plaintext (one release).
+   */
+  private openTotpSecretColumn(stored: string): string {
+    try {
+      return materializeTotpSecret(this.totpSecretKey, stored);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'TOTP secret unreadable';
+      throw new AuthError(msg, 'auth.mfa_invalid');
+    }
   }
 
   // ── Registration ───────────────────────────────────────────────────────────
@@ -255,11 +288,15 @@ export class AuthService {
     let mfa = false;
     if (user.totp_secret) {
       if (!input.totpCode) throw new AuthError('Two-factor code required', 'auth.mfa_required');
-      if (verifyTotp(user.totp_secret, input.totpCode)) {
+      // Prefer TOTP (and burn the step). Only when the code is not a valid TOTP
+      // do we try a recovery code — so a live TOTP never burns a recovery hash.
+      // Column may be enc:v1: — open before matching.
+      const secret = this.openTotpSecretColumn(user.totp_secret);
+      const totpMatch = matchTotpStep(secret, input.totpCode);
+      if (totpMatch !== null) {
+        await this.consumeTotpCode(user.id, secret, input.totpCode);
         mfa = true;
       } else {
-        // Single-use recovery code path (ID-P1-1). Totp first so a valid TOTP
-        // never burns a recovery code.
         const redeemed = await this.tryRedeemRecoveryCode(user.id, input.totpCode);
         if (!redeemed) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
         mfa = true;
@@ -443,6 +480,38 @@ export class AuthService {
     });
   }
 
+  /**
+   * Verify a TOTP code and burn its counter step so it cannot be replayed.
+   *
+   * Under FOR UPDATE so two concurrent uses of the same code cannot both pass.
+   * Same shape as recovery-code redeem: match → refuse if step ≤ last → advance.
+   */
+  private async consumeTotpCode(userId: string, secret: string, code: string, at?: Date): Promise<void> {
+    const matched = matchTotpStep(secret, code, at ? { at } : {});
+    if (matched === null) {
+      throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+    }
+
+    await transaction(this.sql, async (tx) => {
+      const rows = await tx<Array<{ totp_last_step: string | number | bigint | null }>>`
+        SELECT totp_last_step FROM users WHERE id = ${userId} FOR UPDATE
+      `;
+      if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
+
+      const lastRaw = rows[0].totp_last_step;
+      const lastStep = lastRaw === null || lastRaw === undefined ? null : BigInt(lastRaw);
+      if (lastStep !== null && matched <= lastStep) {
+        throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+      }
+
+      await tx`
+        UPDATE users
+           SET totp_last_step = ${matched.toString()}, updated_at = now()
+         WHERE id = ${userId}
+      `;
+    });
+  }
+
   async startTotpEnrolment(userId: string): Promise<{ secret: string; uri: string; recoveryCodes: string[] }> {
     const rows = await this.sql<Array<{ email: string; totp_secret: string | null }>>`
       SELECT email, totp_secret FROM users WHERE id = ${userId}
@@ -467,17 +536,30 @@ export class AuthService {
   }
 
   async confirmTotpEnrolment(userId: string, secret: string, code: string): Promise<void> {
-    if (!verifyTotp(secret, code)) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+    const matched = matchTotpStep(secret, code);
+    if (matched === null) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
 
     const pending = this.pendingTotpEnrolment.get(userId);
     if (!pending || pending.secret !== secret) {
       throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
     }
 
+    // Never write base32 plaintext to totp_secret — refuse enrol if key missing.
+    if (!this.totpSecretKey) {
+      throw new AuthError(
+        'IDENTITY_TOTP_SECRET_KEY is not set to a 32-byte key (base64 or hex) — cannot enrol TOTP',
+        'auth.totp_key_missing',
+      );
+    }
+    const sealed = encryptTotpSecret(this.totpSecretKey, secret);
+
+    // Seed totp_last_step with the confirm code so that same code cannot be
+    // immediately reused for login / step-up inside the same window.
     await this.sql`
       UPDATE users
-         SET totp_secret = ${secret},
+         SET totp_secret = ${sealed},
              totp_enrolled_at = now(),
+             totp_last_step = ${matched.toString()},
              recovery_code_hashes = ${this.sql.json(pending.recoveryHashes as never)},
              updated_at = now()
        WHERE id = ${userId} AND totp_secret IS NULL
@@ -498,9 +580,10 @@ export class AuthService {
   /**
    * Step 1 of enrolment: options for `navigator.credentials.create()`.
    *
-   * The challenge is held in-process until `confirmWebauthnRegistration`
-   * consumes it. Mirrors TOTP — nothing is persisted until the ceremony proves
-   * the authenticator holds the private key.
+   * The challenge is held in the durable challenge store until
+   * `confirmWebauthnRegistration` consumes it (single-use, TTL). Mirrors TOTP —
+   * nothing is persisted on the user until the ceremony proves the authenticator
+   * holds the private key. Multi-pod: put/take share Postgres.
    */
   async startWebauthnRegistration(userId: string): Promise<RegistrationOptionsJSON> {
     const rows = await this.sql<Array<{ email: string; handle: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
@@ -511,7 +594,7 @@ export class AuthService {
 
     const existing = asCredentialList(user.webauthn_creds);
     const challenge = generateChallenge();
-    this.challenges.put('registration', challenge, userId);
+    await this.challenges.put('registration', challenge, userId);
 
     return createRegistrationOptions(this.webauthn, { id: userId, name: user.email, displayName: user.handle }, existing, challenge);
   }
@@ -530,7 +613,7 @@ export class AuthService {
     const clientChallenge = readClientChallenge(response.response.clientDataJSON);
     if (!clientChallenge) throw new AuthError('Invalid WebAuthn response', 'auth.webauthn_invalid');
 
-    const held = this.challenges.take(clientChallenge, 'registration');
+    const held = await this.challenges.take(clientChallenge, 'registration');
     if (!held || held.userId !== userId) {
       throw new AuthError('WebAuthn challenge expired or already used', 'auth.webauthn_invalid');
     }
@@ -585,8 +668,9 @@ export class AuthService {
     const creds = user && user.status === 'active' ? asCredentialList(user.webauthn_creds) : [];
 
     // Challenge is bound to the user when we found one; otherwise it is stored
-    // against null and can never issue a session.
-    this.challenges.put('authentication', challenge, user?.status === 'active' ? user.id : null);
+    // against null and can never issue a session. Durable store so another pod
+    // can complete the assertion.
+    await this.challenges.put('authentication', challenge, user?.status === 'active' ? user.id : null);
 
     return createAuthenticationOptions(this.webauthn, creds, challenge);
   }
@@ -613,7 +697,7 @@ export class AuthService {
     const clientChallenge = readClientChallenge(response.response.clientDataJSON);
     if (!clientChallenge) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
 
-    const held = this.challenges.take(clientChallenge, 'authentication');
+    const held = await this.challenges.take(clientChallenge, 'authentication');
     if (!held || held.userId !== user.id) {
       throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
     }
@@ -699,7 +783,7 @@ export class AuthService {
       throw new AuthError('No security key enrolled', 'auth.webauthn_not_enrolled');
     }
     const challenge = generateChallenge();
-    this.challenges.put('step-up', challenge, userId);
+    await this.challenges.put('step-up', challenge, userId);
     return createAuthenticationOptions(this.webauthn, creds, challenge);
   }
 
@@ -1069,8 +1153,8 @@ export class AuthService {
   // ── Step-up ────────────────────────────────────────────────────────────────
 
   /**
-   * Trade a live session plus a fresh TOTP code for a SHORT-LIVED token that
-   * carries `trade:withdraw`.
+   * Trade a live session plus a fresh TOTP (or single-use recovery) code for a
+   * SHORT-LIVED token that carries `trade:withdraw`.
    *
    * This exists because `defaultScopes()` deliberately withholds
    * `trade:withdraw` — "added only after a step-up challenge" — and until now
@@ -1081,6 +1165,10 @@ export class AuthService {
    * Three things make the elevated token weaker than a normal one, and all three
    * matter: it lasts five minutes, it is bound to the session that asked for it,
    * and it is only issued to an account that actually has a second factor.
+   *
+   * Recovery codes (XXXXX-XXXXX) are accepted on the same `totpCode` field as
+   * login: TOTP first so a live authenticator never burns a recovery hash;
+   * else single-use redeem. Lost authenticator can still elevate withdraw.
    */
   async stepUp(input: { userId: string; sessionId: string; totpCode?: string; webauthn?: AuthenticationResponseJSON }): Promise<{
     accessToken: string;
@@ -1114,8 +1202,15 @@ export class AuthService {
       if (!user.totp_secret) {
         throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
       }
-      if (!verifyTotp(user.totp_secret, input.totpCode!)) {
-        throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+      // Same order as login: open enc:v1: → TOTP burn first, else recovery redeem.
+      // Recovery never mints trade:withdraw without burning a second-factor proof.
+      const secret = this.openTotpSecretColumn(user.totp_secret!);
+      const matched = matchTotpStep(secret, input.totpCode!);
+      if (matched !== null) {
+        await this.consumeTotpCode(input.userId, secret, input.totpCode!);
+      } else {
+        const redeemed = await this.tryRedeemRecoveryCode(input.userId, input.totpCode!);
+        if (!redeemed) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
       }
     } else {
       const creds = asCredentialList(user.webauthn_creds);
@@ -1125,7 +1220,7 @@ export class AuthService {
       const response = input.webauthn!;
       const clientChallenge = readClientChallenge(response.response.clientDataJSON);
       if (!clientChallenge) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
-      const held = this.challenges.take(clientChallenge, 'step-up');
+      const held = await this.challenges.take(clientChallenge, 'step-up');
       if (!held || held.userId !== input.userId) {
         throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
       }

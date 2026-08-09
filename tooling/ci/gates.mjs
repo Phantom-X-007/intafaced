@@ -77,6 +77,15 @@ export const GATES = [
       'holding it, which is precisely why deleting the entry has to be a visible act rather than a silent one.',
   },
   {
+    id: 'path-collide-selftest',
+    script: 'tooling/scripts/path-collide.mjs',
+    args: ['--self-test'],
+    doctrine: 'multi-dev law / claim-check honesty',
+    why:
+      'claim-check + swarm share touches() — a trailing-slash wall prefix used to false-clear ' +
+      'open PR collisions (L15 #1245). --self-test is pure fixtures, no gh/git. Pins the regression.',
+  },
+  {
     id: 'tracker',
     script: 'tooling/scripts/tracker.mjs',
     args: ['--check'],
@@ -123,7 +132,7 @@ export const GATES = [
       'sole product surface, and therefore the surface most likely to show a partner name to a user. It also has no ' +
       '`.vue` in EXTENSIONS, and the shell is 70 single-file components, so removing the skip would not have covered ' +
       'it either. Takes its forbidden names by parsing brand-scan.mjs rather than restating them, so the two cannot ' +
-      'drift. Enforcing, at a frozen baseline of 8 named findings that can only shrink — see BASELINE in the scan.',
+      'drift. Baseline was drained to zero (L11 wave 5) — any new product-surface hit fails until fixed; never re-freeze.',
   },
   {
     id: 'custody',
@@ -225,7 +234,7 @@ export const GATES = [
     why:
       'a money figure on a surface that no service supplied. Was `apps/web/src/testing/fabricated-money.ts`, which had two ' +
       'consumers and dies with that app; the shell replacing it has one unit spec and no root script that runs it. ' +
-      'Baseline drained to zero — any new money-shaped template literal fails until fixed; never re-freeze.',
+      'Enforcing with an empty BASELINE (ratchet closed) — new invented figures fail; BASELINE can only stay empty or shrink if debt is re-added honestly.',
   },
   {
     id: 'dual-book-door',

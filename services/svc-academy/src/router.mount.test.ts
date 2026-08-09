@@ -89,6 +89,7 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
       streamProvider: null,
       streamRoom: null,
       scene: {},
+      sceneFingerprint: 'stub-session-scene-fp',
     })),
     occupancy: vi.fn(async () => 3),
     join: vi.fn(async () => ({ role: 'attendee' as const })),
@@ -162,9 +163,11 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'standings',
         'createSeason',
         'setSeasonStatus',
+        'freezeSnapshot',
         'tournamentPrizePlane',
         'tournamentPrizeIntent',
         'setStanding',
+        'bulkSetStandings',
         'endSession',
         'health',
         'invite',
@@ -670,6 +673,47 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
         .createCaller(signed(noScope))
         .paperDrillResult(drill() as never),
     ).rejects.toBeTruthy();
+  });
+});
+
+// ── Ambassador IFC pay / revenue share — Class M refuse on the mount ────────
+//
+// Pure ifc-pay tests prove refuse. Without a mount test an operator path could
+// start returning 200 with invented amounts and only unit files would stay green.
+describe('svc-academy mount — ambassador pay stays refuse-closed', () => {
+  const admin = () =>
+    principal({
+      scopes: ['admin:read', 'admin:write', 'academy:read', 'academy:write'],
+    });
+
+  it('ambassadorPayPlane is always dark (no invent enabled=true)', async () => {
+    const plane = await createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorPayPlane();
+    expect(plane.ifcPayEnabled).toBe(false);
+    expect(plane.revenueShareEnabled).toBe(false);
+    expect(plane.classM).toBe(true);
+    expect(plane).not.toHaveProperty('rate');
+    expect(plane).not.toHaveProperty('amount');
+    expect(plane).not.toHaveProperty('bps');
+    expect(plane.residualIfcPay).toMatch(/Class M/);
+    expect(plane.residualIfcPay).toMatch(/refuse-closed/);
+  });
+
+  it('ambassadorIfcPay refuses closed — PRECONDITION_FAILED, no amount fields', async () => {
+    await expect(createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorIfcPay({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
+  it('ambassadorRevenueShare refuses closed — including dryRun', async () => {
+    await expect(
+      createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorRevenueShare({ dryRun: true }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
+  it('pay plane is not readable without admin:read', async () => {
+    await expect(createAcademyRouter(stubAcademy()).createCaller(signed()).ambassadorPayPlane()).rejects.toBeTruthy();
   });
 });
 

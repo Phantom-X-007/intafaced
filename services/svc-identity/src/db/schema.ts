@@ -51,6 +51,12 @@ export const users = identity.table(
      */
     totpSecret: text('totp_secret'),
     totpEnrolledAt: tstz('totp_enrolled_at'),
+    /**
+     * Last TOTP counter that successfully authenticated (login / step-up / enrol confirm).
+     * Null until first use. Replay of the same step is refused so a captured code
+     * cannot be reused inside the ±1-step validity window.
+     */
+    totpLastStep: bigint('totp_last_step', { mode: 'bigint' }),
     /** SHA-256 hashes of single-use recovery codes; plaintext never stored. */
     recoveryCodeHashes: jsonb('recovery_code_hashes').notNull().default([]),
 
@@ -138,6 +144,22 @@ export const kycDocuments = identity.table(
     createdAt: createdAt(),
   },
   (t) => [index('kyc_documents_user_idx').on(t.userId, t.createdAt)],
+);
+
+/**
+ * WebAuthn ceremony challenges — durable multi-pod store.
+ * take() is single-use (DELETE). userId null when authentication target unknown.
+ */
+export const webauthnChallenges = identity.table(
+  'webauthn_challenges',
+  {
+    challenge: text('challenge').primaryKey(),
+    kind: text('kind').notNull(),
+    userId: uuid('user_id'),
+    expiresAt: tstz('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('webauthn_challenges_expires_idx').on(t.expiresAt)],
 );
 
 /**

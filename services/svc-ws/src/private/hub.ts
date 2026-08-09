@@ -68,6 +68,11 @@ export interface PrivateOrderHubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
   readonly maxConnections: number;
+  /**
+   * Soft ceiling per principal so one user cannot fill the whole replica pool.
+   * Defaults to 16 when omitted (env: `WS_PRIVATE_MAX_CONNECTIONS_PER_USER`).
+   */
+  readonly maxConnectionsPerUser?: number;
 }
 
 interface Subscription {
@@ -117,6 +122,16 @@ export class PrivateOrderHub {
       return null;
     }
 
+    const maxPerUser = this.#options.maxConnectionsPerUser ?? 16;
+    let forUser = 0;
+    for (const existing of this.#subscriptions) {
+      if (!existing.closed && existing.userId === userId) forUser++;
+    }
+    if (forUser >= maxPerUser) {
+      sink.close(CLOSE_TRY_LATER, 'too many private connections for this user');
+      return null;
+    }
+
     const sub: Subscription = { userId, sink, lagTicks: 0, closed: false };
     this.#subscriptions.add(sub);
     return () => {
@@ -150,7 +165,11 @@ export class PrivateOrderHub {
           this.#evictions++;
           sub.closed = true;
           this.#subscriptions.delete(sub);
-          sub.sink.close(1008, 'client too slow');
+          // Align with depth/trade: lag is try-later (1013), not policy (1008).
+          sub.sink.close(
+            CLOSE_TRY_LATER,
+            `slow consumer: outbound buffer over ${this.#options.highWaterBytes} bytes for ${sub.lagTicks} ticks`,
+          );
           this.#log.warn({ userId: sub.userId }, 'ws-private: evicted lagging client');
         }
         continue;

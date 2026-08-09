@@ -106,6 +106,13 @@ export class MemoryAmbassadorProgramme {
     if (existing?.status === 'active') {
       throw new AmbassadorProgrammeError(`User ${userId} is already an active ambassador`, 'academy.ambassador_already_active');
     }
+    // Frozen rows keep freeze audit — operators must unfreeze, not re-appoint.
+    if (existing?.status === 'frozen') {
+      throw new AmbassadorProgrammeError(
+        `Ambassador ${userId} is frozen — unfreeze to restore the badge (re-appoint would erase freeze audit)`,
+        'academy.ambassador_already_frozen',
+      );
+    }
     const row: AmbassadorRecord = {
       userId,
       status: 'active',

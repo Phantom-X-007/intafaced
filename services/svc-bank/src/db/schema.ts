@@ -421,6 +421,11 @@ export const loans = bank.table(
     quoteAssetId: text('quote_asset_id').notNull(),
     aprBps: integer('apr_bps').notNull(),
     principal: amount('principal').notNull(),
+    /**
+     * Collateral pledged at open — write-once term for id-reuse compares.
+     * Not a live balance (see `loan_collateral_events` + ledger).
+     */
+    openingCollateral: amount('opening_collateral'),
     status: loanStatusEnum('status').notNull().default('pending'),
     /** NULL means the principal has not been released. The crash-safe state. */
     drawLedgerTxId: text('draw_ledger_tx_id'),

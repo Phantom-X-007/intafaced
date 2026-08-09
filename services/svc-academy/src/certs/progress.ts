@@ -1,12 +1,13 @@
 /**
- * Certifications Stage-1 — progress spine (no XP emit, no perks, no ledger).
+ * Certifications Stage-1 — progress spine (enroll / complete / grant).
  *
  * Spec: docs/ops/trk/academy.certs.md Stage 1.
  *
  * · Schema pure functions + in-memory store shape for enroll / complete / grant.
  * · Re-complete is idempotent (no-op, not double grant).
  * · Incomplete item set cannot grant cert.
- * · Stage-2 owns XP event + perk unlock (identity rank).
+ * · XP emit on grant is Stage-2 shipped (`xp-publish.ts` / `grantCert` service).
+ * · Perks remain svc-identity rank SoT — academy never maps cert → perk.
  */
 
 export type EnrollmentRecord = {

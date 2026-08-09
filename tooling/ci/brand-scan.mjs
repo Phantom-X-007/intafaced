@@ -181,9 +181,41 @@ const ALLOWLIST = [
     reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
   {
+    path: join('docs', 'PASTE-BUILD-WAVE-6-2026-08-09.md'),
+    reason:
+      'internal paste skeletons, same category as the paste-w6 wave directory above. These two sit at the docs/ root rather than inside a directory, so isAllowlisted cannot cover them by prefix and each needs its own line. PASTE-BUILD-WAVE-6 is wave-named, so WAVE-7 will red main again — see the docs/paste note below for the durable fix.',
+  },
+  {
+    path: join('docs', 'COORDINATOR-PASTE-SKELETON.md'),
+    reason: 'internal paste skeleton — see PASTE-BUILD-WAVE-6 above; not user-facing product copy',
+  },
+  {
+    path: join('docs', 'paste-w6'),
+    reason:
+      'internal agent session prompts — the same category as AGENTS.md ("internal agent brief — not shipped to users") and CONTRIBUTING.md ("names the agent tools we actually use"). Their first line names the agent tool an operator pastes them into, which is not product copy. 18 files landed 2026-08-09 and took main red on 33 occurrences.',
+  },
+  {
+    path: join('docs', 'paste'),
+    reason:
+      'PRE-AUTHORISED, currently empty on disk. Paste material is written as a per-wave directory (docs/paste-w6), and isAllowlisted matches on a strict directory boundary (relPath === entry.path, or startsWith(entry.path + sep)). So docs/paste does NOT cover docs/paste-w6, and every new wave needs its own line — reddening main until someone adds it. This file already argues twice, about the mandated CLAUDE.md filename, that a false positive recurring on every new doc is a gate people learn to route around, and that costs more than the rule protects. Move paste material to docs/paste/<wave>/ and this one entry covers every wave; the wave-specific line above can then be deleted.',
+  },
+  {
     path: join('docs', 'ops'),
     reason:
       'internal swarm FREEZE/report board; must list real shell paths so agents can claim work without paraphrasing territory. Not user-facing product copy. Remove once the vendor directory is renamed.',
+  },
+  {
+    path: join('docs', 'paste-w6'),
+    reason:
+      'internal multi-lane paste packs for AFK agent dispatch; name the coding agent product so operators can open the right tool. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'PASTE-BUILD-WAVE-6-2026-08-09.md'),
+    reason: 'internal wave-6 paste master; same rationale as docs/paste-w6. Not shipped to users.',
+  },
+  {
+    path: join('docs', 'COORDINATOR-PASTE-SKELETON.md'),
+    reason: 'internal coordinator paste skeleton; must show the exact agent product line operators paste. Not shipped to users.',
   },
   // REMOVED 2026-08-05, both on the terms their own reasons set:
   //

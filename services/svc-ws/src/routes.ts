@@ -34,10 +34,9 @@ import { withWsSpan } from './tracing.js';
  * ── Bus truth on /ready and /health ─────────────────────────────────────────
  *
  * Depth polls matching and does not need NATS. Trade tape and private streams
- * do. A failed bus subscribe at boot used to leave /ready fully green with a
- * silent empty tape forever (no auto-reconnect yet). Flags `tradesBus` /
- * `privateBus` expose that without 503'ing the instance — depth still works
- * and remains the primary product surface for LB rotation.
+ * do. A failed bus subscribe leaves /ready green with `tradesBus` /
+ * `privateBus` false while the lifecycle retries with backoff — depth still
+ * works and remains the primary product surface for LB rotation.
  */
 
 /** Same bound as the socket's. The hub does the authoritative check. */

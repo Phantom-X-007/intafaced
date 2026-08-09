@@ -455,10 +455,21 @@ describe('auth.stepUp is what makes a withdrawal reachable at all', () => {
 
   it('rejects a malformed code at the boundary', async () => {
     const api = await caller(['identity:read']);
-    for (const totpCode of ['', '12345', '1234567', 'abcdef', ' 123456 ']) {
+    for (const totpCode of ['', '12345', '1234567', 'abcdef', ' 123456 ', 'AAAA-BBBB', 'AAAAA-BBBBBB']) {
       await expect(api.auth.stepUp({ totpCode })).rejects.toThrow();
     }
     expect(stub.calls.filter((c) => c.method === 'stepUp')).toHaveLength(0);
+  });
+
+  it('accepts recovery-shaped codes on the same totpCode field as login', async () => {
+    const api = await caller(['identity:read']);
+    await api.auth.stepUp({ totpCode: 'A1B2C-D3E4F' });
+    const call = stub.calls.find((c) => c.method === 'stepUp')!;
+    expect(call.args[0]).toMatchObject({
+      userId: USER,
+      sessionId: SESSION,
+      totpCode: 'A1B2C-D3E4F',
+    });
   });
 
   it('tells "wrong code" apart from "you have no second factor"', async () => {

@@ -57,6 +57,35 @@ export type DeliveryStatus =
 export const DEFAULT_CLAIM_LEASE_MS = 15_000;
 
 /**
+ * JetStream bus `ack_wait` default (packages/events jetstream-bus).
+ * A claim lease must stay strictly under this or redelivery naks forever while
+ * the holder is still alive.
+ */
+export const BUS_ACK_WAIT_MS = 30_000;
+
+/**
+ * Slack under `ack_wait` so a redelivery of a crashed holder can reclaim before
+ * the bus parks the message. Production lease is
+ * `min(gatewayTimeoutMs * 2, BUS_ACK_WAIT_MS - CLAIM_LEASE_ACK_SLACK_MS)`.
+ */
+export const CLAIM_LEASE_ACK_SLACK_MS = 5_000;
+
+/**
+ * Production claim-lease length from the gateway timeout.
+ *
+ * At least long enough for one attempt (`timeout × 2` covers the attempt plus
+ * settle). At most under bus `ack_wait` so a dead holder never blocks reclaim
+ * for a full redelivery window. An operator who raises the gateway timeout to
+ * its 30s ceiling used to get `lease = 60s` and silent double-nak thrash —
+ * the min() clamp stops that lie.
+ */
+export function claimLeaseMsFromGatewayTimeout(gatewayTimeoutMs: number): number {
+  const fromTimeout = Math.max(1, Math.floor(gatewayTimeoutMs) * 2);
+  const ceiling = BUS_ACK_WAIT_MS - CLAIM_LEASE_ACK_SLACK_MS;
+  return Math.min(fromTimeout, ceiling);
+}
+
+/**
  * How often the delivery sweep runs — see `DeliveryStore.reapExhausted`.
  *
  * One minute, and the exact number does not matter much: the rows it retires
