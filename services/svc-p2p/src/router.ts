@@ -1050,6 +1050,8 @@ export function createP2pRouter(
                 resolutionReason: z.string().nullable(),
                 resolvedAt: z.string(),
                 ageSeconds: z.number().int().nonnegative(),
+                lastSettleError: z.string().nullable(),
+                lastSettleErrorAt: z.string().nullable(),
               }),
             ),
           }),
@@ -1065,6 +1067,8 @@ export function createP2pRouter(
                 resolutionReason: r.resolutionReason,
                 resolvedAt: r.resolvedAt.toISOString(),
                 ageSeconds: r.ageSeconds,
+                lastSettleError: r.lastSettleError,
+                lastSettleErrorAt: r.lastSettleErrorAt?.toISOString() ?? null,
               })),
             };
           }),

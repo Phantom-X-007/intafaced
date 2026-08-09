@@ -1682,6 +1682,16 @@ export class P2pService {
    * responsibility.
    */
   async settle(tradeId: string): Promise<TradeRecord> {
+    try {
+      return await this.settleOnce(tradeId);
+    } catch (err) {
+      // Durable reason for late pots — survives process restart; cleared on stamp.
+      await this.persistSettleFailure(tradeId, err);
+      throw err;
+    }
+  }
+
+  private async settleOnce(tradeId: string): Promise<TradeRecord> {
     const trade = await this.getTrade(tradeId);
 
     if (!trade.resolution) throw new P2pError(`Trade ${tradeId} has no recorded resolution to settle`, 'p2p.escrow_missing');
@@ -1734,10 +1744,34 @@ export class P2pService {
     await this.announceSettlement(trade, fee);
 
     const rows = await this.sql<TradeRow[]>`
-      UPDATE p2p.p2p_trades SET settled_at = now() WHERE id = ${tradeId} AND settled_at IS NULL
+      UPDATE p2p.p2p_trades
+         SET settled_at = now(),
+             last_settle_error = NULL,
+             last_settle_error_at = NULL
+       WHERE id = ${tradeId} AND settled_at IS NULL
       RETURNING *
     `;
     return rows[0] ? toTrade(rows[0]) : await this.getTrade(tradeId);
+  }
+
+  /**
+   * Write the last settle failure onto the late row. Never throws: a secondary
+   * write failure must not mask the original settle error the caller needs.
+   */
+  private async persistSettleFailure(tradeId: string, err: unknown): Promise<void> {
+    const message = (err instanceof Error ? err.message : String(err)).slice(0, 2000);
+    try {
+      await this.sql`
+        UPDATE p2p.p2p_trades
+           SET last_settle_error = ${message},
+               last_settle_error_at = now()
+         WHERE id = ${tradeId}
+           AND resolved_at IS NOT NULL
+           AND settled_at IS NULL
+      `;
+    } catch {
+      // best-effort — the throw from settle still surfaces
+    }
   }
 
   private async announceSettlement(trade: TradeRecord, fee: Amount): Promise<void> {
@@ -2032,6 +2066,9 @@ export class P2pService {
       resolutionReason: string | null;
       resolvedAt: Date;
       ageSeconds: number;
+      /** Last settle failure if any attempt ran; null if not yet re-driven. */
+      lastSettleError: string | null;
+      lastSettleErrorAt: Date | null;
     }>
   > {
     const lim = Math.min(Math.max(limit, 1), 200);
@@ -2042,9 +2079,12 @@ export class P2pService {
         resolution: TradeResolution | null;
         resolution_reason: string | null;
         resolved_at: Date;
+        last_settle_error: string | null;
+        last_settle_error_at: Date | null;
       }>
     >`
-      SELECT id, status, resolution, resolution_reason, resolved_at
+      SELECT id, status, resolution, resolution_reason, resolved_at,
+             last_settle_error, last_settle_error_at
         FROM p2p.p2p_trades
        WHERE resolved_at IS NOT NULL AND settled_at IS NULL
        ORDER BY resolved_at ASC
@@ -2053,6 +2093,12 @@ export class P2pService {
     const nowMs = now.getTime();
     return rows.map((r) => {
       const resolvedAt = r.resolved_at instanceof Date ? r.resolved_at : new Date(r.resolved_at);
+      const lastSettleErrorAt =
+        r.last_settle_error_at == null
+          ? null
+          : r.last_settle_error_at instanceof Date
+            ? r.last_settle_error_at
+            : new Date(r.last_settle_error_at);
       return {
         tradeId: r.id,
         status: r.status,
@@ -2060,6 +2106,8 @@ export class P2pService {
         resolutionReason: r.resolution_reason,
         resolvedAt,
         ageSeconds: Math.max(0, Math.floor((nowMs - resolvedAt.getTime()) / 1000)),
+        lastSettleError: r.last_settle_error,
+        lastSettleErrorAt,
       };
     });
   }

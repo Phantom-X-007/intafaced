@@ -67,6 +67,7 @@ const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'),
 const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
+const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -121,6 +122,7 @@ if (!available) {
     await tx.unsafe(instrumentsMigration);
     await tx.unsafe(fieldGuardMigration);
     await tx.unsafe(disputeRulingMigration);
+    await tx.unsafe(lateSettleErrorMigration);
   });
 
   /**
@@ -1611,9 +1613,13 @@ if (!available) {
       expect((await p2p.getTrade(trade.id)).settledAt).toBeNull();
 
       // Operator surface: late settlement is listable without grepping logs.
+      // Last failure is durable on the row — survives a process restart.
       const late = await p2p.listLateSettlements(50);
-      expect(late.some((t) => t.tradeId === trade.id)).toBe(true);
-      expect(late.find((t) => t.tradeId === trade.id)?.ageSeconds).toBeGreaterThanOrEqual(0);
+      const lateRow = late.find((t) => t.tradeId === trade.id);
+      expect(lateRow).toBeDefined();
+      expect(lateRow!.ageSeconds).toBeGreaterThanOrEqual(0);
+      expect(lateRow!.lastSettleError).toMatch(/ledger unavailable/);
+      expect(lateRow!.lastSettleErrorAt).toBeInstanceOf(Date);
 
       expect((await p2p.sweepSettlements()).settled).toBe(1);
       expect(await p2p.listLateSettlements()).toEqual([]);

@@ -131,7 +131,7 @@ HTTP (`src/index.ts`):
 Three background sweeps start before the HTTP listener. The first two are why escrow cannot strand; the third is why we do not keep personal data after we need it:
 
 - **timeout sweep** — resolves any trade whose deadline has passed
-- **settlement sweep** — posts any resolution that was decided but not yet acted on
+- **settlement sweep** — posts any resolution that was decided but not yet acted on. Failures stamp `last_settle_error` on the trade so `ops.lateSettlements` survives a process restart (not only process logs)
 - **retention sweep** — wipes the payment details off closed trades past `P2P_INSTRUMENT_RETENTION_DAYS`
 
 ---
@@ -323,15 +323,39 @@ The remaining question is the one worth stating plainly: **funds can be late.** 
 
 _If it crashes exactly here, whose funds are stranded?_
 
-| Crash point                                        | Whose funds                 | Why not                                                                                                             |
-| -------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| after the inventory reserve, before `escrowLock`   | nobody's                    | nothing is locked; `created` expires in 2 min and voids                                                             |
-| after `escrowLock`, before the row says `escrowed` | nobody's, but non-obviously | the sweep re-calls `escrowLock`, which is idempotent, so the lock becomes a fact rather than a guess — then refunds |
-| after the resolution is recorded, before the post  | nobody's, but they are late | `sweepSettlements()` re-posts; the recipe key stops it doubling                                                     |
-| after the post, before `settled_at`                | nobody's                    | the re-post is idempotent and the stamp is retried                                                                  |
-| during a concurrent release/refund race            | nobody's                    | both take the trade's row lock; the loser sees a terminal status and posts nothing at all                           |
+| Crash point                                        | Whose funds                 | Why not                                                                                                                |
+| -------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| after the inventory reserve, before `escrowLock`   | nobody's                    | nothing is locked; `created` expires in 2 min and voids                                                                |
+| after `escrowLock`, before the row says `escrowed` | nobody's, but non-obviously | the sweep re-calls `escrowLock`, which is idempotent, so the lock becomes a fact rather than a guess — then refunds    |
+| after the resolution is recorded, before the post  | nobody's, but they are late | `sweepSettlements()` re-posts; the recipe key stops it doubling; `last_settle_error` names why if a post keeps failing |
+| after the post, before `settled_at`                | nobody's                    | the re-post is idempotent and the stamp is retried                                                                     |
+| during a concurrent release/refund race            | nobody's                    | both take the trade's row lock; the loser sees a terminal status and posts nothing at all                              |
+
+### Not built here (named so nobody invents them)
+
+| Socket                                    | Status                                                                                                                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat_thread_id` on `p2p_trades`          | Column exists for a future chat product. **No API field, no service method, no chat delivery.** A UI that shows "open trade chat" from this service alone is lying. |
+| Method registry seed content              | Operator-supplied. Empty on purpose — not this repo's knowledge of bank rails.                                                                                      |
+| Rank fee discounts / `p2pLimitMultiplier` | Identity owns rank; this service stamps `P2P_FEE_BPS` only (no per-take fee override). Multiplier apply is not invented here.                                       |
+| `p2p:moderate` who                        | Class X — allowlist / scope mint is Nitro. Empty allowlist honest-refuses.                                                                                          |
 
 ---
+
+## State × timeout matrix
+
+Source of truth: `src/state.ts` (`timeoutActionFor`, `assertTransition`) + `src/state.test.ts` (full graph).
+
+| Status      | Holds escrow?        | Timeout action                                       | Moves value?       | Who can terminal without clock                                              |
+| ----------- | -------------------- | ---------------------------------------------------- | ------------------ | --------------------------------------------------------------------------- |
+| `created`   | not yet / re-drive   | `settle_or_void` (re-lock, then refund or void)      | yes if lock posted | —                                                                           |
+| `escrowed`  | yes                  | `refund`                                             | yes                | seller cancel; buyer mark fiat sent                                         |
+| `fiat_sent` | yes                  | `open_dispute` (never auto-release)                  | no                 | seller confirm → release; either open dispute; cancel refused once disputed |
+| `disputed`  | yes                  | `escalate_dispute` (re-arm SLA; **no** machine rule) | no                 | natural-person moderator only                                               |
+| `released`  | no (posted)          | none                                                 | —                  | terminal                                                                    |
+| `cancelled` | no (refunded/voided) | none                                                 | —                  | terminal                                                                    |
+
+Value-moving timeout actions are only `settle_or_void` and `refund`. `fiat_sent` and `disputed` deliberately do **not** move value on a clock.
 
 ## Database constraints as a backstop
 
