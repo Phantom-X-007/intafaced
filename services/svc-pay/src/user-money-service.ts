@@ -10,6 +10,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { PayError } from './payment-service.js';
+import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import type { RailRegistry } from './rails/registry.js';
 import { assertRailMayMoveValue, type ValueMovementPolicy } from './rails/posture.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
@@ -330,6 +331,18 @@ export class UserMoneyService {
     // user has been told `sent`. Refusing at this line means no row exists, no
     // hold was placed, and nothing has to be unwound.
     assertRailMayMoveValue(adapter, 'payout', this.valueMovement);
+
+    // Same gate as merchant payoutSettlement: crypto must not accept an IBAN
+    // (and bank/sandbox must not accept a chain address). BEFORE claim/hold so
+    // a mismatch never leaves a withdrawal row or stranded funds.
+    try {
+      assertPayoutDestinationKind(adapter.id, input.destination);
+    } catch (err) {
+      if (err instanceof DestinationKindError) {
+        throw new PayError(err.message, err.code);
+      }
+      throw err;
+    }
 
     return withMoneySpan('pay.withdraw', { operation: 'withdraw', rail: input.rail, amount: formatAmount(input.amount) }, async (span) => {
       let claimed = await this.claimWithdrawal(input);
