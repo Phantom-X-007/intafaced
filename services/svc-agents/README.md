@@ -259,13 +259,17 @@ Pure layers (no database): cost arithmetic, guardrails, adapters, **readiness ho
 
 ### Residual (honest — not Done by this package alone)
 
-| Gap                                    | Why it is residual                                                                                                                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guardrail registration at boot         | **Wired:** `registerProductAgentsAtBoot` upserts the five Stage-1 factories into `agent_definitions` before listen. Portfolio / launch / risk / coach / growth still have no factory. |
-| Product agents (Support, Merchant, …)  | Stage-1 factories + runSession mounts exist; live data planes and shell UX remain residual                                                                                            |
-| Live data behind the navigator's tools | Tool inputs are caller-supplied fixtures. A real `svc-trade` / `svc-identity` call is the next slice; the refusals are already typed for it                                           |
-| Production inference                   | Requires `AGENTS_PROVIDER=upstream` + vault credentials                                                                                                                               |
-| Full premium-tier product surface      | Phase 5 agent product work on top of this runtime                                                                                                                                     |
+| Gap                               | State on tip (W5 after #1336)                                                                                                                              |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guardrail registration at boot    | **Wired** — `registerProductAgentsAtBoot` upserts the five Stage-1 factories into `agent_definitions` before listen.                                       |
+| Stage-1 product agents (5)        | Factories + routing + metered `runSession` for navigator/support/scanner/merchant on tip; copy-intel metered runSession in open #1285.                     |
+| Fleet integrity pins              | Mount matrix (`#1296`), money-write register deny (`#1300`), request-id free-replay (`#1306`), sealed-unbilled recover (`#1286`), scopes pin (open #1339). |
+| Live data behind agent tools      | Caller-supplied fixtures. Dark / blank-tier / empty refuse unbilled. Live allowlists are Class X.                                                          |
+| i18n surface keys                 | svc-agents `COPY_KEYS` complete; packages/i18n EN parity open #1337.                                                                                       |
+| Production inference              | `AGENTS_PROVIDER=upstream` + vault credentials (Class X). Mock residual on `/ready` is intentional.                                                        |
+| Agent pricing §8                  | Rates on routing table / env; blank rate refuses. Product magnitudes are Nitro-only.                                                                       |
+| v2 agents (portfolio…growth)      | Doctrine names only — no factory until product law.                                                                                                        |
+| Full premium-tier product surface | Phase 5 shell UX + live planes on top of this runtime.                                                                                                     |
 
 The money and audit paths run against real Postgres with the ledger's in-memory reference implementation, which the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Real Postgres because every property worth testing here — append-only, the window seal, the unique request id — lives in the database, and a fake would test the fake.
 
