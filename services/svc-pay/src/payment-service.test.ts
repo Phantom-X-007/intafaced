@@ -1374,6 +1374,39 @@ if (!available) {
       ).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
     });
 
+    /**
+     * Mid-flight suspend: payment already created, then merchant cut off.
+     * Authorize and capture must stop; refund is not gated (payer return).
+     */
+    it('refuses authorize and capture after the merchant is suspended mid-flight', async () => {
+      const m = await merchant();
+      // create only — cryptoPayment() already authorizes, which would skip this gate.
+      const payment = await pay.createPayment({
+        merchantId: m.id,
+        amount: amt('15'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+      expect(payment.status).toBe('created');
+
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+
+      await expect(pay.authorize(payment.id)).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      expect((await pay.getPayment(payment.id)).status).toBe('created');
+
+      // Reinstate, authorize, suspend again — capture must refuse.
+      await sql`UPDATE pay.merchants SET status = 'active' WHERE id = ${m.id}`;
+      const authorized = await pay.authorize(payment.id);
+      expect(authorized.status).toBe('authorized');
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
+      await expect(pay.capture(payment.id)).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      expect((await pay.getPayment(payment.id)).status).toBe('authorized');
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('refuses a new payment link for a suspended merchant', async () => {
       const m = await merchant();
       await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;

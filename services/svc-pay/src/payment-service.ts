@@ -1209,6 +1209,11 @@ export class PayService {
           }
           assertTransition(row, 'authorized');
 
+          // Suspension mid-flight: new progress stops. Already-terminal reads above
+          // stay idempotent. Refund is deliberately NOT gated here — returning
+          // money to a payer after cut-off is customer-protective.
+          this.assertMerchantActive(await this.getMerchant(row.merchant_id));
+
           const adapter = this.rails.require(row.rail_adapter, 'authorize');
 
           const intent: PaymentIntent = {
@@ -1311,6 +1316,10 @@ export class PayService {
 
           if (row.status === 'captured' || row.status === 'settled') return this.view(tx, row);
           assertTransition(row, 'captured');
+
+          // Same mid-flight suspend rule as authorize: no new money into clearing
+          // after cut-off. Idempotent re-read of already-captured stays above.
+          this.assertMerchantActive(await this.getMerchant(row.merchant_id));
 
           const authorized = parseAmount(row.amount);
 
@@ -2195,7 +2204,8 @@ export class PayService {
   /**
    * One gate, one code, every money-moving surface that should refuse a
    * non-active merchant: createPayment, openCheckout, createPaymentLink,
-   * settleWindow (post), prepareSettlement (new freeze), payoutSettlement.
+   * authorize, capture, settleWindow (post), prepareSettlement (new freeze),
+   * payoutSettlement. Refund is intentionally not on this list (payer return).
    *
    * `status` is the operational cut-off (`suspended` / `closed` / `pending`);
    * `kybStatus` is a separate flag and is deliberately not read here — wiring
