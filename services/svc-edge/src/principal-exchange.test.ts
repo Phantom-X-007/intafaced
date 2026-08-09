@@ -155,6 +155,43 @@ describe('reserved headers are stripped, not overwritten', () => {
     const out = stripReserved({ host: 'evil.test', connection: 'keep-alive', 'content-length': '10', accept: '*/*' });
     expect(Object.keys(out)).toEqual(['accept']);
   });
+
+  /**
+   * Audit 2026-08-08 #7: the filter claimed the hop-by-hop class and only
+   * stripped `connection`. The full RFC 7230 set (plus host/content-length)
+   * must die here so undici is not the last line of defence.
+   */
+  it('strips the full hop-by-hop class, not only connection', () => {
+    const out = stripReserved({
+      accept: 'application/json',
+      'content-type': 'application/json',
+      'transfer-encoding': 'chunked',
+      te: 'trailers',
+      trailer: 'Expires',
+      upgrade: 'websocket',
+      'keep-alive': 'timeout=5',
+      'proxy-authorization': 'Basic Zm9vOmJhcg==',
+      'proxy-authenticate': 'Basic realm="x"',
+      connection: 'close',
+      host: 'evil.test',
+      'content-length': '999',
+    });
+    expect(out).toEqual({ accept: 'application/json', 'content-type': 'application/json' });
+    for (const name of [
+      'transfer-encoding',
+      'te',
+      'trailer',
+      'upgrade',
+      'keep-alive',
+      'proxy-authorization',
+      'proxy-authenticate',
+      'connection',
+      'host',
+      'content-length',
+    ]) {
+      expect(out[name], name).toBeUndefined();
+    }
+  });
 });
 
 describe('bad credentials land as anonymous, never as an error', () => {

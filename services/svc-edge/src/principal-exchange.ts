@@ -62,14 +62,42 @@ export interface ExchangeOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+/**
+ * Hop-by-hop headers (RFC 7230 §6.1) plus the request identity headers the
+ * edge must rewrite itself.
+ *
+ * Until this list was complete, the comment above claimed the class while only
+ * `connection` (plus `host` / `content-length`) was stripped — an audit finding
+ * (`docs/audit/2026-08-08-svc-edge.md` #7). `transfer-encoding`, `te`,
+ * `trailer`, `upgrade`, `keep-alive` and the proxy-auth pair were forwarded.
+ * Undici may reject some of those outbound, but a safety control that relies on
+ * the outbound client to paper over a leaky filter is not a control.
+ *
+ * `host` is not hop-by-hop in the RFC sense; it is stripped because the
+ * upstream's host must be the edge's own choice, never the caller's.
+ * `content-length` is stripped because the proxy re-serialises the body with
+ * `JSON.stringify` and a stale length would lie.
+ */
+export const HOP_BY_HOP_HEADERS: ReadonlySet<string> = new Set([
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'host',
+  'content-length',
+]);
+
 /** Strip every reserved header, whatever its case. */
 export function stripReserved(headers: Record<string, string | string[] | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(headers)) {
     const lower = name.toLowerCase();
     if (lower.startsWith(RESERVED_HEADER_PREFIX)) continue;
-    // Hop-by-hop headers must not be proxied; `host` must be the upstream's.
-    if (lower === 'host' || lower === 'connection' || lower === 'content-length') continue;
+    if (HOP_BY_HOP_HEADERS.has(lower)) continue;
     // The upstream has no use for the bearer token and should never see it —
     // a service that can read a token is a service that can replay it.
     if (lower === 'authorization') continue;

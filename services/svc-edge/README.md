@@ -58,6 +58,10 @@ An unlisted prefix returns **404, never a pass-through**. An edge that forwards 
 
 **A bad token lands as anonymous, never as an error.** A forged or expired token on a public endpoint is an ordinary event. The request reaches the service unauthenticated and `protectedProcedure` refuses it there with the right status — which is what lets a caller with an expired token still reach `auth.refresh` and recover.
 
+**Hop-by-hop headers are stripped, not forwarded.** The full RFC 7230 set (`connection`, `keep-alive`, `proxy-authenticate`, `proxy-authorization`, `te`, `trailer`, `transfer-encoding`, `upgrade`) plus `host` and `content-length` die in `stripReserved` before anything reaches an upstream. The edge rewrites `host`/`content-length` for the hop it owns; the rest must not be smuggled through the perimeter.
+
+**Unauthenticated `/ready` is not a kill-switch oracle.** It reports route prefixes, screening/CORS counts, rate-limit posture, and the body budget — not `disabledModules`. The halt list is operator-only on `GET /admin/status` (`admin:write` + MFA). Publishing it on `/ready` undid the preflight ordering that exists so an unauthenticated caller cannot learn which modules are killed.
+
 **The edge holds no database, no bus, and no `INTERNAL_SERVICE_SECRET`.** The internet-facing component should have the smallest blast radius in the fleet, and that is a property of what it is allowed to hold. Giving it the service secret would let a compromised edge call `ledger.post` directly rather than merely proxying to something that can.
 
 ## Browser origins (CORS)
@@ -141,13 +145,13 @@ Until this landed the edge sent **no CORS headers at all** — not a permissive 
 | `EDGE_RATE_LIMIT_ENABLED`            | throttle on/off (see `env.ts` defaults)                                                                                                                         |
 | `EDGE_RATE_LIMIT_MAX` / `_WINDOW_MS` | per-replica budget when enabled                                                                                                                                 |
 | `EDGE_TRUST_PROXY`                   | when set, Fastify trusts proxy headers for `req.ip` (rate-limit key). Unset behind nginx = one shared bucket — boot WARN.                                       |
+| `EDGE_BODY_LIMIT_BYTES`              | max request body the edge will parse (default 1 MiB). Oversize → 413 before principal exchange or upstream work.                                                |
 | `EDGE_KILL_STATE_PATH`               | JSON path for single-process kill restart durability. Empty = memory only. **Not** multi-replica share.                                                         |
 | `LEDGER_URL`                         | optional; operator freeze surface. Unset → `/admin/status.ledgerConfigured: false`.                                                                             |
 
 ## Not built yet
 
 - **Geo-IP region resolution.** `DEFAULT_REGION` is a single configured value; per-request resolution replaces one line in `index.ts`.
-- **Request size limits beyond Fastify default.** Fastify's default body limit (~1 MiB) applies; no edge-specific env yet.
 - **Streaming / WebSocket proxying.** The proxy buffers with `response.text()`, so this is not a path for websockets or large downloads. Market-data sockets stay on `svc-ws` (see outside-the-door).
 - **Multi-replica shared kill store.** Process-local file or memory only. SOCKET §13 residual — inventing Redis/etc. without product law is fenced.
 - **§13 refresh-token in httpOnly cookie.** When that lands, CORS credentials + `svc-ws` origin check must be re-taken deliberately (see Browser origins). Named residual, not fake done.

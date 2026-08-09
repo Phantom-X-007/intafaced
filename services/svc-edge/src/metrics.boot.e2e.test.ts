@@ -159,6 +159,42 @@ describe('the deployed svc-edge serves /metrics', () => {
     // series on the same panel.
     expect(samples.every((s) => s.labels.service === 'svc-edge')).toBe(true);
   });
+});
+
+/**
+ * Unauthenticated `/ready` must not be a kill-switch oracle.
+ *
+ * CORS preflight is ordered so an unauthenticated caller cannot learn which
+ * modules an operator halted. Publishing `disabledModules` on `/ready` undid
+ * that (audit 2026-08-08 #5). The operator surface is `/admin/status`.
+ */
+describe('the deployed /ready does not leak the halt list', () => {
+  it('answers ready with routes/screening/cors and without disabledModules', async () => {
+    const res = await fetch(`${base}/ready`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ready).toBe(true);
+    expect(Array.isArray(body.routes)).toBe(true);
+    expect(body.screening).toBeTypeOf('object');
+    expect(body.cors).toBeTypeOf('object');
+    expect(body.bodyLimitBytes).toBeTypeOf('number');
+    expect(Object.prototype.hasOwnProperty.call(body, 'disabledModules')).toBe(false);
+  });
+
+  it('still returns 502 with edge.upstream_unavailable when an upstream is absent', async () => {
+    // Proves the proxy path in index.ts is wired: dead upstream → 502, not 500.
+    const res = await fetch(`${base}/api/trade/trpc/orders.list`, { method: 'GET' });
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('edge.upstream_unavailable');
+  });
+
+  it('returns 404 edge.no_route for an unlisted prefix', async () => {
+    const res = await fetch(`${base}/api/ledger/trpc/post`, { method: 'POST' });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('edge.no_route');
+  });
 
   it('counts a failed proxy attempt — the outage goes in the denominator', async () => {
     // No svc-trade is running, so the edge answers 502. That is the point.
