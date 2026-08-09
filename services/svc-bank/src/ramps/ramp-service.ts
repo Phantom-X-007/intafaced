@@ -397,10 +397,7 @@ export class RampService {
       if (byId[0]) {
         const existing = toOfframp(byId[0]);
         if (offrampFactsMismatch(existing, input)) {
-          throw new BankError(
-            `Off-ramp id ${input.offrampId} was already used with different terms`,
-            'bank.ramp_conflict',
-          );
+          throw new BankError(`Off-ramp id ${input.offrampId} was already used with different terms`, 'bank.ramp_conflict');
         }
         return existing;
       }
@@ -429,10 +426,7 @@ export class RampService {
         if (raced[0]) {
           const existing = toOfframp(raced[0]);
           if (offrampFactsMismatch(existing, input)) {
-            throw new BankError(
-              `Off-ramp claim collided on id ${input.offrampId} or client ref ${input.clientRef}`,
-              'bank.ramp_conflict',
-            );
+            throw new BankError(`Off-ramp claim collided on id ${input.offrampId} or client ref ${input.clientRef}`, 'bank.ramp_conflict');
           }
           return existing;
         }

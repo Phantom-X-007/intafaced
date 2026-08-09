@@ -128,8 +128,7 @@ describe('svc-bank mount — the public surface', () => {
 });
 
 describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
-  const treasury = () =>
-    signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
 
   it('refuses with SERVICE_UNAVAILABLE / bank.transfers_disabled when the flag is off, and never runs', async () => {
     let ran = false;
