@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
+  diffMarketIds,
   mapOrderStatusToCounterpartState,
   planLocalActions,
   runEngineLedgerReconcileTick,
@@ -141,6 +142,31 @@ describe('planLocalActions — refuse never becomes a write', () => {
   });
 });
 
+describe('diffMarketIds — pure set compare, no invent', () => {
+  it('identical sets → no drift', () => {
+    const r = diffMarketIds([MARKET, 'b'], ['b', MARKET]);
+    expect(r.drifted).toBe(false);
+    expect(r.onlyInTrade).toEqual([]);
+    expect(r.onlyInEngine).toEqual([]);
+    expect(r.tradeCount).toBe(2);
+    expect(r.engineCount).toBe(2);
+  });
+
+  it('engine-only and trade-only both surface (the 10-vs-16 shape)', () => {
+    const r = diffMarketIds(['trade-only', MARKET], [MARKET, 'engine-only']);
+    expect(r.drifted).toBe(true);
+    expect(r.onlyInTrade).toEqual(['trade-only']);
+    expect(r.onlyInEngine).toEqual(['engine-only']);
+  });
+
+  it('empty engine against listed trade is drift (alarm, not invent)', () => {
+    const r = diffMarketIds([MARKET], []);
+    expect(r.drifted).toBe(true);
+    expect(r.onlyInTrade).toEqual([MARKET]);
+    expect(r.onlyInEngine).toEqual([]);
+  });
+});
+
 describe('runEngineLedgerReconcileTick — no silent release of funded missing', () => {
   it('open+hold no engine → refuse finding; never posts ledger; never deletes', async () => {
     const orderId = 'funded-missing';
@@ -148,6 +174,9 @@ describe('runEngineLedgerReconcileTick — no silent release of funded missing',
 
     const sql = Object.assign(async (strings: TemplateStringsArray, ..._values: unknown[]) => {
       const text = strings.join('?');
+      if (text.includes('FROM trade.markets')) {
+        return [{ id: MARKET }];
+      }
       if (text.includes('FROM trade.orders') && text.includes('SELECT')) {
         return [
           {
@@ -198,10 +227,12 @@ describe('runEngineLedgerReconcileTick — no silent release of funded missing',
       } satisfies ReconcileReport;
     });
 
+    const listMarkets = vi.fn(async () => ({ markets: [MARKET] }));
+
     const result = await runEngineLedgerReconcileTick({
       sql,
       ledger,
-      matching: { reconcile },
+      matching: { reconcile, listMarkets },
     });
 
     expect(result.plan.refusals).toHaveLength(1);
@@ -210,6 +241,8 @@ describe('runEngineLedgerReconcileTick — no silent release of funded missing',
     expect(result.ledgerPosts).toEqual([]);
     expect(ledgerPost).not.toHaveBeenCalled();
     expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(listMarkets).toHaveBeenCalledTimes(1);
+    expect(result.marketIdDrift.drifted).toBe(false);
   });
 
   it('unfunded pending → DELETE only when engine marks auto; still no ledger post', async () => {
@@ -218,6 +251,9 @@ describe('runEngineLedgerReconcileTick — no silent release of funded missing',
 
     const sql = Object.assign(async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const text = strings.join('?');
+      if (text.includes('FROM trade.markets')) {
+        return [{ id: MARKET }];
+      }
       if (text.includes('FROM trade.orders') && text.includes('SELECT')) {
         return [
           {
@@ -253,6 +289,7 @@ describe('runEngineLedgerReconcileTick — no silent release of funded missing',
       sql,
       ledger,
       matching: {
+        listMarkets: async () => ({ markets: [MARKET] }),
         reconcile: async () => ({
           checked: 1,
           agreed: 0,
@@ -276,5 +313,56 @@ describe('runEngineLedgerReconcileTick — no silent release of funded missing',
     expect(result.deleted).toEqual([orderId]);
     expect(ledgerPost).not.toHaveBeenCalled();
     expect(result.ledgerPosts).toEqual([]);
+  });
+
+  it('market-id drift is reported and never writes ledger or markets', async () => {
+    const engineOnly = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    let deleteCalled = false;
+
+    const sql = Object.assign(async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+      const text = strings.join('?');
+      if (text.includes('FROM trade.markets')) {
+        return [{ id: MARKET }];
+      }
+      if (text.includes('FROM trade.orders') && text.includes('SELECT')) {
+        return [];
+      }
+      if (text.includes('DELETE') || text.includes('INSERT') || text.includes('UPDATE')) {
+        deleteCalled = true;
+        throw new Error('drift path must not mutate orders or markets');
+      }
+      return [];
+    }, {}) as unknown as import('postgres').Sql;
+
+    const ledgerPost = vi.fn();
+    const ledger = {
+      balance: vi.fn(async () => {
+        throw new Error('no order claims → balance must not be read');
+      }),
+      post: ledgerPost,
+    };
+
+    const result = await runEngineLedgerReconcileTick({
+      sql,
+      ledger,
+      matching: {
+        listMarkets: async () => ({ markets: [MARKET, engineOnly] }),
+        reconcile: async () => ({
+          checked: 0,
+          agreed: 0,
+          refusals: 0,
+          ok: true,
+          findings: [],
+        }),
+      },
+    });
+
+    expect(result.marketIdDrift.drifted).toBe(true);
+    expect(result.marketIdDrift.onlyInEngine).toEqual([engineOnly]);
+    expect(result.marketIdDrift.onlyInTrade).toEqual([]);
+    expect(result.deleted).toEqual([]);
+    expect(result.ledgerPosts).toEqual([]);
+    expect(ledgerPost).not.toHaveBeenCalled();
+    expect(deleteCalled).toBe(false);
   });
 });

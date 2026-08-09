@@ -208,10 +208,11 @@ await trade.reconcileOrder(orderId);
 
 Default **OFF**. Builds the counterpart view from `trade.orders` (open/pending) + **live** hold balances, POSTs matching `POST /reconcile`, and:
 
-| Engine finding                         | Local action                              |
-| -------------------------------------- | ----------------------------------------- |
-| **refuse** (incl. open+hold no engine) | **write nothing** — warn log / alert only |
-| **auto** unfunded **pending**          | DELETE intent row only (moves no value)   |
+| Engine finding                         | Local action                                                                             |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **refuse** (incl. open+hold no engine) | **write nothing** — warn log / alert only                                                |
+| **auto** unfunded **pending**          | DELETE intent row only (moves no value)                                                  |
+| **market-id set drift** (handoff §4.5) | **alarm only** — `trade.markets` vs engine `GET /markets`; never invents/deletes markets |
 
 Does **not** call `reconcileOrder` (which still releases on open+hold no engine — operator single-order tool; handoff flags that risk). Env: `TRADE_RECONCILE_JOBS_ENABLED`, `TRADE_RECONCILE_JOBS_INTERVAL_MS`.
 
