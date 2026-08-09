@@ -85,7 +85,7 @@ Every recipe this service invokes, and what it touches:
 
 ## Ordering decisions that matter
 
-**Stake: claim `pending` → ledger post → `active`.** A pending row is not yield-eligible and is excluded from `stakeOf`, so a claim without funding cannot create an unfunded obligation. If the ledger refuses, the pending row is deleted. If the process dies after the post and before activate, the ledger key is idempotent and a retry with the same `stakeId` re-posts (no-op) and activates.
+**Stake: claim `pending` → ledger post → `active`.** A pending row is not yield-eligible and is excluded from `stakeOf`, so a claim without funding cannot create an unfunded obligation. If the ledger **confirms** insufficient funds, the pending row is deleted. Ambiguous post failures (timeout after apply) leave the pending claim so the same `stakeId` can resume — deleting on every error was post-without-claim. If the process dies after the post and before activate, the ledger key is idempotent and a retry re-posts (no-op) and activates. Activate checks row count; a vanished claim never returns a fake `active`.
 
 **Unstake: claim `unstaking` under row lock, then post, then close.** Two concurrent unstakes cannot both post — only one claim wins the `active → unstaking` transition. The ledger post is **not** held inside the same Postgres transaction as the lock (remote ledger must not hold a DB lock open). The ledger's idempotency key is still the backstop if the claim ever failed; it is not the ordinary path.
 

@@ -206,6 +206,75 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('keeps the pending claim when ledger post fails after applying (no post-without-claim)', async () => {
+      // Ambiguous failure class: MemoryLedger applied the stake, then the client
+      // saw a transport error. Old fail-path DELETEd pending on any catch →
+      // principal stuck in stake account with no row to unstake.
+      await fund(USER_A, '5000');
+      const stakeId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const realPost = ledger.post.bind(ledger);
+      let stakePosts = 0;
+      ledger.post = async (tx) => {
+        const result = await realPost(tx);
+        const isStake =
+          typeof tx === 'object' &&
+          tx !== null &&
+          'reason' in tx &&
+          (tx as { reason?: string }).reason === 'token.stake';
+        if (isStake) {
+          stakePosts += 1;
+          if (stakePosts === 1) {
+            throw new Error('simulated network flake after ledger apply');
+          }
+        }
+        return result;
+      };
+
+      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId })).rejects.toThrow(
+        /network flake/,
+      );
+
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stakeId}`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.status).toBe('pending');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('4000');
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+
+      // Same stakeId recovers: ledger key no-ops, activate lands once.
+      const recovered = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId });
+      expect(recovered.status).toBe('active');
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('1000');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('does not report active when the claim row vanished after the ledger post', async () => {
+      await fund(USER_A, '5000');
+      const stakeId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      const realPost = ledger.post.bind(ledger);
+      ledger.post = async (tx) => {
+        const result = await realPost(tx);
+        const isStake =
+          typeof tx === 'object' &&
+          tx !== null &&
+          'reason' in tx &&
+          (tx as { reason?: string }).reason === 'token.stake';
+        if (isStake) {
+          // Hostile race: claim deleted after apply (old fail-path / dual flight).
+          await sql`DELETE FROM token.stakes WHERE id = ${stakeId}`;
+        }
+        return result;
+      };
+
+      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId })).rejects.toMatchObject({
+        code: 'token.stake_claim_missing',
+      });
+      expect(await stakedOf(USER_A)).toBe('1000');
+      const rows = await sql`SELECT id FROM token.stakes WHERE id = ${stakeId}`;
+      expect(rows).toHaveLength(0);
+    });
+
     it('M-01 refuses stakeId reuse with a different amount or user', async () => {
       await fund(USER_A, '5000');
       await fund(USER_B, '5000');
