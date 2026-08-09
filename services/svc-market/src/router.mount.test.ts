@@ -495,4 +495,28 @@ describe('svc-market mount — commerce scopes', () => {
         .commerceProgramme(),
     ).resolves.toEqual({ commissionBps: null, commissionConfigured: false });
   });
+
+  it('maps commerce refuse codes to stable tRPC classes', async () => {
+    const cases: Array<{ code: string; trpc: string }> = [
+      { code: 'market.commission_not_configured', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.subscription_not_built', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.listing_slot_missing', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.listing_over_capacity', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.insufficient_funds', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.purchase_self', trpc: 'CONFLICT' },
+      { code: 'market.purchase_conflict', trpc: 'CONFLICT' },
+      { code: 'market.listing_not_found', trpc: 'NOT_FOUND' },
+    ];
+    for (const c of cases) {
+      const commerce = stubCommerce();
+      commerce.purchase = vi.fn(async () => {
+        throw new MarketError('refuse', c.code);
+      });
+      await expect(
+        createMarketRouter(stubVendors(), commerce as never)
+          .createCaller(signed())
+          .purchase({ listingId, purchaseId }),
+      ).rejects.toMatchObject({ code: c.trpc });
+    }
+  });
 });
