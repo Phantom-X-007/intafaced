@@ -4,7 +4,7 @@ import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client
 import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
 import { emptyScene, parseScene } from './spatial/scene.js';
-import { decideHostSceneWrite } from './spatial/edit-policy.js';
+import { decideHostSceneWrite, sceneFingerprint } from './spatial/edit-policy.js';
 import {
   assertFreezeReason,
   badgeOf,
@@ -120,6 +120,11 @@ export interface SessionRecord {
   streamProvider: string | null;
   streamRoom: string | null;
   scene: Record<string, unknown>;
+  /**
+   * Optimistic concurrency token for host scene writes.
+   * Always present on read so clients can supply expectedFingerprint without re-hashing.
+   */
+  sceneFingerprint: string;
 }
 
 interface RoomRow {
@@ -157,18 +162,24 @@ const toRoom = (row: RoomRow): RoomRecord => ({
   hostId: row.host_id,
 });
 
-const toSession = (row: SessionRow): SessionRecord => ({
-  id: row.id,
-  roomId: row.room_id,
-  title: row.title,
-  hostId: row.host_id,
-  status: row.status,
-  startsAt: row.starts_at,
-  endsAt: row.ends_at,
-  streamProvider: row.stream_provider,
-  streamRoom: row.stream_room,
-  scene: row.scene,
-});
+const toSession = (row: SessionRow): SessionRecord => {
+  // Unreadable DB default `{}` → empty v1 fingerprint (same SoT as updateScene).
+  const parsed = parseScene(row.scene);
+  const scene = parsed.ok ? parsed.scene : emptyScene();
+  return {
+    id: row.id,
+    roomId: row.room_id,
+    title: row.title,
+    hostId: row.host_id,
+    status: row.status,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    streamProvider: row.stream_provider,
+    streamRoom: row.stream_room,
+    scene: row.scene,
+    sceneFingerprint: sceneFingerprint(scene),
+  };
+};
 
 export interface AcademyServiceOptions {
   /** Operational ceiling on a room's own capacity — see env.ts. */
