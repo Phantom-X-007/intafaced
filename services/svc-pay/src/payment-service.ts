@@ -1505,6 +1505,43 @@ export class PayService {
         }
 
         const totals = await totalsFor(tx, row.id);
+
+        // A COMPLETED `refundId` IS A REPLAY, NOT A SECOND REFUND.
+        //
+        // `refundId` is a business key — it is what `payment.refund:<refundId>`
+        // makes the ledger idempotent on. The ledger would therefore already
+        // dedupe a repeat and move nothing, but the EVENT LOG would not:
+        // `totalsFor` sums every `refunded` row, so appending a second one for
+        // the same business key leaves the book correct and the PROJECTION
+        // wrong — `refundedAmount` doubles, and refundable shrinks by a refund
+        // that never happened. That desync is worse to unpick than a refusal.
+        //
+        // So a caller who repeats a completed refund id gets the payment as it
+        // stands, having moved and recorded nothing. This is the same rule the
+        // authorize path already states as "an authorization that already
+        // happened is not an error", and it is what makes it safe for
+        // `public-rest.ts` to derive this id from the caller's Idempotency-Key.
+        //
+        // Checked BEFORE the refundable comparison deliberately: after a FULL
+        // refund the refundable balance is zero, so the refusal would otherwise
+        // win and report `pay.refund_exceeds_captured` for what is actually a
+        // retry of a refund that already succeeded.
+        //
+        // Only for an EXPLICIT id. The `${paymentId}:${sequence + 1}` default is
+        // a fresh ordinal by construction and can never be a replay of itself.
+        if (options.refundId !== undefined) {
+          const alreadyDone = await tx<Array<{ n: string }>>`
+            SELECT COUNT(*)::text AS n
+              FROM pay.payment_events
+             WHERE payment_id = ${row.id}
+               AND event = 'refunded'
+               AND payload->>'refundId' = ${options.refundId}
+          `;
+          if (Number.parseInt(alreadyDone[0]?.n ?? '0', 10) > 0) {
+            return { replay: true as const, view: await this.view(tx, row) };
+          }
+        }
+
         const refundable = totals.captured - totals.refunded;
         if (amount > refundable) {
           throw new PayError(
@@ -1567,10 +1604,14 @@ export class PayService {
           ledgerTxId: posted.id,
         });
 
-        return { row, refundId, source, merchant, captured: totals.captured, refunded: totals.refunded };
+        return { replay: false as const, row, refundId, source, merchant, captured: totals.captured, refunded: totals.refunded };
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
+
+    // A repeat of a completed refund id. Nothing moved, nothing was appended,
+    // and no rail was asked — the payment is returned exactly as it stands.
+    if (prepared.replay) return prepared.view;
 
     // ── Phase 2: send it. The book already says this money is on its way out.
     const adapter = this.rails.require(prepared.row.rail_adapter, 'refund');

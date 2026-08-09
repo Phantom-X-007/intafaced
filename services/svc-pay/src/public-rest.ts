@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import swagger from '@fastify/swagger';
 import { requireScope, type Principal, type Scope } from '@intafaced/auth';
@@ -227,6 +228,36 @@ const idempotencyHeaderSchema = {
     },
   },
 } as const;
+
+/**
+ * THE BUSINESS IDENTITY OF A REFUND THE CALLER DID NOT NAME.
+ *
+ * `PayService.refund` defaults `refundId` to `${paymentId}:${sequence + 1}` — an
+ * ATTEMPT ORDINAL, which is the right default for an internal caller who counts
+ * its own refunds and the wrong one for a public retry. `refundId` becomes the
+ * ledger key `payment.refund:<refundId>`, so two attempts at ONE business event
+ * that produce `…:1` and `…:2` are two real movements out of the merchant's
+ * clearing balance. `withIdempotency` hides that in the common case and is not
+ * the guard: it ABANDONS its claim on 5xx so a retry may execute, and a journal
+ * row can expire. A partial refund is the reachable case — a full one is caught
+ * by `pay.refund_exceeds_captured` once refundable hits zero, which is luck
+ * rather than design.
+ *
+ * So when the caller does not supply a business key, the caller's
+ * `Idempotency-Key` IS the business key, bound to the payment it refunds.
+ * Derived from the key and the payment id, never from a clock or a random value.
+ *
+ * DIGESTED, not concatenated, for one reason: the ledger caps an idempotency key
+ * at 200 characters (`packages/ledger-client` `types.ts`) and this header is
+ * allowed 255, so pasting it in would build a key the ledger rejects — turning a
+ * long-but-legal merchant key into a refused refund. A digest is fixed-width and
+ * still a pure function of the key, which is all idempotency needs. The raw key
+ * stays readable in the REST journal, so an operator can still join the two.
+ */
+function restRefundId(paymentId: string, idempotencyKey: string): string {
+  const digest = createHash('sha256').update(`${paymentId} ${idempotencyKey}`).digest('hex').slice(0, 24);
+  return `rest:${paymentId}:${digest}`;
+}
 
 /** Reject JSON numbers / anything that is not already a decimal string (ADR §2.3). */
 function requireDecimalString(value: unknown, field: string): string {
@@ -739,11 +770,11 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           const existing = await deps.pay.getPayment(req.params.id);
           await assertAccess(principal.userId, existing.merchantId, 'payment.refund');
           const amount = requireDecimalString(req.body.amount, 'amount');
-          const payment = await deps.pay.refund(
-            req.params.id,
-            parseAmount(amount),
-            req.body.refundId ? { refundId: req.body.refundId } : {},
-          );
+          // The caller's own business key wins; otherwise their Idempotency-Key
+          // IS the business key (see `restRefundId`). Never an attempt ordinal.
+          const payment = await deps.pay.refund(req.params.id, parseAmount(amount), {
+            refundId: req.body.refundId ?? restRefundId(req.params.id, key),
+          });
           return reply.send(toPaymentBody(payment));
         } catch (err) {
           return send(reply, err);
