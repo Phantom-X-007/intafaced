@@ -657,8 +657,9 @@ if (!available) {
     it('does not pay a staker who joined AFTER an empty window was claimed', async () => {
       // W4 residual / 0004: empty distribute used to write no plan row, so a
       // later stake + re-run of the same window id planned the newcomer.
-      // Header freezes the empty answer; late joiners use a new window id.
-      // Empty claim does NOT sweep — fees stay in houseFees for the new id.
+      // Header freezes the empty answer. Fees still sweep into the engine
+      // (buyback and residual scheduling); late joiners need a NEW window id
+      // with NEW fees — the frozen id never invents recipients.
       await accrueFees('trade', '100');
       const empty = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(empty.recipients).toBe(0);
@@ -669,7 +670,7 @@ if (!available) {
       `;
       expect(headers).toHaveLength(1);
       expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
-      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
 
       await fund(USER_A, '1000');
       await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
@@ -678,12 +679,12 @@ if (!available) {
       expect(formatAmount(again.distributed)).toBe('0');
       expect(again.recipients).toBe(0);
       expect(await balanceOf(USER_A)).toBe('0');
-      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
 
+      // New window needs its own fees in houseFees (first window already swept).
+      await accrueFees('trade', '100');
       const next = await token.distributeRevenue({ windowId: 'w-later-2', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(formatAmount(next.distributed)).toBe('100');
       expect(await balanceOf(USER_A)).toBe('100');
-      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('0');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -704,15 +705,12 @@ if (!available) {
       expect(await sql`SELECT user_id FROM token.yield_payouts WHERE window_id = 'w-empty-mismatch'`).toHaveLength(0);
     });
 
-    it('leaves fees in houseFees when nobody is staked (does not sweep into the engine)', async () => {
+    it('sweeps into the rewards engine when nobody is staked and freezes the window id', async () => {
       await accrueFees('trade', '100');
       const result = await token.distributeRevenue({ windowId: 'w-empty', sources: [{ module: 'trade', amount: amt('100') }] });
 
       expect(result.recipients).toBe(0);
-      // Empty claim freezes the window id but does not move fees — a later
-      // window id with stakers can still sweep the pot.
-      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
-      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
       expect(ledger.totalsByAsset().IFC).toBe('0');
       expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-empty'`).toHaveLength(1);
     });
