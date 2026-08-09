@@ -55,14 +55,17 @@ describe('refusal write catalog — no dark codes on the wire', () => {
 
   it('catalog stays non-empty and includes the load-bearing set', () => {
     const codes = allRefusalCodes();
-    expect(codes.length).toBeGreaterThanOrEqual(9);
+    expect(codes.length).toBeGreaterThanOrEqual(11);
     for (const required of [
       'channel.not_configured',
       'channel.no_target',
       'channel.target_unverified',
+      'channel.target_unroutable',
       'channel.disabled',
       'channel.muted',
       'channel.attempts_exhausted',
+      'channel.transport_rejected',
+      'channel.delivery_stuck',
       'channel.register_rate_limited',
       'channel.verify_rate_limited',
     ] as const) {
