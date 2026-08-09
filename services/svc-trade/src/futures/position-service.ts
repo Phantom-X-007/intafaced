@@ -871,7 +871,11 @@ function presentPosition(row: PositionRow, extras?: { markPrice?: string | null;
   const size = parseAmount(row.size);
   const entry = parseAmount(row.entry_price);
   const leverage = parseAmount(row.leverage);
-  const margin = parseAmount(row.margin_current ?? row.margin_initial);
+  // W4 R6: collateral = residual margin; initialMargin stays the open stake.
+  // After funding debits, margin_current drops while margin_initial does not —
+  // reporting both as residual lied to every client risk view.
+  const marginCurrent = parseAmount(row.margin_current ?? row.margin_initial);
+  const marginInitial = parseAmount(row.margin_initial);
   const SCALE = 10n ** 18n;
   const notional = (size * entry) / SCALE;
   const opened = row.opened_at instanceof Date ? row.opened_at : new Date(row.opened_at);
@@ -890,8 +894,8 @@ function presentPosition(row: PositionRow, extras?: { markPrice?: string | null;
     markPrice: extras?.markPrice ?? null,
     notional: formatAmount(notional),
     leverage: formatAmount(leverage),
-    collateral: formatAmount(margin),
-    initialMargin: formatAmount(margin),
+    collateral: formatAmount(marginCurrent),
+    initialMargin: formatAmount(marginInitial),
     maintenanceMargin: null,
     unrealizedPnl: null,
     realizedPnl: extras?.realizedPnl ?? null,
