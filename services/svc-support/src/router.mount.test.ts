@@ -59,6 +59,14 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     listKb: vi.fn(async () => [
       { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
     ]),
+    searchKb: vi.fn(async () => [
+      { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
+    ]),
+    getKbArticle: vi.fn(async (id: string) =>
+      id === 'kb-account-access'
+        ? { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' }
+        : null,
+    ),
     listOperatorQueue: vi.fn(async () => ({ status: 'empty' as const })),
     peekNext: vi.fn(async () => null),
     claimForOperator: vi.fn(),
@@ -101,6 +109,18 @@ describe('svc-support mount', () => {
     const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
     expect(kb).toHaveLength(1);
     expect(kb[0]!.titleKey).toMatch(/^support\.kb\./);
+  });
+
+  it('searchKb and getKb are public', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(anonymous());
+    const found = await caller.searchKb({ q: 'account' });
+    expect(found).toHaveLength(1);
+    expect(support.searchKb).toHaveBeenCalledWith('account');
+    const one = await caller.getKb({ id: 'kb-account-access' });
+    expect(one?.id).toBe('kb-account-access');
+    const missing = await caller.getKb({ id: 'nope' });
+    expect(missing).toBeNull();
   });
 
   it('refuses listAll without support:ops', async () => {

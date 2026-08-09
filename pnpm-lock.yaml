@@ -1304,6 +1304,9 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -1313,9 +1316,15 @@ importers:
       '@trpc/server':
         specifier: ^11.0.0-rc.660
         version: 11.18.0(typescript@5.9.3)
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(postgres@3.4.9)
       fastify:
         specifier: ^5.11.2
         version: 5.11.2
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
       zod:
         specifier: ^3.24.1
         version: 3.25.76

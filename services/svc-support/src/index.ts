@@ -1,16 +1,14 @@
 import Fastify from 'fastify';
+import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
 import { env } from './env.js';
 import { SupportService } from './support-service.js';
+import { PostgresSupportStore } from './store.js';
 import { createSupportRouter, type SupportRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
-// `@opentelemetry/api` alone is a no-op: without this call every span in
-// ./tracing.ts is built, tagged and then discarded before it reaches the
-// collector. Tracers grabbed at module scope resolve lazily through the proxy
-// provider, so registering here still captures them.
 registerProcessHooks(
   startTelemetry({
     serviceName: env.SERVICE_NAME,
@@ -21,10 +19,22 @@ registerProcessHooks(
 );
 
 /**
- * svc-support — tickets + KB + Stage-2 operator queue (ops.support).
- * In-memory store. No ledger. No balances.
+ * svc-support — tickets + KB + operator queue (ops.support).
+ * Durable Postgres store. No ledger. No balances.
  */
-const support = new SupportService();
+const sql = postgres(env.DATABASE_URL, {
+  max: env.DATABASE_POOL_MAX,
+  ssl: env.DATABASE_SSL ? 'require' : false,
+  connection: { search_path: 'support,public', application_name: env.SERVICE_NAME },
+  onnotice: () => undefined,
+});
+
+await sql`SELECT 1 FROM support.tickets LIMIT 1`.catch(() => {
+  throw new Error('support schema is missing — run migrations before starting svc-support');
+});
+
+const store = new PostgresSupportStore(sql);
+const support = new SupportService(store);
 const appRouter = createSupportRouter(support);
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
@@ -34,7 +44,7 @@ const edgeContext = createEdgeContext({
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, stage: '2-memory-queue' }));
+app.get('/ready', async () => ({ ready: true, stage: '3-durable-queue', store: 'postgres' }));
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
@@ -51,6 +61,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
+      await sql.end({ timeout: 5 });
       process.exit(0);
     })();
   });

@@ -646,8 +646,7 @@ services:
     depends_on:
       <<: [*needs-schema, *needs-bus]
 
-  # Support desk tickets + KB (ops.support Stage-1). Non-custodial: no
-  # LEDGER_URL, no DATABASE_URL — in-memory ticket spine only.
+  # Support desk tickets + KB (ops.support). Durable Postgres store; no ledger.
   svc-support:
     <<: *app
     container_name: intafaced-svc-support
@@ -656,8 +655,11 @@ services:
       <<: [*service-env, *edge-secret]
       SERVICE_NAME: svc-support
       HTTP_PORT: '4017'
+      DATABASE_URL: postgres://svc_support:svc_support@postgres:5432/intafaced
     expose: ['4017']
     healthcheck: *healthcheck
+    depends_on:
+      <<: *needs-schema
 
   # Vendor lifecycle Stage 1 — apply, then vet (§8.7 `market.vendors`).
   #
