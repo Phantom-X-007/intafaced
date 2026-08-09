@@ -13,6 +13,7 @@ import { UpstreamModelProvider } from './providers/upstream.js';
 import type { ModelProvider } from './providers/provider.js';
 import { AgentRuntime } from './runtime.js';
 import { registerProductAgentsAtBoot } from './fleet/boot-register.js';
+import { fleetMatrixBoardCard } from './fleet/matrix.js';
 import { agentsReadiness } from './readiness.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -132,6 +133,7 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
  *   · `providerMode: mock` is not production inference
  *   · `usefulPath.available` is whether a completion can leave the process now
  *   · productAgentsRegistered is the boot upsert count (not live inference)
+ *   · fleet is the Stage-1 matrix card (mounts + boot flags), not live inference
  * Never a vendor name (Doctrine §0.7).
  */
 app.get('/ready', async () =>
@@ -141,6 +143,7 @@ app.get('/ready', async () =>
     table: gateway.routingTable,
     meteringEnabled: env.AGENTS_METERING_ENABLED,
     productAgentsRegistered: bootAgents.count,
+    fleet: fleetMatrixBoardCard(),
   }),
 );
 
