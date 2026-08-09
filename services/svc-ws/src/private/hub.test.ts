@@ -146,7 +146,8 @@ describe('PrivateOrderHub', () => {
     hub.attach('user-a', lagging);
     hub.publish(update('user-a'));
     hub.publish(update('user-a'));
-    expect(lagging.closed?.code).toBe(1008);
+    expect(lagging.closed?.code).toBe(1013);
+    expect(lagging.closed?.reason).toMatch(/slow consumer/i);
     expect(lagging.sent).toHaveLength(0);
   });
 
@@ -229,7 +230,8 @@ describe('PrivateOrderHub', () => {
     hub.publishPosition(position);
     hub.publishPosition(position);
 
-    expect(lagging.closed?.code).toBe(1008);
+    expect(lagging.closed?.code).toBe(1013);
+    expect(lagging.closed?.reason).toMatch(/slow consumer/i);
     expect(healthy.sent).toHaveLength(2);
     expect(JSON.parse(healthy.sent[0]!).channel).toBe('positions');
   });
