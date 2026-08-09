@@ -151,8 +151,25 @@ describe('paymentRefundReverse', () => {
       rail: RAIL,
       source: 'clearing' as const,
     };
-    expect(recipes.paymentRefund(body).idempotencyKey).toBe('payment.refund:rf-x');
-    expect(recipes.paymentRefundReverse(body).idempotencyKey).toBe('payment.refund.reverse:rf-x');
+    expect(recipes.paymentRefund(body).idempotencyKey).toBe('payment.refund:p:rf-x');
+    expect(recipes.paymentRefundReverse(body).idempotencyKey).toBe('payment.refund.reverse:p:rf-x');
+  });
+
+  it('namespaces refund keys by paymentId so two payments may share a merchant refundId', () => {
+    const base = {
+      refundId: 'merchant-rf-1',
+      merchantId: MERCHANT,
+      merchantUserId: MERCHANT_USER,
+      assetId: 'USDT',
+      amount: amt('1'),
+      rail: RAIL,
+      source: 'clearing' as const,
+    };
+    const a = recipes.paymentRefund({ ...base, paymentId: 'pay-a' }).idempotencyKey;
+    const b = recipes.paymentRefund({ ...base, paymentId: 'pay-b' }).idempotencyKey;
+    expect(a).toBe('payment.refund:pay-a:merchant-rf-1');
+    expect(b).toBe('payment.refund:pay-b:merchant-rf-1');
+    expect(a).not.toBe(b);
   });
 });
 

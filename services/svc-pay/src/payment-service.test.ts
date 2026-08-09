@@ -481,8 +481,30 @@ if (!available) {
     });
 
     /**
+     * Cross-payment residual — explicit refundId used to be a GLOBAL ledger key
+     * (`payment.refund:<refundId>`). Payment B reusing A's id would no-op the
+     * book while the rail still paid B. Keys are now namespaced by paymentId.
+     */
+    it('two payments may share an explicit refundId — both debit the merchant', async () => {
+      const m = await merchant(0);
+      const a = await cardPayment(m.id, '100');
+      const b = await cardPayment(m.id, '100');
+      await pay.capture(a.id);
+      await pay.capture(b.id);
+      expect(await clearingOf(m.id)).toBe('200');
+
+      await pay.refund(a.id, amt('10'), { refundId: 'shared-biz-rf' });
+      await pay.refund(b.id, amt('10'), { refundId: 'shared-biz-rf' });
+
+      expect(await clearingOf(m.id)).toBe('180');
+      expect(formatAmount((await pay.getPayment(a.id)).refundedAmount)).toBe('10');
+      expect(formatAmount((await pay.getPayment(b.id)).refundedAmount)).toBe('10');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    /**
      * W8 residual — same explicit refundId after reverse must NOT free-rail.
-     * Ledger key `payment.refund:<id>` is spent (idempotent no-op on re-post);
+     * Ledger key `payment.refund:<paymentId>:<id>` is spent (idempotent no-op on re-post);
      * card-sandbox ignores refundId and would still advance the charge.
      * Refuse so a public body refundId / derived rest key cannot desync book vs rail.
      */

@@ -107,9 +107,9 @@ export type PayErrorCode =
   /**
    * An explicit `refundId` already ran to `refund.reversed` (rail refused after
    * the merchant was debited and the reverse posted). The ledger key
-   * `payment.refund:<refundId>` is spent: a re-post is a silent no-op, so
-   * reusing the id would let the rail pay out while the book does not re-debit.
-   * Caller must supply a **new** business key for a genuine second attempt.
+   * `payment.refund:<paymentId>:<refundId>` is spent: a re-post is a silent
+   * no-op, so reusing the id would let the rail pay out while the book does not
+   * re-debit. Caller must supply a **new** business key for a genuine second attempt.
    */
   | 'pay.refund_id_spent'
   | 'pay.refund_id_conflict'
@@ -1517,9 +1517,10 @@ export class PayService {
 
         // A COMPLETED `refundId` IS A REPLAY, NOT A SECOND REFUND.
         //
-        // `refundId` is a business key — it is what `payment.refund:<refundId>`
-        // makes the ledger idempotent on. The ledger would therefore already
-        // dedupe a repeat and move nothing, but the EVENT LOG would not:
+        // `refundId` is a business key — it is what
+        // `payment.refund:<paymentId>:<refundId>` makes the ledger idempotent
+        // on. The ledger would therefore already dedupe a repeat and move
+        // nothing, but the EVENT LOG would not:
         // `totalsFor` sums every `refunded` row, so appending a second one for
         // the same business key leaves the book correct and the PROJECTION
         // wrong — `refundedAmount` doubles, and refundable shrinks by a refund

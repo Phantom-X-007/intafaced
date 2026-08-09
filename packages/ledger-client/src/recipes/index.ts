@@ -784,7 +784,13 @@ export interface PaymentRefundInput {
   source: 'clearing' | 'settled';
 }
 
-/** Value leaves the book, back out through the rail it came in on. */
+/**
+ * Value leaves the book, back out through the rail it came in on.
+ *
+ * Key is namespaced by `paymentId` so an explicit merchant `refundId` reused
+ * on a second payment cannot no-op the ledger while the rail still pays out
+ * (cross-payment key collision).
+ */
 export function paymentRefund(input: PaymentRefundInput): PostRequest {
   requirePositive('refund amount', input.amount);
 
@@ -792,7 +798,7 @@ export function paymentRefund(input: PaymentRefundInput): PostRequest {
     input.source === 'clearing' ? merchantClearing(input.merchantId, input.assetId) : userAvailable(input.merchantUserId, input.assetId);
 
   return {
-    idempotencyKey: `payment.refund:${input.refundId}`,
+    idempotencyKey: `payment.refund:${input.paymentId}:${input.refundId}`,
     module: 'pay',
     reason: 'payment.refunded',
     meta: { paymentId: input.paymentId, refundId: input.refundId, source: input.source, rail: input.rail },
@@ -819,7 +825,7 @@ export function paymentRefundReverse(input: PaymentRefundInput): PostRequest {
     input.source === 'clearing' ? merchantClearing(input.merchantId, input.assetId) : userAvailable(input.merchantUserId, input.assetId);
 
   return {
-    idempotencyKey: `payment.refund.reverse:${input.refundId}`,
+    idempotencyKey: `payment.refund.reverse:${input.paymentId}:${input.refundId}`,
     module: 'pay',
     reason: 'payment.refund.reversed',
     meta: { paymentId: input.paymentId, refundId: input.refundId, source: input.source, rail: input.rail },
