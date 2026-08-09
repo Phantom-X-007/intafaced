@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { JetStreamEventBus, type Subscription } from '@intafaced/events';
 import { env } from './env.js';
+import { createBusLifecycle } from './bus-lifecycle.js';
 import { DepthHub } from './depth/hub.js';
 import { DepthPoller } from './depth/poller.js';
 import { HttpMarketRegistry, UnionMarketRegistry } from './depth/registry.js';
@@ -130,14 +131,71 @@ let enabled = env.WS_GATEWAY_ENABLED;
 const isEnabled = () => enabled;
 
 /**
- * Bus subscription handles — declared before routes so /ready getters can read
- * them. Filled (or left null) in the NATS boot block below.
+ * Bus lifecycle — declared before routes so /ready getters can read status.
+ * Connect/subscribe may fail at boot; the lifecycle retries with backoff so
+ * an empty tape is temporary, not "until process restart".
  */
-let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
-let tradeSub: Subscription | null = null;
-let privateSub: Subscription | null = null;
-let privateFillSub: Subscription | null = null;
-let privatePositionSub: Subscription | null = null;
+const busLifecycle = createBusLifecycle({
+  log: app.log,
+  attempt: async () => {
+    const connected = await JetStreamEventBus.connect({
+      servers: env.NATS_URL,
+      producer: env.SERVICE_NAME,
+      streamPrefix: env.NATS_STREAM_PREFIX,
+      ownedStreams: [],
+    });
+    let tradeSub: Subscription | null = null;
+    let privateSub: Subscription | null = null;
+    let privateFillSub: Subscription | null = null;
+    let privatePositionSub: Subscription | null = null;
+    try {
+      tradeSub = await subscribeTradeTape({
+        bus: connected,
+        hub: tradeHub,
+        durable: env.WS_TRADES_DURABLE,
+        log: app.log,
+      });
+      if (privateTokens) {
+        privateSub = await subscribePrivateOrders({
+          bus: connected,
+          hub: privateOrderHub,
+          durable: env.WS_PRIVATE_ORDERS_DURABLE,
+          log: app.log,
+        });
+        privateFillSub = await subscribePrivateFills({
+          bus: connected,
+          hub: privateOrderHub,
+          durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-fills`,
+          log: app.log,
+        });
+        privatePositionSub = await subscribePrivatePositions({
+          bus: connected,
+          hub: privateOrderHub,
+          durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-positions`,
+          log: app.log,
+        });
+      }
+    } catch (err) {
+      await tradeSub?.unsubscribe().catch(() => undefined);
+      await privateSub?.unsubscribe().catch(() => undefined);
+      await privateFillSub?.unsubscribe().catch(() => undefined);
+      await privatePositionSub?.unsubscribe().catch(() => undefined);
+      await connected.close().catch(() => undefined);
+      throw err;
+    }
+    return {
+      tradesUp: tradeSub !== null,
+      privateUp: privateSub !== null,
+      close: async () => {
+        await tradeSub?.unsubscribe().catch(() => undefined);
+        await privateSub?.unsubscribe().catch(() => undefined);
+        await privateFillSub?.unsubscribe().catch(() => undefined);
+        await privatePositionSub?.unsubscribe().catch(() => undefined);
+        await connected.close().catch(() => undefined);
+      },
+    };
+  },
+});
 
 const poller = new DepthPoller(
   source,
@@ -155,9 +213,9 @@ registerRoutes(app, {
   serviceName: env.SERVICE_NAME,
   upstream: env.MATCHING_URL,
   enabled: isEnabled,
-  // Mutable getters: boot may fail the NATS subscribe and leave these null.
-  tradesBus: () => tradeSub !== null,
-  privateBus: () => privateSub !== null,
+  // Mutable getters: lifecycle flips these when reconnect lands.
+  tradesBus: busLifecycle.tradesBus,
+  privateBus: busLifecycle.privateBus,
 });
 
 /**
@@ -178,56 +236,11 @@ await hub.refreshMarkets().catch((err: unknown) => {
 });
 
 /**
- * Trade tape: subscribe to `orderFilled` if NATS is up. Depth must keep
- * working when the bus is down — a public book feed should not die because
- * JetStream hiccuped. `ownedStreams: []` — matching owns the stream.
+ * Trade tape + private fan-out: start bus lifecycle (non-blocking). Depth
+ * serves immediately; tape attaches when NATS is reachable, including after a
+ * boot-time outage. `ownedStreams: []` — matching owns the stream.
  */
-try {
-  bus = await JetStreamEventBus.connect({
-    servers: env.NATS_URL,
-    producer: env.SERVICE_NAME,
-    streamPrefix: env.NATS_STREAM_PREFIX,
-    ownedStreams: [],
-  });
-  tradeSub = await subscribeTradeTape({
-    bus,
-    hub: tradeHub,
-    durable: env.WS_TRADES_DURABLE,
-    log: app.log,
-  });
-  if (privateTokens) {
-    privateSub = await subscribePrivateOrders({
-      bus,
-      hub: privateOrderHub,
-      durable: env.WS_PRIVATE_ORDERS_DURABLE,
-      log: app.log,
-    });
-    privateFillSub = await subscribePrivateFills({
-      bus,
-      hub: privateOrderHub,
-      durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-fills`,
-      log: app.log,
-    });
-    privatePositionSub = await subscribePrivatePositions({
-      bus,
-      hub: privateOrderHub,
-      durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-positions`,
-      log: app.log,
-    });
-  }
-} catch (err) {
-  // Honest: there is no auto-reconnect loop yet. /ready stays green (depth
-  // works) but tradesBus/privateBus stay false until process restart.
-  app.log.warn(
-    { err: String(err), nats: env.NATS_URL },
-    'svc-ws: trade/private bus unavailable at boot — depth still serves; tape empty until process restart (no auto-reconnect yet)',
-  );
-  bus = null;
-  tradeSub = null;
-  privateSub = null;
-  privateFillSub = null;
-  privatePositionSub = null;
-}
+busLifecycle.start();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
@@ -259,9 +272,9 @@ app.log.info(
     markets: hub.knownMarkets.length,
     depthLimit: env.WS_DEPTH_LIMIT,
     pollMs: env.WS_POLL_INTERVAL_MS,
-    trades: tradeSub !== null,
-    privateOrders: privateSub !== null && privateTokens !== null,
-    privatePositions: privatePositionSub !== null && privateTokens !== null,
+    trades: busLifecycle.tradesBus(),
+    privateOrders: busLifecycle.privateBus() && privateTokens !== null,
+    privatePositions: busLifecycle.privateBus() && privateTokens !== null,
     enabled,
   },
   'svc-ws ready — depth + trade tape + private orders/fills/positions',
@@ -274,11 +287,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       // socket that is mid-close, and tell every client why it is going.
       enabled = false;
       poller.stop();
-      if (tradeSub) await tradeSub.unsubscribe().catch(() => undefined);
-      if (privateSub) await privateSub.unsubscribe().catch(() => undefined);
-      if (privateFillSub) await privateFillSub.unsubscribe().catch(() => undefined);
-      if (privatePositionSub) await privatePositionSub.unsubscribe().catch(() => undefined);
-      if (bus) await bus.close().catch(() => undefined);
+      await busLifecycle.stop();
       await gateway.close('gateway shutting down');
       await privateGateway.close('gateway shutting down');
       await app.close();
