@@ -16,10 +16,20 @@ export interface FeeShareAttributionInput {
   readonly leaderId: string;
   readonly followerId: string;
   readonly assetId: string;
-  /** Follower fill notional (quote asset). */
+  /** Follower fill notional (quote asset). Used only when `fillFeeAmount` is omitted. */
   readonly followerFillNotional: Amount;
-  /** Protocol maker/taker fee bps already charged on the fill (existing surface). */
+  /**
+   * Protocol maker/taker fee bps. Used only when `fillFeeAmount` is omitted —
+   * the fallback re-derives fee from notional and can disagree with the fill
+   * row (ceil vs floor, base vs quote). Prefer the settled fee.
+   */
   readonly protocolFeeBps: number;
+  /**
+   * THE FEE ACTUALLY COLLECTED on the follower fill (`fills.fee_amount` / fee
+   * asset). When present, share is of THIS amount — never a re-invented
+   * notional×bps that can over-claim the house fee pot (audit R3).
+   */
+  readonly fillFeeAmount?: Amount;
   /** Round-trips already attributed this period for churn decay. */
   readonly roundTripsThisPeriod: number;
   /** Leader earnings already paid for this follower this period. */
@@ -59,14 +69,27 @@ export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShare
     throw new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed');
   }
 
-  if (!Number.isInteger(input.protocolFeeBps) || input.protocolFeeBps < 0 || input.protocolFeeBps > 10_000) {
-    throw new CopyError('protocolFeeBps must be an integer 0..10000', 'trade.copy_settle_refused', COPY_FEE_SHARE_RESIDUAL);
-  }
-  if (input.followerFillNotional <= 0n) {
-    throw new CopyError('Follower fill notional must be strictly positive', 'trade.copy_settle_refused');
+  if (input.fillFeeAmount !== undefined) {
+    if (input.fillFeeAmount < 0n) {
+      throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
+    }
+  } else {
+    if (!Number.isInteger(input.protocolFeeBps) || input.protocolFeeBps < 0 || input.protocolFeeBps > 10_000) {
+      throw new CopyError('protocolFeeBps must be an integer 0..10000', 'trade.copy_settle_refused', COPY_FEE_SHARE_RESIDUAL);
+    }
+    if (input.followerFillNotional <= 0n) {
+      throw new CopyError('Follower fill notional must be strictly positive', 'trade.copy_settle_refused');
+    }
   }
 
-  const protocolFee = mulBps(input.followerFillNotional, input.protocolFeeBps, 'floor');
+  /**
+   * Prefer the fee the fill actually collected. Re-deriving from notional×bps
+   * can disagree with tradeFill (ceil, receivable asset) and over-claim the
+   * shared house fee pot. Legacy callers without fillFeeAmount keep the
+   * notional path so existing tests and dormant mount code still typecheck.
+   */
+  const protocolFee =
+    input.fillFeeAmount !== undefined ? input.fillFeeAmount : mulBps(input.followerFillNotional, input.protocolFeeBps, 'floor');
   const appliedShareBps =
     law.decayRoundTrips > 0 && input.roundTripsThisPeriod >= law.decayRoundTrips ? law.decayShareBps : law.leaderShareBps;
 
