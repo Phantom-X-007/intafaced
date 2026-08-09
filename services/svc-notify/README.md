@@ -239,8 +239,10 @@ lease is still live.
 
 **Register / verify rate limits.** Per `userId`+channel sliding windows (default
 3 registers / 10 verifies per 15 minutes). Named refuse codes, not silent drops.
-In-memory per process — multi-replica residual is roughly N× the budget until a
-shared counter lands.
+Production stores the window in Postgres (`notify.target_rate_windows`, migration
+`0005`) and claims it with `SELECT … FOR UPDATE`, so two replicas share one
+budget rather than each holding an N× in-process counter. Unit tests may still
+inject the memory limiter.
 
 **Consent footer.** Out-of-app bodies from `renderNotification` append
 `notify.channel.footer` (catalog). Verification messages do not (address is still

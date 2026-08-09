@@ -103,7 +103,25 @@ export const channelMutes = schema.table(
   (t) => [primaryKey({ columns: [t.userId, t.channel] })],
 );
 
+/**
+ * Shared register/verify rate windows. One row per (user, channel, op).
+ * `hit_count` is takes inside the open window; expired windows reset on take.
+ * Production claim path: SELECT … FOR UPDATE (see PostgresTargetRateLimiter).
+ */
+export const targetRateWindows = schema.table(
+  'target_rate_windows',
+  {
+    userId: text('user_id').notNull(),
+    channel: text('channel').$type<'email' | 'push' | 'sms'>().notNull(),
+    op: text('op').$type<'register' | 'verify'>().notNull(),
+    windowStart: timestamp('window_start', { withTimezone: true, mode: 'date' }).notNull(),
+    hitCount: integer('hit_count').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.channel, t.op] })],
+);
+
 export type NotificationRow = typeof notifications.$inferSelect;
 export type ChannelTargetRow = typeof channelTargets.$inferSelect;
 export type DeliveryRow = typeof deliveries.$inferSelect;
 export type ChannelMuteRow = typeof channelMutes.$inferSelect;
+export type TargetRateWindowRow = typeof targetRateWindows.$inferSelect;

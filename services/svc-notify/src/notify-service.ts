@@ -7,7 +7,7 @@ import { ChannelRefusal, type OutOfAppChannel, type RefusalCode } from './channe
 import { normaliseLocale, renderVerification } from './channels/render.js';
 import { withNotifySpan } from './tracing.js';
 import type { ChannelMutePrefs, MuteStore, MuteableChannel } from './preferences/mute.js';
-import { TargetRateLimiter } from './target-rate-limit.js';
+import { TargetRateLimiter, type TargetRateLimiterPort } from './target-rate-limit.js';
 
 /**
  * svc-notify — event-driven fan-out (ops.notifications).
@@ -53,7 +53,7 @@ export interface NotifyServiceOptions {
    * Optional rate limiter for register/verify. Production always wires one;
    * tests may inject a tight window or omit (a default limiter is created).
    */
-  readonly targetRateLimiter?: TargetRateLimiter;
+  readonly targetRateLimiter?: TargetRateLimiterPort;
 }
 
 const DEFAULT_VERIFY_TTL_MINUTES = 15;
@@ -78,7 +78,7 @@ function newCode(): string {
 }
 
 export class NotifyService {
-  private readonly targetRateLimiter: TargetRateLimiter;
+  private readonly targetRateLimiter: TargetRateLimiterPort;
 
   constructor(
     private readonly store: NotifyStore,
@@ -202,7 +202,7 @@ export class NotifyService {
 
       // Rate limit BEFORE upsert/send so a flood neither rotates the code nor
       // bills the gateway. Named code — not a silent drop.
-      if (!this.targetRateLimiter.tryTake(input.userId, input.channel, 'register')) {
+      if (!(await this.targetRateLimiter.tryTake(input.userId, input.channel, 'register'))) {
         span.setAttribute('intafaced.notify.rate_limited', true);
         return {
           status: 'refused',
@@ -266,7 +266,7 @@ export class NotifyService {
       span.setAttribute('intafaced.notify.channel', channel);
       if (!this.deps) return { status: 'rejected' };
 
-      if (!this.targetRateLimiter.tryTake(userId, channel, 'verify')) {
+      if (!(await this.targetRateLimiter.tryTake(userId, channel, 'verify'))) {
         span.setAttribute('intafaced.notify.rate_limited', true);
         return { status: 'refused', code: 'channel.verify_rate_limited' };
       }
