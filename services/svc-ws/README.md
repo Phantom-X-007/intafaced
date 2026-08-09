@@ -311,13 +311,18 @@ JWT-authenticated, push-only. Query `?access_token=` (or `Authorization: Bearer`
 On connect the server sends three ready frames, then live updates:
 
 ```jsonc
-{ "channel": "orders", "type": "ready", "userId": "<uuid>" }
-{ "channel": "fills", "type": "ready", "userId": "<uuid>" }
-{ "channel": "positions", "type": "ready", "userId": "<uuid>" }
+{ "channel": "orders", "type": "ready", "userId": "<uuid>", "bus": true }
+{ "channel": "fills", "type": "ready", "userId": "<uuid>", "bus": true }
+{ "channel": "positions", "type": "ready", "userId": "<uuid>", "bus": true }
 { "channel": "orders", "orderId": "...", /* orderUpdated fields */ }
 { "channel": "fills", "fillId": "...", /* fillSettled fields */ }
 { "channel": "positions", "positionId": "...", /* positionUpdated fields */ }
 ```
+
+`bus: false` means private JetStream consumers are not attached (boot retry still
+running, or private subscribe failed). Silence with `bus: false` is **unsubscribed**,
+not a quiet market — clients must not treat it as "no orders". `bus: true` and empty
+is the honest quiet case.
 
 Positions updates are emitted only when `trade.futures` publishes `positionUpdated`. Until then the channel is
 mounted and silent — same honesty as REST `GET /positions → []`. Never invent a position frame.

@@ -271,6 +271,7 @@ const privateGateway = createPrivateWebSocketGateway({
   log: app.log,
   enabled: isEnabled,
   tokens: privateTokens,
+  busAttached: busLifecycle.privateBus,
 });
 
 poller.start();

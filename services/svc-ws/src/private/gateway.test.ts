@@ -80,6 +80,7 @@ describe('private WebSocket gateway', () => {
       maxConnections?: number;
       maxConnectionsPerUser?: number;
       heartbeatMs?: number;
+      busAttached?: () => boolean;
     } = { tokens },
   ): Promise<void> {
     hub = new PrivateOrderHub({
@@ -105,6 +106,7 @@ describe('private WebSocket gateway', () => {
       log: { info: () => undefined, warn: () => undefined },
       enabled: () => enabled,
       tokens: opts.tokens,
+      busAttached: opts.busAttached,
     });
   }
 
@@ -213,11 +215,27 @@ describe('private WebSocket gateway', () => {
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await client.frameCount(3);
 
-    const ready = client.frames.map((f) => JSON.parse(f) as { channel: string; type: string; userId: string });
+    const ready = client.frames.map((f) => JSON.parse(f) as { channel: string; type: string; userId: string; bus?: boolean });
     expect(ready.map((r) => r.channel).sort()).toEqual(['fills', 'orders', 'positions']);
     for (const frame of ready) {
       expect(frame.type).toBe('ready');
       expect(frame.userId).toBe(USER);
+      // Default busAttached is true when tests omit the flag.
+      expect(frame.bus).toBe(true);
+    }
+    client.socket.close();
+  });
+
+  it('ready frames say bus:false when private consumers are not attached', async () => {
+    await boot({ tokens, busAttached: () => false });
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
+    await client.frameCount(3);
+
+    for (const raw of client.frames) {
+      const frame = JSON.parse(raw) as { type: string; bus: boolean };
+      expect(frame.type).toBe('ready');
+      expect(frame.bus).toBe(false);
     }
     client.socket.close();
   });
