@@ -1902,26 +1902,10 @@ if (!available) {
   });
 
   describe('fee_bps integrality', () => {
-    it('refuses a fractional fee rather than letting Postgres round it', async () => {
-      // Audit P5: numeric(8,0) rounds 12.5 → 13 silently. mulBps would then
-      // charge a fee nobody chose. Refuse at the service edge.
-      await fund(MAKER, '1000');
-      const offer = await sellOffer();
-      await expect(
-        p2p.takeOffer({
-          offerId: offer.id,
-          takerId: TAKER,
-          amount: amt('100'),
-          method: 'sepa',
-          feeBps: 12.5 as unknown as number,
-        }),
-      ).rejects.toMatchObject({ code: 'p2p.invalid_fee_bps' });
-      // Nothing reserved, nothing locked.
-      expect(await escrowOf(MAKER)).toBe('0');
-      expect(formatAmount((await p2p.getOffer(offer.id)).remainingAmt)).toBe('500');
-    });
-
     it('refuses constructing a service with a fractional default fee', () => {
+      // Audit P5: numeric(8,0) rounds 12.5 → 13 silently. mulBps would then
+      // charge a fee nobody chose. Refuse at construction — take no longer
+      // accepts a per-call fee override.
       expect(
         () =>
           new P2pService(sql, ledger, bus, {
@@ -1930,6 +1914,28 @@ if (!available) {
           }),
       ).toThrow(/fee_bps/);
     });
+
+    it('stamps the service fee on every take — no per-call override', async () => {
+      // W5 residual: drop takeOffer({ feeBps }). Wire never exposed it; service
+      // method used to, which would let an internal caller zero the house fee.
+      await fund(MAKER, '1000');
+      const offer = await sellOffer();
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+      });
+      expect(trade.feeBps).toBe(100);
+      // Second take on the same service still stamps 100 — fee is constructor-only.
+      const again = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: OTHER,
+        amount: amt('100'),
+        method: 'sepa',
+      });
+      expect(again.feeBps).toBe(100);
+    });
   });
 
   describe('release must be postable before any decision', () => {
@@ -1937,6 +1943,8 @@ if (!available) {
       // amount=1 scaled unit + any fee_bps ≥ 1 → mulBps ceils fee to 1 → buyer 0.
       // Without this gate: lock succeeds, seller confirms, resolution=released,
       // settle throws forever, pot is late with no postable terminal.
+      // Fee is the service default (here 30), not a take-time argument.
+      const dusty = new P2pService(sql, ledger, bus, { ...options, feeBps: 30 });
       await fund(MAKER, '1000');
       const offer = await sellOffer({
         totalAmt: amt('1'),
@@ -1944,12 +1952,11 @@ if (!available) {
         maxAmt: amt('1'),
       });
       await expect(
-        p2p.takeOffer({
+        dusty.takeOffer({
           offerId: offer.id,
           takerId: TAKER,
           amount: 1n,
           method: 'sepa',
-          feeBps: 30,
         }),
       ).rejects.toMatchObject({ code: 'p2p.release_unpostable' });
       expect(await escrowOf(MAKER)).toBe('0');
@@ -1957,22 +1964,22 @@ if (!available) {
     });
 
     it('still allows a one-unit take when the fee is zero', async () => {
+      const noFee = new P2pService(sql, ledger, bus, { ...options, feeBps: 0 });
       await fund(MAKER, '1000');
       const offer = await sellOffer({
         totalAmt: amt('1'),
         minAmt: amt('0.000000000000000001'),
         maxAmt: amt('1'),
       });
-      const trade = await p2p.takeOffer({
+      const trade = await noFee.takeOffer({
         offerId: offer.id,
         takerId: TAKER,
         amount: 1n,
         method: 'sepa',
-        feeBps: 0,
       });
       expect(trade.status).toBe('escrowed');
-      await p2p.confirmFiatReceived(trade.id, MAKER);
-      expect((await p2p.getTrade(trade.id)).status).toBe('released');
+      await noFee.confirmFiatReceived(trade.id, MAKER);
+      expect((await noFee.getTrade(trade.id)).status).toBe('released');
     });
   });
 

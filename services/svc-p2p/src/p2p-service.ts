@@ -782,8 +782,12 @@ export class P2pService {
     takerId: string;
     amount: Amount;
     method: string;
-    /** Overrides the service default — e.g. after applying a rank fee discount (§4.1). */
-    feeBps?: number;
+    /**
+     * No per-take fee override. Fee is the service default only (`P2P_FEE_BPS` /
+     * constructor). Rank discounts (§4.1) are product law not yet wired — when
+     * they land, they must change the service fee policy, not a caller field
+     * that lets a hostile take set fee to zero.
+     */
     tradeId?: string;
   }): Promise<TradeRecord> {
     this.assertTradingEnabled();
@@ -811,7 +815,6 @@ export class P2pService {
     takerId: string;
     amount: Amount;
     method: string;
-    feeBps?: number;
   }): Promise<TradeRecord> {
     // Read the offer once, unlocked, purely to decide whether a reference price
     // is needed. Fetching a mark price is a network call; holding the offer's
@@ -897,13 +900,9 @@ export class P2pService {
           const now = await txNow(tx);
           const deadlineAt = deadlineFor('created', now, this.deadlines);
           const deadlines = withDeadline({}, 'created', deadlineAt);
-          const feeBps = input.feeBps ?? this.feeBps;
-          // `fee_bps` is numeric(8,0). A fractional bps would round in Postgres
-          // (12.5 → 13) without anyone noticing, and then `mulBps` would charge a
-          // different fee than the caller thought they set. Refuse, don't round.
-          if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
-            throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
-          }
+          // Fee is constructor/`P2P_FEE_BPS` only — never a take-time argument.
+          // Integer range already validated in the constructor.
+          const feeBps = this.feeBps;
           // Before inventory moves: a dust take that cannot post a release would
           // lock value into a trade that can never settle.
           assertReleasePostable(input.amount, feeBps);
