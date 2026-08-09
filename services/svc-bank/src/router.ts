@@ -94,6 +94,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.loan_not_found':
       case 'bank.loan_product_not_found':
       case 'bank.auto_invest_not_found':
+      case 'bank.business_not_found':
+      case 'bank.business_approval_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
       case 'bank.not_owner':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
@@ -158,6 +160,14 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.auto_invest_invalid_threshold':
       case 'bank.auto_invest_run_failed':
       case 'bank.auto_invest_below_threshold':
+      case 'bank.business_closed':
+      case 'bank.business_not_member':
+      case 'bank.business_role_forbidden':
+      case 'bank.business_invalid_threshold':
+      case 'bank.business_invalid_name':
+      case 'bank.business_approval_inactive':
+      case 'bank.business_self_approve':
+      case 'bank.business_rejected':
       // CONFLICT rather than BAD_REQUEST: the request is well-formed, it just
       // collides with a loan that already exists under that id on other terms.
       case 'bank.loan_principal_mismatch':
@@ -2036,6 +2046,190 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
   });
 
+  const businessAccountOutput = z.object({
+    id: z.string(),
+    name: z.string(),
+    assetId: z.string(),
+    spendThreshold: amountString,
+    status: z.enum(['active', 'closed']),
+    createdAt: z.string(),
+  });
+
+  const businessApprovalOutput = z.object({
+    id: z.string(),
+    accountId: z.string(),
+    makerUserId: z.string(),
+    checkerUserId: z.string().nullable(),
+    fromSpaceId: z.string(),
+    toSpaceId: z.string(),
+    assetId: z.string(),
+    amount: amountString,
+    status: z.enum(['pending', 'approved', 'rejected', 'cancelled']),
+    transferId: z.string().nullable(),
+    ledgerTxId: z.string().nullable(),
+    createdAt: z.string(),
+  });
+
+  const business = router({
+    list: scopedProcedure('bank:read', { module: 'bank' })
+      .output(z.array(businessAccountOutput))
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const rows = await bank.business.accountsOf(ctx.principal.userId);
+          return rows.map((a) => ({
+            id: a.id,
+            name: a.name,
+            assetId: a.assetId,
+            spendThreshold: formatAmount(a.spendThreshold),
+            status: a.status,
+            createdAt: a.createdAt.toISOString(),
+          }));
+        }),
+      ),
+
+    create: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          name: z.string().min(1).max(128),
+          assetId: z.string().min(1).max(16),
+          spendThreshold: amountString,
+        }),
+      )
+      .output(businessAccountOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const a = await bank.business.createAccount({
+            name: input.name,
+            assetId: input.assetId,
+            spendThreshold: parseAmount(input.spendThreshold),
+            creatorUserId: ctx.principal.userId,
+          });
+          return {
+            id: a.id,
+            name: a.name,
+            assetId: a.assetId,
+            spendThreshold: formatAmount(a.spendThreshold),
+            status: a.status,
+            createdAt: a.createdAt.toISOString(),
+          };
+        }),
+      ),
+
+    addMember: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          accountId: z.string().uuid(),
+          userId: z.string().min(1),
+          role: z.enum(['admin', 'maker', 'checker']),
+        }),
+      )
+      .output(z.object({ accountId: z.string(), userId: z.string(), role: z.enum(['admin', 'maker', 'checker']) }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const m = await bank.business.addMember({
+            accountId: input.accountId,
+            actorUserId: ctx.principal.userId,
+            userId: input.userId,
+            role: input.role,
+          });
+          return { accountId: m.accountId, userId: m.userId, role: m.role };
+        }),
+      ),
+
+    proposeTransfer: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          accountId: z.string().uuid(),
+          fromSpaceId: z.string().uuid(),
+          toSpaceId: z.string().uuid(),
+          amount: amountString,
+        }),
+      )
+      .output(
+        z.discriminatedUnion('kind', [
+          z.object({
+            kind: z.literal('posted'),
+            transferId: z.string(),
+            ledgerTxId: z.string(),
+          }),
+          z.object({
+            kind: z.literal('pending'),
+            approval: businessApprovalOutput,
+          }),
+        ]),
+      )
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const result = await bank.business.proposeTransfer({
+            accountId: input.accountId,
+            makerUserId: ctx.principal.userId,
+            fromSpaceId: input.fromSpaceId,
+            toSpaceId: input.toSpaceId,
+            amount: parseAmount(input.amount),
+          });
+          if (result.kind === 'posted') return result;
+          const a = result.approval;
+          return {
+            kind: 'pending' as const,
+            approval: {
+              id: a.id,
+              accountId: a.accountId,
+              makerUserId: a.makerUserId,
+              checkerUserId: a.checkerUserId,
+              fromSpaceId: a.fromSpaceId,
+              toSpaceId: a.toSpaceId,
+              assetId: a.assetId,
+              amount: formatAmount(a.amount),
+              status: a.status,
+              transferId: a.transferId,
+              ledgerTxId: a.ledgerTxId,
+              createdAt: a.createdAt.toISOString(),
+            },
+          };
+        }),
+      ),
+
+    approve: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ approvalId: z.string().uuid() }))
+      .output(z.object({ transferId: z.string(), ledgerTxId: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => bank.business.approve({ approvalId: input.approvalId, checkerUserId: ctx.principal.userId })),
+      ),
+
+    reject: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ approvalId: z.string().uuid() }))
+      .output(z.object({ ok: z.literal(true) }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          await bank.business.reject({ approvalId: input.approvalId, checkerUserId: ctx.principal.userId });
+          return { ok: true as const };
+        }),
+      ),
+
+    pending: scopedProcedure('bank:read', { module: 'bank' })
+      .input(z.object({ accountId: z.string().uuid() }))
+      .output(z.array(businessApprovalOutput))
+      .query(async ({ ctx, input }) =>
+        guard(async () => {
+          const rows = await bank.business.listPending(input.accountId, ctx.principal.userId);
+          return rows.map((a) => ({
+            id: a.id,
+            accountId: a.accountId,
+            makerUserId: a.makerUserId,
+            checkerUserId: a.checkerUserId,
+            fromSpaceId: a.fromSpaceId,
+            toSpaceId: a.toSpaceId,
+            assetId: a.assetId,
+            amount: formatAmount(a.amount),
+            status: a.status,
+            transferId: a.transferId,
+            ledgerTxId: a.ledgerTxId,
+            createdAt: a.createdAt.toISOString(),
+          }));
+        }),
+      ),
+  });
+
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-bank') }))
@@ -2047,6 +2241,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     cards,
     ramps,
     autoInvest,
+    business,
     analytics,
     ops,
   });

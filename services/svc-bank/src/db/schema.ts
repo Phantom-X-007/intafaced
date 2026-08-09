@@ -997,6 +997,57 @@ export const autoInvestRuns = bank.table(
   ],
 );
 
+// ── Business maker/checker (§31:811 partial) ─────────────────────────────────
+
+export const businessMemberRoleEnum = bank.enum('business_member_role', ['admin', 'maker', 'checker']);
+export const businessApprovalStatusEnum = bank.enum('business_approval_status', ['pending', 'approved', 'rejected', 'cancelled']);
+
+export const businessAccounts = bank.table('business_accounts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  assetId: text('asset_id').notNull(),
+  spendThreshold: amount('spend_threshold').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const businessMembers = bank.table(
+  'business_members',
+  {
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => businessAccounts.id),
+    userId: text('user_id').notNull(),
+    role: businessMemberRoleEnum('role').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('business_members_user_idx').on(t.userId)],
+);
+
+export const businessApprovals = bank.table(
+  'business_approvals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => businessAccounts.id),
+    makerUserId: text('maker_user_id').notNull(),
+    checkerUserId: text('checker_user_id'),
+    fromSpaceId: uuid('from_space_id').notNull(),
+    toSpaceId: uuid('to_space_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    amount: amount('amount').notNull(),
+    status: businessApprovalStatusEnum('status').notNull().default('pending'),
+    transferId: text('transfer_id'),
+    ledgerTxId: text('ledger_tx_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    decidedAt: tstz('decided_at'),
+  },
+  (t) => [index('business_approvals_account_status_idx').on(t.accountId, t.status)],
+);
+
 export const schema = {
   spaces,
   scheduledTransfers,
@@ -1020,4 +1071,7 @@ export const schema = {
   rampOfframps,
   autoInvestRules,
   autoInvestRuns,
+  businessAccounts,
+  businessMembers,
+  businessApprovals,
 };
