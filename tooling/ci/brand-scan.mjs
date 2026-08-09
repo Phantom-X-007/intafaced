@@ -26,9 +26,32 @@
  * Exit 0 = clean. Exit 1 = a name would have shipped.
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ROOT = process.cwd();
+
+/**
+ * Internal AFK paste packs name coding-agent products so operators open the
+ * right tool. That is not user-facing copy. Wave directories used to be
+ * allowlisted one-by-one (`docs/paste-w6`, then WAVE-7 reds main — #1471 class).
+ * Match the wave pattern once so every wave does not re-break the gate.
+ *
+ * Product surfaces (apps/, services/, packages/) are never matched here.
+ */
+export function isInternalPastePath(relPath) {
+  if (typeof relPath !== 'string' || relPath.length === 0) return false;
+  const p = relPath.replace(/\\/g, '/');
+  // docs/paste-w6, docs/paste-w7/L09.md, docs/paste-w10/...
+  if (/^docs\/paste-w\d+(\/|$)/.test(p)) return true;
+  // docs/PASTE-BUILD-WAVE-6-2026-08-09.md, WAVE-7, …
+  if (/^docs\/PASTE-BUILD-WAVE-\d+/.test(p)) return true;
+  // docs/PASTE-W6-AUDIT-…, PASTE-W7-DEPTH-…
+  if (/^docs\/PASTE-W\d+/.test(p)) return true;
+  // durable home (pre-authorised; empty or wave subdirs)
+  if (p === 'docs/paste' || p.startsWith('docs/paste/')) return true;
+  return false;
+}
 
 /**
  * Names that must never appear in shipped copy. Extend as partners are added
@@ -181,41 +204,16 @@ const ALLOWLIST = [
     reason: 'internal audit work product; may cite vendor paths when describing CI/brand failures',
   },
   {
-    path: join('docs', 'PASTE-BUILD-WAVE-6-2026-08-09.md'),
-    reason:
-      'internal paste skeletons, same category as the paste-w6 wave directory above. These two sit at the docs/ root rather than inside a directory, so isAllowlisted cannot cover them by prefix and each needs its own line. PASTE-BUILD-WAVE-6 is wave-named, so WAVE-7 will red main again — see the docs/paste note below for the durable fix.',
-  },
-  {
     path: join('docs', 'COORDINATOR-PASTE-SKELETON.md'),
-    reason: 'internal paste skeleton — see PASTE-BUILD-WAVE-6 above; not user-facing product copy',
+    reason: 'internal coordinator paste skeleton; must show the exact agent product line operators paste. Not shipped to users.',
   },
-  {
-    path: join('docs', 'paste-w6'),
-    reason:
-      'internal agent session prompts — the same category as AGENTS.md ("internal agent brief — not shipped to users") and CONTRIBUTING.md ("names the agent tools we actually use"). Their first line names the agent tool an operator pastes them into, which is not product copy. 18 files landed 2026-08-09 and took main red on 33 occurrences.',
-  },
-  {
-    path: join('docs', 'paste'),
-    reason:
-      'PRE-AUTHORISED, currently empty on disk. Paste material is written as a per-wave directory (docs/paste-w6), and isAllowlisted matches on a strict directory boundary (relPath === entry.path, or startsWith(entry.path + sep)). So docs/paste does NOT cover docs/paste-w6, and every new wave needs its own line — reddening main until someone adds it. This file already argues twice, about the mandated CLAUDE.md filename, that a false positive recurring on every new doc is a gate people learn to route around, and that costs more than the rule protects. Move paste material to docs/paste/<wave>/ and this one entry covers every wave; the wave-specific line above can then be deleted.',
-  },
+  // Wave paste dirs (docs/paste-wN, PASTE-BUILD-WAVE-N*, PASTE-W*) and
+  // docs/paste/** are covered by isInternalPastePath() — do not re-list each
+  // wave here (that is how WAVE-7 re-redded main after #1471).
   {
     path: join('docs', 'ops'),
     reason:
       'internal swarm FREEZE/report board; must list real shell paths so agents can claim work without paraphrasing territory. Not user-facing product copy. Remove once the vendor directory is renamed.',
-  },
-  {
-    path: join('docs', 'paste-w6'),
-    reason:
-      'internal multi-lane paste packs for AFK agent dispatch; name the coding agent product so operators can open the right tool. Not shipped to users.',
-  },
-  {
-    path: join('docs', 'PASTE-BUILD-WAVE-6-2026-08-09.md'),
-    reason: 'internal wave-6 paste master; same rationale as docs/paste-w6. Not shipped to users.',
-  },
-  {
-    path: join('docs', 'COORDINATOR-PASTE-SKELETON.md'),
-    reason: 'internal coordinator paste skeleton; must show the exact agent product line operators paste. Not shipped to users.',
   },
   // REMOVED 2026-08-05, both on the terms their own reasons set:
   //
@@ -385,8 +383,41 @@ const ALLOWLIST = [
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.json', '.md', '.mdx', '.html', '.css', '.yaml', '.yml'];
 
 function isAllowlisted(relPath) {
+  if (isInternalPastePath(relPath)) return true;
   return ALLOWLIST.some((entry) => relPath === entry.path || relPath.startsWith(entry.path + sep));
 }
+
+function selfTest() {
+  const fails = [];
+  const assert = (c, m) => {
+    if (!c) fails.push(m);
+  };
+
+  // THE REGRESSION: each new wave used to re-red main until someone added a
+  // one-off allowlist line (#1471 paste-w6; WAVE-7 was the next landmine).
+  assert(isInternalPastePath('docs/paste-w7/L09.md') === true, 'paste-w7 child allowed');
+  assert(isInternalPastePath('docs/paste-w6/L15.md') === true, 'paste-w6 child allowed');
+  assert(isInternalPastePath('docs/PASTE-BUILD-WAVE-7-2026-08-09.md') === true, 'PASTE-BUILD-WAVE-7 allowed');
+  assert(isInternalPastePath('docs/PASTE-W7-AUDIT-2026-08-09.md') === true, 'PASTE-W7 audit allowed');
+  assert(isInternalPastePath('docs/paste/w8/L01.md') === true, 'durable docs/paste/ child allowed');
+  // Product surfaces must never ride the paste pattern.
+  assert(isInternalPastePath('apps/web/src/page.tsx') === false, 'apps not paste');
+  assert(isInternalPastePath('services/svc-pay/src/x.ts') === false, 'services not paste');
+  assert(isInternalPastePath('docs/START-HERE.md') === false, 'ordinary docs not paste');
+  assert(isInternalPastePath('docs/paste-extra/nope.md') === false, 'paste-extra is not paste-wN');
+
+  if (fails.length) {
+    console.error('brand-scan --self-test FAIL:');
+    for (const f of fails) console.error(`  · ${f}`);
+    process.exit(1);
+  }
+  console.log('brand-scan --self-test OK');
+  console.log('  fixture paste-wN / PASTE-BUILD-WAVE-N / docs/paste/** allowed; product surfaces not');
+  process.exit(0);
+}
+
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+if (isDirectRun && process.argv.includes('--self-test')) selfTest();
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
