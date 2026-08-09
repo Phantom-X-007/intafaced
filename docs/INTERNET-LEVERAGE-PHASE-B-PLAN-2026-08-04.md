@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+
 # Internet leverage — Phase B plan (external candidates · full future project)
 
 **Status:** PLAN LAW · living · **hardened 2026-08-05** after methodology audit  

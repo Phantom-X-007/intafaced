@@ -192,10 +192,9 @@ Denon does **not** wait for Nitro’s Approve. Accountability is **CI + self-aud
 ## CI habits (mandatory — Nitro and Denon agents)
 
 **There is no Actions budget.** The repo is **public**, and GitHub Actions on standard runners are
-free and unlimited for public repositories. The "thrift" law that metered runs and asked agents to
-batch, hold, and throttle was **deleted on 2026-08-07** — retirement note:
+free and unlimited for public repositories. Spend-metering of Actions (old run-count thrift) was **deleted on 2026-08-07** — retirement note:
 [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
-**Never hold finished work back to save CI.** Open the PR.
+**Never hold finished work back for CI cost.** There is none on this public repo. Open the PR.
 
 What survives, for reasons that were never about money:
 

@@ -15,7 +15,7 @@ Pay rail · prize pools · rates · Class M money · partner dual-edit on #800/#
 
 ## Done bar
 
-Focused vitest green on touched packages/services; thrift soft; CI green.
+Focused vitest green on touched packages/services; CI green.
 
 ## Paths allowlist
 

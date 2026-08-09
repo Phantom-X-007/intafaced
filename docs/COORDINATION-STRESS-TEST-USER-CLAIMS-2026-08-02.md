@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+
 # Coordination stress test — audit of Nitro’s claims
 
 **Date:** 2026-08-02  
@@ -12,7 +14,7 @@
 | Your claim                                                   | Verdict                      | Plain truth                                                                                                                        |
 | ------------------------------------------------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | We have **backend implementation** that enforces this        | **False / mislabel**         | We shipped **agent law + entry-chain docs**, not a product backend or auto-sync service                                            |
-| It will **not limit** me                                     | **True (by design)**         | No PR caps, no new Approves, thrift stays, craft PRs need not touch tracker every time                                             |
+| It will **not limit** me                                     | **True (by design)**         | No PR caps, no new Approves, thrift deleted 2026-08-07, craft PRs need not touch tracker every time                                |
 | As a user I **don’t need to notice** — automatic             | **Half-true**                | **You** do not run git/tracker. **Agents** must still claim and update on mountain events. Nothing auto-writes the registry        |
 | GitHub work is **more structured the way Denon wants**       | **Mostly true (intent)**     | Shared product map + claim rules restored; **not** literal “every merge edits tracker”                                             |
 | I **never need to do anything** going forward in these chats | **True for git/claim/merge** | Operator mode: agents own the loop. **False** for Class X (go-live, secrets, etc.) and if you must paste/start a new agent session |

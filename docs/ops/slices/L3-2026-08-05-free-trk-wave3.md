@@ -1,8 +1,8 @@
-# L3 pack — free TRK wave3 (local hold under thrift hard)
+# L3 pack — free TRK wave3 (historical pack)
 
 **Date:** 2026-08-05  
 **Class:** N  
-**Status:** local commit ready; open PR only when thrift 24h cools under hard cap.
+**Status:** local commit ready; open PR when the unit is done (Actions thrift deleted 2026-08-07).
 
 ## freeProduct context
 
@@ -21,6 +21,6 @@ freeImplementable: ambassadors · curriculum · tournaments · affiliates · ana
 
 No pay, no prize pools, no warehouse series, no multi-tier invent as followers.
 
-## Board-Delta (when thrift cools)
+## Board-Delta
 
 L3 Class N free-TRK wave3: inventory · status histograms · downline map · dims · fanout summary.

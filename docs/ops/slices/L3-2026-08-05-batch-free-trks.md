@@ -1,8 +1,8 @@
-# L3 pack — free TRK depth batch (HOLD PUSH — thrift hard)
+# L3 pack — free TRK depth batch (historical pack)
 
 **Date:** 2026-08-05  
 **Class:** N  
-**Status:** local commit ready; **do not push** until thrift 24h cools under hard cap (220) or THRIFT_ALLOW emergency.
+**Status:** local commit ready; **open the PR when the unit is done** — Actions thrift deleted 2026-08-07; there is no hold.
 
 ## freeProduct context
 
@@ -21,6 +21,6 @@ This pack deepens: analytics lag rollup · residency cohort summary · commissio
 
 No rates invent; no pay; no warehouse invent series.
 
-## Board-Delta (when thrift cools)
+## Board-Delta
 
 L3 Class N batch: analytics lag rollup · residency cohort summary · commission dry-run.

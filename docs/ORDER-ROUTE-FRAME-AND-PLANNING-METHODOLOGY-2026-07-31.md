@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Historical text below may still _mention_ thrift as what was once believed.
+
 # FRAME + how we plan this program (hardened)
 
 **Status:** FRAME WORKING · methodology locked · tools/workflows landscape filled · Nitro does **not** restate — agent owns quality  
@@ -56,7 +58,7 @@ Domain gaps still live in the companion program doc; they are **inputs to Spec**
 8. **Build test-first** where behavior is money-path; source-driven for frameworks; systematic-debug on break.
 9. **Verify = evidence** (test output, demo, reconcile numbers) — claim ≠ done. **Two levels:** piece green **and** assembled path green.
 10. **Review ≠ verify** — correctness/security/over-engineering lenses after proof of behavior.
-11. **Ship small/often** — Class matrix + thrift law; walking proof path before big features.
+11. **Ship small/often** — Class matrix; walking proof path before big features. (Actions thrift deleted 2026-08-07.)
 12. **Operate / readiness** — scoreboard + chaos steady-state metrics; go-live stays §8 human.
 13. **Docs hygiene** — one home per fact; update before session end.
 14. **Fractal** — whole program runs the ladder; each subsystem (dual-book, CEX chaos, DEX quote, seed) runs a mini-ladder.
@@ -238,7 +240,7 @@ Before calling CEX “stable,” Spec must define:
 | Write a mini design doc when   | Skip when                           |
 | ------------------------------ | ----------------------------------- |
 | Dual-book enforcement strategy | Pure test addition for known recipe |
-| Chaos harness architecture     | Docs-only thrift                    |
+| Chaos harness architecture     | Docs-only path (when docs-only)     |
 | Seed flag data model           | Tracker honesty wording             |
 | Multi-asset resume conflicts   | Format fix                          |
 
@@ -266,7 +268,7 @@ Spec must be **checkable** by a stranger agent:
 - LIVE-LANES claim before code
 - Worktree never main checkout
 - `pnpm verify` real output
-- CI thrift: local green before push storms
+- Local green before push (fast feedback, not spend caps)
 - project-doc-hygiene
 - Denon §8 never agent-closed
 

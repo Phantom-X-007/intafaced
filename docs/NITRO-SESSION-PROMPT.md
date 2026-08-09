@@ -64,7 +64,7 @@ MANDATORY WORKFLOW
 4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of spine branches; **no agent implement on Shehzad M1–M7 paths**. Board Clear agent Done bars only on agent-owned rows.
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand) + Class M path.
 6. No commits/PRs unless I asked to ship (or residual/Board Clear/AFK campaign / I said go all-out). AFK-ACTIVE + residual tip_note AFK-ACTIVE = Class N Stream A ship authorized without per-PR ask. No random new architecture.
-7. CI: local pnpm verify green before the push that opens/updates a code PR — local is seconds, CI is minutes. There is NO Actions budget (public repo = free unlimited Actions), so never hold finished work back, never batch a PR fatter, never skip tests or fake green "to save $". Parallel PRs unlimited. The old thrift law was deleted 2026-08-07 (see AGENTS.md · docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+7. CI: local pnpm verify green before the push that opens/updates a code PR — local is seconds, CI is minutes. There is NO Actions budget (public repo = free unlimited Actions), so never hold finished work back, never batch a PR fatter, never skip tests or fake green "to save $". Parallel PRs unlimited. Actions spend thrift deleted 2026-08-07 (AGENTS.md · docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
 
 RIGHT WAY (quality bar)
 - Senior, surgical, doctrine-true. Prefer smallest green PR over hero branch.

@@ -21,4 +21,4 @@ No money moves · empty never invents rows · missing user → null/false · par
 
 ## Proof
 
-Focused vitest on touched modules; `pnpm gates` before open when thrift allows.
+Focused vitest on touched modules; `pnpm gates` before open when the unit is done.

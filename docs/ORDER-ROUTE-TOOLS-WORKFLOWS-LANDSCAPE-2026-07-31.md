@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Historical text below may still _mention_ thrift as what was once believed.
+
 # Frame · Research landscape — tools & workflows (professionals, not vibe coding)
 
 **Status:** SUPERSEDED by **v2** — use [`ORDER-ROUTE-TOOLS-WORKFLOWS-LANDSCAPE-v2-2026-07-31.md`](ORDER-ROUTE-TOOLS-WORKFLOWS-LANDSCAPE-v2-2026-07-31.md)  
@@ -32,7 +34,7 @@ Do **not** replace these with fashionable alternatives.
 
 | Asset                                        | Role for this program                              | Professional use                                            |
 | -------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
-| **`pnpm verify`**                            | Build + typecheck + test + DoD gate                | Local merge seal; thrift law                                |
+| **`pnpm verify`**                            | Build + typecheck + test + DoD gate                | Local merge seal                                            |
 | **Vitest** (everywhere)                      | Unit + service tests                               | Primary runner; already huge trade/matching suites          |
 | **Doctrine scans**                           | brand / custody / vendor-shell / secrets / test-db | Dual-book enforcement **extends** these — not a new product |
 | **`dod-gate.mjs`**                           | Definition of Done CI                              | Keep; money PRs must pass                                   |
@@ -44,7 +46,7 @@ Do **not** replace these with fashionable alternatives.
 | **Matching FileJournal + determinism tests** | Engine recovery                                    | Extend, don’t rewrite                                       |
 | **JetStream bus + memory bus**               | Event recovery                                     | Redelivery tests use real semantics                         |
 | **Playwright uiproof**                       | Shell proof                                        | Only when Stream A honesty collides (DX-9)                  |
-| **Class M matrix + thrift**                  | Merge / CI economics                               | Non-negotiable                                              |
+| **Class M matrix**                           | Money merge self-audit + green CI                  | Non-negotiable (thrift deleted 2026-08-07)                  |
 | **Doubt-driven / review skills**             | Fresh adversarial                                  | Every Spec/Arch/money PR                                    |
 | **Multi-session coding agents**              | Builder ≠ verifier                                 | Session topology from Frame                                 |
 
@@ -87,7 +89,7 @@ Do **not** replace these with fashionable alternatives.
 | **`platform:up` + scripted scenarios**                                               | Real services, real NATS/PG | **Adopt as CX-8 primary**                                               |
 | **In-process multi-service harness** (trade + matching + memory ledger + memory bus) | Fast CI subset of chaos     | **Adopt** as first chaos layer                                          |
 | **Testcontainers** (PG/NATS)                                                         | Ephemeral real deps in CI   | **Adopt later** if compose flakes; not blocking if platform:up reliable |
-| **Docker compose profiles**                                                          | Minimal order-path stack    | **Adopt** if full platform too heavy for CI thrift                      |
+| **Docker compose profiles**                                                          | Minimal order-path stack    | **Adopt** if full platform too heavy for local/CI runtime               |
 
 **Insane difference:** Unit-green + assemble-red is the #1 professional shame. Spec already requires both levels.
 
@@ -194,10 +196,10 @@ For each fault F*:
 5. Fresh money review
 6. ADR Accepted on main (#272)
 
-### W6 — Thrift-compatible professional CI
+### W6 — Professional CI (post-thrift)
 
 - Heavy assemble/chaos: targeted jobs or local `platform:up` proof in PR body
-- Not every push runs full fleet if thrift requires — but **merge of path-touching money PRs requires evidence**
+- Path filters may skip full matrix on pure docs — but **merge of path-touching money PRs requires evidence**
 - Docs-only paths stay paths-ignore friendly
 
 ### W7 — Scoreboard as operate artifact
