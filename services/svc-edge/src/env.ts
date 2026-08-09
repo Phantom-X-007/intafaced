@@ -40,10 +40,14 @@ const schema = baseEnvSchema
       /**
        * Jurisdiction region, resolved server-side.
        *
-       * `XX` is the deliberate default: it is the region the matrix treats as
-       * unknown, so a deployment that forgets to configure this is restrictive
-       * rather than permissive. A wrong-but-open default would let a caller
-       * reach modules their actual jurisdiction forbids.
+       * Default `XX` is the platform UNRESOLVED sentinel (`UNRESOLVED_REGION` in
+       * `@intafaced/config`) — not a restrictive jurisdiction. There is no matrix
+       * entry for `XX`, so `checkAccess` falls through to `DEFAULT_MODULE_RULES`
+       * (open defaults) and, for non-custodial protocol modules, still returns
+       * `allowed.permissionless`. The decision now carries `regionResolved: false`
+       * so that open outcome is distinguishable from a real code; set
+       * `INTAFACED_REGION_FAIL_CLOSED=true` if a deployment must refuse instead
+       * of falling open. Do not read `XX` as "safe default / locked down".
        *
        * ── READ THIS BEFORE TRUSTING ANY REGION-BASED CONTROL ─────────────────
        * IT IS ONE CONSTANT FOR EVERY REQUEST. The value is read once and stamped
@@ -63,7 +67,8 @@ const schema = baseEnvSchema
        * the caller — one who could set it would choose its own regulator — so it
        * needs a trusted upstream geo header, a stated precedence, proof the
        * header cannot be forged by reaching origin directly, and a fail-closed
-       * answer when it is absent.
+       * answer when it is absent (`INTAFACED_REGION_FAIL_CLOSED` arms the
+       * mechanism; per-request resolution still has to supply a real code).
        */
       DEFAULT_REGION: z.string().length(2).default('XX'),
 

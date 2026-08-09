@@ -39,7 +39,7 @@ An unlisted prefix returns **404, never a pass-through**. An edge that forwards 
 
 **Reserved headers are stripped, not overwritten.** Anything under `x-intafaced-` is the edge's vocabulary, not the caller's. They are removed unconditionally _before_ any decision about whether to set our own. The difference matters on every path where we decide not to — an anonymous request, a failed verification, an expired token. Overwriting only protects the success case, which was never the one at risk.
 
-**Region is resolved server-side.** It drives the jurisdiction matrix — which modules a caller may reach at all. A client that could set its own region would select its own regulator. Defaults to `XX`, the region the matrix treats as unknown, so a misconfigured deployment is restrictive rather than permissive.
+**Region is resolved server-side.** It drives the jurisdiction matrix — which modules a caller may reach at all. A client that could set its own region would select its own regulator. Defaults to `XX`, the platform _unresolved_ sentinel — **not** a restrictive lock-down. With no matrix entry, `XX` falls through to open defaults (`regionResolved: false` on every `checkAccess` decision). Set `INTAFACED_REGION_FAIL_CLOSED=true` to refuse with `denied.region_unknown` instead.
 
 **The bearer token is never forwarded upstream.** A service that can read a token is a service that can replay it.
 
@@ -96,13 +96,14 @@ Until this landed the edge sent **no CORS headers at all** — not a permissive 
 
 ## Configuration
 
-| Variable                | Notes                                                                                                                                                           |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JWT_ACCESS_SECRET`     | **must match svc-identity's.** A mismatch means every login succeeds and every request after it is anonymous — which presents as "logged in but nothing works". |
-| `EDGE_PRINCIPAL_SECRET` | must match every mounted service's                                                                                                                              |
-| `DEFAULT_REGION`        | two-letter code; `XX` = unknown/restricted                                                                                                                      |
-| `UPSTREAM_TIMEOUT_MS`   | a hung service must not hold an edge connection open                                                                                                            |
-| `EDGE_ALLOWED_ORIGINS`  | browser origins, comma-separated and exact. **Required in `staging`/`prod`** — unset there is a closed door to every front-end. `*` is a boot failure.          |
+| Variable                       | Notes                                                                                                                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_ACCESS_SECRET`            | **must match svc-identity's.** A mismatch means every login succeeds and every request after it is anonymous — which presents as "logged in but nothing works". |
+| `EDGE_PRINCIPAL_SECRET`        | must match every mounted service's                                                                                                                              |
+| `DEFAULT_REGION`               | two-letter code; `XX` = unresolved sentinel (open defaults + `regionResolved: false`, not a lock-down)                                                          |
+| `INTAFACED_REGION_FAIL_CLOSED` | process-wide; when `true`/`1`/`yes`/`on`, `checkAccess` refuses unresolved (`XX`) with `denied.region_unknown`. Default off.                                    |
+| `UPSTREAM_TIMEOUT_MS`          | a hung service must not hold an edge connection open                                                                                                            |
+| `EDGE_ALLOWED_ORIGINS`         | browser origins, comma-separated and exact. **Required in `staging`/`prod`** — unset there is a closed door to every front-end. `*` is a boot failure.          |
 
 ## Not built yet
 
