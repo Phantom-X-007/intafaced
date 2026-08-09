@@ -96,8 +96,9 @@ function toTrpcError(err: unknown): TRPCError {
   switch (err.code) {
     case 'auth.invalid_credentials':
     case 'auth.mfa_invalid':
+    case 'auth.domain_not_allowed':
       // Deliberately the same shape as a wrong password: never confirm which
-      // half of the credential was right.
+      // half of the credential was right (including "key ok, origin wrong").
       return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
     case 'auth.mfa_required':
       return new TRPCError({ code: 'UNAUTHORIZED', message: 'Two-factor code required', cause: err });
@@ -663,9 +664,12 @@ export function createIdentityRouter(
             mode: z.enum(['live', 'sandbox']),
           }),
         )
-        .mutation(async ({ input }) => {
+        .mutation(async ({ input, ctx }) => {
           try {
-            const result = await auth.exchangeApiKey(input.key);
+            // Origin is read from the trusted edge request, never from the body.
+            // A non-empty domain_whitelist refuses foreign or missing origins.
+            const clientOrigin = (ctx as { clientOrigin?: string }).clientOrigin;
+            const result = await auth.exchangeApiKey(input.key, clientOrigin);
             return {
               accessToken: result.accessToken,
               expiresAt: result.expiresAt.toISOString(),

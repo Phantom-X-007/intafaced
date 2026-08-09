@@ -4,6 +4,7 @@ import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, 
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
 import { generateRecoveryCodes, generateSecret, totpUri, verifyTotp } from './totp.js';
+import { apiKeyOriginAllowed } from './api-key-origin.js';
 import {
   b64urlDecode,
   b64urlEncode,
@@ -59,6 +60,11 @@ export class AuthError extends Error {
       | 'auth.webauthn_invalid'
       /** Account has no registered WebAuthn credential for assertion. */
       | 'auth.webauthn_not_enrolled'
+      /**
+       * API key has a domain whitelist and the request origin is missing or
+       * not on it. Empty whitelist stays open (server bots).
+       */
+      | 'auth.domain_not_allowed'
       /**
        * Transfer door: a sub-account id was missing or empty.
        * SPEC-SUBACCOUNTS §2 — never default to primary.
@@ -721,9 +727,24 @@ export class AuthService {
     return { id: rows[0]!.id, key, prefix, mode };
   }
 
-  async verifyApiKey(key: string): Promise<{ userId: string; scopes: string[]; keyId: string; mode: 'live' | 'sandbox' } | null> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; scopes: string[]; expires_at: Date | null; mode: string | null }>>`
-      SELECT id, user_id, scopes, expires_at, mode FROM api_keys
+  async verifyApiKey(key: string): Promise<{
+    userId: string;
+    scopes: string[];
+    keyId: string;
+    mode: 'live' | 'sandbox';
+    domainWhitelist: string[];
+  } | null> {
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        scopes: string[];
+        expires_at: Date | null;
+        mode: string | null;
+        domain_whitelist: string[] | null;
+      }>
+    >`
+      SELECT id, user_id, scopes, expires_at, mode, domain_whitelist FROM api_keys
        WHERE key_hash = ${hashToken(key)} AND revoked = false
     `;
     const row = rows[0];
@@ -732,7 +753,13 @@ export class AuthService {
 
     await this.sql`UPDATE api_keys SET last_used_at = now() WHERE id = ${row.id}`;
     const mode: 'live' | 'sandbox' = row.mode === 'sandbox' ? 'sandbox' : 'live';
-    return { userId: row.user_id, scopes: row.scopes, keyId: row.id, mode };
+    return {
+      userId: row.user_id,
+      scopes: row.scopes,
+      keyId: row.id,
+      mode,
+      domainWhitelist: row.domain_whitelist ?? [],
+    };
   }
 
   /**
@@ -750,7 +777,14 @@ export class AuthService {
    * someone smuggled them into the key row (create already refuses them via
    * assertDelegatableScopes + INTERACTIVE_ONLY).
    */
-  async exchangeApiKey(key: string): Promise<{
+  async exchangeApiKey(
+    key: string,
+    /**
+     * Browser `Origin` (or edge-forwarded equivalent). Required when the key
+     * carries a non-empty domain_whitelist. Server bots leave the list empty.
+     */
+    requestOrigin?: string | null,
+  ): Promise<{
     accessToken: string;
     expiresAt: Date;
     userId: string;
@@ -760,6 +794,13 @@ export class AuthService {
   }> {
     const verified = await this.verifyApiKey(key);
     if (!verified) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+
+    if (!apiKeyOriginAllowed(verified.domainWhitelist, requestOrigin)) {
+      throw new AuthError(
+        'API key is not allowed from this origin',
+        'auth.domain_not_allowed',
+      );
+    }
 
     const users = await this.sql<Array<{ status: string }>>`
       SELECT status FROM users WHERE id = ${verified.userId}
