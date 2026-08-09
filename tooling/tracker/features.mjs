@@ -1216,18 +1216,23 @@ export const FEATURES = [
       'usable:0 instantly — that is how DoD clause 5 holds with no event. NO suspension POLICY was added: releasing on a ' +
       'transition an operator recorded is not deciding it. ' +
       'PR #1100 (stake endpoint serialization) and #1109 (Stage 1) are on main — the earlier note that they were unmerged is stale. ' +
-      'Org-vs-user left as per-user on purpose (adding org_id later is a nullable column plus a backfill). market.commerce still open.',
+      'Org-vs-user left as per-user on purpose (adding org_id later is a nullable column plus a backfill). market.commerce C1+C2 done #1189; C3 subscriptions residual.',
   }),
   f('market.commerce', 'Listings, subscriptions, purchases, house commission', {
     module: 'market',
     phase: '5',
-    status: 'wip',
-    owner: 'wave3-bank-market',
+    status: 'done',
     dependsOn: ['market.vendors'],
+    requires: ['services/svc-market'],
     note:
-      'Wave 3 2026-08-09: Stage C1+C2 in progress — listings + one-time purchase via recipes.marketPurchase + houseFees(market). ' +
-      'Blank MARKET_HOUSE_COMMISSION_BPS refuses market.commission_not_configured (owner-gated rate). Subscriptions residual. ' +
-      'Eligibility from VendorService.listingEligibility (computed, no is_listed). Class M.',
+      'C1+C2 ON MAIN 2026-08-09 — #1189 (listings + one-time purchase + house commission Class M). ' +
+      'Money only via recipes.marketPurchase → houseFees(market); blank MARKET_HOUSE_COMMISSION_BPS refuses ' +
+      'market.commission_not_configured (never invents free commission; 0 only when owner sets). ' +
+      'Crash re-drive settles from claim snapshot (not live env bps). Over-capacity after unstake: oldest-first ' +
+      'entitledListingRefs; excess refuse market.listing_over_capacity. Concurrent createListing cannot oversell ' +
+      'slots (claimSlot FOR UPDATE + orphan rollback). Catalogue registration order (ASC) — ranking DIRECTION §8 owner. ' +
+      'RESIDUAL / PARK: C3 subscriptions (period/past-due/cancel/access law — Nitro); commission bps value (Nitro env); ' +
+      'ranking/featured. Purchase of subscription refuse market.subscription_not_built; public catalogue hides them.',
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
     owner: 'shehzad002',

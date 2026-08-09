@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **39%** — 57 of 148 features shipped
+`████████░░░░░░░░░░░░` **39%** — 58 of 148 features shipped
 
-Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 10/55 · **5P** 1/4
+Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 11/55 · **5P** 1/4
 
-**In progress:** Navigator — tool-calling inside user guardrails (nitro-agent) · Market Scanner — ranked signals by tier (nitro-agent) · Listings, subscriptions, purchases, house commission (wave3-bank-market)
+**In progress:** Navigator — tool-calling inside user guardrails (nitro-agent) · Market Scanner — ranked signals by tier (nitro-agent)
 
 **🟢 35 ready to claim** — nothing blocks these:
 
