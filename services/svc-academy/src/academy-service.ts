@@ -878,6 +878,42 @@ export class AcademyService {
     return this.toAmbassador(rows[0]!);
   }
 
+  async unfreezeAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
+    const existing = await this.ambassadorOf(input.userId);
+    if (!existing) {
+      throw new AcademyError(`Ambassador ${input.userId} not found`, 'academy.ambassador_not_found');
+    }
+    if (existing.status !== 'frozen') {
+      throw new AcademyError(`Ambassador ${input.userId} is not frozen`, 'academy.ambassador_invalid');
+    }
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      UPDATE academy.ambassadors
+         SET status = 'active',
+             frozen_at = NULL,
+             frozen_by = NULL,
+             freeze_reason = NULL,
+             updated_at = now()
+       WHERE user_id = ${input.userId} AND status = 'frozen'
+       RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+    `;
+    if (!rows[0]) {
+      throw new AcademyError(`Ambassador ${input.userId} not found`, 'academy.ambassador_not_found');
+    }
+    // operatorId is audit context for future event emission — required for admin write symmetry.
+    void input.operatorId;
+    return this.toAmbassador(rows[0]);
+  }
+
   // ── Residency applications (Stage-1 durable — NO PAY) ─────────────────────
   //
   // Persistence is the whole point: MemoryResidencyDesk is for unit tests only.
