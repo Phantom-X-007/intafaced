@@ -4,7 +4,13 @@
  * Period / attempt IDENTITY only — never invents rates, marks, or balances.
  */
 import type { Sql } from 'postgres';
-import type { FundingMarginApplier, FundingPeriodStore } from './funding-tick.js';
+import {
+  positionsFromFundingSnapshots,
+  snapshotFundingMembers,
+  type FundingMarginApplier,
+  type FundingMemberSnapshot,
+  type FundingPeriodStore,
+} from './funding-tick.js';
 import type { LiquidationAttemptStore, PositionCloser, PositionReducer } from './liquidation-tick.js';
 import type { EventBus } from '@intafaced/events';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
@@ -90,29 +96,42 @@ export function sqlFundingPeriodStore(sql: Sql): FundingPeriodStore {
         ON CONFLICT (period_id) DO NOTHING
       `;
     },
-    async freezeMembership(periodId, candidateIds) {
+    async freezeMembership(periodId, candidates) {
       // market_id from periodId prefix — same rule as markSettled (never invent a market).
       const marketId = periodId.includes(':') ? periodId.slice(0, periodId.indexOf(':')) : periodId;
-      // First writer freezes the full candidate set atomically. Replays and
-      // concurrent ticks see the same membership; new openers never join.
+      const ids = candidates.map((c) => c.positionId);
+      const snaps = snapshotFundingMembers(candidates);
+      // First writer freezes ids + size/notional atomically. Replays and
+      // concurrent ticks see the same plan inputs; new openers never join and
+      // live size changes cannot re-size the charge.
       await sql`
-        INSERT INTO trade.funding_period_membership (period_id, market_id, member_position_ids)
-        VALUES (${periodId}, ${marketId}, ${[...candidateIds]}::text[])
+        INSERT INTO trade.funding_period_membership (period_id, market_id, member_position_ids, member_snapshots)
+        VALUES (${periodId}, ${marketId}, ${ids}::text[], ${sql.json(snaps)})
         ON CONFLICT (period_id) DO NOTHING
       `;
-      const rows = await sql<{ member_position_ids: string[] }[]>`
-        SELECT member_position_ids
+      const rows = await sql<{ member_position_ids: string[]; member_snapshots: FundingMemberSnapshot[] | null }[]>`
+        SELECT member_position_ids, member_snapshots
           FROM trade.funding_period_membership
          WHERE period_id = ${periodId}
          LIMIT 1
       `;
-      const frozen = rows[0]?.member_position_ids;
-      if (!frozen) {
+      const row = rows[0];
+      if (!row) {
         // Insert raced with a delete or table missing — refuse rather than
         // fall back to open-now (that is the defect this table closes).
         throw new Error(`funding membership freeze for ${periodId} produced no row — refusing open-now fallback`);
       }
-      return frozen;
+      if (row.member_snapshots != null && Array.isArray(row.member_snapshots) && row.member_snapshots.length > 0) {
+        return positionsFromFundingSnapshots(row.member_snapshots);
+      }
+      // Pre-0020 row (ids only) or empty snapshots: refuse open-now size re-read.
+      // Periods frozen before this migration must not re-plan live sizes.
+      if (row.member_position_ids?.length) {
+        throw new Error(
+          `funding membership freeze for ${periodId} has ids but no size snapshots — refuse open-now size fallback (run migration 0020)`,
+        );
+      }
+      return [];
     },
     async recordSkip(periodId, meta) {
       await sql`
