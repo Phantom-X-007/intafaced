@@ -162,6 +162,9 @@ export const en = {
   'notify.channel.verify.title': 'Confirm this address',
   'notify.channel.verify.body': 'Your confirmation code is {code}. It expires in {minutes} minutes.',
   'notify.channel.footer': 'You are receiving this because you confirmed this address for account alerts.',
+  // v22.alerts — fire path uses these keys; missing catalog fell back to the key string.
+  'notify.alert.price.crossed.title': 'Price alert',
+  'notify.alert.price.crossed.body': '{marketId} crossed {direction} {targetPrice} (mark {markPrice}).',
 
   // ── errors ────────────────────────────────────────────────────────────────
   'error.insufficientFunds': 'Insufficient balance.',

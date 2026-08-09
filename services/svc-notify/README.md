@@ -269,12 +269,13 @@ test fails if production writes a string missing from that list.
 | `channel.disabled`              | Operator kill-switch `NOTIFY_OUT_OF_APP_ENABLED=false`                   |
 | `channel.muted`                 | User muted non-critical traffic on this channel                          |
 | `channel.attempts_exhausted`    | Attempt budget spent — abandoned after max attempts                      |
+| `channel.transport_rejected`    | Permanent gateway 4xx — abandoned with a name, not retried as "failed"   |
+| `channel.delivery_stuck`        | Reaper arm 2 — claim lease dead past the bus window; attempts may remain |
 | `channel.register_rate_limited` | Too many address registrations in the window                             |
 | `channel.verify_rate_limited`   | Too many verification guesses in the window                              |
 
-**In flight (open honesty PRs, not tip yet):** `channel.delivery_stuck` (reaper
-arm 2 — budget remained but bus gave up) and `channel.transport_rejected`
-(permanent gateway 4xx abandoned with a name).
+The table is the tip wire vocabulary — a pin test fails if it drifts from
+`allRefusalCodes()`.
 
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
 `<loanId>` — a loan can be called, cured and called again, and the second call is
