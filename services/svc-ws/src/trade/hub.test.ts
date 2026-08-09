@@ -283,12 +283,15 @@ describe('TradeHub fan-out', () => {
 describe('per-hub capacity (not process-wide)', () => {
   it('a full trade hub does not prevent a separate depth hub from accepting', async () => {
     const { DepthHub, CLOSE_TRY_LATER } = await import('../depth/hub.js');
+    type WireLevel = readonly [string, string];
     class Stub {
-      async markets() {
+      async markets(): Promise<readonly string[]> {
         return ['BTC-USDT'];
       }
-      async snapshot(marketId: string) {
-        return { type: 'snapshot' as const, marketId, sequence: 1, bids: [], asks: [] };
+      async snapshot(marketId: string, _limit: number) {
+        const bids: readonly WireLevel[] = [];
+        const asks: readonly WireLevel[] = [];
+        return { type: 'snapshot' as const, marketId, sequence: 1, bids, asks };
       }
     }
     const depth = new DepthHub(new Stub(), {
@@ -296,6 +299,7 @@ describe('per-hub capacity (not process-wide)', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 1,
+      marketsRefreshMs: 0,
     });
     const trade = new TradeHub({
       highWaterBytes: 1_000_000,
