@@ -52,6 +52,8 @@ These procedures exist for the **custodial** side only — the modules whose `JU
 
 There is **no verification-provider integration** here. Approval is an operator action against `kyc_records`. A provider webhook can land later as one more way to move a record off `pending`, without changing what approval means.
 
+**`provider_ref` is never client-written.** `kyc.submit` accepts only `tier` + `jurisdiction`. A free-text `providerRef` from the user was a PII side-channel into the pointer column (§10: pointer never holds name/DOB/docs). Opaque refs are minted by the encrypted document store (or operator tools) when that store lands; until then the column stays null and `kyc.status` never returns it.
+
 ### Step-up
 
 `defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.

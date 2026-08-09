@@ -466,7 +466,13 @@ export function createIdentityRouter(
             tier: submittableTier,
             /** ISO-3166 alpha-2. The matrix is keyed on it, so it is not free text. */
             jurisdiction: z.string().length(2).toUpperCase(),
-            providerRef: z.string().min(1).max(200).optional(),
+            /**
+             * Deliberately absent: a client-supplied `providerRef` was a free-text
+             * side-channel into `kyc_records.provider_ref` (§10 PII isolation —
+             * "pointer never holds a name or DOB"). Opaque refs are minted by the
+             * encrypted document store (or operator tools) when that store lands;
+             * user submit only opens a pending row.
+             */
           }),
         )
         .output(kycRecordOutput)
@@ -477,7 +483,6 @@ export function createIdentityRouter(
                 userId: ctx.principal.userId,
                 tier: input.tier,
                 jurisdiction: input.jurisdiction,
-                ...(input.providerRef ? { providerRef: input.providerRef } : {}),
               }),
             );
           } catch (err) {
