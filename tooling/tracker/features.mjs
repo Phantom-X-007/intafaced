@@ -274,8 +274,11 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '1',
     plane: 'F',
+    status: 'wip',
+    owner: 'ZenYoda3',
+    requires: ['packages/config/src/flags.ts'],
     dependsOn: ['infra.config'],
-    note: 'Law §11:456, gap-closed 2026-08-08. §11 maps six drop phases to the flags that switch them on and closes with "the drop sequence is configuration, not deployment risk" — and THE CONFIGURATION DOES NOT EXIST (audit §A1.a #15). `tooling/coverage.yaml` drop_phases already names this row under drop phases 0, I, III and V, so four of the six drop gates point at a capability with no code. WHY IT READS `ready` AND DEPENDS ONLY ON infra.config: this row is the SWITCH, not the features behind it. §11:449 flags "founding badges (NFT mint)", and the mint itself is launch.nft — chain owner, blocked. Putting launch.nft in `dependsOn` would have parked a phase-1 framework behind a phase-5 row and recreated exactly the inverted-edge defect this same PR removed from venue.aggregation and v22.alerts. A flag can exist and be OFF for a feature that does not; that is what dark shipping means. So: the framework, the waitlist and the referral queue (§11:449) are buildable today against infra.config, which is `done` and already carries typed flags. DONE-BAR CONDITION, not a blocking edge: a flag whose feature does not exist must read as OFF-and-unbuilt rather than OFF-and-ready, or the flag surface becomes a second, quieter tracker that disagrees with this one. PHASE: §11 is a mapping chapter and is not itself phased; `1` is stated because drop phase 0 is the first thing it gates. NOT PROMISED: no drop phase in coverage.yaml carries `promised: true`, so no drop date is committed and this row does not create one.',
+    note: 'Law §11:456. SWITCH mountain (not the features behind it). 2026-08-09 W10 L14: product refuse path shipped — `assertEnabled` / `FlagDisabledError` so waitlist+referral refuse when off (wrong phase / override / kill); `offReadiness` makes OFF unbuilt plan rows read `unbuilt` not ready (tracker Done-bar). Residual: wire callers in waitlist/referral services when those surfaces exist; founding-badge mint remains launch.nft (chain). NOT PROMISED: no drop phase in coverage.yaml carries `promised: true`.',
   }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────

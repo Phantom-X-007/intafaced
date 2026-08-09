@@ -3,10 +3,14 @@ import {
   DROPS,
   DROP_NAMES,
   FLAG_REGISTRY,
+  assertEnabled,
   compareDrops,
   explain,
+  FlagDisabledError,
+  isCapabilityBuilt,
   isEnabled,
   modulesWithoutKillSwitch,
+  offReadiness,
   resolveAll,
   UnknownFlagError,
   type FlagContext,
@@ -161,5 +165,95 @@ describe('registry hygiene', () => {
   it('has no duplicate keys', () => {
     const keys = FLAG_REGISTRY.map((f) => f.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+/**
+ * Product Done bar — `infra.drop-flags` / L14 wave 10.
+ *
+ * `isEnabled` is a registry read. Product surfaces (waitlist capture, referral
+ * queue) must REFUSE when the drop clock (or an override) says off. Before
+ * `assertEnabled`, nothing threw: wrong phase was silent open if a caller
+ * forgot to branch on the boolean.
+ */
+describe('assertEnabled — waitlist / referral refuse wrong phase', () => {
+  it('lets waitlist and referral through at drop 0 (Tease — §11:449)', () => {
+    expect(() => assertEnabled('waitlist.enabled', { drop: '0' })).not.toThrow();
+    expect(() => assertEnabled('referral.queue', { drop: '0' })).not.toThrow();
+  });
+
+  it('refuses waitlist when explicitly off (operator closed capture)', () => {
+    expect(() => assertEnabled('waitlist.enabled', { drop: '0', overrides: { 'waitlist.enabled': false } })).toThrow(FlagDisabledError);
+    try {
+      assertEnabled('waitlist.enabled', { drop: 'V', overrides: { 'waitlist.enabled': false } });
+      expect.unreachable('must refuse');
+    } catch (err) {
+      expect(err).toBeInstanceOf(FlagDisabledError);
+      const e = err as FlagDisabledError;
+      expect(e.code).toBe('flag.waitlist.enabled.disabled');
+      expect(e.source).toBe('override');
+      expect(e.key).toBe('waitlist.enabled');
+    }
+  });
+
+  it('refuses referral queue when env-pinned off', () => {
+    expect(() =>
+      assertEnabled('referral.queue', {
+        drop: '0',
+        env: { INTAFACED_FLAG_REFERRAL_QUEUE: 'off' },
+      }),
+    ).toThrow(FlagDisabledError);
+  });
+
+  it('refuses a later-phase flag before its drop (wrong phase)', () => {
+    // bank.cardWaitlist is drop II — at Tease it must not capture.
+    expect(() => assertEnabled('bank.cardWaitlist', { drop: '0' })).toThrow(FlagDisabledError);
+    try {
+      assertEnabled('bank.cardWaitlist', { drop: 'I' });
+      expect.unreachable('must refuse');
+    } catch (err) {
+      const e = err as FlagDisabledError;
+      expect(e.code).toBe('flag.bank.cardWaitlist.drop_pending');
+      expect(e.source).toBe('drop-pending');
+    }
+    expect(() => assertEnabled('bank.cardWaitlist', { drop: 'II' })).not.toThrow();
+  });
+
+  it('refuses founding badges and season engine before their drops', () => {
+    expect(() => assertEnabled('launch.foundingBadges', { drop: '0' })).toThrow(FlagDisabledError);
+    expect(() => assertEnabled('identity.seasonEngine', { drop: 'IV' })).toThrow(FlagDisabledError);
+    expect(() => assertEnabled('identity.seasonEngine', { drop: 'V' })).not.toThrow();
+  });
+
+  it('refuses unknown keys the same way isEnabled does', () => {
+    expect(() => assertEnabled('not.a.flag', { drop: 'V' })).toThrow(UnknownFlagError);
+  });
+
+  it('kill-switch refuses even when the drop clock would open the flag', () => {
+    expect(() => assertEnabled('waitlist.enabled', { drop: 'V', disabledModules: ['core-ops'] })).toThrow(FlagDisabledError);
+  });
+});
+
+/**
+ * Tracker Done bar: OFF for an unbuilt feature reads unbuilt, not "ready".
+ * Enforced flags waiting on the drop clock read drop-pending (built control).
+ */
+describe('offReadiness — OFF-and-unbuilt vs OFF-and-ready', () => {
+  it('marks waitlist / referral as unbuilt when off (plan rows, no live service gate)', () => {
+    expect(isCapabilityBuilt('waitlist.enabled')).toBe(false);
+    expect(isCapabilityBuilt('referral.queue')).toBe(false);
+    expect(offReadiness('waitlist.enabled', { drop: '0', overrides: { 'waitlist.enabled': false } })).toBe('unbuilt');
+    expect(offReadiness('referral.queue', { drop: '0', overrides: { 'referral.queue': false } })).toBe('unbuilt');
+  });
+
+  it('marks a built control waiting on the clock as drop-pending, not unbuilt', () => {
+    // trade.spot is service-env enforced — feature exists; drop III has not arrived.
+    expect(isCapabilityBuilt('trade.spot')).toBe(true);
+    expect(offReadiness('trade.spot', { drop: '0' })).toBe('drop-pending');
+  });
+
+  it('returns null when the flag is on', () => {
+    expect(offReadiness('waitlist.enabled', { drop: '0' })).toBeNull();
+    expect(offReadiness('trade.spot', { drop: 'III' })).toBeNull();
   });
 });

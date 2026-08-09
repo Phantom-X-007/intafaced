@@ -348,6 +348,34 @@ export class UnknownFlagError extends Error {
 }
 
 /**
+ * Thrown by `assertEnabled` when a flag is off.
+ *
+ * This is the product refuse path for drop-gated surfaces (waitlist, referral
+ * queue, and every other registry key). Services call it on the request path;
+ * the registry alone answering `isEnabled === false` never stopped traffic.
+ *
+ * `code` is stable for callers to map to HTTP/tRPC:
+ *   - `flag.<key>.drop_pending`  — drop clock has not reached the flag
+ *   - `flag.<key>.disabled`      — override, env pin, kill-switch, or phase-gate
+ */
+export class FlagDisabledError extends Error {
+  readonly code: string;
+  readonly key: string;
+  readonly source: FlagSource;
+  readonly reason: string;
+
+  constructor(key: string, explanation: FlagExplanation) {
+    const code = explanation.source === 'drop-pending' ? `flag.${key}.drop_pending` : `flag.${key}.disabled`;
+    super(`${key} is off (${explanation.source}): ${explanation.reason}`);
+    this.name = 'FlagDisabledError';
+    this.code = code;
+    this.key = key;
+    this.source = explanation.source;
+    this.reason = explanation.reason;
+  }
+}
+
+/**
  * Resolve one flag. Unknown keys throw — there are no ad-hoc flags, because an
  * undeclared flag is an undocumented launch dependency.
  */
@@ -366,6 +394,21 @@ export function isEnabled(key: string, ctx: FlagContext): boolean {
 
   if (flag.drop === null) return false;
   return DROP_ORDER[ctx.drop] >= DROP_ORDER[flag.drop];
+}
+
+/**
+ * Refuse when the flag is off — the product Done bar for drop phases.
+ *
+ * `isEnabled` is a read. This is a gate. Waitlist capture, referral queue
+ * position, and every other drop-mapped surface call this (or an equivalent
+ * service-env check) before doing work; wrong phase → throw, not silent serve.
+ *
+ * Returns void on success so call sites read as a precondition, not a branch.
+ */
+export function assertEnabled(key: string, ctx: FlagContext): void {
+  const explanation = explain(key, ctx);
+  if (explanation.enabled) return;
+  throw new FlagDisabledError(key, explanation);
 }
 
 /** Snapshot of every flag — what apps/admin renders, and what CI asserts against. */
@@ -471,4 +514,50 @@ export function flagsForModule(module: ModuleId): FlagDef[] {
 
 export function flagDef(key: string): FlagDef | undefined {
   return BY_KEY.get(key);
+}
+
+/**
+ * Does anything real refuse when this flag is off?
+ *
+ * Tracker Done bar for `infra.drop-flags` (coverage core.drop-flags): a flag
+ * whose feature does not exist must read as OFF-and-unbuilt, not OFF-and-ready.
+ * Enforced flags (service-env / operator-api) have a live refuse path → built
+ * control. `NOT_ENFORCED` is a launch-plan row → unbuilt / plan-only.
+ */
+export function isCapabilityBuilt(key: string): boolean {
+  return isEnforced(key);
+}
+
+/**
+ * Why an OFF flag is off, at the altitude the tracker Done bar cares about.
+ *
+ * Returns `null` when the flag is on. When off:
+ *   - `unbuilt`      — plan row, no live refuse path (not "ready to flip")
+ *   - `drop-pending` — built control waiting on the drop clock
+ *   - `overridden`   — explicit or env pin holding it off
+ *   - `killed`       — module kill-switch
+ *   - `phase-gated`  — drop:null, never opens by clock alone
+ */
+export type OffReadiness = 'unbuilt' | 'drop-pending' | 'overridden' | 'killed' | 'phase-gated';
+
+export function offReadiness(key: string, ctx: FlagContext): OffReadiness | null {
+  const explanation = explain(key, ctx);
+  if (explanation.enabled) return null;
+
+  if (!isCapabilityBuilt(key)) return 'unbuilt';
+
+  switch (explanation.source) {
+    case 'drop-pending':
+      return 'drop-pending';
+    case 'kill-switch':
+      return 'killed';
+    case 'phase-gated':
+      return 'phase-gated';
+    case 'override':
+    case 'env':
+      return 'overridden';
+    case 'drop':
+      // enabled:false with source drop is unreachable (drop source is always on)
+      return 'drop-pending';
+  }
 }
