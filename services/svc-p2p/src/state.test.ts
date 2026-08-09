@@ -182,6 +182,12 @@ describe('timeouts', () => {
     expect(timeoutActionFor('fiat_sent')).toBe('open_dispute');
   });
 
+  it('re-drives a created lock rather than guessing whether value moved', () => {
+    // created is the only live state where the lock is not provably done —
+    // settle_or_void re-calls escrowLock, then refunds or voids.
+    expect(timeoutActionFor('created')).toBe('settle_or_void');
+  });
+
   it('refunds the seller when the buyer never even claimed to pay', () => {
     expect(timeoutActionFor('escrowed')).toBe('refund');
   });
