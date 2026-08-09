@@ -236,7 +236,7 @@ const entryKey = (entry) => `${entry.module}:${entry.file}`;
  * ADR 2026-08-02 "ADOPT AND ADAPT": keep the controller and its business logic,
  * redirect the balance write to `ledger-client` through an adapter.
  *
- * 47 hits across 21 file/rule pairs, all of them pre-existing and all of them
+ * 43 hits across 19 file/rule pairs, all of them pre-existing and all of them
  * verified individually before being listed. Three grades of dead, weakest last
  * — and one grade that is deliberately empty:
  *
@@ -372,18 +372,9 @@ const VENDOR_JAVA_ALLOWLIST = [
   },
 
   // ── Grade C: entity mutation behind the 410 door ─────────────────────────
-  {
-    module: 'ucenter-api',
-    file: 'ApproveController.java',
-    rules: { 'jpa-entity-balance-mutation': 2 },
-    reason: 'Grade C. Business-auth deposit freeze at apply time. Door fragment /certified/business. Queue: escrowLock.',
-  },
-  {
-    module: 'ucenter-api',
-    file: 'RedEnvelopeController.java',
-    rules: { 'jpa-entity-balance-mutation': 2 },
-    reason: 'Grade C. Credits the receiver on envelope claim. Door fragment /redenvelope. Queue: rewardPay.',
-  },
+  // EMPTY after L16 W5/W6: admin remittance/auth/cancel (#1324) + ucenter freeze/red-envelope
+  // (#1328) throw IllegalStateException instead of mutating managed wallets. Queue remains
+  // ledger-adapter redirect when product law lands; no Grade C rows left to ratchet.
 
   // ── Grade D: EMPTY, and it stays empty ──────────────────────────────────
   // The four files that used to sit here — core:MemberApplicationService (3),
