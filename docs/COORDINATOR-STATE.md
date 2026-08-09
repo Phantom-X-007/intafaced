@@ -1,27 +1,47 @@
-# Coordinator live state (v1.1)
+# Coordinator live state (v1.3)
 
 **Lead only — re-derive tip before any `new` / `topup` / `status`.**  
-**Cold start:** this file → [`COORDINATOR-WAVE-RUNBOOK.md`](COORDINATOR-WAVE-RUNBOOK.md) → [`PROMPT-COORDINATOR-DOCTRINE.md`](PROMPT-COORDINATOR-DOCTRINE.md) → [`COORDINATOR-PASTE-SKELETON.md`](COORDINATOR-PASTE-SKELETON.md) → `git fetch` + open PRs.
+**Cold start / after compact:** this file → runbook → doctrine §0 → **[`COORDINATOR-SUBSTANCE-LEVERAGE-OS.md`](COORDINATOR-SUBSTANCE-LEVERAGE-OS.md)** → skeleton → `git fetch` + open PRs.  
+**Chat memory is not SoT.** Compaction must not drop quality — full §2 on every `new`.  
+**Objective:** maximize **impact ÷ compute** — reject busy efficiency.
+
+---
+
+## Compact-safe quality lock
+
+When he says **`new`** (no re-teach needed):
+
+1. Full NEW pipeline (runbook §2) — harvest tip/PRs/stops/tracker/READMEs
+2. **Leverage-tag L1–L7 · drop pad · depth-grade every seat**
+3. Path walls · **N from thick inventory only** · no dual product on live walls
+4. Pastes pass form + depth + **substance ROI** — cut THIN/COLLIDE
+5. Clipboard = simple full-file pbcopy only
+6. Master coordinator only — no product residual implement
+7. Respect **denon_parallel** when LIVE (residual honesty only on invent-risk walls)
+
+**Acknowledge when authoring:** `Substance Audit Active: Evaluating Queue Mass, Leverage Density, Residual Depth. Rejecting busy efficiency.`
 
 ---
 
 ## Snapshot
 
-| Field               | Value                                                                                                                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **last_updated**    | 2026-08-09 (Denon hard-parallel board + wave 6)                                                                                                                                                   |
-| **os_version**      | 1.1 (+ runbook §5.1 depth gate)                                                                                                                                                                   |
-| **active_wave**     | **6**                                                                                                                                                                                             |
-| **denon_parallel**  | **LIVE** — [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) · LIVE-LANES `denon-hard-parallel` · agents: residual only · he: invent-risk engines + P0 rulings |
-| **tip_at_last_new** | `8da2c561` paste-time · live re-fetch (was `a688e231` at depth audit)                                                                                                                             |
-| **lane_count**      | 16                                                                                                                                                                                                |
-| **paste_dir**       | `docs/paste-w6/`                                                                                                                                                                                  |
-| **master_paste**    | `docs/PASTE-BUILD-WAVE-6-2026-08-09.md`                                                                                                                                                           |
-| **depth_audit**     | `docs/PASTE-W6-DEPTH-AUDIT-2026-08-09.md` — **PASS** after thicken                                                                                                                                |
-| **clipboard_index** | L16 (all clipboard re-push)                                                                                                                                                                       |
-| **wave_6_status**   | Cooking · pastes depth-thickened (esp L08/L13; all Done bars filled)                                                                                                                              |
-| **prior_wave**      | 5 — many SAFE TO CLOSE; market/identity/shell/L15 still had open blockers mid-wave                                                                                                                |
-| **n_policy**        | evidence-driven; 16 residual + open PR babysit · depth gate on every `new`                                                                                                                        |
+| Field               | Value                                                                                                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **last_updated**    | 2026-08-09 (substance/leverage OS v1.3)                                                                                                                                                                         |
+| **os_version**      | **1.3** — substance OS + ROI N + anti-pad + compact-safe                                                                                                                                                        |
+| **substance_os**    | [`COORDINATOR-SUBSTANCE-LEVERAGE-OS.md`](COORDINATOR-SUBSTANCE-LEVERAGE-OS.md)                                                                                                                                  |
+| **objective**       | maximize impact ÷ compute · reject busy efficiency                                                                                                                                                              |
+| **active_wave**     | **6**                                                                                                                                                                                                           |
+| **denon_parallel**  | **LIVE v2 (~120 IDs)** — [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) · LIVE-LANES `denon-hard-parallel` · agents: residual only · he: invent-risk engines + P0 rulings |
+| **tip_at_last_new** | `8da2c561` paste-time · live re-fetch (was `a688e231` at depth audit)                                                                                                                                           |
+| **lane_count**      | 16                                                                                                                                                                                                              |
+| **paste_dir**       | `docs/paste-w6/`                                                                                                                                                                                                |
+| **master_paste**    | `docs/PASTE-BUILD-WAVE-6-2026-08-09.md`                                                                                                                                                                         |
+| **depth_audit**     | `docs/PASTE-W6-DEPTH-AUDIT-2026-08-09.md` — **PASS** after thicken                                                                                                                                              |
+| **clipboard_index** | L16 (all clipboard re-push)                                                                                                                                                                                     |
+| **wave_6_status**   | Cooking · pastes depth-thickened (esp L08/L13; all Done bars filled)                                                                                                                                            |
+| **prior_wave**      | 5 — many SAFE TO CLOSE; market/identity/shell/L15 still had open blockers mid-wave                                                                                                                              |
+| **n_policy**        | evidence-driven; 16 residual + open PR babysit · depth gate on every `new`                                                                                                                                      |
 
 ---
 
@@ -78,4 +98,4 @@
 
 ## Next action
 
-Paste wave 6 → cook · mid free seats → `topup` · all done → `new`
+Wave 6 cooking → free seats → **`topup`** · all banked / need next wave → **`new`** (full pipeline, no re-teach).
