@@ -119,7 +119,7 @@ It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ 
 
 **Enrolment is two-step.** The secret is not persisted until a valid code proves the user actually scanned it — otherwise abandoning enrolment halfway locks you out.
 
-**WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in-process with a five-minute TTL — multi-instance identity needs a shared store later; the ceremony does not.
+**WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in Postgres (`identity.webauthn_challenges`, five-minute TTL, single-use take) so multi-pod ceremonies complete when options were issued on another instance. In-memory `ChallengeStore` remains for pure unit tests without SQL.
 
 Kill-switch: `WEBAUTHN_ENABLED=false`. Relying party: `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` (comma-separated origins).
 

@@ -147,6 +147,22 @@ export const kycDocuments = identity.table(
 );
 
 /**
+ * WebAuthn ceremony challenges — durable multi-pod store.
+ * take() is single-use (DELETE). userId null when authentication target unknown.
+ */
+export const webauthnChallenges = identity.table(
+  'webauthn_challenges',
+  {
+    challenge: text('challenge').primaryKey(),
+    kind: text('kind').notNull(),
+    userId: uuid('user_id'),
+    expiresAt: tstz('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('webauthn_challenges_expires_idx').on(t.expiresAt)],
+);
+
+/**
  * The rank graph. svc-identity is the only writer.
  *
  * `xp` is a bigint count, not money — it never touches the ledger and is
