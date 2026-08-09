@@ -148,6 +148,7 @@ BANK_RAMP_MODE=crypto-ledger   # ledger half only; simulated: true always
 | `ops.accrueLoanInterest`   | `admin:treasury` | Capitalise loan interest (no ledger post; unique per loan/day)      |
 | `ops.runRiskSweep`         | `admin:treasury` | Mark open loans; margin-call and liquidate past grace               |
 | `ops.resumePendingLoans`   | `admin:treasury` | Re-drive loans stuck between collateral lock and principal draw     |
+| `ops.resumePendingEarn`    | `admin:treasury` | Re-drive earn deposits stuck pending after ledger post              |
 | `ops.abandonPendingLoan`   | `admin:treasury` | Give up on a pending loan and return collateral                     |
 | `ops.cardAuthorize`        | `admin:treasury` | The authorisation "webhook" — decide, and hold if the answer is yes |
 | `ops.cardCapture`          | `admin:treasury` | The merchant took this much; the remainder of the hold goes back    |

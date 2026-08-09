@@ -35,6 +35,12 @@ export type BankErrorCode =
    * to "how much is staked" — stop agreeing. Same id must mean same deposit.
    */
   | 'bank.position_conflict'
+  /**
+   * Withdraw (or other active-only action) refused while the deposit claim is
+   * still `pending` — ledger may have posted, activate may not have. Resume the
+   * claim first; do not close a half-open position under the operator's feet.
+   */
+  | 'bank.position_pending'
   | 'bank.not_owner'
   // ── Loans (§8.1) ───────────────────────────────────────────────────────────
   | 'bank.loan_product_not_found'

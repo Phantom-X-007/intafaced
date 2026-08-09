@@ -151,6 +151,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.pool_closed':
       case 'bank.position_closed':
       case 'bank.position_locked':
+      case 'bank.position_pending':
       case 'bank.loan_product_closed':
       // CONFLICT rather than BAD_REQUEST: the request is well-formed, it just
       // collides with a loan that already exists under that id on other terms.
@@ -1357,6 +1358,15 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           return { released: formatAmount(result.released), ledgerTxId: result.ledgerTxId };
         }),
       ),
+
+    /**
+     * Re-drive earn deposits stuck between the ledger post and activate.
+     * Same recovery shape as `resumePendingLoans`; key is bank.earn.deposit:<id>.
+     */
+    resumePendingEarn: scopedProcedure('admin:treasury')
+      .input(z.object({ limit: z.number().int().min(1).max(1_000).optional() }))
+      .output(z.array(z.object({ positionId: z.string(), outcome: z.string(), reason: z.string().optional() })))
+      .mutation(async ({ input }) => guard(async () => bank.earn.resumePending(input.limit))),
 
     // ── Cards (§8.1, ledger half) ────────────────────────────────────────────
     //
