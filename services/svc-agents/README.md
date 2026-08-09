@@ -74,16 +74,17 @@ Also `GET /health` and `GET /ready`.
 
 ### `/ready` — honest, not decorative
 
-| Field                  | Meaning                                                                  |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `ready`                | Process is up (schema + listen succeeded). Always true after boot.       |
-| `providerMode`         | `mock` (default) or `upstream`. **Mock is not production inference.**    |
-| `providers[]`          | Logical provider ids + usable/healthy (no vendor names — §0.7).          |
-| `meteringEnabled`      | Billing kill-switch. Usage is still recorded when off.                   |
-| `tasks`                | Routing task ids currently configured.                                   |
-| `usefulPath.available` | Whether a **completion** can leave this process right now.               |
-| `usefulPath.task`      | First completion task that is currently servable, or null.               |
-| `usefulPath.residual`  | Why not / what this still is not (mock residual, orphan routes, outage). |
+| Field                  | Meaning                                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| `ready`                | Process is up (schema + listen succeeded). Always true after boot.                                  |
+| `providerMode`         | `mock` (default) or `upstream`. **Mock is not production inference.**                               |
+| `providers[]`          | Logical provider ids + usable/healthy (no vendor names — §0.7).                                     |
+| `meteringEnabled`      | Billing kill-switch. Usage is still recorded when off.                                              |
+| `fleet`                | Stage-1 matrix card (agents / runSession / bootRegistered / missing routes). Zeros if not supplied. |
+| `tasks`                | Routing task ids currently configured.                                                              |
+| `usefulPath.available` | Whether a **completion** can leave this process right now.                                          |
+| `usefulPath.task`      | First completion task that is currently servable, or null.                                          |
+| `usefulPath.residual`  | Why not / what this still is not (mock residual, orphan routes, outage).                            |
 
 A green container with `providerMode: mock` and `usefulPath.available: true` means the gateway answers with the deterministic stand-in. It does **not** mean Navigator / Support / the rest of the product fleet are registered — those agents are separate work. Process stays in the fleet when the engine is down so operators can still read session logs; degradation is `usefulPath.available: false`, not 503.
 

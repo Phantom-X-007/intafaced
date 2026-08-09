@@ -91,6 +91,23 @@ describe('agentsReadiness — honest about mock vs useful', () => {
     expect(status.usefulPath.residual).toMatch(/mock/i);
     expect(status.usefulPath.residual).toMatch(/not production/i);
     expect(status.providers[0]).toMatchObject({ id: 'primary', usable: true, healthy: true });
+    // Fleet omitted → zeros (never invent five product agents).
+    expect(status.fleet).toEqual({ agents: 0, withRunSession: 0, bootRegistered: 0, tasksMissingRoute: 0 });
+  });
+
+  it('surfaces the fleet matrix card when supplied — boot count stays separate', () => {
+    const status = agentsReadiness({
+      providerMode: 'mock',
+      providers: [new MockModelProvider({ id: 'primary' })],
+      table: TABLE,
+      meteringEnabled: true,
+      productAgentsRegistered: 5,
+      fleet: { agents: 5, withRunSession: 5, bootRegistered: 5, tasksMissingRoute: 0 },
+    });
+
+    expect(status.productAgentsRegistered).toBe(5);
+    expect(status.fleet).toEqual({ agents: 5, withRunSession: 5, bootRegistered: 5, tasksMissingRoute: 0 });
+    expect(status.usefulPath.residual).toMatch(/5 product agent/);
   });
 
   it('drops the mock residual when upstream is usable', () => {
