@@ -13,7 +13,7 @@ import {
 } from '@intafaced/ledger-client';
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
-import { assertRailMayMoveValue, selectPublicCheckoutRail, type ValueMovementPolicy } from './rails/posture.js';
+import { assertRailMayMoveValue, selectPublicCheckoutRailDetailed, type ValueMovementPolicy } from './rails/posture.js';
 import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 
@@ -948,7 +948,7 @@ export class PayService {
     // honestly take a public payment refuses here, and the payer sees "this
     // merchant cannot take payment right now" rather than a form that leads
     // nowhere or, far worse, a fabricated receipt.
-    const adapter = selectPublicCheckoutRail(
+    const decision = selectPublicCheckoutRailDetailed(
       this.rails,
       this.checkoutRails.map((r) => r.railId),
       // NOT `valueMovement`. The public surface follows the environment, and
@@ -956,6 +956,7 @@ export class PayService {
       this.publicCheckoutMovement,
       this.now(),
     );
+    const adapter = decision.adapter;
     const method = this.checkoutRails.find((r) => r.railId === adapter.id)!.method;
 
     const opened = await transaction(
@@ -1008,6 +1009,13 @@ export class PayService {
           method,
           railAdapter: adapter.id,
           metadata: { source: 'checkout', linkId: link.id },
+        });
+
+        // SPEC §5 — reason per decision. Taxonomy only (no cost/approval invent).
+        // Survives in payment_events so a later dispute can answer "why this rail".
+        await appendEvent(tx, payment.id, 'rail.selected', {
+          chosen: adapter.id,
+          considered: decision.considered,
         });
 
         // Its own token, not the link's. A link is a MANY-payer capability and a
