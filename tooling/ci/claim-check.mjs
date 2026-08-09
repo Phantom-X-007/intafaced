@@ -69,7 +69,13 @@ function git(gitArgs) {
  * anyone else at all.
  */
 function myFiles() {
-  if (args.length > 0) return { source: 'arguments', files: args };
+  // Blank / whitespace-only argv used to count as "paths" and print ✓ clear
+  // without checking anything real (exit 0). Same false-clear class as empty
+  // no-args — strip them so the length===0 refuse below can fire.
+  if (args.length > 0) {
+    const files = args.map((a) => (typeof a === 'string' ? a.trim() : '')).filter(Boolean);
+    return { source: 'arguments', files };
+  }
 
   const base = git(['merge-base', 'origin/main', 'HEAD']) || 'origin/main';
   const committed = git(['diff', '--name-only', `${base}...HEAD`])
@@ -88,8 +94,9 @@ const { source, files: mine } = myFiles();
 if (mine.length === 0) {
   // Exit 2 = cannot answer (same class as gh failure). Exit 0 used to look like
   // "lane free" when an agent forgot to pass paths — the soft false-clear that
-  // ships agents into someone else's desk with a green checkmark.
-  console.error('  claim-check — CANNOT ANSWER: no paths given and this branch has no changes.');
+  // ships agents into someone else's desk with a green checkmark. Blank /
+  // whitespace-only argv used to take the same exit-0 path (#1252 residual).
+  console.error('  claim-check — CANNOT ANSWER: no real paths given (empty args or clean branch).');
   console.error('      Pass the paths you are about to edit, e.g. `pnpm claim:check services/svc-bank`.');
   console.error('      Not reporting "clear" — this tool has not checked anything.');
   process.exit(2);
