@@ -60,4 +60,40 @@ describe('Slice B durable accrual store — no payout', () => {
     expect(listed).toHaveLength(rows.length);
     expect(listed[0]!.commissionAmount).toBe('10');
   });
+
+  it('listByBeneficiary is self-filter only — foreign id returns other rows not mixed', async () => {
+    const store = new MemoryAccrualStore();
+    const at = new Date('2026-08-07T12:00:00.000Z');
+    await store.saveRows([
+      {
+        feeEventId: 'f1',
+        beneficiaryId: REF,
+        payerId: PAYER,
+        hop: 0,
+        rate: '0.10',
+        feeAmount: '100',
+        commissionAmount: '10',
+        asset: 'USDT',
+        accruedAt: at,
+      },
+      {
+        feeEventId: 'f2',
+        beneficiaryId: REF2,
+        payerId: PAYER,
+        hop: 0,
+        rate: '0.05',
+        feeAmount: '100',
+        commissionAmount: '5',
+        asset: 'USDT',
+        accruedAt: at,
+      },
+    ]);
+    const mine = await store.listByBeneficiary(REF);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.beneficiaryId).toBe(REF);
+    const theirs = await store.listByBeneficiary(REF2);
+    expect(theirs).toHaveLength(1);
+    expect(theirs[0]!.beneficiaryId).toBe(REF2);
+    expect(await store.listByBeneficiary('00000000-0000-4000-8000-000000000000')).toHaveLength(0);
+  });
 });

@@ -878,6 +878,54 @@ export function createIdentityRouter(
           }
         }),
 
+      /**
+       * Affiliate self-view of durable commission accruals only.
+       * Always scoped to ctx.principal.userId — no beneficiaryId input (foreign refuse by design).
+       * Empty list when no rows / rates unpublished (never invents rates or amounts).
+       * Payout remains refuse-closed (affiliates.payout).
+       */
+      myAccruals: scopedProcedure('identity:read')
+        .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
+        .output(
+          z.object({
+            rows: z.array(
+              z.object({
+                feeEventId: z.string(),
+                beneficiaryId: z.string().uuid(),
+                payerId: z.string().uuid(),
+                hop: z.number().int(),
+                rate: z.string(),
+                feeAmount: z.string(),
+                commissionAmount: z.string(),
+                asset: z.string(),
+                accruedAt: z.string(),
+              }),
+            ),
+          }),
+        )
+        .query(async ({ ctx, input }) => {
+          try {
+            const store = requireAccruals();
+            // Self-only: never accept a foreign beneficiaryId.
+            const rows = await store.listByBeneficiary(ctx.principal.userId, input?.limit);
+            return {
+              rows: rows.map((r) => ({
+                feeEventId: r.feeEventId,
+                beneficiaryId: r.beneficiaryId,
+                payerId: r.payerId,
+                hop: r.hop,
+                rate: r.rate,
+                feeAmount: r.feeAmount,
+                commissionAmount: r.commissionAmount,
+                asset: r.asset,
+                accruedAt: r.accruedAt.toISOString(),
+              })),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
       /** Operator freeze beneficiary — skips accrual; no payout path here. */
       freeze: scopedProcedure('admin:write')
         .input(z.object({ beneficiaryId: z.string().uuid(), reason: z.string().min(3).max(500) }))

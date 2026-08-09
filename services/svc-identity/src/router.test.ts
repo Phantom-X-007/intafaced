@@ -4,6 +4,7 @@ import type { Context } from '@intafaced/contracts';
 import { createIdentityRouter } from './router.js';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
+import { MemoryAccrualStore } from './affiliates/accrual-store.js';
 
 /**
  * The tRPC boundary for KYC and step-up.
@@ -691,5 +692,67 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
     const err = await api.affiliates.payout({}).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('PRECONDITION_FAILED');
     expect(String((err as { message?: string }).message)).toContain('DIRECTION §8');
+  });
+});
+
+// ── Affiliates residual: myAccruals self-only (durable rows, no invent) ───────
+
+describe('affiliates.myAccruals (self-only durable accruals)', () => {
+  const OTHER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const PAYER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+  function withAccruals() {
+    const store = new MemoryAccrualStore();
+    return { store, router: createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, accruals: store }) };
+  }
+
+  it('returns only durable rows for the principal — never foreign beneficiary rows', async () => {
+    const { store, router: r } = withAccruals();
+    const at = new Date('2026-08-08T12:00:00.000Z');
+    await store.saveRows([
+      {
+        feeEventId: 'fee-mine',
+        beneficiaryId: USER,
+        payerId: PAYER,
+        hop: 0,
+        rate: '0.10',
+        feeAmount: '100',
+        commissionAmount: '10',
+        asset: 'USDT',
+        accruedAt: at,
+      },
+      {
+        feeEventId: 'fee-theirs',
+        beneficiaryId: OTHER,
+        payerId: PAYER,
+        hop: 0,
+        rate: '0.10',
+        feeAmount: '50',
+        commissionAmount: '5',
+        asset: 'USDT',
+        accruedAt: at,
+      },
+    ]);
+
+    const api = r.createCaller(await ctx(['identity:read'], { userId: USER }));
+    const out = await api.affiliates.myAccruals();
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]!.beneficiaryId).toBe(USER);
+    expect(out.rows[0]!.commissionAmount).toBe('10');
+    // Procedure has no beneficiaryId input — foreign list refused by design (self-only).
+  });
+
+  it('empty when no durable rows (does not invent rates or commissions)', async () => {
+    const { router: r } = withAccruals();
+    const api = r.createCaller(await ctx(['identity:read'], { userId: USER }));
+    const out = await api.affiliates.myAccruals();
+    expect(out.rows).toEqual([]);
+  });
+
+  it('requires identity:read', async () => {
+    const { router: r } = withAccruals();
+    const api = r.createCaller(await ctx([]));
+    const err = await api.affiliates.myAccruals().catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
   });
 });
