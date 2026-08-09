@@ -11,7 +11,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { parseAmount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { CopyError } from './errors.js';
 import {
@@ -161,13 +161,20 @@ export class CopyService {
    * Plan a mirror of a leader fill for one of the caller's follows.
    * Typed refuse on cap / market / expiry — never invent a different shape.
    *
-   * Exposure is claimed with `addExposureIfUnderCap` so two concurrent mirrors
-   * cannot both pass a stale near-cap read and overshoot maxAggregateExposure.
+   * `fillId` is required (engine business key). The store claims each fillId
+   * once per follow: a redelivered observation returns the prior plan and does
+   * not bump exposure a second time. Same shape as fee-share settle's fillId.
+   *
+   * Exposure is claimed inside `claimMirrorFill` under the same exclusive key
+   * as `addExposureIfUnderCap` (#1191), so concurrent distinct fills still
+   * cannot both pass a stale near-cap read.
    */
   async planMirrorForFollow(
     principal: Principal,
     input: {
       followId: string;
+      /** Leader fill business key — required; redelivery must not double-mirror. */
+      fillId: string;
       marketId: string;
       side: MirrorSide;
       qty: string;
@@ -183,6 +190,7 @@ export class CopyService {
     }
 
     const observation = parseLeaderFillObservation({
+      fillId: input.fillId,
       leaderId: follow.leaderId,
       marketId: input.marketId,
       side: input.side,
@@ -191,20 +199,50 @@ export class CopyService {
       observedAt: this.now(),
     });
 
+    // Fast path: already claimed this leader fill under this follow.
+    const prior = await this.store.getMirroredFill(follow.followId, observation.fillId);
+    if (prior) {
+      return presentMirrorPlan({ ...prior, reason: 'within_envelope' });
+    }
+
     const current = await this.store.getExposure(follow.followId);
-    const plan = planMirror({
+    // Envelope / market / expiry / per-order checks — may throw typed refuse.
+    // Cap is re-checked inside claimMirrorFill under the follow exclusive lock
+    // so a concurrent first-claim cannot overshoot even if this read is stale.
+    const planned = planMirror({
       follow,
       observation,
       currentExposure: current,
       now: this.now(),
     });
-    // Atomic claim — the plan's optimistic nextExposure may be stale under
-    // concurrency; the store returns the true post-claim value (or refuses).
-    const claimed = await this.store.addExposureIfUnderCap(follow.followId, plan.notional, follow.envelope.maxAggregateExposure);
-    if (!claimed.ok) {
-      throw new CopyError('Mirror would exceed maxAggregateExposure', 'trade.copy_cap_exceeded');
+
+    const claimed = await this.store.claimMirrorFill({
+      followId: follow.followId,
+      fillId: observation.fillId,
+      maxAggregate: follow.envelope.maxAggregateExposure,
+      plan: {
+        fillId: planned.fillId,
+        followId: planned.followId,
+        followerId: planned.followerId,
+        leaderId: planned.leaderId,
+        marketId: planned.marketId,
+        side: planned.side,
+        qty: planned.qty,
+        notional: planned.notional,
+      },
+    });
+
+    if (claimed.status === 'duplicate') {
+      // Lost the race to another delivery of the same fill — return its plan.
+      return presentMirrorPlan({ ...claimed.plan, reason: 'within_envelope' });
     }
-    return presentMirrorPlan({ ...plan, nextExposure: claimed.newExposure });
+    if (claimed.status === 'cap_exceeded') {
+      throw new CopyError(
+        `Mirror would exceed aggregate exposure cap ${formatAmount(follow.envelope.maxAggregateExposure)}`,
+        'trade.copy_cap_exceeded',
+      );
+    }
+    return presentMirrorPlan({ ...claimed.plan, reason: 'within_envelope' });
   }
 
   /**
@@ -220,6 +258,7 @@ export class CopyService {
    *
    * Ledger keys stay on fillId. Period boundary (D11) is not invented here —
    * pair-lifetime counters remain as today. Module stays unmounted.
+   * Same-fill redelivery on the mirror path is closed via claimMirrorFill.
    */
   async settleFeeShare(
     principal: Principal,

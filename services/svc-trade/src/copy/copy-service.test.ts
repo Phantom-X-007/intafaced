@@ -88,17 +88,20 @@ describe('CopyService', () => {
 
     const plan = await svc.planMirrorForFollow(principal, {
       followId: follow.followId,
+      fillId: 'fill-cap-1',
       marketId: 'BTC-USDT',
       side: 'buy',
       qty: '0.01',
       notional: '80',
     });
     expect(plan.notional).toBe('80');
+    expect(plan.fillId).toBe('fill-cap-1');
     expect(plan.reason).toBe('within_envelope');
 
     await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-cap-2',
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.01',
@@ -109,6 +112,7 @@ describe('CopyService', () => {
     await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-bad-mkt',
         marketId: 'ETH-USDT',
         side: 'buy',
         qty: '1',
@@ -120,6 +124,7 @@ describe('CopyService', () => {
     await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-expired',
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.001',
@@ -248,6 +253,7 @@ describe('CopyService', () => {
     });
     await first.planMirrorForFollow(principal, {
       followId: follow.followId,
+      fillId: 'fill-restart-1',
       marketId: 'BTC-USDT',
       side: 'buy',
       qty: '0.01',
@@ -269,6 +275,7 @@ describe('CopyService', () => {
     await expect(
       second.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-restart-2',
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.01',
@@ -305,8 +312,16 @@ describe('CopyService', () => {
       maxAggregateExposure: '250',
       expiresAt: futureExpiry,
     });
+    let fillSeq = 0;
     const mirror = (side: 'buy' | 'sell', notional: string, marketId = 'BTC-USDT') =>
-      svc.planMirrorForFollow(principal, { followId: follow.followId, marketId, side, qty: '0.01', notional });
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: `fill-side-${++fillSeq}`,
+        marketId,
+        side,
+        qty: '0.01',
+        notional,
+      });
 
     const bought = await mirror('buy', '100');
     expect(bought.nextExposure).toBe('100');
@@ -319,6 +334,127 @@ describe('CopyService', () => {
     // And alternating sides across permitted markets cannot evade the cap —
     // a net-position model would let this run forever.
     await expect(mirror('buy', '100', 'ETH-USDT')).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
+  });
+
+  /**
+   * Redelivered leader fills must not double-count exposure.
+   *
+   * Every other money path in svc-trade keys on fillId (ledger trade.fill,
+   * fee-share settle). Mirror used to plan from qty/notional alone — a journal
+   * redelivery of the same leader fill would spend the session budget twice.
+   */
+  it('a redelivered leader fill returns the prior plan and does not bump exposure twice', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+
+    const input = {
+      followId: follow.followId,
+      fillId: 'leader-fill-abc',
+      marketId: 'BTC-USDT' as const,
+      side: 'buy' as const,
+      qty: '0.01',
+      notional: '80',
+    };
+
+    const first = await svc.planMirrorForFollow(principal, input);
+    expect(first.fillId).toBe('leader-fill-abc');
+    expect(first.notional).toBe('80');
+    expect(first.nextExposure).toBe('80');
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('80');
+
+    // Same fillId again (redelivery) — prior plan, exposure unchanged.
+    const second = await svc.planMirrorForFollow(principal, input);
+    expect(second).toEqual(first);
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('80');
+
+    // Stored claim is the durable source of truth across restarts.
+    const claimed = await store.getMirroredFill(follow.followId, 'leader-fill-abc');
+    expect(claimed).not.toBeNull();
+    expect(formatAmount(claimed!.notional)).toBe('80');
+
+    // A different fill still spends budget (not a blanket freeze).
+    const third = await svc.planMirrorForFollow(principal, {
+      ...input,
+      fillId: 'leader-fill-def',
+      notional: '50',
+    });
+    expect(third.nextExposure).toBe('130');
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('130');
+  });
+
+  it('mirror refuses a blank fillId rather than inventing one', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: '   ',
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '10',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_envelope_invalid' });
+  });
+
+  it('concurrent redeliveries of the same fill claim exposure once', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    const input = {
+      followId: follow.followId,
+      fillId: 'leader-fill-race',
+      marketId: 'BTC-USDT' as const,
+      side: 'buy' as const,
+      qty: '0.01',
+      notional: '75',
+    };
+
+    const results = await Promise.all([
+      svc.planMirrorForFollow(principal, input),
+      svc.planMirrorForFollow(principal, input),
+      svc.planMirrorForFollow(principal, input),
+    ]);
+
+    for (const r of results) {
+      expect(r.fillId).toBe('leader-fill-race');
+      expect(r.notional).toBe('75');
+      expect(r.nextExposure).toBe('75');
+    }
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('75');
   });
 
   /**
@@ -565,6 +701,7 @@ describe('CopyService', () => {
     const attempts = await Promise.allSettled([
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-conc-btc',
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.01',
@@ -572,6 +709,7 @@ describe('CopyService', () => {
       }),
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-conc-eth',
         marketId: 'ETH-USDT',
         side: 'buy',
         qty: '0.01',
