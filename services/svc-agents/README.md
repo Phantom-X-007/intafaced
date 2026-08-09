@@ -259,13 +259,13 @@ Pure layers (no database): cost arithmetic, guardrails, adapters, **readiness ho
 
 ### Residual (honest — not Done by this package alone)
 
-| Gap                                    | Why it is residual                                                                                                                                                                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guardrail registration at boot         | `scanner.runSession` / `navigator.runSession` drive the runtime, but no guardrail is written to `agent_definitions` on startup, so `openSession` finds no agent in a real deployment. Registration is a deployment act and is still unwired |
-| Product agents (Support, Merchant, …)  | Register guardrails + drive the runtime; not seeded here                                                                                                                                                                                    |
-| Live data behind the navigator's tools | Tool inputs are caller-supplied fixtures. A real `svc-trade` / `svc-identity` call is the next slice; the refusals are already typed for it                                                                                                 |
-| Production inference                   | Requires `AGENTS_PROVIDER=upstream` + vault credentials                                                                                                                                                                                     |
-| Full premium-tier product surface      | Phase 5 agent product work on top of this runtime                                                                                                                                                                                           |
+| Gap                                    | Why it is residual                                                                                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guardrail registration at boot         | **Wired:** `registerProductAgentsAtBoot` upserts the five Stage-1 factories into `agent_definitions` before listen. Portfolio / launch / risk / coach / growth still have no factory. |
+| Product agents (Support, Merchant, …)  | Stage-1 factories + runSession mounts exist; live data planes and shell UX remain residual                                                                                            |
+| Live data behind the navigator's tools | Tool inputs are caller-supplied fixtures. A real `svc-trade` / `svc-identity` call is the next slice; the refusals are already typed for it                                           |
+| Production inference                   | Requires `AGENTS_PROVIDER=upstream` + vault credentials                                                                                                                               |
+| Full premium-tier product surface      | Phase 5 agent product work on top of this runtime                                                                                                                                     |
 
 The money and audit paths run against real Postgres with the ledger's in-memory reference implementation, which the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Real Postgres because every property worth testing here — append-only, the window seal, the unique request id — lives in the database, and a fake would test the fake.
 

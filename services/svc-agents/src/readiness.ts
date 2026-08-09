@@ -32,6 +32,8 @@ export interface AgentsReadinessInput {
   readonly providers: readonly ModelProvider[];
   readonly table: RoutingTable;
   readonly meteringEnabled: boolean;
+  /** Count of product agents upserted at boot into agent_definitions (0 = residual). */
+  readonly productAgentsRegistered?: number;
   readonly now?: Date;
 }
 
@@ -66,6 +68,8 @@ export interface AgentsReadiness {
   readonly providers: readonly ProviderReadiness[];
   readonly meteringEnabled: boolean;
   readonly tasks: readonly string[];
+  /** Product guardrails written at boot — not the same as live inference. */
+  readonly productAgentsRegistered: number;
   readonly usefulPath: UsefulPathStatus;
 }
 
@@ -113,14 +117,20 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     residual = input.table.routes.length === 0 ? 'no routes configured' : 'no completion route is currently servable';
   }
 
+  const productAgentsRegistered = input.productAgentsRegistered ?? 0;
+
   // Mock mode always carries an honesty residual even when the path works: the
   // engine answers, but it is not production inference. Upstream mode drops
   // that residual once a real completion is servable.
   if (usefulTask !== null) {
-    residual =
-      input.providerMode === 'mock'
-        ? 'engine is the deterministic mock — not production inference; product agents are not registered by this service'
-        : null;
+    if (input.providerMode === 'mock') {
+      residual =
+        productAgentsRegistered > 0
+          ? `engine is the deterministic mock — not production inference; ${productAgentsRegistered} product agent(s) registered at boot`
+          : 'engine is the deterministic mock — not production inference; product agents are not registered by this service';
+    } else {
+      residual = null;
+    }
   }
 
   return {
@@ -129,6 +139,7 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     providers,
     meteringEnabled: input.meteringEnabled,
     tasks,
+    productAgentsRegistered,
     usefulPath: {
       available: usefulTask !== null,
       task: usefulTask,
