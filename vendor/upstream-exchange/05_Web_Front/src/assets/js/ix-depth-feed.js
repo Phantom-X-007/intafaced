@@ -60,8 +60,11 @@ function applySide(current, levels) {
   for (var i = 0; i < levels.length; i++) {
     var row = levels[i];
     if (!row || row.length < 2) continue;
-    var price = String(row[0]);
-    var qty = String(row[1]);
+    /* Same refuse as sideFromWire: JSON numbers never enter the book. */
+    if (typeof row[0] !== 'string' || typeof row[1] !== 'string') continue;
+    var price = row[0].trim();
+    var qty = row[1].trim();
+    if (!price) continue;
     if (qty === '0' || qty === '0.0' || qty === '0.00') {
       delete next[price];
     } else if (qty.charAt(0) !== '-') {
