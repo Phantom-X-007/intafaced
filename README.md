@@ -22,7 +22,7 @@ Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 ·
 - `identity.pii-isolation` — PII isolation — KYC documents in a separate encrypted store (§10)
 - `infra.drop-flags` — Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11)
 - `trade.otc` — OTC RFQ desk, staked-tier gate
-- `trade.copy` — Copy trading, audited leaders, profit share
+- `trade.copy` — Copy trading, audited leaders, fee-share (not profit-share)
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
