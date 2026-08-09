@@ -1,99 +1,71 @@
 # LANE STOP — L07 MARKET · wave 4 · 2026-08-09
 
-**Lane wall:** `services/svc-market/**`  
+**Wall:** `services/svc-market/**`  
 **Tip at write:** re-derive (`git fetch && git log -1 --oneline origin/main`).  
-**SAFE TO CLOSE:** **no** until #1189 merges green (Class M). #1276 TRK honesty **merged**.
+**SAFE TO CLOSE:** **no** — #1189 not merged (CI Tests red on **svc-pay** tip flake/break, not market).
 
 ---
 
-## Shipped this wave
+## Verdict (one line)
 
-| Unit                            | Proof                                                                                                                     | Class |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----- |
-| **#1276** TRK pack honesty      | **MERGED** `071f1c17` — vendors pack + commerce pack no longer claim “no svc-market”                                      | N     |
-| **#1189** market.commerce C1+C2 | **OPEN** — listings + one-time purchase + blank commission refuse + listing↔slot integrity + Class M tests + README truth | **M** |
-| A2 scopes+edge                  | **Sealed on tip** — `market:read/write/ops` real; `/api/market` in edge UPSTREAMS                                         | —     |
-| A3 ranking                      | **PARK** — DIRECTION §8; directory is registration order only                                                             | —     |
-| A2 subscriptions                | **PARK** — `market.subscription_not_built`; needs product law (period/past-due/cancel)                                    | —     |
-| A3 oversell regression          | **Sealed on tip** — `vendor-slots.test.ts` concurrent claim proof                                                         | —     |
-| A3 eligibility computed         | **Sealed** — no `is_listed`; re-read on catalogue/purchase                                                                | —     |
+**Market commerce C1+C2 is built and Class M–audited on #1189; monorepo seal is blocked by `svc-pay` test on tip, not by market.**
 
-### #1189 load-bearing fixes (on PR branch)
-
-1. **Create gate** — approved + `claimSlot`, not `listingEligibility` (fixed first-listing `market.slot_required` CI red).
-2. **Listing↔slot** — purchase/catalogue require open slot `ref = listingId` (crash orphan cannot sell).
-3. **Class M tests** — insufficient funds, suspended, orphan; recipe 6/6; commerce 14/14 green in CI log.
-4. **Mount scopes** — `market:write` on create/purchase.
-5. **README** — removed vendors-only lies (no listings / no ledger).
-
-### CI note
-
-Monorepo **Tests** once failed on **svc-ws** flake (`detaches the subscription when the socket closes`) — **not** market. Commerce suite was green. Rebased + re-pushed for fresh run.
+Proof from CI log (head ~`ee2464cf`):  
+`✓ src/commerce/commerce.test.ts (23 tests)` · Typecheck & build **success** · market typecheck **clean**.  
+Failed: `svc-pay` `payment-service.test.ts` — `0xg4finish` is not a valid EVM address (L04 wall; main CI also red/null).
 
 ---
 
-## Engine B — promise falsification (chapter)
+## Shipped
 
-| Promise                                   | Verdict                         |
-| ----------------------------------------- | ------------------------------- |
-| Vendors apply → vet                       | **SHIPPED** tip (#1109+)        |
-| Stake slots + oversell                    | **SHIPPED** tip (#1115+)        |
-| Public eligibility / no `is_listed`       | **SHIPPED** tip (#1126+)        |
-| Listings + one-time purchase + commission | **#1189** (not tip until merge) |
-| Subscriptions                             | **PARK** — product law missing  |
-| Ranking / featured                        | **PARK** — DIRECTION §8         |
-| Scopes real                               | **SHIPPED** tip                 |
-| TRK “no svc-market”                       | **Falsified** — #1276           |
-
----
-
-## Engine C — attack surface residual
-
-| Surface                  | Status                                                               |
-| ------------------------ | -------------------------------------------------------------------- |
-| Stake unavailable        | Fail closed (throw / drop from catalogue)                            |
-| Commission conservation  | Recipe floor + sum invariant tests                                   |
-| Blank commission         | `market.commission_not_configured` pre-claim                         |
-| Public refuse codes      | Named (`slot_required`, `stake_required`, `listing_slot_missing`, …) |
-| Concurrent createListing | Slot layer proven; wrap residual optional                            |
-
----
+| Item                        | Proof                                            |
+| --------------------------- | ------------------------------------------------ |
+| **#1276** TRK honesty       | **MERGED** — packs no longer claim no svc-market |
+| **#1311** mid-wave stop     | **MERGED**                                       |
+| Vendors Stages 1–3          | **On tip** (sealed — no rebuild)                 |
+| Scopes + edge `/api/market` | **Sealed on tip**                                |
+| Oversell / no `is_listed`   | **Sealed on tip**                                |
+| Ranking                     | **PARK** DIRECTION §8                            |
+| Subscriptions C3            | **PARK** — no product law                        |
 
 ## In flight
 
-- **#1189** — babysit CI → Class M already in PR body → merge when green.
+| Item                             | Status                                                               |
+| -------------------------------- | -------------------------------------------------------------------- |
+| **#1189** commerce C1+C2 Class M | OPEN · mergeable when Tests green · **market green, pay red on tip** |
 
-## Parked (+ why)
+### #1189 stack (Done bars met in PR)
 
-| Unit                     | Why                                                                                                            |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| C3 subscriptions         | No product law (period, past-due, cancel, access cut) — inventing would be Class X-adjacent product authorship |
-| Ranking / featured       | DIRECTION §8 Nitro-only                                                                                        |
-| Commission bps **value** | Mechanism refuse-closed; number is Nitro                                                                       |
-| C4 premium / admin views | After C2 on tip; ranking half owner-gated                                                                      |
-| Purchase NATS events     | Optional; no consumer                                                                                          |
+1. Listings + one-time purchase via `recipes.marketPurchase`
+2. Blank `MARKET_HOUSE_COMMISSION_BPS` → `market.commission_not_configured`
+3. Create = approved + `claimSlot` (not already-listed)
+4. Listing↔slot integrity + over-capacity after unstake (`market.listing_over_capacity`)
+5. Class M failure tests (insuff / susp / orphan / re-drive snapshot)
+6. Mount scopes + refuse-code mapping
+7. README truth
+
+## Parked + pick-up
+
+| Unit                             | Why / next                                                                                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Merge #1189                      | Wait tip **svc-pay** Tests green (or L04 fixes `0xg4finish` fixture) → re-run CI → squash-merge · Class M audit already in PR body |
+| Tracker `market.commerce` → done | After merge; note C3 residual                                                                                                      |
+| C3 subscriptions                 | Nitro product law first                                                                                                            |
+| Commission bps value             | Nitro only                                                                                                                         |
+| Ranking                          | DIRECTION §8 Nitro only                                                                                                            |
 
 ## Nitro must decide
 
-1. **House commission bps** (`MARKET_HOUSE_COMMISSION_BPS`) — rate itself.
-2. **Subscription product law** before C3 craft.
-3. **Ranking / featured placement** (or keep registration order forever).
-
-## Pick-up for next agent (if #1189 still open)
-
-1. `gh pr view 1189` — if Tests red only on `svc-ws` flake, `gh run rerun --failed`.
-2. Merge Class M when green.
-3. Tracker: `market.commerce` → `done` for C1+C2 (note C3 residual in note) + `pnpm tracker`.
-4. Write final SAFE TO CLOSE only after merge + tracker honesty.
-
----
+1. House commission **bps**
+2. Subscription past-due / cancel / period law
+3. Ranking vs keep registration order
 
 ```
 LANE: L07 MARKET wave 4
-shipped: #1276 TRK honesty (vendors/commerce packs not greenfield)
-in flight: #1189 listings + one-time purchase + house commission refuse blank rate (Class M)
-parked: C3 subscriptions (no product law) · ranking DIRECTION 8 · commission bps value
-Nitro must decide: commission bps · subscription past-due/cancel law · ranking or keep registration order
+shipped: #1276 TRK honesty · #1311 stop bank · vendors/scopes/oversell sealed on tip
+in flight: #1189 listings+purchase Class M (market 23/23 green; CI Tests blocked by svc-pay tip)
+parked: C3 subs · ranking §8 · commission bps value
+Nitro must decide: commission bps · subscription law · ranking
 SAFE TO CLOSE: no
 tip: re-derive
 ```
