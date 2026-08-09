@@ -77,6 +77,28 @@ export const GATES = [
       'holding it, which is precisely why deleting the entry has to be a visible act rather than a silent one.',
   },
   {
+    id: 'worktree-selftest',
+    script: 'tooling/scripts/worktree.mjs',
+    args: ['--self-test'],
+    doctrine: 'multi-dev law, CONTRIBUTING.md §2',
+    why:
+      'every branch in this repo starts at whatever `pnpm wt` cut it from, so this script silently decides the base of ' +
+      'all work. It used to hand `git worktree add` a REF NAME (`origin/main`), which git resolves at the moment of the ' +
+      'add rather than at the moment we chose it — and it ran the fetch with stdio ignored and never read the exit ' +
+      'status, so an offline laptop or a credential expiry printed `· fetching main` and cut from whatever the last ' +
+      'successful fetch left behind. Neither showed on stdout: it printed the path and nothing about the base, so a ' +
+      'worktree cut 38 commits stale looked identical to a fresh one and was found by hand (2026-08-09) rather than by ' +
+      'a check. The cost is not theoretical — a branch abandoned the same day was 182 commits behind with 1,303 ' +
+      'insertions and 812 passing tests, because rebasing a money-path branch that far is how a subtle regression ' +
+      'lands with a green diff. The fix pins the start point to a 40-char object id once, after the fetch, and reports ' +
+      'it. These fixtures hold that: pass a ref name to the add again, resolve the ref twice, drop the fetch-status ' +
+      'check, drop the ancestry warning, or flatten the branch-name convention, and a named case goes red. Four of ' +
+      'them read this file’s own text above the self-test marker, because a revert can leave both pure functions ' +
+      'correct and re-resolve the ref at the call site instead. Pure fixtures — no git, no network, no disk — so it ' +
+      'sits next to worktree-gc-selftest. Lives in tooling/scripts/, so the manifest check below does not cover it and ' +
+      'this entry is the only thing holding it.',
+  },
+  {
     id: 'path-collide-selftest',
     script: 'tooling/scripts/path-collide.mjs',
     args: ['--self-test'],
