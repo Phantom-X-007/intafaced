@@ -95,9 +95,14 @@
  * · It does not deliver a margin call, and therefore it does not run a grace
  *   clock. The ADR is explicit that "a margin call that cannot be delivered is
  *   not a margin call" and that grace must not start without a transport. There
- *   is no margin-call transport in `svc-trade` today, so this file reports the
- *   `margin-call` rung and stops there rather than shipping a grace timer that
- *   would silently authorise seizures off an undelivered notice.
+ *   is no production margin-call transport in `svc-trade` today, so this file
+ *   reports the `margin-call` rung and stops there rather than shipping a grace
+ *   timer that would silently authorise seizures off an undelivered notice.
+ *   Delivery is a SEPARATE port (`notifyMarginCall` on the liquidation tick);
+ *   the pure seals below (`mayStartMarginCallGrace` /
+ *   `mayLiquidateFromExpiredMarginCallGrace`) are the only lawful way a future
+ *   grace field may start or expire into seizure. Grace *duration* numbers are
+ *   DIRECTION §8 / D3 owner-reserved — never invent them here.
  * · It does not choose the numbers. Every value in `DEFAULT_FUTURES_LADDER_POLICY`
  *   is a placeholder for a `DIRECTION` §8 item 8 ruling — "any leverage or margin
  *   parameter beyond §1's stated defaults" is the owner's. The MECHANISM is
@@ -127,6 +132,58 @@ export class FuturesLadderError extends Error {
 
 export const LADDER_POLICY_INCOHERENT = 'trade.ladder_policy_incoherent';
 export const DEPTH_UNKNOWN = 'trade.depth_unknown';
+
+// ── C15: margin-call delivery before grace / seizure ─────────────────────────
+
+/**
+ * C15 / ADR done bar 6: "A margin call with no transport does not start a grace
+ * clock." `bankMarginCalled` was published into a void for weeks; futures must
+ * not repeat that by starting grace (or seizing "from grace") off an undelivered
+ * notice.
+ *
+ * These helpers are pure law. They take no grace-duration number — inventing one
+ * would be D3 (owner-reserved ladder parameters). When a real grace clock is
+ * added, write `graceExpiresAt` only after `mayStartMarginCallGrace` returns
+ * true, and only escalate seizure through
+ * `mayLiquidateFromExpiredMarginCallGrace`.
+ */
+
+/** Fact returned by the `notifyMarginCall` port on the liquidation tick. */
+export interface MarginCallDelivery {
+  readonly delivered: boolean;
+}
+
+/**
+ * May a grace clock start after this margin-call attempt?
+ *
+ * Only when transport accepted delivery. Undelivered → never. Does not invent a
+ * grace length — that stays owner-reserved (D3).
+ */
+export function mayStartMarginCallGrace(delivery: MarginCallDelivery): boolean {
+  return delivery.delivered === true;
+}
+
+/**
+ * May the liquidation path seize because "margin-call grace has expired"?
+ *
+ * Today futures has no grace field. A missing `graceExpiresAt` means grace never
+ * started, so this always returns false on the live path — which is the honest
+ * product state, not a silent seizure.
+ *
+ * Seal for future work: even if someone passes a past `graceExpiresAt`, an
+ * undelivered call STILL cannot liquidate "from grace". That is the regression
+ * the unit-9 test pins.
+ */
+export function mayLiquidateFromExpiredMarginCallGrace(input: {
+  readonly delivered: boolean;
+  /** Instant grace ends. Null/undefined = grace never started (current product). */
+  readonly graceExpiresAt?: Date | null;
+  readonly now: Date;
+}): boolean {
+  if (!mayStartMarginCallGrace({ delivered: input.delivered })) return false;
+  if (input.graceExpiresAt == null) return false;
+  return input.now.getTime() >= input.graceExpiresAt.getTime();
+}
 
 // ── The depth-referenced tier table ──────────────────────────────────────────
 
