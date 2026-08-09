@@ -15,8 +15,9 @@ import { resolve } from 'node:path';
 /** Strip trailing slashes so directory prefixes compare cleanly. */
 export function normPath(p) {
   if (typeof p !== 'string' || p.length === 0) return p;
-  // Collapse Windows separators, strip a single leading "./", then trailing slashes.
-  let x = p.replace(/\\/g, '/').replace(/^\.\//, '');
+  // Collapse Windows separators, strip a single leading "./", collapse
+  // internal // (tooling//ci must equal tooling/ci), then trailing slashes.
+  let x = p.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+/g, '/');
   // Keep a lone "/" as root; otherwise drop trailing separators.
   return x.replace(/\/+$/, '') || '/';
 }
