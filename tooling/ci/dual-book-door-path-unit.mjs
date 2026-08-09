@@ -40,6 +40,23 @@ if (files.length !== 1) {
 }
 
 const src = readFileSync(files[0], 'utf8');
+
+// Structural bind to the Java interceptor — the JS mirror below is not enough.
+// If preHandle reverts to raw getRequestURI(), encoded fixtures stay green and
+// the door is bypassable again (adversarial review L16 W4).
+if (!/static\s+String\s+pathForMatch\s*\(/.test(src)) {
+  console.error('✖ dual-book-door-path-unit: interceptor must define static pathForMatch(String)');
+  process.exit(1);
+}
+if (!/URLDecoder\.decode/.test(src)) {
+  console.error('✖ dual-book-door-path-unit: pathForMatch must URLDecoder.decode (percent-encoding)');
+  process.exit(1);
+}
+if (!/String\s+path\s*=\s*pathForMatch\s*\(/.test(src)) {
+  console.error('✖ dual-book-door-path-unit: preHandle must assign path = pathForMatch(...)');
+  process.exit(1);
+}
+
 const block = src.match(/BLOCKED_URI_FRAGMENTS\s*=\s*Arrays\.asList\(([\s\S]*?)\);/);
 if (!block) {
   console.error('✖ dual-book-door-path-unit: could not parse BLOCKED_URI_FRAGMENTS');
