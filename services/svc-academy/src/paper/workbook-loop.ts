@@ -192,8 +192,40 @@ export function attachPaperFillRef(
     size = parsed.value;
   }
 
-  if (run.fillRefs.some((f) => f.fillId === fillId)) {
-    return { ok: true, run }; // idempotent
+  const existing = run.fillRefs.find((f) => f.fillId === fillId);
+  if (existing) {
+    // Same fillId again: true idempotent only when body agrees. A re-send with a
+    // different price/size/side would otherwise let paperDrillResult double-count
+    // inflated PnL when the wire valued the raw input array instead of the run.
+    if (existing.marketId !== input.marketId) {
+      return {
+        ok: false,
+        reason: 'bad_fill',
+        message: `Fill ${fillId}: marketId conflicts with prior attach`,
+      };
+    }
+    if (side !== undefined && existing.side !== undefined && side !== existing.side) {
+      return {
+        ok: false,
+        reason: 'bad_fill',
+        message: `Fill ${fillId}: side conflicts with prior attach`,
+      };
+    }
+    if (price !== undefined && existing.price !== undefined && price !== existing.price) {
+      return {
+        ok: false,
+        reason: 'bad_fill',
+        message: `Fill ${fillId}: price conflicts with prior attach`,
+      };
+    }
+    if (size !== undefined && existing.size !== undefined && size !== existing.size) {
+      return {
+        ok: false,
+        reason: 'bad_fill',
+        message: `Fill ${fillId}: size conflicts with prior attach`,
+      };
+    }
+    return { ok: true, run }; // idempotent same body
   }
   const ref: PaperFillRef = {
     fillId,
