@@ -162,6 +162,14 @@ describe('integration: mark book → liquidation tick', () => {
           posts.push(req);
           return { id: 'x', idempotencyKey: req.idempotencyKey } as never;
         },
+        async balance() {
+          // Funded enough for any shortfall in this suite's underwater fixture.
+          return {
+            account: { ownerType: 'house' as const, ownerId: 'insurance-fund', assetId: 'USDT', kind: 'available' as const },
+            accountId: 'x',
+            amount: 10n ** 30n,
+          };
+        },
       },
       now: () => new Date(1_000_000),
       liquidationIdFor: () => 'liq-1',

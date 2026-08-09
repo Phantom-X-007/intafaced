@@ -36,6 +36,7 @@ import {
   type MarkPolicy,
 } from './mark-policy.js';
 import { breakerBasis, type AcceptedMarkStore } from './accepted-mark.js';
+import { INSURANCE_UNDERFUNDED, checkInsuranceBound } from './insurance-bound.js';
 
 /**
  * WHAT A CALLER ASKS A MARK SOURCE FOR — AND WHAT THE ANSWER IS FOR.
@@ -152,7 +153,12 @@ export interface LiquidationTickDeps {
   positions: LiquidationPositionLoader;
   closer: PositionCloser;
   attempts: LiquidationAttemptStore;
-  ledger: Pick<LedgerClient, 'post'>;
+  /**
+   * `post` moves money; `balance` is the insurance shortfall bound — read before
+   * any bankrupt rung that would credit `house:insurance-fund`. A ledger that
+   * can post but cannot answer balances is not enough for the money path.
+   */
+  ledger: Pick<LedgerClient, 'post' | 'balance'>;
   maintenanceBps?: number;
   now?: () => Date;
   /** Build stable attempt id. Default: liq:{positionId}:{isoMinute} */
@@ -186,6 +192,7 @@ export interface LiquidationTickItemResult {
     | 'skipped_no_depth'
     | 'skipped_healthy'
     | 'skipped_already'
+    | 'skipped_insurance_underfunded'
     | 'margin_call'
     | 'partially_liquidated'
     | 'liquidated'
@@ -353,6 +360,27 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
       continue;
     }
 
+    /**
+     * INSURANCE SHORTFALL BOUND. Planner may attribute loss beyond margin to
+     * insurance; that is arithmetic, not permission to invent cover. Check the
+     * named fund BEFORE any post. Underfunded → park (position stays open,
+     * attempt NOT marked done) so a later top-up can re-drive the rung.
+     */
+    const insurance = await checkInsuranceBound({
+      assetId: row.marginAsset,
+      fromInsurance: decision.fromInsurance,
+      balance: (ref) => deps.ledger.balance(ref),
+    });
+    if (!insurance.ok) {
+      items.push({
+        positionId: row.positionId,
+        outcome: 'skipped_insurance_underfunded',
+        reason: INSURANCE_UNDERFUNDED,
+        summary: insurance.reason,
+      });
+      continue;
+    }
+
     for (const recipe of decision.recipes) {
       await deps.ledger.post(recipe as PostRequest);
     }
@@ -446,6 +474,25 @@ async function runLadderRung(
             ? 'invalid'
             : 'skipped_healthy';
     return { positionId: row.positionId, outcome, reason: decision.reason, summary: summarizeLadder(decision) };
+  }
+
+  /**
+   * Same insurance bound as the full-close path — bankrupt ladder rungs are the
+   * case that invents cover when the fund is empty. Partial rungs with
+   * `fromInsurance === 0` pass through without a balance read cost that matters.
+   */
+  const insurance = await checkInsuranceBound({
+    assetId: row.marginAsset,
+    fromInsurance: decision.fromInsurance,
+    balance: (ref) => deps.ledger.balance(ref),
+  });
+  if (!insurance.ok) {
+    return {
+      positionId: row.positionId,
+      outcome: 'skipped_insurance_underfunded',
+      reason: INSURANCE_UNDERFUNDED,
+      summary: insurance.reason,
+    };
   }
 
   for (const recipe of decision.recipes) {

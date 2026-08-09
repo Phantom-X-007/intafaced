@@ -46,6 +46,7 @@ import {
   type MarkPolicy,
 } from './mark-policy.js';
 import { PROFIT_SOURCE_UNCONFIGURED, checkProfitBound, type ProfitSource } from './profit-source.js';
+import { INSURANCE_UNDERFUNDED, checkInsuranceBound } from './insurance-bound.js';
 import { breakerBasis, readAcceptedMark, type PreviousMark } from './accepted-mark.js';
 
 /**
@@ -751,6 +752,23 @@ export class PositionService {
               'trade.profit_source_underfunded',
               409,
             );
+          }
+        }
+
+        /**
+         * INSURANCE SHORTFALL BOUND (voluntary close). Same law as the
+         * liquidation tick: a loss past margin is not cover the house invents.
+         * Checked before the first post so a refusal cannot leave margin moved
+         * and the position half-closed.
+         */
+        if (plan.fromInsurance > 0n) {
+          const insurance = await checkInsuranceBound({
+            assetId: row.margin_asset,
+            fromInsurance: plan.fromInsurance,
+            balance: (ref) => this.ledger.balance(ref),
+          });
+          if (!insurance.ok) {
+            throw new FuturesError(`Cannot close through insurance shortfall — ${insurance.reason}`, INSURANCE_UNDERFUNDED, 409);
           }
         }
 

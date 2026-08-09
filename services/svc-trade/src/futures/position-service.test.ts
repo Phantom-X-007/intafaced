@@ -12,6 +12,7 @@ import {
   MemoryLedger,
   formatAmount,
   houseFees,
+  insuranceFund,
   parseAmount as amt,
   positionCollateralAccount,
   recipes,
@@ -511,6 +512,34 @@ if (!available) {
     await positions.close(ALICE, pos.id!);
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('99000');
     expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  /**
+   * Insurance shortfall bound on voluntary close — mirror of the liquidation
+   * tick. Loss past margin needs the fund; empty fund refuses; position stays
+   * open; no ledger overdraw.
+   */
+  it('refuses a bankrupt voluntary close when the insurance fund is empty', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    // margin 5000; exit 44000 → loss 6000 → fromInsurance 1000. Fund is empty.
+    expect(formatAmount((await ledger.balance(insuranceFund('USDT'))).amount)).toBe('0');
+    const marginBefore = (await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount;
+    const userBefore = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+    feed('44000');
+    await expect(positions.close(ALICE, pos.id!)).rejects.toMatchObject({ code: 'trade.insurance_underfunded' });
+
+    expect((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount).toBe(marginBefore);
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userBefore);
+    expect(formatAmount((await ledger.balance(insuranceFund('USDT'))).amount)).toBe('0');
+    expect(await positions.listOpen(ALICE)).toHaveLength(1);
   });
 
   /**
