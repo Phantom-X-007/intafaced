@@ -175,6 +175,9 @@ function stubService(): Stub {
       { id: PAYMENT, event: 'created', payload: { amount: '100' }, railEventId: null, ts: new Date('2026-07-27T12:00:00.000Z') },
     ]),
     settleWindow: record('settleWindow', () => settlementRecord()),
+    releasePendingSettlement: record('releasePendingSettlement', () =>
+      settlementRecord({ status: 'failed' }),
+    ),
     payoutSettlement: record('payoutSettlement', () =>
       settlementRecord({ status: 'paid_out', payoutMethod: 'card-sandbox', payoutRef: 'po_1' }),
     ),
