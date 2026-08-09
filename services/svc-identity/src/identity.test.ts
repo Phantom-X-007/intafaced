@@ -21,6 +21,17 @@ import {
 } from './auth/webauthn.js';
 
 /**
+ * Code for the next TOTP step (still inside the ±1 verify window).
+ * Enrol confirm burns the current step; subsequent login/step-up must use a
+ * later step without waiting a wall-clock 30s.
+ */
+function totpNext(secret: string): string {
+  const step = 30;
+  const counter = Math.floor(Math.floor(Date.now() / 1000) / step);
+  return totp(secret, { at: new Date((counter + 1) * step * 1000) });
+}
+
+/**
  * svc-identity against real Postgres.
  *
  * This file also carries the §4.4 Phase 1 exit criteria:
@@ -325,9 +336,34 @@ if (!available) {
         code: 'auth.mfa_invalid',
       });
 
-      const withMfa = await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: totp(secret) });
+      // Confirm burned the enrol step — login needs the next window step.
+      const withMfa = await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: totpNext(secret) });
       const principal = await verifyAccessToken(withMfa.accessToken, tokenConfig);
       expect(principal.mfa).toBe(true);
+    });
+
+    it('refuses a TOTP code that was already consumed in this window (anti-replay)', async () => {
+      const handle = unique();
+      const session = await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+      await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
+
+      const code = totpNext(secret);
+      await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: code });
+
+      // Same code must not buy a second session (or a step-up) inside the window.
+      await expect(auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: code })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      const live = await register();
+      const { secret: s2 } = await auth.startTotpEnrolment(live.userId);
+      await auth.confirmTotpEnrolment(live.userId, s2, totp(s2));
+      const stepCode = totpNext(s2);
+      await auth.stepUp({ userId: live.userId, sessionId: live.sessionId, totpCode: stepCode });
+      await expect(auth.stepUp({ userId: live.userId, sessionId: live.sessionId, totpCode: stepCode })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
     });
 
     it('stores hashed recovery codes on confirm and redeems once at login (ID-P1-1)', async () => {
@@ -374,11 +410,11 @@ if (!available) {
       `;
       expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length - 1);
 
-      // Live TOTP still works after a recovery login.
+      // Live TOTP still works after a recovery login (next step — enrol burned current).
       const withTotp = await auth.login({
         identifier: handle,
         password: 'correct horse battery staple',
-        totpCode: totp(secret),
+        totpCode: totpNext(secret),
       });
       expect((await verifyAccessToken(withTotp.accessToken, tokenConfig)).mfa).toBe(true);
     });
@@ -1035,7 +1071,11 @@ if (!available) {
       const session = await register();
       const secret = await enrol(session.userId);
 
-      const elevated = await auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) });
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: totpNext(secret),
+      });
       const principal = await verifyAccessToken(elevated.accessToken, tokenConfig);
 
       expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(true);
@@ -1048,7 +1088,11 @@ if (!available) {
       const session = await register();
       const secret = await enrol(session.userId);
 
-      const elevated = await auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) });
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: totpNext(secret),
+      });
       const lifetimeSeconds = (elevated.expiresAt.getTime() - Date.now()) / 1000;
 
       // Five minutes, not the 900s a normal access token gets. An elevation that
@@ -1084,9 +1128,11 @@ if (!available) {
 
       // Otherwise a logout could be undone by whoever still holds the old
       // access token, which is precisely the party a logout is aimed at.
-      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) })).rejects.toMatchObject({
-        code: 'auth.session_invalid',
-      });
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totpNext(secret) })).rejects.toMatchObject(
+        {
+          code: 'auth.session_invalid',
+        },
+      );
     });
 
     it('refuses a frozen account', async () => {
@@ -1094,9 +1140,11 @@ if (!available) {
       const secret = await enrol(session.userId);
       await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
 
-      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) })).rejects.toMatchObject({
-        code: 'auth.account_frozen',
-      });
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totpNext(secret) })).rejects.toMatchObject(
+        {
+          code: 'auth.account_frozen',
+        },
+      );
     });
   });
 
@@ -1247,11 +1295,11 @@ if (!available) {
       const { secret } = await auth.startTotpEnrolment(registered.userId);
       await auth.confirmTotpEnrolment(registered.userId, secret, totp(secret));
 
-      // 3 · log in with the second factor
+      // 3 · log in with the second factor (next step — confirm burned current)
       const loggedIn = await auth.login({
         identifier: handle,
         password: 'correct horse battery staple',
-        totpCode: totp(secret),
+        totpCode: totpNext(secret),
       });
       expect((await verifyAccessToken(loggedIn.accessToken, tokenConfig)).mfa).toBe(true);
 

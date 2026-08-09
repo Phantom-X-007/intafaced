@@ -51,6 +51,12 @@ export const users = identity.table(
      */
     totpSecret: text('totp_secret'),
     totpEnrolledAt: tstz('totp_enrolled_at'),
+    /**
+     * Last TOTP counter that successfully authenticated (login / step-up / enrol confirm).
+     * Null until first use. Replay of the same step is refused so a captured code
+     * cannot be reused inside the ±1-step validity window.
+     */
+    totpLastStep: bigint('totp_last_step', { mode: 'bigint' }),
     /** SHA-256 hashes of single-use recovery codes; plaintext never stored. */
     recoveryCodeHashes: jsonb('recovery_code_hashes').notNull().default([]),
 

@@ -3,7 +3,7 @@ import { transaction } from '@intafaced/db';
 import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, type TokenConfig } from '@intafaced/auth';
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
-import { generateRecoveryCodes, generateSecret, totpUri, verifyTotp } from './totp.js';
+import { generateRecoveryCodes, generateSecret, matchTotpStep, totpUri } from './totp.js';
 import { apiKeyOriginAllowed } from './api-key-origin.js';
 import {
   b64urlDecode,
@@ -255,11 +255,13 @@ export class AuthService {
     let mfa = false;
     if (user.totp_secret) {
       if (!input.totpCode) throw new AuthError('Two-factor code required', 'auth.mfa_required');
-      if (verifyTotp(user.totp_secret, input.totpCode)) {
+      // Prefer TOTP (and burn the step). Only when the code is not a valid TOTP
+      // do we try a recovery code — so a live TOTP never burns a recovery hash.
+      const totpMatch = matchTotpStep(user.totp_secret, input.totpCode);
+      if (totpMatch !== null) {
+        await this.consumeTotpCode(user.id, user.totp_secret, input.totpCode);
         mfa = true;
       } else {
-        // Single-use recovery code path (ID-P1-1). Totp first so a valid TOTP
-        // never burns a recovery code.
         const redeemed = await this.tryRedeemRecoveryCode(user.id, input.totpCode);
         if (!redeemed) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
         mfa = true;
@@ -443,6 +445,38 @@ export class AuthService {
     });
   }
 
+  /**
+   * Verify a TOTP code and burn its counter step so it cannot be replayed.
+   *
+   * Under FOR UPDATE so two concurrent uses of the same code cannot both pass.
+   * Same shape as recovery-code redeem: match → refuse if step ≤ last → advance.
+   */
+  private async consumeTotpCode(userId: string, secret: string, code: string, at?: Date): Promise<void> {
+    const matched = matchTotpStep(secret, code, at ? { at } : {});
+    if (matched === null) {
+      throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+    }
+
+    await transaction(this.sql, async (tx) => {
+      const rows = await tx<Array<{ totp_last_step: string | number | bigint | null }>>`
+        SELECT totp_last_step FROM users WHERE id = ${userId} FOR UPDATE
+      `;
+      if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
+
+      const lastRaw = rows[0].totp_last_step;
+      const lastStep = lastRaw === null || lastRaw === undefined ? null : BigInt(lastRaw);
+      if (lastStep !== null && matched <= lastStep) {
+        throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+      }
+
+      await tx`
+        UPDATE users
+           SET totp_last_step = ${matched.toString()}, updated_at = now()
+         WHERE id = ${userId}
+      `;
+    });
+  }
+
   async startTotpEnrolment(userId: string): Promise<{ secret: string; uri: string; recoveryCodes: string[] }> {
     const rows = await this.sql<Array<{ email: string; totp_secret: string | null }>>`
       SELECT email, totp_secret FROM users WHERE id = ${userId}
@@ -467,17 +501,21 @@ export class AuthService {
   }
 
   async confirmTotpEnrolment(userId: string, secret: string, code: string): Promise<void> {
-    if (!verifyTotp(secret, code)) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+    const matched = matchTotpStep(secret, code);
+    if (matched === null) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
 
     const pending = this.pendingTotpEnrolment.get(userId);
     if (!pending || pending.secret !== secret) {
       throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
     }
 
+    // Seed totp_last_step with the confirm code so that same code cannot be
+    // immediately reused for login / step-up inside the same window.
     await this.sql`
       UPDATE users
          SET totp_secret = ${secret},
              totp_enrolled_at = now(),
+             totp_last_step = ${matched.toString()},
              recovery_code_hashes = ${this.sql.json(pending.recoveryHashes as never)},
              updated_at = now()
        WHERE id = ${userId} AND totp_secret IS NULL
@@ -1114,9 +1152,9 @@ export class AuthService {
       if (!user.totp_secret) {
         throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
       }
-      if (!verifyTotp(user.totp_secret, input.totpCode!)) {
-        throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
-      }
+      // Burn the step before issuing trade:withdraw — a captured code must not
+      // buy a second elevation inside the validity window.
+      await this.consumeTotpCode(input.userId, user.totp_secret, input.totpCode!);
     } else {
       const creds = asCredentialList(user.webauthn_creds);
       if (creds.length === 0) {
