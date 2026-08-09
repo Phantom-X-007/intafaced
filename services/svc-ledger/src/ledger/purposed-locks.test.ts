@@ -116,5 +116,35 @@ if (!available) {
         `,
       ).resolves.toBeDefined();
     });
+
+    it('REFUSES whitespace-only lock purpose via raw SQL (0011 btrim belt)', async () => {
+      // Client trims and treats spaces as empty; 0008 length(purpose)>0 let
+      // purpose '   ' land as a lock pot that names nothing.
+      await expect(
+        db.sql`
+          INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
+          VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, '   ')
+        `,
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    });
+
+    it('REFUSES padded lock purpose — identity is the trimmed claim (P0-3)', async () => {
+      await expect(
+        db.sql`
+          INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
+          VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, 'order:x ')
+        `,
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    });
+
+    it('REFUSES purpose on available — fungible pot must stay one row', async () => {
+      // Same failure class as assertAvailableUnpurposed on the TypeScript path.
+      await expect(
+        db.sql`
+          INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
+          VALUES ('user'::owner_type, ${USER}, 'USDT', 'available'::account_kind, 'split')
+        `,
+      ).rejects.toMatchObject({ code: CHECK_VIOLATION });
+    });
   });
 }

@@ -216,7 +216,8 @@ export const accounts = ledger.table(
     check('accounts_purpose_len_ck', sql`length(purpose) <= 128`),
     /**
      * Every lock pot names its claim in the database, not only in TypeScript
-     * (0001 hold; 0007 escrow/stake/collateral — STOP §4.2b #1; 0008 fail-closed).
+     * (0001 hold; 0007 escrow/stake/collateral — STOP §4.2b #1; 0008 fail-closed;
+     * 0011 trim + available empty — mirrors client `accountPurpose` / available law).
      *
      * Phrased as "everything except `available`" rather than as a list of locked
      * kinds. 0007 listed the four locked kinds, which meant a fifth would have
@@ -228,8 +229,14 @@ export const accounts = ledger.table(
      * `legacy:%` is refused because 0007's backfill minted purposes of the form
      * `legacy:<the row's own id>`, which name the row rather than the claim it
      * secures — see 0008 for why that is worse than an empty purpose.
+     *
+     * 0011: purpose must equal `btrim(purpose)` so padded claims cannot open a
+     * second pot beside the trimmed identity; `available` must store `''` only.
      */
-    check('accounts_lock_purposed_ck', sql`kind = 'available' OR (length(purpose) > 0 AND purpose NOT LIKE 'legacy:%')`),
+    check(
+      'accounts_lock_purposed_ck',
+      sql`(kind = 'available' AND purpose = '') OR (kind <> 'available' AND purpose = btrim(purpose) AND length(purpose) > 0 AND purpose NOT LIKE 'legacy:%')`,
+    ),
     /**
      * Every `owner_id` is drawn from the space its `owner_type` declares (0005).
      * Kept character-for-character identical to `isValidOwnerId` in

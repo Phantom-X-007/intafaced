@@ -224,10 +224,14 @@ if (!available) {
       expect(state).toMatchObject({ frozen: true, reason: 'operator halt', actor: OPERATOR });
     });
 
-    it('service.freeze leaves the first attribution standing when recon tries to clobber', async () => {
+    it('service.freeze throws freeze_attributed when recon tries to clobber — first reason stands', async () => {
+      // Soft-success was the old lie: callers (operator HTTP) saw 200 and believed
+      // their reason landed. Now freeze throws; recon catches so the alarm still pages.
       await a.freeze('operator: suspected drift', OPERATOR);
-      // Recon path: freeze() must not throw and must not overwrite.
-      const after = await a.freeze('reconciliation mismatch', 'reconciliation');
+      await expect(a.freeze('reconciliation mismatch', 'reconciliation')).rejects.toMatchObject({
+        code: 'ledger.freeze_attributed',
+      });
+      const after = await a.freezeState();
       expect(after).toMatchObject({ frozen: true, reason: 'operator: suspected drift', actor: OPERATOR });
     });
 

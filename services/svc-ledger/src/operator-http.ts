@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { AuthError, bearerToken, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
+import { LedgerError } from '@intafaced/ledger-client';
 import type { LedgerService } from './service.js';
 
 /**
@@ -139,6 +140,13 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
       try {
         return await handle(operator, req.body);
       } catch (err) {
+        // Different attribution while already frozen: first reason stands
+        // (STOP §4.2b #3). Must not look like a successful freeze — soft-200
+        // used to return the standing row and operators believed their reason
+        // had landed. 409 + the durable code so a console can branch.
+        if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
+          return reply.code(409).send({ message: err.message, code: err.code });
+        }
         const message = err instanceof Error ? err.message : 'operator request failed';
         // 400 rather than 500: everything reachable here is either a validation
         // failure or a constraint the database refused, and both are the

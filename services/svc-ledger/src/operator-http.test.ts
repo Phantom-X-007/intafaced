@@ -393,4 +393,33 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
     expect(freezeCalls).toBe(0);
     await app.close();
   });
+
+  it('POST /operator/freeze returns 409 when attribution already stands (not soft-200)', async () => {
+    // Soft-200 used to return the standing freeze and look like success while
+    // the operator's reason never landed. Conflict is the honest answer.
+    const { LedgerError } = await import('@intafaced/ledger-client');
+    let freezeCalls = 0;
+    const app = await buildApp(
+      stubService({
+        freeze: async () => {
+          freezeCalls += 1;
+          throw new LedgerError(
+            'Ledger already frozen by recon: reconciliation mismatch — refusing to overwrite (STOP §4.2b #3)',
+            'ledger.freeze_attributed',
+          );
+        },
+      }),
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { reason: 'operator: suspected USDT drift' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({ code: 'ledger.freeze_attributed' });
+    expect(freezeCalls).toBe(1);
+    await app.close();
+  });
 });

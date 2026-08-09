@@ -35,6 +35,11 @@ function toTrpcError(err: unknown): TRPCError {
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
+  // Already frozen under another actor/reason — conflict, not internal error.
+  // Mirrors operator HTTP 409 so both doors name the same refusal.
+  if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
+    return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+  }
   // The window as asked cannot be answered, and retrying it unchanged never
   // will be. Same status as `s2s-http.httpError` gives these two, so the mounted
   // route and its twin cannot tell a caller different things about one refusal.
@@ -257,15 +262,23 @@ export function createLedgerRouter(ledger: LedgerService) {
       )
       .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
       .mutation(async ({ ctx, input }) => {
-        const state = await ledger.freeze(input.reason, ctx.principal.userId);
-        return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        try {
+          const state = await ledger.freeze(input.reason, ctx.principal.userId);
+          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     unfreeze: scopedProcedure('admin:treasury')
       .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
       .mutation(async ({ ctx }) => {
-        const state = await ledger.unfreeze(ctx.principal.userId);
-        return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        try {
+          const state = await ledger.unfreeze(ctx.principal.userId);
+          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
   });
 }
