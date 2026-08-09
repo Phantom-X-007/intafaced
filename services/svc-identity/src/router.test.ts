@@ -625,7 +625,8 @@ describe('auth.register optional referrerId', () => {
         referrerId: USER,
       })
       .catch((e: unknown) => e);
-    expect(codeOf(err)).toBe('BAD_REQUEST');
+    // referral.self maps to CONFLICT (same family as cycle / already_set).
+    expect(codeOf(err)).toBe('CONFLICT');
   });
 });
 
