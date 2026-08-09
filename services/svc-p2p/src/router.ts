@@ -154,6 +154,12 @@ type TradeOut = z.infer<typeof tradeOutput>;
  * timed-out call needs to be able to tell those apart.
  */
 function toTrpcError(err: unknown): TRPCError {
+  // Procedures throw TRPCError deliberately (L2-7 party filter on trades.get /
+  // disputes.get → NOT_FOUND, not FORBIDDEN). `guard` funnels every throw
+  // through this mapper; re-wrapping those would turn a clean NOT_FOUND into
+  // INTERNAL_SERVER_ERROR and undo the IDOR shape the caller is meant to see.
+  if (err instanceof TRPCError) return err;
+
   if (err instanceof InstrumentError) {
     switch (err.code) {
       case 'p2p.instrument_not_found':

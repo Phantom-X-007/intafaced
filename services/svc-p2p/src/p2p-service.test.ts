@@ -621,6 +621,26 @@ if (!available) {
       await expect(p2p.openDispute({ tradeId: trade.id, openedBy: MAKER, reason: 'second' })).rejects.toBeInstanceOf(TradeStateError);
     });
 
+    it('refuses cancel once a dispute is open — moderator owns the terminal, not either party', async () => {
+      // Reachable break: party cancel after dispute would unwind escrow without a ruling,
+      // defeating escalate-and-hold and the natural-person moderator invariant.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'stuck' });
+
+      await expect(p2p.cancelTrade(trade.id, MAKER)).rejects.toMatchObject({
+        code: 'p2p.dispute_already_open',
+      });
+      await expect(p2p.cancelTrade(trade.id, TAKER)).rejects.toMatchObject({
+        code: 'p2p.dispute_already_open',
+      });
+
+      // Escrow still held; nothing settled.
+      const held = await p2p.getTrade(trade.id);
+      expect(held.status).toBe('disputed');
+      expect(held.resolution).toBeNull();
+      expect(held.settledAt).toBeNull();
+    });
+
     it('refuses a second ruling on a resolved dispute', async () => {
       const trade = await escrowedTrade('100');
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
