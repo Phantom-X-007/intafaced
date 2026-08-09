@@ -264,6 +264,26 @@ describe('INVARIANT 2 — available never goes negative', () => {
     ).toThrow(/no purpose/);
   });
 
+  it('refuses a lock purpose stamped legacy: — migration stamp is not a claim', () => {
+    // DB 0008 refuses purpose LIKE 'legacy:%'. Pure guards must match so the
+    // in-memory reference cannot accept what Postgres will reject.
+    expect(() =>
+      assertValidPost({
+        idempotencyKey: 'legacy-purpose-test',
+        module: 'test',
+        reason: 'test',
+        entries: [
+          { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('1') },
+          {
+            account: { ownerType: 'user', ownerId: USER_A, assetId: 'USDT', kind: 'collateral', purpose: `legacy:${USER_A}` },
+            direction: 'debit',
+            amount: amt('1'),
+          },
+        ],
+      }),
+    ).toThrow(/legacy:/);
+  });
+
   it('leaves the book untouched when a post is rejected', async () => {
     await fund(USER_A, 'USDT', '10');
     const before = ledger.journal().length;

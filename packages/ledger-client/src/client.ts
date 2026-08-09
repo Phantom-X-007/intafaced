@@ -193,13 +193,25 @@ export function assertPurposedLocks(entries: readonly EntryInput[]): void {
 function assertPurposedLockKinds(entries: readonly EntryInput[], kinds: readonly string[], label: string, doctrine: string): void {
   for (const entry of entries) {
     if (!kinds.includes(entry.account.kind)) continue;
-    if (entry.account.purpose && entry.account.purpose.length > 0) continue;
-
-    throw new InvalidEntryError(
-      `${label} account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} has no purpose — ` +
-        `a ${entry.account.kind} must name its claim (e.g. "order:<id>", "trade:<id>", "token:stake:<id>") so one claim cannot spend ` +
-        `another's reservation (${doctrine})`,
-    );
+    const purpose = entry.account.purpose ?? '';
+    if (purpose.length === 0) {
+      throw new InvalidEntryError(
+        `${label} account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} has no purpose — ` +
+          `a ${entry.account.kind} must name its claim (e.g. "order:<id>", "trade:<id>", "token:stake:<id>") so one claim cannot spend ` +
+          `another's reservation (${doctrine})`,
+      );
+    }
+    // Migration 0008 refuses `legacy:%` at the database. Refuse here too so a
+    // MemoryLedger / pure-guard path cannot mint a stamp the DB would reject —
+    // and so an adapter never learns the hard way that "legacy:uuid" is not a
+    // claim name (0007's temporary backfill prefix, never a product purpose).
+    if (purpose.startsWith('legacy:')) {
+      throw new InvalidEntryError(
+        `${label} account for ${entry.account.ownerType}:${entry.account.ownerId} in ${entry.account.assetId} ` +
+          `uses forbidden purpose "${purpose}" — the legacy: prefix was a one-time migration stamp, not a claim ` +
+          `(migration 0008 / ${doctrine})`,
+      );
+    }
   }
 }
 
