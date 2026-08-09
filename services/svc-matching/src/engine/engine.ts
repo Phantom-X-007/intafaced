@@ -278,10 +278,26 @@ export class MatchingEngine {
 
   async cancel(marketId: MarketId, orderId: OrderId): Promise<CancelResult> {
     return withEngineSpan('matching.cancel', { marketId, orderId }, async (): Promise<CancelResult & { fillCount: number }> => {
+      /**
+       * CANCEL MUST NOT CREATE A MARKET. `book()` allocates and stores an empty
+       * OrderBook for any string — correct for the first submit that opens a
+       * market, wrong for a cancel of an order that never lived here. Depth
+       * already uses `existingBook` for this reason; cancel used to grow the
+       * market list (and the journal) with phantom books that then survived
+       * replay forever.
+       *
+       * Unknown market → not cancelled, nothing journalled, nothing stored.
+       * Unknown order on a known market still journals (cancel races fill).
+       */
+      const existing = this.existingBook(marketId);
+      if (!existing) {
+        return { cancelled: false, orderId, sequence: null, cancellation: null, fillCount: 0 };
+      }
+
       const at = this.clock().toISOString();
       this.journal.append({ kind: 'cancel', marketId, at, orderId });
 
-      const result = this.book(marketId).cancel(orderId);
+      const result = existing.cancel(orderId);
       if (result.cancellation) await this.emit([cancelledEvent(marketId, result.cancellation)]);
       await this.maybeSnapshot();
 

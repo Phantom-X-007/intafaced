@@ -119,6 +119,58 @@ describe('the journal comes first', () => {
     expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'cancel']);
   });
 
+  /**
+   * W5/W7 — cancel of a never-traded market must not create a phantom book.
+   * Depth already used existingBook; cancel used book() and stored empties that
+   * then appeared in GET /markets and survived journal replay.
+   */
+  it('cancel on an unknown market does not create a book or journal entry', async () => {
+    const { journal, engine } = build();
+    const ghost = 'NEVER-TRADED-MARKET';
+
+    const result = await engine.cancel(ghost, uuid());
+
+    expect(result.cancelled).toBe(false);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.markets).not.toContain(ghost);
+    expect(journal.length).toBe(0);
+  });
+
+  /**
+   * Legacy journals may still hold cancel-only lines written by the old
+   * inventing cancel. Replay must not re-open those phantoms on boot.
+   */
+  it('replaying a cancel-only journal line does not invent a market', () => {
+    const ghost = 'LEGACY-CANCEL-PHANTOM';
+    const books = replay([
+      {
+        kind: 'cancel',
+        marketId: ghost,
+        at: '2026-01-01T00:00:00.000Z',
+        orderId: '00000000-0000-4000-8000-cafebabe0001',
+        seq: 1,
+      },
+    ]);
+
+    expect(books.has(ghost)).toBe(false);
+    expect([...books.keys()]).toEqual([]);
+  });
+
+  it('replayFrom also refuses to invent a market from a cancel-only tail', () => {
+    const ghost = 'LEGACY-TAIL-PHANTOM';
+    const books = replayFrom({ journalSeq: 0, books: [] }, [
+      {
+        kind: 'cancel',
+        marketId: ghost,
+        at: '2026-01-01T00:00:00.000Z',
+        orderId: '00000000-0000-4000-8000-cafebabe0002',
+        seq: 1,
+      },
+    ]);
+
+    expect(books.has(ghost)).toBe(false);
+  });
+
   it('does not journal an input the kill-switch refused', async () => {
     const { journal, bus, engine } = build({ enabled: false });
 

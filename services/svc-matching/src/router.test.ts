@@ -252,6 +252,33 @@ describe('depth does not allocate a book', () => {
   });
 });
 
+describe('cancel does not allocate a book', () => {
+  /**
+   * W7 residual — cancel used book() and invented never-traded markets.
+   * Depth was fixed earlier; the HTTP cancel door must show the same honesty.
+   */
+  it('returns 404 for an unknown market without creating one', async () => {
+    const { MatchingEngine } = await import('./engine/engine.js');
+    const SECRET = 'matching-internal-service-secret-32c';
+    const engine = new MatchingEngine({ journalPath: null } as never);
+    const app = Fastify({ logger: false });
+    registerRoutes(app, engine, SECRET, {});
+    await app.ready();
+
+    const ghost = 'NEVER-TRADED-VIA-HTTP';
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/markets/${ghost}/orders/00000000-0000-4000-8000-deadbeef0001`,
+      headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.markets).not.toContain(ghost);
+    await app.close();
+  });
+});
+
 // ── The reconciliation surface ───────────────────────────────────────────────
 //
 // `reconcile.ts` is unit-tested against a real engine in `reconcile.test.ts`.
