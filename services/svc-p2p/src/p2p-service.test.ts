@@ -5,7 +5,15 @@ import postgres from 'postgres';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus, type Envelope, type EventName, type Payload, type PublishOptions } from '@intafaced/events';
-import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
+import {
+  MemoryLedger,
+  formatAmount,
+  parseAmount as amt,
+  recipes,
+  houseFees,
+  userAvailable,
+  tradeEscrowAccount,
+} from '@intafaced/ledger-client';
 import { P2pService, P2pError } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY } from './instruments.js';
@@ -313,6 +321,38 @@ if (!available) {
     it('lets only the maker close an offer', async () => {
       const offer = await sellOffer();
       await expect(p2p.closeOffer(offer.id, OTHER)).rejects.toMatchObject({ code: 'p2p.not_a_party' });
+    });
+
+    it('pauses an offer off the board without cancelling open trades', async () => {
+      // Schema always had `paused`; the API never exposed it. Pause hides
+      // remaining liquidity; open trades keep running.
+      await fund(MAKER, '1000');
+      const offer = await sellOffer({ totalAmt: amt('500'), maxAmt: amt('200') });
+      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+
+      const paused = await p2p.pauseOffer(offer.id, MAKER);
+      expect(paused.status).toBe('paused');
+      expect((await p2p.listOffers()).map((o) => o.id)).not.toContain(offer.id);
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
+        code: 'p2p.offer_not_active',
+      });
+
+      // Open trade still releasable.
+      await p2p.confirmFiatReceived(trade.id, MAKER);
+      expect((await p2p.getTrade(trade.id)).status).toBe('released');
+
+      // Resume restores the board.
+      const resumed = await p2p.resumeOffer(offer.id, MAKER);
+      expect(resumed.status).toBe('active');
+      expect((await p2p.listOffers()).map((o) => o.id)).toContain(offer.id);
+    });
+
+    it('refuses pause/resume by a non-maker and resume of a closed offer', async () => {
+      const offer = await sellOffer();
+      await expect(p2p.pauseOffer(offer.id, OTHER)).rejects.toMatchObject({ code: 'p2p.not_a_party' });
+      await p2p.closeOffer(offer.id, MAKER);
+      await expect(p2p.pauseOffer(offer.id, MAKER)).rejects.toMatchObject({ code: 'p2p.offer_not_active' });
+      await expect(p2p.resumeOffer(offer.id, MAKER)).rejects.toMatchObject({ code: 'p2p.offer_not_active' });
     });
   });
 
@@ -1774,6 +1814,37 @@ if (!available) {
       expect(await escrowOf(MAKER)).toBe('300');
     });
 
+    it('flags equal-and-opposite per-trade drift that seller aggregation would hide', async () => {
+      // Audit P2 (2026-08-08): summing expected/actual by (seller, asset) before
+      // comparing makes two trades that each disagree by +X and −X report ok.
+      // Pots are purpose-keyed per trade — the alarm must use the same grain.
+      await fund(MAKER, '10000');
+      const offer = await sellOffer({ maxAmt: amt('100'), totalAmt: amt('500') });
+      const a = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const b = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
+
+      // Move 10 units from trade A's pot into trade B's pot. Seller-level totals
+      // still match the sum of the trade amounts; per-trade pots do not.
+      await ledger.post({
+        idempotencyKey: `test.cross-trade-theft:${a.id}:${b.id}`,
+        module: 'p2p',
+        reason: 'test.cross_trade_theft',
+        entries: [
+          { account: tradeEscrowAccount(MAKER, ASSET, a.id), direction: 'credit', amount: amt('10') },
+          { account: tradeEscrowAccount(MAKER, ASSET, b.id), direction: 'debit', amount: amt('10') },
+        ],
+      });
+
+      const result = await p2p.escrowIntegrity();
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('unreachable');
+      const byTrade = new Map(result.drift.map((d) => [d.tradeId, d]));
+      expect(byTrade.get(a.id)).toMatchObject({ sellerId: MAKER, asset: ASSET, expected: '100', actual: '90' });
+      expect(byTrade.get(b.id)).toMatchObject({ sellerId: MAKER, asset: ASSET, expected: '100', actual: '110' });
+      // Seller totals still sum to 200 — the bug the aggregation hid.
+      expect(await escrowOf(MAKER)).toBe('200');
+    });
+
     it('still agrees when a decision is recorded but not yet posted', async () => {
       // A decided-but-unsettled trade still holds escrow — the post has not
       // happened — so it must count on this side too.
@@ -1797,6 +1868,37 @@ if (!available) {
       const after = await sql<Array<{ amount: string }>>`SELECT amount FROM p2p.p2p_trades WHERE id = ${trade.id}`;
 
       expect(after[0]!.amount).toBe(before[0]!.amount);
+    });
+  });
+
+  describe('fee_bps integrality', () => {
+    it('refuses a fractional fee rather than letting Postgres round it', async () => {
+      // Audit P5: numeric(8,0) rounds 12.5 → 13 silently. mulBps would then
+      // charge a fee nobody chose. Refuse at the service edge.
+      await fund(MAKER, '1000');
+      const offer = await sellOffer();
+      await expect(
+        p2p.takeOffer({
+          offerId: offer.id,
+          takerId: TAKER,
+          amount: amt('100'),
+          method: 'sepa',
+          feeBps: 12.5 as unknown as number,
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.invalid_fee_bps' });
+      // Nothing reserved, nothing locked.
+      expect(await escrowOf(MAKER)).toBe('0');
+      expect(formatAmount((await p2p.getOffer(offer.id)).remainingAmt)).toBe('500');
+    });
+
+    it('refuses constructing a service with a fractional default fee', () => {
+      expect(
+        () =>
+          new P2pService(sql, ledger, bus, {
+            ...options,
+            feeBps: 12.5 as unknown as number,
+          }),
+      ).toThrow(/fee_bps/);
     });
   });
 

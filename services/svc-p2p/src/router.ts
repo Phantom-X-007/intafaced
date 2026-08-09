@@ -226,6 +226,8 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.offer_not_active':
       case 'p2p.offer_method_unsupported':
+      case 'p2p.offer_limit_exceeded':
+      case 'p2p.invalid_fee_bps':
       case 'p2p.dispute_evidence_rejected':
       // The caller can fix it — by being a person. Reachable only from a
       // principal whose user id is not a canonical UUID, which is a wiring
@@ -490,6 +492,16 @@ export function createP2pRouter(
         .input(z.object({ offerId: z.string().uuid() }))
         .output(offerOutput)
         .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.closeOffer(input.offerId, ctx.principal.userId)))),
+
+      pause: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(z.object({ offerId: z.string().uuid() }))
+        .output(offerOutput)
+        .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.pauseOffer(input.offerId, ctx.principal.userId)))),
+
+      resume: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(z.object({ offerId: z.string().uuid() }))
+        .output(offerOutput)
+        .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.resumeOffer(input.offerId, ctx.principal.userId)))),
     }),
 
     trades: router({

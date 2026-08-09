@@ -28,7 +28,7 @@ This is also why §5's rule about moderators falls out for free — the ruling _
 
 "Did the escrow lock post?" is answered by **calling `escrowLock` again**. Its business key `p2p.escrow.lock:<tradeId>` makes a retry return the original transaction if it did, and fail on `ledger.insufficient_funds` if it did not — because the ledger checks idempotency _before_ it checks funds.
 
-So a trade stuck in `created` is never ambiguous. This matters more than it looks: escrow is pooled per `(user, asset)`, so a refund posted against a lock that never happened would not fail — it would quietly pay the seller out of a **different trade's** escrow. The refund path is therefore unreachable from `created`, and `created` is the only state where the lock is not provably done.
+So a trade stuck in `created` is never ambiguous. This matters more than it looks: each lock lands in a **per-trade** escrow pot (`tradeEscrowAccount(seller, asset, tradeId)`), but a refund posted against a lock that never happened would still be wrong — it would invent a pot credit with no matching lock history, and the refund path is therefore unreachable from `created`. `created` is the only state where the lock is not provably done.
 
 ---
 
@@ -94,6 +94,7 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `offers.create`                  | `p2p:write`              | Publish an offer, fixed or floating price                                 |
 | `offers.list`                    | `p2p:read`               | The board — active offers with liquidity left to take                     |
 | `offers.get` / `offers.close`    | `p2p:read` / `p2p:write` | Closing withdraws remaining liquidity; open trades continue               |
+| `offers.pause` / `offers.resume` | `p2p:write`              | Hide / restore remaining liquidity without cancelling open trades         |
 | `trades.take`                    | `p2p:write`              | **→ `escrowLock`.** Bounds, liquidity **and destination** before any lock |
 | `trades.markFiatSent`            | `p2p:write`              | Buyer only                                                                |
 | `trades.confirmReceived`         | `p2p:write`              | Seller only. **→ `escrowRelease`**                                        |
@@ -120,12 +121,12 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 
 HTTP (`src/index.ts`):
 
-| Route                              | Purpose                                                                                               |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `GET /health`, `GET /ready`        | liveness / readiness                                                                                  |
-| `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's escrow view vs the ledger's. Non-zero drift returns 500 |
-| `GET /internal/reputation/:userId` | the hot path other modules read for `p2pLimitMultiplier`                                              |
-| `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more   |
+| Route                              | Purpose                                                                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /health`, `GET /ready`        | liveness / readiness                                                                                                           |
+| `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500 |
+| `GET /internal/reputation/:userId` | the hot path other modules read for `p2pLimitMultiplier`                                                                       |
+| `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more                            |
 
 Three background sweeps start before the HTTP listener. The first two are why escrow cannot strand; the third is why we do not keep personal data after we need it:
 

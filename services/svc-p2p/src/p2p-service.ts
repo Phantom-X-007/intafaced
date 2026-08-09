@@ -122,6 +122,8 @@ export type P2pErrorCode =
   | 'p2p.merchant_reason_required'
   | 'p2p.merchant_transition_invalid'
   | 'p2p.offer_limit_exceeded'
+  // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
+  | 'p2p.invalid_fee_bps'
   // Deployment has no moderator allowlist and the caller does not hold
   // admin:compliance — the queue exists but nobody can authenticate into it.
   | 'p2p.moderation_unreachable'
@@ -496,7 +498,11 @@ export class P2pService {
     options: P2pServiceOptions,
   ) {
     this.instruments = options.instruments;
-    this.feeBps = options.feeBps ?? 0;
+    const feeBps = options.feeBps ?? 0;
+    if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+      throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+    }
+    this.feeBps = feeBps;
     this.deadlines = options.deadlines ?? DEFAULT_DEADLINES;
     this.xpPolicy = options.xp ?? DEFAULT_XP_POLICY;
     this.tradingEnabled = options.tradingEnabled ?? true;
@@ -667,6 +673,56 @@ export class P2pService {
     return toOffer(rows[0]);
   }
 
+  /**
+   * Pause an active offer — hide remaining liquidity without closing.
+   *
+   * The schema has always carried `paused` as a distinct status (not a flag): a
+   * paused offer is invisible on the board and cannot be taken, but open trades
+   * against it continue and the maker can resume. Closing withdraws inventory
+   * permanently; pausing is the reversible cousin the enum promised and the
+   * API never exposed.
+   */
+  async pauseOffer(offerId: string, makerId: string): Promise<OfferRecord> {
+    const rows = await this.sql<OfferRow[]>`
+      UPDATE p2p.offers SET status = 'paused', updated_at = now()
+       WHERE id = ${offerId} AND maker_id = ${makerId} AND status = 'active'
+      RETURNING *
+    `;
+    if (!rows[0]) {
+      const existing = await this.getOffer(offerId);
+      if (existing.makerId !== makerId) throw new P2pError('Only the maker can pause an offer', 'p2p.not_a_party');
+      if (existing.status === 'paused') return existing;
+      if (existing.status === 'closed') {
+        throw new P2pError(`Offer ${offerId} is closed and cannot be paused`, 'p2p.offer_not_active');
+      }
+      throw new P2pError(`Offer ${offerId} is ${existing.status} and cannot be paused`, 'p2p.offer_not_active');
+    }
+    return toOffer(rows[0]);
+  }
+
+  /**
+   * Resume a paused offer onto the board. Closed stays closed — re-list is a
+   * new offer, not a resume of one the maker already withdrew.
+   */
+  async resumeOffer(offerId: string, makerId: string): Promise<OfferRecord> {
+    this.assertTradingEnabled();
+    const rows = await this.sql<OfferRow[]>`
+      UPDATE p2p.offers SET status = 'active', updated_at = now()
+       WHERE id = ${offerId} AND maker_id = ${makerId} AND status = 'paused'
+      RETURNING *
+    `;
+    if (!rows[0]) {
+      const existing = await this.getOffer(offerId);
+      if (existing.makerId !== makerId) throw new P2pError('Only the maker can resume an offer', 'p2p.not_a_party');
+      if (existing.status === 'active') return existing;
+      if (existing.status === 'closed') {
+        throw new P2pError(`Offer ${offerId} is closed and cannot be resumed`, 'p2p.offer_not_active');
+      }
+      throw new P2pError(`Offer ${offerId} is ${existing.status} and cannot be resumed`, 'p2p.offer_not_active');
+    }
+    return toOffer(rows[0]);
+  }
+
   // ── Taking an offer → escrowLock (§6.2) ────────────────────────────────────
 
   /**
@@ -817,6 +873,12 @@ export class P2pService {
           const deadlineAt = deadlineFor('created', now, this.deadlines);
           const deadlines = withDeadline({}, 'created', deadlineAt);
           const feeBps = input.feeBps ?? this.feeBps;
+          // `fee_bps` is numeric(8,0). A fractional bps would round in Postgres
+          // (12.5 → 13) without anyone noticing, and then `mulBps` would charge a
+          // different fee than the caller thought they set. Refuse, don't round.
+          if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+            throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+          }
 
           await tx`
             UPDATE p2p.offers
@@ -2026,18 +2088,22 @@ export class P2pService {
   /**
    * DOCTRINE §0.6, as a query.
    *
-   * "How much is in P2P escrow" has two independent answers: sum the trades
-   * this service believes hold escrow, and read the ledger's `escrow` accounts.
-   * They must agree per (seller, asset). That they CAN be compared is the whole
-   * reason value lives in the ledger and only terms live here.
+   * "How much is in P2P escrow" has two independent answers: this service's
+   * trade terms, and the ledger's per-trade escrow pots. They must agree
+   * **per trade**. Aggregating by (seller, asset) first would hide
+   * equal-and-opposite cross-trade theft — the pots are purpose-keyed for a
+   * reason, and the alarm has to use the same grain.
    *
    * A trade that is decided but not yet settled still holds escrow — the post
    * has not happened — so it counts on this side too.
    */
   async escrowIntegrity(): Promise<
-    { ok: true } | { ok: false; drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> }
+    | { ok: true }
+    | {
+        ok: false;
+        drift: Array<{ tradeId: string; sellerId: string; asset: string; expected: string; actual: string }>;
+      }
   > {
-    // Per-trade pots (L3-4). Aggregate-by-seller would hide cross-trade theft.
     const rows = await this.sql<Array<{ id: string; seller_id: string; asset: string; amount: string }>>`
       SELECT id, seller_id, asset, amount
         FROM p2p.p2p_trades
@@ -2045,26 +2111,17 @@ export class P2pService {
           OR (resolution IN ('released', 'refunded') AND settled_at IS NULL)
     `;
 
-    const bySeller = new Map<string, { expected: bigint; actual: bigint; sellerId: string; asset: string }>();
-
+    const drift: Array<{ tradeId: string; sellerId: string; asset: string; expected: string; actual: string }> = [];
     for (const row of rows) {
-      const key = `${row.seller_id}\0${row.asset}`;
-      const expectedPart = parseAmount(row.amount);
-      const actualPart = (await this.ledger.balance(tradeEscrowAccount(row.seller_id, row.asset, row.id))).amount;
-      const cur = bySeller.get(key) ?? { expected: 0n, actual: 0n, sellerId: row.seller_id, asset: row.asset };
-      cur.expected += expectedPart;
-      cur.actual += actualPart;
-      bySeller.set(key, cur);
-    }
-
-    const drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> = [];
-    for (const row of bySeller.values()) {
-      if (row.expected !== row.actual) {
+      const expected = parseAmount(row.amount);
+      const actual = (await this.ledger.balance(tradeEscrowAccount(row.seller_id, row.asset, row.id))).amount;
+      if (expected !== actual) {
         drift.push({
-          sellerId: row.sellerId,
+          tradeId: row.id,
+          sellerId: row.seller_id,
           asset: row.asset,
-          expected: formatAmount(row.expected),
-          actual: formatAmount(row.actual),
+          expected: formatAmount(expected),
+          actual: formatAmount(actual),
         });
       }
     }

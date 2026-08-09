@@ -761,6 +761,8 @@ if (!available) {
           maxAmount: '100',
         },
         'offers.close': { offerId: offer.id },
+        'offers.pause': { offerId: offer.id },
+        'offers.resume': { offerId: offer.id },
         // A random offer id on purpose: a stranger who TAKES an offer becomes a
         // counterparty, which is the product working, not a leak.
         'trades.take': { offerId: crypto.randomUUID(), amount: '10', method: METHOD },
