@@ -624,7 +624,14 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/orders',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', type: 'market', side: 'buy', amount: '1' },
+      // clientOrderId required at the door — without it this test only proves 400 InvalidOrder
+      payload: {
+        symbol: 'BTC/USDT',
+        type: 'market',
+        side: 'buy',
+        amount: '1',
+        clientOrderId: 'map-trade-error',
+      },
     });
     // The operator kill-switch is a temporary, venue-wide condition, so CCXT
     // `OnMaintenance` + 503 — a retryable state. It used to answer 403, which a
