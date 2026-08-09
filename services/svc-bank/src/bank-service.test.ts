@@ -436,6 +436,125 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    /**
+     * Batch-fairness residual after #1491: isolation continues peers *on the
+     * same pass*, but a permanently-failing schedule never advanced
+     * `next_run_at`, so N poison rows with the oldest watermark permanently
+     * filled `LIMIT` and healthy schedules never got selected.
+     */
+    it('permanently failing schedules cannot starve healthy ones under the batch limit', async () => {
+      const primaryA = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rentA = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Poison rent' });
+      const primaryB = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const rentB = await bank.spaces.create({ userId: USER_B, assetId: 'USDT', name: 'Healthy rent' });
+      await fund(USER_A, 'USDT', '500');
+      await fund(USER_B, 'USDT', '500');
+
+      // Poison starts earlier so ORDER BY next_run_at picks it first.
+      const poison = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primaryA.id,
+        toSpaceId: rentA.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T08:00:00Z'),
+      });
+      const healthy = await bank.transfers.schedule({
+        userId: USER_B,
+        fromSpaceId: primaryB.id,
+        toSpaceId: rentB.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      const poisonPrefix = `bank.transfer:${poison.id}:`;
+      const real = ledger;
+      const isolating: LedgerClient = {
+        post: async (request) => {
+          if (request.idempotencyKey.startsWith(poisonPrefix)) {
+            throw new LedgerError('Ledger posting is frozen: batch fairness residual', 'ledger.frozen');
+          }
+          return real.post(request);
+        },
+        balance: (ref) => real.balance(ref),
+        balances: (ownerType, ownerId) => real.balances(ownerType, ownerId),
+        getTx: (txId) => real.getTx(txId),
+        getTxByKey: (key) => real.getTxByKey(key),
+      };
+      bank = createBankServices(sql, isolating, memoryLedgerHistory(real), { nativeAssetId: 'IFC' });
+
+      const jobNow = new Date('2026-01-01T10:00:00Z');
+      // Pass 1: limit=1 only sees poison (oldest). Isolation records failure;
+      // fairness bumps poison next_run_at to jobNow so healthy sorts first next.
+      const first = await bank.transfers.runDueTransfers({ now: jobNow, limit: 1 });
+      expect(first.failures).toEqual(expect.arrayContaining([expect.objectContaining({ scheduleId: poison.id, code: 'ledger.frozen' })]));
+      expect(first.settled).toBe(0);
+
+      // Pass 2: healthy must settle even though poison is still due and failing.
+      const second = await bank.transfers.runDueTransfers({ now: jobNow, limit: 1 });
+      expect(second.settled).toBe(1);
+      expect(formatAmount(await bank.spaces.balanceOf(rentB))).toBe('100');
+      expect(await bank.transfers.executions(healthy.id)).toHaveLength(1);
+      // Poison still not consumed.
+      expect(await bank.transfers.executions(poison.id)).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    /**
+     * Cancel mid-drive residual: due select freezes status=active. Without a
+     * re-check before each claim, multi-occurrence catch-up still posts every
+     * planned firing after cancel.
+     *
+     * Cancel runs after the first fire returns (claim tx committed) so it does
+     * not deadlock on schedule FOR UPDATE. Private method access is test-only
+     * (TS private is erase-only).
+     */
+    it('cancel during a multi-occurrence catch-up stops unclaimed firings', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent mid-cancel' });
+      await fund(USER_A, 'USDT', '1000');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('10'),
+        cadence: 'daily',
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      const transfers = bank.transfers as unknown as {
+        fireOccurrenceInner: (
+          schedule: unknown,
+          occurrence: number,
+          now: Date,
+        ) => Promise<'settled' | 'rejected' | 'already-fired' | 'stopped'>;
+      };
+      const original = transfers.fireOccurrenceInner.bind(bank.transfers);
+      let fired = 0;
+      transfers.fireOccurrenceInner = async (sched, occurrence, now) => {
+        const outcome = await original(sched, occurrence, now);
+        fired += 1;
+        if (fired === 1) {
+          await bank.transfers.cancelSchedule(schedule.id);
+        }
+        return outcome;
+      };
+
+      const report = await bank.transfers.runDueTransfers({
+        now: new Date('2026-01-10T00:00:00Z'),
+        maxCatchUp: 10,
+      });
+
+      expect(report.settled).toBe(1);
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions).toHaveLength(1);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('records a rejection and moves nothing when the space is empty', async () => {
       const { rent, schedule } = await standingOrder('100');
       // No funding at all.

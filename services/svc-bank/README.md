@@ -167,7 +167,8 @@ HTTP, for the external scheduler (service credentials required; each money job h
 | `POST /internal/jobs/accrue-interest`      | earn pool daily interest                  |
 | `POST /internal/jobs/accrue-loan-interest` | loan interest capitalisation              |
 | `POST /internal/jobs/run-risk-sweep`       | mark / call / liquidate (default **off**) |
-| `POST /internal/jobs/resume-pending-loans` | crash recovery for pending opens          |
+| `POST /internal/jobs/resume-pending-loans` | crash recovery for pending loan opens     |
+| `POST /internal/jobs/resume-pending-earn`  | crash recovery for pending earn deposits  |
 
 Plus `/health` and `/ready`. Card settlement resume is tRPC-only (`ops.cardResumeSettlement`) — no HTTP twin yet.
 
@@ -373,14 +374,19 @@ Editing a standing order cancels it and writes a new one, so the history of what
 
 ## Kill-switches
 
-| Variable                                                                    | Guards                                                                                                             |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `SCHEDULED_TRANSFERS_ENABLED`                                               | A bad deploy mis-computing occurrence indices would fire every schedule in the book, and the ledger is append-only |
-| `INTEREST_ACCRUAL_ENABLED`                                                  | A reserve drained by a runaway job cannot be un-paid without asking users to return money                          |
-| `LOAN_ACCRUAL_ENABLED`                                                      | Loan interest capitalisation is its own flag — stopping earn payout must not stop charging borrowers               |
-| `LOAN_RISK_SWEEP_ENABLED`                                                   | Defaults **off**. Sells people's collateral; a fresh deploy must not liquidate until a human has checked marks     |
-| `TRANSFER_BATCH_SIZE` / `LOAN_SWEEP_BATCH_SIZE`                             | Bounds the blast radius of a single bad pass                                                                       |
-| flags `bank.loans`, `bank.cards`, `bank.sovereignCard`, `bank.cardWaitlist` | Module kill-switch via `FLAG_REGISTRY` (§11)                                                                       |
+| Variable                                        | Guards                                                                                                             |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `SCHEDULED_TRANSFERS_ENABLED`                   | A bad deploy mis-computing occurrence indices would fire every schedule in the book, and the ledger is append-only |
+| `INTEREST_ACCRUAL_ENABLED`                      | A reserve drained by a runaway job cannot be un-paid without asking users to return money                          |
+| `LOAN_ACCRUAL_ENABLED`                          | Loan interest capitalisation is its own flag — stopping earn payout must not stop charging borrowers               |
+| `LOAN_RISK_SWEEP_ENABLED`                       | Defaults **off**. Sells people's collateral; a fresh deploy must not liquidate until a human has checked marks     |
+| `TRANSFER_BATCH_SIZE` / `LOAN_SWEEP_BATCH_SIZE` | Bounds the blast radius of a single bad pass                                                                       |
+
+Each env job flag gates **both** the HTTP `/internal/jobs/*` endpoint **and** the matching `ops.*` tRPC mutation (same 503 / named code). tRPC is not a back door past an emergency stop.
+
+| Registry flag (`FLAG_REGISTRY`)                                       | What it is today                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bank.loans`, `bank.cards`, `bank.sovereignCard`, `bank.cardWaitlist` | **Named only** — `NOT_ENFORCED` in `packages/config`. The admin console can show them; **svc-bank does not read them**. Turning one off in the registry alone does **not** stop loans, cards, or waitlist procedures. Real emergency stops for money jobs are the env variables above. Wiring true module kills is a deliberate product decision, not a silent claim. |
 
 The scheduler is external (an endpoint, not a `setInterval`) so it can be paused, inspected and re-run by an operator. Duplicate firing is safe — that is the whole point of the idempotency work — but "safe when it happens" is not a reason to make it happen on every deploy.
 

@@ -142,6 +142,9 @@ const rampProgramme = bank.ramps.programmeInfo();
 
 export const appRouter = createBankRouter(bank, {
   scheduledTransfersEnabled: env.SCHEDULED_TRANSFERS_ENABLED,
+  interestAccrualEnabled: env.INTEREST_ACCRUAL_ENABLED,
+  loanAccrualEnabled: env.LOAN_ACCRUAL_ENABLED,
+  loanRiskSweepEnabled: env.LOAN_RISK_SWEEP_ENABLED,
 });
 export type AppRouter = typeof appRouter;
 
@@ -238,7 +241,8 @@ app.post('/internal/jobs/accrue-interest', async (req, reply) => {
     return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
   }
   if (!env.INTEREST_ACCRUAL_ENABLED) {
-    return reply.code(503).send({ error: 'interest accrual is disabled', code: 'bank.accrual_disabled' });
+    // Same code string as ops.accrueInterest / BankErrorCode — alerts key on one name.
+    return reply.code(503).send({ error: 'interest accrual is disabled', code: 'bank.interest_accrual_disabled' });
   }
   return withSpan('bank.job.accrueInterest', async () => {
     const report = await bank.earn.accrueAll();
@@ -298,7 +302,8 @@ app.post('/internal/jobs/run-risk-sweep', async (req, reply) => {
     return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
   }
   if (!env.LOAN_RISK_SWEEP_ENABLED) {
-    return reply.code(503).send({ error: 'the loan risk sweep is disabled', code: 'bank.risk_sweep_disabled' });
+    // Same code string as ops.runRiskSweep / BankErrorCode — alerts key on one name.
+    return reply.code(503).send({ error: 'the loan risk sweep is disabled', code: 'bank.loan_risk_sweep_disabled' });
   }
   return withSpan('bank.job.runRiskSweep', async () => bank.loans.runRiskSweep({ limit: env.LOAN_SWEEP_BATCH_SIZE }));
 });

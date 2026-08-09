@@ -200,7 +200,22 @@ export type BankErrorCode =
    * Same refusal as the HTTP job endpoint. Both surfaces must agree: an operator
    * who flipped the flag off must not still fire due schedules via tRPC.
    */
-  | 'bank.transfers_disabled';
+  | 'bank.transfers_disabled'
+  /**
+   * Earn daily interest kill switch (`INTEREST_ACCRUAL_ENABLED=false`).
+   * HTTP job and `ops.accrueInterest` must agree — tRPC is not a back door.
+   */
+  | 'bank.interest_accrual_disabled'
+  /**
+   * Loan interest capitalisation kill switch (`LOAN_ACCRUAL_ENABLED=false`).
+   * Same parity rule as transfers / earn.
+   */
+  | 'bank.loan_accrual_disabled'
+  /**
+   * Loan risk-sweep kill switch (`LOAN_RISK_SWEEP_ENABLED=false`).
+   * Defaults off in production; tRPC must not liquidate past the HTTP stop.
+   */
+  | 'bank.loan_risk_sweep_disabled';
 
 export class BankError extends Error {
   constructor(
