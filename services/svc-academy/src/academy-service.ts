@@ -1169,8 +1169,11 @@ export class AcademyService {
 
   async enrollCertPath(input: { userId: string; pathSlug: string }): Promise<EnrollmentRecord> {
     const pathSlug = input.pathSlug.trim().toLowerCase();
-    if (!pathSlug || pathSlug.length > 64) {
-      throw new AcademyError('Invalid path slug', 'academy.cert_invalid');
+    // Blueprint paths only — enroll is a bookmark, not a grant gate, but any
+    // free-text pathSlug would invent a fourth curriculum axis on the wire.
+    const BLUEPRINT_PATHS = new Set(['foundations', 'markets', 'builder', 'sovereign']);
+    if (!pathSlug || pathSlug.length > 64 || !BLUEPRINT_PATHS.has(pathSlug)) {
+      throw new AcademyError('pathSlug must be one of foundations | markets | builder | sovereign', 'academy.cert_invalid');
     }
     const rows = await this.sql<Array<{ user_id: string; path_slug: string; enrolled_at: Date }>>`
       INSERT INTO academy.cert_enrollments (user_id, path_slug, enrolled_at)

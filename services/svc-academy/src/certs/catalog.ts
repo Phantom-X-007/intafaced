@@ -2,8 +2,9 @@
  * Certification definitions Stage-1 — code-seeded catalog (no DB).
  *
  * Spec: docs/ops/trk/academy.certs.md Stage 1.
- * Required items are curriculum slugs from the platform-native spine.
- * XP / perks / ledger are Stage-2 residual.
+ * Required items are curriculum slugs from the platform-native spine
+ * (enforced by catalog-spine.test.ts). XP policy is Stage-2 shipped for
+ * priced certs only; perks stay identity rank SoT; no ledger here.
  */
 
 import type { CertDefinition } from './progress.js';
