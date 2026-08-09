@@ -56,19 +56,7 @@
  * @type {{file: string, dependency: string, owner: string, why: string}[]}
  */
 export const PRIVATE_PROBE = [
-  {
-    file: 'services/svc-pay/src/payment-service.test.ts',
-    dependency: 'postgres',
-    owner: 'Nitro agents (Class M) — blocked only by open PR #346, which edits this file',
-    why:
-      'a money suite — merchant payments against the ledger. Its private `reachable()` is the same eight lines the ' +
-      'four fixed suites carried. The one-line fix is `const available = await postgresAvailable(URL)`, identical to ' +
-      'services/svc-p2p/src/p2p-service.test.ts in that change. It was NOT left for a lock — the svc-pay lock was a ' +
-      'phantom (see the correction at the top of this file). What holds it now is the dual-edit rule, which is ' +
-      'stricter and real: PR #346 (shehzad002) modifies services/svc-pay/src/payment-service.test.ts on an open ' +
-      'branch, and two branches editing one test file is how a merge silently loses a suite. LIFTS WHEN: #346 merges ' +
-      'or closes. Then apply the one-line fix and delete this entry — the scan will fail until you do.',
-  },
+  // payment-service.test.ts lifted 2026-08-09 — #346 merged; uses postgresAvailable.
   {
     file: 'services/svc-pay/src/rails/evm-chain.live.test.ts',
     dependency: 'evm-chain',
