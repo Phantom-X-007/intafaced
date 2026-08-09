@@ -642,7 +642,7 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
+    status: 'ready',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
@@ -662,7 +662,7 @@ export const FEATURES = [
   f('p2p.payment-instruments', 'Payment instruments — where the buyer actually pays', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
+    status: 'ready',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/instrument-service.ts'],
     note: "GHOST OWNER CLEARED 2026-08-09 L03 W4 (mechanism on main #428). Residual is operator content + Class X KMS, not craft. A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
@@ -670,7 +670,7 @@ export const FEATURES = [
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
+    status: 'ready',
     dependsOn: ['p2p.reputation'],
     requires: ['services/svc-p2p'],
     note: 'GHOST OWNER CLEARED 2026-08-09 L03 W4. Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings mechanism on main. Standing read per offer create; only approved gets merchant ceiling; env P2P_OFFER_MAX_STANDARD/MERCHANT unset = unlimited = pre-Stage-2 behaviour (numbers are owner product law, not invented). reputation.get exposes merchant:boolean|null for counterparty badge. Stage 3 merchant API keys/scopes/rate limits EXPLICITLY CUT 2026-08-09 L03 W4 — identity.apikeys already owns named keys; dual-writing a second key plane inside svc-p2p is refused. STILL wip for tracker done: owner must either set ceiling env (or confirm unlimited is the product choice) and accept the Stage 3 cut. Eligibility thresholds remain conservative defaults (spec §5).',
