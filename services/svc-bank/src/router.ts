@@ -194,8 +194,12 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.fiat_ramp_socket':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
 
-      // Kill switch. Same 503 class as the HTTP job endpoint's bank.transfers_disabled.
+      // Kill switches. Same 503 class as the matching HTTP job endpoints —
+      // operator flipped the flag off; tRPC must not be a back door past it.
       case 'bank.transfers_disabled':
+      case 'bank.interest_accrual_disabled':
+      case 'bank.loan_accrual_disabled':
+      case 'bank.loan_risk_sweep_disabled':
         return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: err.message, cause: err });
 
       default: {
@@ -373,14 +377,28 @@ const spaceOutput = z.object({
 /**
  * Optional kill switches for operator jobs. Production passes live env values
  * from `index.ts`; tests inject without loading `env` (which needs full service env).
+ *
+ * Every flag that gates an HTTP `/internal/jobs/*` endpoint MUST also gate the
+ * matching `ops.*` mutation. A tRPC-only back door past an emergency stop is
+ * the residual #1271 closed for transfers and that this options bag closes for
+ * earn accrual, loan accrual, and the risk sweep.
  */
 export type BankRouterOptions = {
   /** When false, `ops.runDueTransfers` refuses with `bank.transfers_disabled`. Default true. */
   scheduledTransfersEnabled?: boolean;
+  /** When false, `ops.accrueInterest` refuses with `bank.interest_accrual_disabled`. Default true. */
+  interestAccrualEnabled?: boolean;
+  /** When false, `ops.accrueLoanInterest` refuses with `bank.loan_accrual_disabled`. Default true. */
+  loanAccrualEnabled?: boolean;
+  /** When false, `ops.runRiskSweep` refuses with `bank.loan_risk_sweep_disabled`. Default true. */
+  loanRiskSweepEnabled?: boolean;
 };
 
 export function createBankRouter(bank: BankServices, options: BankRouterOptions = {}) {
   const scheduledTransfersEnabled = options.scheduledTransfersEnabled ?? true;
+  const interestAccrualEnabled = options.interestAccrualEnabled ?? true;
+  const loanAccrualEnabled = options.loanAccrualEnabled ?? true;
+  const loanRiskSweepEnabled = options.loanRiskSweepEnabled ?? true;
 
   const spaces = router({
     list: scopedProcedure('bank:read', { module: 'bank' })
@@ -1293,6 +1311,10 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       )
       .mutation(async ({ input }) =>
         guard(async () => {
+          // Parity with POST /internal/jobs/accrue-interest.
+          if (!interestAccrualEnabled) {
+            throw new BankError('interest accrual is disabled', 'bank.interest_accrual_disabled');
+          }
           const at = input.at ? new Date(input.at) : new Date();
           // Single-pool path stays loud: operator targeted that pool, so throw.
           if (input.poolId) {
@@ -1360,6 +1382,10 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       )
       .mutation(async ({ input }) =>
         guard(async () => {
+          // Parity with POST /internal/jobs/accrue-loan-interest.
+          if (!loanAccrualEnabled) {
+            throw new BankError('loan interest accrual is disabled', 'bank.loan_accrual_disabled');
+          }
           const at = input.at ? new Date(input.at) : new Date();
           if (input.loanId) {
             const one = await bank.loans.accrue({ loanId: input.loanId, until: at });
@@ -1390,7 +1416,16 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           refused: z.array(z.object({ loanId: z.string(), reason: z.string() })),
         }),
       )
-      .mutation(async ({ input }) => guard(async () => bank.loans.runRiskSweep(input.limit === undefined ? {} : { limit: input.limit }))),
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          // Parity with POST /internal/jobs/run-risk-sweep. Defaults off in
+          // production; a treasury caller must not liquidate past that stop.
+          if (!loanRiskSweepEnabled) {
+            throw new BankError('loan risk sweep is disabled', 'bank.loan_risk_sweep_disabled');
+          }
+          return bank.loans.runRiskSweep(input.limit === undefined ? {} : { limit: input.limit });
+        }),
+      ),
 
     /** Re-drive loans stuck between the collateral lock and the draw. */
     resumePendingLoans: scopedProcedure('admin:treasury')

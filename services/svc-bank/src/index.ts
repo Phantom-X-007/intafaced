@@ -142,6 +142,9 @@ const rampProgramme = bank.ramps.programmeInfo();
 
 export const appRouter = createBankRouter(bank, {
   scheduledTransfersEnabled: env.SCHEDULED_TRANSFERS_ENABLED,
+  interestAccrualEnabled: env.INTEREST_ACCRUAL_ENABLED,
+  loanAccrualEnabled: env.LOAN_ACCRUAL_ENABLED,
+  loanRiskSweepEnabled: env.LOAN_RISK_SWEEP_ENABLED,
 });
 export type AppRouter = typeof appRouter;
 
