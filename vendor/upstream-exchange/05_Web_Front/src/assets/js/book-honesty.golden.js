@@ -81,23 +81,29 @@ var levels = h.normalizePlateLevels(
     { price: -1, amount: 2 },
     { price: 98, amount: 3 },
     null,
+    { price: '100', amount: '1' },
+    { price: '98', amount: '3' },
     { price: '97.5', amount: '2.5' }
   ],
   14
 );
-assert(levels.length === 3, 'drops zero/invalid levels (got ' + levels.length + ')');
+assert(levels.length === 3, 'drops JSON numbers + zero/invalid (got ' + levels.length + ')');
 assert(levels[0].price === '100' && levels[0].totalAmount === '1', 'first real level + cumulative');
 assert(levels[1].price === '98' && levels[1].totalAmount === '4', 'second cumulative');
-assert(levels[2].price === '97.5' && levels[2].amount === '2.5', 'string numbers ok');
+assert(levels[2].price === '97.5' && levels[2].amount === '2.5', 'string decimals ok');
 assert(levels[2].totalAmount === '6.5', 'third cumulative');
+assert(
+  h.normalizePlateLevels([{ price: 42.5, amount: 1 }, { price: '1', amount: 2 }], 14).length === 0,
+  'JSON number price/amount never become ladder rows'
+);
 assert(h.normalizePlateLevels([], 14).length === 0, 'empty in → empty out (no pad)');
 assert(h.normalizePlateLevels(null, 14).length === 0, 'null in → empty out');
 assert(
   h.normalizePlateLevels(
     [
-      { price: 1, amount: 1 },
-      { price: 2, amount: 1 },
-      { price: 3, amount: 1 }
+      { price: '1', amount: '1' },
+      { price: '2', amount: '1' },
+      { price: '3', amount: '1' }
     ],
     2
   ).length === 2,

@@ -73,6 +73,12 @@ function normalizePlateLevels(items, maxDepth) {
   var total = '0';
   for (var i = 0; i < list.length && rows.length < limit; i++) {
     var item = list[i] || {};
+    /* Wire/plate levels must be decimal STRINGS. JSON numbers (and any other
+       type) are dropped — never String(n) into a money column. Form inputs that
+       are numbers must be stringified by the caller before they reach here. */
+    if (typeof item.price !== 'string' || typeof item.amount !== 'string') {
+      continue;
+    }
     if (!ixMoney.isPositive(item.price) || !ixMoney.isPositive(item.amount)) {
       continue;
     }

@@ -112,6 +112,43 @@ assert(liveFlags[liveFlags.length - 1] === false, 'close clears live');
 handle.stop();
 assert(liveFlags[liveFlags.length - 1] === false, 'stop clears live');
 
+/* JSON number levels must not become book prints (same law as REST accept). */
+var cold = feed.bookFromSnapshot({
+  type: 'snapshot',
+  marketId: 'm1',
+  sequence: 1,
+  bids: [
+    [100, 2],
+    ['99', '1']
+  ],
+  asks: [['101', 3]]
+});
+assert(Object.keys(cold.bids).length === 1 && cold.bids['99'] === '1', 'number bid dropped');
+
+assert(Object.keys(cold.asks).length === 0, 'number ask dropped');
+
+/* Delta applySide must refuse JSON numbers too (not only snapshots). */
+var base = feed.bookFromSnapshot({
+  type: 'snapshot',
+  marketId: 'm-d',
+  sequence: 1,
+  bids: [['10', '1']],
+  asks: [['20', '1']]
+});
+var d = feed.applyDelta(base, {
+  type: 'delta',
+  marketId: 'm-d',
+  fromSequence: 1,
+  sequence: 2,
+  bids: [[11, 5], ['12', '3']],
+  asks: []
+});
+assert(d.ok === true, 'delta with mixed types still applies string rows');
+assert(d.book.bids['12'] === '3', 'string delta bid kept');
+assert(d.book.bids['11'] === undefined, 'number delta bid refused');
+assert(d.book.bids['10'] === '1', 'prior string level preserved');
+
+
 if (failed) {
   console.error(failed + ' failed');
   process.exit(1);
