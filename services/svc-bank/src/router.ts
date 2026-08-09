@@ -1246,6 +1246,14 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           alreadyFired: z.number().int(),
           /** Schedules looked at only because a claim was left behind. An operator wants zero. */
           strandedSwept: z.number().int(),
+          /** Schedules that threw mid-drive; occurrence not consumed; next pass retries. */
+          failures: z.array(
+            z.object({
+              scheduleId: z.string(),
+              reason: z.string(),
+              code: z.string().optional(),
+            }),
+          ),
         }),
       )
       .mutation(async ({ input }) =>
@@ -1263,27 +1271,56 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     accrueInterest: scopedProcedure('admin:treasury')
       .input(z.object({ poolId: z.string().uuid().optional(), at: z.string().datetime({ offset: true }).optional() }))
       .output(
-        z.array(
-          z.object({
-            poolId: z.string(),
-            date: z.string(),
-            paid: amountString,
-            recipients: z.number().int(),
-            alreadyAccrued: z.boolean(),
-          }),
-        ),
+        z.object({
+          results: z.array(
+            z.object({
+              poolId: z.string(),
+              date: z.string(),
+              paid: amountString,
+              recipients: z.number().int(),
+              alreadyAccrued: z.boolean(),
+            }),
+          ),
+          /** Pools that threw (e.g. underfunded); day not consumed for those pools. */
+          failures: z.array(
+            z.object({
+              poolId: z.string(),
+              reason: z.string(),
+              code: z.string().optional(),
+            }),
+          ),
+        }),
       )
       .mutation(async ({ input }) =>
         guard(async () => {
           const at = input.at ? new Date(input.at) : new Date();
-          const results = input.poolId ? [await bank.earn.accrue({ poolId: input.poolId, at })] : await bank.earn.accrueAll(at);
-          return results.map((r) => ({
-            poolId: r.poolId,
-            date: r.date,
-            paid: formatAmount(r.paid),
-            recipients: r.recipients,
-            alreadyAccrued: r.alreadyAccrued,
-          }));
+          // Single-pool path stays loud: operator targeted that pool, so throw.
+          if (input.poolId) {
+            const r = await bank.earn.accrue({ poolId: input.poolId, at });
+            return {
+              results: [
+                {
+                  poolId: r.poolId,
+                  date: r.date,
+                  paid: formatAmount(r.paid),
+                  recipients: r.recipients,
+                  alreadyAccrued: r.alreadyAccrued,
+                },
+              ],
+              failures: [],
+            };
+          }
+          const report = await bank.earn.accrueAll(at);
+          return {
+            results: report.results.map((r) => ({
+              poolId: r.poolId,
+              date: r.date,
+              paid: formatAmount(r.paid),
+              recipients: r.recipients,
+              alreadyAccrued: r.alreadyAccrued,
+            })),
+            failures: report.failures,
+          };
         }),
       ),
 
@@ -1315,16 +1352,27 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
     accrueLoanInterest: scopedProcedure('admin:treasury')
       .input(z.object({ loanId: z.string().uuid().optional(), at: z.string().datetime({ offset: true }).optional() }))
-      .output(z.array(z.object({ loanId: z.string(), charged: amountString, days: z.number().int() })))
+      .output(
+        z.object({
+          results: z.array(z.object({ loanId: z.string(), charged: amountString, days: z.number().int() })),
+          failures: z.array(z.object({ loanId: z.string(), reason: z.string(), code: z.string().optional() })),
+        }),
+      )
       .mutation(async ({ input }) =>
         guard(async () => {
           const at = input.at ? new Date(input.at) : new Date();
           if (input.loanId) {
             const one = await bank.loans.accrue({ loanId: input.loanId, until: at });
-            return [{ loanId: one.loanId, charged: formatAmount(one.charged), days: one.days.length }];
+            return {
+              results: [{ loanId: one.loanId, charged: formatAmount(one.charged), days: one.days.length }],
+              failures: [],
+            };
           }
           const all = await bank.loans.accrueAll(at);
-          return all.map((r) => ({ loanId: r.loanId, charged: formatAmount(r.charged), days: r.days }));
+          return {
+            results: all.results.map((r) => ({ loanId: r.loanId, charged: formatAmount(r.charged), days: r.days })),
+            failures: all.failures,
+          };
         }),
       ),
 

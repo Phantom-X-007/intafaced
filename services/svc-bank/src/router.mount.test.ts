@@ -70,6 +70,7 @@ function stubBank(overrides: Partial<Record<string, unknown>> = {}) {
         rejected: 0,
         alreadyFired: 0,
         strandedSwept: 0,
+        failures: [],
       }),
       ...(overrides.transfers as object | undefined),
     },
@@ -142,6 +143,7 @@ describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
             rejected: 0,
             alreadyFired: 0,
             strandedSwept: 0,
+            failures: [],
           };
         },
       },
@@ -168,6 +170,7 @@ describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
             rejected: 0,
             alreadyFired: 0,
             strandedSwept: 0,
+            failures: [],
           };
         },
       },

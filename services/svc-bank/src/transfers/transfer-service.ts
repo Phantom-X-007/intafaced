@@ -130,6 +130,17 @@ export interface RunReport {
    * ledger never refused anything).
    */
   strandedSwept: number;
+  /**
+   * Schedules that threw mid-drive (network fault, frozen ledger module, …).
+   *
+   * Those occurrences are NOT consumed — `settle` rethrows so the claim rolls
+   * back and the next pass retries. Recording them here is what lets one bad
+   * schedule fail loudly without becoming a platform-wide stop: before isolation,
+   * the throw escaped `runDueTransfers` and every later schedule on the pass
+   * never ran (and the thrower stayed first forever because `next_run_at` never
+   * advanced).
+   */
+  failures: Array<{ scheduleId: string; reason: string; code?: string }>;
 }
 
 export class TransferService {
@@ -527,6 +538,7 @@ export class TransferService {
       rejected: 0,
       alreadyFired: 0,
       strandedSwept: stranded.length,
+      failures: [],
     };
 
     const count = (outcomes: FiringOutcome[]) => {
@@ -537,11 +549,29 @@ export class TransferService {
       }
     };
 
+    const recordFailure = (scheduleId: string, err: unknown) => {
+      // One schedule's fault must not halt every other standing order on the
+      // platform. Same posture as `runRiskSweep`: report and continue. The
+      // occurrence itself is still un-consumed (rethrow inside settle rolls the
+      // claim back), so the next pass retries this one alone.
+      const reason = err instanceof Error ? err.message : String(err);
+      const code = err instanceof BankError || err instanceof LedgerError ? err.code : undefined;
+      report.failures.push({ scheduleId, reason, ...(code ? { code } : {}) });
+    };
+
     for (const row of due) {
-      count(await this.driveSchedule(toSchedule(row), now, options.maxCatchUp ?? MAX_CATCH_UP_PER_PASS));
+      try {
+        count(await this.driveSchedule(toSchedule(row), now, options.maxCatchUp ?? MAX_CATCH_UP_PER_PASS));
+      } catch (err) {
+        recordFailure(row.id, err);
+      }
     }
     for (const row of stranded) {
-      count(await this.sweepStrandedClaims(toSchedule(row), now));
+      try {
+        count(await this.sweepStrandedClaims(toSchedule(row), now));
+      } catch (err) {
+        recordFailure(row.id, err);
+      }
     }
 
     return report;

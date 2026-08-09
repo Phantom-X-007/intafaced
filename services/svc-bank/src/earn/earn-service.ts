@@ -120,6 +120,15 @@ export interface AccrualResult {
   alreadyAccrued: boolean;
 }
 
+/**
+ * Job report for `accrueAll`: successes plus per-pool failures that did not
+ * abort the rest of the pass.
+ */
+export interface AccrueAllReport {
+  results: AccrualResult[];
+  failures: Array<{ poolId: string; reason: string; code?: string }>;
+}
+
 export class EarnService {
   private readonly nativeAssetId: string;
 
@@ -653,14 +662,28 @@ export class EarnService {
     );
   }
 
-  /** Every open pool accrues for the day. The job's entry point. */
-  async accrueAll(at: Date = new Date(), daysPerYear?: number): Promise<AccrualResult[]> {
+  /**
+   * Every open pool accrues for the day. The job's entry point.
+   *
+   * Isolation is deliberate: an underfunded pool is a loud operator problem for
+   * THAT pool (`bank.pool_underfunded` still throws from `accrue` when called
+   * alone), but it must not withhold every other pool's advertised yield for the
+   * day. Failures are returned, not swallowed — ops see which pool blocked.
+   */
+  async accrueAll(at: Date = new Date(), daysPerYear?: number): Promise<AccrueAllReport> {
     const pools = await this.listPools();
     const results: AccrualResult[] = [];
+    const failures: AccrueAllReport['failures'] = [];
     for (const pool of pools) {
-      results.push(await this.accrue({ poolId: pool.id, at, ...(daysPerYear === undefined ? {} : { daysPerYear }) }));
+      try {
+        results.push(await this.accrue({ poolId: pool.id, at, ...(daysPerYear === undefined ? {} : { daysPerYear }) }));
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        const code = err instanceof BankError ? err.code : undefined;
+        failures.push({ poolId: pool.id, reason, ...(code ? { code } : {}) });
+      }
     }
-    return results;
+    return { results, failures };
   }
 
   /**
