@@ -450,8 +450,12 @@ export function createP2pRouter(
              * is the seller's instrument set — a clean per-method probe of the
              * maker. The service refuses it too; this is the message a client
              * can act on rather than a 400 from deeper down.
+             *
+             * Each entry is a method id (string) or `{ id }` — not `{}` / null /
+             * numbers. `methodAllowed` only matches those shapes; junk would
+             * board an offer that can never be taken.
              */
-            methods: z.array(z.unknown()).min(1),
+            methods: z.array(z.union([z.string().min(1).max(64), z.object({ id: z.string().min(1).max(64) })])).min(1),
             terms: z.string().max(4000).optional(),
           }),
         )

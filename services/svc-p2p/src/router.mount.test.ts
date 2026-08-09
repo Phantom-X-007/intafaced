@@ -513,3 +513,33 @@ describe('svc-p2p mount — late settlements ops', () => {
     expect(listed).toBe(0);
   });
 });
+
+describe('svc-p2p mount — offer methods shape', () => {
+  it('refuses an offer whose methods are not matchable ids', async () => {
+    // methodAllowed only matches strings or {id}. Boarding junk would create
+    // an active offer that can never be taken — a free stall of inventory.
+    let created = 0;
+    const p2p = stubP2p({
+      createOffer: async () => {
+        created++;
+        throw new Error('create must not run');
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    await expect(
+      createP2pRouter(p2p, stubInstruments())
+        .createCaller(ctx)
+        .offers.create({
+          side: 'sell',
+          asset: 'USDT',
+          fiatCurrency: 'EUR',
+          priceType: 'fixed',
+          price: '1',
+          minAmount: '10',
+          maxAmount: '100',
+          methods: [{}],
+        }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(created).toBe(0);
+  });
+});
