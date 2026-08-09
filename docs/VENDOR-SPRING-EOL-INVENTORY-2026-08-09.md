@@ -64,9 +64,9 @@ This inventory is the **risk map** so a human (or a later agent with compile pro
 
 ## Next agent pick-up (wave 6+)
 
-1. **#1413** (wallet_rpc `rpc-common` compile probe job) — merge when doctrine green; advisory fail is signal not block.
-2. **#1142** rebased on tip (fastjson 1.2.84) — still **HOLD** until wallet_rpc probe log is read; no blind merge / no jar invent.
-3. **#1146** only after #1142 lesson + framework core probe signal + money-path pom skim.
+1. **#1142** rebased on tip (fastjson 1.2.84) — still **HOLD**. M7 bars agent-added wallet_rpc CI compile; need Nitro §A4 path or offline proof.
+2. **#1146** only after #1142 lesson + framework core probe signal + money-path pom skim.
+3. Do **not** re-open wallet_rpc CI Maven without Class X go (#1413 closed).
 4. Boot 2/3 upgrade remains multi-month — not residual craft.
 5. NOTICE refresh only from artefacts — **no invent generator**.
 
