@@ -142,6 +142,7 @@ export function allRefusalCodes(): readonly RefusalCode[] {
     'channel.disabled',
     'channel.muted',
     'channel.attempts_exhausted',
+    'channel.transport_rejected',
     'channel.register_rate_limited',
     'channel.verify_rate_limited',
   ];
@@ -182,6 +183,12 @@ export type RefusalCode =
   | 'channel.muted'
   /** Attempted the configured maximum times and never succeeded. Terminal by policy. */
   | 'channel.attempts_exhausted'
+  /**
+   * Gateway returned a permanent failure (non-retryable 4xx other than auth).
+   * Distinct from attempts_exhausted (budget spent) and refused (never tried).
+   * Detail still carries the gateway wording.
+   */
+  | 'channel.transport_rejected'
   /**
    * Too many `registerTarget` calls for this user+channel in the window.
    * Stops unlimited SMS/email verification traffic (billing + abuse).
