@@ -48,6 +48,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Compile core module (skip tests)
+        # maven:*-temurin image default shell is dash (/bin/sh). `set -o pipefail`
+        # is a bashism and aborts the step with exit 2 before mvn runs — which made
+        # Dependabot #1142 look "compile-red" with zero Java signal (2026-08-09 log:
+        # `set: Illegal option -o pipefail`). Use bash so the probe actually compiles.
+        shell: bash
         run: |
           set -euo pipefail
           echo "Vendor compile probe — core only (path-filtered, continue-on-error)"
