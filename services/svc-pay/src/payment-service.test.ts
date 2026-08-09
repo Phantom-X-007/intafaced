@@ -1085,7 +1085,7 @@ if (!available) {
       const paid = await pay.payoutSettlement({
         settlementId: settlement.id,
         railId: 'crypto-native',
-        destination: { kind: 'crypto', ref: '0xmerchantwallet' },
+        destination: { kind: 'crypto', ref: '0x000000000000000000000000000000000000dEaD' },
       });
 
       expect(paid.status).toBe('paid_out');
@@ -1108,7 +1108,7 @@ if (!available) {
         pay.payoutSettlement({
           settlementId: settlement.id,
           railId: 'card-sandbox',
-          destination: { kind: 'bank', ref: 'GB00CLOSED' },
+          destination: { kind: 'bank', ref: 'DE89370400440532013000' },
         }),
       ).rejects.toMatchObject({ code: 'pay.rail_failed' });
 
@@ -1123,7 +1123,7 @@ if (!available) {
       const retried = await pay.payoutSettlement({
         settlementId: settlement.id,
         railId: 'card-sandbox',
-        destination: { kind: 'bank', ref: 'GB00WORKING' },
+        destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
       });
       expect(retried.status).toBe('paid_out');
       expect(await availableOf(MERCHANT_USER)).toBe('0');
@@ -1138,7 +1138,7 @@ if (!available) {
       const request = {
         settlementId: settlement.id,
         railId: 'crypto-native',
-        destination: { kind: 'crypto', ref: '0xmerchantwallet' },
+        destination: { kind: 'crypto', ref: '0x000000000000000000000000000000000000dEaD' },
       };
       await pay.payoutSettlement(request);
       await pay.payoutSettlement(request);
@@ -1156,7 +1156,7 @@ if (!available) {
 
       await sql`UPDATE pay.settlements SET status = 'pending' WHERE id = ${settlement.id}`;
       await expect(
-        pay.payoutSettlement({ settlementId: settlement.id, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'X' } }),
+        pay.payoutSettlement({ settlementId: settlement.id, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'GB82WEST12345698765432' } }),
       ).rejects.toMatchObject({ code: 'pay.invalid_transition' });
     });
 
@@ -1183,7 +1183,7 @@ if (!available) {
         pay.payoutSettlement({
           settlementId: settlement.id,
           railId: 'crypto-native',
-          destination: { kind: 'crypto', ref: '0xshouldnotreceive' },
+          destination: { kind: 'crypto', ref: '0x0000000000000000000000000000000000000001' },
         }),
       ).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
 
@@ -1203,7 +1203,7 @@ if (!available) {
       const paid = await pay.payoutSettlement({
         settlementId: settlement.id,
         railId: 'crypto-native',
-        destination: { kind: 'crypto', ref: '0xdone' },
+        destination: { kind: 'crypto', ref: '0x0000000000000000000000000000000000000002' },
       });
       expect(paid.status).toBe('paid_out');
       expect(chain.totalSent('USDT')).toBe('8');
@@ -1212,7 +1212,7 @@ if (!available) {
       const again = await pay.payoutSettlement({
         settlementId: settlement.id,
         railId: 'crypto-native',
-        destination: { kind: 'crypto', ref: '0xdone' },
+        destination: { kind: 'crypto', ref: '0x0000000000000000000000000000000000000002' },
       });
       expect(again.status).toBe('paid_out');
       expect(chain.outboundTransfers()).toHaveLength(1);
@@ -1282,7 +1282,7 @@ if (!available) {
       await pay.payoutSettlement({
         settlementId: settlementB.id,
         railId: 'crypto-native',
-        destination: { kind: 'crypto', ref: '0xb' },
+        destination: { kind: 'crypto', ref: '0x0000000000000000000000000000000000000003' },
       });
 
       // THE TWO CHECKS THAT MATTER. Every asset nets to zero across the whole

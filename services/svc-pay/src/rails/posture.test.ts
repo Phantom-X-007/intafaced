@@ -62,7 +62,7 @@ const payout = {
   amount: amt('100'),
   assetId: 'USDT',
   window: 'w',
-  destination: { kind: 'crypto', ref: '0xdest' },
+  destination: { kind: 'crypto', ref: '0x0000000000000000000000000000000000000004' },
 };
 
 // ══ THE DECLARATION ═════════════════════════════════════════════════════════

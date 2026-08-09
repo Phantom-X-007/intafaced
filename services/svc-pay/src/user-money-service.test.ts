@@ -147,7 +147,7 @@ if (!available) {
       assetId: 'USDT',
       amount: amt('40'),
       rail: 'card-sandbox',
-      destination: { kind: 'bank', ref: 'DE00 1234' },
+      destination: { kind: 'bank', ref: 'DE89370400440532013000' },
       clientRef: 'w-1',
       ...overrides,
     });
@@ -380,7 +380,7 @@ if (!available) {
         INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, status, attempts)
         VALUES (
           ${USER}, 'USDT', ${'40'}::numeric, 'card-sandbox',
-          ${sql.json({ kind: 'bank', ref: 'DE00 1234' })}, ${clientRef}, 'held', 0
+          ${sql.json({ kind: 'bank', ref: 'DE89370400440532013000' })}, ${clientRef}, 'held', 0
         )
         RETURNING id
       `;
@@ -444,7 +444,7 @@ if (!available) {
       await withdraw({ clientRef: 'w-42', amount: amt('40') });
 
       await expect(withdraw({ clientRef: 'w-42', amount: amt('50') })).rejects.toMatchObject({ code: 'pay.withdrawal_conflict' });
-      await expect(withdraw({ clientRef: 'w-42', destination: { kind: 'bank', ref: 'ATTACKER' } })).rejects.toMatchObject({
+      await expect(withdraw({ clientRef: 'w-42', destination: { kind: 'bank', ref: 'NL91ABNA0417164300' } })).rejects.toMatchObject({
         code: 'pay.withdrawal_conflict',
       });
       expect(await availableOf()).toBe('60');
@@ -461,7 +461,7 @@ if (!available) {
       const { recipes } = await import('@intafaced/ledger-client');
       const rows = await sql<Array<{ id: string }>>`
         INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, status)
-        VALUES (${USER}, 'USDT', 40, 'card-sandbox', ${sql.json({ kind: 'bank', ref: 'DE00 1234' } as never)}, 'w-1', 'held')
+        VALUES (${USER}, 'USDT', 40, 'card-sandbox', ${sql.json({ kind: 'bank', ref: 'DE89370400440532013000' } as never)}, 'w-1', 'held')
         RETURNING id
       `;
       const id = rows[0]!.id;

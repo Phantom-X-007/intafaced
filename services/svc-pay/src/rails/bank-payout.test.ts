@@ -23,7 +23,7 @@ describe('BankPayoutAbsentAdapter', () => {
       amount: parseAmount('10'),
       assetId: 'USD',
       window: 'w1',
-      destination: { kind: 'bank', ref: 'GB00X' },
+      destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
     });
     expect(payout.ok).toBe(false);
     expect(payout.failureCode).toBe('bank.not_configured');

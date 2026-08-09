@@ -146,6 +146,7 @@ export type PayErrorCode =
    * Refused BEFORE withdrawHold so no ledger row is left stranded.
    */
   | 'pay.destination_kind_mismatch'
+  | 'pay.invalid_destination_ref'
   | 'pay.subscription_not_found'
   | 'pay.mandate_not_found'
   | 'pay.subscription_reconsent_required'
