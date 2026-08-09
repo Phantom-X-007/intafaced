@@ -3,7 +3,8 @@ import swagger from '@fastify/swagger';
 import { requireScope, type Principal, type Scope } from '@intafaced/auth';
 import { createEdgeContext, type EdgeRequest } from '@intafaced/contracts';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import { assertMerchantOwnership } from './merchant-ownership.js';
+import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
+import type { PermissionArea } from './submerchants.js';
 import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merchant-webhooks.js';
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
@@ -32,7 +33,7 @@ import { resolveMerchantRail } from './sandbox-key-routing.js';
  *
  * The ADR's rule: "any behaviour that differs between REST and tRPC is a defect
  * in the REST layer". So these routes call the same `PayService` methods the
- * tRPC router calls, gate on the same `assertMerchantOwnership`, and render
+ * tRPC router calls, gate on the same `assertMerchantAreaAccess`, and render
  * amounts through the same `formatAmount`. Nothing here recomputes anything.
  *
  * ── AUTH IS THE MOUNT BOUNDARY, UNCHANGED ────────────────────────────────
@@ -105,6 +106,8 @@ export interface PublicRestDeps {
   idempotency?: RestIdempotencyStore;
   /** Outbound merchant webhooks (step 3). Optional so read/mutate tests stay light. */
   webhooks?: MerchantWebhookService;
+  /** PayFac area fence — same as tRPC `createPayRouter` fourth arg. */
+  trees?: MerchantAreaFence | null;
 }
 
 /**
@@ -241,6 +244,7 @@ function statusFor(code: string): number {
     case 'pay.webhook_endpoint_not_found':
       return 404;
     case 'pay.merchant_forbidden':
+    case 'pay.submerchant_permission_denied':
     case 'pay.merchant_inactive':
     case 'pay.kyb_operator_required':
       return 403;
@@ -279,6 +283,8 @@ function send(reply: FastifyReply, err: unknown): FastifyReply {
 }
 
 export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRestDeps): Promise<void> {
+  const assertAccess = (userId: string | undefined, merchantId: string, area: PermissionArea) =>
+    assertMerchantAreaAccess(deps.pay, userId, merchantId, area, deps.trees ?? null);
   const edge = createEdgeContext({ secret: deps.edgeSecret, serviceName: deps.serviceName });
   const idempotency = deps.idempotency ?? new MemoryRestIdempotencyStore();
 
@@ -473,7 +479,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       if (!principal) return reply;
       try {
         const payment = await deps.pay.getPayment(req.params.id);
-        await assertMerchantOwnership(deps.pay, principal.userId, payment.merchantId);
+        await assertAccess(principal.userId, payment.merchantId, 'payment');
         return reply.send(toPaymentBody(payment));
       } catch (err) {
         return send(reply, err);
@@ -503,7 +509,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
-        await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+        await assertAccess(principal.userId, req.query.merchantId, 'payment');
         const rows = await deps.pay.listPayments({
           merchantId: req.query.merchantId,
           status: req.query.status,
@@ -536,7 +542,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
-        await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+        await assertAccess(principal.userId, req.query.merchantId, 'merchant.profile');
         const [clearing, available] = await Promise.all([
           deps.pay.clearingBalance(req.query.merchantId, req.query.assetId),
           deps.pay.merchantBalance(req.query.merchantId, req.query.assetId),
@@ -594,7 +600,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
 
       return withIdempotency(req, reply, principal.userId, key, req.body, async () => {
         try {
-          await assertMerchantOwnership(deps.pay, principal.userId, req.body.merchantId);
+          await assertAccess(principal.userId, req.body.merchantId, 'payment');
           const amount = requireDecimalString(req.body.amount, 'amount');
           // ADR §2.5 step 4 — sandbox key → sandbox rail; live key may not.
           const railAdapter = resolveMerchantRail({
@@ -650,7 +656,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       return withIdempotency(req, reply, principal.userId, key, req.body ?? {}, async () => {
         try {
           const existing = await deps.pay.getPayment(req.params.id);
-          await assertMerchantOwnership(deps.pay, principal.userId, existing.merchantId);
+          await assertAccess(principal.userId, existing.merchantId, 'payment');
           const payment = await deps.pay.authorize(req.params.id);
           return reply.send(toPaymentBody(payment));
         } catch (err) {
@@ -690,7 +696,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       return withIdempotency(req, reply, principal.userId, key, req.body ?? {}, async () => {
         try {
           const existing = await deps.pay.getPayment(req.params.id);
-          await assertMerchantOwnership(deps.pay, principal.userId, existing.merchantId);
+          await assertAccess(principal.userId, existing.merchantId, 'payment');
           const opts = req.body?.amount === undefined ? {} : { amount: parseAmount(requireDecimalString(req.body.amount, 'amount')) };
           const payment = await deps.pay.capture(req.params.id, opts);
           return reply.send(toPaymentBody(payment));
@@ -731,7 +737,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       return withIdempotency(req, reply, principal.userId, key, req.body, async () => {
         try {
           const existing = await deps.pay.getPayment(req.params.id);
-          await assertMerchantOwnership(deps.pay, principal.userId, existing.merchantId);
+          await assertAccess(principal.userId, existing.merchantId, 'payment.refund');
           const amount = requireDecimalString(req.body.amount, 'amount');
           const payment = await deps.pay.refund(
             req.params.id,
@@ -812,7 +818,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:write');
         if (!principal) return reply;
         try {
-          await assertMerchantOwnership(deps.pay, principal.userId, req.body.merchantId);
+          await assertAccess(principal.userId, req.body.merchantId, 'webhook');
           const created = await webhooks.registerEndpoint(req.body.merchantId, req.body.url);
           return reply.send({
             id: created.id,
@@ -849,7 +855,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
-          await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
           const rows = await webhooks.listEndpoints(req.query.merchantId);
           return reply.send(
             rows.map((e) => ({
@@ -893,7 +899,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:write');
         if (!principal) return reply;
         try {
-          await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
           await webhooks.disableEndpoint(req.query.merchantId, req.params.id);
           return reply.send({ disabled: true });
         } catch (err) {
@@ -931,7 +937,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
-          await assertMerchantOwnership(deps.pay, principal.userId, req.query.merchantId);
+          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
           const rows = await webhooks.listDeliveries(req.query.merchantId, {
             status: req.query.status,
             limit: req.query.limit,
