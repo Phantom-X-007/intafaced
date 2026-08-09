@@ -96,6 +96,10 @@ describe('subscription merchant surface', () => {
         return mandateRecord();
       },
       getMandate: async () => mandateRecord(),
+      cancelMandate: async () => {
+        calls.push('cancelMandate');
+        return mandateRecord({ status: 'cancelled', cancelledAt: new Date('2026-08-09T00:00:00.000Z') });
+      },
       createSubscription: async () => {
         calls.push('createSubscription');
         return subRecord();
@@ -142,6 +146,21 @@ describe('subscription merchant surface', () => {
     const cancelled = await api.subscription.cancel({ subscriptionId: SUB });
     expect(cancelled.status).toBe('cancelled');
     expect(calls).toEqual(expect.arrayContaining(['createSubscription', 'cancelSubscription']));
+  });
+
+  it('owner can cancel a mandate (cascades; no charge reverse)', async () => {
+    const api = await caller(['pay:write']);
+    const cancelled = await api.mandate.cancel({ mandateId: MANDATE });
+    expect(cancelled.status).toBe('cancelled');
+    expect(calls).toContain('cancelMandate');
+  });
+
+  it('subscription.create accepts card_mandate path (fire refuses separately)', async () => {
+    const api = await caller(['pay:write']);
+    // Router must keep the enum value that fireOccurrence refuses by name.
+    const created = await api.subscription.create({ mandateId: MANDATE, path: 'card_mandate' });
+    expect(created).toBeDefined();
+    expect(calls).toContain('createSubscription');
   });
 
   it('parent without payment area cannot cancel (PayFac fence)', async () => {

@@ -594,14 +594,15 @@ export const FEATURES = [
     phase: '3',
     // Ghost clear 2026-08-09 W4: schema/schedule/lifecycle/invoice-runner on tip (#1214).
     // Residual is watch/dunning/surface — not "schema/runner" re-ship.
-    status: 'ready',
-    owner: null,
+    // W10 L01: mandate.cancel surface + cascade; path allowlist sealed #1527.
+    status: 'wip',
+    owner: 'nitro-agents',
     dependsOn: ['pay.gateway'],
     note:
-      '**Wave 4 2026-08-09 ghost clear:** mandate+schedule+lifecycle+due invoice runner on tip (#1214). ' +
-      'Crypto = invoice-and-watch only (protocol FORBIDDEN_SIGNATURES — never invent pull). ' +
-      'Residual: payment→execution settled watch, bounded dunning, merchant surface, pre-charge notify. ' +
-      'Card mandate rail absent (pay.mandate_rail_absent).',
+      '**W10 L01 2026-08-09 claim:** mandate create/get/cancel + sub create/get/cancel + due runner + ' +
+      'capture→execution settled + path allowlist (card_mandate→card refuse / crypto_invoice only opens money) on tip. ' +
+      'Crypto = invoice-and-watch only (never invent pull). ' +
+      'Residual park: bounded dunning, real pre-charge notify, card mandate rail (pay.mandate_rail_absent).',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',

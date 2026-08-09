@@ -167,6 +167,22 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
             return toMandateOut(mandate);
           }),
         ),
+
+      /**
+       * Immediate mandate cancel (SPEC §4). Cascades to active subscriptions.
+       * Does not reverse settled executions.
+       */
+      cancel: scopedProcedure('pay:write', { module: 'pay' })
+        .input(z.object({ mandateId: z.string().uuid() }))
+        .output(mandateView)
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const existing = await subscriptions.getMandate(input.mandateId);
+            await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
+            const mandate = await subscriptions.cancelMandate(input.mandateId);
+            return toMandateOut(mandate);
+          }),
+        ),
     }),
 
     subscription: router({
