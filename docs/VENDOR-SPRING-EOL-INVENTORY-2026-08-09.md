@@ -62,25 +62,30 @@ This inventory is the **risk map** so a human (or a later agent with compile pro
 
 ---
 
-## Next agent pick-up (wave 5)
+## Next agent pick-up (wave 6+)
 
-1. **Compile probe on tip** — **DONE** (#1217).
-2. Rebase **#1142** onto tip; require Vendor compile probe **signal** (advisory red OK); merge only with doctrine green + no jar invent.
-3. **#1146** only after #1142 lesson + probe + money-path pom skim.
+1. **#1413** (wallet_rpc `rpc-common` compile probe job) — merge when doctrine green; advisory fail is signal not block.
+2. **#1142** rebased on tip (fastjson 1.2.84) — still **HOLD** until wallet_rpc probe log is read; no blind merge / no jar invent.
+3. **#1146** only after #1142 lesson + framework core probe signal + money-path pom skim.
 4. Boot 2/3 upgrade remains multi-month — not residual craft.
+5. NOTICE refresh only from artefacts — **no invent generator**.
 
 **Nitro must decide:** none for inventory itself. Class X only if counsel wants a formal third-party supply attestation beyond this risk map.
 
 ---
 
-## Supply matrix (L16 W5)
+## Supply matrix (L16 W6)
 
-| Surface                    | State on tip (re-derive)                                  | Residual                                              |
-| -------------------------- | --------------------------------------------------------- | ----------------------------------------------------- |
-| Vendor compile probe       | **#1217 MERGED** — framework core only, continue-on-error | Wallet_rpc still unbuilt by design (M7 barrier)       |
-| Spring Cloud train jumps   | **#1226** ignore + **#1143/#1147 closed**                 | Hold **#1142/#1146**                                  |
-| Dual-book door             | **#1218** interceptor + 4 apps                            | Grade C body kills in flight (admin/ucenter)          |
-| Grade D mints              | Empty allowlist band (deleted)                            | Keep empty                                            |
-| NOTICE                     | Compiled 2026-07-29                                       | Refresh only from artefacts — **no invent generator** |
-| L11 desk `05_Web_Front/**` | Separate lane                                             | L16 one-writer: do not dual-write open L11 PRs        |
-| Licence / counsel          | Class X                                                   | Nitro only                                            |
+| Surface                    | State on tip (re-derive)                                                     | Residual                                              |
+| -------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Vendor compile probe       | **#1217** framework core; **#1413** adds wallet_rpc `rpc-common` (in flight) | Full multi-coin reactor not claimed (`xrp` missing)   |
+| Spring Cloud train jumps   | **#1226** ignore + **#1143/#1147 closed**                                    | Hold **#1142/#1146**                                  |
+| Dependabot wallet_rpc      | **#1142** rebased W6 — fastjson **1.2.84**, Boot **1.5.22**                  | Compile-proof before merge                            |
+| Dependabot framework ×57   | **#1146** HOLD                                                               | Serial after #1142                                    |
+| Dual-book door             | **#1218** interceptor + 4 apps                                               | Grade B allowlist (service throws) remains work queue |
+| Grade C admin/ucenter      | **#1324 MERGED** + **#1328 MERGED** — zero Grade C rows                      | Grade B only                                          |
+| Money-scan ratchet         | **43/19** after #1328 (header honest)                                        | No growth; lower only on body kills                   |
+| Grade D mints              | Empty allowlist band                                                         | Keep empty                                            |
+| NOTICE                     | Retrieved 2026-07-28 / compiled 2026-07-29                                   | No invent generator                                   |
+| L11 desk `05_Web_Front/**` | Separate lane (#1320–#1383 open)                                             | L16 one-writer: do not dual-write                     |
+| Licence / counsel          | Class X                                                                      | Nitro only                                            |
