@@ -402,15 +402,6 @@ const VENDOR_JAVA_ALLOWLIST = [
 
   {
     module: 'admin',
-    file: 'DividendController.java',
-    rules: { 'jpa-entity-balance-mutation': 1 },
-    reason:
-      'Grade C. Pro-rata dividend across every holder, and the one Grade C site with an EXPLICIT ' +
-      'memberWalletService.save() — a loop that credits every wallet of a coin in one request. Door fragment ' +
-      '/system/dividend. Queue: rewardPay, and note proRata dust belongs in the ledger, not in decimal(18,8).',
-  },
-  {
-    module: 'admin',
     file: 'BusinessCancelApplyController.java',
     rules: { 'jpa-entity-balance-mutation': 1 },
     reason: 'Grade C. Returns a business deposit on cancel approval. Door fragment /business/cancel-apply. Queue: escrowRelease.',
