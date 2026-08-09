@@ -28,8 +28,13 @@ import { claimTicket, type ClaimResult } from './operator-queue.js';
  * uses when they would rather there were no record. `create`, `setStatus` and
  * `claimTicket` each write ticket and trail together or write neither.
  *
- * `appendEvent` exists only for the two kinds that are NOT state changes —
- * `grounding_read` and `escalated` — where there is nothing to be atomic with.
+ * `appendEvent` exists for `grounding_read` alone — a pure read with nothing
+ * else to pair. Escalation is different: the case file and the `escalated`
+ * trail row are two halves of one fact, so they go through
+ * `putCaseFileWithEscalated` (same transaction). A path that wrote the case
+ * file and then died before the trail row would leave the desk able to open a
+ * file with no record that an escalation happened — which is the gap the trail
+ * exists to close.
  */
 
 export type CreateTicketRow = {
@@ -48,7 +53,8 @@ export type AddCommentInput = {
 
 export type AppendEventInput = {
   ticketId: string;
-  kind: Extract<SupportTicketEventKind, 'grounding_read' | 'escalated'>;
+  /** Pure read only. Escalation uses `putCaseFileWithEscalated`. */
+  kind: Extract<SupportTicketEventKind, 'grounding_read'>;
   actorId: string;
   actorRole: 'user' | 'operator';
   note?: string | null;
@@ -87,12 +93,20 @@ export interface SupportStore {
    * Writes an `assigned` audit row in the same transaction as a winning claim.
    */
   claimTicket(input: { ticketId: string; operatorId: string }): Promise<ClaimResult>;
-  /** Non-state-change trail rows: `grounding_read`, `escalated`. */
+  /** Non-state-change trail row for a pure read: `grounding_read` only. */
   appendEvent(input: AppendEventInput): Promise<SupportTicketEvent>;
   /** The trail, oldest first. */
   listEvents(ticketId: string): Promise<SupportTicketEvent[]>;
-  /** Write a case file. Immutable once written (trigger, migration 0001). */
+  /**
+   * Write a case file alone. Used by Postgres integrity tests that assert the
+   * immutability trigger. Production escalation uses `putCaseFileWithEscalated`.
+   */
   putCaseFile(caseFile: SupportCaseFile): Promise<SupportCaseFile>;
+  /**
+   * Case file + `escalated` trail row in ONE transaction. Either both land or
+   * neither does — a case file without its trail row is an incomplete desk.
+   */
+  putCaseFileWithEscalated(input: { caseFile: SupportCaseFile; actorId: string; note: string }): Promise<SupportCaseFile>;
   /** The most recent case file for a ticket, or null if never escalated. */
   latestCaseFile(ticketId: string): Promise<SupportCaseFile | null>;
 }
@@ -419,6 +433,29 @@ export class MemorySupportStore implements SupportStore {
     return caseFile;
   }
 
+  async putCaseFileWithEscalated(input: { caseFile: SupportCaseFile; actorId: string; note: string }): Promise<SupportCaseFile> {
+    // Single-process memory: both writes or neither — match the PG transaction.
+    if (!this.tickets.has(input.caseFile.ticketId)) {
+      throw new Error('ticket not found for escalation');
+    }
+    await this.putCaseFile(input.caseFile);
+    try {
+      this.record({
+        ticketId: input.caseFile.ticketId,
+        kind: 'escalated',
+        actorId: input.actorId,
+        actorRole: 'operator',
+        note: input.note,
+      });
+    } catch (err) {
+      const list = this.cases.get(input.caseFile.ticketId) ?? [];
+      list.pop();
+      this.cases.set(input.caseFile.ticketId, list);
+      throw err;
+    }
+    return input.caseFile;
+  }
+
   async latestCaseFile(ticketId: string): Promise<SupportCaseFile | null> {
     const list = this.cases.get(ticketId) ?? [];
     return list.length === 0 ? null : list[list.length - 1]!;
@@ -548,34 +585,39 @@ export class PostgresSupportStore implements SupportStore {
   }
 
   /**
-   * Atomic claim: one statement, exclusive under Postgres row update.
-   * Two operators racing → one UPDATE returns a row, the other gets zero.
+   * Atomic claim: FOR UPDATE + one exclusive UPDATE, trail from the locked row.
+   *
+   * A pre-read outside the transaction (the previous shape) could see `open`,
+   * lose a race to `setStatus(pending)`, then write a trail row claiming
+   * `open → pending` when the live move was already recorded. The trail would
+   * lie. Locking the ticket row first makes `fromStatus` the status the claim
+   * actually moved from.
    */
   async claimTicket(input: { ticketId: string; operatorId: string }): Promise<ClaimResult> {
     const operatorId = input.operatorId?.trim() ?? '';
     if (!operatorId) return { status: 'refuse', reason: 'invalid_operator' };
 
-    const existing = await this.findById(input.ticketId);
-    if (!existing) return { status: 'refuse', reason: 'not_found' };
-    if (existing.status !== 'open' && existing.status !== 'pending') {
-      return { status: 'refuse', reason: 'not_queueable' };
-    }
-    if (existing.assigneeId && existing.assigneeId !== operatorId) {
-      return { status: 'refuse', reason: 'already_claimed' };
-    }
+    return this.sql.begin(async (tx): Promise<ClaimResult> => {
+      const locked = await tx<PgTicket[]>`
+        SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+        FROM support.tickets
+        WHERE id = ${input.ticketId}
+        FOR UPDATE
+      `;
+      if (!locked[0]) return { status: 'refuse', reason: 'not_found' };
+      const existing = ticketFromPg(locked[0]);
 
-    // Self re-claim: idempotent, no steal race possible for other operators.
-    if (existing.assigneeId === operatorId) {
-      return { status: 'ok', ticket: existing };
-    }
+      if (existing.status !== 'open' && existing.status !== 'pending') {
+        return { status: 'refuse', reason: 'not_queueable' };
+      }
+      if (existing.assigneeId && existing.assigneeId !== operatorId) {
+        return { status: 'refuse', reason: 'already_claimed' };
+      }
+      // Self re-claim: idempotent, no trail noise on every screen refresh.
+      if (existing.assigneeId === operatorId) {
+        return { status: 'ok', ticket: existing };
+      }
 
-    // The UPDATE stays ONE statement — that is what makes the claim exclusive,
-    // and the transaction around it changes nothing about that. What the
-    // transaction adds is that the winner's `assigned` trail row cannot be lost
-    // if this process dies between the two writes: a ticket assigned to an
-    // operator with no record of who assigned it is the exact gap the trail
-    // exists to close.
-    const rows = await this.sql.begin(async (tx) => {
       const claimed = await tx<PgTicket[]>`
         UPDATE support.tickets
         SET
@@ -587,9 +629,13 @@ export class PostgresSupportStore implements SupportStore {
           AND (assignee_id IS NULL OR assignee_id = ${operatorId})
         RETURNING id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
       `;
-      if (claimed.length === 0) return claimed;
+      // Holding FOR UPDATE, this should always return a row when the checks
+      // above passed. Zero rows means another writer slipped past — treat as
+      // lost claim rather than inventing trail.
+      if (claimed.length === 0) return { status: 'refuse', reason: 'already_claimed' };
 
       await insertEvent(tx, { ticketId: input.ticketId, kind: 'assigned', actorId: operatorId, actorRole: 'operator' });
+      // fromStatus comes from the locked row, not a pre-transaction snapshot.
       if (existing.status !== claimed[0]!.status) {
         await insertEvent(tx, {
           ticketId: input.ticketId,
@@ -600,23 +646,8 @@ export class PostgresSupportStore implements SupportStore {
           toStatus: claimed[0]!.status,
         });
       }
-      return claimed;
+      return { status: 'ok', ticket: ticketFromPg(claimed[0]!) };
     });
-
-    if (rows.length === 0) {
-      // Lost race: another operator claimed between our read and update.
-      const again = await this.findById(input.ticketId);
-      if (!again) return { status: 'refuse', reason: 'not_found' };
-      if (again.assigneeId && again.assigneeId !== operatorId) {
-        return { status: 'refuse', reason: 'already_claimed' };
-      }
-      if (again.status !== 'open' && again.status !== 'pending') {
-        return { status: 'refuse', reason: 'not_queueable' };
-      }
-      return { status: 'refuse', reason: 'already_claimed' };
-    }
-
-    return { status: 'ok', ticket: ticketFromPg(rows[0]!) };
   }
 
   /**
@@ -661,6 +692,31 @@ export class PostgresSupportStore implements SupportStore {
       RETURNING ticket_id, escalated_by, reason, citations, grounding, summary, created_at
     `;
     return caseFileFromPg(rows[0]!);
+  }
+
+  async putCaseFileWithEscalated(input: { caseFile: SupportCaseFile; actorId: string; note: string }): Promise<SupportCaseFile> {
+    return this.sql.begin(async (tx) => {
+      const rows = await tx<PgCaseFile[]>`
+        INSERT INTO support.case_files (ticket_id, escalated_by, reason, citations, grounding, summary)
+        VALUES (
+          ${input.caseFile.ticketId},
+          ${input.caseFile.escalatedBy},
+          ${input.caseFile.reason},
+          ${tx.json(input.caseFile.citations as never)},
+          ${tx.json(input.caseFile.grounding as never)},
+          ${input.caseFile.summary}
+        )
+        RETURNING ticket_id, escalated_by, reason, citations, grounding, summary, created_at
+      `;
+      await insertEvent(tx, {
+        ticketId: input.caseFile.ticketId,
+        kind: 'escalated',
+        actorId: input.actorId,
+        actorRole: 'operator',
+        note: input.note,
+      });
+      return caseFileFromPg(rows[0]!);
+    });
   }
 
   async latestCaseFile(ticketId: string): Promise<SupportCaseFile | null> {

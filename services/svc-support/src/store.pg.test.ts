@@ -15,6 +15,7 @@ const URL = process.env.TEST_DATABASE_URL_SUPPORT ?? 'postgres://svc_support:svc
 const here = dirname(fileURLToPath(import.meta.url));
 const MIGRATION = readFileSync(join(here, '..', 'drizzle', '0000_support_init.sql'), 'utf8');
 const MIGRATION_0001 = readFileSync(join(here, '..', 'drizzle', '0001_support_audit_and_case_file.sql'), 'utf8');
+const MIGRATION_0002 = readFileSync(join(here, '..', 'drizzle', '0002_support_lifecycle_full.sql'), 'utf8');
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OP_A = '33333333-3333-4333-8333-333333333333';
@@ -33,6 +34,7 @@ if (available && sql) {
   // otherwise report the append-only trigger as absent by silently exercising a
   // table that is not there — a green run proving nothing.
   await sql.unsafe(MIGRATION_0001);
+  await sql.unsafe(MIGRATION_0002);
 }
 
 afterAll(async () => {
@@ -182,6 +184,50 @@ describe.skipIf(!available)('audit trail and case file — enforced in Postgres'
     expect((await s.setStatus({ ticketId: t.id, status: 'closed', operatorId: OP_A })).status).toBe('ok');
     // The service refuses this too. Here we go around the service entirely.
     await expect(sql!`UPDATE support.tickets SET status = 'open' WHERE id = ${t.id}`).rejects.toMatchObject({ code: '23514' });
+  });
+
+  it('illegal transitions (e.g. resolved → pending) are refused by the database too', async () => {
+    const s = store();
+    const t = await open();
+    expect((await s.setStatus({ ticketId: t.id, status: 'resolved', operatorId: OP_A })).status).toBe('ok');
+    // 0001 only blocked leaving closed. 0002 mirrors lifecycle.ts fully so a
+    // psql bypass cannot invent a status history the service would refuse.
+    await expect(sql!`UPDATE support.tickets SET status = 'pending' WHERE id = ${t.id}`).rejects.toMatchObject({
+      code: '23514',
+    });
+  });
+
+  it('claim trail reconstructs status even when racing setStatus', async () => {
+    const s = store();
+    const t = await open();
+    // Concurrent: operator A moves status, operator B claims. Whatever wins,
+    // every status_changed.from must equal the status the trail held just before.
+    await Promise.all([
+      s.setStatus({ ticketId: t.id, status: 'pending', operatorId: OP_A }),
+      s.claimTicket({ ticketId: t.id, operatorId: OP_B }),
+    ]);
+    const trail = await s.listEvents(t.id);
+    let status: string = 'open'; // after `opened`
+    for (const e of trail) {
+      if (e.kind === 'status_changed') {
+        expect(e.fromStatus).toBe(status);
+        status = e.toStatus!;
+      }
+    }
+    const final = await s.findById(t.id);
+    expect(final?.status).toBe(status);
+  });
+
+  it('claim after setStatus(pending) records assigned only — no invented open→pending', async () => {
+    const s = store();
+    const t = await open();
+    await s.setStatus({ ticketId: t.id, status: 'pending', operatorId: OP_A });
+    expect((await s.claimTicket({ ticketId: t.id, operatorId: OP_B })).status).toBe('ok');
+    const trail = await s.listEvents(t.id);
+    const changes = trail.filter((e) => e.kind === 'status_changed');
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ fromStatus: 'open', toStatus: 'pending', actorId: OP_A });
+    expect(trail.filter((e) => e.kind === 'assigned')).toHaveLength(1);
   });
 
   it('a lifecycle move and its trail row commit together', async () => {
