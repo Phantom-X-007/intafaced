@@ -7,12 +7,14 @@ import { recipes, type RecipeName } from './index.js';
  * RECIPES.md is the human matrix. This test is the machine one: if a recipe is
  * added or removed without updating the documented count, the suite fails and
  * someone has to name the change. The number is not magic — it is the length of
- * `export const recipes` on tip when this file landed (49). Bump it with intent.
+ * `export const recipes` on tip when this file landed (50 after marketPurchase).
+ * Bump it with intent.
  */
 describe('recipes registry', () => {
   it('exports every named recipe and nothing unnamed', () => {
     const names = Object.keys(recipes) as RecipeName[];
-    expect(names.length).toBe(49);
+    expect(names.length).toBe(50);
+    expect(names).toContain('marketPurchase');
     // Every key is a callable pure function.
     for (const name of names) {
       expect(typeof recipes[name]).toBe('function');

@@ -284,10 +284,9 @@ if (!available) {
   /**
    * FAIL CLOSED, AGAINST A SERVER THAT REALLY 500s.
    *
-   * Not a mocked rejection: a `node:http` server returning the exact failure
-   * `GET /internal/stake/:userId` produces on `main` today (PR #1100 is green and
-   * unmerged), so this is a description of the live environment rather than a
-   * hypothetical. Nobody appears — not everybody.
+   * Not a mocked rejection: a `node:http` server returns 500 so the directory
+   * path is proved against a real non-2xx (PR #1100 merged the historic
+   * always-500 bigint bug; outages still exist). Nobody appears — not everybody.
    */
   describe('when the stake source is down', () => {
     let server: Server | undefined;
