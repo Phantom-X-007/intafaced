@@ -29,7 +29,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>1.5.9.RELEASE</version>
+		<version>1.5.22.RELEASE</version>
 		<relativePath />
 		<!-- lookup parent from repository -->
 	</parent>
@@ -39,7 +39,7 @@
 		<project.build.jdk_version>1.8</project.build.jdk_version>
 		<!-- spring -->
 		<spring-cloud.version>Edgware.RELEASE</spring-cloud.version>
-		<spring-boot_version>1.5.9.RELEASE</spring-boot_version>
+		<spring-boot_version>1.5.22.RELEASE</spring-boot_version>
 		<!-- 数据库连接 -->
 		<druid_version>1.1.9</druid_version>
 		<mariadb.client.version>2.7.12</mariadb.client.version>
@@ -53,7 +53,7 @@
 		<commons-collections_version>3.2</commons-collections_version>
 		<!-- extension -->
 		<lombok_version>1.16.16</lombok_version>
-		<fastjson_version>1.2.31</fastjson_version>
+		<fastjson_version>1.2.84</fastjson_version>
 		<kafka_version>0.10.0.0</kafka_version>
 		<!-- Log libs -->
 		<slf4j_version>1.7.7</slf4j_version>
