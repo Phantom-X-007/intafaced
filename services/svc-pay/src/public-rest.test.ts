@@ -535,7 +535,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     expect(pay.calls.filter((c) => c.method === 'capture')).toHaveLength(0);
   });
 
-  it('authorizes, captures (optional amount), and refunds with the matching scopes', async () => {
+  it('authorizes, forwards capture amount to the service, and refunds with the matching scopes', async () => {
     const pay = stubPay();
     app = await build(pay);
 
@@ -548,6 +548,9 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     expect(auth.statusCode).toBe(200);
     expect(auth.json().status).toBe('authorized');
 
+    // Wire shape only: REST forwards optional amount. Real PayService refuses
+    // partial capture (`pay.partial_capture_unsupported`) — money suite / service
+    // tests pin that; stub must not be read as product support for partials.
     const capture = await app.inject({
       method: 'POST',
       url: `/v1/payments/${PAYMENT}/capture`,
@@ -566,6 +569,44 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     });
     expect(refund.statusCode).toBe(200);
     expect(refund.json().status).toBe('refunded');
+  });
+
+  it('omitted body refundId becomes rest:<paymentId>:<digest> — never an ordinal', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/payments/${PAYMENT}/refund`,
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'ref:derived-key' },
+      payload: { amount: '0.50' },
+    });
+    expect(res.statusCode).toBe(200);
+    const args = pay.calls.find((c) => c.method === 'refund')!.args;
+    const opts = args[2] as { refundId?: string };
+    expect(opts.refundId).toMatch(new RegExp(`^rest:${PAYMENT}:[0-9a-f]{24}$`));
+  });
+
+  it('empty / whitespace body refundId falls through to restRefundId (not payment.refund:)', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    for (const refundId of ['', '   ']) {
+      pay.calls.length = 0;
+      const res = await app.inject({
+        method: 'POST',
+        url: `/v1/payments/${PAYMENT}/refund`,
+        headers: {
+          ...signed(),
+          'content-type': 'application/json',
+          'idempotency-key': `ref:empty:${refundId.length}`,
+        },
+        payload: { amount: '0.50', refundId },
+      });
+      expect(res.statusCode).toBe(200);
+      const opts = pay.calls.find((c) => c.method === 'refund')!.args[2] as { refundId?: string };
+      expect(opts.refundId).toMatch(new RegExp(`^rest:${PAYMENT}:[0-9a-f]{24}$`));
+    }
   });
 
   it('does not let a writer refund — pay:refund is its own authority', async () => {

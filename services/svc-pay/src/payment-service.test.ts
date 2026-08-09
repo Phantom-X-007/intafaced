@@ -512,6 +512,32 @@ if (!available) {
       expect(await clearingOf(m.id)).toBe('40');
     });
 
+    /**
+     * W9 residual — completed refundId is bound to its amount.
+     * Same id + different amount must not silent-200 with the old refund.
+     */
+    it('refuses the same refundId with a different amount (no silent replay)', async () => {
+      const m = await merchant(0);
+      const payment = await cardPayment(m.id, '100');
+      await pay.capture(payment.id);
+
+      await pay.refund(payment.id, amt('10'), { refundId: 'amt-bind-1' });
+      expect(await clearingOf(m.id)).toBe('90');
+
+      await expect(pay.refund(payment.id, amt('50'), { refundId: 'amt-bind-1' })).rejects.toMatchObject({
+        code: 'pay.refund_id_conflict',
+      });
+      // Money still the single first refund; projection still 10.
+      expect(await clearingOf(m.id)).toBe('90');
+      expect(formatAmount((await pay.getPayment(payment.id)).refundedAmount)).toBe('10');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+
+      // Same amount is a true replay.
+      const replay = await pay.refund(payment.id, amt('10'), { refundId: 'amt-bind-1' });
+      expect(formatAmount(replay.refundedAmount)).toBe('10');
+      expect(await clearingOf(m.id)).toBe('90');
+    });
+
     it('sends an on-chain refund back to the address that paid', async () => {
       const m = await merchant(0);
       const payment = await cryptoPayment(m.id, '5');

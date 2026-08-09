@@ -288,6 +288,7 @@ function statusFor(code: string): number {
     case 'pay.refund_exceeds_captured':
     case 'pay.refund_in_flight':
     case 'pay.refund_id_spent':
+    case 'pay.refund_id_conflict':
     case 'pay.settlement_in_flight':
     case 'pay.settlement_desynced':
     case 'pay.idempotency_conflict':
@@ -777,8 +778,13 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           const amount = requireDecimalString(req.body.amount, 'amount');
           // The caller's own business key wins; otherwise their Idempotency-Key
           // IS the business key (see `restRefundId`). Never an attempt ordinal.
+          // Empty / whitespace body refundId is NOT a business key — fall through
+          // to the Idempotency-Key-derived identity. `??` alone would accept ""
+          // and build ledger key `payment.refund:` (or spaces), colliding all
+          // such "keys" and bypassing restRefundId.
+          const bodyRefundId = typeof req.body.refundId === 'string' ? req.body.refundId.trim() : '';
           const payment = await deps.pay.refund(req.params.id, parseAmount(amount), {
-            refundId: req.body.refundId ?? restRefundId(req.params.id, key),
+            refundId: bodyRefundId.length > 0 ? bodyRefundId : restRefundId(req.params.id, key),
           });
           return reply.send(toPaymentBody(payment));
         } catch (err) {

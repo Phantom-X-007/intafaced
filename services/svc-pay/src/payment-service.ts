@@ -112,6 +112,7 @@ export type PayErrorCode =
    * Caller must supply a **new** business key for a genuine second attempt.
    */
   | 'pay.refund_id_spent'
+  | 'pay.refund_id_conflict'
   /**
    * A pending settlement window has already frozen this payment into its set.
    * Pre-settlement refunds would drain clearing under the frozen gross and let
@@ -1538,14 +1539,32 @@ export class PayService {
         // Only for an EXPLICIT id. The `${paymentId}:${sequence + 1}` default is
         // a fresh ordinal by construction and can never be a replay of itself.
         if (options.refundId !== undefined) {
-          const alreadyDone = await tx<Array<{ n: string }>>`
-            SELECT COUNT(*)::text AS n
+          // A COMPLETED refundId is one business event with ONE amount.
+          // Same id + same amount → replay (no second movement / event).
+          // Same id + different amount → conflict: silent 200 with the old
+          // amount would teach the merchant their second request succeeded.
+          const alreadyDone = await tx<Array<{ amount: string | null }>>`
+            SELECT payload->>'amount' AS amount
               FROM pay.payment_events
              WHERE payment_id = ${row.id}
                AND event = 'refunded'
                AND payload->>'refundId' = ${options.refundId}
+             LIMIT 1
           `;
-          if (Number.parseInt(alreadyDone[0]?.n ?? '0', 10) > 0) {
+          if (alreadyDone[0]) {
+            const prior = alreadyDone[0].amount;
+            if (prior !== null && prior !== formatAmount(amount)) {
+              throw new PayError(
+                `Refund id ${options.refundId} already completed for ${prior}; requested ${formatAmount(amount)} — use a new refundId for a different amount`,
+                'pay.refund_id_conflict',
+                {
+                  refundId: options.refundId,
+                  paymentId: row.id,
+                  completedAmount: prior,
+                  requested: formatAmount(amount),
+                },
+              );
+            }
             return { replay: true as const, view: await this.view(tx, row) };
           }
 

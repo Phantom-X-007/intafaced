@@ -5,7 +5,7 @@ The payments core (§6.1). Merchants, the payment lifecycle, settlement into the
 **What it is NOT:** it does not hold balances (the ledger does), it does not choose between rails (smart routing is its own feature), and it does not know the name of a single payment processor. Every rail — the two here and every one that comes later — is an implementation of one interface, and `src/rails/conformance.ts` is what keeps that true.
 
 **On tip today:** gateway mode, rails (`crypto-native`, `card-sandbox`, absent `bank-payout`), public REST + webhooks, PayFac **sub-merchant trees + area fence on money paths** ([below](#payfac--sub-merchant-trees-61)), subscriptions as **invoice-and-watch** (schema / due runner / capture→execution settle — no on-chain pull), destination shape refuse (EVM + IBAN) before hold, G3 settlement release, G4 suspend-safe payout hold.
-**Still separate / residual:** PSP mode, smart routing (no invent costs/approval rates), fraud scoring, commerce plugins, **chargeback wire** (recipes exist in `packages/ledger-client` with owner sign-off banner — **not wired** into svc-pay), subscription dunning / merchant surface / pre-charge notify, IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION §8.4).
+**Still separate / residual:** PSP mode, smart routing (no invent costs/approval rates), fraud scoring, commerce plugins, **chargeback wire** (recipes exist in `packages/ledger-client` with owner sign-off banner — **not wired** into svc-pay), subscription dunning / pre-charge notify (merchant mandate surface is on tip), IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION §8.4).
 
 ---
 
