@@ -63,6 +63,16 @@ function forged(p: Principal = principal()) {
 function stubBank(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     spaces: { unnamedAssets: async () => [], ...(overrides.spaces as object | undefined) },
+    transfers: {
+      runDueTransfers: async () => ({
+        schedulesConsidered: 0,
+        settled: 0,
+        rejected: 0,
+        alreadyFired: 0,
+        strandedSwept: 0,
+      }),
+      ...(overrides.transfers as object | undefined),
+    },
   } as unknown as BankServices;
 }
 
@@ -114,5 +124,58 @@ describe('svc-bank mount — the public surface', () => {
 
   it('serves health even when a forged principal was presented', async () => {
     await expect(createBankRouter(stubBank()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
+  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+
+  it('refuses with SERVICE_UNAVAILABLE / bank.transfers_disabled when the flag is off, and never runs', async () => {
+    let ran = false;
+    const bank = stubBank({
+      transfers: {
+        runDueTransfers: async () => {
+          ran = true;
+          return {
+            schedulesConsidered: 1,
+            settled: 1,
+            rejected: 0,
+            alreadyFired: 0,
+            strandedSwept: 0,
+          };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { scheduledTransfersEnabled: false }).createCaller(treasury()).ops.runDueTransfers({}),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      cause: { code: 'bank.transfers_disabled' },
+    });
+    expect(ran).toBe(false);
+  });
+
+  it('runs when the flag is on', async () => {
+    let ran = false;
+    const bank = stubBank({
+      transfers: {
+        runDueTransfers: async () => {
+          ran = true;
+          return {
+            schedulesConsidered: 0,
+            settled: 0,
+            rejected: 0,
+            alreadyFired: 0,
+            strandedSwept: 0,
+          };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { scheduledTransfersEnabled: true }).createCaller(treasury()).ops.runDueTransfers({}),
+    ).resolves.toMatchObject({ schedulesConsidered: 0, settled: 0 });
+    expect(ran).toBe(true);
   });
 });

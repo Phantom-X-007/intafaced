@@ -191,6 +191,10 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.fiat_ramp_socket':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
 
+      // Kill switch. Same 503 class as the HTTP job endpoint's bank.transfers_disabled.
+      case 'bank.transfers_disabled':
+        return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: err.message, cause: err });
+
       default: {
         // EXHAUSTIVENESS. If this line stops compiling, a `BankErrorCode` was
         // added without anyone deciding what a caller may be told about it —
@@ -363,7 +367,18 @@ const spaceOutput = z.object({
   ledgerAccount: z.object({ ownerType: z.string(), ownerId: z.string(), assetId: z.string(), kind: z.string() }),
 });
 
-export function createBankRouter(bank: BankServices) {
+/**
+ * Optional kill switches for operator jobs. Production passes live env values
+ * from `index.ts`; tests inject without loading `env` (which needs full service env).
+ */
+export type BankRouterOptions = {
+  /** When false, `ops.runDueTransfers` refuses with `bank.transfers_disabled`. Default true. */
+  scheduledTransfersEnabled?: boolean;
+};
+
+export function createBankRouter(bank: BankServices, options: BankRouterOptions = {}) {
+  const scheduledTransfersEnabled = options.scheduledTransfersEnabled ?? true;
+
   const spaces = router({
     list: scopedProcedure('bank:read', { module: 'bank' })
       .input(z.object({ assetId: z.string().min(1).max(16).optional() }))
@@ -1231,7 +1246,15 @@ export function createBankRouter(bank: BankServices) {
         }),
       )
       .mutation(async ({ input }) =>
-        guard(async () => bank.transfers.runDueTransfers(input.limit === undefined ? {} : { limit: input.limit })),
+        guard(async () => {
+          // Parity with POST /internal/jobs/run-due-transfers: the flag is the
+          // emergency stop for a mis-computed occurrence index. tRPC must not
+          // be a back door past it.
+          if (!scheduledTransfersEnabled) {
+            throw new BankError('scheduled transfers are disabled', 'bank.transfers_disabled');
+          }
+          return bank.transfers.runDueTransfers(input.limit === undefined ? {} : { limit: input.limit });
+        }),
       ),
 
     accrueInterest: scopedProcedure('admin:treasury')
