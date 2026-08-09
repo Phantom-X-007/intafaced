@@ -140,6 +140,39 @@ describe('/admin/status — control-plane summary', () => {
     expect(body.auditCount).toBeGreaterThanOrEqual(1);
     expect(body.lastChange?.module).toBe('trade');
   });
+
+  /**
+   * THE residual that made a green console a lie: `ws` is not behind this edge.
+   * Status must name the gap so an operator never reads "disabledModules"
+   * and invents a halted market-data socket. Multi-replica share must stay
+   * explicitly false — inventing a shared store is fenced (§13).
+   */
+  it('names modules outside the door and process-local kill durability', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      outsideTheDoor: Record<string, string>;
+      enforceableModules: string[];
+      killState: { persistence: string; multiReplicaShared: boolean; note: string };
+      disabledModules: string[];
+    };
+
+    expect(body.outsideTheDoor.ws).toMatch(/socket\.ws-behind-the-edge|not through this edge/i);
+    expect(body.outsideTheDoor.ledger).toMatch(/posting_freeze|admin\/ledger\/freeze/i);
+    expect(body.outsideTheDoor.matching).toBeTruthy();
+    // A halted list that contains `ws` would be the old green-while-live failure.
+    expect(body.disabledModules).not.toContain('ws');
+    expect(body.enforceableModules).toContain('trade');
+    expect(body.enforceableModules).not.toContain('ws');
+    expect(body.killState.multiReplicaShared).toBe(false);
+    expect(body.killState.persistence === 'file' || body.killState.persistence === 'memory').toBe(true);
+    expect(body.killState.note.length).toBeGreaterThan(20);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -14,24 +14,36 @@ This service is the join between those two halves. It is the only place in the s
 | ---------------- | ------------------------------------------------------------------------------------------------- |
 | `GET /health`    | liveness                                                                                          |
 | `GET /ready`     | readiness + the route table, so an operator can see what will be forwarded without reading source |
+| `GET /metrics`   | Prometheus scrape surface (§14.5)                                                                 |
 | `ALL /api/*`     | the proxy                                                                                         |
 | `OPTIONS /api/*` | CORS preflight — answered here and **never forwarded upstream**                                   |
+| `/admin/*`       | operator control plane (§14.6) — **not** a CORS surface; bearer + MFA scopes                      |
 
 ### The route table
 
-| Prefix           | Upstream      | Env var         |
-| ---------------- | ------------- | --------------- |
-| `/api/identity`  | svc-identity  | `IDENTITY_URL`  |
-| `/api/trade`     | svc-trade     | `TRADE_URL`     |
-| `/api/token`     | svc-token     | `TOKEN_URL`     |
-| `/api/agents`    | svc-agents    | `AGENTS_URL`    |
-| `/api/bank`      | svc-bank      | `BANK_URL`      |
-| `/api/p2p`       | svc-p2p       | `P2P_URL`       |
-| `/api/pay`       | svc-pay       | `PAY_URL`       |
-| `/api/blueprint` | svc-blueprint | `BLUEPRINT_URL` |
-| `/api/protocol`  | svc-protocol  | `PROTOCOL_URL`  |
+Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the live prefix list. This table must stay in lockstep.
 
-**`svc-ledger` and `svc-matching` are deliberately absent.** Both serve service-to-service HTTP behind a shared secret (#50, #55). No browser has business reaching either — `ledger.post` moves value on a module's own authority, which is exactly why no user token carries `ledger:write`. There is a test asserting they never appear in the table.
+| Prefix           | Upstream      | Env var         | Notes                                            |
+| ---------------- | ------------- | --------------- | ------------------------------------------------ |
+| `/api/identity`  | svc-identity  | `IDENTITY_URL`  |                                                  |
+| `/api/trade`     | svc-trade     | `TRADE_URL`     | tRPC trade                                       |
+| `/api/v1`        | svc-trade     | `TRADE_URL`     | public CCXT REST; path preserved; module=`trade` |
+| `/api/token`     | svc-token     | `TOKEN_URL`     |                                                  |
+| `/api/agents`    | svc-agents    | `AGENTS_URL`    |                                                  |
+| `/api/bank`      | svc-bank      | `BANK_URL`      |                                                  |
+| `/api/p2p`       | svc-p2p       | `P2P_URL`       |                                                  |
+| `/api/pay`       | svc-pay       | `PAY_URL`       |                                                  |
+| `/api/blueprint` | svc-blueprint | `BLUEPRINT_URL` |                                                  |
+| `/api/protocol`  | svc-protocol  | `PROTOCOL_URL`  |                                                  |
+| `/api/dex`       | svc-dex       | `DEX_URL`       |                                                  |
+| `/api/indexer`   | svc-indexer   | `INDEXER_URL`   |                                                  |
+| `/api/notify`    | svc-notify    | `NOTIFY_URL`    |                                                  |
+| `/api/academy`   | svc-academy   | `ACADEMY_URL`   |                                                  |
+| `/api/support`   | svc-support   | `SUPPORT_URL`   |                                                  |
+
+**`svc-ledger` and `svc-matching` are deliberately absent.** Both serve service-to-service HTTP behind a shared secret (#50, #55). No browser has business reaching either — `ledger.post` moves value on a module's own authority, which is exactly why no user token carries `ledger:write`. The ledger's **operator** surface is the durable `posting_freeze` via `/admin/ledger/*`, not a proxied `/api/ledger`. There is a test asserting ledger/matching never appear in the table.
+
+**`svc-ws` is also not here.** The browser reaches it on its own port (`4014`); nginx `/ws` proxies straight to it. That is SOCKET §13 `socket.ws-behind-the-edge` — the edge kill-switch cannot halt market-data sockets. `/admin/status` names this under `outsideTheDoor.ws` so the console cannot show a green halt while the socket is still live.
 
 An unlisted prefix returns **404, never a pass-through**. An edge that forwards what it does not recognise is a proxy for the entire internal network.
 
@@ -92,22 +104,50 @@ Until this landed the edge sent **no CORS headers at all** — not a permissive 
 
 ## Kill-switch
 
-`edge.gateway` in `FLAG_REGISTRY`. Turning it off returns 503 from the proxy while leaving `/health` and `/ready` answering, so an operator can take the public surface down without losing the ability to see whether the process is alive.
+**Live control is the operator surface, not the `edge.gateway` flag.**
+
+| Surface                     | What it does                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /admin/kill-switches` | Per-module halt (`admin:write` + MFA). Reads and cancels still pass; new commitments return `503 edge.module_killed`.                            |
+| `GET /admin/status`         | Who is killed, **what cannot be killed** (`outsideTheDoor`), and **kill durability** (`killState` — process-local; `multiReplicaShared: false`). |
+| `POST /admin/ledger/freeze` | Money-plane halt (`admin:treasury`) — durable row on svc-ledger, not an in-memory module flag.                                                   |
+
+`edge.gateway` in `FLAG_REGISTRY` is **`NOT_ENFORCED`**. Flipping that flag does **not** take the proxy down. Do not operate as if it does. The real kill is `/admin/kill-switches` + the `onRequest` guard in `control-plane.ts`.
+
+**Outside the door (cannot arm here):** `ws` (SOCKET §13 `socket.ws-behind-the-edge`), `ledger` (use `/admin/ledger/freeze`), `matching` (halt `trade` for new risk). Arming these returns **400** with the reason — never a green 200 that refuses nothing.
+
+**Durability:** optional `EDGE_KILL_STATE_PATH` file = single-process restart durability. Multi-replica shared store is SOCKET §13 residual and is **not invented** here. `/admin/status.killState` says so out loud.
+
+`/health` and `/ready` keep answering under kills so the process stays probeable and cancels/reads stay reachable through the same door.
+
+## Transport hardening (built)
+
+| Control          | Where                                  | Honesty                                                                                                                                                                                      |
+| ---------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Security headers | `src/hardening.ts` (`@fastify/helmet`) | Always on.                                                                                                                                                                                   |
+| Rate limit       | same file (`@fastify/rate-limit`)      | Per-replica in-process counters. Keyed on `req.ip`. Without `EDGE_TRUST_PROXY` behind a balancer, every caller shares one bucket — boot log warns. `OPTIONS`/`/health`/`/ready` unthrottled. |
 
 ## Configuration
 
-| Variable                       | Notes                                                                                                                                                           |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `JWT_ACCESS_SECRET`            | **must match svc-identity's.** A mismatch means every login succeeds and every request after it is anonymous — which presents as "logged in but nothing works". |
-| `EDGE_PRINCIPAL_SECRET`        | must match every mounted service's                                                                                                                              |
-| `DEFAULT_REGION`               | two-letter code; `XX` = unresolved sentinel (open defaults + `regionResolved: false`, not a lock-down)                                                          |
-| `INTAFACED_REGION_FAIL_CLOSED` | process-wide; when `true`/`1`/`yes`/`on`, `checkAccess` refuses unresolved (`XX`) with `denied.region_unknown`. Default off.                                    |
-| `UPSTREAM_TIMEOUT_MS`          | a hung service must not hold an edge connection open                                                                                                            |
-| `EDGE_ALLOWED_ORIGINS`         | browser origins, comma-separated and exact. **Required in `staging`/`prod`** — unset there is a closed door to every front-end. `*` is a boot failure.          |
+| Variable                             | Notes                                                                                                                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_ACCESS_SECRET`                  | **must match svc-identity's.** A mismatch means every login succeeds and every request after it is anonymous — which presents as "logged in but nothing works". |
+| `EDGE_PRINCIPAL_SECRET`              | must match every mounted service's                                                                                                                              |
+| `DEFAULT_REGION`                     | two-letter code; `XX` = unresolved sentinel (open defaults + `regionResolved: false`, not a lock-down)                                                          |
+| `INTAFACED_REGION_FAIL_CLOSED`       | process-wide; when `true`/`1`/`yes`/`on`, `checkAccess` refuses unresolved (`XX`) with `denied.region_unknown`. Default off.                                    |
+| `UPSTREAM_TIMEOUT_MS`                | a hung service must not hold an edge connection open                                                                                                            |
+| `EDGE_ALLOWED_ORIGINS`               | browser origins, comma-separated and exact. **Required in `staging`/`prod`** — unset there is a closed door to every front-end. `*` is a boot failure.          |
+| `EDGE_RATE_LIMIT_ENABLED`            | throttle on/off (see `env.ts` defaults)                                                                                                                         |
+| `EDGE_RATE_LIMIT_MAX` / `_WINDOW_MS` | per-replica budget when enabled                                                                                                                                 |
+| `EDGE_TRUST_PROXY`                   | when set, Fastify trusts proxy headers for `req.ip` (rate-limit key). Unset behind nginx = one shared bucket — boot WARN.                                       |
+| `EDGE_KILL_STATE_PATH`               | JSON path for single-process kill restart durability. Empty = memory only. **Not** multi-replica share.                                                         |
+| `LEDGER_URL`                         | optional; operator freeze surface. Unset → `/admin/status.ledgerConfigured: false`.                                                                             |
 
 ## Not built yet
 
-- **Rate limiting.** There is none, anywhere in the platform. The edge is the right place for it and it is not here. Note that `OPTIONS` is now answered without touching an upstream, so a preflight flood costs this process only and reaches nothing behind it — but that is a consequence, not a control.
 - **Geo-IP region resolution.** `DEFAULT_REGION` is a single configured value; per-request resolution replaces one line in `index.ts`.
-- **Request size limits.** Not configured.
-- **Streaming responses.** The proxy buffers with `response.text()`, so this is not a path for websockets or large downloads.
+- **Request size limits beyond Fastify default.** Fastify's default body limit (~1 MiB) applies; no edge-specific env yet.
+- **Streaming / WebSocket proxying.** The proxy buffers with `response.text()`, so this is not a path for websockets or large downloads. Market-data sockets stay on `svc-ws` (see outside-the-door).
+- **Multi-replica shared kill store.** Process-local file or memory only. SOCKET §13 residual — inventing Redis/etc. without product law is fenced.
+- **§13 refresh-token in httpOnly cookie.** When that lands, CORS credentials + `svc-ws` origin check must be re-taken deliberately (see Browser origins). Named residual, not fake done.
+- **`edge.gateway` flag enforcement.** Still `NOT_ENFORCED` in the registry; do not claim it gates traffic until a deliberate enforcement PR.
