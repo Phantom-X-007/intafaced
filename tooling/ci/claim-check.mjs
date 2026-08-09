@@ -135,6 +135,8 @@ async function ownedPaths() {
   try {
     const mod = await import(pathToFileURL(join(process.cwd(), 'tooling/tracker/features.mjs')).href);
     const out = [];
+    /** @type {{ id: string, owner: string, status: string }[]} */
+    const unmapped = [];
     for (const f of mod.FEATURES ?? []) {
       if (!f.owner) continue;
       // `done` means the mountain already shipped. A leftover owner field is a
@@ -157,8 +159,16 @@ async function ownedPaths() {
       if (f.module && reqs.length === 0) {
         out.push({ path: `services/svc-${f.module}`, owner: f.owner, id: f.id ?? '' });
       }
+
+      // Owner + non-done with neither requires nor module → invisible fence.
+      // Agents get ✓ clear on every path while a human still owns the mountain
+      // (connect.venue-vault @shehzad002 was the live case). Surface them —
+      // never pretend the ownership axis is complete.
+      if (reqs.length === 0 && !f.module) {
+        unmapped.push({ id: f.id ?? '', owner: f.owner, status: f.status ?? '' });
+      }
     }
-    return out;
+    return { paths: out, unmapped };
   } catch (error) {
     // Cannot read = cannot claim clear on this axis. Surfaced, never swallowed:
     // a silent failure here reproduces the exact bug this check was added for.
@@ -169,13 +179,16 @@ async function ownedPaths() {
 
 const owned = await ownedPaths();
 const lockHits = [];
+/** @type {{ id: string, owner: string, status: string }[]} */
+let unmappedOwners = [];
 if (owned === null) {
   console.error('  claim-check — CANNOT ANSWER: tracker ownership could not be read.');
   console.error(`      ${ownershipError}`);
   console.error('      The human-mountain check did NOT run. Not reporting clear.');
   process.exit(2);
 } else {
-  for (const o of owned) {
+  unmappedOwners = owned.unmapped;
+  for (const o of owned.paths) {
     if (mine.some((m) => touches(m, o.path))) {
       if (!lockHits.some((h) => h.path === o.path && h.owner === o.owner)) lockHits.push(o);
     }
@@ -208,6 +221,23 @@ if (lockHits.length > 0) {
 }
 
 if (collisions.length === 0) {
+  if (unmappedOwners.length > 0) {
+    // Path axis is clear. Ownership axis is incomplete — do not print the full
+    // "none is human-claimed" lie while a named owner has zero fenceable paths.
+    console.log('  ✓ clear of open PRs for these paths');
+    console.error(
+      `  ⚠ ownership axis incomplete — ${unmappedOwners.length} human-owned mountain(s) have no path map (requires/module empty):`,
+    );
+    for (const u of unmappedOwners.slice(0, 12)) {
+      console.error(`      ${u.id || '(no id)'} — @${u.owner} (${u.status || 'unknown'})`);
+    }
+    if (unmappedOwners.length > 12) {
+      console.error(`      … and ${unmappedOwners.length - 12} more`);
+    }
+    console.error('      Fix: add requires[] or module on the tracker row, or clear the owner.');
+    console.error('      Not claiming "none is human-claimed" until every owned mountain is fenceable.');
+    process.exit(0);
+  }
   console.log('  ✓ clear — no open PR touches these paths, and none is human-claimed');
   process.exit(0);
 }
