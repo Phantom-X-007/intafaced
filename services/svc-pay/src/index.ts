@@ -4,6 +4,7 @@ import { env } from './env.js';
 import { PayError, PayService } from './payment-service.js';
 import { UserMoneyService } from './user-money-service.js';
 import { createLedgerClient } from './ledger-client.js';
+import { BankPayoutAbsentAdapter } from './rails/bank-payout.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { RailRegistry } from './rails/registry.js';
@@ -98,6 +99,10 @@ const cryptoRail = new CryptoNativeAdapter({
 });
 const rails = new RailRegistry([
   cryptoRail,
+  // Always registered. mode:'absent' — not a sandbox, so staging/prod boot is
+  // fine. Merchants who ask for bank settlement get pay.rail_not_live before any
+  // hold, instead of a silent "rail unknown" or a card-sandbox lie.
+  new BankPayoutAbsentAdapter(),
   ...(shouldRegisterCardSandbox(process.env)
     ? [
         new CardSandboxAdapter({
