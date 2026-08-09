@@ -42,9 +42,12 @@ import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 
 const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-const migrations = ['0000_p2p_init.sql', '0001_p2p_payment_instruments.sql', '0003_p2p_dispute_ruling_invariant.sql'].map((file) =>
-  readFileSync(join(here, '..', 'drizzle', file), 'utf8'),
-);
+const migrations = [
+  '0000_p2p_init.sql',
+  '0001_p2p_payment_instruments.sql',
+  '0003_p2p_dispute_ruling_invariant.sql',
+  '0005_p2p_late_settle_error.sql',
+].map((file) => readFileSync(join(here, '..', 'drizzle', file), 'utf8'));
 
 const SELLER = '11111111-1111-4111-8111-111111111111';
 const BUYER = '22222222-2222-4222-8222-222222222222';

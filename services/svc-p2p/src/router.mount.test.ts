@@ -326,6 +326,130 @@ describe('svc-p2p mount — the moderator queue', () => {
 
     expect(opened.moderationReachable).toBe(true);
   });
+
+  it('never lets a normal session resolve a dispute when moderation is unconfigured', async () => {
+    // Money path: resolve moves escrow. Empty allowlist must refuse before the service runs.
+    let resolved = 0;
+    const p2p = stubP2p({
+      resolveDispute: async () => {
+        resolved++;
+        throw new Error('resolve must not run');
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    await expect(
+      createP2pRouter(p2p, stubInstruments()).createCaller(ctx).disputes.resolve({
+        tradeId: dispute.tradeId,
+        resolution: 'release',
+      }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(resolved).toBe(0);
+  });
+
+  it('never lets a non-moderator resolve when the queue is staffed', async () => {
+    let resolved = 0;
+    const p2p = stubP2p({
+      resolveDispute: async () => {
+        resolved++;
+        throw new Error('resolve must not run');
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    await expect(
+      createP2pRouter(p2p, stubInstruments(), undefined, { moderatorUserIds: [BUYER] })
+        .createCaller(ctx)
+        .disputes.resolve({ tradeId: dispute.tradeId, resolution: 'refund' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(resolved).toBe(0);
+  });
+});
+
+describe('svc-p2p mount — trade/dispute read IDOR', () => {
+  const SELLER = USER;
+  const BUYER = '33333333-3333-4333-8333-333333333333';
+  const STRANGER = '66666666-6666-4666-8666-666666666666';
+  const tradeId = '55555555-5555-4555-8555-555555555555';
+
+  const foreignTrade = {
+    id: tradeId,
+    offerId: tradeId,
+    sellerId: SELLER,
+    buyerId: BUYER,
+    asset: 'USDT',
+    amount: 100n,
+    fiatCurrency: 'EUR',
+    fiatAmount: 100n,
+    price: 1n,
+    priceType: 'fixed' as const,
+    method: 'sepa',
+    feeBps: 100,
+    status: 'escrowed' as const,
+    resolution: null,
+    resolutionReason: null,
+    deadlines: {},
+    deadlineAt: new Date(),
+    createdAt: new Date(),
+    escrowedAt: new Date(),
+    fiatSentAt: null,
+    resolvedAt: null,
+    settledAt: null,
+    escalatedAt: null,
+    escalations: 0,
+  };
+
+  it("hides another pair's trade as NOT_FOUND rather than FORBIDDEN or 500", async () => {
+    // FORBIDDEN would confirm the trade id exists to a probe. L2-7.
+    // INTERNAL_SERVER_ERROR was the real regression: guard() re-wrapped the
+    // deliberate TRPCError and undid the IDOR shape.
+    let reads = 0;
+    const p2p = stubP2p({
+      getTrade: async () => {
+        reads++;
+        return foreignTrade;
+      },
+    });
+    const ctx = signed(principal({ userId: STRANGER, sub: STRANGER, scopes: ['p2p:read'] }));
+    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).trades.get({ tradeId })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Trade not found',
+    });
+    expect(reads).toBe(1);
+  });
+
+  it("hides another pair's dispute as NOT_FOUND rather than FORBIDDEN or 500", async () => {
+    let reads = 0;
+    const dispute = {
+      id: '44444444-4444-4444-8444-444444444444',
+      tradeId,
+      openedBy: BUYER,
+      reason: 'nothing arrived',
+      evidence: [],
+      moderatorId: null,
+      resolution: null,
+      resolutionNotes: null,
+      status: 'open' as const,
+      deadlineAt: new Date('2026-08-01T00:00:00.000Z'),
+      openedAt: new Date('2026-07-25T00:00:00.000Z'),
+      resolvedAt: null,
+      lastSeenByModeratorAt: null,
+      moderatorViews: 0,
+      escalatedAt: null,
+      escalations: 0,
+    };
+    const p2p = stubP2p({
+      getTrade: async () => {
+        reads++;
+        return foreignTrade;
+      },
+      getDispute: async () => dispute,
+    });
+    const ctx = signed(principal({ userId: STRANGER, sub: STRANGER, scopes: ['p2p:read'] }));
+    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).disputes.get({ tradeId })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Dispute not found',
+    });
+    expect(reads).toBe(1);
+  });
 });
 
 describe('svc-p2p mount — the public surface', () => {
@@ -337,8 +461,86 @@ describe('svc-p2p mount — the public surface', () => {
     });
   });
 
+  it('discloses moderationReachable on health when an allowlist is configured', async () => {
+    // Clients must not imply a watcher when none is staffed — and must see true
+    // when one is, without needing a scoped procedure.
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {
+      moderatorUserIds: [USER],
+    }).createCaller(anonymous());
+    await expect(caller.health()).resolves.toEqual({
+      ok: true,
+      service: 'svc-p2p',
+      moderationReachable: true,
+    });
+  });
+
   it('serves health even when a forged principal was presented', async () => {
     // A rejected principal makes the caller anonymous, not rejected outright.
     await expect(routerFor(stubP2p()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe('svc-p2p mount — late settlements ops', () => {
+  it('refuses the late-settlements list without admin:compliance', async () => {
+    // Operator surface for committed-but-unsettled decisions. Not either party's
+    // p2p:write — that would let a party inventory the whole house's backlog.
+    let listed = 0;
+    const p2p = stubP2p({
+      listLateSettlements: async () => {
+        listed++;
+        return [];
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).ops.lateSettlements({})).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(listed).toBe(0);
+  });
+
+  it('refuses a forged principal even when it claims admin:compliance', async () => {
+    let listed = 0;
+    const p2p = stubP2p({
+      listLateSettlements: async () => {
+        listed++;
+        return [];
+      },
+    });
+    const ctx = forged(principal({ scopes: ['admin:compliance', 'p2p:write'], tier: 'full', mfa: true }));
+    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).ops.lateSettlements({})).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(listed).toBe(0);
+  });
+});
+
+describe('svc-p2p mount — offer methods shape', () => {
+  it('refuses an offer whose methods are not matchable ids', async () => {
+    // methodAllowed only matches strings or {id}. Boarding junk would create
+    // an active offer that can never be taken — a free stall of inventory.
+    let created = 0;
+    const p2p = stubP2p({
+      createOffer: async () => {
+        created++;
+        throw new Error('create must not run');
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    await expect(
+      createP2pRouter(p2p, stubInstruments())
+        .createCaller(ctx)
+        .offers.create({
+          side: 'sell',
+          asset: 'USDT',
+          fiatCurrency: 'EUR',
+          priceType: 'fixed',
+          price: '1',
+          minAmount: '10',
+          maxAmount: '100',
+          // TS wire type forbids bare `{}`; cast so we still prove runtime zod refuses it.
+          methods: [{} as { id: string }],
+        }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(created).toBe(0);
   });
 });

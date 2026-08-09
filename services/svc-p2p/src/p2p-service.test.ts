@@ -5,7 +5,15 @@ import postgres from 'postgres';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus, type Envelope, type EventName, type Payload, type PublishOptions } from '@intafaced/events';
-import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
+import {
+  MemoryLedger,
+  formatAmount,
+  parseAmount as amt,
+  recipes,
+  houseFees,
+  userAvailable,
+  tradeEscrowAccount,
+} from '@intafaced/ledger-client';
 import { P2pService, P2pError } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY } from './instruments.js';
@@ -59,6 +67,7 @@ const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'),
 const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
+const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -113,6 +122,7 @@ if (!available) {
     await tx.unsafe(instrumentsMigration);
     await tx.unsafe(fieldGuardMigration);
     await tx.unsafe(disputeRulingMigration);
+    await tx.unsafe(lateSettleErrorMigration);
   });
 
   /**
@@ -313,6 +323,38 @@ if (!available) {
     it('lets only the maker close an offer', async () => {
       const offer = await sellOffer();
       await expect(p2p.closeOffer(offer.id, OTHER)).rejects.toMatchObject({ code: 'p2p.not_a_party' });
+    });
+
+    it('pauses an offer off the board without cancelling open trades', async () => {
+      // Schema always had `paused`; the API never exposed it. Pause hides
+      // remaining liquidity; open trades keep running.
+      await fund(MAKER, '1000');
+      const offer = await sellOffer({ totalAmt: amt('500'), maxAmt: amt('200') });
+      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+
+      const paused = await p2p.pauseOffer(offer.id, MAKER);
+      expect(paused.status).toBe('paused');
+      expect((await p2p.listOffers()).map((o) => o.id)).not.toContain(offer.id);
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
+        code: 'p2p.offer_not_active',
+      });
+
+      // Open trade still releasable.
+      await p2p.confirmFiatReceived(trade.id, MAKER);
+      expect((await p2p.getTrade(trade.id)).status).toBe('released');
+
+      // Resume restores the board.
+      const resumed = await p2p.resumeOffer(offer.id, MAKER);
+      expect(resumed.status).toBe('active');
+      expect((await p2p.listOffers()).map((o) => o.id)).toContain(offer.id);
+    });
+
+    it('refuses pause/resume by a non-maker and resume of a closed offer', async () => {
+      const offer = await sellOffer();
+      await expect(p2p.pauseOffer(offer.id, OTHER)).rejects.toMatchObject({ code: 'p2p.not_a_party' });
+      await p2p.closeOffer(offer.id, MAKER);
+      await expect(p2p.pauseOffer(offer.id, MAKER)).rejects.toMatchObject({ code: 'p2p.offer_not_active' });
+      await expect(p2p.resumeOffer(offer.id, MAKER)).rejects.toMatchObject({ code: 'p2p.offer_not_active' });
     });
   });
 
@@ -579,6 +621,26 @@ if (!available) {
       const trade = await escrowedTrade('100');
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'first' });
       await expect(p2p.openDispute({ tradeId: trade.id, openedBy: MAKER, reason: 'second' })).rejects.toBeInstanceOf(TradeStateError);
+    });
+
+    it('refuses cancel once a dispute is open — moderator owns the terminal, not either party', async () => {
+      // Reachable break: party cancel after dispute would unwind escrow without a ruling,
+      // defeating escalate-and-hold and the natural-person moderator invariant.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'stuck' });
+
+      await expect(p2p.cancelTrade(trade.id, MAKER)).rejects.toMatchObject({
+        code: 'p2p.dispute_already_open',
+      });
+      await expect(p2p.cancelTrade(trade.id, TAKER)).rejects.toMatchObject({
+        code: 'p2p.dispute_already_open',
+      });
+
+      // Escrow still held; nothing settled.
+      const held = await p2p.getTrade(trade.id);
+      expect(held.status).toBe('disputed');
+      expect(held.resolution).toBeNull();
+      expect(held.settledAt).toBeNull();
     });
 
     it('refuses a second ruling on a resolved dispute', async () => {
@@ -1551,9 +1613,13 @@ if (!available) {
       expect((await p2p.getTrade(trade.id)).settledAt).toBeNull();
 
       // Operator surface: late settlement is listable without grepping logs.
+      // Last failure is durable on the row — survives a process restart.
       const late = await p2p.listLateSettlements(50);
-      expect(late.some((t) => t.tradeId === trade.id)).toBe(true);
-      expect(late.find((t) => t.tradeId === trade.id)?.ageSeconds).toBeGreaterThanOrEqual(0);
+      const lateRow = late.find((t) => t.tradeId === trade.id);
+      expect(lateRow).toBeDefined();
+      expect(lateRow!.ageSeconds).toBeGreaterThanOrEqual(0);
+      expect(lateRow!.lastSettleError).toMatch(/ledger unavailable/);
+      expect(lateRow!.lastSettleErrorAt).toBeInstanceOf(Date);
 
       expect((await p2p.sweepSettlements()).settled).toBe(1);
       expect(await p2p.listLateSettlements()).toEqual([]);
@@ -1774,6 +1840,47 @@ if (!available) {
       expect(await escrowOf(MAKER)).toBe('300');
     });
 
+    it('flags equal-and-opposite per-trade drift that seller aggregation would hide', async () => {
+      // Audit P2 (2026-08-08): summing expected/actual by (seller, asset) before
+      // comparing makes two trades that each disagree by +X and −X report ok.
+      // Pots are purpose-keyed per trade — the alarm must use the same grain.
+      await fund(MAKER, '10000');
+      const offer = await sellOffer({ maxAmt: amt('100'), totalAmt: amt('500') });
+      const a = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const b = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
+
+      // Move 10 units from trade A's pot into trade B's pot via available
+      // (ledger refuses pot→pot without an available counter-entry). Seller
+      // totals still match the sum of the trade amounts; per-trade pots do not.
+      await ledger.post({
+        idempotencyKey: `test.cross-trade-theft:out:${a.id}`,
+        module: 'p2p',
+        reason: 'test.cross_trade_theft',
+        entries: [
+          { account: tradeEscrowAccount(MAKER, ASSET, a.id), direction: 'credit', amount: amt('10') },
+          { account: userAvailable(MAKER, ASSET), direction: 'debit', amount: amt('10') },
+        ],
+      });
+      await ledger.post({
+        idempotencyKey: `test.cross-trade-theft:in:${b.id}`,
+        module: 'p2p',
+        reason: 'test.cross_trade_theft',
+        entries: [
+          { account: userAvailable(MAKER, ASSET), direction: 'credit', amount: amt('10') },
+          { account: tradeEscrowAccount(MAKER, ASSET, b.id), direction: 'debit', amount: amt('10') },
+        ],
+      });
+
+      const result = await p2p.escrowIntegrity();
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('unreachable');
+      const byTrade = new Map(result.drift.map((d) => [d.tradeId, d]));
+      expect(byTrade.get(a.id)).toMatchObject({ sellerId: MAKER, asset: ASSET, expected: '100', actual: '90' });
+      expect(byTrade.get(b.id)).toMatchObject({ sellerId: MAKER, asset: ASSET, expected: '100', actual: '110' });
+      // Seller totals still sum to 200 — the bug the aggregation hid.
+      expect(await escrowOf(MAKER)).toBe('200');
+    });
+
     it('still agrees when a decision is recorded but not yet posted', async () => {
       // A decided-but-unsettled trade still holds escrow — the post has not
       // happened — so it must count on this side too.
@@ -1797,6 +1904,91 @@ if (!available) {
       const after = await sql<Array<{ amount: string }>>`SELECT amount FROM p2p.p2p_trades WHERE id = ${trade.id}`;
 
       expect(after[0]!.amount).toBe(before[0]!.amount);
+    });
+  });
+
+  describe('fee_bps integrality', () => {
+    it('refuses constructing a service with a fractional default fee', () => {
+      // Audit P5: numeric(8,0) rounds 12.5 → 13 silently. mulBps would then
+      // charge a fee nobody chose. Refuse at construction — take no longer
+      // accepts a per-call fee override.
+      expect(
+        () =>
+          new P2pService(sql, ledger, bus, {
+            ...options,
+            feeBps: 12.5 as unknown as number,
+          }),
+      ).toThrow(/fee_bps/);
+    });
+
+    it('stamps the service fee on every take — no per-call override', async () => {
+      // W5 residual: drop takeOffer({ feeBps }). Wire never exposed it; service
+      // method used to, which would let an internal caller zero the house fee.
+      await fund(MAKER, '1000');
+      const offer = await sellOffer();
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+      });
+      expect(trade.feeBps).toBe(100);
+      // Second take on the same service still stamps 100 — fee is constructor-only.
+      const again = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: OTHER,
+        amount: amt('100'),
+        method: 'sepa',
+      });
+      expect(again.feeBps).toBe(100);
+    });
+  });
+
+  describe('release must be postable before any decision', () => {
+    it('refuses a dust take when the fee would leave the buyer nothing', async () => {
+      // Exact code path is pinned pure in release-postable.test.ts (amount=1n +
+      // fee ≥ 1 → release_unpostable). Through takeOffer, 1 base unit at a normal
+      // price usually fails pricing first (rounds to zero fiat) — still refuse
+      // before lock. Fee is the service default (here 30), not a take-time arg.
+      const dusty = new P2pService(sql, ledger, bus, { ...options, feeBps: 30 });
+      await fund(MAKER, '1000');
+      const offer = await sellOffer({
+        totalAmt: amt('1'),
+        minAmt: 1n,
+        maxAmt: amt('1'),
+      });
+      await expect(
+        dusty.takeOffer({
+          offerId: offer.id,
+          takerId: TAKER,
+          amount: 1n,
+          method: 'sepa',
+        }),
+      ).rejects.toMatchObject({
+        code: expect.stringMatching(/^p2p\.(release_unpostable|invalid_amount)$/),
+      });
+      expect(await escrowOf(MAKER)).toBe('0');
+      expect(formatAmount((await p2p.getOffer(offer.id)).remainingAmt)).toBe('1');
+    });
+
+    it('still allows a one-unit take when the fee is zero', async () => {
+      // Full unit (not 1 base unit) so fiat quantises; fee 0 so release posts.
+      const noFee = new P2pService(sql, ledger, bus, { ...options, feeBps: 0 });
+      await fund(MAKER, '1000');
+      const offer = await sellOffer({
+        totalAmt: amt('1'),
+        minAmt: amt('1'),
+        maxAmt: amt('1'),
+      });
+      const trade = await noFee.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('1'),
+        method: 'sepa',
+      });
+      expect(trade.status).toBe('escrowed');
+      await noFee.confirmFiatReceived(trade.id, MAKER);
+      expect((await noFee.getTrade(trade.id)).status).toBe('released');
     });
   });
 

@@ -154,6 +154,12 @@ type TradeOut = z.infer<typeof tradeOutput>;
  * timed-out call needs to be able to tell those apart.
  */
 function toTrpcError(err: unknown): TRPCError {
+  // Procedures throw TRPCError deliberately (L2-7 party filter on trades.get /
+  // disputes.get → NOT_FOUND, not FORBIDDEN). `guard` funnels every throw
+  // through this mapper; re-wrapping those would turn a clean NOT_FOUND into
+  // INTERNAL_SERVER_ERROR and undo the IDOR shape the caller is meant to see.
+  if (err instanceof TRPCError) return err;
+
   if (err instanceof InstrumentError) {
     switch (err.code) {
       case 'p2p.instrument_not_found':
@@ -226,6 +232,9 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.offer_not_active':
       case 'p2p.offer_method_unsupported':
+      case 'p2p.offer_limit_exceeded':
+      case 'p2p.invalid_fee_bps':
+      case 'p2p.release_unpostable':
       case 'p2p.dispute_evidence_rejected':
       // The caller can fix it — by being a person. Reachable only from a
       // principal whose user id is not a canonical UUID, which is a wiring
@@ -441,8 +450,12 @@ export function createP2pRouter(
              * is the seller's instrument set — a clean per-method probe of the
              * maker. The service refuses it too; this is the message a client
              * can act on rather than a 400 from deeper down.
+             *
+             * Each entry is a method id (string) or `{ id }` — not `{}` / null /
+             * numbers. `methodAllowed` only matches those shapes; junk would
+             * board an offer that can never be taken.
              */
-            methods: z.array(z.unknown()).min(1),
+            methods: z.array(z.union([z.string().min(1).max(64), z.object({ id: z.string().min(1).max(64) })])).min(1),
             terms: z.string().max(4000).optional(),
           }),
         )
@@ -490,6 +503,16 @@ export function createP2pRouter(
         .input(z.object({ offerId: z.string().uuid() }))
         .output(offerOutput)
         .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.closeOffer(input.offerId, ctx.principal.userId)))),
+
+      pause: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(z.object({ offerId: z.string().uuid() }))
+        .output(offerOutput)
+        .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.pauseOffer(input.offerId, ctx.principal.userId)))),
+
+      resume: scopedProcedure('p2p:write', { module: 'p2p' })
+        .input(z.object({ offerId: z.string().uuid() }))
+        .output(offerOutput)
+        .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.resumeOffer(input.offerId, ctx.principal.userId)))),
     }),
 
     trades: router({
@@ -1027,6 +1050,8 @@ export function createP2pRouter(
                 resolutionReason: z.string().nullable(),
                 resolvedAt: z.string(),
                 ageSeconds: z.number().int().nonnegative(),
+                lastSettleError: z.string().nullable(),
+                lastSettleErrorAt: z.string().nullable(),
               }),
             ),
           }),
@@ -1042,6 +1067,8 @@ export function createP2pRouter(
                 resolutionReason: r.resolutionReason,
                 resolvedAt: r.resolvedAt.toISOString(),
                 ageSeconds: r.ageSeconds,
+                lastSettleError: r.lastSettleError,
+                lastSettleErrorAt: r.lastSettleErrorAt?.toISOString() ?? null,
               })),
             };
           }),
