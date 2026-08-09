@@ -354,17 +354,20 @@ function fail(message) {
 // Every assertion below is a claim this file makes in prose above, and each one
 // names the revert it catches:
 //
-//   · pass a ref NAME to `worktree add` again → "the add is given a SHA" fails
-//   · resolve the ref a second time           → "resolved exactly once" fails
-//   · drop the fetch status check             → "a failed fetch warns" fails
-//   · drop the ancestry check                 → "unrelated base warns" fails
-//   · flatten the branch-name convention      → "docs-adr-foo is refused" fails
+//   · pass a ref NAME to `worktree add` again  → "the add is given a SHA"
+//   · resolve the ref a second time            → "resolved exactly once"
+//   · drop the fetch status check              → "a failed fetch warns"
+//   · drop the ancestry check                  → "a base that main is not an
+//                                                 ancestor of warns"
+//   · flatten the branch-name convention       → "docs-adr-foo is refused"
+//   · re-resolve at the call site in create()  → "resolves … in exactly one
+//                                                 place" + "hands the add the
+//                                                 PLANNED sha"
 //
 // Pure fixtures: no git, no network, no disk. Runs before anything reads a repo.
 if (selfTest) {
   const SHA_A = 'a'.repeat(40);
   const SHA_B = 'b'.repeat(40);
-  const SHA_LOCAL = 'c'.repeat(40);
 
   /** A fake git whose `origin/main` MOVES on every read — the race, on demand. */
   function movingIo({ hasRemote = true, ancestor = true } = {}) {
