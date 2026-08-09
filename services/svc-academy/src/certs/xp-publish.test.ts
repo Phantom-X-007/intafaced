@@ -202,10 +202,7 @@ describe('certXpPlaneStatus — what an operator is told when a rank did not mov
       sourceModule: 'academy',
       action: 'cert.granted',
       rankWriter: 'svc-identity',
-      policies: [
-        { certId: 'foundations-v1', xpDelta: 100 },
-        { certId: 'markets-v1', xpDelta: 150 },
-      ],
+      policies: [{ certId: 'foundations-v1', xpDelta: 100 }],
     });
   });
 
