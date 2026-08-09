@@ -507,9 +507,25 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
       code: 'trade.algo_child_cancel_failed',
     });
     expect(engine.get(parent.id)!.status).not.toBe('cancelled');
-    expect(engine.get(parent.id)!.status).toBe('active');
+    // W4 C1: partial cancel pauses so the next tick cannot place more children.
+    expect(engine.get(parent.id)!.status).toBe('paused');
+    expect(engine.get(parent.id)!.haltReason).toBe('cancel_incomplete');
     // Collect-all: both children were asked before the flip decision.
     expect(attempted.sort()).toEqual(['order-0', 'order-1']);
+
+    ports.advance(2_000);
+    const after = await engine.tick(parent.id);
+    expect(after).toEqual({ kind: 'idle', reason: 'paused' });
+    expect(ports.placed).toHaveLength(2); // no third child
+
+    // Resume refused until re-cancel succeeds (adversarial Class M).
+    try {
+      engine.resume(USER, parent.id);
+      throw new Error('expected resume refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(TradeError);
+      expect((e as TradeError).code).toBe('trade.algo_cancel_incomplete');
+    }
   });
 
   it('A: parent flips cancelled only after every child cancel succeeds', async () => {
@@ -529,6 +545,42 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
     expect(cancelled.status).toBe('cancelled');
     expect(order).toContain('cancel:order-0');
     expect(order).toContain('cancel:order-1');
+  });
+});
+
+describe('TwapEngine — tickAll isolation (W4 C2)', () => {
+  it('one parent throw does not starve the next active parent', async () => {
+    let n = 0;
+    const ports = makePorts({
+      randomId: () => {
+        n += 1;
+        return `algo-${n}`;
+      },
+      markFor: async (marketId) => {
+        if (marketId === 'm-bad') throw new Error('mark feed down');
+        return {
+          marketId,
+          price: parseAmount('50'),
+          asOf: new Date(1_700_000_000_000),
+          quality: 'mid' as const,
+        };
+      },
+    });
+    const engine = new TwapEngine(ports);
+    engine.create(
+      USER,
+      baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000, marketId: 'm-bad', symbol: 'BAD/USDT' }),
+      LOT,
+    );
+    const good = engine.create(
+      USER,
+      baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000, marketId: 'm-good', symbol: 'GOOD/USDT' }),
+      LOT,
+    );
+    await engine.tickAll();
+    // Bad parent threw; good parent still placed one child.
+    expect(engine.get(good.id)!.children).toHaveLength(1);
+    expect(ports.placed.length).toBe(1);
   });
 });
 
