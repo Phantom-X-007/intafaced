@@ -128,15 +128,16 @@ What the job does:
 - **Refuse → write nothing** (warn log with both states / metrics only)
 - **Auto-delete only** unfunded **pending** (`counterpart_unfunded_engine_missing`); open+unfunded auto findings stay alert-only
 - **Never** silent-releases funded missing; does **not** call `reconcileOrder` (still the per-order operator tool)
+- **Market-id drift alarm (4.5) — landed:** each tick compares `SELECT id FROM trade.markets` to engine `GET /markets` (`MatchingClient.listMarkets`); symmetric diff is warn-log only — never invents or deletes markets, never moves value
 
 `funded` comes from the ledger balance, never the order row snapshot.
 
-Residual (still open): market-id set drift alarm (4.5); non-destructive probe on `reconcileOrder` itself (4.2–4.3).
+Residual (still open): non-destructive probe on `reconcileOrder` itself is **probe-half sealed** (list-before-cancel #1524); **release-on-miss policy** remains owner carve-out (§4.3).
 
-### 4.5 `trade.markets` and the engine's markets can drift with nothing noticing
+### 4.5 `trade.markets` and the engine's markets can drift with nothing noticing — **landed**
 
 The 10-vs-16 market-id divergence had no alarm. `GET /markets` on the engine versus `SELECT id FROM trade.markets`
-is a one-line comparison, and it caught this. Worth a line in the same job.
+is compared on every A10 tick (`diffMarketIds` / `marketIdDrift` on the tick result). Alarm only — no heal.
 
 ---
 

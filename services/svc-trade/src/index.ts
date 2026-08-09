@@ -285,6 +285,17 @@ const reconcileJobs = startEngineLedgerReconcileJobs({
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'engine-ledger reconcile job tick failed'),
   onResult: (r) => {
+    if (r.marketIdDrift.drifted) {
+      app.log.warn(
+        {
+          tradeCount: r.marketIdDrift.tradeCount,
+          engineCount: r.marketIdDrift.engineCount,
+          onlyInTrade: r.marketIdDrift.onlyInTrade,
+          onlyInEngine: r.marketIdDrift.onlyInEngine,
+        },
+        'engine-ledger market-id DRIFT — alarm only; no invent/delete of markets',
+      );
+    }
     if (r.plan.refusals.length > 0) {
       app.log.warn(
         {

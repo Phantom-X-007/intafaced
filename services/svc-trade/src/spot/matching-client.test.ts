@@ -142,3 +142,29 @@ describe('listOrders — non-destructive liveness', () => {
     expect(calls[0]).not.toContain('DELETE');
   });
 });
+
+describe('listMarkets — market-id drift port', () => {
+  it('returns engine market ids unchanged (no invent)', async () => {
+    const body = { markets: [MARKET, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'] };
+    const calls = stubFetch(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    await expect(client.listMarkets()).resolves.toEqual(body);
+    expect(calls[0]).toContain('/markets');
+    expect(calls[0]).not.toContain('DELETE');
+  });
+
+  it('empty engine set is honest empty, not unavailable', async () => {
+    stubFetch(new Response(JSON.stringify({ markets: [] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    await expect(client.listMarkets()).resolves.toEqual({ markets: [] });
+  });
+
+  it('transport failure stays loud', async () => {
+    stubFetch(new Response('boom', { status: 500 }));
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    await expect(client.listMarkets()).rejects.toBeInstanceOf(MatchingUnavailableError);
+  });
+});

@@ -10,7 +10,7 @@
 import type { Sql } from 'postgres';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
-import type { CounterpartOrder, ReconcileReport } from './matching-client.js';
+import type { CounterpartOrder, EngineMarketList, ReconcileReport } from './matching-client.js';
 import { runEngineLedgerReconcileTick, type EngineLedgerReconcileTickResult } from './engine-ledger-reconcile.js';
 
 export interface EngineLedgerReconcileJobsConfig {
@@ -27,6 +27,7 @@ export interface EngineLedgerReconcileJobsDeps {
   ledger: Pick<LedgerClient, 'balance'>;
   matching: {
     reconcile(orders: readonly CounterpartOrder[]): Promise<ReconcileReport>;
+    listMarkets(): Promise<EngineMarketList>;
   };
   config: EngineLedgerReconcileJobsConfig;
   onError?: (name: string, err: unknown) => void;

@@ -234,6 +234,13 @@ export class StubMatching implements MatchingClient {
     return { marketId, orders };
   }
 
+  /** Default: empty engine set (tests that care set this). */
+  engineMarketIds: string[] = [];
+
+  async listMarkets(): Promise<import('./matching-client.js').EngineMarketList> {
+    return { markets: [...this.engineMarketIds] };
+  }
+
   async reconcile(): Promise<import('./matching-client.js').ReconcileReport> {
     return { checked: 0, agreed: 0, findings: [], refusals: 0, ok: true };
   }
@@ -282,6 +289,10 @@ export class UnreachableMatching implements MatchingClient {
   }
 
   async listOrders(_marketId: string): Promise<import('./matching-client.js').EngineLiveOrders> {
+    throw new Error('svc-matching is unreachable');
+  }
+
+  async listMarkets(): Promise<import('./matching-client.js').EngineMarketList> {
     throw new Error('svc-matching is unreachable');
   }
 

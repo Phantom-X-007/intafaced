@@ -170,6 +170,14 @@ export interface ReconcileReport {
   readonly ok: boolean;
 }
 
+/**
+ * Engine market-id set (GET /markets wire). Ids only — never invent listings.
+ * Empty array = engine has no books yet (honest empty, not an outage).
+ */
+export interface EngineMarketList {
+  readonly markets: readonly string[];
+}
+
 export interface MatchingClient {
   submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult>;
   cancel(marketId: string, orderId: string): Promise<EngineCancelResult>;
@@ -180,6 +188,12 @@ export interface MatchingClient {
    * Empty market / never-traded → empty orders (not an outage).
    */
   listOrders(marketId: string): Promise<EngineLiveOrders>;
+  /**
+   * Whole-engine market id set — GET /markets.
+   * Used for market-id drift alarm vs trade.markets (handoff §4.5).
+   * Never mutates books; empty list is honest.
+   */
+  listMarkets(): Promise<EngineMarketList>;
   /**
    * Non-destructive engine↔counterpart compare. Service-auth only.
    * Returns 200 with `ok: false` on refusals — that is a report, not an outage.
@@ -326,6 +340,18 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       }
 
       return (await response.json()) as EngineLiveOrders;
+    },
+
+    /**
+     * Market-id set for drift alarm. Always a list of ids — never invents a
+     * market row on either side. Transport failure throws MatchingUnavailable;
+     * empty markets is a valid 200.
+     */
+    async listMarkets() {
+      return call<EngineMarketList>('/markets', {
+        method: 'GET',
+        headers: authHeaders(''),
+      });
     },
 
     /**

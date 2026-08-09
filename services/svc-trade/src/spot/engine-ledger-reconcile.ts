@@ -15,6 +15,9 @@
  * 4. **Refuse findings write nothing** — log / metrics / alert only.
  * 5. **Auto-delete only** `counterpart_unfunded_engine_missing` when the row
  *    is still `pending` (engine table: unfunded intent, moves no value).
+ * 6. **Market-id drift alarm** (handoff §4.5): compare `trade.markets` ids to
+ *    engine `GET /markets`. Symmetric diff is log/alert only — never invents
+ *    a listing, never deletes a market, never moves value.
  *
  * ── What this deliberately does NOT do ──────────────────────────────────────
  *
@@ -23,12 +26,13 @@
  * - Release holds, invent holds, cancel live books, or pick a winner on any
  *   `refuse` case. A lost fill looks like funded-missing-from-engine; auto-
  *   release would pay the user money owed to a taker.
+ * - Heal market-id drift by writing either side.
  *
  * Job host: `engine-ledger-reconcile-jobs.ts` · default OFF.
  */
 import type { Sql } from 'postgres';
 import { formatAmount, orderHoldAccount, parseAmount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
-import type { CounterpartOrder, ReconcileFinding, ReconcileReport } from './matching-client.js';
+import type { CounterpartOrder, EngineMarketList, ReconcileFinding, ReconcileReport } from './matching-client.js';
 import type { OrderStatus } from './types.js';
 
 /** Wire state for matching — three values, not trade's six-status enum. */
@@ -120,6 +124,36 @@ export function planLocalActions(report: ReconcileReport, claimsById: ReadonlyMa
   return { deleteUnfundedPendingIds, refusals, autoNonDelete };
 }
 
+/**
+ * Symmetric market-id set drift (handoff §4.5).
+ * `drifted` is true when either side has an id the other lacks.
+ * Pure compare — no writes, no invent.
+ */
+export interface MarketIdDriftReport {
+  readonly tradeCount: number;
+  readonly engineCount: number;
+  /** Present in trade.markets, missing from engine GET /markets. */
+  readonly onlyInTrade: readonly string[];
+  /** Present on engine, missing from trade.markets. */
+  readonly onlyInEngine: readonly string[];
+  readonly drifted: boolean;
+}
+
+/** Pure set diff — sorted ids for stable logs/tests. Never invents members. */
+export function diffMarketIds(tradeIds: readonly string[], engineIds: readonly string[]): MarketIdDriftReport {
+  const trade = new Set(tradeIds);
+  const engine = new Set(engineIds);
+  const onlyInTrade = [...trade].filter((id) => !engine.has(id)).sort();
+  const onlyInEngine = [...engine].filter((id) => !trade.has(id)).sort();
+  return {
+    tradeCount: trade.size,
+    engineCount: engine.size,
+    onlyInTrade,
+    onlyInEngine,
+    drifted: onlyInTrade.length > 0 || onlyInEngine.length > 0,
+  };
+}
+
 export interface EngineLedgerReconcileTickResult {
   readonly counterpartCount: number;
   readonly report: ReconcileReport;
@@ -131,6 +165,8 @@ export interface EngineLedgerReconcileTickResult {
    * Tick never posts to the ledger.
    */
   readonly ledgerPosts: readonly never[];
+  /** Market-id set compare — alarm surface only. */
+  readonly marketIdDrift: MarketIdDriftReport;
 }
 
 export interface EngineLedgerReconcileTickDeps {
@@ -138,6 +174,7 @@ export interface EngineLedgerReconcileTickDeps {
   ledger: Pick<LedgerClient, 'balance'>;
   matching: {
     reconcile(orders: readonly CounterpartOrder[]): Promise<ReconcileReport>;
+    listMarkets(): Promise<EngineMarketList>;
   };
   /**
    * When true (default), perform the only auto write: DELETE pending unfunded.
@@ -197,10 +234,26 @@ export async function loadTradeOrderClaims(
 }
 
 /**
- * One full sweep: build counterpart view → POST reconcile → local plan → optional deletes.
- * Never releases holds. Never invents money.
+ * Load every listed trade market id for the drift compare.
+ * No join to orders — an empty trade book can still diverge from the engine.
+ */
+export async function loadTradeMarketIds(sql: Sql): Promise<string[]> {
+  const rows = await sql<{ id: string }[]>`
+    SELECT id FROM trade.markets ORDER BY id ASC
+  `;
+  return rows.map((r) => r.id);
+}
+
+/**
+ * One full sweep: market-id drift alarm → build counterpart view → POST reconcile
+ * → local plan → optional deletes.
+ * Never releases holds. Never invents money. Drift never writes either side.
  */
 export async function runEngineLedgerReconcileTick(deps: EngineLedgerReconcileTickDeps): Promise<EngineLedgerReconcileTickResult> {
+  const tradeMarketIds = await loadTradeMarketIds(deps.sql);
+  const engineMarkets = await deps.matching.listMarkets();
+  const marketIdDrift = diffMarketIds(tradeMarketIds, engineMarkets.markets);
+
   const claims = await loadTradeOrderClaims(deps.sql, deps.ledger, deps.limit);
   const claimsById = new Map(claims.map((c) => [c.orderId, c]));
   const counterpart = claims.map(toCounterpartOrder);
@@ -230,5 +283,6 @@ export async function runEngineLedgerReconcileTick(deps: EngineLedgerReconcileTi
     plan,
     deleted,
     ledgerPosts: [],
+    marketIdDrift,
   };
 }
