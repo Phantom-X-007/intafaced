@@ -1052,6 +1052,103 @@ if (!available) {
       expect(paper.assetClass).toBe('forex');
     });
 
+    /**
+     * trade.options honest thin (D7 still owner).
+     *
+     * Default service has empty TRADE_OPTIONS_SETTLEMENT_FIXING → refuse any
+     * kind=options list. With fixing set, incomplete terms still refuse (half-list).
+     * Complete terms list; orders remain refused by assertTradable (no engine/IV).
+     */
+    it('refuses options listing when settlement fixing is unconfigured', async () => {
+      await expect(
+        trade.listMarket({
+          symbol: 'BTC/USDT:USDT-251226-90000-C',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'options',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 10,
+          takerBps: 20,
+          optionType: 'call',
+          optionStrike: amt('90000'),
+          optionExpiryAt: new Date('2025-12-26T08:00:00.000Z'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.options_fixing_unconfigured' });
+    });
+
+    it('refuses half-listed options even when fixing is configured', async () => {
+      const withFixing = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        optionsSettlementFixing: 'owner-d7-opaque-id',
+      });
+      await expect(
+        withFixing.listMarket({
+          symbol: 'BTC/USDT:USDT-251226-HALF',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'options',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 10,
+          takerBps: 20,
+          // missing optionType / strike / expiry
+        }),
+      ).rejects.toMatchObject({ code: 'trade.options_terms_incomplete' });
+    });
+
+    it('lists a complete options market when fixing is configured; orders still refuse by kind', async () => {
+      const withFixing = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        optionsSettlementFixing: 'owner-d7-opaque-id',
+      });
+      const listed = await withFixing.listMarket({
+        symbol: 'BTC/USDT:USDT-251226-90000-C',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'options',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        optionType: 'call',
+        optionStrike: amt('90000'),
+        optionExpiryAt: new Date('2025-12-26T08:00:00.000Z'),
+      });
+      expect(listed.kind).toBe('options');
+      expect(listed.symbol).toBe('BTC/USDT:USDT-251226-90000-C');
+
+      // CHECK stamp is on the row even if Market domain omits terms.
+      const row = await sql<{ settlement_fixing: string | null; option_type: string | null; option_strike: string | null }[]>`
+        SELECT settlement_fixing, option_type, option_strike::text AS option_strike
+          FROM trade.markets WHERE id = ${listed.id}
+      `;
+      expect(row[0]?.settlement_fixing).toBe('owner-d7-opaque-id');
+      expect(row[0]?.option_type).toBe('call');
+      expect(row[0]?.option_strike).toMatch(/^90000(\.0+)?$/);
+
+      await fund(ALICE, 'USDT', '100000');
+      await expect(
+        withFixing.placeOrder(principalFor(ALICE), {
+          marketId: listed.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('0.01'),
+          price: amt('1000'),
+          clientOrderId: 'opt-must-refuse',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.market_kind_unsupported' });
+    });
+
     it('refuses a weekend forex order and holds nothing', async () => {
       // paper=true: D-S-05 allows modelling forex; production active listing is refused.
       const eurusd = await trade.listMarket({

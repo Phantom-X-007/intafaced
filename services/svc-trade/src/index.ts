@@ -83,6 +83,7 @@ const bus = await JetStreamEventBus.connect({
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
   spotEnabled: env.TRADE_SPOT_ENABLED,
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
+  optionsSettlementFixing: env.TRADE_OPTIONS_SETTLEMENT_FIXING,
   marketSlippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
   convertEnabled: env.TRADE_CONVERT_ENABLED,
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,

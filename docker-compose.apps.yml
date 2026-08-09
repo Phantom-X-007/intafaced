@@ -358,6 +358,9 @@ services:
       # futures: opens are refused, no realised profit is paid, and nothing ever
       # leaves a pot nobody chose, which is all the ADR asked for.
       TRADE_FUTURES_PROFIT_SOURCE: ${TRADE_FUTURES_PROFIT_SOURCE:-}
+      # Options listing gate (trade.options / D7). Empty = refuse kind=options
+      # listing. Opaque stamp only — never invent fixing source/window/payor.
+      TRADE_OPTIONS_SETTLEMENT_FIXING: ${TRADE_OPTIONS_SETTLEMENT_FIXING:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4004']
     healthcheck: *healthcheck

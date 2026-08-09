@@ -320,6 +320,11 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.futures'],
+    note:
+      'Honest thin slice (not done): listMarket refuses kind=options while TRADE_OPTIONS_SETTLEMENT_FIXING is empty ' +
+      '(trade.options_fixing_unconfigured); complete European terms required when set; DB CHECK markets_options_terms_ck ' +
+      'blocks half-listed option rows. No IV surface, no pricing model, no invent D7 source/window/payor. Orders still ' +
+      'refused by assertTradable (trade.market_kind_unsupported). Real product remains blocked on D7 settlement fixing law.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',

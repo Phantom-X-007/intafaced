@@ -102,6 +102,15 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Not a symbol to drop forever if the operator later enables rails — BadRequest.
    */
   'trade.unsettled_asset_class_listing': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Options listing refused: D7 settlement fixing not configured.
+   * BadRequest — operator sets TRADE_OPTIONS_SETTLEMENT_FIXING; not a symbol to drop.
+   */
+  'trade.options_fixing_unconfigured': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Options half-list (missing strike/type/expiry) or terms on non-options kind.
+   */
+  'trade.options_terms_incomplete': { ccxt: 'BadRequest', status: 400 },
   /** Operator kill-switch across the whole spot plane — venue-wide, retryable. */
   'trade.spot_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },
