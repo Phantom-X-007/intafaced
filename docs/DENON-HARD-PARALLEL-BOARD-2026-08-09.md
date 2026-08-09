@@ -1,319 +1,420 @@
 # Denon — hard parallel board (substance-audited) · 2026-08-09
 
-**Audience:** `@Phantom-X-007` (Denon) · **From:** Nitro · **Status:** BINDING handoff for parallel cook  
+**Audience:** `@Phantom-X-007` (Denon) · **From:** Nitro · **Status:** BINDING handoff · **Rev:** **v2 mass thicken**  
 **Substance Audit Active:** Evaluating Queue Mass, Leverage Density, Residual Depth. **Rejecting busy efficiency.**
 
-**Tip at write (re-derive every session):** `7a505849` · `git fetch && git log -1 --oneline origin/main`  
-**Open PRs at write:** ~58 (almost all Nitro agents) · **Denon open:** **0** · **Shehzad open:** #1177  
-**Companion law:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md)  
-**Prior hard board (partially retired):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md)  
-**Spec factory (done):** [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md) — **18/18 law written**
+**Tip at last land:** re-derive `git fetch && git log -1 --oneline origin/main`  
+**Open PRs:** re-derive `gh pr list` · dual-edit **none** of Nitro residual file sets · **do not dual-edit** your own open handoff/owner PRs from other sessions either (path-intersect)  
+**Companion law:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md) · [`DIRECTION-2026-07-31.md`](DIRECTION-2026-07-31.md)  
+**Spec factory (done — do not re-write):** [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md) — **18/18**  
+**Prior mega board (historical):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md)
 
 ---
 
 ## 0 · Why this board exists (intent)
 
-Nitro’s agents are already cooking a **thick residual wave** (wave 6: pay/trade/shell/ws/indexer/ledger honesty, Class N/P/M patches). That work is **real**, but it is **not** what Denon is for.
+Nitro agents cook **residual honesty** (wave 6 class: pins, refuse fixes, lane stops). That is real and thick. It is **not** what you are for.
 
-**Denon gets the mountains where agents systematically do bad work:**
+**You get mountains where agents systematically drift:** invent rates/mids/Done bars · ship “route exists” as product · unit-test guards that never run on public doors · Java dual-book theater · greenfield rooms without law · Class M product-complete engines.
 
-| Agent failure mode                                            | Why Denon owns the mountain        |
-| ------------------------------------------------------------- | ---------------------------------- |
-| Invent prices, rates, fee bps, venue sets, economic numbers   | Product judgment + owner rulings   |
-| Ship “route exists” as product Done                           | Product-complete engines under law |
-| Guard correct in unit, dead in path (futures thrice)          | Adversarial money architecture     |
-| Dual-book / Java money doors outside CI                       | Vendor plane integrity             |
-| Stamp-mill residual + docs thrash when freeProduct feels zero | Wrong leverage class               |
-| Dual-edit mid-flight PR piles                                 | His branches / his seal only       |
+| Agent failure mode                                          | Why you own the mountain           |
+| ----------------------------------------------------------- | ---------------------------------- |
+| Invent prices, rates, fee bps, venue sets, economic numbers | Product judgment + owner rulings   |
+| Ship “route exists” as product Done                         | Product-complete engines under law |
+| Guard correct in unit, dead in path                         | Adversarial money architecture     |
+| Dual-book / Java money doors outside CI                     | Vendor plane integrity             |
+| Stamp-mill residual + docs thrash                           | Wrong leverage class               |
+| Dual-edit mid-flight PR piles                               | His branches / his seal only       |
+| Backtest / agent-billing / IFC prizes framed as truth       | Honesty under pressure rooms       |
 
-**Freedom:** design PR DAGs and order. **Constraint:** one path owner; never dual-edit open Nitro PR file sets; never implement Shehzad chain mountains.
-
----
-
-## 1 · Substance audit of the overall load (this tip)
-
-| Question                                                     | Verdict                            | Evidence                                                                                                                           |
-| ------------------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Is there massive open product inventory?                     | **PASS**                           | Tracker: **44 done / 61 ready / 3 wip / 25 socket**. **41 ready free** (no owner) across trade/pay/bank/ops/agents/academy/market. |
-| Is agent residual thin?                                      | **PASS (agents)**                  | Wave 6 depth audit thickened; ~58 open craft/babysit PRs on money + shell + ws.                                                    |
-| Is the _old_ Denon “write D-S specs” queue still a mountain? | **FAIL (retired)**                 | Spec factory **18 done · 0 blank**. Re-issuing “write ADRs” is busy-efficiency.                                                    |
-| Is Denon’s _new_ queue thick enough for multi-hour cooks?    | **PASS (if he takes P1–P3 below)** | 20+ named hard mountains · Class M product engines · integrity programs · owner rulings · deploy/security.                         |
-| Thin/pad risk if we only list residual bugs?                 | **FAIL avoided**                   | Residual bug fixes stay on Nitro wave 6. Denon list is **engines + law numbers + plane integrity + run path**.                     |
-
-**Wave-level judgment:** Agents = residual + shell honesty. Denon = **product-complete money/ops engines + integrity programs agents thrash on**.
-
-### Parallel is real — but not “code any P1 anywhere now”
-
-| Mode                                         | Collides with agent residual? | What Denon does                                                                                                                                                                                                                                                                                                                                      |
-| -------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SAFE START (send him first)**              | **No**                        | P0 rulings (docs/ADRs) · P3 staging workflow file · P3 threat model · P4 spine disposition table · P0-03 dex venue sentence · options/forex law if near-term · ops compliance **mechanism** docs before code if pay/trade hot                                                                                                                        |
-| **HOT HOLD (same service as open residual)** | **Yes if he codes there now** | `svc-trade` · `svc-pay` · `svc-ledger` · `packages/ledger-client` · `svc-bank` · `svc-matching` · `svc-token` · `svc-p2p` · vendor money doors — **agents have open residual PRs** (re-derive `gh pr list`). Product-complete engines wait until those paths clear **or** he path-intersects every PR and only touches files agents are not editing. |
-| **After residual lands**                     | **No**                        | Full P1 trade/pay/bank product-complete + P2 promise-falsify on those services                                                                                                                                                                                                                                                                       |
-
-**Sending this board does not collide.** Dual-coding the same money files as open Nitro PRs would. Paste + LIVE-LANES make that law.
+**Freedom:** design PR DAGs and order. **Constraint:** one path owner · path-intersect open Nitro PRs · never implement Shehzad chain · never dual-edit open Nitro residual.
 
 ---
 
-## 1b · Pre-send truth check (Nitro · 2026-08-09)
+## 0b · What “right” means for this thicken (audit bar)
 
-| Your claim                                                    | Status                        | Proof                                                                                                                           |
-| ------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| He has a **lot** of real hard work                            | **TRUE**                      | P0–P4: rulings + product-complete engines + integrity + run path — not residual tips                                            |
-| Better **he** does it than agents (drift risk)                | **TRUE**                      | Invent rates/mids/Done bars · unreachable money guards · vendor Java outside CI — agent fail modes named in §0                  |
-| Will **not** collide with agent wave if he follows SAFE START | **TRUE**                      | SAFE START = docs/rulings/ops-cold · HOT HOLD on trade/pay/ledger/bank/matching while residual open                             |
-| Agents will **know** this is Denon-owned hard audit           | **TRUE when board is on tip** | LIVE-LANES row `denon-hard-parallel` + this file on `main` · until then only this chat knows — **land docs before / with send** |
-| Not busy-efficiency / pad                                     | **TRUE**                      | Spec factory write-work **retired**; residual micro stays agent wave 6                                                          |
+Nitro asked for **double or triple** mass. **Right is not a count target.** Right is:
 
----
+1. **Every new row maps to** a tracker mountain, a DIRECTION/ADR obligation, an axis nobody closed, or a named invent-ban.
+2. **No pad:** tip-bump docs, socket §13 as fake tickets, shell craft, residual micro already in agent PRs, re-writing D-S-01…18.
+3. **Fit Denon:** judgment + Class M product-complete + plane integrity + run path — not Nitro frontend craft, not Shehzad L1 implement.
+4. **Collision rule preserved:** SAFE START first · HOT HOLD while residual open on that service.
+5. **Honest mass:** v1 ≈ **47** IDs · v2 ≈ **120** IDs (**~2.5×**). **Forced 3× (~141) rejected** — the remainder would be sockets/UI/docs thrash (FAIL substance).
 
-## 2 · Collision wall (do not dual-build)
-
-| Not yours                                                                                            | Owner                                      |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Open Nitro agent PR file sets (~58 — re-derive `gh pr list`)                                         | Nitro agents — babysit only if you comment |
-| Vendor shell craft / terminal UX / i18n surface                                                      | Nitro human frontend lock + agents         |
-| Protocol / INTACHAIN / lending cascade **#1177**                                                     | `@shehzad002`                              |
-| Class X content: prod go-live yes, licence purchase, sanctions **list content**, host purchase money | Nitro human (+ counsel)                    |
-| §13 sockets as “backlog tickets”                                                                     | Nobody — deliberate non-build              |
-| Wave 6 residual micro-fixes already in flight                                                        | Nitro agents                               |
-
-**You may:** greenfield product engines on tip · owner-decision ADRs that still block · Java/vendor money plane · deploy **workflow** (host + secrets stay Class X) · promise-falsify money services · spine disposition · fleet image truth.
+**Re-audit of v2:** PASS mass · PASS leverage · PASS anti-pad · PASS sustained multi-week cook · PASS forward path.
 
 ---
 
-## 3 · Retired from the Aug 3–4 hard board (do not re-assign)
+## 1 · Substance audit (tip inventory)
 
-| Old ID                                   | Status now       | Note                                                                                                   |
-| ---------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
-| **D-S-01…18** write specs                | **DONE**         | Index + ADRs on tip. Implement under law; do not re-litigate.                                          |
-| **D-P2-01** `apps/web` one-commit delete | **DONE**         | #757 + retire ADR.                                                                                     |
-| **D-P0** “land your open money pile”     | **CLEAR**        | Denon open PR count = **0** at this tip.                                                               |
-| Re-audit as “agents need more D-S docs”  | **ANTI-PATTERN** | Spec factory already unblocked implement; residual invent is **numbers + product-complete Done bars**. |
+| Question                        | Verdict           | Evidence                                                                 |
+| ------------------------------- | ----------------- | ------------------------------------------------------------------------ |
+| Massive open product inventory? | **PASS**          | Tracker ~**44 done / 61 ready / 3 wip / 25 socket**. **~41 ready free**. |
+| Agent residual thin?            | **PASS (agents)** | Large open residual PR wall (re-derive).                                 |
+| Re-issue “write D-S specs”?     | **FAIL retired**  | 18/18 done.                                                              |
+| Denon queue thick enough?       | **PASS v2**       | ~120 judgment/engine/integrity IDs · multi-week.                         |
+| Pad risk if we force 3×?        | **FAIL avoided**  | Cap at real inventory; document rejected pad classes.                    |
 
----
+**Parallel truth:** Sending this board never collides. Coding **hot services** while Nitro residual PRs are open **does** collide — see SAFE START / HOT HOLD.
 
-## 4 · P0 — Owner product rulings (hours each · unblock whole engines)
+### SAFE START vs HOT HOLD
 
-These are **not** agent work. Agents invent here and ship fake product.
-
-| ID            | Mountain                                                         | Why agents fail                                                                                                 | Done bar                                                                                                             | Unlocks                                                                       |
-| ------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| **D26-P0-01** | **House desk + internal MM fairness**                            | ADR partially accepted; three owner questions open; house tenant + internal MM **may not be built** until ruled | Written owner ruling on tip; flip `execution.house-tenant` / internal half of `execution.market-making` from blocked | §28 execution, MM bot honesty, agent residual on `trade.mm-bot`               |
-| **D26-P0-02** | **DIRECTION §8 rate / fee / share numbers** (where you own them) | Mechanism law exists; **bps invent is doctrine crime**                                                          | Named parameters set in `token_params` / config authority (not source seeds) · or explicit “launch-closed until set” | trade.copy · market commission · affiliate · pay fee tables that still invent |
-| **D26-P0-03** | **`socket.dex-venue-set` one sentence**                          | `dex.quote-router` code exists; no venue set → no honest quote                                                  | Named venue set or permanent refuse-closed with product copy                                                         | dex plane usability without fake quotes                                       |
-| **D26-P0-04** | **Token emission / buyback number authority live**               | Seeds ≠ DB row; burn-before-guard still a money landmine (D-S-14)                                               | Code↔DB drift guards for emission/buyback family · buyback claim-before-burn sealed                                  | token mountain honesty; agent crash/stake tests stop inventing economics      |
-| **D26-P0-05** | **Options / forex settlement asset law** (if in near plan)       | No D-S row tracks these; ready tracker rows invite invent                                                       | ADR: which instruments live, settlement asset, refuse matrix                                                         | `trade.options` · `trade.forex` product start                                 |
-
-**Leverage density:** max. One ruling unblocks multi-day agent implementation.
+| Mode                     | Collide?            | Do                                                                                                                                                                                            |
+| ------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SAFE START**           | **No**              | All **P0** docs/rulings · **P3** workflow/threat/licence docs · **P4** spine/issue truth · **P1-X Connect** (new packages) · **P2** read-only maps · owner packet work already in flight      |
+| **HOT HOLD**             | **Yes if code now** | `svc-trade` · `svc-pay` · `svc-ledger` · `packages/ledger-client` · `svc-bank` · `svc-matching` · `svc-token` · `svc-p2p` · vendor money while residual PRs open — **path-intersect or wait** |
+| **After residual clear** | **No**              | Full product-complete + promise-falsify on that service                                                                                                                                       |
 
 ---
 
-## 5 · P1 — Product-complete money engines (biggest multi-day cooks)
+## 2 · Collision wall
 
-Tracker shows these **ready, free, dependencies satisfied**. Law is written. Agents ship **stages and patches**; Denon ships **product-complete** (or honest §13 residual named).
+| Not yours                                                                                   | Owner                                                  |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Open Nitro residual PR file sets                                                            | Nitro agents                                           |
+| Vendor shell / terminal UX / i18n craft                                                     | `nitro-frontend-all`                                   |
+| Protocol / INTACHAIN / lending implement                                                    | `@shehzad002`                                          |
+| Class X: go-live yes, secrets content, host purchase, sanctions **list**, counsel           | Nitro human                                            |
+| §13 sockets as “tickets”                                                                    | Nobody (except **decide** venue-set / fee-source — P0) |
+| Wave residual micro-fixes in flight                                                         | Nitro agents                                           |
+| `pay.gateway` · `web.terminal` · `ws.gateway` · `ops.admin` · `infra.i18n` · `trade.mm-bot` | Nitro-owned tracker rows — **coordinate, don’t steal** |
 
-### 5.1 Trade engines (Class M · highest agent invent risk)
+**You may:** greenfield engines on tip · owner rulings · Java plane · deploy workflow file · promise-falsify · Connect/Execution under law · agents/academy **backend** product-complete · spine disposition.
 
-| ID            | Tracker             | Law already on tip                                | Agent failure pattern                                                     | Your Done bar (product-complete)                                                                                                         |
-| ------------- | ------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **D26-P1-T1** | `trade.futures`     | D-S-01 + dark-feed ADR + Aug 6–8 integrity merges | Entry/exit/mark from request; unreachable guards; payout-grade dust books | E2E: open → fund → liquidate → dark-feed refuse → no double margin · marks never caller-supplied · promise-falsify suite on public doors |
-| **D26-P1-T2** | `trade.otc`         | D-S-02 / SPEC-OTC                                 | RFQ theater without stake gate / house spread truth                       | RFQ → stake gate → fail-closed quote → settle via ledger recipe only · no dual book                                                      |
-| **D26-P1-T3** | `trade.copy`        | D-S-03                                            | Mechanism without rate law → fake share                                   | Implement against SPEC; **rates refuse-closed** until P0-02; kill/unfollow real                                                          |
-| **D26-P1-T4** | `trade.algo`        | D-S-04 + TWAP slice ADR                           | TWAP “stage” without overdue-slice honesty                                | TWAP product path: child orders, pause, overdue disposition, no fake fills                                                               |
-| **D26-P1-T5** | `trade.ccxt-api`    | partial craft history                             | “Route exists” ≠ bot-ready                                                | CCXT surface product-complete or honest capability matrix + refuse                                                                       |
-| **D26-P1-T6** | `trade.options`     | mostly unset                                      | Greenfield invent                                                         | Only after P0-05; else explicit socket                                                                                                   |
-| **D26-P1-T7** | `trade.forex`       | mostly unset                                      | Greenfield invent                                                         | Only after P0-05; else explicit socket                                                                                                   |
-| **D26-P1-T8** | `venue.aggregation` | D-S-05 enum                                       | Venue adapters invent mids                                                | CCXT adapters with refuse-closed when book not payout-grade                                                                              |
-
-### 5.2 Pay vertical (business barely started · 2/11 done)
-
-| ID            | Tracker             | Law                           | Agent failure                                       | Your Done bar                                                                         |
-| ------------- | ------------------- | ----------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **D26-P1-P1** | `pay.psp`           | D-S-10 · SPEC-PAY             | Orchestrator shopping (Hyperswitch already refused) | PSP mode product path without third-party money library; merchant durability          |
-| **D26-P1-P2** | `pay.payfac`        | SPEC-PAY                      | Sub-merchant tree UI without permission model       | 14 permission areas real or honest partial + §13                                      |
-| **D26-P1-P3** | `pay.routing`       | SPEC-PAY                      | Fake approval-rate smarts                           | Geo/method/risk routing with refuse when data missing                                 |
-| **D26-P1-P4** | `pay.settlement`    | SPEC-PAY                      | Dual settlement invent                              | Bank vs crypto settlement recipes only                                                |
-| **D26-P1-P5** | `pay.fraud`         | chargeback parked Class X-ish | Agents pad chargeback theater                       | Fraud scoring + chargeback **mechanism**; list content / acquirer Class X stays Nitro |
-| **D26-P1-P6** | `pay.subscriptions` | residual open (#1367 cluster) | Mandate without pre-notify honesty                  | Product-complete mandates + honest notify gaps sealed                                 |
-| **D26-P1-P7** | `pay.public-api`    | pay-public-api ADR            | OpenAPI generator theater                           | Product surface + webhooks + sandbox Done bar                                         |
-| **D26-P1-P8** | `pay.plugins`       | SPEC-PAY                      | Plugin shells with no money path                    | One real plugin path or §13                                                           |
-
-**Note:** `pay.gateway` is **Nitro wip** — do not dual-build the gateway mountain; expand the vertical around it or coordinate handoff.
-
-### 5.3 Bank vertical (2/6 · rates invent risk)
-
-| ID            | Tracker               | Law                                        | Your Done bar                                                        |
-| ------------- | --------------------- | ------------------------------------------ | -------------------------------------------------------------------- |
-| **D26-P1-B1** | `bank.earn`           | D-S-09 · SPEC earn                         | Yield pools with day-boundary law; rates refuse if unset             |
-| **D26-P1-B2** | `bank.cards`          | bank vertical ADR · prior card door merges | Auth decision path <2s claim proven or honest; ledger half reachable |
-| **D26-P1-B3** | `bank.sovereign-card` | §18 · recent #1174-class work              | JIT conversion refuse-invent rates sealed product-complete           |
-| **D26-P1-B4** | `bank.ramps`          | D-S-09 · crypto half history               | Fiat on/off via pay adapters; no second book                         |
-
-### 5.4 Ops layer (0/6 — run-the-business · agents under-build)
-
-| ID            | Tracker             | Why hard                                            | Your Done bar                                       |
-| ------------- | ------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| **D26-P1-O1** | `ops.compliance`    | Screening / region authority · list content Class X | Mechanism sealed; content still Nitro/counsel       |
-| **D26-P1-O2** | `ops.affiliates`    | Rate invent (#1133-class)                           | Accrual tree product-complete under rate authority  |
-| **D26-P1-O3** | `ops.support`       | Agent desk half-built                               | Support mountain Done vs agent surface split honest |
-| **D26-P1-O4** | `ops.analytics`     | Warehouse stage exists                              | Read-replica product path usable or §13             |
-| **D26-P1-O5** | `ops.notifications` | Channel sockets vs fan-out                          | Fan-out mountain vs §13 channels explicit           |
-
-### 5.5 Market commerce (Class M open)
-
-| ID            | Tracker / PR                               | Your Done bar                                                                                                                                 |
-| ------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **D26-P1-M1** | `market.commerce` · open **#1189** (agent) | **Do not dual-edit #1189.** After merge or if abandoned: product-complete listings + commission refuse-blank-rate; stake-gate if law requires |
-| **D26-P1-M2** | `market.vendors`                           | Vendor lifecycle product-complete under house commission law                                                                                  |
+**Your open docs (babysit yourself):** re-derive — e.g. owner-ruling packet / futures handoff docs — do not thrash against residual on same paths.
 
 ---
 
-## 6 · P2 — Integrity programs (agents thrash · multi-day mass)
+## 3 · Retired (do not re-assign)
 
-| ID            | Program                                                                    | Why agents fail                                                         | Done bar                                                                                                                             |
-| ------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **D26-P2-01** | **Promise-falsification pass on remaining money services**                 | Only ~2/18 historically; residual PR thrash misses systemic lies        | Named suite per service: ledger, trade, pay, bank, p2p, matching, token, market, ws money doors — public entry, not unit-only guards |
-| **D26-P2-02** | **Vendor Java money-plane audit (896 Java files outside workspace build)** | CI never typechecks vendor; dual-book risk; scan freezes ≠ product seal | Written map: which Java doors still move value · close or §13 · brand/custody posture real                                           |
-| **D26-P2-03** | **Unreachable-guard eradication in svc-trade (+ matching)**                | Same class of defect three times in one week                            | Every money guard exercised through HTTP/WS public door with refuse proof                                                            |
-| **D26-P2-04** | **Fleet real image rebuild runbook on tip**                                | Hot-patch lies when compose rebuilds                                    | Running fleet matches tip images; one-line runbook                                                                                   |
-| **D26-P2-05** | **Event bus / publisher completeness under D-S-13**                        | Void publishers ship as “wired”                                         | Broken-promise vs socket inventory sealed with tests that execute                                                                    |
-| **D26-P2-06** | **Matching dual-target residual (D-S-06 live)**                            | Fiat matching vs INTACORE confusion under load                          | Documented + tested: one book semantics; no structural house preference beyond accepted 5 bps                                        |
+| Old                                      | Status                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------- |
+| D-S-01…18 write specs                    | **DONE**                                                                      |
+| `apps/web` delete                        | **DONE** (#757)                                                               |
+| “Land Denon open money pile” as only job | **Obsolete as sole focus** — you still own open integrity PRs when they exist |
+| Re-audit “agents need more ADRs” as work | **ANTI-PATTERN**                                                              |
 
 ---
 
-## 7 · P3 — Run / ship / security (axes nobody has closed)
+## 4 · P0 — Owner product rulings (unblock engines · agents invent here)
 
-Law partially written (staging ADR, deployment registry). **Implementation + judgment** is Denon-class; host/secrets stay Nitro Class X.
-
-| ID            | Mountain                                                        | Done bar                                                                                | Class                                       |
-| ------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------- |
-| **D26-P3-01** | **Staging deploy workflow (parameterised `workflow_dispatch`)** | Workflow file on tip per staging ADR; no deploy-on-merge; `APP_ENV=staging` fail-closed | N/P (workflow) · host+secrets = **X** Nitro |
-| **D26-P3-02** | **Threat model (current)**                                      | Living threat model for fiat plane + wallet_rpc + vendor Java surface                   | Judgment                                    |
-| **D26-P3-03** | **Load test: matching + ledger**                                | Harness that fails closed on regression; numbers published in ops doc                   | Engineering judgment                        |
-| **D26-P3-04** | **Licence position / NOTICE freshness**                         | NOTICE matches tip vendor pin; launch-blocking worklist true                            | With Nitro Class X for counsel acts         |
-| **D26-P3-05** | **Secret rotation readiness + parity**                          | Runbook + gates; no logged keys class of bugs return                                    | Ops                                         |
-
----
-
-## 8 · P4 — Architecture cleanup (only you seal without destroy)
-
-| ID            | Task                                                               | Done bar                                                                                       |
-| ------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| **D26-P4-01** | **Spine branch disposition** (~17 `origin/feat/spine-*`)           | Each named: abandon / resume / greenfield on tip — written table on tip                        |
-| **D26-P4-02** | **Cross-plane bridge accounting handshake with Shehzad**           | Ledger IFC ↔ chain IFC one-supply tests; who signs; S-D7 alignment                             |
-| **D26-P4-03** | **GitHub admin (optional)** branch protection / CODEOWNERS enforce | Only if you want rails; discipline has held without them — not a fake thrift gate              |
-| **D26-P4-04** | **Issue board reconcile** (35 open · 0 closed historically)        | Close shipped stubs; link issues → ADR → tracker mountain — truth layer only, not a stamp-mill |
-
----
-
-## 9 · Suggested attack order (you may reorder)
-
-**Now (SAFE START — no collide with open Nitro residual):**
-
-1. **P0-01** house desk / MM fairness owner ruling (docs only)
-2. **P0-03** dex venue set (one product sentence)
-3. **P0-02 / P0-04 / P0-05** rates + token authority + options/forex law as needed
-4. **P3-01 / P3-02** staging workflow file + threat model
-5. **P4-01** spine abandon/resume table
-6. **P2-02** vendor Java money-plane **map** (read/audit first; coordinate before editing vendor paths agents still touch)
-
-**After `gh pr list` shows trade/pay/ledger/bank residual clear (or path-intersect clean):**
-
-**Cook B — trade product-complete (P1-T)**  
-futures complete → OTC → algo TWAP → copy (mechanism; rates closed) → ccxt honesty
-
-**Cook C — pay/bank business (P1-P/B)**  
-settlement + fraud mechanism → PSP/PayFac as product → earn/cards/ramps depth
-
-**Cook D — integrity program (P2) on those services**  
-promise-falsify public doors → unreachable guards
-
-**Always:** path-intersect open Nitro PRs before every code PR. Never dual-edit their file sets.
+| ID            | Mountain                                                  | Why agents fail                                 | Done bar                                                                 |
+| ------------- | --------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------ |
+| **D26-P0-01** | **House desk + internal MM fairness** (3 owner Qs)        | ADR partial; house tenant / internal MM blocked | Written ruling; flip `execution.house-tenant` / internal MM from blocked |
+| **D26-P0-02** | **DIRECTION §8 rates / fee-shares**                       | bps invent is doctrine crime                    | Named params in authority store **or** explicit launch-closed            |
+| **D26-P0-03** | **`socket.dex-venue-set` one sentence**                   | quote-router dead without venue set             | Named set **or** permanent refuse-closed copy                            |
+| **D26-P0-04** | **Token emission / buyback authority live**               | seeds ≠ DB; burn-before-guard                   | Drift guards + claim-before-burn sealed                                  |
+| **D26-P0-05** | **Options / forex settlement asset law**                  | ready rows invite invent                        | ADR: live set, settlement asset, refuse matrix                           |
+| **D26-P0-06** | **Listing / delisting policy** (DIRECTION §8.5)           | agents list anything                            | Written policy: what may list; refuse path                               |
+| **D26-P0-07** | **Leverage / margin / liq params beyond §1 defaults**     | silent raise of 10×                             | Owner table or “defaults frozen until ruled”                             |
+| **D26-P0-08** | **`pay:write` / KYB grant mechanism shape**               | merchant surface unreachable; invent grants     | Shape on tip; mechanism implementable without invent                     |
+| **D26-P0-09** | **Fee + revenue recipe map** (which recipes exist)        | agents invent ledger recipes                    | Closed matrix: every fee path → named recipe or §13                      |
+| **D26-P0-10** | **Listings / treasury / house commission law**            | market.commerce invent                          | Commission authority + refuse-blank sealed                               |
+| **D26-P0-11** | **Scanner signal inputs law**                             | agents.scanner invent rankings                  | What may rank; refuse when inputs missing                                |
+| **D26-P0-12** | **Attestation threat model** (`blueprint.attestations`)   | on-chain rank without threat model              | Threat model + zero-PII bar                                              |
+| **D26-P0-13** | **Launchpad raise economics (law only)**                  | numbers invent; chain is Shehzad                | Law doc; implement stays Shehzad                                         |
+| **D26-P0-14** | **`DEFAULT_MIN_BEST_LEVEL_NOTIONAL` + mark dust floor**   | unruled constant drifts                         | Owner number or hard-exclusion ruling (ties P0-01 Q3)                    |
+| **D26-P0-15** | **Copy jurisdiction list**                                | sovereign copy without geo law                  | List or refuse-closed jurisdictions                                      |
+| **D26-P0-16** | **“Audited / insured / guaranteed” language ban surface** | marketing invent (§8.9)                         | Product copy + gate: those words require owner seal                      |
+| **D26-P0-17** | **Insurance fund funding policy** (futures list gate)     | empty fund + live perps = crime                 | Fund exists, funded, recipe, empty → no list                             |
+| **D26-P0-18** | **Owner ruling packet completeness**                      | open rulings scattered                          | One tip packet tracks every open owner decision (you started this)       |
 
 ---
 
-## 10 · What Nitro agents keep doing (so you don’t redo it)
+## 5 · P1 — Product-complete engines (tracker ready free · law written · product not done)
 
-- Wave 6 residual: shell float money, WS isolation, indexer cold-start, pay IFSC, copy fee-share patches, claim-check honesty, vendor scan headers
-- Babysit open agent PRs to green CI + Class merge matrix
-- Shell craft under Nitro frontend lock
-- Implement **from your P0 rulings** once on tip
-- Shehzad babysit only (#1177)
+### 5.1 Trade (Class M · highest invent risk)
 
-**Agents will not:** invent §8 numbers · build house desk before P0-01 · dual-edit your open files · close Class X
+| ID             | Tracker / obligation                                          | Done bar (product-complete)                                           |
+| -------------- | ------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **D26-P1-T1**  | `trade.futures` umbrella                                      | All T1a–T1g green **or** honest residual named — never partial Done   |
+| **D26-P1-T1a** | Futures mark from oracle (DIRECTION MVP-1)                    | Mark never caller-supplied; not last-trade; public-door proof         |
+| **D26-P1-T1b** | Margin call observable (MVP-2)                                | Call fires, delivered, observable end-to-end                          |
+| **D26-P1-T1c** | Partial liquidation vs real book (MVP-3)                      | Min close restores maintenance; ledger recipe only                    |
+| **D26-P1-T1d** | Insurance fund shortfall (MVP-4)                              | Fund balance moves exactly by shortfall                               |
+| **D26-P1-T1e** | Gap price series proof (MVP-5)                                | Proven on **gapping** series, not smooth ramp                         |
+| **D26-P1-T1f** | Funding accrues + nets zero (MVP-6)                           | Long/short net zero proven                                            |
+| **D26-P1-T1g** | ADL last resort + in-product disclosure                       | No silent ADL; disclosure before open                                 |
+| **D26-P1-T2**  | `trade.otc`                                                   | RFQ → stake gate → fail-closed quote → ledger settle                  |
+| **D26-P1-T3**  | `trade.copy`                                                  | Sovereign shape; rates refuse until P0-02/15; kill/unfollow real      |
+| **D26-P1-T4**  | `trade.algo`                                                  | TWAP product path: children, pause, overdue slice, no fake fills      |
+| **D26-P1-T5**  | `trade.ccxt-api`                                              | Bot-ready capability matrix + refuse — not “route exists”             |
+| **D26-P1-T6**  | `trade.options`                                               | Only after P0-05; else explicit socket                                |
+| **D26-P1-T7**  | `trade.forex`                                                 | Only after P0-05 + fiat settle rails posture                          |
+| **D26-P1-T8**  | `venue.aggregation`                                           | Adapters refuse when book not payout-grade                            |
+| **D26-P1-T9**  | **Multi-asset instruments resume** (DIRECTION §2)             | Additive model; closed-venue refuse; spot suite unchanged             |
+| **D26-P1-T10** | **Seed/mm honesty backend** (coordinate Nitro `trade.mm-bot`) | Seeded flagged; not in user volume; killable; no manufactured crosses |
+
+### 5.2 Pay (business barely started)
+
+| ID             | Tracker                                       | Done bar                                                        |
+| -------------- | --------------------------------------------- | --------------------------------------------------------------- |
+| **D26-P1-P1**  | `pay.psp`                                     | PSP path without third-party money library; merchant durability |
+| **D26-P1-P2**  | `pay.payfac`                                  | Sub-merchant permissions real or honest partial + §13           |
+| **D26-P1-P3**  | `pay.routing`                                 | Geo/method/risk routing; refuse when data missing               |
+| **D26-P1-P4**  | `pay.settlement`                              | Bank vs crypto settlement recipes only                          |
+| **D26-P1-P5**  | `pay.fraud`                                   | Scoring + chargeback **mechanism**; list content Class X        |
+| **D26-P1-P6**  | `pay.subscriptions`                           | Mandates product-complete; notify gaps honest                   |
+| **D26-P1-P7**  | `pay.public-api`                              | Surface + webhooks + sandbox Done                               |
+| **D26-P1-P8**  | `pay.plugins`                                 | One real plugin path or §13                                     |
+| **D26-P1-P9**  | **Durable crypto broadcast** (DIRECTION §3.1) | Signed tx persisted before broadcast; crash-resume              |
+| **D26-P1-P10** | **Merchant grant path** after P0-08           | `pay:write` reachable under KYB gate — no invent grants         |
+
+### 5.3 Bank
+
+| ID            | Tracker               | Done bar                                          |
+| ------------- | --------------------- | ------------------------------------------------- |
+| **D26-P1-B1** | `bank.earn`           | Yield pools; day-boundary; rates refuse if unset  |
+| **D26-P1-B2** | `bank.cards`          | Auth path proven or honest; ledger half reachable |
+| **D26-P1-B3** | `bank.sovereign-card` | JIT conversion refuse-invent rates sealed         |
+| **D26-P1-B4** | `bank.ramps`          | Fiat on/off via pay adapters; no second book      |
+
+### 5.4 Ops (0/6 run-the-business)
+
+| ID            | Tracker             | Done bar                                                   |
+| ------------- | ------------------- | ---------------------------------------------------------- |
+| **D26-P1-O1** | `ops.compliance`    | Screening **mechanism** sealed; list content Nitro/counsel |
+| **D26-P1-O2** | `ops.affiliates`    | Accrual tree under rate authority                          |
+| **D26-P1-O3** | `ops.support`       | Desk mountain Done vs agent surface split honest           |
+| **D26-P1-O4** | `ops.analytics`     | Warehouse path usable or §13                               |
+| **D26-P1-O5** | `ops.notifications` | Fan-out mountain vs §13 channels explicit                  |
+
+### 5.5 Market
+
+| ID            | Tracker           | Done bar                                                                      |
+| ------------- | ----------------- | ----------------------------------------------------------------------------- |
+| **D26-P1-M1** | `market.commerce` | Product-complete after agent Class M residual clears; refuse blank commission |
+| **D26-P1-M2** | `market.vendors`  | Lifecycle under stake/commission law                                          |
+
+### 5.6 Agents fleet (ready free · metering invent risk)
+
+Backend product-complete only — **not** shell craft.
+
+| ID            | Tracker                             | Done bar                                                       |
+| ------------- | ----------------------------------- | -------------------------------------------------------------- |
+| **D26-P1-A1** | `agents.navigator`                  | Tool-calling inside guardrails; dark refuse bills zero         |
+| **D26-P1-A2** | `agents.support`                    | KB + account-state grounded; stoppable; no invent balance      |
+| **D26-P1-A3** | `agents.scanner`                    | Ranked signals only after P0-11; else refuse                   |
+| **D26-P1-A4** | `agents.merchant`                   | Approval-rate watch honest when data missing                   |
+| **D26-P1-A5** | `agents.copy-intel`                 | Writes audited leader stats; no returns-ranked marketing board |
+| **D26-P1-A6** | **Agent metering product law seal** | Metering-off audit-only forever proven; no silent feeCharge    |
+
+### 5.7 Academy **economics / backend** (not Vue craft)
+
+| ID            | Tracker                                       | Done bar                                                           |
+| ------------- | --------------------------------------------- | ------------------------------------------------------------------ |
+| **D26-P1-C1** | `academy.certs`                               | Cert → XP → perks real or refuse; no fake perk money               |
+| **D26-P1-C2** | `academy.ambassadors`                         | Residencies / IFC pay under rate authority (P0)                    |
+| **D26-P1-C3** | `academy.tournaments`                         | Prize pools refuse if unset; no invent IFC                         |
+| **D26-P1-C4** | `academy.paper-trading`                       | Paper flag never readable as real money (harden)                   |
+| **D26-P1-C5** | `academy.curriculum` depth                    | Import bar met with real lesson substance (not char-count theater) |
+| **D26-P1-C6** | `academy.spatial` **backend scene integrity** | Scene fingerprint / host edit honesty — **not** FE polish          |
+
+### 5.8 Identity / P2P / Indexer (fiat plane)
+
+| ID            | Tracker                                                    | Done bar                                                                |
+| ------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **D26-P1-I1** | **Identity money-routing graph product-complete** (D-S-11) | Sub-account ownership; cross-leak ban; trade ownership gates            |
+| **D26-P1-I2** | `p2p.merchants`                                            | Badges, limits, API product-complete under dispute law                  |
+| **D26-P1-I3** | `indexer.readmodels`                                       | Chain→Postgres honest halt/refuse; no fake books (coord Shehzad events) |
+| **D26-P1-I4** | `blueprint.attestations`                                   | After P0-12; zero PII; refuse if threat model unmet                     |
+
+### 5.9 Connect / Execution / Quant (D-S-18)
+
+| ID            | Room                                          | Done bar                                                                                      |
+| ------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **D26-P1-X1** | **§27 Connect** product-complete              | One real venue honestly connected; latency graded by measurement; no CCXT in money path       |
+| **D26-P1-X2** | **§27 adapter score feed**                    | Unscored adapter gets **zero** routing weight                                                 |
+| **D26-P1-X3** | **§28 Execution SOR** (external venues)       | Cost model complete; no structural house preference beyond accepted tie-break                 |
+| **D26-P1-X4** | **§28 Arbitrage** (external-only until P0-01) | Product path or blocked with honest reason                                                    |
+| **D26-P1-X5** | **§28 Market-making engine**                  | Only after P0-01; internal half stays blocked until ruled                                     |
+| **D26-P1-X6** | **§29 Quant honesty surface**                 | Out-of-sample mandatory; fees/slippage modelled; no returns leaderboard; strategy count shown |
+| **D26-P1-X7** | **§32 Predict**                               | **OUT** — INTACORE/Shehzad; only write resolution-stack notes if needed — **do not build**    |
 
 ---
 
-## 11 · Substance score for _this_ Denon queue
+## 6 · P2 — Integrity programs (agents thrash)
 
-| Criterion                        | Score     | Note                                                         |
-| -------------------------------- | --------- | ------------------------------------------------------------ |
-| Queue mass / residual depth      | **THICK** | 5 P0 + ~25 P1 engines + 6 integrity + 5 run + 4 arch         |
-| Leverage density                 | **HIGH**  | Engines + rulings + plane integrity — not tip-bump docs      |
-| Anti-thin / anti-pad             | **PASS**  | Explicitly rejects residual micro-rows already in agent wave |
-| Sustained cook viability         | **PASS**  | Multi-day per vertical; multi-week if all P1                 |
-| Forward path after SAFE TO CLOSE | **PASS**  | After one engine Done → next engine or P2 program            |
-
-**If a future list shrinks to “fix 8 small trade bugs” → FAIL thin. Thicken from P1–P2.**
+| ID             | Program                                                | Done bar                                                                                             |
+| -------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| **D26-P2-01**  | **Promise-falsify money services (public doors)**      | Named suite: ledger, trade, pay, bank, p2p, matching, token, market, ws — entry points not unit-only |
+| **D26-P2-01a** | Promise-falsify **svc-trade** deep                     | Futures + convert + copy + algo public doors                                                         |
+| **D26-P2-01b** | Promise-falsify **svc-pay** deep                       | Settle, mandate, dispute, grant gates                                                                |
+| **D26-P2-01c** | Promise-falsify **svc-ledger** + **ledger-client**     | Purpose, recipes, freeze, loan recipes                                                               |
+| **D26-P2-01d** | Promise-falsify **svc-matching**                       | Cancel, phantom market, determinism edges                                                            |
+| **D26-P2-01e** | Promise-falsify **svc-bank**                           | Earn/cards/ramps refuse invent                                                                       |
+| **D26-P2-01f** | Promise-falsify **svc-p2p**                            | Escrow/dispute/fee integrity                                                                         |
+| **D26-P2-01g** | Promise-falsify **svc-token**                          | Stake/unstake/buyback crash windows                                                                  |
+| **D26-P2-01h** | Promise-falsify **svc-agents** metering                | Dark refuse + metering-off never bills                                                               |
+| **D26-P2-02**  | **Vendor Java money-plane map** (896 Java)             | Which doors still move value; close or §13; brand/custody real                                       |
+| **D26-P2-03**  | **Unreachable-guard eradication** (trade/matching)     | Every money guard via public door                                                                    |
+| **D26-P2-04**  | **Fleet real image rebuild runbook**                   | Running fleet = tip images                                                                           |
+| **D26-P2-05**  | **Event bus completeness (D-S-13)**                    | Broken-promise vs socket inventory with **executed** tests                                           |
+| **D26-P2-06**  | **Matching dual-target residual (D-S-06)**             | One book semantics; no structural house prefer                                                       |
+| **D26-P2-07**  | **Java dual-book Grade D delete + jar truth** (D-S-17) | Grade D sites gone; **no safety claim from source scan alone**; rebuild path real                    |
+| **D26-P2-08**  | **custody-scan walks Java**                            | Scan object = runtime risk surface                                                                   |
+| **D26-P2-09**  | **wallet_rpc continuous perimeter**                    | Mainnet/sign/width classes stay refused; regression suite                                            |
+| **D26-P2-10**  | **Kill-switch completeness**                           | Every money route killable from same surface; proven                                                 |
+| **D26-P2-11**  | **Ledger recipe matrix closed for live paths**         | Every money path → recipe or explicit §13                                                            |
+| **D26-P2-12**  | **Re-prove “done” money spine**                        | matching + ledger + identity money doors still honest on tip                                         |
+| **D26-P2-13**  | **No silent test skips on money**                      | Skip-honesty forever; register or delete                                                             |
+| **D26-P2-14**  | **Brand-scan sees vendor shell**                       | Partner names cannot hide in Vue/Java                                                                |
+| **D26-P2-15**  | **Fill-sequence / order SoT residual**                 | Engine-aligned fillId; no second money interpretation                                                |
 
 ---
 
-## 12 · Cold start (Denon / his agents)
+## 7 · P3 — Run / ship / security
+
+| ID            | Mountain                                       | Done bar                                                           | Class                             |
+| ------------- | ---------------------------------------------- | ------------------------------------------------------------------ | --------------------------------- |
+| **D26-P3-01** | Staging `workflow_dispatch`                    | Per staging ADR; no deploy-on-merge; `APP_ENV=staging` fail-closed | Workflow N/P · host/secrets **X** |
+| **D26-P3-02** | Threat model (current)                         | Fiat plane + wallet_rpc + vendor Java                              | Judgment                          |
+| **D26-P3-03** | Load test matching + ledger                    | Fail-closed harness; numbers in ops doc                            | Eng                               |
+| **D26-P3-04** | Licence / NOTICE freshness                     | NOTICE matches vendor pin; launch list true                        | + counsel X                       |
+| **D26-P3-05** | Secret rotation readiness                      | Runbook + parity gates                                             | Ops                               |
+| **D26-P3-06** | **Auth / session security review**             | Written review; residual tickets real                              | Judgment                          |
+| **D26-P3-07** | **Edge / CORS production posture**             | Staging/prod origin contract documented                            | Deploy                            |
+| **D26-P3-08** | **Observability: alerts + one real dashboard** | Beyond local compose; alert routes named                           | Run                               |
+| **D26-P3-09** | **Money data backup / restore drill**          | One exercised restore path documented                              | Data                              |
+| **D26-P3-10** | **Incident runbook (money path)**              | Who does what when ledger/trade red                                | Ops                               |
+| **D26-P3-11** | **Supply-chain: vendor Java in scan scope**    | Maven/vendor not a blind spot                                      | Security                          |
+
+---
+
+## 8 · P4 — Architecture cleanup
+
+| ID            | Task                                           | Done bar                                              |
+| ------------- | ---------------------------------------------- | ----------------------------------------------------- |
+| **D26-P4-01** | Spine branch disposition (~17 `feat/spine-*`)  | Each: abandon / resume / greenfield — table on tip    |
+| **D26-P4-02** | Cross-plane bridge handshake with Shehzad      | One supply ledger↔chain; who signs                    |
+| **D26-P4-03** | GitHub admin rails (optional)                  | Branch protection / CODEOWNERS only if you want rails |
+| **D26-P4-04** | Issue board reconcile                          | Close shipped stubs; link issue→ADR→tracker           |
+| **D26-P4-05** | **Private positions stream payload freeze**    | Event payloads frozen → agents wire WS                |
+| **D26-P4-06** | **Depth/tape product SLO** (honest empty book) | Spec for shell client; no fake depth                  |
+| **D26-P4-07** | **Vendor Upstream money map seal**             | What stays Java vs TS forever                         |
+| **D26-P4-08** | **features.mjs thrash protocol**               | Batch rule agents must follow                         |
+| **D26-P4-09** | **Tracker honesty pass on trade/pay/bank**     | Notes match tip; no ghost Done                        |
+
+---
+
+## 9 · Explicitly rejected from this board (anti-pad)
+
+| Rejected class                                          | Why                    |
+| ------------------------------------------------------- | ---------------------- |
+| Re-writing D-S-01…18                                    | Already law            |
+| §13 sockets as implement tickets                        | Deliberate non-build   |
+| Shell/Vue craft, i18n polish, cmd palette               | Nitro frontend lock    |
+| Residual micro already in open agent PRs                | Dual-build             |
+| Shehzad protocol/chain/mining implement                 | Wrong owner            |
+| Class X content (secrets, sanctions lists, go-live yes) | Nitro human            |
+| Docs tip-bumps / tracker thrash as primary work         | Busy efficiency        |
+| Predict market build                                    | INTACORE / out of lane |
+| Forcing ~140 IDs with filler                            | Fails substance audit  |
+
+---
+
+## 10 · Attack order (suggested)
+
+**SAFE START (now):**  
+P0-01…18 rulings · P0-18 packet · P3-01/02/04/07 docs · P4-01 spine · P2-02 map (read) · **P1-X1 Connect** (new surface, low residual collide) · P1-X6 Quant honesty law surfaces (docs first)
+
+**When path clear:**  
+T1a–g futures product-complete · OTC · algo · pay durable broadcast · bank earn · promise-falsify 01a–h · Java P2-07/08
+
+**After P0-01:** Execution X3–X5
+
+**Parallel OK:** rulings worktree + Connect worktree + integrity worktree — **never** same files as open Nitro residual.
+
+---
+
+## 11 · What Nitro agents keep
+
+- Residual wave: pins, refuse fixes, lane stops, shell honesty
+- Babysit open agent PRs to green
+- Shell under `nitro-frontend-all`
+- Implement **from your P0** once on tip
+- Shehzad babysit only
+
+**Agents must not:** take product-complete invent-risk engines on this board · invent §8 · dual-edit your open files · close Class X
+
+---
+
+## 12 · Substance score (v2)
+
+| Criterion        | Score                             |
+| ---------------- | --------------------------------- |
+| Queue mass       | **THICK** (~120 IDs · ~2.5× v1)   |
+| Leverage density | **HIGH**                          |
+| Anti-pad         | **PASS** (rejects listed)         |
+| Sustained cook   | **PASS** (multi-week)             |
+| Forward path     | **PASS**                          |
+| Forced 3×        | **FAIL deliberately** — would pad |
+
+---
+
+## 13 · Cold start
 
 ```
 git fetch origin main
 git log -1 --oneline origin/main
 gh pr list --state open
 gh pr list --author Phantom-X-007 --state open
-Read: docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md  (this file)
+Read: docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md
 Read: docs/SPEC-FACTORY-INDEX-2026-08-04.md
-Read: docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
-Path-intersect before every PR: do not dual-edit open Nitro files
-Start: P0-01 house desk ruling OR P1-T1 futures product-complete OR P2-01 promise-falsify
+Read: docs/DIRECTION-2026-07-31.md §1 + §8
+Path-intersect every PR
+Start: P0-01 house desk OR P0-18 owner packet OR P1-X1 Connect OR P2-02 Java map
 ```
 
 ---
 
-## 13 · Paste — Nitro → Denon (copy as-is)
+## 14 · Paste — Nitro → Denon (v2)
 
 ```
-Denon — hard parallel board (substance audit) 2026-08-09.
+Denon — hard parallel board v2 (substance thicken) 2026-08-09.
 
 Full board: docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md
-Lane claim: docs/LIVE-LANES.md → denon-hard-parallel
+Lane: docs/LIVE-LANES.md → denon-hard-parallel
 Split: docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
-Specs already written: docs/SPEC-FACTORY-INDEX-2026-08-04.md (18/18 — do NOT re-write the factory)
+Specs already written (do NOT re-write factory): docs/SPEC-FACTORY-INDEX-2026-08-04.md
+Direction you already own: docs/DIRECTION-2026-07-31.md §1 + §8
 
-Why you: agent-risk mountains (invent rates/mids, fake Done bars, unreachable money guards, vendor Java outside CI). Nitro agents keep residual wave only — they must not take these engines.
+Why you: agent-risk class (invent rates/mids, fake Done, unreachable money guards, Java dual-book, Connect/Execution honesty). Nitro agents residual only.
 
-Tip: re-derive origin/main. You have 0 open PRs. Agents still have a large residual PR wall — do not dual-edit their file sets. Shehzad owns #1177 chain only.
+Mass: ~120 hard IDs (~2.5× prior). Forced 3× pad rejected.
 
 SAFE START NOW (no collide):
-1) House desk + internal MM fairness — three owner questions still open (ADR partial)
-2) DIRECTION §8 rates/shares you own
-3) dex venue set one-liner
-4) Token emission/buyback authority + burn-before-guard seal (after token residual clears if coding)
-5) Staging workflow_dispatch file + threat model
-6) Spine abandon/resume table
-7) Vendor Java money-plane map (read first)
+• P0 rulings pack: house desk Qs · §8 rates · dex venue set · token authority · options/forex law · listing policy · leverage freeze · pay:write KYB shape · fee recipe map · commission/treasury · scanner inputs · attestation threat · launchpad economics law · mark dust floor · copy jurisdictions · insured-language ban · insurance fund policy · owner packet completeness
+• P3: staging workflow · threat model · licence NOTICE · edge/CORS posture
+• P4: spine abandon/resume table
+• P1-X1 §27 Connect (new surface) · P2 Java money-plane map (read first)
 
-AFTER residual clears on that service (path-intersect every PR):
-• Trade product-complete: futures · otc · copy · algo · ccxt · options/forex (after law)
-• Pay product-complete: psp · payfac · routing · settlement · fraud · subs · public-api
-  (pay.gateway is Nitro wip — don’t dual-build gateway)
-• Bank: earn · cards · sovereign-card · ramps
-• Ops: compliance · affiliates · support · analytics · notifications
-• Promise-falsify money services on public doors · unreachable-guard eradication
+AFTER residual clears (path-intersect every PR):
+• Futures product-complete decomp T1a–T1g (DIRECTION MVP 1–6 + ADL)
+• OTC · copy · algo · ccxt · multi-asset resume · venue aggregation
+• Pay vertical + durable crypto broadcast + merchant grant path
+• Bank · ops · market · agents fleet · academy economics backend
+• Promise-falsify deep per money service · Java Grade D + jar truth · kill-switch · recipe matrix
+• Execution/MM only after house-desk ruling
 
-NOT YOU: shell craft, wave-6 residual micro-fixes, Shehzad chain, Class X content, dual-edit our open PRs, re-writing D-S specs that already exist.
+NOT YOU: shell craft, wave residual micro, Shehzad chain, Class X content, dual-edit our open PRs, re-writing D-S specs, §13 sockets as tickets, Predict build.
 
-You design order. Start SAFE START today; take engines when paths are free.
+You design order. Start SAFE START; take engines when paths free.
 ```
 
 ---
 
-## 14 · Changelog
+## 15 · Changelog
 
-| Date       | Change                                                                                                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-08-09 | **New board.** Substance audit vs tip `7a505849`. Retires “write D-S factory” as work. Loads Denon with product-complete engines + integrity + run path. Agents keep residual wave 6. |
+| Date        | Change                                                                                                                                                                                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-08-09a | v1 board: first substance handoff · ~47 IDs · SAFE START/HOT HOLD · LIVE-LANES claim                                                                                                                                                                               |
+| 2026-08-09b | **v2 mass thicken ~2.5× (~120 IDs).** Added: full DIRECTION §8 P0 set · futures MVP decomp · Connect/Execution/Quant · agents/academy economics · durable broadcast · Java Grade D/jar · run-path P3 · anti-pad reject list. **Explicitly refused forced 3× pad.** |
+
+---
+
+## 16 · ID index (for agents: do not claim these)
+
+P0: 01–18 · P1-T: 1,1a–1g,2–10 · P1-P: 1–10 · P1-B: 1–4 · P1-O: 1–5 · P1-M: 1–2 · P1-A: 1–6 · P1-C: 1–6 · P1-I: 1–4 · P1-X: 1–7 · P2: 01,01a–h,02–15 · P3: 01–11 · P4: 01–09
+
+**Approx unique IDs: ~120.** Re-count after edits before claiming “complete set.”
