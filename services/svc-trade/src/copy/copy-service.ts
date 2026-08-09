@@ -268,6 +268,8 @@ export class CopyService {
       assetId: string;
       followerFillNotional: string;
       protocolFeeBps: number;
+      /** Settled fill fee when known — preferred over notional×bps invent. */
+      fillFeeAmount?: string;
     },
   ) {
     const follow = await this.store.getFollow(input.followId);
@@ -288,6 +290,7 @@ export class CopyService {
       assetId: input.assetId.trim(),
       followerFillNotional: parseAmount(input.followerFillNotional),
       protocolFeeBps: input.protocolFeeBps,
+      ...(input.fillFeeAmount !== undefined ? { fillFeeAmount: parseAmount(input.fillFeeAmount) } : {}),
       roundTripsThisPeriod: period.roundTrips,
       earningsPaidThisPeriod: period.earningsPaid,
       feeShareKilled: follow.feeShareKilled,
