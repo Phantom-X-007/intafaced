@@ -26,7 +26,7 @@
  * exactly the shortfall, and what the fund then is remains an owner decision.
  */
 import { describe, expect, it } from 'vitest';
-import { formatAmount, parseAmount as amt, type Amount, type PostRequest } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount as amt, type AccountRef, type Amount, type Balance, type PostRequest } from '@intafaced/ledger-client';
 import {
   memoryLiquidationAttemptStore,
   runLiquidationTick,
@@ -37,6 +37,7 @@ import {
 import { memoryAcceptedMarkStore } from './accepted-mark.js';
 import { sideDepthNotional } from './mark-from-depth.js';
 import type { FuturesLadderPolicy } from './maintenance-ladder.js';
+import { INSURANCE_UNDERFUNDED } from './insurance-bound.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -95,14 +96,19 @@ function livePosition() {
   };
 }
 
-function recordingLedger() {
+function recordingLedger(opts?: { insuranceAvailable?: Amount }) {
   const posts: PostRequest[] = [];
+  const insuranceAvailable = opts?.insuranceAvailable ?? amt('1000000');
   return {
     posts,
     ledger: {
       async post(req: PostRequest) {
         posts.push(req);
         return { id: `tx-${posts.length}`, idempotencyKey: req.idempotencyKey } as never;
+      },
+      async balance(ref: AccountRef): Promise<Balance> {
+        const amount = ref.ownerType === 'house' && ref.ownerId === 'insurance-fund' ? insuranceAvailable : 0n;
+        return { account: ref, accountId: `${ref.ownerType}:${ref.ownerId}`, amount };
       },
     },
   };
@@ -276,6 +282,55 @@ describe('gap-series liquidation proof (DIRECTION §1 MVP items 4 and 5)', () =>
     expect(result.partial).toBe(0);
     expect(live.closed).not.toBeNull();
     expect(posts.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * UNIT 10 on the ladder path — bankrupt gap with empty insurance parks.
+   * Walks partial rungs (no insurance) then the gap that would invent cover:
+   * no insurance leg posts, position not falsely liquidated.
+   */
+  it('empty insurance fund parks the bankrupt gap — partial rungs still work, gap does not invent cover', async () => {
+    const live = livePosition();
+    const { ledger, posts } = recordingLedger({ insuranceAvailable: 0n });
+    const attempts = memoryLiquidationAttemptStore();
+    const acceptedMarks = memoryAcceptedMarkStore();
+    const series = ['100', '96', '94', '93', '80'];
+    const outcomes: string[] = [];
+
+    for (const [index, price] of series.entries()) {
+      const at = new Date(Date.UTC(2026, 7, 8, 2, index));
+      const result = await runLiquidationTick({
+        marks: markAt(price),
+        positions: live.positions,
+        closer: live.closer,
+        attempts,
+        acceptedMarks,
+        ledger,
+        now: () => at,
+        ladder: { depth: deepBook, reducer: live.reducer, policy: POLICY },
+      });
+      outcomes.push(result.items[0]?.outcome ?? 'none-open');
+    }
+
+    expect(outcomes).toEqual([
+      'skipped_healthy',
+      'skipped_healthy',
+      'partially_liquidated',
+      'partially_liquidated',
+      'skipped_insurance_underfunded',
+    ]);
+    expect(live.closed).toBeNull();
+    expect(formatAmount(live.row.size)).not.toBe('0');
+
+    const losses = posts.filter((p) => p.reason === 'futures.loss.realized');
+    // Only the two partial (margin-only) rungs — never the insurance shortfall post.
+    expect(losses).toHaveLength(2);
+    for (const leg of losses.map(lossLegs)) {
+      expect(leg.fromInsurance).toBe(0n);
+    }
+    expect(outcomes[4]).toBe('skipped_insurance_underfunded');
+    // Silence unused import guard when test file only uses the constant in expect paths.
+    expect(INSURANCE_UNDERFUNDED).toBe('trade.insurance_underfunded');
   });
 });
 

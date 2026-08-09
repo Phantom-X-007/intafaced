@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseAmount as amt, type PostRequest } from '@intafaced/ledger-client';
+import { parseAmount as amt, type AccountRef, type Amount, type Balance, type PostRequest } from '@intafaced/ledger-client';
 import {
   memoryLiquidationAttemptStore,
   runLiquidationTick,
@@ -9,6 +9,7 @@ import {
 } from './liquidation-tick.js';
 import { DEFAULT_FUTURES_MARK_POLICY, type FuturesQuotedMark } from './mark-policy.js';
 import { memoryAcceptedMarkStore } from './accepted-mark.js';
+import { INSURANCE_UNDERFUNDED } from './insurance-bound.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -36,14 +37,24 @@ function healthyLong(): LiquidationPositionRow {
   };
 }
 
-function recordingLedger() {
+/**
+ * Recording ledger for path tests. `insuranceAvailable` defaults to a large
+ * pot so existing "liquidates when underwater" controls still post; set to `0n`
+ * to prove the insurance shortfall bound parks without inventing cover.
+ */
+function recordingLedger(opts?: { insuranceAvailable?: Amount }) {
   const posts: PostRequest[] = [];
+  const insuranceAvailable = opts?.insuranceAvailable ?? amt('1000000');
   return {
     posts,
     ledger: {
       async post(req: PostRequest) {
         posts.push(req);
         return { id: `tx-${posts.length}`, idempotencyKey: req.idempotencyKey } as never;
+      },
+      async balance(ref: AccountRef): Promise<Balance> {
+        const amount = ref.ownerType === 'house' && ref.ownerId === 'insurance-fund' ? insuranceAvailable : 0n;
+        return { account: ref, accountId: `${ref.ownerType}:${ref.ownerId}`, amount };
       },
     },
   };
@@ -181,6 +192,44 @@ describe('runLiquidationTick', () => {
       symbol: 'BTC/USDT-PERP',
       at: fixed,
     });
+  });
+
+  /**
+   * UNIT 10 — insurance shortfall bound.
+   *
+   * underwaterLong at mark 80: loss 20, margin 10 → fromInsurance 10. Empty fund
+   * must NOT post, must NOT mark liquidated, must NOT mark the attempt done
+   * (park for re-drive after top-up). Position is not falsely clean.
+   */
+  it('empty insurance fund parks a bankrupt liquidation — no post, position stays open', async () => {
+    const { ledger, posts } = recordingLedger({ insuranceAvailable: 0n });
+    const closed: string[] = [];
+    const attempts = memoryLiquidationAttemptStore();
+    const result = await runLiquidationTick({
+      marks: fixedMark('80'),
+      positions: {
+        async listOpen() {
+          return [underwaterLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts,
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      liquidationIdFor: () => 'liq-empty-insurance',
+    });
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_insurance_underfunded');
+    expect(result.items[0]!.reason).toBe(INSURANCE_UNDERFUNDED);
+    expect(result.items[0]!.summary).toMatch(/refusing rather than overdrawing/);
+    expect(posts).toHaveLength(0);
+    expect(closed).toHaveLength(0);
+    // Attempt not done — a later tick after top-up may re-drive.
+    expect(await attempts.isDone('liq-empty-insurance')).toBe(false);
   });
 });
 

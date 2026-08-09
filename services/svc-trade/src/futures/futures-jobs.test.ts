@@ -18,7 +18,7 @@ describe('startFuturesJobs', () => {
   it('disabled → no scheduled jobs (safe default)', () => {
     const handle = startFuturesJobs({
       sql: {} as never,
-      ledger: { post: vi.fn() },
+      ledger: { post: vi.fn(), balance: vi.fn() },
       matching: { depth: vi.fn() } as never,
       bus: null,
       config: {
@@ -44,7 +44,10 @@ describe('startFuturesJobs', () => {
         if (t.includes('select')) return Promise.resolve([]);
         return Promise.resolve([]);
       }, {}) as never,
-      ledger: { post: async () => ({ id: 'x' }) as never },
+      ledger: {
+        post: async () => ({ id: 'x' }) as never,
+        balance: async () => ({ account: {} as never, accountId: 'x', amount: 0n }),
+      },
       matching: {
         depth: async () => ({ bids: [], asks: [], sequence: 0 }),
       } as never,
@@ -79,7 +82,7 @@ describe('startFuturesJobs', () => {
     }));
     const handle = startFuturesJobs({
       sql: {} as never,
-      ledger: { post: vi.fn() },
+      ledger: { post: vi.fn(), balance: vi.fn() },
       matching: { depth } as never,
       bus: null,
       venueMarkSource: venue,
@@ -101,7 +104,7 @@ describe('startFuturesJobs', () => {
   it('markPrice null when no venue and empty depth (never invent)', async () => {
     const handle = startFuturesJobs({
       sql: {} as never,
-      ledger: { post: vi.fn() },
+      ledger: { post: vi.fn(), balance: vi.fn() },
       matching: {
         depth: async () => ({ bids: [], asks: [], sequence: 0 }),
       } as never,

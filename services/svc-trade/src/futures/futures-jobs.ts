@@ -45,7 +45,7 @@ export interface FuturesJobsConfig {
 
 export interface FuturesJobsDeps {
   sql: Sql;
-  ledger: Pick<LedgerClient, 'post'>;
+  ledger: Pick<LedgerClient, 'post' | 'balance'>;
   matching: MatchingClient;
   bus: EventBus | null;
   config: FuturesJobsConfig;
