@@ -1932,6 +1932,50 @@ if (!available) {
     });
   });
 
+  describe('release must be postable before any decision', () => {
+    it('refuses a dust take when the fee would leave the buyer nothing', async () => {
+      // amount=1 scaled unit + any fee_bps ≥ 1 → mulBps ceils fee to 1 → buyer 0.
+      // Without this gate: lock succeeds, seller confirms, resolution=released,
+      // settle throws forever, pot is late with no postable terminal.
+      await fund(MAKER, '1000');
+      const offer = await sellOffer({
+        totalAmt: amt('1'),
+        minAmt: amt('0.000000000000000001'),
+        maxAmt: amt('1'),
+      });
+      await expect(
+        p2p.takeOffer({
+          offerId: offer.id,
+          takerId: TAKER,
+          amount: 1n,
+          method: 'sepa',
+          feeBps: 30,
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.release_unpostable' });
+      expect(await escrowOf(MAKER)).toBe('0');
+      expect(formatAmount((await p2p.getOffer(offer.id)).remainingAmt)).toBe('1');
+    });
+
+    it('still allows a one-unit take when the fee is zero', async () => {
+      await fund(MAKER, '1000');
+      const offer = await sellOffer({
+        totalAmt: amt('1'),
+        minAmt: amt('0.000000000000000001'),
+        maxAmt: amt('1'),
+      });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: 1n,
+        method: 'sepa',
+        feeBps: 0,
+      });
+      expect(trade.status).toBe('escrowed');
+      await p2p.confirmFiatReceived(trade.id, MAKER);
+      expect((await p2p.getTrade(trade.id)).status).toBe('released');
+    });
+  });
+
   // ── Kill-switch ───────────────────────────────────────────────────────────
 
   describe('kill-switch', () => {

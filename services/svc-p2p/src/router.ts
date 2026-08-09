@@ -234,6 +234,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.offer_method_unsupported':
       case 'p2p.offer_limit_exceeded':
       case 'p2p.invalid_fee_bps':
+      case 'p2p.release_unpostable':
       case 'p2p.dispute_evidence_rejected':
       // The caller can fix it — by being a person. Reachable only from a
       // principal whose user id is not a canonical UUID, which is a wiring

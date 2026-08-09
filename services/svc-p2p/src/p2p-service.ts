@@ -124,6 +124,9 @@ export type P2pErrorCode =
   | 'p2p.offer_limit_exceeded'
   // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
   | 'p2p.invalid_fee_bps'
+  // amount - ceil(fee) would leave the buyer with nothing — ledger refuses the
+  // release recipe forever after a decision would strand the pot as late.
+  | 'p2p.release_unpostable'
   // Deployment has no moderator allowlist and the caller does not hold
   // admin:compliance — the queue exists but nobody can authenticate into it.
   | 'p2p.moderation_unreachable'
@@ -161,6 +164,28 @@ export class P2pError extends Error {
   ) {
     super(message);
     this.name = 'P2pError';
+  }
+}
+
+/**
+ * A release must leave the buyer a positive leg after the house fee.
+ *
+ * `mulBps` ceils: amount = 1 scaled unit with any fee_bps ≥ 1 yields fee = 1 and
+ * buyer = 0. The ledger recipe then throws InvalidEntryError. If we wrote
+ * resolution=released first, settle would fail forever and the pot would sit
+ * as "late" with no postable terminal. Refuse before the decision (and at take,
+ * before any inventory is reserved).
+ */
+export function assertReleasePostable(amount: Amount, feeBps: number): void {
+  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+    throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+  }
+  const fee = mulBps(amount, feeBps);
+  if (amount - fee <= 0n) {
+    throw new P2pError(
+      `Trade amount is too small for a ${feeBps} bps fee — after the fee the buyer would receive nothing. Raise the size or set fee to 0.`,
+      'p2p.release_unpostable',
+    );
   }
 }
 
@@ -879,6 +904,9 @@ export class P2pService {
           if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
             throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
           }
+          // Before inventory moves: a dust take that cannot post a release would
+          // lock value into a trade that can never settle.
+          assertReleasePostable(input.amount, feeBps);
 
           await tx`
             UPDATE p2p.offers
@@ -1073,6 +1101,9 @@ export class P2pService {
       if (trade.sellerId !== actorId) {
         throw new P2pError('Only the seller can confirm the fiat was received', 'p2p.not_the_seller');
       }
+      // Defense in depth: take already refuses unpostable dust, but a trade row
+      // could predate the gate or arrive via a future writer.
+      assertReleasePostable(trade.amount, trade.feeBps);
       await this.recordDecision({ tradeId, to: 'released', resolution: 'released', reason: 'seller.confirmed' });
       return this.settle(tradeId);
     });
@@ -1442,6 +1473,13 @@ export class P2pService {
           `under a different spelling.`,
         'p2p.ruling_not_attributed',
       );
+    }
+
+    // Release path must post; refuse before the ruling transaction if the fee
+    // would zero the buyer leg (same dust trap as confirmFiatReceived).
+    if (input.resolution === 'release') {
+      const trade = await this.getTrade(input.tradeId);
+      assertReleasePostable(trade.amount, trade.feeBps);
     }
 
     return withMoneySpan(
