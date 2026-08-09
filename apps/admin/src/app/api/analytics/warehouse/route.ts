@@ -1,28 +1,39 @@
-import { queryWarehouseSurface, type CubeFactRow, type WarehouseSurfaceResult } from '@intafaced/contracts';
+import {
+  queryWarehouseSurface,
+  resolveWarehouseReplicaConfig,
+  type CubeFactRow,
+  type WarehouseLagProbe,
+  type WarehouseSurfaceResult,
+} from '@intafaced/contracts';
 import { adminBffGate } from '@/lib/admin-bff-gate';
 
 /**
  * Admin read path for ops.analytics Stage-1 warehouse surface (Class N).
  *
  * Honest empty/lag only — never invents trading volume. Fixture facts may be
- * POSTed for operator dry-runs; production wires replica lag via env.
+ * POSTed for operator dry-runs.
+ *
+ * Lag law (wave-3 residual):
+ *   · ANALYTICS_REPLICA_*_URL are read and assertAnalyticsReplicaRole runs.
+ *   · ANALYTICS_REPLICA_LAG_SECONDS alone is lagSource=configured — never live.
+ *   · Optional lag probe (injectable) stamps lagMeasuredAt → mayLabelLive only
+ *     when measurement is fresh.
  *
  * Law: docs/adr/2026-08-07-ops-analytics-warehouse-read-replica.md
- * TRK residual: "Admin or BI tool read path" without claiming ETL is live.
  */
 
 export const dynamic = 'force-dynamic';
 
-function replicaConfigured(): boolean {
-  // Explicit opt-in. Unset → surface says unavailable, never fabricates KPIs.
-  return process.env.ANALYTICS_REPLICA_CONFIGURED === 'true';
-}
+/**
+ * Optional production probe hook. Default: none (unit tests inject; wiring a
+ * real `pg` pool is out of this residual — contracts own the probe interface +
+ * ANALYTICS_REPLICA_LAG_SQL).
+ */
+let lagProbe: WarehouseLagProbe | null = null;
 
-function lagSeconds(): number | null {
-  const raw = process.env.ANALYTICS_REPLICA_LAG_SECONDS;
-  if (raw === undefined || raw === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+/** Test / host wiring only — not a public HTTP surface. */
+export function setWarehouseLagProbeForTests(probe: WarehouseLagProbe | null): void {
+  lagProbe = probe;
 }
 
 function parseFacts(body: unknown): readonly CubeFactRow[] | null {
@@ -37,6 +48,35 @@ function surfaceResponse(result: WarehouseSurfaceResult): Response {
   return Response.json(result, { status });
 }
 
+async function runSurface(facts: readonly CubeFactRow[]): Promise<Response> {
+  const resolved = await resolveWarehouseReplicaConfig({
+    env: process.env,
+    probe: lagProbe,
+  });
+
+  if (resolved.status === 'refuse') {
+    return Response.json(
+      {
+        status: 'refuse' as const,
+        reason: resolved.reason,
+        mayLabelLive: false as const,
+        lagSource: 'unknown' as const,
+        lagMeasuredAt: null,
+      },
+      { status: 400 },
+    );
+  }
+
+  const result = queryWarehouseSurface({
+    replicaConfigured: resolved.replicaConfigured,
+    lagSeconds: resolved.lagSeconds,
+    lagMeasuredAt: resolved.lagMeasuredAt,
+    lagSource: resolved.lagSource,
+    facts,
+  });
+  return surfaceResponse(result);
+}
+
 /**
  * GET — warehouse status with env-configured replica posture and no facts
  * (honest empty / unavailable). Never invents volume series.
@@ -44,13 +84,7 @@ function surfaceResponse(result: WarehouseSurfaceResult): Response {
 export async function GET(request: Request) {
   const gate = adminBffGate(request);
   if (gate) return gate;
-
-  const result = queryWarehouseSurface({
-    replicaConfigured: replicaConfigured(),
-    lagSeconds: lagSeconds(),
-    facts: [],
-  });
-  return surfaceResponse(result);
+  return runSurface([]);
 }
 
 /**
@@ -69,10 +103,5 @@ export async function POST(request: Request) {
   }
 
   const facts = parseFacts(body) ?? [];
-  const result = queryWarehouseSurface({
-    replicaConfigured: replicaConfigured(),
-    lagSeconds: lagSeconds(),
-    facts,
-  });
-  return surfaceResponse(result);
+  return runSurface(facts);
 }
