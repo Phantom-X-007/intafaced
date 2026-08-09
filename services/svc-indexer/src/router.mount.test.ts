@@ -497,6 +497,13 @@ describe('svc-indexer mount — status is honest', () => {
     await expect(caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
+    // accountFills + singular position share assertServing — pin the matrix.
+    await expect(caller.accountFills({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.position({ market: 'IFC-USD', account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
   });
 });
 

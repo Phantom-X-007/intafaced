@@ -175,4 +175,16 @@ describe('assertLogsBoundToBlock · getLogs answer must match the request', () =
   it('refuses a log whose blockNumber does not match the height we asked for', () => {
     expect(() => assertLogsBoundToBlock([fakeLog({ blockNumber: 99n })], expected)).toThrow(/height 99/i);
   });
+
+  it('refuses a log with no blockNumber — height bind is not optional', () => {
+    // Runtime null (node sometimes) is not in viem's Log type — cast for the refuse path.
+    const missing = { ...fakeLog(), blockNumber: null } as unknown as RawLog;
+    expect(() => assertLogsBoundToBlock([missing], expected)).toThrow(/no blockNumber/i);
+    expect(() => assertLogsBoundToBlock([fakeLog({ blockNumber: undefined })], expected)).toThrow(/no blockNumber/i);
+    try {
+      assertLogsBoundToBlock([missing], expected);
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'indexer.malformed_block' });
+    }
+  });
 });

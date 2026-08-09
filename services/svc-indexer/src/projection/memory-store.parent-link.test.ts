@@ -43,4 +43,21 @@ describe('MemoryProjectionStore · parent link is enforced', () => {
     await store.applyBlock(blk(1, H1, H0));
     expect((await store.head())?.hash).toBe(H1);
   });
+
+  /**
+   * Forward gap is sealed; under-tip plant was not. With head at H and empty
+   * heights below (startHeight path), a second writer could insert a fill at
+   * height 0 while head() still reports the real tip — tape poison.
+   */
+  it('refuses planting a height below the current tip', async () => {
+    const store = new MemoryProjectionStore(CHAIN);
+    // Cold start at height 5 (empty under-tip is normal after startHeight).
+    await store.applyBlock(blk(5, H0, '0x' + '00'.repeat(32)));
+    await store.applyBlock(blk(6, H1, H0));
+
+    await expect(store.applyBlock(blk(0, H2, '0x' + '00'.repeat(32)))).rejects.toThrow(/height_below_tip/);
+    await expect(store.applyBlock(blk(2, BAD, H0))).rejects.toThrow(/height_below_tip/);
+    expect((await store.head())?.hash).toBe(H1);
+    expect(await store.blockAt(0)).toBeNull();
+  });
 });

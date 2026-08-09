@@ -139,6 +139,30 @@ if (!available) {
       expect((await store.head())?.hash).toBe(H2);
     });
 
+    it('refuses planting a height below the current tip', async () => {
+      await db.sql`TRUNCATE positions, fills, book_levels, blocks RESTART IDENTITY CASCADE`;
+      const store = new PostgresProjectionStore(db.sql, CHAIN_ID);
+      const H0 = `0x${'11'.repeat(32)}`;
+      const H1 = `0x${'22'.repeat(32)}`;
+      const H2 = `0x${'33'.repeat(32)}`;
+      const blk = (height: number, hash: string, parentHash: string) => ({
+        chainId: CHAIN_ID,
+        height,
+        hash,
+        parentHash,
+        timestamp: 1_700_000_000 + height,
+        events: [] as const,
+      });
+
+      // Cold start at height 5 — under-tip empty is normal after startHeight.
+      await store.applyBlock(blk(5, H0, `0x${'00'.repeat(32)}`));
+      await store.applyBlock(blk(6, H1, H0));
+
+      await expect(store.applyBlock(blk(0, H2, `0x${'00'.repeat(32)}`))).rejects.toThrow(/height_below_tip/);
+      expect((await store.head())?.hash).toBe(H1);
+      expect(await store.blockAt(0)).toBeNull();
+    });
+
     /**
      * Reversibility, proven rather than claimed (§14 DoD).
      *

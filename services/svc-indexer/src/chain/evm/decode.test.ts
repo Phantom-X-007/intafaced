@@ -251,4 +251,13 @@ describe('decodeVenueLog · fill price and quantity must be positive', () => {
   it('still accepts a book level with quantity zero', () => {
     expect(decodeVenueLog(bookLevelLog(0, 10n ** 18n, 0n))).toMatchObject({ quantity: '0' });
   });
+
+  it('refuses a book level with price zero at decode time', () => {
+    expect(() => decodeVenueLog(bookLevelLog(0, 0n, 10n ** 18n))).toThrow(/book level price must be positive/);
+    try {
+      decodeVenueLog(bookLevelLog(0, 0n, 10n ** 18n));
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'indexer.bad_amount' });
+    }
+  });
 });
