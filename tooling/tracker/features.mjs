@@ -1258,8 +1258,40 @@ export const FEATURES = [
       'Rate invent FIXED #1133 (2026-08-08): blank / unpublished accrual tiers refuse-closed; DEFAULT_ACCRUAL_TIERS gone. ' +
       'Wave 3 residual #1180 (2026-08-09): attribute under txn + advisory lock + post-insert cycle recheck; `affiliates.myAccruals` self-only ' +
       'reads durable rows (never invents rates). Stage-1 #996 tree/payout refuse · Stage-2 #1008 members/freeze · Stage-3 #1027 accrue store. ' +
-      'Still NOT done: Class M payout automation after DIRECTION §8 owner-published rates + ledger recipe (reuse rewardPay/sweepFees — do not invent recipe). ' +
-      'Payout procedure remains refuse-closed by name.',
+      'SLICE C PAYOUT ENGINE LANDED #1477 (2026-08-09) — affiliates/payout-engine.ts. The tree, attribution and durable accruals already existed, so this ' +
+      'built the payout half ON TOP of them rather than a second tree. `affiliates.payout` no longer throws an unconditional stub: it plans a multi-tier ' +
+      'fan-out from durable accrual rows and posts it through EXISTING recipes (sweepFeesToRewards + rewardPay). No recipe added or edited — DIRECTION §3 ' +
+      'owner carve-out. svc-identity gained @intafaced/ledger-client and a `Pick<LedgerClient,"post">` client (narrower than all seven siblings on purpose: ' +
+      'a service that must hold no balance gets no balance read). ' +
+      'STILL `ready`, NOT `done`, AND THE REASON IS THE DELIVERABLE: every commission rate is DIRECTION §8 owner-only (item 10 reserves leader_share_bps ' +
+      '"and every other fee-share rate"; item 6 reserves fee/revenue recipes). With no published law the path refuses `affiliate.payout.rates_unset` and ' +
+      'moves nothing — asserted on BALANCES, not on a tRPC code. A payout engine refuse-closed on an owner rate is `ready`. ' +
+      'NEW HOLE CLOSED THAT WAS NOT IN THE BRIEF: resolveAccrualTiers accepts per-call operator `requestTiers`, which is defensible at accrual (writes a ' +
+      'claim, moves nothing) and NOT at payout — paying "the rate on the row" would launder an operator-supplied rate into real money. Payout therefore ' +
+      'ignores row.rate and requires every row to match the owner-published tier for its hop, else `affiliate.payout.rate_unpublished`. Compared numerically, ' +
+      'so "0.10" vs "0.1" is not a false refuse an operator would "fix" by editing a rate. ' +
+      'OWNER RULING PENDING (not a rate, but it multiplies one): MAX_PAYOUT_TIER_DEPTH — one named constant in payout-engine.ts, conservatively equal to the ' +
+      'tree write-time cap DEFAULT_MAX_REFERRAL_DEPTH = 5. Each extra commissionable hop is a money decision. ' +
+      'ATOMICITY, STATED HONESTLY: LedgerClient has no batch API and an all-legs single post would need a new multi-beneficiary recipe (owner carve-out), so ' +
+      'the fan-out is replay-safe by key rather than one transaction — a crash mid-fan-out leaves the tree partly paid and re-running completes it, paying ' +
+      'nobody twice. Keys are business-derived: `affiliate:<feeEventId>:<beneficiaryId>:h<hop>`, which IS the accrual unique constraint — no clock, no UUID. ' +
+      'One sweep PER LEG, not per fee event, because sweepFeesToRewards omits the amount from its key: a per-event sweep would dedupe against itself if the ' +
+      'row set grew and silently borrow the difference from the rewards engine. ' +
+      'Also refused and tested: cycles and self-referral (write time in the tree, and again at payout so a pre-fix row cannot pay), depth past the bound, ' +
+      'mixed-asset fan-out, rows from another fee event, duplicate rows, frozen beneficiary (freeze applied AFTER accrual still stops the money), and an ' +
+      'unfunded fee pool (fails rather than inventing). 31 engine tests + 12 mount tests; 12 mutations each verified to turn a named test red. ' +
+      'ONE OF THOSE MUTATIONS FOUND A REAL BUG IN THIS PR before merge: payoutKeysAreBusinessDerived allowed a uuid that `endsWith` the key on the theory that ' +
+      'a trailing id was the business one — backwards, since trailing is exactly where a generated id is appended, so `close:${id}:${randomUUID()}` passed the ' +
+      'guard clean. Replaced with a count (exactly one uuid per key, the beneficiary) plus a Date.now() segment check, and pointed a test at both shapes. ' +
+      'Still NOT done beyond the rate: no caller ACCRUES from a real fee event yet — svc-trade/svc-pay do not emit affiliate fee events, so accrual rows are ' +
+      'operator-supplied today. LEDGER_URL is optional and undefaulted in svc-identity, so a deployment that has not set it refuses ' +
+      '`affiliate.payout.ledger_unwired` rather than failing at post time. ' +
+      'NAMED GAP FOR WHOEVER WIRES THE PRODUCER, because it will bite them and is invisible from the payout side: FeeEvent and the accrual row do NOT record ' +
+      'which module fee pool the fee landed in. A trading fee lands in houseFees("trade"), a payment fee in houseFees("pay") — payout has only ' +
+      'AFFILIATE_PAYOUT_SOURCE_MODULE = "identity" to sweep from. It is one named constant plus an overridable `sourceModule` param rather than a literal at the ' +
+      'call site, so the hedge is legible, but it IS an assumption: a real producer needs a source-module column on the accrual row, or commission gets swept ' +
+      'from a pool that never held the fee (which fails as InsufficientFunds rather than inventing — safe, but a failure). Not fixed here because inventing a ' +
+      'column shape for a producer that does not exist is the same class of guess as inventing a rate.',
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', {
     module: 'core-ops',

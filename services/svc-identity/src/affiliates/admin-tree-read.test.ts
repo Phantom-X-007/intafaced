@@ -96,7 +96,7 @@ describe('affiliates Stage — admin tree read (non-pay)', () => {
     expect(directDownlineOf(parentFrom(tree), '  ')).toEqual([]);
   });
 
-  it('refuseAffiliatePayout is Class M residual — never invents rates', () => {
+  it('refuseAffiliatePayout names the owner-only rate residual — never invents rates', () => {
     expect(affiliatePayoutResidualNamesDirectionLaw()).toBe(true);
     expect(AFFILIATE_PAYOUT_RESIDUAL).toContain('DIRECTION §8');
     try {

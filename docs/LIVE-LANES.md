@@ -18,6 +18,7 @@
 | ~~stream-a-ui~~        | —                | Vendor shell :8090 craft residual                                                                                                                                                                                                                           | **CLOSED**                      | —                                                                                    | absorbed into `nitro-frontend-all`                                                                          |
 | afk-residual           | residual-own     | AFK shell wave                                                                                                                                                                                                                                              | **drained** freeProduct=0       | residual-register                                                                    | re-open only new invent residual                                                                            |
 | launch-flags           | this session     | `LAUNCH_DROP` flag honesty — `packages/config` enforcement + `apps/admin` console                                                                                                                                                                           | **OPEN #436**                   | #436                                                                                 | `services/svc-edge` · the console freeze path (#447 landed)                                                 |
+| ops-affiliate-payout   | this session     | `ops.affiliates` Slice C payout engine — `services/svc-identity/src/affiliates/payout-engine.ts` + `ledger-client.ts` + the `affiliates.payout` procedure. Built ON the existing tree; refuse-closed on DIRECTION §8 rates                                  | **OPEN #1477**                  | #1477                                                                                | `packages/ledger-client` (imported, never edited — no recipe added) · `services/svc-trade` · `vendor/**`    |
 
 ## Free agent work (re-derive every fire)
 
@@ -32,6 +33,14 @@
 
 ## Last board update
 
+- **2026-08-09c ops.affiliates payout lane (#1477) — OVERLAP DECLARED, NOT ASSUMED CLEAR.** `ops.affiliates` is **D26-P1-O2** on
+  [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) ("Accrual tree under rate authority"), so this lane
+  touches a row on Denon's board and he should see it. Why it was taken anyway, stated so it can be overruled: the tracker row carried
+  **no owner and no claim**; `svc-identity` is **not** on the HOT HOLD list (`svc-trade` · `svc-pay` · `svc-ledger` ·
+  `packages/ledger-client` · `svc-bank` · `svc-matching` · `svc-token` · `svc-p2p` · vendor money); **no open PR intersects** the path
+  (7 open, re-derived); and the board's O2 done bar — the accrual tree under rate authority — was **already landed** (#996/#1008/#1027/#1133),
+  so this is the payout half under that same authority rather than the row itself. `packages/ledger-client` is **imported and never edited**;
+  no recipe added (DIRECTION §3). If Denon wants O2 whole, this lane hands off.
 - **2026-08-09b Denon hard parallel v2 thicken:** ~120 IDs (~2.5×); forced 3× pad rejected; board file updated on tip.
 - **2026-08-09 Denon hard parallel audit:** lane `denon-hard-parallel` LIVE — substance board for Phantom-X-007; agents keep residual only; SAFE START vs HOT HOLD collision rule on that board.
 - **2026-08-04 three-way distribution:** Shehzad chain-only; M1/M3–M7 reclaimed for agents; Denon hard queue refreshed.

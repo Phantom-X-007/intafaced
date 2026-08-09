@@ -5,6 +5,8 @@ import { createIdentityRouter } from './router.js';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import { MemoryAccrualStore } from './affiliates/accrual-store.js';
+import type { CommissionRow } from './affiliates/commission.js';
+import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
 
 /**
  * The tRPC boundary for KYC and step-up.
@@ -885,5 +887,203 @@ describe('affiliates.myAccruals (self-only durable accruals)', () => {
     const api = r.createCaller(await ctx([]));
     const err = await api.affiliates.myAccruals().catch((e: unknown) => e);
     expect(codeOf(err)).toBe('UNAUTHORIZED');
+  });
+});
+
+// ── Slice C payout on the mount — the route, not a constructed helper ────────
+//
+// The engine's own suite (affiliates/payout-engine.test.ts) proves the law.
+// THIS file proves an operator can actually reach it: `createIdentityRouter` is
+// the same call `src/index.ts:113` makes before registering the router under
+// `/trpc`, so a procedure missing here is a 404 in production. That failure has
+// bitten this repo three times, which is why the surface is enumerated as well
+// as called.
+//
+// Every assertion about value is a BALANCE READ. A tRPC code proves the request
+// was rejected; only the ledger proves no money moved.
+
+describe('affiliates.payout on the mount', () => {
+  const PAYER_U = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const BENE0 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const BENE1 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const FEE_EVT = 'fee-evt-mount-1';
+  const ASSET_U = 'USDT';
+
+  /** TEST FIXTURE rates — never a source default. */
+  const publishedLaw = {
+    published: true as const,
+    tiers: [
+      { hop: 0, rate: '0.10' },
+      { hop: 1, rate: '0.05' },
+    ],
+  };
+
+  function accrualRow(over: Partial<CommissionRow> = {}): CommissionRow {
+    return {
+      feeEventId: FEE_EVT,
+      beneficiaryId: BENE0,
+      payerId: PAYER_U,
+      hop: 0,
+      rate: '0.10',
+      feeAmount: '100',
+      commissionAmount: '10',
+      asset: ASSET_U,
+      accruedAt: new Date('2026-08-09T12:00:00.000Z'),
+      ...over,
+    };
+  }
+
+  /** Fee pool funded the way production funds it. */
+  async function fundedLedger(): Promise<MemoryLedger> {
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({ userId: PAYER_U, assetId: ASSET_U, amount: parseAmount('1000'), rail: 'crypto-native', railRef: 'mount-seed' }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: FEE_EVT,
+        userId: PAYER_U,
+        module: 'identity',
+        assetId: ASSET_U,
+        amount: parseAmount('100'),
+      }),
+    );
+    return ledger;
+  }
+
+  async function mounted(opts: { law?: typeof publishedLaw | undefined; ledger?: MemoryLedger } = {}) {
+    const store = new MemoryAccrualStore();
+    await store.saveRows([accrualRow(), accrualRow({ beneficiaryId: BENE1, hop: 1, rate: '0.05', commissionAmount: '5' })]);
+    const r = createIdentityRouter(stub.auth, stub.rank, {
+      registrationOpen: true,
+      accruals: store,
+      accrualTierLaw: opts.law,
+      ledger: opts.ledger,
+    });
+    return { store, router: r };
+  }
+
+  const bal = async (l: MemoryLedger, ref: Parameters<MemoryLedger['balance']>[0]) => formatAmount((await l.balance(ref)).amount);
+
+  it('payout IS mounted — it appears on the same router index.ts registers', async () => {
+    const { router: r } = await mounted();
+    expect(Object.keys(r._def.procedures)).toContain('affiliates.payout');
+  });
+
+  it('reaching payout with no published rate refuses by CODE and moves nothing', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: undefined, ledger });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+
+    const err = await api.affiliates.payout({ feeEventId: FEE_EVT }).catch((e: unknown) => e);
+    // The refusal names the owner law rather than a validation complaint.
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('DIRECTION §8');
+    expect(String((err as { message?: string }).message)).toContain('owner-only');
+    // The SPECIFIC code, read off the cause — the residual alone cannot tell
+    // `rates_unset` from its neighbours, so asserting the message would let the
+    // unpublished-law branch be deleted while this test stayed green.
+    expect((err as { cause?: { code?: string } }).cause?.code).toBe('affiliate.payout.rates_unset');
+    // THE ASSERTION THAT MATTERS: the book is untouched.
+    expect(await bal(ledger, houseFees('identity', ASSET_U))).toBe('100');
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('0');
+    expect(await bal(ledger, userAvailable(BENE1, ASSET_U))).toBe('0');
+    expect(await bal(ledger, rewardsEngine(ASSET_U))).toBe('0');
+  });
+
+  it('the rate refusal wins over a missing feeEventId — the operator hears the real problem', async () => {
+    const { router: r } = await mounted({ law: undefined });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+    const err = await api.affiliates.payout({}).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('DIRECTION §8');
+    // Not `affiliate.payout.invalid` — the rate gate ran first, on zero rows.
+    expect((err as { cause?: { code?: string } }).cause?.code).toBe('affiliate.payout.rates_unset');
+  });
+
+  it('with a published rate the route pays the whole tree, and balances prove it', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+
+    const receipt = await api.affiliates.payout({ feeEventId: FEE_EVT });
+    expect(receipt.posted).toBe(true);
+    expect(receipt.totalCommission).toBe('15');
+
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('10');
+    expect(await bal(ledger, userAvailable(BENE1, ASSET_U))).toBe('5');
+    expect(await bal(ledger, houseFees('identity', ASSET_U))).toBe('85');
+    expect(await bal(ledger, rewardsEngine(ASSET_U))).toBe('0');
+  });
+
+  it('a retried request through the route pays once — distinct keys, unchanged balances', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+
+    const first = await api.affiliates.payout({ feeEventId: FEE_EVT });
+    const second = await api.affiliates.payout({ feeEventId: FEE_EVT });
+
+    // Distinct keys within a run, identical keys ACROSS runs — that is what makes
+    // the retry a no-op. Call counts would prove neither.
+    expect(new Set(first.idempotencyKeys).size).toBe(first.idempotencyKeys.length);
+    expect(second.idempotencyKeys).toEqual(first.idempotencyKeys);
+    for (const key of first.idempotencyKeys) expect(key).toContain(FEE_EVT);
+
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('10'); // not 20
+    expect(await bal(ledger, userAvailable(BENE1, ASSET_U))).toBe('5');
+    expect(await bal(ledger, houseFees('identity', ASSET_U))).toBe('85');
+  });
+
+  it('dryRun plans without posting — nothing moves', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+
+    const plan = await api.affiliates.payout({ feeEventId: FEE_EVT, dryRun: true });
+    expect(plan.posted).toBe(false);
+    expect(plan.totalCommission).toBe('15');
+    expect(plan.idempotencyKeys.length).toBe(4); // sweep + payout per leg
+
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('0');
+    expect(await bal(ledger, houseFees('identity', ASSET_U))).toBe('100');
+  });
+
+  it('a published rate with no ledger wired refuses rather than reporting a payment', async () => {
+    const { router: r } = await mounted({ law: publishedLaw }); // no ledger
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+    const err = await api.affiliates.payout({ feeEventId: FEE_EVT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('no ledger client');
+  });
+
+  it('an unknown fee event refuses instead of reporting a paid zero', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+    const err = await api.affiliates.payout({ feeEventId: 'fee-evt-that-never-happened' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(await bal(ledger, rewardsEngine(ASSET_U))).toBe('0');
+  });
+
+  it('payout requires admin:write — a read scope cannot move value', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+
+    const err = await api.affiliates.payout({ feeEventId: FEE_EVT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('0');
+  });
+
+  it('an anonymous caller cannot reach payout, and no balance changes', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx([]));
+
+    const err = await api.affiliates.payout({ feeEventId: FEE_EVT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('0');
   });
 });
