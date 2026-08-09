@@ -236,7 +236,7 @@ const entryKey = (entry) => `${entry.module}:${entry.file}`;
  * ADR 2026-08-02 "ADOPT AND ADAPT": keep the controller and its business logic,
  * redirect the balance write to `ledger-client` through an adapter.
  *
- * 55 hits across 26 file/rule pairs, all of them pre-existing and all of them
+ * 54 hits across 25 file/rule pairs, all of them pre-existing and all of them
  * verified individually before being listed. Three grades of dead, weakest last
  * — and one grade that is deliberately empty:
  *
@@ -399,12 +399,7 @@ const VENDOR_JAVA_ALLOWLIST = [
     rules: { 'jpa-entity-balance-mutation': 2 },
     reason: 'Grade C. Credits the receiver on envelope claim. Door fragment /redenvelope. Queue: rewardPay.',
   },
-  {
-    module: 'admin',
-    file: 'MemberWalletController.java',
-    rules: { 'jpa-entity-balance-mutation': 1 },
-    reason: 'Grade C. Admin manual recharge — the most direct mint in the tree. Door fragment /member/member-wallet. Queue: deposit.',
-  },
+
   {
     module: 'admin',
     file: 'DividendController.java',
