@@ -25,6 +25,7 @@ import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
 import { SubMerchantService } from './submerchants.js';
 import { createSubMerchantRouter } from './submerchant-router.js';
+import { createSubscriptionRouter } from './subscription-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { SubscriptionService } from './subscriptions/index.js';
@@ -150,9 +151,6 @@ for (const { railId } of env.PAY_CHECKOUT_RAILS) {
  */
 const merchantWebhooks = new MerchantWebhookService(new PostgresMerchantWebhookStore(sql));
 
-/** Set after SubscriptionService boots — afterPaymentEvent watch half. */
-let subscriptionWatch: SubscriptionService | null = null;
-
 const pay = new PayService(sql, ledger, rails, {
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
   valueMovement: railPosture.policy,
@@ -168,11 +166,37 @@ const pay = new PayService(sql, ledger, rails, {
   afterPaymentEvent: async (event) => {
     await merchantWebhooks.enqueue(event);
     // Watch half of invoice-and-watch (SPEC §4): capture settles the execution.
-    if (subscriptionWatch && event.type === 'payment.captured') {
-      await subscriptionWatch.markExecutionSettledForPayment(event.payment.id);
+    if (event.type === 'payment.captured') {
+      await subscriptions.markExecutionSettledForPayment(event.payment.id);
     }
   },
 });
+
+/**
+ * Subscriptions — mandate store + due runner (invoice path, no pull).
+ * Merchant surface is `createSubscriptionRouter`; cron is POST /internal/jobs/….
+ * Instantiated after `pay` so the invoice opener can create payments.
+ */
+const subscriptions = new SubscriptionService(
+  sql,
+  () => new Date(),
+  async (input) => {
+    const payment = await pay.createPayment({
+      merchantId: input.merchantId,
+      amount: input.amount,
+      assetId: input.assetId,
+      method: 'crypto',
+      railAdapter: 'crypto-native',
+      metadata: {
+        source: 'subscription',
+        subscriptionId: input.subscriptionId,
+        occurrence: String(input.occurrence),
+        customerId: input.customerId,
+      },
+    });
+    return { paymentId: payment.id };
+  },
+);
 
 /**
  * User money in and out (§4.2). Merchant money is `PayService`; this is a user's
@@ -249,10 +273,12 @@ export const appRouter = mergeRouters(
   // taken from a request body would let any merchant claim to be acting as any
   // other and the subtree fence would be measuring the wrong actor.
   createSubMerchantRouter(subMerchants, pay),
+  createSubscriptionRouter(subscriptions, pay, subMerchants),
 );
 export type { PayRouter } from './router.js';
 export type { MerchantStateRouter } from './merchant-state-router.js';
 export type { SubMerchantRouter } from './submerchant-router.js';
+export type { SubscriptionRouter } from './subscription-router.js';
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
@@ -319,28 +345,6 @@ await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
  * Crypto path opens a payment/invoice (never pull). Service credentials required
  * so an unauthenticated caller cannot fan-out invoices.
  */
-const subscriptions = new SubscriptionService(
-  sql,
-  () => new Date(),
-  async (input) => {
-    const payment = await pay.createPayment({
-      merchantId: input.merchantId,
-      amount: input.amount,
-      assetId: input.assetId,
-      method: 'crypto',
-      railAdapter: 'crypto-native',
-      metadata: {
-        source: 'subscription',
-        subscriptionId: input.subscriptionId,
-        occurrence: String(input.occurrence),
-        customerId: input.customerId,
-      },
-    });
-    return { paymentId: payment.id };
-  },
-);
-subscriptionWatch = subscriptions;
-
 function requireService(req: { headers: Record<string, string | string[] | undefined> }): boolean {
   return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;
 }
