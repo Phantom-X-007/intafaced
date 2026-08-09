@@ -89,7 +89,9 @@ public class DualBookMoneyDoorInterceptor implements HandlerInterceptor {
             "/advertise/off/shelves",
             "/advertise/delete",
             // exchange-api order place/cancel (second book if still wired)
-            "/order/add"
+            "/order/add",
+            // ucenter promotion card exchange freezes available → frozen (increaseFrozen)
+            "/promotion"
     );
 
     /**

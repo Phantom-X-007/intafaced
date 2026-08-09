@@ -155,8 +155,13 @@ const FORBIDDEN = [
   },
 ];
 
-/** The four MemberWalletDao mutators the ADR bans by name. */
-const WALLET_MUTATORS = ['increaseBalance', 'decreaseBalance', 'freezeBalance', 'thawBalance'];
+/**
+ * Banned wallet mutator names (ADR 2026-07-28 hard-ban + dual-book residual).
+ * The classic four debit/credit/freeze/thaw plus freeze-path siblings that
+ * still move value (increaseFrozen / decreaseFrozen). Call sites throw today;
+ * the scan must still ratchet them so a re-arm cannot hide off-list.
+ */
+const WALLET_MUTATORS = ['increaseBalance', 'decreaseBalance', 'freezeBalance', 'thawBalance', 'increaseFrozen', 'decreaseFrozen'];
 
 /**
  * The sanctioned disabled body. Anything else attached to one of the four
@@ -236,7 +241,7 @@ const entryKey = (entry) => `${entry.module}:${entry.file}`;
  * ADR 2026-08-02 "ADOPT AND ADAPT": keep the controller and its business logic,
  * redirect the balance write to `ledger-client` through an adapter.
  *
- * 43 hits across 19 file/rule pairs, all of them pre-existing and all of them
+ * 54 hits across 20 file/rule pairs (classic four + frozen mutators + zero-init listings), all of them pre-existing and all of them
  * verified individually before being listed. Three grades of dead, weakest last
  * — and one grade that is deliberately empty:
  *
@@ -270,31 +275,32 @@ const VENDOR_JAVA_ALLOWLIST = [
   {
     module: 'core',
     file: 'MemberWalletDao.java',
-    rules: { 'wallet-mutator-name': 4 },
+    rules: { 'wallet-mutator-name': 6 },
     reason:
-      'Grade A. The four declarations. Each carries UPDATE member_wallet SET id = id WHERE 1 = 0 and is re-proved by ' +
-      'dao-mutator-noop-integrity on every run — that check has no allowlist, so this entry cannot hide a re-arm. ' +
-      'Queue: delete the four methods once no caller remains.',
+      'Grade A. The six named mutators (classic four + increaseFrozen/decreaseFrozen). Each carries UPDATE member_wallet ' +
+      'SET id = id WHERE 1 = 0 and is re-proved by dao-mutator-noop-integrity — that check has no allowlist, so this ' +
+      'entry cannot hide a re-arm. All other @Modifying UPDATE member_wallet queries on this DAO are also proved no-op ' +
+      'by the same check (absolute SET balance = :x cannot sneak past via a non-named method). Queue: delete once no ' +
+      'caller remains.',
   },
   {
     module: 'core',
     file: 'MemberWalletService.java',
-    rules: { 'wallet-mutator-name': 3 },
+    rules: { 'wallet-mutator-name': 5 },
     reason:
-      'Grade A. freezeBalance/thawBalance/increaseBalance stubs that throw IllegalStateException("… is disabled: Java ' +
-      'shell must not … (INTAFACED dual-book)"). These three declarations are what makes every Grade B call site dead. ' +
-      'Queue: replace with ledger-client adapter calls.',
+      'Grade A. freezeBalance/thawBalance/increaseBalance/increaseFrozen/decreaseFrozen stubs that throw ' +
+      'IllegalStateException("… is disabled: Java shell must not … (INTAFACED dual-book)"). These declarations make ' +
+      'every Grade B call site dead. Queue: replace with ledger-client adapter calls.',
   },
 
   // ── Grade B: call sites of a method that throws ──────────────────────────
   {
     module: 'exchange-core',
     file: 'ExchangeOrderService.java',
-    rules: { 'wallet-mutator-name': 8 },
+    rules: { 'wallet-mutator-name': 9 },
     reason:
       'Grade B. Spot/exchange order lifecycle — freeze on place (113, 126, 746, 755), credit on fill (378, 472, 502), ' +
-      'thaw on cancel (619). The largest single seam and the one that maps most directly onto tradeFill / escrowLock. ' +
-      'Queue: highest priority — this is the trading path.',
+      'decreaseFrozen on fill (387), thaw on cancel (619). Largest seam → tradeFill / escrowLock. Queue: highest priority.',
   },
   {
     module: 'otc-api',
@@ -305,8 +311,8 @@ const VENDOR_JAVA_ALLOWLIST = [
   {
     module: 'admin',
     file: 'ActivityController.java',
-    rules: { 'wallet-mutator-name': 3 },
-    reason: 'Grade B. Activity/IEO order thaw on admin cancel. Queue: escrowRelease.',
+    rules: { 'wallet-mutator-name': 5 },
+    reason: 'Grade B. Activity/IEO order freeze/thaw + decreaseFrozen on admin cancel/distribute. Queue: escrowRelease.',
   },
   {
     module: 'otc-api',
@@ -317,8 +323,8 @@ const VENDOR_JAVA_ALLOWLIST = [
   {
     module: 'admin',
     file: 'AdminCtcOrderController.java',
-    rules: { 'wallet-mutator-name': 2 },
-    reason: 'Grade B. CTC order admin release/refund. Queue: escrowRelease.',
+    rules: { 'wallet-mutator-name': 3 },
+    reason: 'Grade B. CTC order admin release/refund including decreaseFrozen. Queue: escrowRelease.',
   },
   {
     module: 'ucenter-api',
@@ -335,10 +341,10 @@ const VENDOR_JAVA_ALLOWLIST = [
   {
     module: 'admin',
     file: 'CheckRedEnvelopeJob.java',
-    rules: { 'wallet-mutator-name': 2 },
+    rules: { 'wallet-mutator-name': 4 },
     reason:
-      'Grade B, scheduled — NOT behind the HTTP door. Refunds unclaimed red-envelope amounts on a timer. Dead only ' +
-      'because the service throws. Queue: rewardPay reversal.',
+      'Grade B, scheduled — NOT behind the HTTP door. Refunds unclaimed red-envelope amounts (thaw + decreaseFrozen). ' +
+      'Dead only because the service throws. Queue: rewardPay reversal.',
   },
   {
     module: 'admin',
@@ -351,6 +357,14 @@ const VENDOR_JAVA_ALLOWLIST = [
     file: 'WithdrawController.java',
     rules: { 'wallet-mutator-name': 1 },
     reason: 'Grade B. Freeze on withdrawal request. Queue: withdrawHold.',
+  },
+  {
+    module: 'ucenter-api',
+    file: 'PromotionController.java',
+    rules: { 'wallet-mutator-name': 1 },
+    reason:
+      'Grade B. Promotion card exchange freezes via increaseFrozen — was invisible to the classic-four name ban. ' +
+      'Service throws; door fragment /promotion added for defense-in-depth. Queue: escrowLock.',
   },
   {
     module: 'admin',
@@ -572,28 +586,38 @@ for (const file of files) {
     }
   }
 
-  // ── Check 2: the four DAO declarations must carry the sanctioned no-op ────
+  // ── Check 2: DAO wallet UPDATEs must carry the sanctioned no-op ───────────
   // Scoped to repository interfaces so a call site is never mistaken for a
   // declaration. Absence is fine — deleting the mutators outright is the ideal
   // end state — but a declaration that exists must be provably dead.
+  //
+  // Two layers:
+  //   (a) Every banned mutator NAME on any Dao/Repository carries the no-op.
+  //   (b) On MemberWalletDao specifically, EVERY @Query that UPDATE-s
+  //       member_wallet must be the sanctioned no-op — not only the six named
+  //       methods. Absolute `SET balance = :x` on a non-named helper used to be
+  //       invisible to (a); that is the hole map §6.2 names.
   if (/(?:Dao|Repository)\.java$/.test(path)) {
     for (const m of [...codeView.matchAll(/@Query\s*\(([\s\S]{0,400}?)\)\s*([\s\S]{0,200}?);/g)]) {
       const [, annotation, signature] = m;
-      const mutator = WALLET_MUTATORS.find((name) => new RegExp(`(?<![.\\w])${name}\\s*\\(`).test(signature));
-      if (!mutator) continue;
-      daoDeclarationsVerified++;
       // The query text lives in the SQL view — the code view blanked it out.
       const sqlAnnotation = sqlView.slice(m.index, m.index + annotation.length + 8);
       const value = /"([^"]*)"/.exec(sqlAnnotation)?.[1] ?? '';
+      const mutator = WALLET_MUTATORS.find((name) => new RegExp(`(?<![.\\w])${name}\\s*\\(`).test(signature));
+      const isMemberWalletDao = /MemberWalletDao\.java$/.test(path);
+      const isWalletUpdate = /UPDATE\s+member_wallet\b/i.test(value);
+      if (!mutator && !(isMemberWalletDao && isWalletUpdate)) continue;
+      const label = mutator ?? signature.match(/\b(\w+)\s*\(/)?.[1] ?? 'unnamed-wallet-update';
+      daoDeclarationsVerified++;
       if (!NOOP_QUERY.test(value)) {
-        daoIntegrityFailures.push({ path, line: lineAt(codeView, m.index), mutator, query: value.slice(0, 160) });
+        daoIntegrityFailures.push({ path, line: lineAt(codeView, m.index), mutator: label, query: value.slice(0, 160) });
       }
     }
   }
 
   // ── Checks 3 + 4: name ban and JPA managed-entity mutation ────────────────
   // Cheap pre-filter: no wallet vocabulary at all means no rule can match.
-  if (!/[Bb]alance|member_wallet|[Tt]oReleased|to_released|setToReleased/.test(source)) continue;
+  if (!/[Bb]alance|[Ff]rozen|member_wallet|[Tt]oReleased|to_released|setToReleased/.test(source)) continue;
   for (const rule of CODE_RULES) {
     rule.re.lastIndex = 0;
     let match;
