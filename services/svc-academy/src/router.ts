@@ -22,6 +22,7 @@ import { curriculumBodyForLocale, curriculumI18nStrategyLine } from './curriculu
 import {
   drillProgress,
   isDrillComplete,
+  listPaperFillRefs,
   remainingStepIds,
   replayPaperDrill,
   startPaperDrillForCatalogItem,
@@ -243,6 +244,12 @@ const publishedFillIn = z.object({
 });
 
 const simulatedValuationOut = z.object({
+  // Nested seal — valuation alone cannot be read as live money if parent seal stripped
+  simulated: z.literal(true),
+  venue: z.literal(SIMULATED_VENUE),
+  realLedger: z.literal(false),
+  withdrawable: z.literal(false),
+  disclaimer: z.string().min(1),
   fillCount: z.number().int(),
   boughtSize: z.string(),
   soldSize: z.string(),
@@ -766,9 +773,28 @@ export function createAcademyRouter(academy: AcademyService) {
 
           const run = replayed.run;
           const progress = drillProgress(run);
+          // Value the post-attach run, not the raw input array. attachPaperFillRef
+          // already de-dupes fillId and refuses conflicting re-sends; valuing
+          // input.fills would re-inflate PnL when a client double-posts the same id.
+          // Incomplete refs (id-only) never reach valuation — publishedFillIn on
+          // the wire requires side/price/size, and uniquePublishedFills refuses
+          // conflicts that slip past attach.
+          const fillsForValue: PublishedFill[] = listPaperFillRefs(run).flatMap((ref) => {
+            if (ref.side !== 'buy' && ref.side !== 'sell') return [];
+            if (typeof ref.price !== 'string' || typeof ref.size !== 'string') return [];
+            return [
+              {
+                fillId: ref.fillId,
+                marketId: ref.marketId,
+                side: ref.side,
+                price: ref.price,
+                size: ref.size,
+              },
+            ];
+          });
           // Throws `academy.paper_price_unavailable` rather than valuing a fill
-          // whose price nobody published.
-          const valuation = valueSimulatedDrill(input.fills as readonly PublishedFill[], input.markPrice);
+          // whose price nobody published (or a conflicting fillId pair).
+          const valuation = valueSimulatedDrill(fillsForValue, input.markPrice);
 
           const sealed = assertSealedSimulated(
             sealSimulated({

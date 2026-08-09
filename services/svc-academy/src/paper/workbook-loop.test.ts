@@ -181,6 +181,44 @@ describe('paper Stage-2 workbook loop', () => {
     expect(listPaperFillRefs(ok.run)[0]).not.toHaveProperty('price');
   });
 
+  it('attachPaperFillRef refuses same fillId with a conflicting body', () => {
+    const start = startPaperDrill({
+      workbookSlug: 'foundations-paper-workbook',
+      market: { marketId: 'p1', paper: true, symbol: 'PAPER/USD' },
+    });
+    if (!start.ok) return;
+    const first = attachPaperFillRef(start.run, {
+      fillId: 'f-1',
+      marketId: 'p1',
+      side: 'buy',
+      price: '100',
+      size: '1',
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const conflict = attachPaperFillRef(first.run, {
+      fillId: 'f-1',
+      marketId: 'p1',
+      side: 'buy',
+      price: '999',
+      size: '1',
+    });
+    expect(conflict.ok).toBe(false);
+    if (conflict.ok) return;
+    expect(conflict.reason).toBe('bad_fill');
+    expect(listPaperFillRefs(first.run)).toHaveLength(1);
+
+    const same = attachPaperFillRef(first.run, {
+      fillId: 'f-1',
+      marketId: 'p1',
+      side: 'buy',
+      price: '100',
+      size: '1',
+    });
+    expect(same.ok).toBe(true);
+    if (same.ok) expect(same.run.fillRefs).toHaveLength(1);
+  });
+
   it('L3 drillProgress reports ratio without invent complete', () => {
     const start = startPaperDrill({
       workbookSlug: 'foundations-paper-workbook',
