@@ -1106,9 +1106,9 @@ if (!available) {
    */
   describe('step-up elevation', () => {
     const enrol = async (userId: string) => {
-      const { secret } = await auth.startTotpEnrolment(userId);
+      const { secret, recoveryCodes } = await auth.startTotpEnrolment(userId);
       await auth.confirmTotpEnrolment(userId, secret, totp(secret));
-      return secret;
+      return { secret, recoveryCodes };
     };
 
     it('a normal session does NOT carry trade:withdraw', async () => {
@@ -1121,7 +1121,7 @@ if (!available) {
 
     it('a valid TOTP code buys a token that carries trade:withdraw with mfa set', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
 
       const elevated = await auth.stepUp({
         userId: session.userId,
@@ -1138,7 +1138,7 @@ if (!available) {
 
     it('the elevated token expires far sooner than a normal one', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
 
       const elevated = await auth.stepUp({
         userId: session.userId,
@@ -1175,7 +1175,7 @@ if (!available) {
 
     it('refuses to elevate off a session that has been logged out', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
       await auth.logoutAll(session.userId);
 
       // Otherwise a logout could be undone by whoever still holds the old
@@ -1189,7 +1189,7 @@ if (!available) {
 
     it('refuses a frozen account', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
       await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
 
       await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totpNext(secret) })).rejects.toMatchObject(
@@ -1197,6 +1197,100 @@ if (!available) {
           code: 'auth.account_frozen',
         },
       );
+    });
+
+    // W6-L12: recovery codes are second-factor credentials. Lost authenticator
+    // must still unlock trade:withdraw without re-enrolling TOTP first (login
+    // already redeems them; step-up did not).
+    it('a recovery code buys trade:withdraw step-up, burns once, and refuses replay', async () => {
+      const session = await register();
+      const { secret, recoveryCodes } = await enrol(session.userId);
+      const code = recoveryCodes[0]!;
+      expect(code).toMatch(/^[0-9A-F]{5}-[0-9A-F]{5}$/);
+
+      const before = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      const hashesBefore = normalizeStringList(before[0]!.recovery_code_hashes);
+      expect(hashesBefore.length).toBe(recoveryCodes.length);
+
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: code,
+      });
+      const principal = await verifyAccessToken(elevated.accessToken, tokenConfig);
+      expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(true);
+      expect(principal.mfa).toBe(true);
+      const lifetimeSeconds = (elevated.expiresAt.getTime() - Date.now()) / 1000;
+      expect(lifetimeSeconds).toBeLessThanOrEqual(300);
+      expect(lifetimeSeconds).toBeGreaterThan(240);
+
+      const after = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(normalizeStringList(after[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length - 1);
+
+      // Single-use: same recovery code cannot elevate again.
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: code })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      // Valid TOTP still steps up after a recovery burn (next step — enrol burned current).
+      const again = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: totpNext(secret),
+      });
+      expect(hasScope((await verifyAccessToken(again.accessToken, tokenConfig)).scopes, 'trade:withdraw')).toBe(true);
+    });
+
+    it('refuses a recovery-shaped code that was never issued', async () => {
+      const session = await register();
+      await enrol(session.userId);
+
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          totpCode: 'AAAAA-BBBBB',
+        }),
+      ).rejects.toMatchObject({ code: 'auth.mfa_invalid' });
+    });
+
+    it('refuses recovery step-up on a frozen account before burning the code', async () => {
+      const session = await register();
+      const { recoveryCodes } = await enrol(session.userId);
+      const code = recoveryCodes[0]!;
+      await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
+
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: code })).rejects.toMatchObject({
+        code: 'auth.account_frozen',
+      });
+
+      // Freeze check is before redeem — code must still be available after thaw.
+      await db.sql`UPDATE users SET status = 'active' WHERE id = ${session.userId}`;
+      const remaining = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length);
+    });
+
+    it('refuses recovery step-up on a dead session without burning the code', async () => {
+      const session = await register();
+      const { recoveryCodes } = await enrol(session.userId);
+      const code = recoveryCodes[0]!;
+      await auth.logoutAll(session.userId);
+
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: code })).rejects.toMatchObject({
+        code: 'auth.session_invalid',
+      });
+
+      // Re-login would be a new session; here we only assert the hash survived.
+      const remaining = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length);
     });
   });
 
