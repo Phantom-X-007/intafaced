@@ -46,7 +46,7 @@ tRPC under `/trpc` (edge mounts `/api/market`). Principal via edge HMAC
 | `vet`               | `market:ops`   | Record an operator's decision and apply it              |
 | `history`           | `market:ops`   | The decision trail for one application                  |
 
-HTTP: `GET /health`, `GET /ready` (`stage: 3-list-eligibility`).
+HTTP: `GET /health`, `GET /ready` (`stage: commerce-one-time`, plus whether commission is configured).
 
 Neither `claimSlot` nor `releaseSlot` takes a `vendorId`: a slot is always spent
 against the caller's own vendor row. A claim that could name its vendor would let
@@ -189,22 +189,25 @@ could enumerate everybody an operator has thrown off the marketplace.
 ### The `market.commerce` seam
 
 `VendorService.listingEligibility({ vendorId })` or `({ userId })` — a method, not
-only a procedure, because the consumer the DoD names is another service's write
-path. Commerce holds a principal, so it asks by `userId`; the public profile asks
-by `vendorId`; one rule serves both. It returns a verdict with a code commerce can
-act on (`market.vendor_not_found`, `market.vendor_not_approved`,
+only a procedure. **Public catalogue and purchase** re-read it so an unstaked or
+suspended vendor cannot present as listed or sell. It returns a verdict with a
+code commerce can act on (`market.vendor_not_found`, `market.vendor_not_approved`,
 `market.slot_required`, `market.stake_required`) rather than throwing, because a
 refusal that arrives as an exception gets flattened into a 500 that tells the
 vendor nothing.
+
+**Create listing does not use `listingEligibility`.** A vendor is listed only
+after they hold a usable slot; the first listing is what claims that slot.
+Create gates on **approved vendor** + successful `claimSlot({ ref: listingId })`.
+Using eligibility on create would refuse every first listing with
+`market.slot_required` (chicken-and-egg). Purchase and catalogue still require a
+live open slot with `ref = listingId`, so a crash between insert and claim cannot
+sell an orphan row.
 
 `market.stake_unavailable` is the exception, and it is **thrown**: "we could not
 check" is not a finding about the vendor and must never be recorded as one. A
 caller handed `stake_required` during an svc-token outage would tell an honest
 vendor to go and stake.
-
-**No commerce surface was built here** — no listing table, no price, no
-commission. Those are `market.commerce`, and its commission rate is an
-owner-gated blank.
 
 ### Fail closed, ordered so an outage costs as little as possible
 
@@ -239,25 +242,18 @@ turns one slow lookup into an unbounded number of them.
 
 ## Events
 
-**None published, none consumed — still true at Stage 2.** No accepted bus subject
-exists for vendor lifecycle, and `packages/events` is not a dependency of this
-service. Declaring a subject with no publisher or subscriber is an orphan the
-wiring gate correctly refuses; connecting to NATS to publish nothing would add a
-boot dependency that can fail in exchange for no capability. When a subject is
-accepted, it lands in an events PR first.
-
-That includes the unstake event a slot release would otherwise want. There is no
-subscriber wiring for one, so Stage 2 re-checks stake at claim time and on every
-read instead — see "Release" above.
+**None published, none consumed.** No accepted bus subject exists for vendor
+lifecycle or market purchases yet. Declaring a subject with no publisher is an
+orphan the wiring gate correctly refuses. Unstake has no bus subject either —
+eligibility re-reads svc-token live instead.
 
 ## Ledger
 
-**No ledger recipes, and no `@intafaced/ledger-client` dependency.** This service
-holds no balances and moves no value. `market` is `custodial: true` in the module
-registry because the _marketplace_ eventually takes custody of purchase funds —
-that is `market.commerce`, a different mountain with its own recipes. Nothing in
-`market.vendors` is an amount, a price or a balance, and no column in its schema
-could hold one.
+**Vendors half moves no value.** Slot capacity is not money. **Commerce half**
+depends on `@intafaced/ledger-client` and posts only `recipes.marketPurchase`
+(buyer → vendor net + `houseFees('market')`). Market tables hold no balances —
+price and commission_bps are intent records. The house rate is owner-gated via
+`MARKET_HOUSE_COMMISSION_BPS` (no default).
 
 ## Schema
 
@@ -276,11 +272,10 @@ column** — that is svc-token's, read live. A partial unique index on
 `(vendor_id, ref) WHERE released_at IS NULL` makes "one open slot per listing" a
 database fact for any future path that does not take the lock.
 
-A slot table rather than counting listings, because there are no listings:
-`market.commerce` is a different mountain and Stage 3 is not built, so deriving
-capacity from a table that does not exist would make the oversell guarantee
-untestable — the one thing this stage is for. Stage 3 attaches a listing by
-writing its id into `ref`.
+A slot table rather than counting listings: Stage 2 shipped before commerce, so
+oversell was provable with opaque `ref`s alone. Commerce now writes the listing
+id into `ref` on create. Schema also has `market.listings` and `market.purchases`
+(migration `0002_market_commerce.sql`).
 
 ## Observability
 
@@ -308,10 +303,11 @@ otherwise.
   free rate, not silence.
 - **Rounding:** floor on commission (customer favour); buyer pays exactly the
   listed price (vendor net + house = price).
-- **Eligibility:** re-checked on every create/purchase via
-  `VendorService.listingEligibility` — never a stored `is_listed`.
+- **Eligibility:** catalogue and purchase re-check `listingEligibility` plus a
+  live slot `ref = listingId` — never a stored `is_listed`. Create uses
+  approved + `claimSlot` (see seam above).
 - **Subscriptions:** listing `offer_type=subscription` is storable; purchase
-  refuses `market.subscription_not_built` until Stage C3.
+  refuses `market.subscription_not_built` until Stage C3 (needs product law).
 
 No balance column exists on `market.listings` or `market.purchases`. Price and
 commission_bps are intent records; the only balances live in svc-ledger.
