@@ -1,0 +1,106 @@
+/**
+ * CLASS B EVENT-WIRING MATRIX — the growth pin.
+ *
+ * `subscribeNotificationEvents` attaches durable consumers one by one. A casual
+ * add is how a dark subject (no publisher, no user id, no product meaning)
+ * enters production and either parks forever or fans noise into every inbox.
+ *
+ * This list is the deliberate surface. Adding a consumer requires changing this
+ * matrix AND the attach block in `events.ts`. The pin test fails if they drift.
+ *
+ * Skipped subjects (documented, not attached) live in SKIPPED_NOTIFY_SUBJECTS.
+ * No invented publishers.
+ */
+
+export type NotifyConsumerRow = {
+  /** Catalog event name on `@intafaced/events`. */
+  readonly event: string;
+  /** JetStream durable consumer name. */
+  readonly durable: string;
+  /** Bus subject string (must match the catalog). */
+  readonly subject: string;
+  /** One-line product effect for the README matrix. */
+  readonly effect: string;
+};
+
+/**
+ * Every durable consumer svc-notify attaches today.
+ *
+ * Order matches `subscribeNotificationEvents` for greppability.
+ */
+export const NOTIFY_EVENT_CONSUMERS: readonly NotifyConsumerRow[] = [
+  {
+    event: 'fillSettled',
+    durable: 'notify-fill-settled',
+    subject: 'intafaced.trade.fill.settled',
+    effect: 'Inbox row for the fill owner',
+  },
+  {
+    event: 'positionUpdated',
+    durable: 'notify-position-updated',
+    subject: 'intafaced.trade.position.updated',
+    effect: 'Critical inbox row + fan-out on liquidation only',
+  },
+  {
+    event: 'p2pEscrowLocked',
+    durable: 'notify-p2p-escrow-locked',
+    subject: 'intafaced.p2p.escrow.locked',
+    effect: 'Inbox rows for seller and buyer',
+  },
+  {
+    event: 'p2pEscrowReleased',
+    durable: 'notify-p2p-escrow-released',
+    subject: 'intafaced.p2p.escrow.released',
+    effect: 'Inbox rows when escrow releases to buyer',
+  },
+  {
+    event: 'p2pEscrowRefunded',
+    durable: 'notify-p2p-escrow-refunded',
+    subject: 'intafaced.p2p.escrow.refunded',
+    effect: 'Inbox rows when escrow returns to seller',
+  },
+  {
+    event: 'p2pTradeDisputed',
+    durable: 'notify-p2p-trade-disputed',
+    subject: 'intafaced.p2p.trade.disputed',
+    effect: 'Inbox row for the opener only (no counterparty on payload)',
+  },
+  {
+    event: 'kycApproved',
+    durable: 'notify-kyc-approved',
+    subject: 'intafaced.identity.kyc.approved',
+    effect: 'Inbox row when verification tier is granted',
+  },
+  {
+    event: 'rankUpdated',
+    durable: 'notify-rank-updated',
+    subject: 'intafaced.identity.rank.updated',
+    effect: 'Inbox row when rank changes',
+  },
+  {
+    event: 'stakeCreated',
+    durable: 'notify-stake-created',
+    subject: 'intafaced.token.stake.created',
+    effect: 'Inbox row when a stake is locked',
+  },
+  {
+    event: 'bankMarginCalled',
+    durable: 'notify-bank-margin-called',
+    subject: 'intafaced.bank.margin_call.created',
+    effect: 'Critical inbox row + fan-out when a loan is called',
+  },
+] as const;
+
+/** Catalog subjects we deliberately do not fan out (and why). */
+export const SKIPPED_NOTIFY_SUBJECTS: readonly { readonly event: string; readonly why: string }[] = [
+  { event: 'p2pDisputeResolved', why: 'no user ids on payload' },
+  { event: 'p2pTradeExpired', why: 'no user ids on payload' },
+] as const;
+
+export function notifyEventConsumerCount(): number {
+  return NOTIFY_EVENT_CONSUMERS.length;
+}
+
+export function notifyEventDurableNames(): readonly string[] {
+  return NOTIFY_EVENT_CONSUMERS.map((r) => r.durable);
+}

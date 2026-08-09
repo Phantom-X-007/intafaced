@@ -18,6 +18,15 @@ import {
 } from '@intafaced/events';
 import type { CreateResult, NotifyService } from './notify-service.js';
 import type { Severity } from './store.js';
+import {
+  NOTIFY_EVENT_CONSUMERS,
+  SKIPPED_NOTIFY_SUBJECTS,
+  notifyEventConsumerCount,
+  notifyEventDurableNames,
+} from './event-wiring-matrix.js';
+
+/** Class B matrix — re-exported so production graph reaches the pin (reachability gate). */
+export { NOTIFY_EVENT_CONSUMERS, SKIPPED_NOTIFY_SUBJECTS, notifyEventConsumerCount, notifyEventDurableNames };
 
 /**
  * EVENT WIRING — fan-out.
@@ -498,6 +507,12 @@ export async function subscribeNotificationEvents(
       );
     }),
   );
+
+  // Class B growth pin: attach count must match the deliberate matrix.
+  // A casual second attach without a matrix row fails here at boot, not in CI only.
+  if (attachments.length !== notifyEventConsumerCount()) {
+    throw new Error(`notify event-wiring drift: attached ${attachments.length} consumers, matrix has ${notifyEventConsumerCount()}`);
+  }
 
   return {
     subscriptions: attachments.map((a) => a.subscription).filter((s): s is Subscription => s !== null),
