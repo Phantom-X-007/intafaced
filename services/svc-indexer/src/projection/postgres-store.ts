@@ -86,6 +86,10 @@ export class PostgresProjectionStore implements ProjectionStore {
   async applyBlock(block: ChainBlock): Promise<ApplyOutcome> {
     assertValidBlock(block);
 
+    if (block.chainId !== this.chainId) {
+      throw new Error(`indexer.wrong_chain: block chainId ${block.chainId} does not match store chainId ${this.chainId}`);
+    }
+
     return this.sql.begin(async (tx) => {
       const [prior] = await tx<Array<{ status: string }>>`
         SELECT status FROM blocks WHERE chain_id = ${this.chainId} AND hash = ${block.hash}
@@ -129,13 +133,17 @@ export class PostgresProjectionStore implements ProjectionStore {
             // (block hash, log index) is the chain's own identity for a log.
             // DO NOTHING here is THE anti-double-count guarantee for the tape:
             // a re-read of the same block inserts nothing at all.
+            // Addresses lowercased on write so EIP-55 spellings cannot dual-key
+            // against case-sensitive DISTINCT ON / unique indexes.
+            const maker = event.maker.toLowerCase();
+            const taker = event.taker.toLowerCase();
             await tx`
               INSERT INTO fills (chain_id, block_hash, log_index, block_height, market, price, quantity, taker_side, maker, taker, block_time)
               VALUES (
                 ${this.chainId}, ${block.hash}, ${event.logIndex}, ${block.height}, ${event.market},
                 ${formatAmount(positiveAmountOf(event.price, 'fill price'))},
                 ${formatAmount(positiveAmountOf(event.quantity, 'fill quantity'))},
-                ${event.takerSide}, ${event.maker}, ${event.taker}, ${blockTime}
+                ${event.takerSide}, ${maker}, ${taker}, ${blockTime}
               )
               ON CONFLICT (chain_id, block_hash, log_index) DO NOTHING
             `;
@@ -143,10 +151,11 @@ export class PostgresProjectionStore implements ProjectionStore {
           }
 
           case 'position': {
+            const account = event.account.toLowerCase();
             await tx`
               INSERT INTO positions (chain_id, market, account, block_height, block_hash, size, entry_price)
               VALUES (
-                ${this.chainId}, ${event.market}, ${event.account}, ${block.height}, ${block.hash},
+                ${this.chainId}, ${event.market}, ${account}, ${block.height}, ${block.hash},
                 ${formatAmount(amountOf(event.size, 'position size'))},
                 ${formatAmount(nonNegativeAmountOf(event.entryPrice, 'position entry price'))}
               )

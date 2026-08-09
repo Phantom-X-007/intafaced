@@ -447,5 +447,44 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
         ['B-USD', '2'],
       ]);
     });
+
+    /**
+     * EIP-55 checksum casing is presentation, not identity. Stores that keep
+     * the write spelling as the key split one account into two; Postgres
+     * `DISTINCT ON (market, account)` is case-sensitive, so mixed-case writes
+     * would dual-key and serve two "current" sizes. Lowercase on write makes
+     * that state unrepresentable — same as EVM decode already does.
+     */
+    it('treats mixed-case address spellings as one account — newest size wins', async () => {
+      const mixed = '0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa';
+      const lower = mixed.toLowerCase();
+      const upper = ('0x' + mixed.slice(2).toUpperCase()) as string;
+
+      source.append(block(position(MARKET, mixed, '1', '100')));
+      source.append(block(position(MARKET, lower, '9', '101')));
+      await indexer.sync();
+
+      // Query with any casing → newest size, single current row.
+      for (const query of [mixed, lower, upper]) {
+        const pos = await store.position(MARKET, query);
+        expect(pos, `position via ${query}`).not.toBeNull();
+        expect(formatAmount(pos!.size)).toBe('9');
+        expect(pos!.account).toBe(lower);
+        expect(await store.positionsOf(query)).toHaveLength(1);
+      }
+    });
+
+    it('refuses applyBlock when block.chainId does not match the store', async () => {
+      const foreign = {
+        chainId: CHAIN_ID + 1,
+        height: 0,
+        hash: `0x${'a'.repeat(64)}`,
+        parentHash: `0x${'b'.repeat(64)}`,
+        timestamp: 1_700_000_000,
+        events: [] as ChainEvent[],
+      };
+      await expect(store.applyBlock(foreign)).rejects.toThrow(/chainId|chain_id|wrong.?chain/i);
+      expect(await store.head()).toBeNull();
+    });
   });
 }
