@@ -191,11 +191,13 @@ Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
 Operator recovery for a **single** suspect order (not cancel-all):
 
-| Case                    | Detection                              | Action                                                     |
-| ----------------------- | -------------------------------------- | ---------------------------------------------------------- |
-| **orphan pending**      | `pending` + ledger hold 0              | delete row                                                 |
-| **open+hold no engine** | `open` + hold > 0 + engine cancel miss | release remainder once                                     |
-| **open+engine no hold** | `open` + hold 0                        | **fail closed** — never invent hold; cancel free book risk |
+| Case                    | Detection                                | Action                                                                  |
+| ----------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
+| **orphan pending**      | `pending` + ledger hold 0                | delete row                                                              |
+| **open+hold no engine** | `open` + hold > 0 + engine **list** miss | release remainder once (cancel only if list says live)                  |
+| **open+engine no hold** | `open` + hold 0                          | **fail closed** — never invent hold; cancel free book risk if list live |
+
+Liveness is `MatchingClient.listOrders` (GET), not cancel-as-probe. Cancel is repair.
 
 ```ts
 await trade.reconcileOrder(orderId);

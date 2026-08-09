@@ -1921,9 +1921,11 @@ export class TradeService {
    * | Case | Detection | Action |
    * | --- | --- | --- |
    * | orphan pending | `pending` + hold 0 | delete row (never held) |
-   * | open+hold no engine | `open` + hold > 0 + cancel miss | release remainder once |
+   * | open+hold no engine | `open` + hold > 0 + list miss | release remainder once |
    * | open+engine no hold | `open` + hold 0 | **fail closed** — do not invent hold; cancel free book risk if live |
    *
+   * Liveness is **list first** (`GET` engine orders). Cancel is repair, not probe
+   * (W6/W7 residual: cancel-as-probe emptied the book to ask if it was live).
    * Fail closed means: never mint a hold from this path; never mark filled without fills.
    */
   async reconcileOrder(orderId: string): Promise<ReconcileResult> {
@@ -1967,13 +1969,17 @@ export class TradeService {
         };
       }
 
+      // Non-destructive liveness: list before any cancel.
+      const listed = await this.matching.listOrders(order.marketId);
+      const engineLive = listed.orders.some((o) => o.orderId === orderId);
+
       // ── open (or pending-with-hold) + no ledger hold — FAIL CLOSED ────────
       // Spec: open+engine no hold. We treat any open/pending with zero hold as
-      // fail-closed: never invent a hold. Best-effort cancel removes free book
-      // risk if the engine still has the order.
+      // fail-closed: never invent a hold. Cancel only if list says live (free book risk).
       if (holdBal === 0n) {
-        const eng = await this.matching.cancel(order.marketId, orderId);
-        const engineLive = eng.cancelled;
+        if (engineLive) {
+          await this.matching.cancel(order.marketId, orderId);
+        }
         // Terminalize without release (remainder already 0). Do not invent money.
         await this.finalize(orderId, 'cancelled');
         return {
@@ -1983,14 +1989,15 @@ export class TradeService {
           holdBefore,
           engineLive,
           detail: engineLive
-            ? 'open/pending with zero hold while engine had the order — cancelled free book risk; NO hold invented'
-            : 'open/pending with zero hold and engine miss — terminalized; NO hold invented',
+            ? 'open/pending with zero hold while engine list had the order — cancelled free book risk; NO hold invented'
+            : 'open/pending with zero hold and engine list miss — terminalized; NO hold invented',
         };
       }
 
-      // ── open+hold: cancel probe then release remainder once ───────────────
-      const eng = await this.matching.cancel(order.marketId, orderId);
-      const engineLive = eng.cancelled;
+      // ── open+hold: list then cancel-if-live, release remainder once ────────
+      if (engineLive) {
+        await this.matching.cancel(order.marketId, orderId);
+      }
       await this.finalize(orderId, 'cancelled');
       return {
         orderId,
@@ -1999,8 +2006,8 @@ export class TradeService {
         holdBefore,
         engineLive,
         detail: engineLive
-          ? 'open+hold; engine cancelled; remainder released once'
-          : 'open+hold; engine miss (never live / already gone); remainder released once',
+          ? 'open+hold; engine list live then cancelled; remainder released once'
+          : 'open+hold; engine list miss; remainder released once',
       };
     });
   }

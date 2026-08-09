@@ -64,6 +64,7 @@ export interface ScriptedFill {
 export class StubMatching implements MatchingClient {
   readonly submitted: Array<{ marketId: string; request: EngineSubmitRequest }> = [];
   readonly cancelledOrders: string[] = [];
+  readonly listedMarkets: string[] = [];
 
   /** Depth answered to `bestAsk`, used to price a market buy. */
   asks: Array<readonly [string, string]> = [];
@@ -75,6 +76,12 @@ export class StubMatching implements MatchingClient {
   private sequence = 0;
   private readonly script: Array<(request: EngineSubmitRequest, next: () => number) => EngineSubmitResult> = [];
   private readonly cancelScript = new Map<string, EngineCancelResult>();
+  /**
+   * Orders the list endpoint reports as live (orderId → marketId).
+   * Default: empty → list miss. Tests that need "engine live" seed this set.
+   * When cancel is scripted as a miss, list also reports miss for that id.
+   */
+  private readonly liveById = new Map<string, string>();
 
   /** Queue one submit outcome. Unscripted submissions rest in full. */
   script1(fn: (request: EngineSubmitRequest, next: () => number) => EngineSubmitResult): this {
@@ -169,11 +176,20 @@ export class StubMatching implements MatchingClient {
   /** The engine reports the order is not live — it already filled, or never arrived. */
   scriptCancelMiss(orderId: string): this {
     this.cancelScript.set(orderId, { cancelled: false, orderId, sequence: null, cancellation: null });
+    this.liveById.delete(orderId);
+    return this;
+  }
+
+  /** Report order as live on list (and default cancel success unless miss scripted). */
+  scriptLive(orderId: string, marketId: string): this {
+    this.liveById.set(orderId, marketId);
     return this;
   }
 
   async submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult> {
     this.submitted.push({ marketId, request });
+    // Default list liveness: resting/unscripted submissions appear on the book.
+    this.liveById.set(request.orderId, marketId);
     if (this.onSubmit) await this.onSubmit(request);
     const fn = this.script.shift();
     return fn ? fn(request, () => ++this.sequence) : restsInFull(request, ++this.sequence);
@@ -182,8 +198,12 @@ export class StubMatching implements MatchingClient {
   async cancel(_marketId: string, orderId: string): Promise<EngineCancelResult> {
     this.cancelledOrders.push(orderId);
     const scripted = this.cancelScript.get(orderId);
-    if (scripted) return scripted;
+    if (scripted) {
+      this.liveById.delete(orderId);
+      return scripted;
+    }
 
+    this.liveById.delete(orderId);
     const sequence = ++this.sequence;
     return {
       cancelled: true,
@@ -195,6 +215,23 @@ export class StubMatching implements MatchingClient {
 
   async depth(): Promise<EngineDepth> {
     return { bids: this.bids, asks: this.asks, sequence: this.sequence };
+  }
+
+  async listOrders(marketId: string): Promise<import('./matching-client.js').EngineLiveOrders> {
+    this.listedMarkets.push(marketId);
+    const orders = [...this.liveById.entries()]
+      .filter(([, mid]) => mid === marketId)
+      .map(([orderId], i) => ({
+        marketId,
+        orderId,
+        accountId: '',
+        kind: 'book' as const,
+        side: 'buy' as const,
+        price: '0',
+        remaining: '0',
+        sequence: i + 1,
+      }));
+    return { marketId, orders };
   }
 
   async reconcile(): Promise<import('./matching-client.js').ReconcileReport> {
@@ -213,8 +250,10 @@ export class StubMatching implements MatchingClient {
   simulateProcessRestart(): this {
     this.submitted.length = 0;
     this.cancelledOrders.length = 0;
+    this.listedMarkets.length = 0;
     this.script.length = 0;
     this.cancelScript.clear();
+    this.liveById.clear();
     this.onSubmit = null;
     // Sequence must not go backwards after restart (journal floor).
     this.sequence = Math.max(this.sequence, 1);
@@ -240,6 +279,10 @@ export class UnreachableMatching implements MatchingClient {
 
   async depth(): Promise<EngineDepth> {
     return { bids: [], asks: [], sequence: 0 };
+  }
+
+  async listOrders(_marketId: string): Promise<import('./matching-client.js').EngineLiveOrders> {
+    throw new Error('svc-matching is unreachable');
   }
 
   async reconcile(): Promise<import('./matching-client.js').ReconcileReport> {
