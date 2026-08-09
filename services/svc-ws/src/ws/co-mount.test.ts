@@ -6,6 +6,7 @@ import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
+import type { DepthSnapshot, WireLevel } from '@intafaced/market-data';
 import { DepthHub } from '../depth/hub.js';
 import type { DepthSource } from '../depth/source.js';
 import { PrivateOrderHub } from '../private/hub.js';
@@ -26,11 +27,13 @@ const tokens: TokenConfig = {
 };
 
 class StubSource implements DepthSource {
-  async markets() {
+  async markets(): Promise<readonly string[]> {
     return [MARKET];
   }
-  async snapshot(marketId: string) {
-    return { type: 'snapshot' as const, marketId, sequence: 1, bids: [['100', '1']], asks: [['101', '1']] };
+  async snapshot(marketId: string, _limit: number): Promise<DepthSnapshot> {
+    const bids: readonly WireLevel[] = [['100', '1']];
+    const asks: readonly WireLevel[] = [['101', '1']];
+    return { type: 'snapshot', marketId, sequence: 1, bids, asks };
   }
 }
 
@@ -49,6 +52,40 @@ async function upgradeStatus(url: string): Promise<number> {
   });
 }
 
+function mountHubs(log: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> }) {
+  const source = new StubSource();
+  const depthHub = new DepthHub(
+    source,
+    {
+      depthLimit: 50,
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+      marketsRefreshMs: 0,
+    },
+    log,
+  );
+  const tradeHub = new TradeHub(
+    {
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+      recentLimit: 10,
+      ensureKnownMarket: (id) => depthHub.ensureKnownMarket(id),
+    },
+    log,
+  );
+  const privateHub = new PrivateOrderHub(
+    {
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+    },
+    log,
+  );
+  return { source, depthHub, tradeHub, privateHub };
+}
+
 describe('public + private WS co-mount (production shape)', () => {
   let server: Server;
   const log = { info: vi.fn(), warn: vi.fn() };
@@ -59,15 +96,7 @@ describe('public + private WS co-mount (production shape)', () => {
 
   it('private stream reaches auth (401 without token); public stream still works', async () => {
     server = createServer();
-    const source = new StubSource();
-    const depthHub = new DepthHub(source, {
-      depthLimit: 50,
-      highWaterBytes: 1_000_000,
-      maxLagTicks: 5,
-      log,
-    });
-    const tradeHub = new TradeHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
+    const { depthHub, tradeHub, privateHub } = mountHubs(log);
 
     createWebSocketGateway({
       server,
@@ -106,15 +135,7 @@ describe('public + private WS co-mount (production shape)', () => {
 
   it('public stream ignores a junk access_token and still upgrades', async () => {
     server = createServer();
-    const source = new StubSource();
-    const depthHub = new DepthHub(source, {
-      depthLimit: 50,
-      highWaterBytes: 1_000_000,
-      maxLagTicks: 5,
-      log,
-    });
-    const tradeHub = new TradeHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
+    const { depthHub, tradeHub, privateHub } = mountHubs(log);
 
     createWebSocketGateway({
       server,
@@ -144,15 +165,7 @@ describe('public + private WS co-mount (production shape)', () => {
 
   it('kill-switch refuses both public and private upgrades with 503', async () => {
     server = createServer();
-    const source = new StubSource();
-    const depthHub = new DepthHub(source, {
-      depthLimit: 50,
-      highWaterBytes: 1_000_000,
-      maxLagTicks: 5,
-      log,
-    });
-    const tradeHub = new TradeHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
+    const { depthHub, tradeHub, privateHub } = mountHubs(log);
     let enabled = false;
 
     createWebSocketGateway({
@@ -185,15 +198,7 @@ describe('public + private WS co-mount (production shape)', () => {
 
   it('private stream never serves public depth frames', async () => {
     server = createServer();
-    const source = new StubSource();
-    const depthHub = new DepthHub(source, {
-      depthLimit: 50,
-      highWaterBytes: 1_000_000,
-      maxLagTicks: 5,
-      log,
-    });
-    const tradeHub = new TradeHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, log });
+    const { depthHub, tradeHub, privateHub } = mountHubs(log);
 
     createWebSocketGateway({
       server,
