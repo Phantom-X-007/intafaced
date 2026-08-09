@@ -116,6 +116,12 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `instruments.list`               | `p2p:read`               | The caller's own — **headers only, no field values, ever**                |
 | `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read          |
 | `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                          |
+| `merchants.me`                   | `p2p:read`               | Caller's merchant standing + history headers (Stage 1–2 programme)        |
+| `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                               |
+| `merchants.withdraw`             | `p2p:write`              | Withdraw a pending application                                            |
+| `merchants.decide`               | `admin:compliance`       | Operator transition to approved / rejected / suspended                    |
+| `merchants.history`              | `admin:compliance`       | Audit trail of standing changes                                           |
+| `ops.lateSettlements`            | `admin:compliance`       | Committed decisions with no ledger stamp yet (+ durable last settle error)|
 | `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                 |
 | `data.erase`                     | `p2p:write`              | §0.9 — self-only. Refuses while escrow is live; names what it retained    |
 
@@ -123,7 +129,8 @@ HTTP (`src/index.ts`):
 
 | Route                              | Purpose                                                                                                                        |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /health`, `GET /ready`        | liveness / readiness                                                                                                           |
+| `GET /health`                      | liveness; discloses `moderationReachable` (allowlist non-empty)                                                                |
+| `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationReachable`                                                                  |
 | `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500 |
 | `GET /internal/reputation/:userId` | the hot path other modules read for `p2pLimitMultiplier`                                                                       |
 | `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more                            |
@@ -283,7 +290,7 @@ Every publish carries a **business** idempotency key (`p2p.escrow.release:<trade
 
 **Consumes** — nothing yet. When svc-trade's mark-price surface lands it supplies the `ReferencePriceSource` that floating offers need; until then a floating offer is **refused** rather than priced from a stale number (§13 socket: cross-venue pricing).
 
-> **This PR adds seven events to `packages/events/src/catalog.ts`.** Strictly §15.2 says a shared-package change should be its own PR first — flagging it rather than burying it. The payloads are additive and no existing subject changed.
+Event subjects live in `packages/events` (catalog). Payloads are additive; business idempotency keys (not random uuids) are what make redelivery safe.
 
 ---
 
@@ -421,7 +428,7 @@ pnpm --filter @intafaced/svc-p2p test
 
 ## Tests
 
-**236 tests.** The state machine, pricing, reputation and instrument field validation are pure functions tested by enumeration without a database — every state, every edge, every timeout, plus graph properties (reachability of a terminal state from every state; acyclicity among live states) that are the machine-checkable form of "funds cannot be stranded".
+**Pure suite (no Postgres) + money suite (Postgres).** The state machine, pricing, reputation and instrument field validation are pure functions tested by enumeration without a database — every state, every edge, every timeout, plus graph properties (reachability of a terminal state from every state; acyclicity among live states) that are the machine-checkable form of "funds cannot be stranded". Re-count with `pnpm exec vitest run` in this package — do not pin a stale headcount in prose.
 
 The two Postgres suites are serialised by `vitest.config.ts` (`fileParallelism: false`) and bring the schema up under a shared advisory lock. Both truncate the same connected set of tables — an instrument is attached to a trade, which belongs to an offer — and vitest runs test files in parallel by default, which deletes one suite's rows out from under the other mid-assertion. It does not fail cleanly: it surfaces as "trade not found" immediately after a successful take, in tests that have nothing to do with the change being made.
 
