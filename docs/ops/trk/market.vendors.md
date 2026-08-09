@@ -3,37 +3,37 @@
 **Tracker id:** `market.vendors`  
 **Title:** Vendor lifecycle — apply, vet, list, stake-gated slots  
 **Module / phase:** `market` · phase **5** · plane **F**  
-**Status on tip:** `ready` · **owner:** none (Denon product direction for market law)  
+**Status on tip:** **`done`** (Stages 1–3 on main — #1109 / #1115 / #1126). Re-derive tracker before claiming otherwise.  
 **Depends on:** `token.staking` (**done**)  
-**Requires:** future `services/svc-market` — **not built**; scopes stubbed  
-**Tip freeze:** `origin/main` @ `d9e517bd` (re-derive before implement)  
-**Pack type:** research only — no implement swarm; no money invention; no commerce settlement under this id; no `features.mjs` edit.
+**Service:** `services/svc-market` **exists** — scopes `market:read` / `market:write` / `market:ops` real; edge `/api/market`.  
+**Tip freeze:** re-derive `origin/main` before any residual work.  
+**Pack type:** research **archive** for shipped vendors law. Do **not** re-build Stages 1–3. Commerce money is `market.commerce` (separate pack / open PR).
 
 ---
 
 ## 1 · What “done” means (plain language)
 
-1. A user can **apply** to be a vendor, ops can **vet**, and approved vendors can **list** within **stake-gated slots** enforced by real `token.stakeOf` (fail closed), not a checkbox.
-2. Slot capacity cannot be oversold under concurrency (serializable / lock pattern as academy seats).
+1. A user can **apply** to be a vendor, ops can **vet**, and approved vendors can **list** within **stake-gated slots** enforced by live svc-token tier `vendorSlots` (fail closed), not a checkbox.
+2. Slot capacity cannot be oversold under concurrency (vendor row `FOR UPDATE` + count + insert).
 3. No commerce money movement in this mountain alone — that is `market.commerce`; vendors mountain stops at lifecycle + listing **eligibility**.
-4. Scopes `market:read` / `market:write` become real when service exists (today stub comments in auth package).
-5. Suspended / under-staked vendors cannot present as listed.
+4. Scopes `market:read` / `market:write` / `market:ops` are real (not stubs).
+5. Suspended / under-staked vendors cannot present as listed (eligibility **computed**, no `is_listed`).
 
 ---
 
-## 2 · Current code state (tip)
+## 2 · Current code state (tip — falsified 2026-08-09)
 
-### 2.1 Service missing — greenfield
+### 2.1 Service **shipped** — not greenfield
 
-| Fact              | Tip                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| `svc-market`      | **Not in `services/`**                                                                         |
-| Config module     | `packages/config/src/modules.ts` — `market` → `svc-market`, fiat, phase 5, **custodial: true** |
-| Auth scopes       | `packages/auth` — `market:read` / `market:write` description **'svc-market not built'**        |
-| Scope implication | `market:write` implies `market:read` (when wired)                                              |
-| Vendor schema     | **None**                                                                                       |
-| Apply / vet API   | **None**                                                                                       |
-| market.commerce   | Depends on this row; also greenfield — see `market.commerce.md`                                |
+| Fact            | Tip                                                                             |
+| --------------- | ------------------------------------------------------------------------------- |
+| `svc-market`    | **Exists** — `services/svc-market` (vendors + slots + public list)              |
+| Config module   | `packages/config` — `market` → `svc-market`, fiat, phase 5, **custodial: true** |
+| Auth scopes     | `market:read` / `market:write` issued on session; `market:ops` withheld (staff) |
+| Edge            | `/api/market` in svc-edge UPSTREAMS (kill-switchable)                           |
+| Vendor schema   | `market.vendors` + `market.vendor_status_events` + `market.vendor_slots`        |
+| Apply / vet API | tRPC `applyAsVendor` / `vet` / `history` / `mine` / `listApplications`          |
+| market.commerce | Separate mountain — listings/purchase on open PR path; see `market.commerce.md` |
 
 ### 2.2 Stake substrate (done — usable for gates)
 
