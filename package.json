@@ -80,6 +80,7 @@
     "dual-book:classify": "node tooling/scripts/dual-book-setbalance-classify.mjs",
     "order-path-cx8": "node tooling/scripts/order-path-cx8-boot.mjs",
     "claim:check": "node tooling/ci/claim-check.mjs",
+    "claim:self-test": "node tooling/ci/claim-check.mjs --self-test",
     "wt:gc": "node tooling/scripts/worktree-gc.mjs",
     "wt:gc:apply": "node tooling/scripts/worktree-gc.mjs --apply",
     "wt:gc:check": "node tooling/scripts/worktree-gc.mjs --check",

@@ -108,6 +108,17 @@ export const GATES = [
       'open PR collisions (L15 #1245). --self-test is pure fixtures, no gh/git. Pins the regression.',
   },
   {
+    id: 'claim-check-selftest',
+    script: 'tooling/ci/claim-check.mjs',
+    args: ['--self-test'],
+    doctrine: 'multi-dev law / claim-check honesty',
+    why:
+      'the interactive claim-check still needs gh + network and stays advisory, but the sealed honesty pack ' +
+      '(blank argv refuse, rename porcelain, PR list/files caps — #1414) lived only in prose until #1489 added ' +
+      'hermetic fixtures. Without this entry a quiet revert of those fixtures greens CI while agents get false ' +
+      'clears again — the same shape as path-collide before its self-test gate. --self-test exits before gh.',
+  },
+  {
     id: 'tracker',
     script: 'tooling/scripts/tracker.mjs',
     args: ['--check'],
@@ -379,8 +390,9 @@ export const NOT_GATES = {
   'gates.mjs': 'this runner — it is the list, so it cannot be an entry in itself.',
   'dod-gate.mjs':
     'run by `pnpm gate`, separately and last — it walks every service and is the §14 Definition of Done, not a repo-wide scan. verify runs it after build/typecheck/test; CI runs it in the `dod` job, which needs [gates, build, test].',
-  'claim-check.mjs':
-    'advisory, interactive, and needs a working `gh` + network to list open PRs. Run it by hand (`pnpm claim:check`) before starting work, not as a build gate.',
+  // claim-check.mjs is in GATES as claim-check-selftest (--self-test only). The
+  // interactive full run still needs gh + network: `pnpm claim:check` by hand.
+
   'verify.mjs':
     'the verify runner itself — it CALLS this list. Listing it as a gate would make it invoke itself. It exists so the infrastructure verdict prints even when turbo halts early, which a `&&` chain cannot do.',
   'infra-verdict.mjs':
