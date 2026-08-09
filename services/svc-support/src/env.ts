@@ -1,16 +1,33 @@
 import { z } from 'zod';
-import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { edgeEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
 /**
  * svc-support — durable tickets in Postgres (schema `support`).
  * DATABASE_URL is required (serviceEnvSchema) so the desk survives restarts
- * and multi-replica claims stay exclusive. No ledger. No internal service secret.
+ * and multi-replica claims stay exclusive. Still no ledger, and never one.
+ *
+ * INTERNAL_SERVICE_SECRET is now required, and the reason is narrow: reading
+ * account state from svc-identity is an S2S call and `/internal/account/:userId`
+ * hard-401s an unauthenticated caller. Required rather than optional because a
+ * desk that boots without it looks healthy and then reports every account as
+ * unread — a degraded mode that is indistinguishable, from the operator's
+ * chair, from every account genuinely being unreadable. Refusing to start says
+ * it once, loudly, at deploy time. (`compose-secret-parity` holds the other
+ * half: the compose block must actually supply it.)
+ *
+ * IDENTITY_URL is optional with a dev default, matching `svc-trade`. It is not
+ * a secret and a missing one is a wrong address, not a silent authority hole.
  */
-const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
-  z.object({
-    HTTP_PORT: z.coerce.number().int().positive().default(4017),
-  }),
-);
+const schema = serviceEnvSchema
+  .merge(edgeEnvSchema)
+  .merge(internalServiceEnvSchema)
+  .merge(
+    z.object({
+      HTTP_PORT: z.coerce.number().int().positive().default(4017),
+      /** svc-identity, for the account-state read port. Never written to. */
+      IDENTITY_URL: z.string().url().default('http://localhost:4002'),
+    }),
+  );
 
 export type SupportEnv = z.infer<typeof schema>;
 export const env: SupportEnv = loadEnv(schema);

@@ -168,6 +168,30 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
   return row;
 });
 
+/**
+ * Service-to-service account state (svc-support's grounding read).
+ *
+ * Three fields — status and KYC tier — published as `accountStateSchema`. It is
+ * an S2S route and not a `scopedProcedure` for the same reason `/internal/rank`
+ * is: the caller is svc-support acting for an operator who is NOT the account
+ * holder, and the tRPC surface would need a user principal svc-support does not
+ * hold. Making identity accept "trust me, this is a support person" instead
+ * would be granting an authority no scope defines.
+ *
+ * Unknown user → 404, which the caller renders as "not read". It must never
+ * render as an account in good standing.
+ */
+app.get<{ Params: { userId: string } }>('/internal/account/:userId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
+  const state = await auth.accountState(req.params.userId);
+  if (!state) {
+    return reply.code(404).send({ error: 'account not found', code: 'identity.account_not_found' });
+  }
+  return state;
+});
+
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {

@@ -659,14 +659,27 @@ services:
     container_name: intafaced-svc-support
     command: ['node', 'services/svc-support/dist/index.js']
     environment:
-      <<: [*service-env, *edge-secret]
+      # internal-secret: the desk READS account state from svc-identity's
+      # /internal/account/:userId, which hard-401s an unauthenticated caller.
+      # Without this line the service refuses to boot (env.ts requires it) —
+      # deliberately, rather than starting and reporting every account as
+      # unread, which from an operator's chair is indistinguishable from every
+      # account genuinely being unreadable.
+      <<: [*service-env, *edge-secret, *internal-secret]
       SERVICE_NAME: svc-support
       HTTP_PORT: '4017'
       DATABASE_URL: postgres://svc_support:svc_support@postgres:5432/intafaced
+      # Read-only dependency. No LEDGER_URL, and there never will be one: this
+      # mountain moves no value (§0.6) and a refund is a request it files, not a
+      # transaction it posts.
+      IDENTITY_URL: http://svc-identity:4002
     expose: ['4017']
     healthcheck: *healthcheck
     depends_on:
       <<: *needs-schema
+      # Starts after identity so the desk's first grounding read is not a
+      # connection refused that gets recorded as "account unread".
+      svc-identity: { condition: service_healthy }
 
   # Vendor lifecycle Stage 1 — apply, then vet (§8.7 `market.vendors`).
   #
