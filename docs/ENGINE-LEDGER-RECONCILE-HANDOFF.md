@@ -117,23 +117,21 @@ carve-out (DIRECTION §3). No agent should touch it. Two options an owner might 
 
 Both are your call. Neither belongs in an agent PR.
 
-### 4.4 Nothing calls `POST /reconcile` on a schedule
+### 4.4 `POST /reconcile` scheduled caller — **landed (A10)**
 
-svc-trade already has the mechanism — `TRADE_FUTURES_JOBS_ENABLED`, `TRADE_CANDLE_JOBS_ENABLED`,
-`TRADE_MM_SEED_INTERVAL_MS`: flag-gated interval jobs, **default OFF**, an `_INTERVAL_MS` beside each. A
-`TRADE_RECONCILE_JOBS_ENABLED` following that pattern is the obvious shape, and it is the mechanism this repo
-already uses rather than a new one.
+**Files:** `services/svc-trade/src/spot/engine-ledger-reconcile.ts` (+ `engine-ledger-reconcile-jobs.ts` + tests),
+`MatchingClient.reconcile`, env `TRADE_RECONCILE_JOBS_ENABLED` / `TRADE_RECONCILE_JOBS_INTERVAL_MS` (**default OFF**).
 
-What such a job would do, and what it must not:
+What the job does:
 
-- **Would:** `SELECT` open/pending orders + their `order:<id>` hold balances, map to `CounterpartOrder[]`, POST to
-  the engine, log refusals with both states, expose the refusal count.
-- **Must not:** repair anything on a refusal. Every refusal in the table above is a case where resolving means
-  choosing which side is wrong, and that choice is not in the data. Silently reconciling a money disagreement is
-  worse than reporting it.
+- `SELECT` open/pending orders + live `order:<id>` hold balances → `CounterpartOrder[]` → POST matching `/reconcile`
+- **Refuse → write nothing** (warn log with both states / metrics only)
+- **Auto-delete only** unfunded **pending** (`counterpart_unfunded_engine_missing`); open+unfunded auto findings stay alert-only
+- **Never** silent-releases funded missing; does **not** call `reconcileOrder` (still the per-order operator tool)
 
-Note the `funded` bit is the one field the engine cannot check for you. Get it from the ledger balance, never from
-the order row's own idea of what it should be.
+`funded` comes from the ledger balance, never the order row snapshot.
+
+Residual (still open): market-id set drift alarm (4.5); non-destructive probe on `reconcileOrder` itself (4.2–4.3).
 
 ### 4.5 `trade.markets` and the engine's markets can drift with nothing noticing
 

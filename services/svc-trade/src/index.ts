@@ -22,6 +22,7 @@ import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
+import { startEngineLedgerReconcileJobs } from './spot/engine-ledger-reconcile-jobs.js';
 import { startAlgoJobs } from './algo/algo-jobs.js';
 import { checkEngineSequences, describeRegressions } from './spot/sequence-guard.js';
 import { parseAmount } from '@intafaced/ledger-client';
@@ -253,6 +254,45 @@ const algoJobs = startAlgoJobs({
   onError: (name, err) => app.log.error({ err, job: name }, 'algo job tick failed'),
 });
 
+// Engine ↔ ledger reconcile sweep — default OFF (A10). Refuse = alert only;
+// auto-delete only unfunded pending. Never silent-release funded missing.
+const reconcileJobs = startEngineLedgerReconcileJobs({
+  sql,
+  ledger,
+  matching,
+  config: {
+    enabled: env.TRADE_RECONCILE_JOBS_ENABLED,
+    intervalMs: env.TRADE_RECONCILE_JOBS_INTERVAL_MS,
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'engine-ledger reconcile job tick failed'),
+  onResult: (r) => {
+    if (r.plan.refusals.length > 0) {
+      app.log.warn(
+        {
+          checked: r.report.checked,
+          refusals: r.plan.refusals.length,
+          findings: r.plan.refusals.map((f) => ({
+            orderId: f.orderId,
+            case: f.case,
+            engine: f.engine,
+            counterpart: f.counterpart,
+          })),
+        },
+        'engine-ledger reconcile REFUSE — no write; operator must resolve',
+      );
+    }
+    if (r.deleted.length > 0) {
+      app.log.info({ deleted: r.deleted }, 'engine-ledger reconcile auto-deleted unfunded pending');
+    }
+    if (r.plan.autoNonDelete.length > 0) {
+      app.log.info(
+        { autoNonDelete: r.plan.autoNonDelete.map((f) => ({ orderId: f.orderId, case: f.case })) },
+        'engine-ledger reconcile auto findings not deleted (pending-only rule)',
+      );
+    }
+  },
+});
+
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async (_req, reply) => {
@@ -389,6 +429,8 @@ app.log.info(
     mmSeedJobs: mmSeedJobs.host.list(),
     algoJobsEnabled: env.TRADE_ALGO_JOBS_ENABLED,
     algoJobs: algoJobs.host.list(),
+    reconcileJobsEnabled: env.TRADE_RECONCILE_JOBS_ENABLED,
+    reconcileJobs: reconcileJobs.host.list(),
     trpc: true,
     publicRest: [
       '/api/v1/markets',

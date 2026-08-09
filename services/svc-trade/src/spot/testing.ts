@@ -197,6 +197,10 @@ export class StubMatching implements MatchingClient {
     return { bids: this.bids, asks: this.asks, sequence: this.sequence };
   }
 
+  async reconcile(): Promise<import('./matching-client.js').ReconcileReport> {
+    return { checked: 0, agreed: 0, findings: [], refusals: 0, ok: true };
+  }
+
   /**
    * CX-7 F6 — simulate matching **process** death + cold start before journal replay.
    *
@@ -236,6 +240,10 @@ export class UnreachableMatching implements MatchingClient {
 
   async depth(): Promise<EngineDepth> {
     return { bids: [], asks: [], sequence: 0 };
+  }
+
+  async reconcile(): Promise<import('./matching-client.js').ReconcileReport> {
+    throw new Error('svc-matching is unreachable');
   }
 }
 
