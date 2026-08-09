@@ -391,19 +391,29 @@ export function payoutKeysAreDistinct(receipt: AffiliatePayoutReceipt): boolean 
 }
 
 /**
- * True when no key carries a clock reading or a random id.
+ * True when no key carries a clock reading or a generated id.
  *
  * A guard, not decoration: this is the defect class that has been fixed three
  * times in this repo, and it always looked fine in review.
+ *
+ * THE INVARIANT IS A COUNT, and it is deliberately blunt. An affiliate payout
+ * key contains EXACTLY ONE uuid — the beneficiary. A second uuid anywhere means
+ * something generated one, and a `close:${id}:${randomUUID()}` tail is the exact
+ * shape that drained a pot here before.
+ *
+ * The first version of this function tried to be clever — it allowed a uuid that
+ * `endsWith` the key on the theory that a trailing id was "the business one".
+ * That is precisely backwards: the trailing position is where a generated id
+ * gets appended, so the guard waved through the one shape it existed to catch.
+ * Counting cannot be fooled that way.
  */
 export function payoutKeysAreBusinessDerived(receipt: AffiliatePayoutReceipt): boolean {
-  const uuidish = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  const uuidish = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
   const isoish = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+  /** `Date.now()` — 13 digits as its own segment. */
+  const epochish = /(?:^|:)\d{13}(?::|$)/;
   return receipt.idempotencyKeys.every((k) => {
-    if (isoish.test(k)) return false;
-    // Beneficiary ids ARE uuids and belong in the key; a uuid that is not one
-    // of this receipt's business ids is a generated one.
-    const generated = k.match(new RegExp(uuidish, 'gi'))?.some((m) => !k.includes(`:${m}:`) && !k.endsWith(m));
-    return generated !== true;
+    if (isoish.test(k) || epochish.test(k)) return false;
+    return (k.match(uuidish) ?? []).length === 1;
   });
 }

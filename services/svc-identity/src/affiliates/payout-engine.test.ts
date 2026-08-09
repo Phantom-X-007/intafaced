@@ -296,6 +296,31 @@ describe('a retried payout pays once', () => {
     expect(keysOf(planB)).toEqual(keysOf(planA));
   });
 
+  /**
+   * THE GUARD ITSELF, TESTED AGAINST THE SHAPES IT CLAIMS TO CATCH.
+   *
+   * Without this, `payoutKeysAreBusinessDerived` was free to be wrong and still
+   * green — and its first version WAS wrong in exactly the expensive direction:
+   * it allowed a trailing uuid, which is where a generated id gets appended. A
+   * guard nothing adversarial is pointed at is a comment.
+   */
+  it('the business-key guard rejects a clock reading and an appended random id', () => {
+    const good = { idempotencyKeys: [`affiliate:${FEE_EVENT}:${HOP0}:h0`] } as never;
+    expect(payoutKeysAreBusinessDerived(good)).toBe(true);
+
+    // The shape that drained a pot: `close:${id}:${randomUUID()}`.
+    const trailingUuid = {
+      idempotencyKeys: [`affiliate:${FEE_EVENT}:${HOP0}:h0:11111111-2222-4333-8444-555555555555`],
+    } as never;
+    expect(payoutKeysAreBusinessDerived(trailingUuid)).toBe(false);
+
+    const isoClock = { idempotencyKeys: [`affiliate:${FEE_EVENT}:${HOP0}:h0:2026-08-09T12:00:00.000Z`] } as never;
+    expect(payoutKeysAreBusinessDerived(isoClock)).toBe(false);
+
+    const epochClock = { idempotencyKeys: [`affiliate:${FEE_EVENT}:${HOP0}:h0:1786000000000`] } as never;
+    expect(payoutKeysAreBusinessDerived(epochClock)).toBe(false);
+  });
+
   it('every key is distinct and derived from the business event', async () => {
     const ledger = await fundedLedger();
     const receipt = await postAffiliatePayout(ledger, planAffiliatePayout({ feeEventId: FEE_EVENT, rows: rows(), law: PUBLISHED }));
