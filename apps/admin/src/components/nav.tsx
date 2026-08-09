@@ -8,6 +8,7 @@ const ROUTES = [
   { href: '/launch', label: 'Launch sequence' },
   { href: '/jurisdiction', label: 'Jurisdiction' },
   { href: '/ledger', label: 'Ledger ops' },
+  { href: '/tools', label: 'Operator tools' },
 ] as const;
 
 export function Nav() {
