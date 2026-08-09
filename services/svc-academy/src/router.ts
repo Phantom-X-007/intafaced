@@ -99,6 +99,8 @@ const sessionOut = z.object({
   /** Null when no SFU is configured — the lobby still runs as text and presence. */
   streamProvider: z.string().nullable(),
   scene: z.record(z.unknown()),
+  /** Always on read — client supplies this as expectedFingerprint on updateScene. */
+  sceneFingerprint: z.string().min(1),
 });
 
 const curriculumSummaryOut = z.object({

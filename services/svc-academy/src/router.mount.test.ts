@@ -89,6 +89,7 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
       streamProvider: null,
       streamRoom: null,
       scene: {},
+      sceneFingerprint: 'stub-session-scene-fp',
     })),
     occupancy: vi.fn(async () => 3),
     join: vi.fn(async () => ({ role: 'attendee' as const })),
