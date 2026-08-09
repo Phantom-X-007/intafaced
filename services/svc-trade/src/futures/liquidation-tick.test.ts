@@ -190,12 +190,13 @@ describe('runLiquidationTick', () => {
       ledger,
       now: () => fixed,
     });
-    // Legacy markPrice path still receives the request; size is passed when quote() exists.
-    expect(markPrice).toHaveBeenCalled();
-    const arg = markPrice.mock.calls[0]![0] as { marketId: string; symbol?: string; at: Date };
-    expect(arg.marketId).toBe('m1');
-    expect(arg.symbol).toBe('BTC/USDT-PERP');
-    expect(arg.at).toEqual(fixed);
+    expect(markPrice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketId: 'm1',
+        symbol: 'BTC/USDT-PERP',
+        at: fixed,
+      }),
+    );
   });
 
   /**
