@@ -31,7 +31,10 @@
  * should be the request the operating system delivered.
  */
 
+import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -46,6 +49,11 @@ import { NotificationDispatcher } from './dispatch.js';
 import { AlertService } from './alerts/service.js';
 import { MemoryAlertStore } from './alerts/store.js';
 import type { MarkSource } from './alerts/types.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+/** The prefix this file proves. `index.ts` must ship the same one — see below. */
+const PREFIX = '/trpc';
 
 const SECRET = 'a-notify-reachability-edge-secret-long-enough';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -111,7 +119,7 @@ async function mount(): Promise<Mounted> {
 
   const app = Fastify({ logger: false, maxParamLength: 5_000 });
   await app.register(fastifyTRPCPlugin, {
-    prefix: '/trpc',
+    prefix: PREFIX,
     trpcOptions: {
       router: appRouter,
       createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
@@ -137,8 +145,8 @@ async function call(
   const method = init.method ?? 'GET';
   const url =
     method === 'GET' && init.input !== undefined
-      ? `${base}/trpc/${procedure}?input=${encodeURIComponent(JSON.stringify(init.input))}`
-      : `${base}/trpc/${procedure}`;
+      ? `${base}${PREFIX}/${procedure}?input=${encodeURIComponent(JSON.stringify(init.input))}`
+      : `${base}${PREFIX}/${procedure}`;
 
   const response = await fetch(url, {
     method,
@@ -208,6 +216,36 @@ describe('svc-notify serves its router over a real socket', () => {
         requires: [`NOTIFY_${channel.toUpperCase()}_GATEWAY_URL`, `NOTIFY_${channel.toUpperCase()}_GATEWAY_TOKEN`],
       });
     }
+  });
+});
+
+/**
+ * THE HALF THAT MAKES THE HALF ABOVE MEAN ANYTHING.
+ *
+ * Everything above assembles a mount and proves requests reach it. On its own
+ * that proves a mount THIS FILE built — and a green result would read as evidence
+ * for the mount `index.ts` ships, which it never examined. That is the recurring
+ * defect shape D-S-13's second correction counts five times, and writing a
+ * reachability test without this block would be the sixth.
+ *
+ * `index.ts` connects to Postgres and NATS at module scope and cannot be
+ * imported, so the tie is made by reading it: same plugin, same prefix, same
+ * context factory. Change either side and one of these fails.
+ */
+describe('the mount proven above is the mount index.ts ships', () => {
+  const index = readFileSync(join(here, 'index.ts'), 'utf8');
+
+  it('registers the same tRPC plugin at the same prefix this file requested', () => {
+    expect(index).toMatch(/fastifyTRPCPlugin/);
+    expect(index).toMatch(new RegExp(`prefix: '${PREFIX}'`));
+  });
+
+  it('builds its context from the edge principal, not from the request body', () => {
+    // A mount that served the router without this would answer every caller as
+    // whoever they claimed to be.
+    expect(index).toMatch(/createContext:/);
+    expect(index).toMatch(/edgeContext\(\{ headers: req\.headers/);
+    expect(index).toMatch(/EDGE_PRINCIPAL_SECRET/);
   });
 });
 
