@@ -1352,7 +1352,15 @@ if (!available) {
      */
     it('refuses authorize and capture after the merchant is suspended mid-flight', async () => {
       const m = await merchant();
-      const payment = await cryptoPayment(m.id, '15');
+      // create only — cryptoPayment() already authorizes, which would skip this gate.
+      const payment = await pay.createPayment({
+        merchantId: m.id,
+        amount: amt('15'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
       expect(payment.status).toBe('created');
 
       await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
