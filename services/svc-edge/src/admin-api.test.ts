@@ -98,6 +98,22 @@ describe('control-plane honesty surface', () => {
     expect(h.enforceableModules).toContain('trade');
     expect(h.killState.multiReplicaShared).toBe(false);
   });
+
+  /**
+   * A2 residual (wave 8): `edge.gateway` is still NOT_ENFORCED. Status must say
+   * the live kill is the operator surface, not the flag — otherwise a console
+   * that only flips registry flags invents a green "gateway off" while the
+   * proxy still serves.
+   */
+  it('names edge.gateway as unenforced and points at the operator kill surface', () => {
+    const { admin } = api();
+    const h = admin.honesty();
+    expect(h.liveKillControl).toBe('operator-kill-switch');
+    expect(h.flagEdgeGateway.key).toBe('edge.gateway');
+    expect(h.flagEdgeGateway.enforced).toBe(false);
+    expect(h.flagEdgeGateway.note).toMatch(/NOT_ENFORCED|does not stop the proxy/i);
+    expect(h.flagEdgeGateway.note).toMatch(/kill-switches|operator/i);
+  });
 });
 
 describe('applying a toggle', () => {

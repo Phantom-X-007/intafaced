@@ -173,6 +173,23 @@ describe('/admin/status — control-plane summary', () => {
     expect(body.killState.persistence === 'file' || body.killState.persistence === 'memory').toBe(true);
     expect(body.killState.note.length).toBeGreaterThan(20);
   });
+
+  it('names edge.gateway as unenforced so status cannot invent a flag-only halt', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      liveKillControl: string;
+      flagEdgeGateway: { key: string; enforced: boolean; note: string };
+    };
+    expect(body.liveKillControl).toBe('operator-kill-switch');
+    expect(body.flagEdgeGateway).toMatchObject({ key: 'edge.gateway', enforced: false });
+    expect(body.flagEdgeGateway.note).toMatch(/NOT_ENFORCED|does not stop the proxy/i);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AuthError, bearerToken, requireMfa, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
-import { MODULE_IDS, isModuleId, type ModuleId } from '@intafaced/config';
+import { MODULE_IDS, enforcementOf, isModuleId, type ModuleId } from '@intafaced/config';
 import type { KillSwitchAuditEntry, KillSwitchDurability, KillSwitchState } from './kill-switch.js';
 import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
 
@@ -118,6 +118,25 @@ export interface KillSwitchSnapshot {
 }
 
 /**
+ * What the registry says about `edge.gateway` — never invent that the flag gates
+ * the proxy when it is still `NOT_ENFORCED`.
+ *
+ * Live kill is `POST /admin/kill-switches` + the `onRequest` guard. Flipping the
+ * flag in a console that only reads `isEnabled` does not stop traffic.
+ */
+export interface FlagEdgeGatewayHonesty {
+  readonly key: 'edge.gateway';
+  /**
+   * Always false while `enforcementOf('edge.gateway').kind === 'none'`.
+   * When a deliberate enforcement PR lands, this flips from the registry —
+   * status must never hard-code "enforced".
+   */
+  readonly enforced: boolean;
+  /** One sentence an operator can act on at 3am. */
+  readonly note: string;
+}
+
+/**
  * Control-plane honesty fields the console needs so a green status is never
  * mistaken for a closed market-data socket or a fleet-wide kill.
  */
@@ -132,6 +151,13 @@ export interface ControlPlaneHonesty {
   readonly enforceableModules: readonly ModuleId[];
   /** Process-local durability — multi-replica share is always false today. */
   readonly killState: KillSwitchDurability;
+  /**
+   * Live control surface name — not a feature-flag key.
+   * Operators who only know `edge.gateway` must not invent a green halt.
+   */
+  readonly liveKillControl: 'operator-kill-switch';
+  /** Registry honesty for the drop-I flag that still does not gate the proxy. */
+  readonly flagEdgeGateway: FlagEdgeGatewayHonesty;
 }
 
 export interface FreezeSnapshot {
@@ -233,11 +259,23 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
     read: snapshot,
 
     honesty(): ControlPlaneHonesty {
+      // Read enforcement from the registry — never hard-code "not enforced" so a
+      // future deliberate wiring of edge.gateway cannot leave this surface lying.
+      const gatewayEnforcement = enforcementOf('edge.gateway');
+      const gatewayEnforced = gatewayEnforcement.kind !== 'none';
       return {
         outsideTheDoor: { ...OUTSIDE_THE_DOOR },
         // MODULE_IDS order so the status payload is stable across processes.
         enforceableModules: MODULE_IDS.filter((id) => ENFORCEABLE_MODULES.has(id)),
         killState: state.durability(),
+        liveKillControl: 'operator-kill-switch',
+        flagEdgeGateway: {
+          key: 'edge.gateway',
+          enforced: gatewayEnforced,
+          note: gatewayEnforced
+            ? 'edge.gateway is enforced in FLAG_REGISTRY — confirm the edge process actually consults it before trusting a flag-only halt.'
+            : 'edge.gateway is NOT_ENFORCED — flipping the flag does not stop the proxy. Live kill is POST /admin/kill-switches (admin:write + MFA).',
+        },
       };
     },
 

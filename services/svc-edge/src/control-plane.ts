@@ -171,6 +171,11 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       // Process-local durability only. multiReplicaShared is always false until
       // a shared store exists; never invent one on the status surface.
       killState: honesty.killState,
+      // Live kill is the operator surface — not the drop-I `edge.gateway` flag
+      // (still NOT_ENFORCED until a deliberate enforcement PR). Status must say
+      // so out loud so a console never invents a flag-only halt.
+      liveKillControl: honesty.liveKillControl,
+      flagEdgeGateway: honesty.flagEdgeGateway,
       // Reminder for operators reading JSON at 3am — full path list is in the runbook.
       releaseRule: 'reads and cancels pass under a kill; new commitments refuse (503 edge.module_killed)',
     };
