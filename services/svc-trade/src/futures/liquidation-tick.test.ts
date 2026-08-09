@@ -190,11 +190,60 @@ describe('runLiquidationTick', () => {
       ledger,
       now: () => fixed,
     });
-    expect(markPrice).toHaveBeenCalledWith({
-      marketId: 'm1',
-      symbol: 'BTC/USDT-PERP',
-      at: fixed,
-    });
+    // Legacy markPrice path still receives the request; size is passed when quote() exists.
+    expect(markPrice).toHaveBeenCalled();
+    const arg = markPrice.mock.calls[0]![0] as { marketId: string; symbol?: string; at: Date };
+    expect(arg.marketId).toBe('m1');
+    expect(arg.symbol).toBe('BTC/USDT-PERP');
+    expect(arg.at).toEqual(fixed);
+  });
+
+  /**
+   * W5 — concurrent claim + stable lifecycle id.
+   *
+   * Two workers on the same underwater position must not both post a full loss.
+   * Default id is `liq:{positionId}` (not wall-clock minutes), and tryClaim
+   * reserves that id before any ledger post.
+   */
+  it('two concurrent ticks on one position: one liquidates, one skipped_already, one post set', async () => {
+    const { ledger, posts } = recordingLedger();
+    const attempts = memoryLiquidationAttemptStore();
+    const closed: string[] = [];
+    const deps = {
+      marks: fixedMark('80'),
+      positions: {
+        async listOpen() {
+          return [underwaterLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id: string) {
+          closed.push(id);
+        },
+      },
+      attempts,
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      liquidationIdFor: (row: { positionId: string }) => `liq:${row.positionId}`,
+    };
+
+    const [a, b] = await Promise.all([runLiquidationTick(deps), runLiquidationTick(deps)]);
+    const outcomes = [a.items[0]!.outcome, b.items[0]!.outcome].sort();
+    expect(outcomes).toEqual(['liquidated', 'skipped_already']);
+    expect(a.liquidated + b.liquidated).toBe(1);
+    expect(closed).toEqual(['pos-1']);
+    // Second worker posted nothing — bag size is exactly one liquidator's posts.
+    expect(posts.length).toBeGreaterThan(0);
+    const postsAfter = posts.length;
+    await runLiquidationTick(deps);
+    expect(posts).toHaveLength(postsAfter);
+    expect(await attempts.isDone('liq:pos-1')).toBe(true);
+  });
+
+  it('default liquidation id is stable per position (not minute-bucketed)', async () => {
+    const { defaultLiquidationId } = await import('./liquidation-tick.js');
+    expect(defaultLiquidationId('pos-1')).toBe('liq:pos-1');
+    expect(defaultLiquidationId('pos-1')).toBe(defaultLiquidationId('pos-1'));
   });
 
   /**

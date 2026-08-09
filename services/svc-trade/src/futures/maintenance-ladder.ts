@@ -667,6 +667,16 @@ export function planLadderLiquidation(input: LadderPlanInput): LadderDecision {
 
   const posts: PostRequest[] = [];
   if (fromMargin > 0n || fromInsurance > 0n) {
+    /**
+     * LOSS ID MUST BE UNIQUE PER RUNG. A stable lifecycle liquidationId
+     * (`liq:{positionId}`) is correct for a single full close; partial rungs
+     * on the same position re-use that prefix, so the closed size is part of
+     * the key — otherwise the second partial is a ledger no-op and margin
+     * never leaves the pot while the row shrinks.
+     */
+    const lossId = rung.closesPosition
+      ? `${input.liquidationId}:loss`
+      : `${input.liquidationId}:loss:partial:${formatAmount(sizeClosed)}:${formatAmount(position.size)}`;
     posts.push(
       recipes.futuresRealizeLoss({
         positionId: position.positionId,
@@ -674,7 +684,7 @@ export function planLadderLiquidation(input: LadderPlanInput): LadderDecision {
         assetId: position.marginAsset,
         fromMargin,
         fromInsurance,
-        lossId: `${input.liquidationId}:loss`,
+        lossId,
       }),
     );
   }
