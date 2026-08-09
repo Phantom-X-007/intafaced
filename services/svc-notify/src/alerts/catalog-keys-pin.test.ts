@@ -23,8 +23,9 @@ describe('v22.alerts catalog keys pin', () => {
 
   it('renders human copy, not the key string', () => {
     const t = createTranslator('en');
-    const title = t.t(TITLE as never);
-    const body = t.t(BODY as never, {
+    // Typed keys (not `as never`) so TS tracks required placeholders.
+    const title = t.t('notify.alert.price.crossed.title');
+    const body = t.t('notify.alert.price.crossed.body', {
       marketId: 'BTC-PERP',
       direction: 'above',
       targetPrice: '100000',
