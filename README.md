@@ -14,7 +14,9 @@
 
 Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 11/55 · **5P** 1/4
 
-**🟢 37 ready to claim** — nothing blocks these:
+**In progress:** Screening queues, geo-block, VPN/Tor detection (w10-l04-edge) · Warehouse — read replica + cube layer (w10-l04-edge)
+
+**🟢 35 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `identity.pii-isolation` — PII isolation — KYC documents in a separate encrypted store (§10)
@@ -24,7 +26,7 @@ Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 ·
 - `trade.copy` — Copy trading, audited leaders, fee-share (not profit-share)
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
-- …and 29 more
+- …and 27 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

@@ -1338,21 +1338,24 @@ export const FEATURES = [
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', {
     module: 'core-ops',
     phase: '5',
+    status: 'wip',
+    owner: 'w10-l04-edge',
     dependsOn: ['identity.kyc'],
     note:
-      'Wave 3 #1184 (in flight / merge when green): AccessDecision.regionResolved + optional INTAFACED_REGION_FAIL_CLOSED (default OFF so protocol XX boot holds). ' +
-      'Sanctions list content remains Class X empty-safe. No IP/geo resolution (socket.geo-region-resolution). No VPN/Tor code — residual or narrow title. ' +
-      'Screening list honesty (empty ≠ clean) already strong in packages/config.',
+      'Wave 10 edge door (svc-edge): /admin/status networkSignal (unset≠clear; fail-closed env) + freezeAuthority (only ledger.posting; invent trade/pay freeze refused) + ' +
+      'compliance queue mechanism (partner_cleared refuses without screening partner; honest empty). Builds on #1551 config + #1184 regionResolved. ' +
+      'Still NOT done: Class X sanctions list content + VPN partner procurement; geo-IP resolution (socket.geo-region-resolution); full case-management UI/DB. ' +
+      'Screening list honesty (empty ≠ clean) strong in packages/config.',
   }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'wip',
+    owner: 'w10-l04-edge',
     dependsOn: ['ledger.double-entry'],
     note:
-      'Stage-1 contracts + ADR. Admin consumer #1032. **Wave 3 #1185 (2026-08-09)**: lagSource/lagMeasuredAt honesty — configured lag without measurement ' +
-      'cannot claim live; stale measurements → unknown; admin path calls assertAnalyticsReplicaRole when ANALYTICS_REPLICA_*_URL present. ' +
-      'Still NOT done: real pg lag probe production pool, ETL watermark, cube job callers. Never second balances.',
+      'Stage-1 contracts + ADR. Admin consumer #1032. Wave 3 #1185 lag honesty. **Wave 10 edge**: /admin/status.analytics surfaces dark/unavailable warehouse ' +
+      '(writer URLs refuse; no live cubes without lag probe). Still NOT done: real pg lag probe production pool, ETL watermark, cube job callers. Never second balances.',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',

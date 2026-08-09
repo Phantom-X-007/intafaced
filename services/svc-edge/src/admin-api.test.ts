@@ -233,6 +233,33 @@ describe('the audit trail', () => {
   });
 });
 
+describe('ops honesty residual on the admin door', () => {
+  it('surfaces network unset ≠ clear and invent freeze refuse', () => {
+    const { admin } = api();
+    const ops = admin.opsHonesty();
+    expect(ops.network.signal.declaration).toBe('unset');
+    expect(ops.network.signal.partnerConfigured).toBe(false);
+    expect(ops.freeze.soleKey).toBe('ledger.posting');
+    expect(ops.freeze.inventProbes['trade freeze'].ok).toBe(false);
+    expect(ops.freeze.inventProbes['ledger.posting'].ok).toBe(true);
+    expect(ops.analytics.surface.mayLabelLive).toBe(false);
+  });
+
+  it('refuses partner_cleared without a screening partner and keeps the case', () => {
+    const { admin } = api();
+    admin.openComplianceCase({
+      id: 'hit-1',
+      kind: 'screening_hit',
+      subjectId: 'u1',
+      openedAt: '2026-08-09T00:00:00.000Z',
+    });
+    const r = admin.disposeComplianceCase('hit-1', { status: 'partner_cleared', partnerRef: 'slot' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('refuse.partner_absent');
+    expect(admin.complianceQueueSnapshot().items.map((i) => i.id)).toEqual(['hit-1']);
+  });
+});
+
 describe('reaching the ledger freeze', () => {
   it('tells the console it is unreachable rather than reporting success', async () => {
     const res = await api(null).admin.setFreeze(true, { reason: 'reconciliation mismatch on BTC' }, 'Bearer x');

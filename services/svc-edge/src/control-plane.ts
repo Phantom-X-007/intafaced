@@ -1,7 +1,31 @@
 import type { FastifyInstance } from 'fastify';
 import { AuthError } from '@intafaced/auth';
+import type { ComplianceQueueDispositionRequest } from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
+
+/**
+ * Parse disposition body for the compliance queue. Unknown status refuses closed.
+ */
+export function parseComplianceDisposition(body: {
+  status?: string;
+  actor?: string;
+  reason?: string;
+  partnerRef?: string;
+}): ComplianceQueueDispositionRequest {
+  const status = body.status?.trim();
+  if (status === 'pending') return { status: 'pending' };
+  if (status === 'cleared') {
+    return { status: 'cleared', by: 'operator', actor: body.actor ?? '' };
+  }
+  if (status === 'rejected') {
+    return { status: 'rejected', by: 'operator', actor: body.actor ?? '', reason: body.reason ?? '' };
+  }
+  if (status === 'partner_cleared') {
+    return { status: 'partner_cleared', partnerRef: body.partnerRef ?? '' };
+  }
+  throw new Error(`compliance disposition status must be pending|cleared|rejected|partner_cleared — got ${JSON.stringify(status)}`);
+}
 
 /**
  * THE OPERATOR CONTROL PLANE, AS SOMETHING A TEST CAN DRIVE (§14.6).
@@ -154,6 +178,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
     const snap = admin.read();
     const honesty = admin.honesty();
+    const ops = admin.opsHonesty();
     return {
       ok: true,
       service: 'svc-edge',
@@ -178,7 +203,89 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       flagEdgeGateway: honesty.flagEdgeGateway,
       // Reminder for operators reading JSON at 3am — full path list is in the runbook.
       releaseRule: 'reads and cancels pass under a kill; new commitments refuse (503 edge.module_killed)',
+      // ── ops.compliance / ops.analytics residual (wave 10) ─────────────────
+      // #1551 mechanisms at the door: unset≠clear, invent freeze refuse,
+      // partner_cleared refuse, warehouse dark — never silent green ticks.
+      networkSignal: {
+        declaration: ops.network.signal.declaration,
+        partnerConfigured: ops.network.signal.partnerConfigured,
+        kind: ops.network.signal.kind,
+        statusLine: ops.network.statusLine,
+        accessAllowed: ops.network.access.allowed,
+        accessCode: ops.network.access.code,
+        summary: ops.network.signal.summary,
+      },
+      freezeAuthority: {
+        soleKey: ops.freeze.soleKey,
+        note: ops.freeze.note,
+        authorities: ops.freeze.authorities,
+        inventTradeFreezeOk: ops.freeze.inventProbes['trade freeze'].ok,
+        inventPayFreezeOk: ops.freeze.inventProbes['pay freeze'].ok,
+        ledgerPostingOk: ops.freeze.inventProbes['ledger.posting'].ok,
+      },
+      complianceQueue: {
+        empty: ops.complianceQueue.empty,
+        pending: ops.complianceQueue.items.length,
+        partnerConfigured: ops.complianceQueue.partnerConfigured,
+        summary: ops.complianceQueue.summary,
+      },
+      analytics: {
+        replicaConfigured: ops.analytics.replicaConfigured,
+        replicaCount: ops.analytics.replicaCount,
+        refuse: ops.analytics.refuse,
+        surfaceStatus: ops.analytics.surface.status,
+        mayLabelLive: ops.analytics.surface.mayLabelLive,
+        statusLine: ops.analytics.statusLine,
+      },
     };
+  });
+
+  /**
+   * Compliance queue snapshot — honest empty when nothing pending.
+   * partnerConfigured follows screening list posture (never invents a vendor).
+   */
+  app.get('/admin/compliance/queue', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    return admin.complianceQueueSnapshot();
+  });
+
+  /**
+   * Disposition a queue item. Hostile path blocked here too: partner_cleared
+   * without screening partner → 409 refuse.partner_absent (not 200 green).
+   */
+  app.post('/admin/compliance/queue/disposition', async (req, reply) => {
+    const auth = await operator(req.headers.authorization, reply, 'module');
+    if (!auth) return reply;
+
+    const body = (req.body ?? {}) as {
+      itemId?: string;
+      status?: string;
+      actor?: string;
+      reason?: string;
+      partnerRef?: string;
+    };
+    const itemId = typeof body.itemId === 'string' ? body.itemId.trim() : '';
+    if (itemId === '') {
+      return reply.code(400).send({ error: 'itemId required', code: 'edge.invalid_compliance_disposition' });
+    }
+
+    let request;
+    try {
+      request = parseComplianceDisposition(body);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message, code: 'edge.invalid_compliance_disposition' });
+    }
+
+    const result = admin.disposeComplianceCase(itemId, request);
+    if (!result.ok) {
+      // 409: the case may exist, but this disposition is refused (partner absent).
+      return reply.code(409).send({ error: result.reason, code: result.code, ok: false });
+    }
+    req.log.warn(
+      { operator: auth.principal.userId, itemId, status: result.status, actor: result.actor },
+      'edge: compliance queue disposition',
+    );
+    return { ...result, queue: admin.complianceQueueSnapshot() };
   });
 
   app.get('/admin/kill-switches', async (req, reply) => {

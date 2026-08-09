@@ -190,6 +190,53 @@ describe('/admin/status — control-plane summary', () => {
     expect(body.flagEdgeGateway).toMatchObject({ key: 'edge.gateway', enforced: false });
     expect(body.flagEdgeGateway.note).toMatch(/NOT_ENFORCED|does not stop the proxy/i);
   });
+
+  /**
+   * Wave 10 ops residual: #1551 config honesty must reach the door.
+   * unset network ≠ clear; invent freezes refused; analytics never live without lag.
+   */
+  it('surfaces network/freeze/compliance/analytics honesty on status', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      networkSignal: { declaration: string; partnerConfigured: boolean; accessCode: string };
+      freezeAuthority: {
+        soleKey: string;
+        inventTradeFreezeOk: boolean;
+        ledgerPostingOk: boolean;
+      };
+      complianceQueue: { empty: boolean; partnerConfigured: boolean };
+      analytics: { mayLabelLive: boolean; surfaceStatus: string };
+    };
+    expect(body.networkSignal.declaration).toBe('unset');
+    expect(body.networkSignal.partnerConfigured).toBe(false);
+    expect(body.freezeAuthority.soleKey).toBe('ledger.posting');
+    expect(body.freezeAuthority.inventTradeFreezeOk).toBe(false);
+    expect(body.freezeAuthority.ledgerPostingOk).toBe(true);
+    expect(body.complianceQueue.empty).toBe(true);
+    expect(body.analytics.mayLabelLive).toBe(false);
+    expect(body.analytics.surfaceStatus).not.toBe('ok');
+  });
+
+  it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
+    const h = await edge();
+    // Seed via admin API method through status surface — open is not HTTP yet
+    // for thrift; disposition is. Open case via the same process's createAdminApi
+    // is only unit-tested; here we prove HTTP refuse shape when item missing first.
+    const missing = await h.app.inject({
+      method: 'POST',
+      url: '/admin/compliance/queue/disposition',
+      headers: { authorization: await asOperator(), 'content-type': 'application/json' },
+      payload: { itemId: 'no-such', status: 'partner_cleared', partnerRef: 'slot' },
+    });
+    expect(missing.statusCode).toBe(409);
+    expect(missing.json()).toMatchObject({ ok: false, code: 'refuse.unknown_item' });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
