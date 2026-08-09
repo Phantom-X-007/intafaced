@@ -158,7 +158,8 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
       price: '100.5',
       quantity: '1.5',
       takerSide: 'buy',
-      maker: seededAccount,
+      // Wire normalises EVM addresses to lower hex (same case-insensitivity as the account key).
+      maker: lowerAccount,
     });
     expect(typeof accountFills[0]!.price).toBe('string');
     expect(typeof accountFills[0]!.quantity).toBe('string');
