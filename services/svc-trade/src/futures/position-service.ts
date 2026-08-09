@@ -31,6 +31,7 @@
  */
 import type { Sql } from 'postgres';
 import { randomUUID } from 'node:crypto';
+import { positionIdFor } from './ids.js';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
@@ -110,6 +111,15 @@ export interface OpenPositionInput {
    * callers TypeScript is not watching.
    */
   marginMode?: 'isolated';
+  /**
+   * Caller-supplied open intent key. When present, the position id (and the
+   * margin lock key) are derived from (user, market, clientOpenId) the same way
+   * spot derives order ids from clientOrderId. A timeout + retry finds the
+   * original open instead of locking a second pot under randomUUID().
+   *
+   * Omitted → randomUUID (legacy clients). Prefer always sending one.
+   */
+  clientOpenId?: string;
 }
 
 export interface PositionServiceDeps {
@@ -451,7 +461,16 @@ export class PositionService {
       entryPrice,
       leverage,
     });
-    const positionId = randomUUID();
+    /**
+     * IDEMPOTENT OPEN KEY. With clientOpenId the id is business-derived; without
+     * it we still mint a UUID (legacy). Same clientOpenId → same lock key →
+     * ledger no-ops the second post and the INSERT either wins or we re-read.
+     */
+    const clientOpenId = input.clientOpenId?.trim();
+    if (clientOpenId !== undefined && clientOpenId.length === 0) {
+      throw new FuturesError('clientOpenId must not be empty when supplied', 'trade.client_open_id_invalid', 400);
+    }
+    const positionId = clientOpenId !== undefined ? positionIdFor(input.userId, m.id, clientOpenId) : randomUUID();
 
     // Money first — never a position row without a ledger claim.
     await this.ledger.post(
@@ -502,6 +521,24 @@ export class PositionService {
         )
       `;
     } catch (err) {
+      /**
+       * RETRY PATH. Same clientOpenId already wrote this row (or a concurrent
+       * open with the same key won the race). Do not release the lock we just
+       * no-op'd on — the original position still owns it. Re-read and return.
+       * Other failures still release (unique open on a *different* id, etc.).
+       */
+      if (clientOpenId !== undefined) {
+        const existing = await this.sql<PositionRow[]>`
+          SELECT p.*, m.symbol
+          FROM trade.positions p
+          JOIN trade.markets m ON m.id = p.market_id
+          WHERE p.id = ${positionId}
+          LIMIT 1
+        `;
+        if (existing[0]) {
+          return presentPosition(existing[0]);
+        }
+      }
       // Roll margin back if the row failed (unique open, etc.).
       await this.ledger.post(
         recipes.futuresMarginRelease({

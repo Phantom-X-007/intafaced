@@ -105,6 +105,8 @@ export interface PrivateRestDeps {
        * a value the type system cannot express.
        */
       marginMode?: 'isolated';
+      /** Retry key — same as spot clientOrderId; see positionIdFor. */
+      clientOpenId?: string;
     },
   ): Promise<Position>;
   /** Close at the current mark. No price parameter, for the same reason. */
@@ -740,12 +742,20 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
           ...badRequest('symbol, side, size|contracts required', 'trade.bad_request').body,
         });
       }
+      const clientOpenId =
+        typeof body.clientOpenId === 'string'
+          ? body.clientOpenId
+          : typeof body.clientPositionId === 'string'
+            ? body.clientPositionId
+            : undefined;
+
       const pos = await deps.openPosition(principal, {
         symbol,
         side,
         size,
         leverage,
         marginMode,
+        clientOpenId,
       });
       return reply.code(200).send(pos);
     } catch (err) {
