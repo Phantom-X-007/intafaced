@@ -18,9 +18,14 @@ import type { BookState, EngineOrder, EngineOrderType, MarketId, OrderId, OrderS
  *      the state verifiable.
  *
  *   2. BEFORE PROCESSING. The record is durable before the book moves. A crash
- *      between the two costs a duplicate replay of one input, which is
- *      idempotent (the order id is already live → `duplicate_order_id`). A
- *      crash the other way round would cost a fill nobody can reconstruct.
+ *      between the two costs a **replay of that input into an empty book**
+ *      (recovery rebuilds once from the journal; it does not re-emit bus
+ *      events). Safety is **not** "duplicate_order_id on live re-submit" —
+ *      that guard only covers **still-live** resting/stop ids (README).
+ *      Never-rests markets and fully filled ids are reusable by design; a
+ *      second live submit of the same id after the order is gone is a new
+ *      trade-side concern, not journal crash safety. A crash the other way
+ *      (book moved before journal) would cost a fill nobody can reconstruct.
  *
  * Amounts are decimal strings on disk. A journal is read years after it is
  * written, by processes that may not share this build — a scaled bigint is our
