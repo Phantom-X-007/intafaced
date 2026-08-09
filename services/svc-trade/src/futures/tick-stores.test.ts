@@ -52,31 +52,50 @@ describe('sqlFundingPeriodStore', () => {
     expect(await store.isSettled('settled-period')).toBe(true);
   });
 
-  it('freezeMembership inserts then reads the frozen set (no open-now fallback)', async () => {
+  it('freezeMembership inserts then reads frozen snapshots (no open-now size fallback)', async () => {
     const calls: unknown[][] = [];
-    let frozen: string[] | null = null;
+    let frozenIds: string[] | null = null;
+    let frozenSnaps: unknown[] | null = null;
     const sql = Object.assign(
       (strings: TemplateStringsArray, ...values: unknown[]) => {
         calls.push([...values]);
         const text = strings.join('?').toLowerCase();
         if (text.includes('insert into trade.funding_period_membership')) {
-          if (frozen == null) frozen = values[2] as string[];
+          if (frozenIds == null) {
+            frozenIds = values[2] as string[];
+            frozenSnaps = values[3] as unknown[];
+          }
           return Promise.resolve([]);
         }
         if (text.includes('select member_position_ids')) {
-          return Promise.resolve(frozen ? [{ member_position_ids: frozen }] : []);
+          return Promise.resolve(frozenIds ? [{ member_position_ids: frozenIds, member_snapshots: frozenSnaps }] : []);
         }
         return Promise.resolve([]);
       },
-      { calls },
+      {
+        calls,
+        // postgres.js helper — pass-through so INSERT values[3] is the snap array.
+        json: (v: unknown) => v,
+      },
     );
     const store = sqlFundingPeriodStore(sql as never);
-    const first = await store.freezeMembership('m1:p', ['pos-a', 'pos-b']);
-    expect(first).toEqual(['pos-a', 'pos-b']);
+    const a = {
+      positionId: 'pos-a',
+      userId: 'u1',
+      side: 'long' as const,
+      size: 1n * 10n ** 18n,
+      entryPrice: 50_000n * 10n ** 18n,
+      marginAsset: 'USDT',
+    };
+    const b = { ...a, positionId: 'pos-b', side: 'short' as const };
+    const c = { ...a, positionId: 'pos-c', side: 'short' as const, size: 2n * 10n ** 18n };
+    const first = await store.freezeMembership('m1:p', [a, b]);
+    expect(first.map((p) => p.positionId)).toEqual(['pos-a', 'pos-b']);
+    expect(first[0]!.size).toBe(a.size);
     // Second call must not widen — insert is ON CONFLICT DO NOTHING; select returns first set.
-    frozen = ['pos-a', 'pos-b'];
-    const second = await store.freezeMembership('m1:p', ['pos-a', 'pos-b', 'pos-c']);
-    expect(second).toEqual(['pos-a', 'pos-b']);
+    const second = await store.freezeMembership('m1:p', [a, b, c]);
+    expect(second.map((p) => p.positionId)).toEqual(['pos-a', 'pos-b']);
+    expect(second.find((p) => p.positionId === 'pos-c')).toBeUndefined();
   });
 });
 

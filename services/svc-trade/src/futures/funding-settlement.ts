@@ -28,17 +28,15 @@
  * left open. That is the third funding double-charge in this file's history;
  * the first two are #1034 and #1047.
  *
- * Membership for a period is NOT decided here — the planner plans whatever
- * positions it is handed. `runFundingTick` freezes the open-position set on
- * the first plan for a periodId (`FundingPeriodStore.freezeMembership`) and
- * only passes that set (intersected with currently open rows) into this
- * planner. That closes the residual where a position OPENED between a failed
- * post and its replay minted a new (payer, payee) key: the original payer's
- * ledger was drained for the new leg while `applyFundingNets` (idempotent on
- * (position, period)) recorded only the first net — same divergence family as
- * #1034 / #1047. Product law about "who should have paid at the boundary" is
- * still open; freeze-at-first-plan is the money-safe rule that needs no owner
- * number and stops the double-charge.
+ * Membership + size/notional for a period is NOT decided here — the planner
+ * plans whatever positions it is handed. `runFundingTick` freezes full
+ * position snapshots on the first plan for a periodId
+ * (`FundingPeriodStore.freezeMembership`) and passes only those frozen rows
+ * into this planner. That closes both residuals: a position OPENED mid-gap
+ * minting a new (payer, payee) key (C14), and a size change mid-gap re-planning
+ * different amounts under the same keys (W8 notional freeze). Product law about
+ * "who should have paid at the boundary" is still open; freeze-at-first-plan is
+ * the money-safe rule that needs no owner number.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
 import { assertFundingRateWithinBound } from './funding-rate-bound.js';

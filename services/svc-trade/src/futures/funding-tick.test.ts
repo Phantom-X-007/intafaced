@@ -246,10 +246,103 @@ describe('runFundingTick', () => {
 
   it('freezeMembership is first-writer: a second open set cannot widen the plan', async () => {
     const periods = memoryFundingPeriodStore();
-    const first = await periods.freezeMembership('m1:p', ['a', 'b']);
-    const second = await periods.freezeMembership('m1:p', ['a', 'b', 'c']);
-    expect(first).toEqual(['a', 'b']);
-    expect(second).toEqual(['a', 'b']);
+    const a = longShort()[0]!;
+    const b = longShort()[1]!;
+    const c = { ...b, positionId: 'pshort2' };
+    const first = await periods.freezeMembership('m1:p', [a, b]);
+    const second = await periods.freezeMembership('m1:p', [a, b, c]);
+    expect(first.map((p) => p.positionId)).toEqual(['plong', 'pshort']);
+    expect(second.map((p) => p.positionId)).toEqual(['plong', 'pshort']);
+  });
+
+  /**
+   * W8 residual — ids were frozen (C14) but size was live at plan time.
+   *
+   * Crash after ledger post, before margin apply, then shrink the long: without
+   * size freeze the replay re-plans a smaller net, margin claim records the
+   * small amount, ledger still holds the large post → divergence.
+   */
+  it('a size change between post and apply does not re-size the charge', async () => {
+    const long = {
+      positionId: 'plong',
+      userId: A,
+      side: 'long' as const,
+      size: amt('2'),
+      entryPrice: amt('50000'),
+      marginAsset: 'USDT',
+    };
+    const short = {
+      positionId: 'pshort',
+      userId: B,
+      side: 'short' as const,
+      size: amt('2'),
+      entryPrice: amt('50000'),
+      marginAsset: 'USDT',
+    };
+
+    const seen = new Map<string, PostRequest>();
+    const ledger = {
+      async post(req: PostRequest) {
+        if (!seen.has(req.idempotencyKey)) seen.set(req.idempotencyKey, req);
+        return { id: req.idempotencyKey, idempotencyKey: req.idempotencyKey } as never;
+      },
+    };
+
+    let applyCalls = 0;
+    const baseMargins = memoryFundingMarginApplier();
+    const margins = {
+      ...baseMargins,
+      async applyFundingNets(nets: Parameters<typeof baseMargins.applyFundingNets>[0], periodId: string) {
+        applyCalls += 1;
+        if (applyCalls === 1) {
+          throw new Error('crashed after post, before margin apply');
+        }
+        return baseMargins.applyFundingNets(nets, periodId);
+      },
+      paidByPosition: (id: string) => baseMargins.paidByPosition(id),
+      applied: () => baseMargins.applied(),
+    };
+
+    const periods = memoryFundingPeriodStore();
+    const rates = fixedRate('0.0001', 'm1:period-size-freeze');
+    const fullPeriod = (amt('0.0001') * ((amt('2') * amt('50000')) / 10n ** 18n)) / 10n ** 18n;
+
+    // Attempt 1: size 2×2 posts, crashes before margin.
+    await expect(
+      runFundingTick(
+        {
+          rates,
+          positions: positionsOf([long, short]),
+          periods,
+          margins,
+          ledger,
+          maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
+        },
+        'm1',
+      ),
+    ).rejects.toThrow(/crashed after post/);
+
+    const ledgerCharge = [...seen.values()]
+      .filter((req) => (req.meta as { payerPositionId?: string }).payerPositionId === 'plong')
+      .reduce((a, req) => a + (req.entries[0]!.amount as bigint), 0n);
+    expect(ledgerCharge).toBe(fullPeriod);
+
+    // Live book shrinks the long to size 1. Replay must still charge fullPeriod.
+    const longShrunk = { ...long, size: amt('1') };
+    const result = await runFundingTick(
+      {
+        rates,
+        positions: positionsOf([longShrunk, short]),
+        periods,
+        margins,
+        ledger,
+        maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
+      },
+      'm1',
+    );
+    expect(result.status).toBe('settled');
+    expect(margins.paidByPosition('plong')).toBe(fullPeriod);
+    expect(margins.paidByPosition('pshort')).toBe(-fullPeriod);
   });
 
   it('replaying a crashed tick against a CHANGED book charges no one twice', async () => {

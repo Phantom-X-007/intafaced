@@ -12,8 +12,44 @@
  * only proves the tick cannot invent money.
  */
 import type { Amount, LedgerClient, PostRequest } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { planFundingSettlement, summarizeFundingPlan, type FundingOpenPosition, type FundingLeg } from './funding-settlement.js';
 import { assertFundingRateWithinBound } from './funding-rate-bound.js';
+
+/**
+ * Wire shape stored in `funding_period_membership.member_snapshots`.
+ * Amounts are decimal strings — never JSON numbers (18 dp).
+ */
+export interface FundingMemberSnapshot {
+  readonly positionId: string;
+  readonly userId: string;
+  readonly side: 'long' | 'short';
+  readonly size: string;
+  readonly entryPrice: string;
+  readonly marginAsset: string;
+}
+
+export function snapshotFundingMembers(positions: readonly FundingOpenPosition[]): FundingMemberSnapshot[] {
+  return positions.map((p) => ({
+    positionId: p.positionId,
+    userId: p.userId,
+    side: p.side,
+    size: formatAmount(p.size),
+    entryPrice: formatAmount(p.entryPrice),
+    marginAsset: p.marginAsset,
+  }));
+}
+
+export function positionsFromFundingSnapshots(snaps: readonly FundingMemberSnapshot[]): FundingOpenPosition[] {
+  return snaps.map((s) => ({
+    positionId: s.positionId,
+    userId: s.userId,
+    side: s.side,
+    size: parseAmount(s.size),
+    entryPrice: parseAmount(s.entryPrice),
+    marginAsset: s.marginAsset,
+  }));
+}
 
 /** External period rate. Null / refuse → tick skips; never synthesize a rate. */
 export interface FundingRateQuote {
@@ -52,14 +88,17 @@ export interface FundingPeriodStore {
   isSettled(periodId: string): Promise<boolean>;
   markSettled(periodId: string, meta: { legCount: number; totalPosted: number }): Promise<void>;
   /**
-   * Freeze period membership on first plan for `periodId`.
+   * Freeze period membership + size/notional on first plan for `periodId`.
    *
-   * First call stores `candidateIds` as the only positions eligible for this
-   * period. Later calls return that frozen set and ignore new candidates.
-   * Required: without a freeze, a crash between post and settle re-plans
-   * against open-now and a position opened mid-gap posts an extra leg (C14).
+   * First call stores the candidate **snapshots** (id, side, size, entry, user,
+   * margin asset) as the only plan inputs for this period. Later calls return
+   * that frozen set and ignore new candidates and live size changes.
+   *
+   * Required: without id freeze, a mid-gap opener mints a new ledger key (C14).
+   * Without size freeze, a partial close re-plans different amounts under the
+   * same keys — ledger first-wins vs margin re-net (W6/W7 residual).
    */
-  freezeMembership(periodId: string, candidateIds: readonly string[]): Promise<readonly string[]>;
+  freezeMembership(periodId: string, candidates: readonly FundingOpenPosition[]): Promise<readonly FundingOpenPosition[]>;
   /**
    * Record a skip that is NOT a settled zero-leg period.
    * Optional on older stores — tick still returns skipped; production wires it.
@@ -169,19 +208,11 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
     return { status: 'skipped', reason: 'no_positions', periodId: quote.periodId };
   }
 
-  // Membership is frozen on the first plan for this periodId. A position that
-  // opens between a crashed post and its replay must not enter the plan: new
-  // (payer, payee) pairs mint new ledger keys while applyFundingNets stays
-  // idempotent on (position, period) for the original payers — ledger vs
-  // margin_current diverge (C14 / funding-settlement residual).
-  const frozenIds = await deps.periods.freezeMembership(
-    quote.periodId,
-    open.map((p) => p.positionId),
-  );
-  const frozen = new Set(frozenIds);
-  const members = open.filter((p) => frozen.has(p.positionId));
+  // Membership + size/notional frozen on the first plan for this periodId.
+  // Replays plan from that snapshot only — never open-now size, never a mid-gap
+  // opener (C14 + W8 notional freeze residual).
+  const members = await deps.periods.freezeMembership(quote.periodId, open);
   if (members.length === 0) {
-    // Every frozen member has closed; period completes with no live book.
     await deps.periods.markSettled(quote.periodId, { legCount: 0, totalPosted: 0 });
     return { status: 'skipped', reason: 'no_legs', periodId: quote.periodId };
   }
@@ -296,7 +327,7 @@ export function memoryFundingMarginApplier(): FundingMarginApplier & {
 export function memoryFundingPeriodStore(): FundingPeriodStore {
   const settled = new Map<string, number>();
   const skips = new Map<string, { reason: FundingSkipReason; marketId: string }>();
-  const membership = new Map<string, readonly string[]>();
+  const membership = new Map<string, readonly FundingOpenPosition[]>();
   return {
     async isSettled(periodId) {
       return settled.has(periodId);
@@ -304,9 +335,20 @@ export function memoryFundingPeriodStore(): FundingPeriodStore {
     async markSettled(periodId, meta) {
       settled.set(periodId, meta.legCount);
     },
-    async freezeMembership(periodId, candidateIds) {
+    async freezeMembership(periodId, candidates) {
       if (!membership.has(periodId)) {
-        membership.set(periodId, [...candidateIds]);
+        // Deep-copy amounts so later mutation of caller arrays cannot resize the freeze.
+        membership.set(
+          periodId,
+          candidates.map((p) => ({
+            positionId: p.positionId,
+            userId: p.userId,
+            side: p.side,
+            size: p.size,
+            entryPrice: p.entryPrice,
+            marginAsset: p.marginAsset,
+          })),
+        );
       }
       return membership.get(periodId)!;
     },
