@@ -106,6 +106,40 @@ if (!available) {
     });
 
     /**
+     * Parent-link / height-gap parity with MemoryProjectionStore (memory #1420).
+     * The store is the last line of defence if a second writer or corrupt apply
+     * tries to plant an unlinked height.
+     */
+    it('refuses parent mismatch and height gaps without moving head', async () => {
+      await db.sql`TRUNCATE positions, fills, book_levels, blocks RESTART IDENTITY CASCADE`;
+      const store = new PostgresProjectionStore(db.sql, CHAIN_ID);
+      const H0 = `0x${'11'.repeat(32)}`;
+      const H1 = `0x${'22'.repeat(32)}`;
+      const H2 = `0x${'33'.repeat(32)}`;
+      const BAD = `0x${'44'.repeat(32)}`;
+      const blk = (height: number, hash: string, parentHash: string) => ({
+        chainId: CHAIN_ID,
+        height,
+        hash,
+        parentHash,
+        timestamp: 1_700_000_000 + height,
+        events: [] as const,
+      });
+
+      await store.applyBlock(blk(0, H0, `0x${'00'.repeat(32)}`));
+      await store.applyBlock(blk(1, H1, H0));
+
+      await expect(store.applyBlock(blk(2, H2, BAD))).rejects.toThrow(/parent_mismatch|parent_missing/);
+      expect((await store.head())?.hash).toBe(H1);
+
+      await expect(store.applyBlock(blk(3, H2, H1))).rejects.toThrow(/height_gap/);
+      expect((await store.head())?.height).toBe(1);
+
+      await store.applyBlock(blk(2, H2, H1));
+      expect((await store.head())?.hash).toBe(H2);
+    });
+
+    /**
      * Reversibility, proven rather than claimed (§14 DoD).
      *
      * Applies every `.down.sql` in reverse, asserts the tables are gone, then

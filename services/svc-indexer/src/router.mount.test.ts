@@ -511,3 +511,26 @@ describe('svc-indexer mount — health', () => {
     });
   });
 });
+
+describe('svc-indexer mount — kill-switch is visible on the API', () => {
+  it('reports ingestEnabled false on health and status when the switch is off', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => false,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => false,
+      chainSource: 'null',
+    });
+    const caller = router.createCaller(anonymous());
+    await expect(caller.health()).resolves.toMatchObject({ ingestEnabled: false, custodial: false });
+    await expect(caller.status()).resolves.toMatchObject({ ingestEnabled: false });
+  });
+});

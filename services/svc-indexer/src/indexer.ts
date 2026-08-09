@@ -54,6 +54,25 @@ export class ParentUnlinkError extends Error {
   }
 }
 
+/**
+ * Cold start configured past the live tip. An empty projection that claims
+ * caught-up is a lie — refuse with a typed error so status/lastError name it.
+ */
+export class StartHeightAboveTipError extends Error {
+  readonly code = 'indexer.start_height_above_tip' as const;
+
+  constructor(
+    readonly startHeight: number,
+    readonly tipHeight: number,
+  ) {
+    super(
+      `startHeight ${startHeight} is above chain tip ${tipHeight} — empty projection would look healthy; ` +
+        `lower INDEXER_START_HEIGHT or wait for the chain.`,
+    );
+    this.name = 'StartHeightAboveTipError';
+  }
+}
+
 export interface IndexerDeps {
   readonly source: ChainSource;
   readonly store: ProjectionStore;
@@ -193,12 +212,32 @@ export class Indexer {
     let caughtUp = false;
 
     for (let step = 0; step < batchSize; step++) {
+      // Re-check kill mid-batch so a flip during a long catch-up does not finish
+      // applying the remaining steps of this pass (full-blocks only, not mid-block).
+      if (!this.deps.ingestEnabled()) {
+        const h = await store.head();
+        return {
+          blocksApplied,
+          blocksOrphaned,
+          reorgs,
+          head: h,
+          caughtUp,
+          idle: 'disabled',
+        };
+      }
+
       const head = await store.head();
 
       // Cold start.
       if (!head) {
         const first = await source.blockAt(startHeight);
         if (!first) {
+          // startHeight above the live tip must not look "caught up + healthy empty".
+          // chainHead was read at pass start; if it sits below startHeight the
+          // operator misconfigured INDEXER_START_HEIGHT (or the RPC is truncated).
+          if (chainHead.height < startHeight) {
+            throw new StartHeightAboveTipError(startHeight, chainHead.height);
+          }
           caughtUp = true;
           break;
         }

@@ -98,6 +98,41 @@ export class PostgresProjectionStore implements ProjectionStore {
 
       const blockTime = new Date(block.timestamp * 1000);
 
+      // Parent link is the store's last line of defence (parity with memory-store).
+      // The indexer checks the forward link; a second writer (or a corrupted apply)
+      // must not plant a height that does not hang off the current canonical head.
+      if (block.height > 0) {
+        const [headRow] = await tx<BlockRow[]>`
+          SELECT chain_id, hash, parent_hash, height, status, block_time, event_count
+          FROM blocks
+          WHERE chain_id = ${this.chainId} AND status = 'canonical'
+          ORDER BY height DESC
+          LIMIT 1
+        `;
+        const head = headRow ? toStoredBlock(headRow) : null;
+        const [parentRow] = await tx<Array<{ hash: string }>>`
+          SELECT hash FROM blocks
+          WHERE chain_id = ${this.chainId} AND hash = ${block.parentHash}
+          LIMIT 1
+        `;
+        const parentPresent = Boolean(parentRow);
+        if (head && head.height === block.height - 1 && head.hash !== block.parentHash) {
+          throw new Error(
+            `indexer.parent_mismatch: block ${block.height} claims parent ${block.parentHash} but canonical head is ${head.hash}`,
+          );
+        }
+        if (head && block.height > head.height + 1) {
+          throw new Error(
+            `indexer.height_gap: cannot apply height ${block.height} when canonical head is ${head.height} — fill or re-index, do not jump`,
+          );
+        }
+        // Empty store may start at any height (startHeight); only enforce parent
+        // presence when we already hold the parent height.
+        if (head && block.height === head.height + 1 && !parentPresent) {
+          throw new Error(`indexer.parent_missing: block ${block.height} parents ${block.parentHash} which is not in the store`);
+        }
+      }
+
       // A block whose hash we already orphaned comes back canonical here — a
       // chain that reorgs away and then back is ordinary, and a projection that
       // could not follow it home would be stuck serving the loser.
