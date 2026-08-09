@@ -27,6 +27,12 @@ export interface PrivateWebSocketGatewayOptions {
   readonly enabled: () => boolean;
   /** Null ⇒ private path refuses all upgrades. */
   readonly tokens: TokenConfig | null;
+  /**
+   * Whether private bus consumers are attached. Ready frames include `bus: true|false`
+   * so a client can tell "quiet market" from "unsubscribed — will miss updates".
+   * Defaults to true when omitted (unit tests that do not wire a bus).
+   */
+  readonly busAttached?: () => boolean;
 }
 
 export interface PrivateWebSocketGateway {
@@ -67,7 +73,7 @@ function tokenFrom(url: URL, headers: IncomingMessage['headers']): string | null
 }
 
 export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOptions): PrivateWebSocketGateway {
-  const { server, hub, heartbeatMs, log, enabled, tokens } = options;
+  const { server, hub, heartbeatMs, log, enabled, tokens, busAttached = () => true } = options;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024, perMessageDeflate: false });
 
   /**
@@ -87,7 +93,15 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
       try {
         url = new URL(req.url ?? '/', 'http://gateway.invalid');
       } catch (err) {
+        // Destroy the socket — a bare return leaves the TCP upgrade hung until
+        // the client times out, and on co-mount a public-path parse throw used
+        // to abort this listener before we could even get here.
         log.warn({ err: String(err) }, 'ws-private: unreadable upgrade URL');
+        try {
+          reject(socket, 400, 'Bad Request');
+        } catch {
+          /* already gone */
+        }
         return;
       }
       if (url.pathname !== PRIVATE_STREAM_PATH) return;
@@ -149,9 +163,12 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           ws.on('close', detach);
 
           try {
-            ws.send(JSON.stringify({ channel: 'orders', type: 'ready', userId }));
-            ws.send(JSON.stringify({ channel: 'fills', type: 'ready', userId }));
-            ws.send(JSON.stringify({ channel: 'positions', type: 'ready', userId }));
+            // `bus` is honesty, not a second auth: false means the process has no
+            // private consumer yet (or it failed), so silence is unsubscribed not quiet.
+            const bus = busAttached();
+            ws.send(JSON.stringify({ channel: 'orders', type: 'ready', userId, bus }));
+            ws.send(JSON.stringify({ channel: 'fills', type: 'ready', userId, bus }));
+            ws.send(JSON.stringify({ channel: 'positions', type: 'ready', userId, bus }));
           } catch {
             /* ignore */
           }

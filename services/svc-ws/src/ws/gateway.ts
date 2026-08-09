@@ -126,7 +126,16 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
   const alive = new WeakSet<WebSocket>();
 
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
-    const url = new URL(request.url ?? '/', 'http://gateway.invalid');
+    // Fixed base — never Host. Same reason as private: a Host-derived base can
+    // throw before the path check and, on co-mount, abort later upgrade listeners
+    // with an uncaught exception so the socket never gets a 4xx and hangs.
+    let url: URL;
+    try {
+      url = new URL(request.url ?? '/', 'http://gateway.invalid');
+    } catch (err) {
+      log.warn({ err: String(err) }, 'ws: unreadable upgrade URL');
+      return reject(socket, 400, 'Bad Request');
+    }
     // Co-mounted with private gateway: Node fires every upgrade listener.
     // Only ignore the private path so private auth can run; other paths still 404.
     // Shared constant — string drift would 404 private before auth ever runs.
@@ -142,13 +151,23 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
     if (channel === null) return reject(socket, 400, 'Bad Request');
 
     wss.handleUpgrade(request, socket, head, (ws) => {
+      const detach = channel === 'trades' ? tradeHub.attach(marketId, sinkFor(ws)) : hub.attach(marketId, sinkFor(ws));
+      // Capacity refuse closes the sink inside attach — terminate so the client
+      // never sits half-open with zero frames (mirrors private gateway).
+      if (!detach) {
+        try {
+          ws.terminate();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
       alive.add(ws);
       ws.on('pong', () => alive.add(ws));
       // Inbound frames are dropped without being parsed. See the header.
       ws.on('message', () => undefined);
       ws.on('error', () => ws.terminate());
-
-      const detach = channel === 'trades' ? tradeHub.attach(marketId, sinkFor(ws)) : hub.attach(marketId, sinkFor(ws));
       ws.on('close', detach);
     });
   };

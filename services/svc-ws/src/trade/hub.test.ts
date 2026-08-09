@@ -137,7 +137,7 @@ describe('TradeHub fan-out', () => {
 
   it('forgets the recent ring when the last subscriber leaves a market', async () => {
     const first = new FakeSink();
-    const detachFirst = hub.attach(MARKET, first);
+    const detachFirst = hub.attach(MARKET, first)!;
     await settle();
 
     hub.ingest(fill(1, MARKET, '100', '1'));
@@ -147,7 +147,7 @@ describe('TradeHub fan-out', () => {
     expect(first.prints()).toHaveLength(2);
 
     const peer = new FakeSink();
-    const detachPeer = hub.attach(MARKET, peer);
+    const detachPeer = hub.attach(MARKET, peer)!;
     await settle();
     expect(peer.prints()).toHaveLength(2);
 
@@ -179,7 +179,7 @@ describe('TradeHub fan-out', () => {
   it('does not forget one market when another still has a subscriber', async () => {
     const a = new FakeSink();
     const b = new FakeSink();
-    const detachA = hub.attach(MARKET, a);
+    const detachA = hub.attach(MARKET, a)!;
     hub.attach(OTHER, b);
     await settle();
 

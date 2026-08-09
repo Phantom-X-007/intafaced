@@ -253,9 +253,15 @@ returns `503` so the load balancer takes the instance out of rotation. `/health`
 still see the process is alive. The terminal renders the book as unavailable with the reason on screen — never as
 stale numbers.
 
-**Bus honesty:** if NATS subscribe fails at boot the process **retries with exponential backoff** (depth keeps
-serving). `/ready` stays `200` while the bus is down, but `tradesBus` / `privateBus` are `false` so ops can see an
-empty tape is not "live and quiet" — it is unsubscribed until the next successful connect.
+**Bus honesty:** if NATS subscribe fails **before the first successful attach** (boot), the process **retries with
+exponential backoff** (depth keeps serving). `/ready` stays `200` while the bus is down, but `tradesBus` /
+`privateBus` are `false` so ops can see an empty tape is not "live and quiet" — it is unsubscribed until the next
+successful connect.
+
+After a consumer is attached, **nats.js owns TCP reconnect** for that connection. The flags stay `true` for the
+process session while the consumer is held; they are not a continuous probe of remote NATS liveness. A mid-session
+supervisor that drops the flags and re-attaches when the connection is gone for good is **not built** (ops residual
+if nats.js reconnect proves insufficient).
 
 ---
 
@@ -305,13 +311,18 @@ JWT-authenticated, push-only. Query `?access_token=` (or `Authorization: Bearer`
 On connect the server sends three ready frames, then live updates:
 
 ```jsonc
-{ "channel": "orders", "type": "ready", "userId": "<uuid>" }
-{ "channel": "fills", "type": "ready", "userId": "<uuid>" }
-{ "channel": "positions", "type": "ready", "userId": "<uuid>" }
+{ "channel": "orders", "type": "ready", "userId": "<uuid>", "bus": true }
+{ "channel": "fills", "type": "ready", "userId": "<uuid>", "bus": true }
+{ "channel": "positions", "type": "ready", "userId": "<uuid>", "bus": true }
 { "channel": "orders", "orderId": "...", /* orderUpdated fields */ }
 { "channel": "fills", "fillId": "...", /* fillSettled fields */ }
 { "channel": "positions", "positionId": "...", /* positionUpdated fields */ }
 ```
+
+`bus: false` means private JetStream consumers are not attached (boot retry still
+running, or private subscribe failed). Silence with `bus: false` is **unsubscribed**,
+not a quiet market — clients must not treat it as "no orders". `bus: true` and empty
+is the honest quiet case.
 
 Positions updates are emitted only when `trade.futures` publishes `positionUpdated`. Until then the channel is
 mounted and silent — same honesty as REST `GET /positions → []`. Never invent a position frame.

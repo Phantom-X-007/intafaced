@@ -95,10 +95,14 @@ export class TradeHub {
    * Register a sink. Synchronous so the socket handler can wire `close` before
    * anything awaits. Recent prints flush on a later turn.
    */
-  attach(marketId: string, sink: TradeSink): () => void {
+  /**
+   * Register a sink. Returns detach, or `null` when at capacity (sink already
+   * closed with 1013). Real sockets must terminate on null — no half-open seat.
+   */
+  attach(marketId: string, sink: TradeSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
       sink.close(CLOSE_TRY_LATER, 'gateway at capacity');
-      return () => undefined;
+      return null;
     }
 
     const sub: Subscription = { marketId, sink, pending: true, lagTicks: 0, closed: false };

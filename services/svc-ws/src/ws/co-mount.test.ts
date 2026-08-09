@@ -303,6 +303,75 @@ describe('public + private WS co-mount (production shape)', () => {
     expect(frames[0]).toMatchObject({ type: 'snapshot', marketId: MARKET });
   });
 
+  it('unreadable upgrade URL is refused with 400 and does not hang the socket', async () => {
+    server = createServer();
+    const { depthHub, tradeHub, privateHub } = mountHubs(log);
+
+    createWebSocketGateway({
+      server,
+      hub: depthHub,
+      tradeHub,
+      heartbeatMs: 30_000,
+      log,
+      enabled: () => true,
+    });
+    createPrivateWebSocketGateway({
+      server,
+      hub: privateHub,
+      heartbeatMs: 30_000,
+      log,
+      enabled: () => true,
+      tokens,
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') throw new Error('no listen address');
+    const port = addr.port;
+
+    // Craft a raw HTTP upgrade whose request-target makes `new URL(req.url, base)` throw
+    // (absolute-form with a broken IPv6 host). Both gateways must reject with 400, not hang.
+    const { createConnection } = await import('node:net');
+    const status = await new Promise<number>((resolve, reject) => {
+      const sock = createConnection({ host: '127.0.0.1', port }, () => {
+        // Absolute-form target with unclosed IPv6 bracket — URL constructor throws.
+        sock.write(
+          'GET http://[broken HTTP/1.1\r\n' +
+            'Host: 127.0.0.1\r\n' +
+            'Connection: Upgrade\r\n' +
+            'Upgrade: websocket\r\n' +
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n' +
+            'Sec-WebSocket-Version: 13\r\n' +
+            '\r\n',
+        );
+      });
+      let buf = '';
+      const t = setTimeout(() => {
+        sock.destroy();
+        reject(new Error('upgrade hung — no HTTP response for unreadable URL'));
+      }, 2_000);
+      sock.on('data', (chunk) => {
+        buf += chunk.toString('utf8');
+        const m = /^HTTP\/1\.\d\s+(\d+)/.exec(buf);
+        if (m) {
+          clearTimeout(t);
+          sock.destroy();
+          resolve(Number(m[1]));
+        }
+      });
+      sock.on('error', (err) => {
+        clearTimeout(t);
+        reject(err);
+      });
+    });
+
+    expect(status).toBe(400);
+
+    // Peer path still works after the bad upgrade (co-mount isolation / listener health).
+    const ok = await upgradeStatus(`ws://127.0.0.1:${port}${STREAM_PATH}?market=${MARKET}`);
+    expect(ok).toBe(101);
+  });
+
   it('private order frames never land on a public depth socket', async () => {
     server = createServer();
     const { depthHub, tradeHub, privateHub } = mountHubs(log);

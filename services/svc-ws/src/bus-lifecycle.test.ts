@@ -103,6 +103,38 @@ describe('bus lifecycle reconnect', () => {
     expect(lifecycle.privateBus()).toBe(false);
   });
 
+  it('parks after first successful attach — does not re-attempt (nats.js owns mid-session)', async () => {
+    let calls = 0;
+    const first = ok({ tradesUp: true, privateUp: true });
+    const lifecycle = createBusLifecycle({
+      log,
+      initialBackoffMs: 5,
+      sleep: async () => undefined,
+      attempt: async () => {
+        calls += 1;
+        return first;
+      },
+    });
+
+    lifecycle.start();
+    for (let i = 0; i < 20 && !lifecycle.tradesBus(); i += 1) {
+      await Promise.resolve();
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(lifecycle.tradesBus()).toBe(true);
+    expect(calls).toBe(1);
+
+    // Give the loop time to misbehave if it re-entered after success.
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    expect(calls).toBe(1);
+    expect(lifecycle.tradesBus()).toBe(true);
+    expect(lifecycle.privateBus()).toBe(true);
+
+    await lifecycle.stop();
+    expect(first.close).toHaveBeenCalled();
+  });
+
   it('retries when attempt returns neither trades nor private up', async () => {
     let calls = 0;
     const empty = ok({ tradesUp: false, privateUp: false });

@@ -149,13 +149,21 @@ const busLifecycle = createBusLifecycle({
     let privateFillSub: Subscription | null = null;
     let privatePositionSub: Subscription | null = null;
     try {
+      // Public tape first and independently. A private-half failure must not
+      // tear the trade consumer — empty private is privateBus:false, not a dead tape.
       tradeSub = await subscribeTradeTape({
         bus: connected,
         hub: tradeHub,
         durable: env.WS_TRADES_DURABLE,
         log: app.log,
       });
-      if (privateTokens) {
+    } catch (err) {
+      await connected.close().catch(() => undefined);
+      throw err;
+    }
+
+    if (privateTokens) {
+      try {
         privateSub = await subscribePrivateOrders({
           bus: connected,
           hub: privateOrderHub,
@@ -174,18 +182,21 @@ const busLifecycle = createBusLifecycle({
           durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-positions`,
           log: app.log,
         });
+      } catch (err) {
+        // Tear only the private half. Trade tape stays up.
+        await privateSub?.unsubscribe().catch(() => undefined);
+        await privateFillSub?.unsubscribe().catch(() => undefined);
+        await privatePositionSub?.unsubscribe().catch(() => undefined);
+        privateSub = null;
+        privateFillSub = null;
+        privatePositionSub = null;
+        app.log.warn({ err: String(err) }, 'svc-ws: private bus subscribe failed — trade tape still attached; privateBus stays false');
       }
-    } catch (err) {
-      await tradeSub?.unsubscribe().catch(() => undefined);
-      await privateSub?.unsubscribe().catch(() => undefined);
-      await privateFillSub?.unsubscribe().catch(() => undefined);
-      await privatePositionSub?.unsubscribe().catch(() => undefined);
-      await connected.close().catch(() => undefined);
-      throw err;
     }
+
     return {
       tradesUp: tradeSub !== null,
-      privateUp: privateSub !== null,
+      privateUp: privateSub !== null && privateFillSub !== null && privatePositionSub !== null,
       close: async () => {
         await tradeSub?.unsubscribe().catch(() => undefined);
         await privateSub?.unsubscribe().catch(() => undefined);
@@ -260,6 +271,7 @@ const privateGateway = createPrivateWebSocketGateway({
   log: app.log,
   enabled: isEnabled,
   tokens: privateTokens,
+  busAttached: busLifecycle.privateBus,
 });
 
 poller.start();
