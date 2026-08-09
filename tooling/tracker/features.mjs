@@ -591,13 +591,16 @@ export const FEATURES = [
   f('pay.subscriptions', 'Recurring — card and crypto', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-pay-w3',
+    // Ghost clear 2026-08-09 W4: schema/schedule/lifecycle/invoice-runner on tip (#1214).
+    // Residual is watch/dunning/surface — not "schema/runner" re-ship.
+    status: 'ready',
+    owner: null,
     dependsOn: ['pay.gateway'],
     note:
-      '**Wave 3 2026-08-09:** schedule arithmetic transplanted from svc-bank (S1 pure). ' +
-      'Crypto = invoice-and-watch only (protocol FORBIDDEN_SIGNATURES). Card mandate later. ' +
-      'Not auto-pull. Residual: schema/executions, lifecycle, runner, dunning.',
+      '**Wave 4 2026-08-09 ghost clear:** mandate+schedule+lifecycle+due invoice runner on tip (#1214). ' +
+      'Crypto = invoice-and-watch only (protocol FORBIDDEN_SIGNATURES — never invent pull). ' +
+      'Residual: payment→execution settled watch, bounded dunning, merchant surface, pre-charge notify. ' +
+      'Card mandate rail absent (pay.mandate_rail_absent).',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
@@ -609,18 +612,15 @@ export const FEATURES = [
     module: 'pay',
     phase: '3',
     plane: 'B',
-    // Ghost clear: nitro-money-w3 / feat/pay-residual-stage3 was #1006 MERGED 2026-08-07;
-    // steps 3–5 all tip (#1006/#1014/#1024). Claim TRK-pay.public-api.md already closed.
-    // Re-claimed 2026-08-09 for edge BASE reachability residual (mount /v1 after strip).
-    status: 'wip',
-    owner: 'nitro-pay-w3',
+    // Ghost clear W4 2026-08-09: edge BASE #1181 on tip (mount /v1). No dual-write residual.
+    status: 'ready',
+    owner: null,
     dependsOn: ['pay.gateway', 'identity.apikeys'],
     requires: ['services/svc-pay/src/public-rest.ts', 'services/svc-pay/src/merchant-webhooks.ts'],
     note:
-      'Steps 1–5 on tip (#988/#994/#1006/#1014/#1024). Ghost nitro-money-w3 cleared 2026-08-09 ' +
-      '(merged #1006, no open PR, no remote branch). Residual: service mounted at /api/pay/v1 while ' +
-      'edge strips /api/pay → every external REST call 404d; fix BASE=/v1, keep OpenAPI servers ' +
-      '/api/pay/v1, no preservePath. Owner grant path for pay:* still DIRECTION §8.4 (Nitro). ' +
+      'Steps 1–5 + edge BASE on tip (#988/#994/#1006/#1014/#1024/#1181). ' +
+      'Ghost nitro-pay-w3 cleared 2026-08-09 W4 (BASE residual sealed; no open owner session). ' +
+      'Residual honesty: pay:* grant path still DIRECTION §8.4 (Nitro — never invent). ' +
       'Not Class X acquirer.',
   }),
   f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
