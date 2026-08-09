@@ -248,6 +248,28 @@ inject the memory limiter.
 `notify.channel.footer` (catalog). Verification messages do not (address is still
 unconfirmed).
 
+### Refusal codes (the wire vocabulary)
+
+Codes, not sentences — clients render copy from `@intafaced/i18n`. Every code a
+row can carry is listed in `allRefusalCodes()` (`channels/channel.ts`); a pin
+test fails if production writes a string missing from that list.
+
+| Code                            | Means                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `channel.not_configured`        | No gateway credentials for this channel                                  |
+| `channel.no_target`             | User has no address on this channel                                      |
+| `channel.target_unverified`     | Address on file but never confirmed (critical records this, not silence) |
+| `channel.target_unroutable`     | Address shape unusable (not E.164, bad mailbox, etc.)                    |
+| `channel.disabled`              | Operator kill-switch `NOTIFY_OUT_OF_APP_ENABLED=false`                   |
+| `channel.muted`                 | User muted non-critical traffic on this channel                          |
+| `channel.attempts_exhausted`    | Attempt budget spent — abandoned after max attempts                      |
+| `channel.register_rate_limited` | Too many address registrations in the window                             |
+| `channel.verify_rate_limited`   | Too many verification guesses in the window                              |
+
+**In flight (open honesty PRs, not tip yet):** `channel.delivery_stuck` (reaper
+arm 2 — budget remained but bus gave up) and `channel.transport_rejected`
+(permanent gateway 4xx abandoned with a name).
+
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
 `<loanId>` — a loan can be called, cured and called again, and the second call is
 a different fact.
