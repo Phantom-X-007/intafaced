@@ -56,7 +56,7 @@ var required = [
   '/partner',
   '/about-us',
   '/help',
-  '/helplist',
+  // helplist catalog entry now routes to honest /help hub
   '/announcement/0',
   '/notice',
   '/app'
@@ -77,6 +77,27 @@ assert(
   }),
   'no whitepaper invent path'
 );
+
+// Socket surfaces must not look like live product in the palette.
+assert(
+  cat.some(function (c) {
+    return c.path === '/ctc' && /not published/i.test(c.label);
+  }),
+  'ctc labeled not published'
+);
+assert(
+  !cat.some(function (c) {
+    return c.path === '/helplist';
+  }),
+  'no fake help-list destination'
+);
+assert(
+  cat.some(function (c) {
+    return c.id === 'nav-helplist' && c.path === '/help';
+  }),
+  'help list entry points at /help hub'
+);
+
 
 var filtered = api.filterCmdItems(cat, 'withdraw');
 assert(
