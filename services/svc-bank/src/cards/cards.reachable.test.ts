@@ -321,6 +321,19 @@ if (!available) {
         (user as any).ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '10' }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
+
+    /**
+     * Hold recovery (#1102) is operator-only. A user who can re-drive settlements
+     * can shape capture timing and cashback windows they do not own.
+     * Same shape as ops.creditOnramp FORBIDDEN (#1186).
+     */
+    it('refuses ops.cardResumeSettlement for a user session without admin:treasury', async () => {
+      const user = caller(bank, ['bank:read', 'bank:write']);
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (user as any).ops.cardResumeSettlement({}),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
   });
 
   /**
