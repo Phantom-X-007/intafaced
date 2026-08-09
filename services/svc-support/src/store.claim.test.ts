@@ -50,7 +50,13 @@ describe('MemorySupportStore claim exclusivity', () => {
       subject: 'S',
       body: 'B',
     });
-    await store.setStatus(t.id, 'resolved');
+    const resolved = await store.setStatus({ ticketId: t.id, status: 'resolved', operatorId: OP_A });
+    // Assert the setup actually happened. Without this line the old two-argument
+    // call `setStatus(t.id, 'resolved')` silently became `input.ticketId ===
+    // undefined`, the ticket stayed `open`, and the claim below succeeded — the
+    // test failed loudly here, but a test whose SETUP can no-op is one revert
+    // away from passing for the wrong reason.
+    expect(resolved.status).toBe('ok');
     const r = await store.claimTicket({ ticketId: t.id, operatorId: OP_A });
     expect(r).toEqual({ status: 'refuse', reason: 'not_queueable' });
   });

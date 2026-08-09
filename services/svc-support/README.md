@@ -11,6 +11,37 @@ pay/ledger recipes elsewhere.
 
 Doctrine: §0.6 no balances here; brand scan on KB copy; agent optional later.
 
+## The desk can say what it read
+
+Three properties, added together because each is useless without the others.
+
+**Audit trail** — `support.ticket_events`. Every state change writes its own row
+in the SAME transaction, so there is no path that moves a ticket without
+recording who moved it and from what. Append-only and dense-sequenced by unique
+index in the database, not just in TypeScript. `src/lifecycle.ts` holds the
+legal moves: `closed` is terminal, `resolved → open` is a recorded reopen, and a
+self-transition is refused rather than written as a row recording no change.
+
+**Account-state grounding** — `src/account-state.ts` READS
+`accountStateSchema` (`userId` + `status` + `kycTier`, three fields) from
+svc-identity per request. It is deliberately not a local projection: a desk
+holding its own copy of account status lets an operator reassure a user from a
+stale view of a freeze. `accountState` takes no `userId` — the id comes off the
+ticket, so `support:ops` is not a platform-wide account lookup. An unreachable
+identity plane answers `{status:'unread', reason:'plane_dark'}` and never an
+invented `active`.
+
+**Escalation case file** — `support.case_files`, immutable once written.
+Citations are `{kind, ref, sha256 digest}`: proof of what was read, never a copy
+of it, so the record cannot become the PII archive §10 keeps documents out of.
+An escalation citing nothing is refused at three layers — the builder, the zod
+contract, and a CHECK constraint. There is no `amount` field anywhere;
+`money_request` is a reason NAME that files a request for whoever owns the
+pay/ledger recipe.
+
+**No SLA.** Queue priority is a score, not a promise. Describing support timing
+to a user needs an owner ruling (DIRECTION §8 item 9).
+
 ## API
 
 tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
@@ -24,7 +55,11 @@ tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
 | `support.get`          | `support:read` / ops  | Self or operator            |
 | `support.comment`      | `support:write` / ops | Add comment                 |
 | `support.listComments` | `support:read` / ops  | Thread for ticket           |
-| `support.setStatus`    | `support:ops`         | Operator status change      |
+| `support.setStatus`    | `support:ops`         | Status change + trail row   |
+| `support.events`       | `support:read` / ops  | Audit trail, oldest first   |
+| `support.accountState` | `support:ops`         | Grounding read (no userId)  |
+| `support.escalate`     | `support:ops`         | Case file; refuses if empty |
+| `support.caseFile`     | `support:ops`         | Case file or null           |
 | `support.listKb`       | public                | Platform i18n-keyed spine   |
 | `support.searchKb`     | public                | Search spine by fragment    |
 | `support.getKb`        | public                | One article or null         |
@@ -32,7 +67,15 @@ tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
 | `support.next`         | `support:ops`         | Peek next                   |
 | `support.claim`        | `support:ops`         | Exclusive claim (atomic)    |
 
-HTTP: `GET /health`, `GET /ready` (`stage: 3-durable-queue`, `store: postgres`).
+HTTP: `GET /health`, `GET /ready` (`stage: 4-audited-grounded-desk`,
+`store: postgres`, `accountStateSource: svc-identity`).
+
+**Env:** `INTERNAL_SERVICE_SECRET` is REQUIRED — the grounding read is an S2S
+call and `/internal/account/:userId` hard-401s an unauthenticated caller.
+Refusing to boot without it is deliberate: a desk that started anyway would
+report every account as unread, which from an operator's chair is
+indistinguishable from every account genuinely being unreadable.
+`IDENTITY_URL` defaults to `http://localhost:4002` for a dev stack.
 
 ## Migrations
 

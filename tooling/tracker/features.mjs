@@ -1246,7 +1246,24 @@ export const FEATURES = [
     note:
       'Stage-1 #989 ticket spine · Stage-2 #999 operator queue · **durability #1179 (2026-08-09 wave 3)**: Postgres schema `support` + role `svc_support`, ' +
       'atomic claim UPDATE (two operators racing cannot both win), `searchKb`/`getKb` on the router, TEST_DATABASE_URL_SUPPORT + turbo pass-through. ' +
-      'Still NOT done: no customer Vue entry in the vendored shell (create is edge tRPC only). No money on this service ever.',
+      '**Stage-4 #1494 (2026-08-09): the desk can now say what it read.** Closes the two Stage-2 boxes docs/ops/trk/ops.support.md left unchecked. ' +
+      '(a) AUDIT TRAIL — `support.ticket_events`, append-only and dense-sequenced by unique index, written in the SAME transaction as the state change ' +
+      'it records, so there is no path that moves a ticket without recording who moved it and from what; `setStatus` was previously a bare UPDATE whose ' +
+      'only trace was an `updated_at` the next comment overwrote. Lifecycle is a table (`src/lifecycle.ts`): `closed` is terminal, `resolved → open` is a ' +
+      "recorded reopen, self-transitions refused. (b) ACCOUNT-STATE GROUNDING — read port on svc-identity's new `GET /internal/account/:userId` " +
+      '(`accountStateSchema` = userId + status + kycTier, three fields and no fourth); NOT a support-side projection, so an operator cannot reassure a ' +
+      'user from a stale copy of a freeze. Takes no userId argument — the id comes off the ticket, so `support:ops` is not a platform-wide account lookup. ' +
+      '(c) ESCALATION CASE FILE — `support.case_files`, immutable once written, `citations` refused empty at three layers (builder, zod, CHECK). Citations ' +
+      'are ref + sha256 digest, never content, so the record proves what was read without becoming a PII archive. ' +
+      'PROVEN: 103 svc-support tests + 6 new svc-identity ones; all Postgres triggers asserted by SQLSTATE against a real database (23514/23505), not by ' +
+      'message text; route reachability via `createCaller` through the real edge context and scope middleware. 32/32 gates green. ' +
+      'STILL NOT DONE, and this row stays `ready` for the first reason alone: (1) **svc-support has no running container in the local fleet and the compose ' +
+      'block now requires INTERNAL_SERVICE_SECRET, so the grounding loop is proven in tests and in migration, NOT observed serving in a real env** — the ' +
+      "row's own bar is a real ticket+KB loop in a real env. (2) No customer Vue entry in the vendored shell (create is edge tRPC only) and no operator " +
+      'list/detail in `apps/admin`; both are inside the `nitro-frontend-all` HUMAN lane, so not agent-closable. (3) No SLA anywhere — priority is a score, ' +
+      'not a promise (DIRECTION §8 item 9 needs an owner ruling before any support timing is described to a user). ' +
+      'No money on this service ever: no ledger client, and the case file has no amount/currency/instruction field — `money_request` is a reason NAME that ' +
+      'files a request for the pay/ledger recipe that owns the value (§0.6).',
   }),
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',

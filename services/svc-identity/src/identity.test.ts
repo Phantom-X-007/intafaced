@@ -1056,6 +1056,69 @@ if (!available) {
       });
     });
 
+    /**
+     * The projection svc-support reads to ground a ticket (`accountStateSchema`).
+     *
+     * `users.status` was read by nine call sites in this service and returned by
+     * none — so the support desk had no way to know an account was frozen, and
+     * the only alternative was for it to keep its own copy. These hold the two
+     * halves that matter: the fact is now reachable, and it is the ONLY thing
+     * that is.
+     */
+    describe('account state for another service to read', () => {
+      it('an unknown user is null, never an account in good standing', async () => {
+        // If this ever answers `{status:'active'}` for an id that does not exist,
+        // every support answer about a missing account is a false reassurance.
+        expect(await auth.accountState('00000000-0000-4000-8000-000000000000')).toBeNull();
+      });
+
+      it('reports a fresh account as active at tier none', async () => {
+        const session = await register();
+        expect(await auth.accountState(session.userId)).toEqual({
+          userId: session.userId,
+          status: 'active',
+          kycTier: 'none',
+        });
+      });
+
+      it('reports a freeze — the fact a desk exists to be able to see', async () => {
+        const session = await register();
+        await auth.freezeIdentity(session.userId);
+        expect(await auth.accountState(session.userId)).toMatchObject({ status: 'frozen' });
+        await auth.unfreezeIdentity(session.userId);
+        expect(await auth.accountState(session.userId)).toMatchObject({ status: 'active' });
+      });
+
+      it('tracks the approved tier, never a merely submitted one', async () => {
+        const session = await register();
+        const operator = await register();
+        const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+        // Same split as `kycTier`: a submission grants nothing, so an operator
+        // must not see a tier the user has not actually been given.
+        expect(await auth.accountState(session.userId)).toMatchObject({ kycTier: 'none' });
+
+        await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+        expect(await auth.accountState(session.userId)).toMatchObject({ kycTier: 'basic' });
+      });
+
+      it('carries no balance, no document and no name — three keys and no more', async () => {
+        const session = await register();
+        const state = await auth.accountState(session.userId);
+        // §10 PII isolation and §0.6 in one assertion. The encrypted KYC vault
+        // (a688e231) must not gain a second read path through the support desk,
+        // and the shortness of this object is what prevents it.
+        expect(Object.keys(state!).sort()).toEqual(['kycTier', 'status', 'userId']);
+      });
+
+      it('a closed account reads as closed, not as missing', async () => {
+        const session = await register();
+        await db.sql`UPDATE users SET status = 'closed' WHERE id = ${session.userId}`;
+        // Distinct from the null above: "this account is closed" is something a
+        // support operator can act on; "no such account" is not.
+        expect(await auth.accountState(session.userId)).toMatchObject({ status: 'closed' });
+      });
+    });
+
     it('announces the grant once, on the bus and as XP', async () => {
       const session = await register();
       const operator = await register();
