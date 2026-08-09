@@ -1522,6 +1522,48 @@ if (!available) {
       expect(next.epoch).toBe(1);
       await expect(token.mintEpoch(1)).rejects.toMatchObject({ code: 'token.epoch_closed' });
     });
+
+    it('resumes an open claim with the snapshotted reward after a crash mid-flight', async () => {
+      // Simulate: claim written, ledger post happened, close never ran.
+      const reward = DEFAULT_EMISSION_PARAMS.initialEpochReward;
+      await sql`
+        INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
+        VALUES (0, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
+      `;
+      await ledger.post(recipes.mintEmission({ epoch: 0, assetId: 'IFC', amount: reward, destination: rewardsEngine('IFC') }));
+
+      // Retune would change epochReward(0) if we recomputed — prove we do not.
+      const resumed = await token.mintEpoch(0);
+      expect(resumed.minted).toBe(reward);
+
+      const rows = await sql<Array<{ closed: boolean; mined_amount: string; scheduled_amount: string }>>`
+        SELECT closed, mined_amount, scheduled_amount FROM token.emission_epochs WHERE epoch = 0
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.closed).toBe(true);
+      expect(amt(rows[0]!.mined_amount)).toBe(reward);
+      expect(amt(rows[0]!.scheduled_amount)).toBe(reward);
+      // Ledger post was idempotent — balance is one reward, not two.
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe(formatAmount(reward));
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('open claim reserves supply so a concurrent epoch cannot under-book the ceiling', async () => {
+      // Claim epoch 0 open at full reward without closing — ceiling must count it.
+      const reward = DEFAULT_EMISSION_PARAMS.initialEpochReward;
+      await sql`
+        INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
+        VALUES (0, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
+      `;
+
+      // Cap equals one epoch reward. Epoch 1 must refuse even though 0 is not closed.
+      const tight = new TokenService(sql, ledger, bus, {
+        ...options,
+        emission: { ...DEFAULT_EMISSION_PARAMS, maxSupply: reward },
+      });
+      await expect(tight.mintEpoch(1)).rejects.toMatchObject({ code: 'token.supply_exhausted' });
+      expect(await sql`SELECT epoch FROM token.emission_epochs WHERE epoch = 1`).toHaveLength(0);
+    });
   });
 
   // ── Governance (§4.3) ─────────────────────────────────────────────────────

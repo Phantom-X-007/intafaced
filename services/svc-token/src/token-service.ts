@@ -1249,26 +1249,71 @@ export class TokenService {
       );
     }
 
+    // Claim COMMITS before the ledger post — same shape as `stake` / buyback.
+    // Wrapping claim+post in one Postgres transaction would roll back the row
+    // on process death after the post, under-booking the ceiling again.
+    const claimed = await this.claimEmissionEpoch(epoch);
+
+    try {
+      await this.ledger.post(recipes.mintEmission({ epoch, assetId: this.assetId, amount: claimed.reward, destination }));
+    } catch (err) {
+      // Nothing moved. Drop the open claim so a later curve retune is not
+      // blocked by a reservation that never funded — same guarantee stake
+      // gives its pending row on insufficient funds.
+      await this.sql`
+        DELETE FROM token.emission_epochs WHERE epoch = ${epoch} AND closed = false
+      `;
+      throw err;
+    }
+
+    await this.sql`
+      UPDATE token.emission_epochs
+         SET closed = true, mined_amount = ${formatAmount(claimed.reward)}::numeric
+       WHERE epoch = ${epoch} AND closed = false
+    `;
+
+    return { epoch, minted: claimed.reward };
+  }
+
+  /**
+   * Claim an epoch open with a snapshotted scheduled amount, or resume one.
+   *
+   * CLAIM-BEFORE-POST (W4 residual / L13 A1). Previous order was post → insert
+   * closed row. A crash between those left real supply on the ledger with no
+   * `emission_epochs` row, so `SUM(mined_amount)` under-booked the ceiling and a
+   * retune could mint past the cap. A retry also re-read today's `token_params`
+   * and could disagree with the amount the first post already spent on its
+   * ledger key.
+   *
+   * Open claims set `mined_amount = scheduled_amount` so the ceiling reserves
+   * the supply before the irreversible post. Resume never recomputes reward
+   * from a possibly retuned curve.
+   */
+  private async claimEmissionEpoch(epoch: number): Promise<{ reward: Amount }> {
     const emission = await this.emissionParams();
     return transaction(
       this.sql,
       async (tx) => {
-        // Mints are rare — a cron tick or an operator — and the ceiling below
-        // has to read every epoch row, so serialise them rather than reason
-        // about two concurrent mints each reading a total that excludes the
-        // other. Released by commit or rollback alike.
         await tx`SELECT pg_advisory_xact_lock(hashtext(${`token.mint:${this.assetId}`})::bigint)`;
 
-        const rows = await tx<Array<{ epoch: number; closed: boolean }>>`
-          SELECT epoch, closed FROM token.emission_epochs WHERE epoch = ${epoch} FOR UPDATE
+        const rows = await tx<Array<{ epoch: number; closed: boolean; scheduled_amount: string }>>`
+          SELECT epoch, closed, scheduled_amount
+            FROM token.emission_epochs WHERE epoch = ${epoch} FOR UPDATE
         `;
-        if (rows[0]?.closed) throw new TokenError(`Epoch ${epoch} is already closed`, 'token.epoch_closed');
+        const existing = rows[0];
+        if (existing?.closed) {
+          throw new TokenError(`Epoch ${epoch} is already closed`, 'token.epoch_closed');
+        }
+        if (existing) {
+          // Resume open claim: never recompute from a possibly retuned curve.
+          const reward = parseAmount(existing.scheduled_amount);
+          if (reward <= 0n) throw new TokenError('Emission schedule is exhausted', 'token.supply_exhausted');
+          return { reward };
+        }
 
         const reward = epochReward(epoch, emission);
         if (reward <= 0n) throw new TokenError('Emission schedule is exhausted', 'token.supply_exhausted');
 
-        // Guard the cap independently of the curve: a mis-tuned parameter must
-        // not be able to mint past max supply.
         const cumulative = cumulativeEmission(epoch, emission);
         if (cumulative > emission.maxSupply) {
           throw new TokenError('Emission would exceed max supply', 'token.supply_exhausted');
@@ -1293,9 +1338,10 @@ export class TokenService {
          * own schedule, never the total against the cap.
          *
          * The book cannot be retuned. `SUM(mined_amount)` is what this service
-         * actually told the ledger to create, and it is the only figure the
-         * ceiling can honestly be measured against — "inflation cannot be
-         * un-minted" is precisely why this must refuse BEFORE the post.
+         * has claimed or closed — open claims reserve supply the same way a
+         * closed row does — and it is the only figure the ceiling can honestly
+         * be measured against — "inflation cannot be un-minted" is precisely
+         * why this must refuse BEFORE the post.
          */
         const [emitted] = await tx<Array<{ total: string }>>`
           SELECT COALESCE(SUM(mined_amount), 0) AS total FROM token.emission_epochs
@@ -1309,15 +1355,12 @@ export class TokenService {
           );
         }
 
-        await this.ledger.post(recipes.mintEmission({ epoch, assetId: this.assetId, amount: reward, destination }));
-
         await tx`
           INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
-          VALUES (${epoch}, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, true)
-          ON CONFLICT (epoch) DO UPDATE SET mined_amount = EXCLUDED.mined_amount, closed = true
+          VALUES (${epoch}, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
         `;
 
-        return { epoch, minted: reward };
+        return { reward };
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
