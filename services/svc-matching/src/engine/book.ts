@@ -570,9 +570,15 @@ export class OrderBook {
       tif: stop.tif,
     };
 
-    const sequence = this.nextSequence();
+    // Viability BEFORE a sequence is taken — same rule as submit(). A pure
+    // structural reject must not invent two sequences for a path that never
+    // filled or rested. The stop was already pulled from the stop book, so the
+    // cancel still needs one sequence (depth memo keys on sequence; removing a
+    // stop is a real mutation), and that single sequence is both the outcome
+    // sequence and the cancellation sequence.
     const viability = this.checkViability(effective);
     if (viability) {
+      const sequence = this.nextSequence();
       return {
         orderId: stop.orderId,
         sequence,
@@ -583,7 +589,7 @@ export class OrderBook {
             orderId: stop.orderId,
             accountId: stop.accountId,
             remainingQty: stop.qty,
-            sequence: this.nextSequence(),
+            sequence,
             reason: 'trigger_rejected',
           },
         ],
@@ -591,6 +597,7 @@ export class OrderBook {
       };
     }
 
+    const sequence = this.nextSequence();
     const outcome = this.execute(effective, sequence);
     // Prints from a triggered stop arm the next one — that is the cascade.
     this.recordPrints(outcome.fills);
