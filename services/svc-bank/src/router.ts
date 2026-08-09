@@ -180,6 +180,7 @@ function toTrpcError(err: unknown): TRPCError {
       /** Disagrees with a claimed settlement row — same class as ramp_conflict. */
       case 'bank.card_settlement_amount_conflict':
       case 'bank.ramp_invalid_amount':
+      case 'bank.ramp_invalid_asset':
       case 'bank.ramp_invalid_destination':
       case 'bank.ramp_conflict':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });

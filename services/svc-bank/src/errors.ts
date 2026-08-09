@@ -175,6 +175,12 @@ export type BankErrorCode =
    */
   | 'bank.fiat_ramp_socket'
   | 'bank.ramp_invalid_amount'
+  /**
+   * Asset id is blank or not a usable crypto ledger symbol. The crypto half
+   * does not invent an allowlist of commercial pairs — that is product law —
+   * but it refuses the empty / whitespace shape before a row or deposit posts.
+   */
+  | 'bank.ramp_invalid_asset'
   | 'bank.ramp_invalid_destination'
   /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */
   | 'bank.ramp_conflict'
