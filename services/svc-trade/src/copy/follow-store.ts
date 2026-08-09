@@ -10,7 +10,12 @@ import type { CopyFollow } from './follows.js';
  * §8 rates stay refuse-closed in CopyService — this never invents them.
  *
  * Cap-critical counters use atomic reserve/add primitives so concurrent
- * settleFeeShare / planMirrorForFollow cannot over-pay or over-expose.
+ * settleFeeShare / planMirrorForFollow cannot over-pay or over-expose (#1191).
+ *
+ * Mirrored leader fills are claimed by (followId, fillId). A redelivered
+ * observation must return the prior plan and never bump exposure again —
+ * same business-key shape as fee-share settle / ledger fill keys. Mirror claims
+ * serialise on `exp:${followId}` so they compose with addExposureIfUnderCap.
  */
 
 export interface CopyPeriodStats {
@@ -26,6 +31,34 @@ export type ReserveEarningsResult = {
 };
 
 export type AddExposureResult = { readonly ok: true; readonly newExposure: Amount } | { readonly ok: false; readonly current: Amount };
+
+/**
+ * Prior mirror plan stored under a claimed leader fillId.
+ * Enough to re-present the plan on redelivery without re-running envelope math.
+ */
+export interface StoredMirrorPlan {
+  readonly fillId: string;
+  readonly followId: string;
+  readonly followerId: string;
+  readonly leaderId: string;
+  readonly marketId: string;
+  readonly side: 'buy' | 'sell';
+  readonly qty: Amount;
+  readonly notional: Amount;
+  readonly nextExposure: Amount;
+}
+
+/**
+ * Result of claiming a leader fill for mirror under one follow.
+ *
+ * - `duplicate` — fillId already claimed; exposure untouched; return prior plan.
+ * - `claimed` — first time; exposure advanced; plan persisted.
+ * - `cap_exceeded` — would breach maxAggregate; nothing recorded.
+ */
+export type ClaimMirrorFillResult =
+  | { readonly status: 'duplicate'; readonly plan: StoredMirrorPlan }
+  | { readonly status: 'claimed'; readonly plan: StoredMirrorPlan }
+  | { readonly status: 'cap_exceeded'; readonly current: Amount };
 
 export interface CopyFollowStore {
   saveFollow(follow: CopyFollow, exposure?: Amount): Promise<void>;
@@ -55,10 +88,28 @@ export interface CopyFollowStore {
   releaseEarnings(pairKey: string, amount: Amount): Promise<void>;
   /** Drop a pair's churn counters — used when the follow itself goes away. */
   clearPeriodStats(pairKey: string): Promise<void>;
+  /**
+   * Look up a previously claimed mirror for (follow, leader fill).
+   * Null when this fill has never been mirrored under this follow.
+   */
+  getMirroredFill(followId: string, fillId: string): Promise<StoredMirrorPlan | null>;
+  /**
+   * Atomically claim a leader fillId for this follow and apply notional to
+   * exposure when under cap. Same fillId twice → prior plan, no second bump.
+   *
+   * Serialises on followId (same exclusive domain as addExposureIfUnderCap)
+   * so concurrent first-claims cannot both advance.
+   */
+  claimMirrorFill(input: {
+    followId: string;
+    fillId: string;
+    maxAggregate: Amount;
+    plan: Omit<StoredMirrorPlan, 'nextExposure'>;
+  }): Promise<ClaimMirrorFillResult>;
 }
 
 /**
- * Per-key async mutex — serialises reserve/add critical sections on Memory.
+ * Per-key async mutex — serialises reserve/add/claim critical sections on Memory.
  * Promise-chain: each caller awaits the previous, then holds until done.
  */
 function createExclusiveQueue() {
@@ -85,11 +136,17 @@ function createExclusiveQueue() {
   };
 }
 
+function mirrorKey(followId: string, fillId: string): string {
+  return `${followId}\0${fillId}`;
+}
+
 /** In-memory store — default for unit tests and single-process dev. */
 export class MemoryCopyFollowStore implements CopyFollowStore {
   private readonly follows = new Map<string, CopyFollow>();
   private readonly exposure = new Map<string, Amount>();
   private readonly period = new Map<string, CopyPeriodStats>();
+  /** Keyed `${followId}\0${fillId}` — one plan per leader fill under a follow. */
+  private readonly mirrored = new Map<string, StoredMirrorPlan>();
   private readonly exclusive = createExclusiveQueue();
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
@@ -106,6 +163,13 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   async deleteFollow(followId: string): Promise<void> {
     this.follows.delete(followId);
     this.exposure.delete(followId);
+    // Drop claimed mirrors for this envelope. A re-follow gets a new followId
+    // and must not inherit old fill claims (fresh session budget).
+    for (const key of [...this.mirrored.keys()]) {
+      if (key.startsWith(`${followId}\0`)) {
+        this.mirrored.delete(key);
+      }
+    }
   }
 
   async listFollows(): Promise<CopyFollow[]> {
@@ -168,6 +232,40 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   async clearPeriodStats(pairKey: string): Promise<void> {
     this.period.delete(pairKey);
   }
+
+  async getMirroredFill(followId: string, fillId: string): Promise<StoredMirrorPlan | null> {
+    return this.mirrored.get(mirrorKey(followId, fillId)) ?? null;
+  }
+
+  async claimMirrorFill(input: {
+    followId: string;
+    fillId: string;
+    maxAggregate: Amount;
+    plan: Omit<StoredMirrorPlan, 'nextExposure'>;
+  }): Promise<ClaimMirrorFillResult> {
+    // Same exclusive domain as addExposureIfUnderCap (`exp:${followId}`).
+    return this.exclusive(`exp:${input.followId}`, () => {
+      const key = mirrorKey(input.followId, input.fillId);
+      const existing = this.mirrored.get(key);
+      if (existing) {
+        return { status: 'duplicate' as const, plan: existing };
+      }
+
+      const current = this.exposure.get(input.followId) ?? 0n;
+      if (input.plan.notional < 0n) {
+        return { status: 'cap_exceeded' as const, current };
+      }
+      const nextExposure = current + input.plan.notional;
+      if (nextExposure > input.maxAggregate) {
+        return { status: 'cap_exceeded' as const, current };
+      }
+
+      const plan: StoredMirrorPlan = { ...input.plan, nextExposure };
+      this.exposure.set(input.followId, nextExposure);
+      this.mirrored.set(key, plan);
+      return { status: 'claimed' as const, plan };
+    });
+  }
 }
 
 type FollowRow = {
@@ -182,6 +280,18 @@ type FollowRow = {
   fee_share_killed: boolean;
   exposure: string;
   created_at: Date;
+};
+
+type MirroredFillRow = {
+  fill_id: string;
+  follow_id: string;
+  follower_id: string;
+  leader_id: string;
+  market_id: string;
+  side: string;
+  qty: string;
+  notional: string;
+  next_exposure: string;
 };
 
 function marketsFromJson(raw: unknown): string[] {
@@ -206,6 +316,27 @@ function rowToFollow(row: FollowRow): CopyFollow {
   };
 }
 
+function rowToMirrored(row: MirroredFillRow): StoredMirrorPlan {
+  const side = row.side === 'sell' ? 'sell' : 'buy';
+  return {
+    fillId: row.fill_id,
+    followId: row.follow_id,
+    followerId: row.follower_id,
+    leaderId: row.leader_id,
+    marketId: row.market_id,
+    side,
+    qty: parseAmount(String(row.qty)),
+    notional: parseAmount(String(row.notional)),
+    nextExposure: parseAmount(String(row.next_exposure)),
+  };
+}
+
+/**
+ * SQL store.
+ *
+ * Mirrored fills live in `trade.copy_mirrored_fills` (PK follow_id + fill_id).
+ * Migration residual when the module mounts — unit tests use Memory.
+ */
 export class SqlCopyFollowStore implements CopyFollowStore {
   constructor(private readonly sql: Sql) {}
 
@@ -255,6 +386,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   }
 
   async deleteFollow(followId: string): Promise<void> {
+    await this.sql`DELETE FROM copy_mirrored_fills WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_follows WHERE follow_id = ${followId}`;
   }
 
@@ -379,5 +511,91 @@ export class SqlCopyFollowStore implements CopyFollowStore {
 
   async clearPeriodStats(pairKey: string): Promise<void> {
     await this.sql`DELETE FROM copy_period_stats WHERE pair_key = ${pairKey}`;
+  }
+
+  async getMirroredFill(followId: string, fillId: string): Promise<StoredMirrorPlan | null> {
+    const rows = await this.sql<MirroredFillRow[]>`
+      SELECT fill_id, follow_id, follower_id, leader_id, market_id, side,
+             qty::text, notional::text, next_exposure::text
+        FROM copy_mirrored_fills
+       WHERE follow_id = ${followId} AND fill_id = ${fillId}
+       LIMIT 1
+    `;
+    const row = rows[0];
+    return row ? rowToMirrored(row) : null;
+  }
+
+  async claimMirrorFill(input: {
+    followId: string;
+    fillId: string;
+    maxAggregate: Amount;
+    plan: Omit<StoredMirrorPlan, 'nextExposure'>;
+  }): Promise<ClaimMirrorFillResult> {
+    if (input.plan.notional < 0n) {
+      return { status: 'cap_exceeded', current: await this.getExposure(input.followId) };
+    }
+    const notionalStr = formatAmount(input.plan.notional);
+    const maxStr = formatAmount(input.maxAggregate);
+
+    // Transaction: lock follow row → check fill claim → bump exposure under
+    // cap → insert mirrored plan. Concurrent same fillId serialises here.
+    return await this.sql.begin(async (tx) => {
+      const followRows = await tx<Array<{ exposure: string }>>`
+        SELECT exposure::text
+          FROM copy_follows
+         WHERE follow_id = ${input.followId}
+         FOR UPDATE
+      `;
+      const followRow = followRows[0];
+      if (!followRow) {
+        // Follow vanished mid-flight — treat as cap refuse rather than invent.
+        return { status: 'cap_exceeded' as const, current: 0n };
+      }
+
+      const existingRows = await tx<MirroredFillRow[]>`
+        SELECT fill_id, follow_id, follower_id, leader_id, market_id, side,
+               qty::text, notional::text, next_exposure::text
+          FROM copy_mirrored_fills
+         WHERE follow_id = ${input.followId} AND fill_id = ${input.fillId}
+         LIMIT 1
+      `;
+      const existing = existingRows[0];
+      if (existing) {
+        return { status: 'duplicate' as const, plan: rowToMirrored(existing) };
+      }
+
+      const current = parseAmount(String(followRow.exposure));
+      const nextExposure = current + input.plan.notional;
+      if (nextExposure > input.maxAggregate) {
+        return { status: 'cap_exceeded' as const, current };
+      }
+
+      await tx`
+        UPDATE copy_follows
+           SET exposure = ${formatAmount(nextExposure)}, updated_at = now()
+         WHERE follow_id = ${input.followId}
+           AND exposure + ${notionalStr}::numeric <= ${maxStr}::numeric
+      `;
+
+      const plan: StoredMirrorPlan = { ...input.plan, nextExposure };
+      await tx`
+        INSERT INTO copy_mirrored_fills (
+          follow_id, fill_id, follower_id, leader_id, market_id, side,
+          qty, notional, next_exposure, created_at
+        ) VALUES (
+          ${plan.followId},
+          ${plan.fillId},
+          ${plan.followerId},
+          ${plan.leaderId},
+          ${plan.marketId},
+          ${plan.side},
+          ${formatAmount(plan.qty)},
+          ${formatAmount(plan.notional)},
+          ${formatAmount(plan.nextExposure)},
+          now()
+        )
+      `;
+      return { status: 'claimed' as const, plan };
+    });
   }
 }

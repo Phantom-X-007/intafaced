@@ -4,7 +4,16 @@
  */
 
 export { CopyService, type CopyServiceOptions } from './copy-service.js';
-export { MemoryCopyFollowStore, SqlCopyFollowStore, type CopyFollowStore, type CopyPeriodStats } from './follow-store.js';
+export {
+  MemoryCopyFollowStore,
+  SqlCopyFollowStore,
+  type CopyFollowStore,
+  type CopyPeriodStats,
+  type ReserveEarningsResult,
+  type AddExposureResult,
+  type StoredMirrorPlan,
+  type ClaimMirrorFillResult,
+} from './follow-store.js';
 export { CopyError, COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, type CopyErrorCode } from './errors.js';
 export {
   parseCopyFeeShareLawJson,
