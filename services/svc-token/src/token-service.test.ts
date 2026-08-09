@@ -216,11 +216,7 @@ if (!available) {
       let stakePosts = 0;
       ledger.post = async (tx) => {
         const result = await realPost(tx);
-        const isStake =
-          typeof tx === 'object' &&
-          tx !== null &&
-          'reason' in tx &&
-          (tx as { reason?: string }).reason === 'token.stake';
+        const isStake = typeof tx === 'object' && tx !== null && 'reason' in tx && (tx as { reason?: string }).reason === 'token.stake';
         if (isStake) {
           stakePosts += 1;
           if (stakePosts === 1) {
@@ -230,9 +226,7 @@ if (!available) {
         return result;
       };
 
-      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId })).rejects.toThrow(
-        /network flake/,
-      );
+      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId })).rejects.toThrow(/network flake/);
 
       const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stakeId}`;
       expect(rows).toHaveLength(1);
@@ -255,11 +249,7 @@ if (!available) {
       const realPost = ledger.post.bind(ledger);
       ledger.post = async (tx) => {
         const result = await realPost(tx);
-        const isStake =
-          typeof tx === 'object' &&
-          tx !== null &&
-          'reason' in tx &&
-          (tx as { reason?: string }).reason === 'token.stake';
+        const isStake = typeof tx === 'object' && tx !== null && 'reason' in tx && (tx as { reason?: string }).reason === 'token.stake';
         if (isStake) {
           // Hostile race: claim deleted after apply (old fail-path / dual flight).
           await sql`DELETE FROM token.stakes WHERE id = ${stakeId}`;
