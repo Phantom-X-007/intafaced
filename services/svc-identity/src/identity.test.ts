@@ -466,9 +466,7 @@ if (!available) {
       expect(await auth.removeWebauthnCredential(owner.userId, enrolled.credentialId)).toBe(false);
 
       // Assertion path is gone for that key.
-      const handle = (
-        await db.sql<Array<{ handle: string }>>`SELECT handle FROM users WHERE id = ${owner.userId}`
-      )[0]!.handle;
+      const handle = (await db.sql<Array<{ handle: string }>>`SELECT handle FROM users WHERE id = ${owner.userId}`)[0]!.handle;
       const authOptions = await auth.startWebauthnAuthentication(handle);
       expect(authOptions.allowCredentials).toEqual([]);
     });
