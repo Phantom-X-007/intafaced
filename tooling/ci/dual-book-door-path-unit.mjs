@@ -40,6 +40,23 @@ if (files.length !== 1) {
 }
 
 const src = readFileSync(files[0], 'utf8');
+
+// Structural bind to the Java interceptor — the JS mirror below is not enough.
+// If preHandle reverts to raw getRequestURI(), encoded fixtures stay green and
+// the door is bypassable again (adversarial review L16 W4).
+if (!/static\s+String\s+pathForMatch\s*\(/.test(src)) {
+  console.error('✖ dual-book-door-path-unit: interceptor must define static pathForMatch(String)');
+  process.exit(1);
+}
+if (!/URLDecoder\.decode/.test(src)) {
+  console.error('✖ dual-book-door-path-unit: pathForMatch must URLDecoder.decode (percent-encoding)');
+  process.exit(1);
+}
+if (!/String\s+path\s*=\s*pathForMatch\s*\(/.test(src)) {
+  console.error('✖ dual-book-door-path-unit: preHandle must assign path = pathForMatch(...)');
+  process.exit(1);
+}
+
 const block = src.match(/BLOCKED_URI_FRAGMENTS\s*=\s*Arrays\.asList\(([\s\S]*?)\);/);
 if (!block) {
   console.error('✖ dual-book-door-path-unit: could not parse BLOCKED_URI_FRAGMENTS');
@@ -47,13 +64,35 @@ if (!block) {
 }
 
 const fragments = [...block[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-if (fragments.length < 25) {
-  console.error(`✖ dual-book-door-path-unit: fragment floor 25 not met (found ${fragments.length}) — Spec DB-2 inventory class`);
+// Floor is the live inventory count on tip when this unit last tightened (2026-08-09).
+// A lower floor silently green-lights deleting money fragments (mega-audit residual).
+const FRAGMENT_FLOOR = 40;
+if (fragments.length < FRAGMENT_FLOOR) {
+  console.error(
+    `✖ dual-book-door-path-unit: fragment floor ${FRAGMENT_FLOOR} not met (found ${fragments.length}) — Spec DB-2 inventory class`,
+  );
   process.exit(1);
 }
 
+/** Mirror DualBookMoneyDoorInterceptor.pathForMatch — decode then lowercase. */
+function pathForMatch(rawUri) {
+  if (rawUri == null) return null;
+  let decoded = rawUri;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    } catch {
+      break;
+    }
+  }
+  return decoded.toLowerCase();
+}
+
 function wouldBlock(uri) {
-  const path = uri.toLowerCase();
+  const path = pathForMatch(uri);
+  if (path == null) return false;
   return fragments.some((f) => path.includes(f.toLowerCase()));
 }
 
@@ -66,6 +105,10 @@ const mustBlock = [
   '/admin/finance/withdraw-record/audit-pass',
   '/uc/redenvelope/receive',
   '/admin/system/dividend/start',
+  // percent-encoding must not skip the door (Spring routes on decoded path)
+  '/admin/member/member-wallet/recharg%65',
+  '/uc/withdraw/appl%79',
+  '/otc/order/bu%79',
 ];
 
 const mustAllow = ['/uc/member/login', '/market/symbol-thumb', '/health', '/actuator/health', '/uc/asset/wallet'];

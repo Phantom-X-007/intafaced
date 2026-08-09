@@ -146,6 +146,13 @@ const FORBIDDEN = [
     re: /SET\s+frozen_balance\s*=\s*frozen_balance\s*-/i,
     reason: 'native SQL live frozen debit — dual-book',
   },
+  {
+    id: 'native-to-released-write',
+    // Live credit/debit of to_released (not SELECT). Hibernate setToReleased is
+    // covered by CODE_RULES; this catches native/JPQL re-arms the balance rules miss.
+    re: /SET\s+to_released\s*=/i,
+    reason: 'native/JPQL live to_released write — second-book column',
+  },
 ];
 
 /** The four MemberWalletDao mutators the ADR bans by name. */
@@ -179,6 +186,14 @@ const CODE_RULES = [
     // write is the SETTER, so the setter is what is matched.
     re: /\.\s*set(?:Frozen)?Balance\s*\(/g,
     reason: 'assigns a wallet balance field — Hibernate flushes a managed entity to member_wallet at commit',
+  },
+  {
+    id: 'jpa-entity-to-released-mutation',
+    // member_wallet.to_released is a real column Hibernate flushes. The balance
+    // setter rule never saw it (mega-audit 2026-08-07 MemberEvent). Empty
+    // allowlist on purpose — zero hits is the only green state.
+    re: /\.\s*setToReleased\s*\(/g,
+    reason: 'assigns member_wallet.to_released — second-book credit invisible to setBalance rules',
   },
 ];
 
@@ -623,7 +638,7 @@ for (const file of files) {
 
   // ── Checks 3 + 4: name ban and JPA managed-entity mutation ────────────────
   // Cheap pre-filter: no wallet vocabulary at all means no rule can match.
-  if (!/[Bb]alance|member_wallet/.test(source)) continue;
+  if (!/[Bb]alance|member_wallet|[Tt]oReleased|to_released|setToReleased/.test(source)) continue;
   for (const rule of CODE_RULES) {
     rule.re.lastIndex = 0;
     let match;
