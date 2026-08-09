@@ -78,9 +78,10 @@ const schema = serviceEnvSchema
       AGENTS_USAGE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
 
       /**
-       * Kill-switch for billing (§14 admin controls). Usage is still RECORDED
-       * when this is off: turning metering off must not also destroy the ability
-       * to find out what the fleet cost while it was off.
+       * Kill-switch for billing (§14 admin controls). When off: no usage_records,
+       * no windows, no feeCharge — including settle of leftover windows. Token
+       * counts stay on the action audit only (knowable cost without inventing a
+       * deferred bill). Re-open usage_records dual-write only with product ruling.
        */
       AGENTS_METERING_ENABLED: bool.default(true),
 
