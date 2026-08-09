@@ -53,8 +53,8 @@ class Client {
   closed: { code: number; reason: string } | null = null;
   readonly #waiters: Array<{ count: number; resolve: () => void }> = [];
 
-  constructor(url: string) {
-    this.socket = new WebSocket(url);
+  constructor(url: string, headers?: Record<string, string>) {
+    this.socket = new WebSocket(url, headers ? { headers } : undefined);
     this.socket.on('message', (data) => {
       this.frames.push(data.toString());
       this.#settle();
@@ -190,8 +190,8 @@ describe('the websocket gateway, over a real socket', () => {
     await app.close();
   });
 
-  function connect(query: string): Client {
-    const client = new Client(`ws://${base}/stream?${query}`);
+  function connect(query: string, headers?: Record<string, string>): Client {
+    const client = new Client(`ws://${base}/stream?${query}`, headers);
     clients.push(client);
     return client;
   }
@@ -233,10 +233,22 @@ describe('the websocket gateway, over a real socket', () => {
     const client = connect('market=NOPE-NOPE');
     const closed = await client.closure();
 
+    // Policy violation (1008), not an internal error path stacked on top of
+    // capacity / try-later codes. Unknown market is a single, stable close.
     expect(closed.code).toBe(1008);
     expect(closed.reason).toMatch(/unknown market/);
     // And critically: no depth call was made, so nothing was allocated upstream.
     expect(source.snapshotCalls).toEqual([]);
+  });
+
+  it('opens the public stream from any Origin — there is nothing to authorise', async () => {
+    // Cross-site WebSocket hijacking only matters when ambient credentials ride
+    // the upgrade. This port carries none, so Origin is not a gate (gateway.ts).
+    const client = connect(`market=${MARKET}`, { Origin: 'https://evil.example' });
+    await client.frameCount(1);
+
+    expect(client.messages()[0]).toMatchObject({ type: 'snapshot', marketId: MARKET, sequence: 10 });
+    expect(client.closed).toBeNull();
   });
 
   it('never interprets an inbound frame', async () => {
@@ -257,6 +269,41 @@ describe('the websocket gateway, over a real socket', () => {
     expect(client.closed).toBeNull();
   });
 
+  it('survives an oversized inbound frame without taking the process down', async () => {
+    // maxPayload is 1 KiB on the public WSS. The library may drop the offender;
+    // the pin is that the service keeps serving other subscribers.
+    const victim = connect(`market=${MARKET}`);
+    await victim.frameCount(1);
+
+    victim.socket.send('x'.repeat(8_000));
+
+    // Either the library closed the fat socket (1009) or ignored the frame —
+    // either way a second client must still get a clean snapshot.
+    const peer = connect(`market=${MARKET}`);
+    await peer.frameCount(1);
+    expect(peer.messages()[0]).toMatchObject({ type: 'snapshot', marketId: MARKET });
+    expect(peer.closed).toBeNull();
+
+    hub.ingest(snapshot(11, [['100', '2']]));
+    await peer.frameCount(2);
+    expect(peer.book()?.sequence).toBe(11);
+  });
+
+  it('evicts a flood of unknown markets so capacity is not permanently burned', async () => {
+    // attach counts then #open async-evicts unknowns. Slot burn is brief; after
+    // settle, twice capacity of pure junk must leave zero live subscriptions.
+    const capacity = 4;
+    const junk = Array.from({ length: capacity * 2 }, (_, i) => connect(`market=JUNK-${i}`));
+    const closures = await Promise.all(junk.map((c) => c.closure()));
+
+    for (const closed of closures) {
+      expect(closed.code).toBe(1008);
+      expect(closed.reason).toMatch(/unknown market/);
+    }
+    expect(hub.connections).toBe(0);
+    expect(source.snapshotCalls).toEqual([]);
+  });
+
   it('refuses an upgrade with no market, an unknown path, or the switch off', async () => {
     expect(await upgradeStatus(`ws://${base}/stream`)).toBe(400);
     expect(await upgradeStatus(`ws://${base}/stream?market=${'x'.repeat(65)}`)).toBe(400);
@@ -272,7 +319,11 @@ describe('the websocket gateway, over a real socket', () => {
     expect(hub.connections).toBe(1);
 
     client.socket.close();
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await client.closure();
+    // close → detach is same-tick on the server; poll briefly if the event loop is busy.
+    for (let i = 0; i < 20 && hub.connections !== 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
 
     expect(hub.connections).toBe(0);
     // The book goes with it — a book nobody watches goes stale, and a stale
@@ -382,7 +433,19 @@ describe('the HTTP half', () => {
     // No credentials are involved anywhere on this route, so "any origin may
     // read this" is a true statement rather than a relaxation.
     expect(response.headers['access-control-allow-origin']).toBe('*');
+    // Wildcard + Allow-Credentials would be illegal CORS; we never ask for
+    // cookies on a public price feed, so the credentials header stays absent.
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
     expect(response.json()).toMatchObject({ type: 'snapshot', marketId: MARKET, sequence: 10 });
+  });
+
+  it('lists markets without Allow-Credentials either', async () => {
+    const response = await app.inject({ method: 'GET', url: '/markets' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
+    expect(response.json()).toMatchObject({ markets: [MARKET] });
   });
 
   it('404s an unknown market without asking svc-matching for its depth', async () => {
