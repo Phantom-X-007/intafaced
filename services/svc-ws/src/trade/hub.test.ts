@@ -1,21 +1,67 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { TradePrint } from '@intafaced/market-data';
+import { TRADE_PRINT_PUBLIC_KEYS, type FillLike, type TradePrint } from '@intafaced/market-data';
 import { CLOSE_POLICY, CLOSE_TRY_LATER } from '../depth/hub.js';
 import { TradeHub, type TradeSink } from './hub.js';
 
 const MARKET = 'BTC-USDT';
 const OTHER = 'ETH-USDT';
 
-function fill(sequence: number, marketId = MARKET, price = '100', qty = '1') {
+/** Private ids that must never appear on a public tape frame (order or account). */
+const MAKER_ORDER_ID = '11111111-1111-1111-1111-111111111111';
+const TAKER_ORDER_ID = '22222222-2222-2222-2222-222222222222';
+const MAKER_ACCOUNT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const TAKER_ACCOUNT_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+/**
+ * Fill-shaped payload as a bus/handler might hand us — including private and
+ * unknown fields the strip must drop. Cast: FillLike is the accepted shape;
+ * extras prove we do not pass-through by accident.
+ */
+function fill(sequence: number, marketId = MARKET, price = '100', qty = '1'): FillLike {
   return {
     marketId,
-    makerOrderId: '11111111-1111-1111-1111-111111111111',
-    takerOrderId: '22222222-2222-2222-2222-222222222222',
+    makerOrderId: MAKER_ORDER_ID,
+    takerOrderId: TAKER_ORDER_ID,
     price,
     qty,
     sequence,
     ts: `2026-07-29T12:00:${String(sequence % 60).padStart(2, '0')}.000Z`,
-  };
+    // Residual L10: private / unknown fields that must never reach the wire.
+    makerAccountId: MAKER_ACCOUNT_ID,
+    takerAccountId: TAKER_ACCOUNT_ID,
+    house: true,
+    houseFlag: 'internal',
+    side: 'buy',
+  } as FillLike & Record<string, unknown> as FillLike;
+}
+
+/** Assert a JSON wire frame is only the public TradePrint key set and holds none of the secrets. */
+function expectPublicTapeFrame(wire: string): TradePrint {
+  const print = JSON.parse(wire) as TradePrint;
+  expect(Object.keys(print).sort()).toEqual([...TRADE_PRINT_PUBLIC_KEYS].sort());
+  expect(print).not.toHaveProperty('side');
+  expect(print).not.toHaveProperty('makerOrderId');
+  expect(print).not.toHaveProperty('takerOrderId');
+  expect(print).not.toHaveProperty('makerAccountId');
+  expect(print).not.toHaveProperty('takerAccountId');
+  expect(print).not.toHaveProperty('house');
+  expect(print).not.toHaveProperty('houseFlag');
+  for (const secret of [
+    MAKER_ORDER_ID,
+    TAKER_ORDER_ID,
+    MAKER_ACCOUNT_ID,
+    TAKER_ACCOUNT_ID,
+    'makerOrderId',
+    'takerOrderId',
+    'makerAccountId',
+    'takerAccountId',
+    'houseFlag',
+  ]) {
+    expect(wire).not.toContain(secret);
+  }
+  // Aggressor side is not on orderFilled today — never invent it on the public print.
+  expect(wire).not.toMatch(/"side"/);
+  return print;
 }
 
 class FakeSink implements TradeSink {
@@ -76,16 +122,37 @@ describe('TradeHub fan-out', () => {
     expect(sink.prints()[2]).toMatchObject({ sequence: 3, price: '102', quantity: '3' });
   });
 
-  it('never puts order ids on the wire', async () => {
-    hub.ingest(fill(1));
+  it('public tape frames never carry order ids, account ids, house flags, or invented side', async () => {
+    const print = hub.ingest(fill(1));
+    expect(print).not.toBeNull();
+    // Hub return value is the same strip the wire gets.
+    expect(Object.keys(print!).sort()).toEqual([...TRADE_PRINT_PUBLIC_KEYS].sort());
+    expect(print).not.toHaveProperty('side');
+
     const sink = new FakeSink();
     hub.attach(MARKET, sink);
     await settle();
 
-    const wire = sink.frames.join('\n');
-    expect(wire).not.toContain('makerOrderId');
-    expect(wire).not.toContain('takerOrderId');
-    expect(wire).not.toContain('11111111-1111-1111-1111-111111111111');
+    expect(sink.frames).toHaveLength(1);
+    const onWire = expectPublicTapeFrame(sink.frames[0]!);
+    expect(onWire).toEqual({
+      type: 'trade',
+      marketId: MARKET,
+      sequence: 1,
+      price: '100',
+      quantity: '1',
+      ts: '2026-07-29T12:00:01.000Z',
+    });
+  });
+
+  it('live fan-out also strips private fields (not only the recent replay path)', async () => {
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+    await settle();
+
+    hub.ingest(fill(42, MARKET, '99.5', '0.25'));
+    expect(sink.frames).toHaveLength(1);
+    expectPublicTapeFrame(sink.frames[0]!);
   });
 
   it('fans one print out to every subscriber on that market only', async () => {
@@ -115,22 +182,29 @@ describe('TradeHub fan-out', () => {
     expect(sink.prints()).toHaveLength(1);
   });
 
-  it('bounds the recent ring and drops order-id-bearing history with it', async () => {
+  it('bounds the recent ring; stored history is public keys only (no order/account ids)', async () => {
     for (let i = 1; i <= 8; i += 1) hub.ingest(fill(i));
 
     const recent = hub.recentFor(MARKET);
     expect(recent).toHaveLength(5);
     expect(recent[0]?.sequence).toBe(4);
     expect(recent[4]?.sequence).toBe(8);
+    for (const print of recent) {
+      expect(Object.keys(print).sort()).toEqual([...TRADE_PRINT_PUBLIC_KEYS].sort());
+      expect(print).not.toHaveProperty('side');
+      expect(JSON.stringify(print)).not.toContain(MAKER_ORDER_ID);
+      expect(JSON.stringify(print)).not.toContain(MAKER_ACCOUNT_ID);
+    }
   });
 
-  it('closes unknown markets without ever accepting them as subscribers', async () => {
+  it('closes unknown markets with a stable reason — no raw upstream text', async () => {
     const sink = new FakeSink();
     hub.attach('NOPE', sink);
     await settle();
 
-    expect(sink.closed?.code).toBe(CLOSE_POLICY);
-    expect(sink.closed?.reason).toMatch(/unknown market/);
+    // Pin: CLOSE_POLICY + fixed phrase. Market id is client-supplied; reason
+    // must not embed stack traces or ensureKnownMarket error bodies.
+    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'unknown market "NOPE"' });
     expect(hub.connections).toBe(0);
   });
 
