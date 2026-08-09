@@ -958,6 +958,7 @@ var deskA11y = require('../../assets/js/desk-a11y.js');
 var deskPrefs = require('../../assets/js/desk-prefs.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
 var ixMoney = require('../../assets/js/ix-money.js');
+var ixMarketImpact = require('../../assets/js/ix-market-impact.js');
 var ixDepthFeed = require('../../assets/js/ix-depth-feed.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
@@ -1268,47 +1269,51 @@ export default {
      */
     marketImpactLabel() {
       if (this.orderType !== 'MARKET_PRICE') return '';
-      if (!this.bookReachable) return 'book unknown';
-      const size = this.num(this.form.amount);
-      if (size <= 0) return '';
+      if (!this.bookReachable) {
+        return this.$t
+          ? this.$t('exchange.terminal.impactBookUnknown')
+          : 'book unknown';
+      }
+      /* Decimal walk of top-of-book — never IEEE avg (ix-market-impact). */
       const levels =
         this.side === 'BUY'
           ? this.groupPlate(this.plate.asks, 'ask').slice().reverse()
           : this.groupPlate(this.plate.bids, 'bid').slice();
-      if (!levels.length) return 'no depth';
-      let remain = size;
-      let cost = 0;
-      let filled = 0;
-      const mid = this.lastPrice;
-      for (let i = 0; i < levels.length && remain > 0; i++) {
-        const px = this.num(levels[i].price);
-        const qty = this.num(levels[i].amount);
-        if (px <= 0 || qty <= 0) continue;
-        if (this.quoteSized) {
-          /* Market buy amount is quote currency — spend remain quote. */
-          const takeQuote = Math.min(remain, px * qty);
-          const takeBase = takeQuote / px;
-          cost += takeQuote;
-          filled += takeBase;
-          remain -= takeQuote;
-        } else {
-          const take = Math.min(remain, qty);
-          cost += take * px;
-          filled += take;
-          remain -= take;
-        }
+      const est = ixMarketImpact.estimateMarketImpact({
+        size: this.form.amount,
+        quoteSized: !!this.quoteSized,
+        levels: levels,
+        mid: this.lastPrice,
+        side: this.side,
+        scale: this.baseCoinScale,
+        money: ixMoney
+      });
+      if (!est.ok) {
+        if (est.reason === 'bad-size') return '';
+        return this.$t
+          ? this.$t('exchange.terminal.impactNoDepth')
+          : 'no depth';
       }
-      if (filled <= 0) return 'no depth';
-      const avg = cost / filled;
-      const slip =
-        mid > 0 ? ((this.side === 'BUY' ? avg - mid : mid - avg) / mid) * 100 : null;
-      const avgTxt = this.fmt(avg, this.baseCoinScale);
-      if (remain > 1e-12) {
-        return slip == null
-          ? `avg ${avgTxt} · partial book`
-          : `avg ${avgTxt} · ~${slip.toFixed(2)}% · partial`;
+      const avgWord = this.$t
+        ? this.$t('exchange.terminal.impactAvg')
+        : 'avg';
+      let line = avgWord + ' ' + est.avg;
+      if (est.slipPct != null) {
+        line += ' · ~' + est.slipPct + '%';
       }
-      return slip == null ? `avg ${avgTxt}` : `avg ${avgTxt} · ~${slip.toFixed(2)}%`;
+      if (est.partial) {
+        const part = this.$t
+          ? this.$t(
+              est.slipPct != null
+                ? 'exchange.terminal.impactPartial'
+                : 'exchange.terminal.impactPartialBook'
+            )
+          : est.slipPct != null
+            ? 'partial'
+            : 'partial book';
+        line += ' · ' + part;
+      }
+      return line;
     },
     /* A percent of an unknown balance is not a number. isPositive is false for
        null/empty, so the percent buttons stay off rather than sizing fiction. */
