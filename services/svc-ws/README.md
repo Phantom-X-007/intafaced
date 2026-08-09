@@ -3,9 +3,11 @@
 **The live public market-data stream (§5.2 `ws.gateway`).** Depth (snapshot + sequenced deltas) and a public trade
 tape, to any browser that asks.
 
-**What this service is not:** it has no users, no balances, no database, and **no credential of any kind**. Depth
-reads a public endpoint on svc-matching and diffs it with `@intafaced/market-data`. Trades subscribe to the existing
-`orderFilled` bus event and re-broadcast a stripped public print. That is the entire job, and the entire authority.
+**What this service is not:** it has no users, no balances, no database, and **no S2S / principal / DB credential**.
+Public depth and the trade tape hold nothing to steal. Optional `JWT_ACCESS_SECRET` exists **only** for the
+authenticated `/private/stream` lifecycle fan-out; public `/stream` never reads it. Depth reads a public endpoint
+on svc-matching and diffs it with `@intafaced/market-data`. Trades subscribe to the existing `orderFilled` bus
+event and re-broadcast a stripped public print.
 
 ---
 
@@ -27,16 +29,17 @@ as this service does, while holding `INTERNAL_SERVICE_SECRET` for both the ledge
 `ledger.hold` on the money path. Attaching an unauthenticated public socket to that process trades the entire
 custodial blast radius for one saved container.
 
-So: a process that holds nothing.
+So: a process that holds no S2S secret, no principal key, and no database — optional JWT only for private stream.
 
-| Holds                                        | svc-edge | svc-trade | svc-matching | **svc-ws** |
-| -------------------------------------------- | -------- | --------- | ------------ | ---------- |
-| `INTERNAL_SERVICE_SECRET`                    | no       | **yes**   | **yes**      | **no**     |
-| `EDGE_PRINCIPAL_SECRET`                      | yes      | yes       | no           | **no**     |
-| `DATABASE_URL`                               | no       | yes       | no           | **no**     |
-| Event bus connection                         | no       | yes       | yes          | **yes***   |
-| A ledger client                              | no       | yes       | no           | **no**     |
-| Accepts anonymous connections from a browser | yes      | no        | no           | **yes**    |
+| Holds                                        | svc-edge | svc-trade | svc-matching | **svc-ws**   |
+| -------------------------------------------- | -------- | --------- | ------------ | ------------ |
+| `INTERNAL_SERVICE_SECRET`                    | no       | **yes**   | **yes**      | **no**       |
+| `EDGE_PRINCIPAL_SECRET`                      | yes      | yes       | no           | **no**       |
+| `DATABASE_URL`                               | no       | yes       | no           | **no**       |
+| `JWT_ACCESS_SECRET` (private stream only)    | yes*     | no        | no           | **optional** |
+| Event bus connection                         | no       | yes       | yes          | **yes***     |
+| A ledger client                              | no       | yes       | no           | **no**       |
+| Accepts anonymous connections from a browser | yes      | no        | no           | **yes**      |
 
 \*NATS for `orderFilled` only — public print fan-out. Not a money path; order ids never leave the bus-side handler.
 
@@ -54,14 +57,14 @@ smallest blast radius in the fleet. A second public origin on a process that hol
 HTTP + JSON, plus one websocket. Amounts in and out are **decimal strings**, never JSON numbers. The only JSON
 numbers anywhere in this service's output are integer sequences.
 
-| Route                                              | Input | Output                                                        |
-| -------------------------------------------------- | ----- | ------------------------------------------------------------- |
-| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                     |
-| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                  |
-| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unlisted · `502` upstream down        |
-| `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books |
-| `GET /health`                                      | —     | `{ ok, service, enabled, connections, … }`                    |
-| `GET /ready`                                       | —     | depth + trade counters · `503` when the kill-switch is off    |
+| Route                                              | Input | Output                                                                                                                                                       |
+| -------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                                                                                                                    |
+| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                                                                                                                 |
+| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unlisted · `502` upstream down                                                                                                       |
+| `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books                                                                                                |
+| `GET /health`                                      | —     | `{ ok, service, enabled, connections, privateConnections, tradesBus, privateBus, … }`                                                                        |
+| `GET /ready`                                       | —     | depth + trade counters + `tradesBus` / `privateBus` / `privateConnections` · `503` only when kill-switch off · bus down does **not** 503 (depth still works) |
 
 ### The wire format is not ours
 
@@ -241,35 +244,55 @@ If a future change here imports a write recipe, delete the import, not the bound
 
 ## Kill-switch
 
-`ws.gateway` in the admin console, or `WS_GATEWAY_ENABLED=false`.
+**How it flips:** `WS_GATEWAY_ENABLED=false` (env + restart), or process `SIGTERM`/`SIGINT` (handler sets enabled
+off before close). **Not** via the svc-edge admin console — edge never routes `ws` (this process is a second public
+origin, not behind the edge), so edge module halt cannot stop depth/tape here.
 
 **Effect when off:** upgrades are refused with `503`, every open socket is closed with a reason, and `/ready`
 returns `503` so the load balancer takes the instance out of rotation. `/health` keeps answering, so an operator can
 still see the process is alive. The terminal renders the book as unavailable with the reason on screen — never as
 stale numbers.
 
+**Bus honesty:** if NATS subscribe fails at boot there is **no auto-reconnect** yet. `/ready` stays `200` (depth is
+primary and works without the bus) but `tradesBus` / `privateBus` are `false` so ops can see an empty tape is not
+"live and quiet" — it is unsubscribed until process restart.
+
 ---
 
 ## Configuration
 
-| Variable                | Default                 | Notes                                                    |
-| ----------------------- | ----------------------- | -------------------------------------------------------- |
-| `HTTP_PORT`             | `4014`                  | every port 4000–4013 is taken                            |
-| `MATCHING_URL`          | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent   |
-| `TRADE_URL`             | `http://localhost:4004` | svc-trade's public market **listing**; no credential     |
-| `NATS_URL`              | `nats://localhost:4222` | bus for `orderFilled` trade tape only                    |
-| `WS_DEPTH_LIMIT`        | `50`                    | levels per side, for both snapshot and delta             |
-| `WS_POLL_INTERVAL_MS`   | `250`                   | one GET per subscribed market per tick                   |
-| `WS_MARKETS_REFRESH_MS` | `30000`                 | market-list cache window                                 |
-| `WS_HIGH_WATER_BYTES`   | `1048576`               | socket buffer above which a client is lagging            |
-| `WS_MAX_LAG_TICKS`      | `20`                    | consecutive lagging ticks before disconnect              |
-| `WS_MAX_CONNECTIONS`    | `5000`                  | sockets per replica                                      |
-| `WS_HEARTBEAT_MS`       | `30000`                 | ping cadence; a socket that misses a pong is terminated  |
-| `WS_TRADE_RECENT_LIMIT` | `50`                    | recent prints kept per market and replayed on connect    |
-| `WS_TRADES_DURABLE`     | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance |
-| `WS_GATEWAY_ENABLED`    | `true`                  | kill-switch                                              |
+| Variable                | Default                 | Notes                                                     |
+| ----------------------- | ----------------------- | --------------------------------------------------------- |
+| `HTTP_PORT`             | `4014`                  | every port 4000–4013 is taken                             |
+| `MATCHING_URL`          | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent    |
+| `TRADE_URL`             | `http://localhost:4004` | svc-trade's public market **listing**; no credential      |
+| `NATS_URL`              | `nats://localhost:4222` | bus for `orderFilled` trade tape only                     |
+| `WS_DEPTH_LIMIT`        | `50`                    | levels per side, for both snapshot and delta              |
+| `WS_POLL_INTERVAL_MS`   | `250`                   | one GET per subscribed market per tick                    |
+| `WS_MARKETS_REFRESH_MS` | `30000`                 | market-list cache window                                  |
+| `WS_HIGH_WATER_BYTES`   | `1048576`               | socket buffer above which a client is lagging             |
+| `WS_MAX_LAG_TICKS`      | `20`                    | consecutive lagging ticks before disconnect               |
+| `WS_MAX_CONNECTIONS`    | `5000`                  | sockets per replica                                       |
+| `WS_HEARTBEAT_MS`       | `30000`                 | ping cadence; a socket that misses a pong is terminated   |
+| `WS_TRADE_RECENT_LIMIT` | `50`                    | recent prints kept per market and replayed on connect     |
+| `WS_TRADES_DURABLE`     | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance  |
+| `WS_GATEWAY_ENABLED`    | `true`                  | kill-switch (env / restart / SIGTERM — not edge admin)    |
+| `JWT_ACCESS_SECRET`     | _(unset)_               | optional; only `/private/stream` — public path ignores it |
 
-`apps/web` reaches this at `NEXT_PUBLIC_WS_URL` (`apps/web/src/app/layout.tsx`, beside `NEXT_PUBLIC_EDGE_URL`).
+### Isolation (what this process holds)
+
+| Credential / secret       | Present? | Why                                           |
+| ------------------------- | -------- | --------------------------------------------- |
+| `INTERNAL_SERVICE_SECRET` | **no**   | no S2S writes; depth/listing reads are public |
+| `EDGE_PRINCIPAL_SECRET`   | **no**   | public port is not principal-scoped           |
+| `DATABASE_URL`            | **no**   | nothing stored here                           |
+| `JWT_ACCESS_SECRET`       | optional | private order/fill/position stream only       |
+
+Pin: `src/env.isolation.test.ts` + `FORBIDDEN_SERVICE_CREDENTIALS` in `env.ts`.
+
+**How the browser reaches this:** the vendor shell nginx proxies same-origin `/ws/` → `svc-ws:4014/`
+(`vendor/upstream-exchange/05_Web_Front/nginx.conf`). Compose: `vendor-shell` on `:8090` depends on `svc-ws`.
+Direct `NEXT_PUBLIC_WS_URL` / `apps/web` wiring is not the compose path for the live terminal.
 
 ---
 

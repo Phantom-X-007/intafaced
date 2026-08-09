@@ -128,6 +128,16 @@ const privateTokens =
 let enabled = env.WS_GATEWAY_ENABLED;
 const isEnabled = () => enabled;
 
+/**
+ * Bus subscription handles — declared before routes so /ready getters can read
+ * them. Filled (or left null) in the NATS boot block below.
+ */
+let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
+let tradeSub: Subscription | null = null;
+let privateSub: Subscription | null = null;
+let privateFillSub: Subscription | null = null;
+let privatePositionSub: Subscription | null = null;
+
 const poller = new DepthPoller(
   source,
   hub,
@@ -138,11 +148,15 @@ const poller = new DepthPoller(
 registerRoutes(app, {
   hub,
   tradeHub,
+  privateHub: privateOrderHub,
   source,
   depthLimit: env.WS_DEPTH_LIMIT,
   serviceName: env.SERVICE_NAME,
   upstream: env.MATCHING_URL,
   enabled: isEnabled,
+  // Mutable getters: boot may fail the NATS subscribe and leave these null.
+  tradesBus: () => tradeSub !== null,
+  privateBus: () => privateSub !== null,
 });
 
 /**
@@ -167,11 +181,6 @@ await hub.refreshMarkets().catch((err: unknown) => {
  * working when the bus is down — a public book feed should not die because
  * JetStream hiccuped. `ownedStreams: []` — matching owns the stream.
  */
-let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
-let tradeSub: Subscription | null = null;
-let privateSub: Subscription | null = null;
-let privateFillSub: Subscription | null = null;
-let privatePositionSub: Subscription | null = null;
 try {
   bus = await JetStreamEventBus.connect({
     servers: env.NATS_URL,
@@ -206,9 +215,11 @@ try {
     });
   }
 } catch (err) {
+  // Honest: there is no auto-reconnect loop yet. /ready stays green (depth
+  // works) but tradesBus/privateBus stay false until process restart.
   app.log.warn(
     { err: String(err), nats: env.NATS_URL },
-    'svc-ws: trade tape bus unavailable — depth still serves; trades will be empty until reconnect',
+    'svc-ws: trade/private bus unavailable at boot — depth still serves; tape empty until process restart (no auto-reconnect yet)',
   );
   bus = null;
   tradeSub = null;

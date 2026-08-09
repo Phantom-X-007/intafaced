@@ -11,6 +11,7 @@ import {
 } from '@intafaced/market-data';
 import { DepthHub } from '../depth/hub.js';
 import type { DepthSource } from '../depth/source.js';
+import { PrivateOrderHub } from '../private/hub.js';
 import { registerRoutes } from '../routes.js';
 import { TradeHub } from '../trade/hub.js';
 import { createWebSocketGateway, type WebSocketGateway } from './gateway.js';
@@ -158,14 +159,22 @@ describe('the websocket gateway, over a real socket', () => {
       recentLimit: 10,
       ensureKnownMarket: (id) => hub.ensureKnownMarket(id),
     });
+    const privateHub = new PrivateOrderHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+    });
     registerRoutes(app, {
       hub,
       tradeHub,
+      privateHub,
       source,
       depthLimit: 50,
       serviceName: 'svc-ws-test',
       upstream: 'http://matching.test',
       enabled: () => enabled,
+      tradesBus: () => true,
+      privateBus: () => false,
     });
 
     await app.listen({ host: '127.0.0.1', port: 0 });
@@ -337,11 +346,16 @@ describe('the HTTP half', () => {
   let app: FastifyInstance;
   let hub: DepthHub;
   let tradeHub: TradeHub;
+  let privateHub: PrivateOrderHub;
   let source: StubSource;
   let enabled = true;
+  let tradesBusUp = false;
+  let privateBusUp = false;
 
   beforeEach(async () => {
     enabled = true;
+    tradesBusUp = false;
+    privateBusUp = false;
     source = new StubSource();
     app = Fastify({ logger: false });
     hub = new DepthHub(source, {
@@ -358,14 +372,22 @@ describe('the HTTP half', () => {
       recentLimit: 10,
       ensureKnownMarket: (id) => hub.ensureKnownMarket(id),
     });
+    privateHub = new PrivateOrderHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+    });
     registerRoutes(app, {
       hub,
       tradeHub,
+      privateHub,
       source,
       depthLimit: 50,
       serviceName: 'svc-ws-test',
       upstream: 'http://matching.test',
       enabled: () => enabled,
+      tradesBus: () => tradesBusUp,
+      privateBus: () => privateBusUp,
     });
     await app.ready();
     await hub.refreshMarkets();
@@ -430,5 +452,37 @@ describe('the HTTP half', () => {
     const health = await app.inject({ method: 'GET', url: '/health' });
     expect(health.statusCode).toBe(200);
     expect(health.json()).toMatchObject({ ok: true, enabled: false });
+  });
+
+  it('stays ready when the bus is down and exposes the subscription flags', async () => {
+    tradesBusUp = false;
+    privateBusUp = false;
+
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json()).toMatchObject({
+      ready: true,
+      tradesBus: false,
+      privateBus: false,
+      privateConnections: 0,
+    });
+
+    const health = await app.inject({ method: 'GET', url: '/health' });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toMatchObject({
+      ok: true,
+      tradesBus: false,
+      privateBus: false,
+      privateConnections: 0,
+    });
+  });
+
+  it('reports bus up when getters say the subscriptions are live', async () => {
+    tradesBusUp = true;
+    privateBusUp = true;
+
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json()).toMatchObject({ ready: true, tradesBus: true, privateBus: true });
   });
 });
