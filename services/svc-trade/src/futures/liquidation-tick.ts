@@ -176,10 +176,41 @@ export const stubMarginCallNotifier: MarginCallNotifier = {
   },
 };
 
-/** Prevent double-liquidation attempts for the same position+attempt key. */
+/**
+ * Prevent double-liquidation attempts for the same position+attempt key.
+ *
+ * `tryClaim` must be called BEFORE any ledger post. A store that only records
+ * success after posts (legacy `markDone`) leaves a multi-replica window where
+ * two workers both pass `isDone`, both post under *different* minute-bucket
+ * ids, and both apply a full loss. Claim-first + a stable id closes that.
+ *
+ * `tryClaim` returns false when another worker already owns the id (or the
+ * attempt already finished). Callers must not post when false.
+ */
 export interface LiquidationAttemptStore {
   isDone(liquidationId: string): Promise<boolean>;
+  /**
+   * Atomically reserve `liquidationId` before money moves.
+   * true = this worker owns the attempt; false = skip (busy or already done).
+   * Implementations that only have insert-once storage treat claim as the same
+   * row as done — a crash after claim and before post parks the position until
+   * an operator clears the attempt row (same class as any mid-flight crash).
+   * Prefer that park over a second full loss under a new id.
+   */
+  tryClaim(liquidationId: string): Promise<boolean>;
   markDone(liquidationId: string): Promise<void>;
+}
+
+/**
+ * Stable liquidation attempt id for one open position.
+ *
+ * WHY NOT `liq:{positionId}:{isoMinute}`: that format minted a NEW loss id every
+ * minute while a position stayed open. Crash after post / multi-replica race
+ * then applied a second full `futures.loss` because ledger keys differed.
+ * One position liquidates once — the key is the position, not the clock.
+ */
+export function defaultLiquidationId(positionId: string): string {
+  return `liq:${positionId}`;
 }
 
 export interface LiquidationTickDeps {
@@ -195,7 +226,11 @@ export interface LiquidationTickDeps {
   ledger: Pick<LedgerClient, 'post' | 'balance'>;
   maintenanceBps?: number;
   now?: () => Date;
-  /** Build stable attempt id. Default: liq:{positionId}:{isoMinute} */
+  /**
+   * Build the attempt id used for ledger recipe keys and the attempt store.
+   * Default: {@link defaultLiquidationId} — stable per open position for the
+   * whole liquidation lifecycle (not wall-clock minutes).
+   */
   liquidationIdFor?: (row: LiquidationPositionRow, at: Date) => string;
   /** Gates a labelled mark must clear before it may close a position. */
   markPolicy?: MarkPolicy;
@@ -297,7 +332,7 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
   let marginCalls = 0;
 
   for (const row of open) {
-    const liquidationId = deps.liquidationIdFor?.(row, at) ?? `liq:${row.positionId}:${at.toISOString().slice(0, 16)}`;
+    const liquidationId = deps.liquidationIdFor?.(row, at) ?? defaultLiquidationId(row.positionId);
 
     if (await deps.attempts.isDone(liquidationId)) {
       items.push({ positionId: row.positionId, outcome: 'skipped_already', reason: 'already_done' });
@@ -423,6 +458,17 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
         reason: INSURANCE_UNDERFUNDED,
         summary: insurance.reason,
       });
+      continue;
+    }
+
+    /**
+     * CLAIM BEFORE POST. After every skip gate that leaves the position open for
+     * a later re-drive (no mark, healthy, underfunded insurance), reserve the
+     * attempt id so a second worker cannot post under the same lifecycle key.
+     * false → another worker already owns it (or finished).
+     */
+    if (!(await deps.attempts.tryClaim(liquidationId))) {
+      items.push({ positionId: row.positionId, outcome: 'skipped_already', reason: 'already_done' });
       continue;
     }
 
@@ -584,12 +630,25 @@ async function runLadderRung(
     };
   }
 
+  /**
+   * Closing rungs claim the lifecycle id so a second worker cannot full-close
+   * twice. Partial rungs deliberately do NOT claim `liq:{positionId}` — the
+   * position stays open for the next rung, and recipe keys already include the
+   * closed size so two partials do not share a ledger id.
+   */
+  if (decision.closesPosition) {
+    if (!(await deps.attempts.tryClaim(liquidationId))) {
+      return { positionId: row.positionId, outcome: 'skipped_already', reason: 'already_done' };
+    }
+  }
+
   for (const recipe of decision.recipes) {
     await deps.ledger.post(recipe as PostRequest);
   }
 
   if (decision.closesPosition) {
     await deps.closer.markLiquidated(row.positionId, { liquidationId, reason: decision.reason });
+    await deps.attempts.markDone(liquidationId);
   } else {
     await ladder.reducer.reduce(row.positionId, {
       liquidationId,
@@ -598,7 +657,6 @@ async function runLadderRung(
       reason: decision.reason,
     });
   }
-  await deps.attempts.markDone(liquidationId);
 
   return {
     positionId: row.positionId,
@@ -613,6 +671,11 @@ export function memoryLiquidationAttemptStore(): LiquidationAttemptStore {
   return {
     async isDone(id) {
       return done.has(id);
+    },
+    async tryClaim(id) {
+      if (done.has(id)) return false;
+      done.add(id);
+      return true;
     },
     async markDone(id) {
       done.add(id);

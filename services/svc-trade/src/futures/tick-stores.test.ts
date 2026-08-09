@@ -21,6 +21,10 @@ function mockSql() {
         return Promise.resolve([]);
       }
       if (text.includes('insert into trade.liquidation_attempts')) {
+        // tryClaim uses RETURNING; markDone does not. First claim wins a row.
+        if (text.includes('returning')) {
+          return Promise.resolve([{ liquidation_id: values[0] }]);
+        }
         return Promise.resolve([]);
       }
       if (text.includes('from trade.positions')) {
@@ -83,6 +87,27 @@ describe('sqlLiquidationAttemptStore', () => {
     expect(await store.isDone('fresh')).toBe(false);
     expect(await store.isDone('done-liq')).toBe(true);
     await store.markDone('fresh');
+  });
+
+  it('tryClaim is true when INSERT returns a row (first worker wins)', async () => {
+    const sql = mockSql();
+    const store = sqlLiquidationAttemptStore(sql as never);
+    expect(await store.tryClaim('liq-new')).toBe(true);
+  });
+
+  it('tryClaim is false when INSERT returns nothing (conflict — already claimed)', async () => {
+    const sql = Object.assign(
+      (strings: TemplateStringsArray, ..._values: unknown[]) => {
+        const text = strings.join('?').toLowerCase();
+        if (text.includes('insert into trade.liquidation_attempts') && text.includes('returning')) {
+          return Promise.resolve([]); // ON CONFLICT DO NOTHING — no row
+        }
+        return Promise.resolve([]);
+      },
+      { calls: [] as unknown[][] },
+    );
+    const store = sqlLiquidationAttemptStore(sql as never);
+    expect(await store.tryClaim('liq-taken')).toBe(false);
   });
 });
 

@@ -149,6 +149,19 @@ export function sqlLiquidationAttemptStore(sql: Sql): LiquidationAttemptStore {
       `;
       return rows.length > 0;
     },
+    /**
+     * INSERT … ON CONFLICT DO NOTHING RETURNING — true only for the worker that
+     * created the row. That is the claim that must precede any loss post.
+     */
+    async tryClaim(liquidationId) {
+      const rows = await sql<{ liquidation_id: string }[]>`
+        INSERT INTO trade.liquidation_attempts (liquidation_id)
+        VALUES (${liquidationId})
+        ON CONFLICT (liquidation_id) DO NOTHING
+        RETURNING liquidation_id
+      `;
+      return rows.length > 0;
+    },
     async markDone(liquidationId) {
       await sql`
         INSERT INTO trade.liquidation_attempts (liquidation_id)
