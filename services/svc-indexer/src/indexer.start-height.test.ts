@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryChainSource } from './chain/memory-source.js';
 import { MemoryProjectionStore } from './projection/memory-store.js';
-import { Indexer } from './indexer.js';
+import { Indexer, StartHeightAboveTipError } from './indexer.js';
 import { CHAIN_ID } from './testing/conformance.js';
 
 /**
@@ -80,4 +80,24 @@ it('batchSize 1 applies one block per pass and reports not caught up until tip',
   expect(done.blocksApplied).toBe(0);
   expect(done.caughtUp).toBe(true);
   expect((await store.head())?.height).toBe(2);
+});
+
+it('startHeight above chain tip refuses — no healthy empty caughtUp', async () => {
+  const source = new MemoryChainSource(CHAIN_ID, 0);
+  source.appendEmpty(3); // tip height 2
+  const store = new MemoryProjectionStore(CHAIN_ID);
+  const indexer = new Indexer({
+    source,
+    store,
+    finalityDepth: 64,
+    batchSize: 10,
+    ingestEnabled: () => true,
+    startHeight: 50,
+  });
+
+  await expect(indexer.sync()).rejects.toBeInstanceOf(StartHeightAboveTipError);
+  expect(await store.head()).toBeNull();
+  expect(indexer.lastError?.code).toBe('indexer.start_height_above_tip');
+  // Must not look like a successful empty catch-up.
+  expect(indexer.halted).toBeNull();
 });
