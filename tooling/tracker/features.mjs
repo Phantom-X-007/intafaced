@@ -595,8 +595,13 @@ export const FEATURES = [
   f('pay.subscriptions', 'Recurring — card and crypto', {
     module: 'pay',
     phase: '3',
+    status: 'wip',
+    owner: 'nitro-pay-w3',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    note:
+      '**Wave 3 2026-08-09:** schedule arithmetic transplanted from svc-bank (S1 pure). ' +
+      'Crypto = invoice-and-watch only (protocol FORBIDDEN_SIGNATURES). Card mandate later. ' +
+      'Not auto-pull. Residual: schema/executions, lifecycle, runner, dunning.',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',

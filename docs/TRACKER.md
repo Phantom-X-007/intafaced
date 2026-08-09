@@ -168,7 +168,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Smart routing — geo, method, risk, approval rate <br/>_**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M._ | F |  | `pay.routing` |
 | 🟢 | Dual settlement — bank or crypto <br/>_**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M._ | F |  | `pay.settlement` |
 | ⛔ | Risk scoring, chargebacks, decline recovery <br/>_**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M._ | F | `pay.gateway` | `pay.fraud` |
-| ⛔ | Recurring — card and crypto <br/>_**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M._ | F | `pay.gateway` | `pay.subscriptions` |
+| ⛔ | Recurring — card and crypto <br/>_**Wave 3 2026-08-09:** schedule arithmetic transplanted from svc-bank (S1 pure). Crypto = invoice-and-watch only (protocol FORBIDDEN_SIGNATURES). Card mandate later. Not auto-pull. Residual: schema/executions, lifecycle, runner, dunning._ | F | `pay.gateway` | `pay.subscriptions` |
 | ⛔ | Woo / Magento / OpenCart plugins <br/>_**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M._ | F | `pay.gateway` | `pay.plugins` |
 | ⛔ | Public REST + webhooks + sandbox (§9) <br/>_Steps 1–5 on tip (#988/#994/#1006/#1014/#1024). Ghost nitro-money-w3 cleared 2026-08-09 (merged #1006, no open PR, no remote branch). Residual: service mounted at /api/pay/v1 while edge strips /api/pay → every external REST call 404d; fix BASE=/v1, keep OpenAPI servers /api/pay/v1, no preservePath. Owner grant path for pay:* still DIRECTION §8.4 (Nitro). Not Class X acquirer._ | B | `pay.gateway` | `pay.public-api` |
 | ✅ | Offers, maker/taker, 100+ fiat currencies <br/>_svc-p2p on main; self-mounts /trpc with an edge-verified principal_ | F |  | `p2p.offers` |
