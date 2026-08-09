@@ -143,7 +143,7 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
    */
   it('serves markets, accountFills and singular position with no credentials', async () => {
     const caller = (await seeded()).createCaller(anonymous());
-    const seededAccount = '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    // Seed applies uppercase 0xAA…; store normalises to lower (#1228).
     const lowerAccount = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const emptyAccount = '0x0000000000000000000000000000000000000001';
 
@@ -151,6 +151,7 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
     expect(markets).toContain('IFC-USD');
 
     // Mixed-case address must hit the same tape as the seed (case-insensitive).
+    // Stored addresses are lowercased (#1228) — assert the canonical form.
     const accountFills = await caller.accountFills({ account: lowerAccount, limit: 10 });
     expect(accountFills).toHaveLength(1);
     expect(accountFills[0]).toMatchObject({
