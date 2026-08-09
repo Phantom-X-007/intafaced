@@ -21,6 +21,7 @@ import { requireCredentials, type VenueCredentials } from '@intafaced/venue-cont
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamPort } from '../transport.js';
 import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
 import { VenueLatencyGrader } from '../latency.js';
+import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
 
 /**
  * BINANCE SPOT — the first venue in the fabric, done properly.
@@ -133,6 +134,22 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
     this.#clock = options.clock ?? Date.now;
     this.governor = options.governor ?? new RateLimitGovernor(BINANCE_SPOT_RATE_LIMIT, this.#clock());
     this.grader = options.grader ?? new VenueLatencyGrader(VENUE.id);
+  }
+
+  /**
+   * This adapter's `rest-round-trip` grade, from the calls it has actually made.
+   *
+   * Every REST read goes through `#get`, which records an observation on all
+   * four of its exits (ok / 429-reject / non-2xx / unreachable), so this is a
+   * measurement of real traffic and not a self-report. Before the first call it
+   * is UNGRADED — `grade: null`, not `'F'` — because we have not measured this
+   * venue, which is a different fact from having measured it and found it bad.
+   *
+   * Declared on `MarketDataAdapter` so a consumer holding the interface can read
+   * it; see that contract for why it is optional there.
+   */
+  latencyGrade(now: Date = new Date(this.#clock())): VenueLatencyGrade {
+    return this.grader.grade(now);
   }
 
   async markets(): Promise<VenueMarket[]> {

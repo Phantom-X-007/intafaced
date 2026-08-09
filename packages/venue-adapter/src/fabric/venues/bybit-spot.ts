@@ -18,6 +18,7 @@ import {
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamHandle, type StreamPort } from '../transport.js';
 import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
 import { VenueLatencyGrader } from '../latency.js';
+import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
 
 /**
  * BYBIT SPOT — the SECOND venue, and the first thing that makes grading mean
@@ -235,6 +236,22 @@ export class BybitSpotMarketData implements MarketDataAdapter {
     this.#heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
     this.governor = options.governor ?? new RateLimitGovernor(BYBIT_SPOT_RATE_LIMIT, this.#clock());
     this.grader = options.grader ?? new VenueLatencyGrader(VENUE.id);
+  }
+
+  /**
+   * This adapter's `rest-round-trip` grade, from the calls it has actually made.
+   *
+   * Bybit's grade is the one that makes grading mean anything: with a single
+   * venue a grade has no peer to be compared against, and #1148 landed this
+   * adapter for exactly that reason. Before the first call it is UNGRADED —
+   * `grade: null`, not `'F'` — because "we have not called Bybit" and "Bybit is
+   * slow" are different facts with different fixes.
+   *
+   * Declared on `MarketDataAdapter` so a consumer holding the interface can read
+   * it; see that contract for why it is optional there.
+   */
+  latencyGrade(now: Date = new Date(this.#clock())): VenueLatencyGrade {
+    return this.grader.grade(now);
   }
 
   /**

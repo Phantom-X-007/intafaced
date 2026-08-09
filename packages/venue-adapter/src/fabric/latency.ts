@@ -1,4 +1,26 @@
 import type { VenueHealth } from '../source.js';
+import {
+  isGraded,
+  type LatencyGrade,
+  type LatencyMeasurement,
+  type LatencyObservation,
+  type VenueLatencyGrade,
+} from '@intafaced/venue-contracts';
+
+// The vocabulary lives in `@intafaced/venue-contracts` (`latency.ts`) so that
+// `MarketDataAdapter` can declare `latencyGrade()` — an adapter cannot offer a
+// grade through an interface with no word for one. Re-exported here because this
+// is where callers already look for grading, and a caller should not have to know
+// which of the two packages a type happens to be declared in.
+export { isGraded };
+export type {
+  GradedVenueLatency,
+  LatencyGrade,
+  LatencyMeasurement,
+  LatencyObservation,
+  ObservationOutcome,
+  VenueLatencyGrade,
+} from '@intafaced/venue-contracts';
 
 /**
  * LATENCY GRADING — §27's "every adapter continuously scored — round-trip, book
@@ -30,15 +52,24 @@ import type { VenueHealth } from '../source.js';
  *     up until the fill comes back at a price from thirty seconds ago.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * `provisional` — THE HONEST PART
+ * THREE STATES, NOT TWO — `ungraded` vs `provisional` vs graded
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Two samples do not make a p95. A grader that answered "A" on the strength of
- * two fast reads would be inventing confidence, and the router would act on it.
- * So a grade computed from fewer than `minSamples` observations is marked
- * `provisional`, and a caller that is about to move money can refuse to weight
- * on it. The grade is still returned — an honest weak signal beats no signal —
- * but it is labelled.
+ * These are routinely confused and they are not the same claim:
+ *
+ *   · **ungraded** (`grade: null`) — NO evidence. Nothing has been observed in
+ *     the window. We say so, rather than scoring it. See the `latency.ts` header
+ *     in `@intafaced/venue-contracts` for why this is `null` and emphatically
+ *     not `'F'`, and for D-S-18, the Accepted ADR that requires it.
+ *   · **provisional** — THIN evidence. Two samples do not make a p95, and a
+ *     grader that answered "A" on two fast reads would be inventing confidence
+ *     the router would then act on. The letter is returned, because an honest
+ *     weak signal beats no signal, but it is labelled and it is not allowed to
+ *     exclude a venue by itself.
+ *   · **graded** — enough evidence for the letter to mean something.
+ *
+ * A consumer branches on `isGraded` first and `provisional` second. Branching on
+ * `provisional` alone silently lumps "never measured" in with "barely measured".
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * HOW IT FEEDS ROUTING, WITHOUT BREAKING BEST EXECUTION
@@ -54,23 +85,24 @@ import type { VenueHealth } from '../source.js';
  * REPORTED in `RoutePlan.rejected` (§27's requirement, exactly), and `latencyMs`
  * breaks ties between venues at the same price. That is the whole wiring, and
  * it is one function: `healthFromGrade`.
+ *
+ * Producing the grade is this file's job. CONSUMING it — an §28 cost model that
+ * weights the grade against expected impact and transfer cost — belongs to
+ * `execution.sor`, which is a separate boarded row and is blocked. §28:770 makes
+ * the grade ONE INPUT to that model, never a ranking rule of its own, and
+ * D-S-06 (`docs/adr/2026-08-04-matching-dual-target.md`, Accepted) leaves the
+ * bounded, tested 5 bps internal tie-break in `router.ts` as the only permitted
+ * preference. A second latency-shaped ranking rule is therefore not a matter of
+ * taste here; it is forbidden.
  */
 
-export type LatencyGrade = 'A' | 'B' | 'C' | 'D' | 'F';
-
-export type ObservationOutcome =
-  /** Answered with usable data. */
-  | 'ok'
-  /** Answered, and said no. A rejected order, a refused subscription. */
-  | 'reject'
-  /** Did not answer usefully: timeout, socket close, non-2xx, malformed payload. */
-  | 'error';
-
-export interface LatencyObservation {
-  readonly roundTripMs: number;
-  readonly outcome: ObservationOutcome;
-  readonly at: Date;
-}
+/**
+ * What every grade in this file measures. See the `latency.ts` header in
+ * `@intafaced/venue-contracts` for the full list of what it does NOT measure —
+ * in short: not stream delivery lag, not book staleness, not venue-side
+ * matching, and not time spent waiting on our own rate-limit governor.
+ */
+const MEASUREMENT: LatencyMeasurement = 'rest-round-trip';
 
 export interface LatencyThresholds {
   /** p95 round-trip ceilings, in ms, for grades A/B/C/D. Above the last is F. */
@@ -89,23 +121,6 @@ export const DEFAULT_THRESHOLDS: LatencyThresholds = {
   maxStalenessMs: 5_000,
   minSamples: 10,
 };
-
-export interface VenueLatencyGrade {
-  readonly venueId: string;
-  readonly grade: LatencyGrade;
-  readonly samples: number;
-  /** `null` with no successful samples — not zero, which reads as "instant". */
-  readonly p50Ms: number | null;
-  readonly p95Ms: number | null;
-  readonly rejectRateBps: number;
-  readonly errorRateBps: number;
-  /** Since the last observation of any kind. `null` before the first one. */
-  readonly staleMs: number | null;
-  /** True when there are too few samples for the grade to mean much. See the header. */
-  readonly provisional: boolean;
-  /** Every reason the grade is not an A, in the order they were applied. */
-  readonly reasons: readonly string[];
-}
 
 /**
  * A rolling window of observations for one venue.
@@ -160,30 +175,49 @@ export class VenueLatencyGrader {
     const rejects = this.#window.filter((o) => o.outcome === 'reject').length;
     const errors = this.#window.filter((o) => o.outcome === 'error').length;
 
-    const rejectRateBps = samples === 0 ? 0 : Math.round((rejects / samples) * 10_000);
-    const errorRateBps = samples === 0 ? 0 : Math.round((errors / samples) * 10_000);
+    // ── UNGRADED ────────────────────────────────────────────────────────────
+    //
+    // No observations in the window is NOT a grade. D-S-18 (Accepted,
+    // `docs/adr/2026-08-04-predict-quant-connect-law.md`): "A score for an
+    // adapter that has not run is not a low score — it is no score."
+    //
+    // This returned `'F'` until #1148's second venue made grading mean anything,
+    // and `'F'` was wrong in both directions: it asserted a measured property of
+    // a venue we may never have contacted, and it was indistinguishable from a
+    // venue we DID measure and found unusable. Those two need opposite
+    // responses — one is a venue fault, the other is unwired plumbing on our
+    // side — so they must not share a representation.
+    //
+    // Every derived statistic is `null` here for the same reason. A 0% reject
+    // rate over zero samples reads as "never once refused us", which is a
+    // perfect score awarded for silence.
+    //
+    // `provisional` is true but it is not the point: `provisional` describes a
+    // grade with thin evidence, and this is a grade with NO evidence. Consumers
+    // must branch on `isGraded`, not on `provisional`.
+    if (samples === 0) {
+      return {
+        venueId: this.venueId,
+        measurement: MEASUREMENT,
+        grade: null,
+        samples: 0,
+        p50Ms: null,
+        p95Ms: null,
+        rejectRateBps: null,
+        errorRateBps: null,
+        staleMs,
+        provisional: true,
+        reasons: ['ungraded — no observations in the window; not measured, so not scored'],
+      };
+    }
+
+    const rejectRateBps = Math.round((rejects / samples) * 10_000);
+    const errorRateBps = Math.round((errors / samples) * 10_000);
     const p50Ms = percentile(successes, 50);
     const p95Ms = percentile(successes, 95);
 
     const reasons: string[] = [];
     let grade: LatencyGrade = 'A';
-
-    // Never observed at all is F, not A. An absence of bad news about a venue we
-    // have never spoken to is not evidence that it works.
-    if (samples === 0) {
-      return {
-        venueId: this.venueId,
-        grade: 'F',
-        samples: 0,
-        p50Ms: null,
-        p95Ms: null,
-        rejectRateBps: 0,
-        errorRateBps: 0,
-        staleMs,
-        provisional: true,
-        reasons: ['no observations in the window — never graded, not graded good'],
-      };
-    }
 
     if (staleMs !== null && staleMs > this.#thresholds.maxStalenessMs) {
       reasons.push(`last observation ${staleMs}ms ago, ceiling ${this.#thresholds.maxStalenessMs}ms`);
@@ -210,6 +244,7 @@ export class VenueLatencyGrader {
 
     return {
       venueId: this.venueId,
+      measurement: MEASUREMENT,
       grade,
       samples,
       p50Ms,
@@ -247,17 +282,61 @@ export class VenueLatencyGrader {
  * A `provisional` grade is never allowed to mark a venue unhealthy on its own:
  * excluding a venue on two samples would take real liquidity off the router for
  * no evidence. It can still be F for staleness, which needs no sample count.
+ *
+ * ── UNGRADED IS NOT PERMISSION TO ROUTE ─────────────────────────────────────
+ *
+ * The asymmetry in `venue-contracts/latency.ts` is enforced here. An ungraded
+ * venue is not given a bad grade, but it is NOT routable either — D-S-18's
+ * second clause is "an unscored adapter must not receive routing weight". So
+ * `grade: null` produces `healthy: false`, and the two statements coexist
+ * without contradiction: we do not claim the venue is slow, we decline to route
+ * to a venue we have not measured.
+ *
+ * ── `UNMEASURED_LATENCY_MS` IS A SENTINEL, AND IT ONLY SORTS ONE WAY ─────────
+ *
+ * `VenueHealth.latencyMs` is a required `number` (`source.ts`), shared with
+ * every other rail in the repo, so "no measurement" has no `null` to use here
+ * and something must be written. That is the one place this file cannot follow
+ * the refuse-rather-than-fabricate rule to the letter, so the mitigation is
+ * directional rather than representational:
+ *
+ * The sentinel is the MAXIMUM safe integer, and `router.ts` sorts `latencyMs`
+ * ASCENDING at its tie-break. An unmeasured venue therefore always loses a tie
+ * it participates in — it can never be preferred on a latency it does not have.
+ * Being wrong in the conservative direction is the whole of the guarantee.
+ *
+ * It is emitted in two cases, and only one of them is also `healthy: false`:
+ *
+ *   · ungraded — no observations at all. Excluded, so it never reaches ranking.
+ *   · graded, but with no SUCCESSFUL observation (every call errored). If that
+ *     grade is `provisional`, the venue stays healthy on too-few-samples and
+ *     does carry the sentinel into ranking — where, per the above, it loses.
+ *
+ * Both are pinned by tests. If a future change ever flips that sort to
+ * descending, or gives the sentinel a small value, an unmeasured venue starts
+ * winning tie-breaks on money — so those pins are load-bearing, not decorative.
  */
+export const UNMEASURED_LATENCY_MS = Number.MAX_SAFE_INTEGER;
+
 export function healthFromGrade(grade: VenueLatencyGrade, lastUpdate: Date): VenueHealth {
+  if (!isGraded(grade)) {
+    return {
+      healthy: false,
+      latencyMs: UNMEASURED_LATENCY_MS,
+      lastUpdate,
+      reason: `ungraded: ${grade.reasons.join('; ')}`,
+    };
+  }
+
   const failing = grade.grade === 'F';
-  // A grade built on too little data may not exclude a venue on its own — but a
-  // grader with NO samples has not measured anything, and "unmeasured" is not
-  // "healthy". That case stays excluded.
-  const trusted = !grade.provisional || grade.samples === 0;
+  // A grade built on too little data may not exclude a venue on its own:
+  // excluding on two samples takes real liquidity off the router for no
+  // evidence. The no-samples case never reaches here — it is handled above.
+  const trusted = !grade.provisional;
 
   return {
     healthy: !(failing && trusted),
-    latencyMs: grade.p95Ms ?? Number.MAX_SAFE_INTEGER,
+    latencyMs: grade.p95Ms ?? UNMEASURED_LATENCY_MS,
     lastUpdate,
     reason: grade.reasons.length > 0 ? `grade ${grade.grade}: ${grade.reasons.join('; ')}` : undefined,
   };

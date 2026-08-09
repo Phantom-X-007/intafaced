@@ -2,6 +2,7 @@ import type { VenueMarket } from './market.js';
 import type { VenueBookDelta, VenueBookSnapshot } from './book.js';
 import type { BorrowRate, FundingRate, VenueTrade } from './rates.js';
 import type { TransferRail, VenueBalance, VenueOrder, VenueOrderType, VenuePosition } from './account.js';
+import type { VenueLatencyGrade } from './latency.js';
 import { VenueCredentialScopeError, VenueCredentialsMissingError } from './errors.js';
 import type { Amount } from '@intafaced/ledger-client/money';
 
@@ -112,6 +113,44 @@ export interface MarketDataAdapter {
   /** Perpetual venues only. */
   fundingRate?(symbol: string): Promise<FundingRate>;
   borrowRate?(asset: string): Promise<BorrowRate>;
+
+  /**
+   * This adapter's own latency grade, from the observations it has actually
+   * made (§27:760). Measurement, window and the meaning of `null` are all
+   * defined in `latency.ts` — read that before consuming this.
+   *
+   * ── Why this is on the adapter, and why it is optional ──────────────────
+   *
+   * §27 wants "every adapter continuously scored". An adapter is the only thing
+   * that knows how long its own calls took, so the score has to be readable
+   * from the adapter — a grade that exists only inside the fabric, reachable
+   * solely by code that constructed the grader itself, is the unreachable-guard
+   * failure this repo has hit repeatedly: correct in isolation, wired to
+   * nothing.
+   *
+   * Declaring it HERE rather than on the concrete classes is what makes it
+   * reachable in practice. Consumers hold a `MarketDataAdapter`, not a
+   * `BinanceSpotMarketData`, so a method that exists only on the class is
+   * invisible through the type they actually have.
+   *
+   * OPTIONAL, and the optionality is meaningful rather than lenient. There are
+   * two distinct absences and they must not collapse into one:
+   *
+   *   · **Method absent** — this adapter does not measure itself at all. A
+   *     consumer learns that grading is unavailable here, which is a fact about
+   *     our wiring.
+   *   · **Method present, `grade: null`** — this adapter measures, and has no
+   *     observations yet. A fact about the venue traffic, not about the wiring.
+   *
+   * Collapsing them would make "we never built grading for this venue" and "we
+   * have not called this venue yet" the same reading, and only one of those is
+   * fixed by waiting.
+   *
+   * `now` is injected for the same reason every clock in this package is: a
+   * grade is a statement about a window ending at a specific instant, and a
+   * function that reads the wall clock cannot be tested against a stale window.
+   */
+  latencyGrade?(now?: Date): VenueLatencyGrade;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
