@@ -67,7 +67,7 @@ pnpm verify           # everything below, in this order — run this one
 `pnpm verify` is:
 
 ```bash
-pnpm gates            # 14 doctrine gates, ~2s — brand §0.7 · custody §16.10 ·
+pnpm gates            # 29 doctrine gates, ~2s — brand §0.7 · custody §16.10 ·
                       # secrets · vendor-shell · vendor-java-money ·
                       # dual-book door + door-paths · test-db isolation ·
                       # killswitch §14.6 · migrations §14 · workspace · tracker ·
