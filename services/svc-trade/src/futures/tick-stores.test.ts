@@ -47,6 +47,33 @@ describe('sqlFundingPeriodStore', () => {
     const store = sqlFundingPeriodStore(sql as never);
     expect(await store.isSettled('settled-period')).toBe(true);
   });
+
+  it('freezeMembership inserts then reads the frozen set (no open-now fallback)', async () => {
+    const calls: unknown[][] = [];
+    let frozen: string[] | null = null;
+    const sql = Object.assign(
+      (strings: TemplateStringsArray, ...values: unknown[]) => {
+        calls.push([...values]);
+        const text = strings.join('?').toLowerCase();
+        if (text.includes('insert into trade.funding_period_membership')) {
+          if (frozen == null) frozen = values[2] as string[];
+          return Promise.resolve([]);
+        }
+        if (text.includes('select member_position_ids')) {
+          return Promise.resolve(frozen ? [{ member_position_ids: frozen }] : []);
+        }
+        return Promise.resolve([]);
+      },
+      { calls },
+    );
+    const store = sqlFundingPeriodStore(sql as never);
+    const first = await store.freezeMembership('m1:p', ['pos-a', 'pos-b']);
+    expect(first).toEqual(['pos-a', 'pos-b']);
+    // Second call must not widen — insert is ON CONFLICT DO NOTHING; select returns first set.
+    frozen = ['pos-a', 'pos-b'];
+    const second = await store.freezeMembership('m1:p', ['pos-a', 'pos-b', 'pos-c']);
+    expect(second).toEqual(['pos-a', 'pos-b']);
+  });
 });
 
 describe('sqlLiquidationAttemptStore', () => {

@@ -90,6 +90,30 @@ export function sqlFundingPeriodStore(sql: Sql): FundingPeriodStore {
         ON CONFLICT (period_id) DO NOTHING
       `;
     },
+    async freezeMembership(periodId, candidateIds) {
+      // market_id from periodId prefix — same rule as markSettled (never invent a market).
+      const marketId = periodId.includes(':') ? periodId.slice(0, periodId.indexOf(':')) : periodId;
+      // First writer freezes the full candidate set atomically. Replays and
+      // concurrent ticks see the same membership; new openers never join.
+      await sql`
+        INSERT INTO trade.funding_period_membership (period_id, market_id, member_position_ids)
+        VALUES (${periodId}, ${marketId}, ${[...candidateIds]}::text[])
+        ON CONFLICT (period_id) DO NOTHING
+      `;
+      const rows = await sql<{ member_position_ids: string[] }[]>`
+        SELECT member_position_ids
+          FROM trade.funding_period_membership
+         WHERE period_id = ${periodId}
+         LIMIT 1
+      `;
+      const frozen = rows[0]?.member_position_ids;
+      if (!frozen) {
+        // Insert raced with a delete or table missing — refuse rather than
+        // fall back to open-now (that is the defect this table closes).
+        throw new Error(`funding membership freeze for ${periodId} produced no row — refusing open-now fallback`);
+      }
+      return frozen;
+    },
     async recordSkip(periodId, meta) {
       await sql`
         INSERT INTO trade.funding_period_skips (period_id, market_id, reason)
