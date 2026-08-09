@@ -161,12 +161,18 @@ export class CommerceService {
       throw new MarketError('Listing price must be positive', 'market.listing_invalid_price');
     }
 
-    const eligibility = await this.vendors.listingEligibility({ userId: input.userId });
-    if (!eligibility.listed || !eligibility.vendorId) {
-      throw new MarketError(
-        eligibility.reason ?? 'Vendor is not eligible to create listings',
-        eligibility.code ?? 'market.vendor_not_approved',
-      );
+    // Create gate ≠ public "listed". A vendor is listed only AFTER they hold a
+    // usable slot; the first listing is what claims that slot. Using
+    // listingEligibility here would refuse every first listing with
+    // market.slot_required (chicken-and-egg). Create requires: approved vendor
+    // + claimSlot success (stake capacity / not exhausted). Public catalogue and
+    // purchase still re-read listingEligibility so unstaked vendors drop out.
+    const vendor = await this.vendors.myVendor(input.userId);
+    if (!vendor) {
+      throw new MarketError('You have not applied to be a vendor', 'market.vendor_not_found');
+    }
+    if (vendor.status !== 'approved') {
+      throw new MarketError('Only an approved vendor can create listings', 'market.vendor_not_approved');
     }
 
     const priceStr = formatAmount(price);
@@ -175,7 +181,7 @@ export class CommerceService {
     const inserted = await this.sql<ListingRow[]>`
       INSERT INTO market.listings (vendor_id, title, description, offer_type, asset_id, price, status)
       VALUES (
-        ${eligibility.vendorId},
+        ${vendor.id},
         ${title},
         ${description},
         ${input.offerType},
