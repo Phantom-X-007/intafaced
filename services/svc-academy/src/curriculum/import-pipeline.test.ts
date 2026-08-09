@@ -193,7 +193,6 @@ describe('Stage-3 curriculumImportStageStatus', () => {
   });
 });
 
-
 describe('import body floor matches curriculum depth floor', () => {
   it('refuses a 40-char stub that would have passed the old brandChecklist', async () => {
     const { validateImportRecord } = await import('./import-pipeline.js');
@@ -211,9 +210,7 @@ describe('import body floor matches curriculum depth floor', () => {
     expect(stub.body.trim().length).toBeGreaterThanOrEqual(40);
     const result = validateImportRecord(stub);
     expect(result.ok).toBe(false);
-    expect(result.issues.some((i) => i.field === 'body' && i.message.includes(String(CURRICULUM_MIN_BODY_CHARS)))).toBe(
-      true,
-    );
+    expect(result.issues.some((i) => i.field === 'body' && i.message.includes(String(CURRICULUM_MIN_BODY_CHARS)))).toBe(true);
   });
 
   it('accepts a deep body that meets CURRICULUM_MIN_BODY_CHARS', async () => {
