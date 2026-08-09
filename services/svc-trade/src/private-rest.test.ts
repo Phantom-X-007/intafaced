@@ -1340,7 +1340,7 @@ describe('private REST — mount boundary + order write path', () => {
           method: 'POST',
           url: '/api/v1/positions',
           headers: signedHeaders(),
-          payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', [field]: '1' },
+          payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', [field]: '1' },
         });
         expect(res.statusCode).toBe(400);
         expect(res.json().error).toBe('trade.price_not_accepted');
@@ -1357,7 +1357,7 @@ describe('private REST — mount boundary + order write path', () => {
         method: 'POST',
         url: '/api/v1/positions',
         headers: signedHeaders(),
-        payload: { entryPrice: '50000' },
+        payload: { clientOpenId: 'rest-test-open', entryPrice: '50000' },
       });
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('trade.price_not_accepted');
@@ -1437,7 +1437,7 @@ describe('private REST — mount boundary + order write path', () => {
         method: 'POST',
         url: '/api/v1/positions',
         headers: signedHeaders(),
-        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10' },
+        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10' },
       });
       expect(res.statusCode).toBe(200);
       expect(seen).toHaveLength(1);
@@ -1475,12 +1475,34 @@ describe('private REST — mount boundary + order write path', () => {
       await app.close();
     });
 
+    it('POST /positions without clientOpenId → 400 and openPosition is never called', async () => {
+      let called = false;
+      const app = await build(
+        deps({
+          openPosition: async () => {
+            called = true;
+            return { id: 'pos-1' } as never;
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '5' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().intafacedCode).toBe('trade.client_open_id_required');
+      expect(called).toBe(false);
+      await app.close();
+    });
+
     it('an unauthenticated caller is still refused first — the price check does not open a hole', async () => {
       const app = await build();
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/positions',
-        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', entryPrice: '1' },
+        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', entryPrice: '1' },
       });
       expect(res.statusCode).toBe(401);
       await app.close();
@@ -1504,7 +1526,7 @@ describe('private REST — mount boundary + order write path', () => {
         method: 'POST',
         url: '/api/v1/positions',
         headers: signedHeaders(),
-        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', marginMode: 'cross' },
+        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', marginMode: 'cross' },
       });
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('trade.cross_margin_unsupported');
@@ -1530,7 +1552,7 @@ describe('private REST — mount boundary + order write path', () => {
         method: 'POST',
         url: '/api/v1/positions',
         headers: signedHeaders(),
-        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'cross' },
+        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'cross' },
       });
       expect(seen).toEqual([]);
       await app.close();
@@ -1547,8 +1569,8 @@ describe('private REST — mount boundary + order write path', () => {
         }),
       );
       for (const payload of [
-        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'isolated' },
-        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1' },
+        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'isolated', clientOpenId: 'iso-1' },
+        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', clientOpenId: 'iso-2' },
       ]) {
         const res = await app.inject({ method: 'POST', url: '/api/v1/positions', headers: signedHeaders(), payload });
         expect(res.statusCode).toBe(200);
@@ -1563,7 +1585,7 @@ describe('private REST — mount boundary + order write path', () => {
         method: 'POST',
         url: '/api/v1/positions',
         headers: signedHeaders(),
-        payload: { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'portfolio' },
+        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'portfolio' },
       });
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('trade.bad_request');

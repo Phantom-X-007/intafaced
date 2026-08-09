@@ -105,8 +105,8 @@ export interface PrivateRestDeps {
        * a value the type system cannot express.
        */
       marginMode?: 'isolated';
-      /** Retry key — same as spot clientOrderId; see positionIdFor. */
-      clientOpenId?: string;
+      /** Required retry key — same as spot clientOrderId; see positionIdFor. */
+      clientOpenId: string;
     },
   ): Promise<Position>;
   /** Close at the current mark. No price parameter, for the same reason. */
@@ -742,12 +742,15 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
           ...badRequest('symbol, side, size|contracts required', 'trade.bad_request').body,
         });
       }
-      const clientOpenId =
-        typeof body.clientOpenId === 'string'
-          ? body.clientOpenId
-          : typeof body.clientPositionId === 'string'
-            ? body.clientPositionId
-            : undefined;
+      const clientOpenIdRaw =
+        typeof body.clientOpenId === 'string' ? body.clientOpenId : typeof body.clientPositionId === 'string' ? body.clientPositionId : '';
+      const clientOpenId = clientOpenIdRaw.trim();
+      if (!clientOpenId || clientOpenId.length > 64) {
+        return reply.code(400).send({
+          ...badRequest('clientOpenId is required (1–64 chars) — omit would double-lock margin on retry', 'trade.client_open_id_required')
+            .body,
+        });
+      }
 
       const pos = await deps.openPosition(principal, {
         symbol,

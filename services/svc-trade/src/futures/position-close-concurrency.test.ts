@@ -196,7 +196,14 @@ if (!available) {
    */
   async function openWinner(service: PositionService) {
     feed('50000');
-    const pos = await service.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const pos = await service.open({
+      clientOpenId: 't-open-position-close-concurrency.test-1',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     feed('55000');
     return pos;
   }
@@ -378,8 +385,22 @@ if (!available) {
     `;
     feed('50000');
     feed('50000', MARKET_2);
-    const a = await service.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
-    const b = await service.open({ userId: ALICE, symbol: 'ETH/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const a = await service.open({
+      clientOpenId: 't-open-position-close-concurrency.test-2',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const b = await service.open({
+      clientOpenId: 't-open-position-close-concurrency.test-3',
+      userId: ALICE,
+      symbol: 'ETH/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     feed('55000');
     feed('55000', MARKET_2);
     await Promise.all([service.close(ALICE, a.id!), service.close(ALICE, b.id!)]);

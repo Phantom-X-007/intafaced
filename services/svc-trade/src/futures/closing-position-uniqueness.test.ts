@@ -172,7 +172,15 @@ if (!available) {
     await db.drop();
   }, 30_000);
 
-  const openLong = () => service.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+  const openLong = () =>
+    service.open({
+      clientOpenId: 't-open-closing-position-uniqueness.test-1',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
 
   /**
    * THE REPRODUCTION, through the real service and the real migrations.

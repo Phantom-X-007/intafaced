@@ -178,6 +178,7 @@ if (!available) {
   it('open prices from the feed, locks margin, and listOpen returns the row', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-1',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -200,6 +201,7 @@ if (!available) {
   it('close releases margin and empties listOpen', async () => {
     feed('40000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-2',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'short',
@@ -223,6 +225,7 @@ if (!available) {
       { durable: 'test-position-updated' },
     );
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-3',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -251,6 +254,7 @@ if (!available) {
   it('realised PnL follows the feed, and the caller has no argument to change it', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-4',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -271,6 +275,7 @@ if (!available) {
     feed('50000');
     await fundProfitSource('10000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-5',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -286,10 +291,31 @@ if (!available) {
 
   // ── D-S-07: a missing mark is not a zero mark ────────────────────────────────
 
+  it('refuses open without clientOpenId — no random id, no margin lock', async () => {
+    await expect(
+      positions.open({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+        clientOpenId: '',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.client_open_id_required' });
+    expect(ledger.journal().filter((tx) => String(tx.reason).includes('futures.margin'))).toHaveLength(0);
+  });
+
   it('refuses to OPEN when the feed has no mark, and no margin is locked', async () => {
     const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     await expect(
-      positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') }),
+      positions.open({
+        clientOpenId: 't-open-position-service.test-6',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+      }),
     ).rejects.toMatchObject({ code: 'trade.mark_missing' });
 
     // Nothing moved, and no row was written.
@@ -305,6 +331,7 @@ if (!available) {
   it('freezes to closing when the feed goes dark on voluntary close — no 503, no payout', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-7',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -331,6 +358,7 @@ if (!available) {
   it('a losing close with no usable mark freezes rather than fails', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-8',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -347,6 +375,7 @@ if (!available) {
   it('retrying close while dark is idempotent — same closing row, not an error', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-9',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -365,6 +394,7 @@ if (!available) {
   it('freezes when the mark is stale past the marking limit (unusable, not invent)', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-10',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -386,6 +416,7 @@ if (!available) {
     feed('50000');
     await fundProfitSource('10000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-11',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -408,6 +439,7 @@ if (!available) {
     feed('100');
     await fundProfitSource('10000000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-12',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -432,6 +464,7 @@ if (!available) {
     feed('50000');
     await fundProfitSource('10000');
     const winner = await positions.open({
+      clientOpenId: 't-open-position-service.test-13',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -461,6 +494,7 @@ if (!available) {
     feed('50000');
     await fundProfitSource('500');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-14',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -485,6 +519,7 @@ if (!available) {
     feed('50000');
     await fundProfitSource('1000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-15',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -500,6 +535,7 @@ if (!available) {
   it('the bound never blocks a losing close — a control that traps funds is not a control', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-16',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -522,6 +558,7 @@ if (!available) {
   it('refuses a bankrupt voluntary close when the insurance fund is empty', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-17',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -553,6 +590,7 @@ if (!available) {
     const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     await expect(
       positions.open({
+        clientOpenId: 't-open-position-service.test-18',
         userId: ALICE,
         symbol: 'BTC/USDT-PERP',
         side: 'long',
@@ -568,7 +606,14 @@ if (!available) {
 
   it('opens isolated when the mode is omitted, and says so on the wire', async () => {
     feed('50000');
-    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-19',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     expect(pos.marginMode).toBe('isolated');
   });
 
@@ -596,6 +641,7 @@ if (!available) {
     `;
     await expect(
       positions.open({
+        clientOpenId: 't-open-position-service.test-20',
         userId: ALICE,
         symbol: 'ETH/USDT',
         side: 'long',
@@ -630,7 +676,14 @@ if (!available) {
     feed('50000');
     const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     await expect(
-      withoutProfitSource().open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') }),
+      withoutProfitSource().open({
+        clientOpenId: 't-open-position-service.test-21',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+      }),
     ).rejects.toMatchObject({ code: 'trade.futures_unconfigured', status: 503 });
 
     expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
@@ -645,7 +698,14 @@ if (!available) {
   it('refuses a PROFITABLE close when no profit source is named, and nothing moves', async () => {
     feed('50000');
     await fundProfitSource('10000');
-    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-22',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     const userBefore = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
     feed('51000');
@@ -668,7 +728,14 @@ if (!available) {
    */
   it('still lets a LOSING position out when no profit source is named', async () => {
     feed('50000');
-    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-23',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     feed('49000');
     await withoutProfitSource().close(ALICE, pos.id!);
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('99000');
@@ -695,6 +762,7 @@ if (!available) {
     feed('100');
     await fundProfitSource('5000000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-24',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
@@ -724,7 +792,14 @@ if (!available) {
   it('arms the breaker at OPEN — the very first close is measured against the entry mark', async () => {
     feed('100');
     await fundProfitSource('100000');
-    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-25',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('1'),
+    });
     const [row] = await sql<{ accepted_mark: string }[]>`SELECT accepted_mark FROM trade.positions WHERE id = ${pos.id!}`;
     expect(formatAmount(amt(row!.accepted_mark))).toBe('100');
 
@@ -741,7 +816,14 @@ if (!available) {
   it('pays a move INSIDE the breaker — the basis refuses jumps, not profits', async () => {
     feed('100');
     await fundProfitSource('100000');
-    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-26',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('1'),
+    });
     // +19%, under the 2000bps default.
     feed('119');
     await positions.close(ALICE, pos.id!);
@@ -762,7 +844,14 @@ if (!available) {
   it('a refused close does not move the basis — the breaker cannot be ratcheted', async () => {
     feed('100');
     await fundProfitSource('1000000');
-    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('100'), leverage: amt('1') });
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-27',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('100'),
+      leverage: amt('1'),
+    });
     const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
     // Six attempts. The first already clears the breaker from the basis
@@ -787,7 +876,14 @@ if (!available) {
    */
   it('a losing close is never held by the breaker — it guards payouts, not exits', async () => {
     feed('10000');
-    const pos = await positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-28',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     feed('9000');
     await positions.close(ALICE, pos.id!);
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('99000');
@@ -826,7 +922,14 @@ if (!available) {
     let book: EngineDepth = { bids: [['1999', '10']], asks: [['2001', '10']], sequence: 1 };
     const svc = onDepth(async () => book);
 
-    const pos = await svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+    const pos = await svc.open({
+      clientOpenId: 't-open-position-service.test-29',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('1'),
+    });
     expect(pos.entryPrice).toBe('2000');
     const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
@@ -856,7 +959,14 @@ if (!available) {
     await fundProfitSource('10000');
     let book: EngineDepth = { bids: [['1999', '10']], asks: [['2001', '10']], sequence: 1 };
     const svc = onDepth(async () => book);
-    const pos = await svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+    const pos = await svc.open({
+      clientOpenId: 't-open-position-service.test-30',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('1'),
+    });
 
     book = { bids: [['2199', '10']], asks: [['2201', '10']], sequence: 2 };
     await svc.close(ALICE, pos.id!);
@@ -874,7 +984,14 @@ if (!available) {
     }));
     const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     await expect(
-      svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') }),
+      svc.open({
+        clientOpenId: 't-open-position-service.test-31',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('10'),
+        leverage: amt('1'),
+      }),
     ).rejects.toMatchObject({ code: 'trade.mark_missing' });
     expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
     expect(await svc.listOpen(ALICE)).toEqual([]);
@@ -907,7 +1024,14 @@ if (!available) {
    */
   async function marginal() {
     feed('100');
-    return positions.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('10') });
+    return positions.open({
+      clientOpenId: 't-open-position-service.test-32',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('10'),
+    });
   }
 
   it('the tick liquidates on a mark inside the breaker (the control)', async () => {
@@ -1017,6 +1141,7 @@ if (!available) {
   it('funding tick accrues nothing on a closing position across a period', async () => {
     feed('50000');
     const pos = await positions.open({
+      clientOpenId: 't-open-position-service.test-33',
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
