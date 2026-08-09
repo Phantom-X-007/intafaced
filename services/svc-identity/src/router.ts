@@ -129,6 +129,9 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.sub_account_denied':
     case 'auth.sub_account_revoked':
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+    case 'auth.totp_key_missing':
+      // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
 }
 
