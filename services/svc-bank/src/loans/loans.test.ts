@@ -1281,7 +1281,7 @@ if (!available) {
           SELECT status, opening_collateral::text AS opening_collateral FROM bank.loans WHERE id = ${loanId}
         `;
         expect(pending[0]!.status).toBe('pending');
-        expect(pending[0]!.opening_collateral).toBe('1');
+        expect(formatAmount(amt(pending[0]!.opening_collateral!))).toBe('1');
 
         // 2. Same principal, tiny collateral the borrower can fund — would
         //    under-collateralise the stored draw if allowed.
