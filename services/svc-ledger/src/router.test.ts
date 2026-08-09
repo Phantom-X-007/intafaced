@@ -295,6 +295,18 @@ describe('operator controls', () => {
     expect(frozenWith).toEqual({ reason: 'suspected drift in USDT', actor: USER });
   });
 
+  it('maps freeze_attributed to CONFLICT — not a silent soft success', async () => {
+    const conflicted = stubService({
+      freeze: async () => {
+        throw new LedgerError('Ledger already frozen by recon: reconciliation mismatch — refusing overwrite', 'ledger.freeze_attributed');
+      },
+    });
+    const caller = createLedgerRouter(conflicted).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'operator: suspected USDT drift' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+  });
+
   it('gates reconcile behind admin:treasury and reports the run', async () => {
     const open = createLedgerRouter(stubService()).createCaller(await ctx(['admin:treasury'], true));
     await expect(open.reconcile()).resolves.toMatchObject({ ok: true, accountsChecked: 3, chainLength: 7 });

@@ -132,23 +132,19 @@ export class LedgerService implements LedgerClient {
    * `reconciliation`, or `env:LEDGER_POSTING_ENABLED`. The database refuses a
    * freeze with neither reason nor actor (`posting_freeze_attributed_ck`) —
    * whoever finds the platform halted must be able to find out why and by whom.
+   *
+   * Same-attribution re-freeze is a true no-op (hourly recon: no `changed_at`
+   * bump, no bus re-fire). Different attribution while already frozen **throws**
+   * `ledger.freeze_attributed` — the first reason stays, and the caller must not
+   * be told their freeze applied (operator HTTP → 409). Recon catches that code
+   * so an operator halt is never clobbered and the alarm still pages.
    */
   async freeze(reason: string, actor: string): Promise<FreezeState> {
-    try {
-      const { state, switched } = await writeFreeze(this.sql, { frozen: true, reason, actor });
-      // Same-attribution re-freeze is a true no-op (hourly recon). Do not
-      // re-publish — consumers would re-alarm under a stable key or a new one.
-      if (switched) await this.publishFreeze(state);
-      return state;
-    } catch (err) {
-      // Already frozen under different attribution — keep the first reason
-      // standing (STOP §4.2b #3). Recon must not erase an operator freeze, and
-      // the caller still sees the durable halt.
-      if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
-        return this.freezeState();
-      }
-      throw err;
-    }
+    const { state, switched } = await writeFreeze(this.sql, { frozen: true, reason, actor });
+    // Same-attribution re-freeze is a true no-op (hourly recon). Do not
+    // re-publish — consumers would re-alarm under a stable key or a new one.
+    if (switched) await this.publishFreeze(state);
+    return state;
   }
 
   async unfreeze(actor: string): Promise<FreezeState> {
@@ -247,7 +243,15 @@ export class LedgerService implements LedgerClient {
       const report = await runReconciliation(this.sql);
 
       if (!report.ok) {
-        await this.freeze('reconciliation mismatch', 'reconciliation');
+        // Prefer a freeze under actor `reconciliation`. If an operator already
+        // halted the book, writeFreeze refuses the overwrite (STOP §4.2b #3) —
+        // catch that only, leave their reason standing, and still page. Any
+        // other freeze error must surface (raced / uninitialised).
+        try {
+          await this.freeze('reconciliation mismatch', 'reconciliation');
+        } catch (err) {
+          if (!(err instanceof LedgerError && err.code === 'ledger.freeze_attributed')) throw err;
+        }
 
         const firstDrift = report.balances.ok ? null : report.balances.drift[0];
         await this.bus.publish('ledgerReconciliationFailed', {
