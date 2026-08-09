@@ -281,22 +281,8 @@ const PINNED = {
   'services/svc-trade': [[1, "src/spot/matching-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"]],
 
   // 14 — services/svc-ws
-  // hub.test.ts constructor-override pins cleared 2026-08-09 (hubFor typed as Partial<DepthHubOptions>).
-  'services/svc-ws': [
-    [1, "src/ws/co-mount.test.ts | TS2345 | Argument of type 'StubSource' is not assignable to parameter of type 'DepthSource'."],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2353 | Object literal may only specify known properties, and 'log' does not exist in type 'PrivateOrderHubOptions'.",
-    ],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2353 | Object literal may only specify known properties, and 'log' does not exist in type 'TradeHubOptions'.",
-    ],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2416 | Property 'snapshot' in type 'StubSource' is not assignable to the same property in base type 'DepthSource'.",
-    ],
-  ],
+  // co-mount StubSource/hub-ctor pins cleared 2026-08-09 (#1342 typecheck-clean rewrite).
+  'services/svc-ws': [],
 };
 
 // ── Plumbing ────────────────────────────────────────────────────────────────
