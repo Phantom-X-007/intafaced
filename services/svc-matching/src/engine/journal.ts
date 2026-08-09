@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import type { BookState, EngineOrder, EngineOrderType, MarketId, OrderId, OrderSide, TimeInForce } from './types.js';
@@ -159,13 +159,30 @@ export class FileJournal implements EngineJournal {
   private records: JournalRecord[];
 
   constructor(readonly path: string) {
+    /**
+     * Crash mid-write can leave a partial last NDJSON line. `decodeAll` skips
+     * that residue so recovery can boot (#1520). But the torn bytes still sit
+     * on disk — opening O_APPEND without rewriting would glue the next durable
+     * append onto the tear, so a later boot either drops a real record or
+     * throws mid-file corruption and refuses recovery. Rewrite the decoded
+     * records as the clean durable body before any further append.
+     */
     this.records = existsSync(path) ? decodeAll(readFileSync(path, 'utf8')) : [];
+    rewriteClean(path, this.records);
     this.fd = openSync(path, 'a');
   }
 
   append(command: JournalCommand): JournalRecord {
     const record = { ...command, seq: this.records.length + 1 } as JournalRecord;
-    writeSync(this.fd, `${encode(record)}\n`);
+    const line = `${encode(record)}\n`;
+    const expected = Buffer.byteLength(line, 'utf8');
+    const written = writeSync(this.fd, line);
+    if (written !== expected) {
+      // Do not push to memory: a short write is not durable and must not look
+      // like an admitted input. The process dies or the caller retries; either
+      // way the on-disk body stays a complete prefix.
+      throw new Error(`short journal write: wrote ${written} of ${expected} bytes at ${this.path}`);
+    }
     fsyncSync(this.fd);
     this.records.push(record);
     return record;
@@ -181,6 +198,22 @@ export class FileJournal implements EngineJournal {
 
   close(): void {
     closeSync(this.fd);
+  }
+}
+
+/** Replace the file with exactly the durable records (no torn tail residue). */
+function rewriteClean(path: string, records: readonly JournalRecord[]): void {
+  const body = records.length === 0 ? '' : `${records.map((r) => encode(r)).join('\n')}\n`;
+  writeFileSync(path, body, 'utf8');
+  // writeFileSync does not fsync. Durability of the rewrite matters: if we
+  // crash after truncating-away the partial line but before the clean body is
+  // on stable storage, recovery still boots (empty or older complete prefix)
+  // — never from glued garbage.
+  const fd = openSync(path, 'r+');
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
   }
 }
 
