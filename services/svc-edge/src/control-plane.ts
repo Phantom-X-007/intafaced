@@ -153,6 +153,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   app.get('/admin/status', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
     const snap = admin.read();
+    const honesty = admin.honesty();
     return {
       ok: true,
       service: 'svc-edge',
@@ -163,6 +164,13 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       auditCount: snap.audit.length,
       lastChange: snap.audit[0] ?? null,
       ledgerConfigured: admin.ledgerConfigured(),
+      // Modules this edge cannot halt — `ws` is the one that used to look green
+      // while the market-data socket stayed live (SOCKET §13 socket.ws-behind-the-edge).
+      outsideTheDoor: honesty.outsideTheDoor,
+      enforceableModules: honesty.enforceableModules,
+      // Process-local durability only. multiReplicaShared is always false until
+      // a shared store exists; never invent one on the status surface.
+      killState: honesty.killState,
       // Reminder for operators reading JSON at 3am — full path list is in the runbook.
       releaseRule: 'reads and cancels pass under a kill; new commitments refuse (503 edge.module_killed)',
     };

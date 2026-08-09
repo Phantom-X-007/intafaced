@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AuthError, bearerToken, requireMfa, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
 import { MODULE_IDS, isModuleId, type ModuleId } from '@intafaced/config';
-import type { KillSwitchAuditEntry, KillSwitchState } from './kill-switch.js';
+import type { KillSwitchAuditEntry, KillSwitchDurability, KillSwitchState } from './kill-switch.js';
 import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
 
 /**
@@ -117,6 +117,23 @@ export interface KillSwitchSnapshot {
   readonly audit: readonly KillSwitchAuditEntry[];
 }
 
+/**
+ * Control-plane honesty fields the console needs so a green status is never
+ * mistaken for a closed market-data socket or a fleet-wide kill.
+ */
+export interface ControlPlaneHonesty {
+  /**
+   * Modules the control plane will refuse to arm, with the reason the operator
+   * must act on instead. `ws` is the load-bearing entry: svc-ws is outside this
+   * edge (SOCKET §13 socket.ws-behind-the-edge).
+   */
+  readonly outsideTheDoor: Readonly<Record<string, string>>;
+  /** Modules this edge can actually refuse traffic for (route-table-derived). */
+  readonly enforceableModules: readonly ModuleId[];
+  /** Process-local durability — multi-replica share is always false today. */
+  readonly killState: KillSwitchDurability;
+}
+
 export interface FreezeSnapshot {
   readonly frozen: boolean;
   readonly reason: string | null;
@@ -146,6 +163,13 @@ export interface AdminApi {
   authenticateTreasury(header: string | undefined): Promise<Principal>;
   /** Current kill-switch state and its audit trail, as the console renders it. */
   read(): KillSwitchSnapshot;
+  /**
+   * What the door cannot enforce, and how durable a kill is on this process.
+   *
+   * Used by `/admin/status` so an operator never reads "halted" for market data
+   * that still streams on 4014, and never assumes a second replica saw the flip.
+   */
+  honesty(): ControlPlaneHonesty;
   /** Apply one module toggle. Returns the new state. */
   apply(body: unknown, operator: Principal): KillSwitchSnapshot & { changed: boolean };
   /**
@@ -207,6 +231,15 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
     },
 
     read: snapshot,
+
+    honesty(): ControlPlaneHonesty {
+      return {
+        outsideTheDoor: { ...OUTSIDE_THE_DOOR },
+        // MODULE_IDS order so the status payload is stable across processes.
+        enforceableModules: MODULE_IDS.filter((id) => ENFORCEABLE_MODULES.has(id)),
+        killState: state.durability(),
+      };
+    },
 
     apply(body, operator) {
       /**

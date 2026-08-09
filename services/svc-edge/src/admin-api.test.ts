@@ -89,6 +89,17 @@ describe('the treasury authority is not the module authority', () => {
   });
 });
 
+describe('control-plane honesty surface', () => {
+  it('names ws as outside the door so status cannot invent a green live socket halt', () => {
+    const { admin } = api();
+    const h = admin.honesty();
+    expect(h.outsideTheDoor.ws).toMatch(/not through this edge|socket\.ws-behind/i);
+    expect(h.enforceableModules).not.toContain('ws');
+    expect(h.enforceableModules).toContain('trade');
+    expect(h.killState.multiReplicaShared).toBe(false);
+  });
+});
+
 describe('applying a toggle', () => {
   const operator = { userId: OPERATOR } as never;
 
