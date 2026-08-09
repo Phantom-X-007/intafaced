@@ -361,6 +361,22 @@ describe('svc-token mount — yield + buyback', () => {
     });
   });
 
+  it('refuses recordBuyback without MFA even when admin:treasury is present', async () => {
+    const token = stubToken();
+    const adminNoMfa = signed(principal({ scopes: ['admin:treasury'], mfa: false }));
+    await expect(
+      createTokenRouter(token)
+        .createCaller(adminNoMfa)
+        .recordBuyback({
+          runId: RUN,
+          revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+          revenueTotal: { IFC: '1000' },
+          tokensBought: '100',
+        }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(token.recordBuyback).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-ordered revenue window without calling the service', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));

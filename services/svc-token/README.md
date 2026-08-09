@@ -87,7 +87,7 @@ Every recipe this service invokes, and what it touches:
 
 **Stake: ledger first, then the row.** If the ledger post fails, no row is written. If the row write fails, the ledger post is idempotent and a retry reconciles. The reverse order would allow a `stakes` row with no value behind it — a stake we would owe yield on that nobody funded.
 
-**Unstake: row lock for the whole operation.** Two concurrent unstakes cannot both post. The ledger's idempotency key would catch a double-post anyway, but relying on the last line of defence for ordinary correctness is how the last line stops being one.
+**Unstake: claim `unstaking` under row lock, then post, then close.** Two concurrent unstakes cannot both post — only one claim wins the `active → unstaking` transition. The ledger post is **not** held inside the same Postgres transaction as the lock (remote ledger must not hold a DB lock open). The ledger's idempotency key is still the backstop if the claim ever failed; it is not the ordinary path.
 
 **Yield: one ledger transaction per recipient**, keyed on `(window, user)`. A crash halfway through is resumable — re-running pays only whoever was missed. One giant transaction would be atomic but unresumable, and with thousands of stakers that is the worse trade.
 
