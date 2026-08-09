@@ -171,6 +171,74 @@ describe('the journal comes first', () => {
     expect(books.has(ghost)).toBe(false);
   });
 
+  /**
+   * W8 — a rejected first submit used book() and left a never-traded market
+   * in the map (depth empty instead of null; GET /markets grew). Cancel and
+   * depth already refuse invent; reject must match.
+   */
+  it('FOK into a virgin market does not leave the market listed', async () => {
+    const { journal, engine } = build();
+    const ghost = 'NEVER-TRADED-FOK-MKT';
+
+    const result = await engine.submit(ghost, order({ side: 'buy', qty: '1', price: '100', tif: 'FOK' }));
+
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('fok_unfillable');
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.markets).not.toContain(ghost);
+    expect(engine.depth(ghost)).toBeNull();
+    // Input still journalled — recovery replays rejects as no-ops, not phantoms.
+    expect(journal.read().map((r) => r.kind)).toEqual(['submit']);
+  });
+
+  it('structural reject into a virgin market does not invent a market', async () => {
+    const { engine } = build();
+    const ghost = 'NEVER-TRADED-BAD-QTY';
+
+    const result = await engine.submit(ghost, order({ side: 'buy', qty: '0', price: '100' }));
+
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('invalid_qty');
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.depth(ghost)).toBeNull();
+  });
+
+  it('replaying a reject-only journal line does not invent a market', () => {
+    const ghost = 'LEGACY-REJECT-PHANTOM';
+    const books = replay([
+      {
+        kind: 'submit',
+        marketId: ghost,
+        at: '2026-01-01T00:00:00.000Z',
+        seq: 1,
+        order: {
+          orderId: '00000000-0000-4000-8000-cafebabe0003',
+          accountId: 'a',
+          type: 'limit',
+          side: 'buy',
+          qty: '1',
+          price: '100',
+          stopPrice: null,
+          tif: 'FOK',
+        },
+      },
+    ]);
+
+    expect(books.has(ghost)).toBe(false);
+  });
+
+  it('reject on a real market leaves that market listed', async () => {
+    const { engine } = build();
+    await engine.submit(MARKET, order({ account: 'maker', side: 'sell', qty: '1', price: '100' }));
+
+    const result = await engine.submit(MARKET, order({ account: 'taker', side: 'buy', qty: '9', price: '100', tif: 'FOK' }));
+
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('fok_unfillable');
+    expect(engine.hasMarket(MARKET)).toBe(true);
+    expect(engine.depth(MARKET)).not.toBeNull();
+  });
+
   it('does not journal an input the kill-switch refused', async () => {
     const { journal, bus, engine } = build({ enabled: false });
 
