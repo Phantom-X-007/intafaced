@@ -2,7 +2,9 @@
 
 **Law:** [`../SWARM-ALL-OUT-ORIENT-2026-08-03.md`](../SWARM-ALL-OUT-ORIENT-2026-08-03.md) · [`SWARM-MANDATE.md`](./SWARM-MANDATE.md)  
 **Wave 1 tools:** `pnpm swarm:freeze` · `swarm:status` · `swarm:lanes` · `swarm:report` · `swarm:next`  
-**Cold resume:** regenerate `FREEZE-LIVE.md`, then [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start.  
+**Cold resume:** regenerate `FREEZE-LIVE.md` (`pnpm swarm:freeze`), then [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start.
+
+**Committed FREEZE is not live law.** `FREEZE-LIVE.md` / `DASHBOARD.md` / `R00–R02` in git are snapshots. If the tip SHA inside FREEZE ≠ `origin/main`, treat every free/blocked/Actions number as **stale until regenerate**. Never hold work for thrift or Actions run-count — thrift is deleted; the repo is public. Never run bare `pnpm wt:gc:apply` from a stale FREEZE line — use live `pnpm wt:gc` classify + `--yes` consent.  
 **Human blockers inbox:** [`../BOARD-CLEAR-HUMAN-BLOCKERS.md`](../BOARD-CLEAR-HUMAN-BLOCKERS.md) (not a second file).  
 **Value / churn metric (L0):** `tooling/ci/value-gate.mjs` on Docs format · `Board-Delta:` trailer.
 

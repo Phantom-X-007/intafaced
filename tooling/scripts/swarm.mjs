@@ -994,6 +994,10 @@ function renderFreezeMd(m) {
   const lines = [];
   lines.push('# FREEZE-LIVE (generated)');
   lines.push('');
+  lines.push(
+    '> **STALE SNAPSHOT — not cold-start law.** Tip SHA below must match `origin/main` or regenerate: `pnpm swarm:freeze`. Thrift deleted 2026-08-07; public Actions free. Prefer live `pnpm wt:gc` over any apply line printed here.',
+  );
+  lines.push('');
   lines.push('**Do not hand-edit.** Regenerate: `pnpm swarm:freeze`');
   lines.push('');
   lines.push(`- **Tip:** \`${m.tip}\` — ${m.tipSubject}`);
