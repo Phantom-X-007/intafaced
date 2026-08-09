@@ -428,8 +428,6 @@ export class EarnService {
     return out;
   }
 
-  }
-
   async position(positionId: string): Promise<PositionRecord> {
     const rows = await this.sql<PositionRow[]>`
       SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
