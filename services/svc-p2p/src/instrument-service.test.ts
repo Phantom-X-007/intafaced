@@ -822,6 +822,10 @@ if (!available) {
         // `history` need `admin:compliance`, which a stranger does not hold.
         // Probed as a stranger anyway: the assertion is on what comes back.
         'merchants.me': undefined,
+        // Offer-ceiling posture only — decimal strings / null from env policy.
+        // Never joins instrument tables (merchant-limits.ts pure functions).
+        'merchants.offerLimits': undefined,
+        'merchants.myOfferCeiling': undefined,
         'merchants.submitApplication': undefined,
         'merchants.withdraw': { reason: 'probing' },
         'merchants.decide': { userId: SELLER, to: 'approved', reason: 'probing' },
