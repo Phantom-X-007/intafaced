@@ -6,8 +6,10 @@
 svc-matching; the money lives in svc-ledger. This service is the thing in between — the one that decides an order
 is allowed, funds it, hands it to the engine, and turns what comes back into ledger transactions.
 
-**Scope of this PR:** `trade.spot`. Futures, options, OTC, Convert, copy trading and algo execution are separate
-tracker features with their own PRs. See [Not in this PR](#not-in-this-pr).
+**Primary shipped surface here:** `trade.spot` + mounted Convert / OTC / CCXT REST / futures-orderable path (flagged).
+Copy trading (`src/copy/**`) and algo TWAP (`src/algo/**`) **code exists** under this service (tests pass) but are
+**not fully mounted for product use** — copy is unreachable from router/env; algo scheduler is dead code until
+explicitly mounted. See tracker rows `trade.copy` / `trade.algo` and [Not in this PR](#not-in-this-pr).
 
 ---
 
@@ -311,17 +313,17 @@ The service checks these; the database enforces them regardless.
 
 `trade.spot` only. §5.2 also specifies tables and behaviour that belong to other tracker features:
 
-| §5.2 item                                                          | Where it goes                                                                                                                                           |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder | `trade.futures`                                                                                                                                         |
-| options (European, cash-settled, full collateral)                  | `trade.options`                                                                                                                                         |
-| `copy_leaders`, `copy_follows`, profit share                       | `trade.copy`                                                                                                                                            |
-| `otc_quotes`, RFQ, staked-tier gate                                | `trade.otc`                                                                                                                                             |
-| Convert one-tap                                                    | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
-| TWAP / VWAP / POV                                                  | `trade.algo`                                                                                                                                            |
-| internal market-maker bot, venue aggregation                       | `trade.mm-bot`, `venue.aggregation`                                                                                                                     |
-| CCXT REST/ws surface over this router                              | `trade.ccxt-api`                                                                                                                                        |
-| volume aggregates per user per window feeding fee tiers            | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already                                                               |
+| §5.2 item                                                               | Where it goes                                                                                                                                           |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder      | `trade.futures`                                                                                                                                         |
+| options (European, cash-settled, full collateral)                       | `trade.options`                                                                                                                                         |
+| `copy_leaders`, `copy_follows`, **fee-share** (P&L profit-share banned) | `trade.copy` — code under `src/copy/**` exists; product mount residual (unreachable from router today)                                                  |
+| `otc_quotes`, RFQ, staked-tier gate                                     | `trade.otc`                                                                                                                                             |
+| Convert one-tap                                                         | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
+| TWAP / VWAP / POV                                                       | `trade.algo`                                                                                                                                            |
+| internal market-maker bot, venue aggregation                            | `trade.mm-bot`, `venue.aggregation`                                                                                                                     |
+| CCXT REST/ws surface over this router                                   | `trade.ccxt-api`                                                                                                                                        |
+| volume aggregates per user per window feeding fee tiers                 | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already                                                               |
 
 The `market_kind` enum already carries `futures` and `options`, so listing one later is an `INSERT`, not a
 migration.

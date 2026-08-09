@@ -239,7 +239,7 @@ positions      (id, user_id, market_id, side, size, entry_px, margin_mode,
                 margin, liq_px, funding_paid)          -- futures
 funding_rates  (market_id, window, rate, paid_at)
 insurance_fund (asset, balance_ref)                     -- ledger house account ref
-copy_leaders   (user_id, tier, sub_price, profit_share_bps, audited_stats jsonb, status)
+copy_leaders   (user_id, tier, sub_price, fee_share_bps /* not P&L profit-share — banned */, audited_stats jsonb, status)
 copy_follows   (follower_id, leader_id, sizing_mode, max_alloc, active)
 otc_quotes     (id, user_id, side, base, quote, qty, quoted_px, expires_at, status)
 ```
@@ -253,7 +253,7 @@ otc_quotes     (id, user_id, side, base, quote, qty, quoted_px, expires_at, stat
 **Futures:** cross + isolated margin, mark price from index feed, liquidation engine job (checks liq_px vs mark, partial-liquidation ladder, insurance fund backstop), funding every 8h as ledger recipes.
 **Options (v1 scope):** European calls/puts on BTC/ETH, cash-settled, strategy-builder UI in the product shell (§5.3); margining conservative (full collateral) in v1.
 **Convert:** RFQ against internal book + spread — one-tap swap endpoint.
-**Copy trading:** leader fills fan out to followers as proportional child orders (queued, size-capped per follower guardrails); profit-share settled monthly by ledger recipe; `audited_stats` written only by svc-agents Copy-Intel job (Phase 5) — until then, displayed stats computed from fills directly.
+**Copy trading:** leader fills fan out to followers as proportional child orders (queued, size-capped per follower guardrails); **fee-share** (slice of house trading fee per SPEC-SOVEREIGN-ROUTING-AND-COPY — **not** P&L profit-share; any gains%/HWM/success fee is banned in v1) settled by ledger recipe when owner publishes §8 rates; `audited_stats` written only by svc-agents Copy-Intel job (Phase 5) — until then, displayed stats computed from fills directly.
 **OTC:** staked-tier gate via `token.stakeOf`, RFQ workflow, fills post directly to ledger with spread to house.
 **Liquidity:** internal MM bot account (house-owned, own strategy config) seeds books at launch; external venue aggregation is an adapter behind `LiquiditySource` interface — later, per Doctrine 4.
 **Forex markets:** same engine, `kind:spot` with fiat pairs — rails to fund them arrive with svc-pay adapters.
@@ -626,7 +626,7 @@ Plane: **F** = Fiat (custodial/compliant) · **P** = Protocol (non-custodial/zer
 | Options (calls/puts, strategy builder) | F→P | svc-trade; INTACORE later | 2 / 5P |
 | OTC desk (RFQ, staked gate) | F | svc-trade | 2 |
 | Convert one-tap | B | svc-trade / sovereign router | 2 / 3P |
-| Copy trading (audited leaders, profit share) | B | svc-trade + session-key mirroring on-chain | 2 / 5P |
+| Copy trading (audited leaders, fee-share — not P&L profit-share) | B | svc-trade + session-key mirroring on-chain | 2 / 5P |
 | Forex pairs | F | svc-trade (rails via svc-pay) | 2 |
 | Matching engine (full depth) | B | svc-matching / INTACORE CLOB | 2 / 4P |
 | Deep liquidity (internal MM day one; venue aggregation) | B | LiquiditySource adapters | 2 (§13 socket) |

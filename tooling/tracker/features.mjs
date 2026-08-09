@@ -341,28 +341,44 @@ export const FEATURES = [
       '`connect.venue-vault` keeps `owner: shehzad002`; it is key custody and genuinely his. Those two are why svc-trade will still read as ' +
       'claimed after this PR, and that is correct rather than a miss.',
   }),
-  f('trade.copy', 'Copy trading, audited leaders, profit share', {
+  f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
     status: 'ready',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/copy'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Prior wip 2026-08-07 money wave 3 — D-S-03 Stage: follow/unfollow + envelope mirror refuse; blank DIRECTION §8 leader_share_bps + jurisdiction → refuse-closed (never invent rates). Residual: owner §8 numbers, on-chain session-key caps (build order §7.1).',
+    note:
+      'Owner released 2026-08-08 (axis C1 / Nitro green light). Stage #1009 (D-S-03): follow/unfollow + envelope mirror refuse; blank DIRECTION §8 ' +
+      'leader_share_bps + jurisdiction → refuse-closed (never invent rates). Product is **fee-share** (slice of house fee per SPEC-SOVEREIGN-ROUTING-AND-COPY); ' +
+      'P&L **profit-share is banned** in any form (§95 — gains %, HWM, hurdle, success fee). Code under `services/svc-trade/src/copy/**` exists with tests but is ' +
+      '**unreachable** — nothing outside `copy/` imports it; no router/env wire. Residual: mount + money bugs (exposure counter only ever rose — #1110 partial; ' +
+      'mirror lacks fill idempotency key), owner §8 numbers, on-chain session-key caps (build order §7.1). Tip re-verified a05eeb48.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot', 'pay.rails'],
     requires: ['services/svc-trade', 'packages/contracts/src/instruments.ts'],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. NOT production listing: D-S-05 / instrument ADR — model + venue hours first; listing forex pairs without fiat settlement is the lie. What exists: asset_class + schedule on trade.markets; assertMarketOpen refuse on closed venue. Still missing for full product: fiat settlement rails so no forex market is listed in production.',
+    note:
+      'On OPEN_MONEY allowlist 2026-08-08. **Not "unlisted"** — migration `0001_multi_asset_instruments.sql` seeds six majors active ' +
+      '(EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF, USD/CAD) and the public market list publishes them `active: true`. They are **unfundable** ' +
+      '(no live fiat rail settles; only crypto-native + card-sandbox inbound). #1169 refuses NEW production (non-paper) forex/commodity `listMarket` without ' +
+      'fiat settlement rails (`trade.unsettled_asset_class_listing`) — does not de-list the seed rows. What exists: asset_class + schedule; assertMarketOpen; ' +
+      'D-S-05 listing refuse. Full product blocked on owner forex settlement law (D8), not on "no markets listed." Tip re-verified a05eeb48.',
   }),
   f('trade.algo', 'TWAP / VWAP / POV execution', {
     module: 'trade',
     phase: '2',
     status: 'ready',
     dependsOn: ['trade.spot'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Prior wip 2026-08-07 money wave 2 — D-S-04 TWAP Stage (parent=schedule, children via placeOrder, refuse blank mark/empty book). VWAP/POV still out (no honest volume series).',
+    note:
+      'Owner released 2026-08-08 (axis C1 / Nitro green light). D-S-04 TWAP Stage #1002 (parent=schedule, children via placeOrder, refuse blank mark/empty book). ' +
+      'TWAP stage built; ADR #1145 (paused TWAP resume disposition) merged. Scheduler `tickAllAlgos()` still **dead code** (zero callers) — do **not** claim ' +
+      'scheduler mounted until it lands; #1107 halt-on-no-authority is residual state before mount is safe. VWAP/POV still out — but **not** for missing volume ' +
+      'series: `spot/candles.ts` sums non-seeded taker fills (mm excluded both sides) and serves them at GET /api/v1/ohlcv/:symbol. Series is **thin**, blocked on ' +
+      '**market maturity** (owner call per algo ADR), not missing code. (createTwap error string still says "wait on a real volume series" — stale wording in service code.) ' +
+      'Tip re-verified a05eeb48.',
     requires: ['services/svc-trade/src/algo'],
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
@@ -370,7 +386,7 @@ export const FEATURES = [
     phase: '2',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/public-rest.ts', 'services/svc-trade/src/private-rest.ts'],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. partial — all REST_ROUTES mounted. Public: markets (paper flag + schedule/sessionOpen/hours/nextSessionChange so bots tell sim vs real and venue-shut vs exchange-down), orderbook, ticker, tickers, trades (?since= ms), ohlcv (live non-seeded fill aggregation #345 + materialize job default OFF TRADE_CANDLE_JOBS_*; honest [] when never traded; never invent candles), funding-rate (published or NotSupported). Private (edge-signed, fail-closed): orders open/closed/:id, POST/DELETE orders (+ cancelAll), account trades/fees/balance, positions list/open/close (caller price fields refused — mark path only). setLeverage/setMarginMode mounted as 501 NotSupported (never silent success). Futures residual jobs default OFF by design. Empty books until order or trade.mm-bot seed (honest [] not 502 — #185). Private WS under ws.gateway. Residual: public paper-list policy (N3), rate-limit published vs edge (N4), mm seed ops — not missing routes.',
+    note: 'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted (re-verified tip a05eeb48). Public: markets (paper flag + schedule/sessionOpen/hours/nextSessionChange so bots tell sim vs real and venue-shut vs exchange-down), orderbook, ticker, tickers, trades (?since= ms), ohlcv (live non-seeded fill aggregation + materialize job default OFF TRADE_CANDLE_JOBS_*; honest [] when never traded; never invent candles), funding-rate (published or NotSupported). Private (edge-signed, fail-closed): orders open/closed/:id, POST/DELETE orders (+ cancelAll), account trades/fees/balance, positions list/open/close (**caller-supplied price fields refused 400** — mark path only; old note that required exitPrice was inverted/removed). setLeverage/setMarginMode mounted as **501 NotSupported** (never silent success; tested). Edge rate limiter exists (default ON, 300/min — N4 is published contract vs edge honesty, not "no limiter"). Futures residual jobs default OFF by design. Empty books until order or trade.mm-bot seed (honest [] not 502 — #185). Private WS under ws.gateway. Residual: public paper-list policy (N3), rate-limit published vs edge (N4), mm seed ops — not missing routes.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
