@@ -40,3 +40,8 @@ describe('assertPayoutDestinationKind', () => {
     expect(() => assertPayoutDestinationKind('some-future-rail', { kind: 'crypto', ref: '0x' })).toThrow(/no declared/);
   });
 });
+
+it('accepts bank on bank-payout (absent rail; kind must still match)', () => {
+  expect(() => assertPayoutDestinationKind('bank-payout', { kind: 'bank', ref: 'GB00X' })).not.toThrow();
+  expect(() => assertPayoutDestinationKind('bank-payout', { kind: 'crypto', ref: '0xabc' })).toThrow(/crypto/);
+});

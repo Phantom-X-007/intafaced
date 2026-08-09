@@ -13,6 +13,8 @@
 export const PAYOUT_DESTINATION_KINDS: Readonly<Record<string, readonly string[]>> = {
   'crypto-native': ['crypto'],
   'card-sandbox': ['bank'],
+  // Absent until a live bank rail ships; kind map ready so refuse is kind-correct if posture is relaxed.
+  'bank-payout': ['bank'],
 };
 
 export type DestinationKindErrorCode = 'pay.destination_kind_mismatch';
