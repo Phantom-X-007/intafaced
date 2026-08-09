@@ -6,7 +6,8 @@ import type { UserMoneyService, WithdrawalRecord } from './user-money-service.js
 import type { RailRegistry } from './rails/registry.js';
 import { RAIL_CAPABILITIES, RAIL_MODES } from './rails/rail-adapter.js';
 import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.js';
-import { assertMerchantOwnership } from './merchant-ownership.js';
+import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
+import type { PermissionArea } from './submerchants.js';
 
 /**
  * svc-pay's internal tRPC surface (§2 — cross-service calls go through
@@ -106,36 +107,19 @@ type SettlementViewOut = z.infer<typeof settlementView>;
 type WithdrawalViewOut = z.infer<typeof withdrawalView>;
 
 /**
- * A merchant may only read its OWN payments and settlements, whatever its
- * scopes say.
+ * A merchant may only touch payments/settlements it owns — or, when a PayFac
+ * fence is wired, ones it holds the matching permission area over.
  *
  * HOW MERCHANTS RELATE TO USERS. `pay.merchants` carries `user_id` and inserts
- * `ON CONFLICT (user_id) DO NOTHING` (`payment-service.ts`), so today there is
- * exactly one merchant per user and ownership is a single comparison after one
- * lookup. Nothing on a `payments` or `settlements` row names the user, so the
- * lookup is unavoidable: id → merchantId → merchant.userId. When PayFac trees
- * or merchant teams land (§6.1), this function is the one place a membership
- * check replaces the equality.
+ * `ON CONFLICT (user_id) DO NOTHING` (`payment-service.ts`), so there is still
+ * exactly one merchant per user. Self-action is ownership. Parent action is
+ * area (`payment`, `payment.refund`, `settlement`, `settlement.payout`, …).
  *
  * WHY FORBIDDEN AND NOT NOT_FOUND — same call, same reasoning, as svc-bank's
- * `assertSelf`, and deliberately the same across all five procedures fixed
- * together. NOT_FOUND leaks less because it never confirms the id exists, but
- * every id here is a v4 uuid the caller already holds, so the realistic caller
- * is a merchant integration with the wrong id and the realistic cost of lying
- * to them is an engineer's afternoon. The disclosure bought by the lie is one
- * bit about a uuid nobody can enumerate.
+ * `assertSelf`. NOT_FOUND leaks less because it never confirms the id exists,
+ * but every id here is a v4 uuid the caller already holds.
  */
-/**
- * Delegates to the ONE ownership rule (`merchant-ownership.ts`). It threw a
- * TRPCError here while tRPC was the only way in; `pay.public-api` adds a second,
- * and a rule copied into two files is a rule with two futures. `wrap` maps the
- * PayError to FORBIDDEN, so the wire shape is unchanged.
- */
-async function assertMerchantOwner(pay: PayService, principalUserId: string | undefined, merchantId: string): Promise<void> {
-  await assertMerchantOwnership(pay, principalUserId, merchantId);
-}
-
-export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService) {
+export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService, trees: MerchantAreaFence | null = null) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -143,6 +127,9 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
       throw toTrpcError(err);
     }
   };
+
+  const assertAccess = (principalUserId: string | undefined, merchantId: string, area: PermissionArea) =>
+    assertMerchantAreaAccess(pay, principalUserId, merchantId, area, trees);
 
   return router({
     health: publicProcedure
@@ -343,7 +330,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'kyb');
             const merchant = await pay.submitKyb(input);
             return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
           }),
@@ -364,7 +351,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'kyb');
             const merchant = await pay.decideKybStub(input);
             return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
           }),
@@ -382,7 +369,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.object({ id: z.string().uuid(), merchantId: z.string().uuid() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'checkout.profile');
             return pay.createProfile(input);
           }),
         ),
@@ -415,7 +402,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
             const link = await pay.createPaymentLink({
               merchantId: input.merchantId,
               label: input.label,
@@ -454,7 +441,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
             return pay.listPaymentLinks(input.merchantId);
           }),
         ),
@@ -464,7 +451,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.object({ deactivated: z.boolean() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
             return pay.deactivatePaymentLink(input.merchantId, input.linkId);
           }),
         ),
@@ -480,7 +467,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.object({ clearing: amountSchema, available: amountSchema }))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'merchant.profile');
             return {
               clearing: formatAmount(await pay.clearingBalance(input.merchantId, input.assetId)),
               available: formatAmount(await pay.merchantBalance(input.merchantId, input.assetId)),
@@ -507,7 +494,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(paymentView)
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment');
             return toPaymentOut(
               await pay.createPayment({
                 ...input,
@@ -524,7 +511,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertMerchantOwner(pay, ctx.principal?.userId, payment.merchantId);
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment');
             return toPaymentOut(await pay.authorize(input.paymentId));
           }),
         ),
@@ -535,7 +522,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertMerchantOwner(pay, ctx.principal?.userId, payment.merchantId);
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment');
             return toPaymentOut(
               await pay.capture(input.paymentId, input.amount === undefined ? {} : { amount: parseAmount(input.amount) }),
             );
@@ -549,7 +536,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertMerchantOwner(pay, ctx.principal?.userId, payment.merchantId);
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment.refund');
             return toPaymentOut(
               await pay.refund(input.paymentId, parseAmount(input.amount), input.refundId ? { refundId: input.refundId } : {}),
             );
@@ -566,7 +553,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             // is the RESPONSE, and it must come before the return, not after
             // the caller has the object.
             const payment = await pay.getPayment(input.paymentId);
-            await assertMerchantOwner(pay, ctx.principal.userId, payment.merchantId);
+            await assertAccess(ctx.principal.userId, payment.merchantId, 'payment');
             return toPaymentOut(payment);
           }),
         ),
@@ -583,7 +570,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.array(paymentView))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal.userId, input.merchantId);
+            await assertAccess(ctx.principal.userId, input.merchantId, 'payment');
             return (await pay.listPayments(input)).map(toPaymentOut);
           }),
         ),
@@ -609,7 +596,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             // `payment_events` carries instrument metadata, customer refs and
             // rail references, so this is the more sensitive of the two reads.
             const payment = await pay.getPayment(input.paymentId);
-            await assertMerchantOwner(pay, ctx.principal.userId, payment.merchantId);
+            await assertAccess(ctx.principal.userId, payment.merchantId, 'payment');
             return (await pay.history(input.paymentId)).map((e) => ({
               id: e.id,
               event: e.event,
@@ -627,7 +614,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(settlementView)
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertMerchantOwner(pay, ctx.principal?.userId, input.merchantId);
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement');
             return toSettlementOut(await pay.settleWindow(input));
           }),
         ),
@@ -645,7 +632,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertMerchantOwner(pay, ctx.principal?.userId, settlement.merchantId);
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement.payout');
             return toSettlementOut(await pay.payoutSettlement(input));
           }),
         ),
@@ -658,7 +645,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             // A settlement names gross, fees and net for a window — another
             // merchant's revenue and the rate we charge them.
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertMerchantOwner(pay, ctx.principal.userId, settlement.merchantId);
+            await assertAccess(ctx.principal.userId, settlement.merchantId, 'settlement');
             return toSettlementOut(settlement);
           }),
         ),
@@ -673,7 +660,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertMerchantOwner(pay, ctx.principal?.userId, settlement.merchantId);
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement');
             return toSettlementOut(await pay.releasePendingSettlement(input));
           }),
         ),
@@ -1012,6 +999,7 @@ function toTrpcError(err: unknown): unknown {
         return 'UNAUTHORIZED' as const;
       case 'pay.merchant_inactive':
       case 'pay.merchant_forbidden':
+      case 'pay.submerchant_permission_denied':
       case 'pay.rail_not_creditable':
       case 'pay.kyb_operator_required':
         return 'FORBIDDEN' as const;

@@ -241,7 +241,8 @@ const subMerchants = new SubMerchantService(sql);
  * anyway.
  */
 export const appRouter = mergeRouters(
-  createPayRouter(pay, rails, userMoney),
+  // trees fence: gateway money paths check PayFac areas (merchant-ownership).
+  createPayRouter(pay, rails, userMoney, subMerchants),
   createMerchantStateRouter(merchantState),
   // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's
   // own merchant node from the authenticated principal, because a merchant node
@@ -371,6 +372,7 @@ await registerPublicPayRest(app, {
   pay,
   idempotency: new PostgresRestIdempotencyStore(sql),
   webhooks: merchantWebhooks,
+  trees: subMerchants,
 });
 
 /** Drain outbound merchant webhook deliveries (ADR §2.4 retry). */

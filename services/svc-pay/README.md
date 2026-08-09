@@ -4,8 +4,8 @@ The payments core (§6.1). Merchants, the payment lifecycle, settlement into the
 
 **What it is NOT:** it does not hold balances (the ledger does), it does not choose between rails (smart routing is its own feature), and it does not know the name of a single payment processor. Every rail — the two here and every one that comes later — is an implementation of one interface, and `src/rails/conformance.ts` is what keeps that true.
 
-**In this PR:** gateway mode, the adapter interface, `crypto-native`, `card-sandbox`, and the conformance kit.
-**Not in this PR** (each a separate tracker feature): PSP mode, smart routing, fraud scoring, the checkout builder, subscriptions, commerce plugins, disputes. PayFac **sub-merchant trees** landed separately — [see below](#payfac--sub-merchant-trees-61).
+**On tip today:** gateway mode, rails (`crypto-native`, `card-sandbox`, absent `bank-payout`), public REST + webhooks, PayFac **sub-merchant trees + area fence on money paths** ([below](#payfac--sub-merchant-trees-61)), subscriptions as **invoice-and-watch** (schema / due runner / capture→execution settle — no on-chain pull), destination shape refuse (EVM + IBAN) before hold, G3 settlement release, G4 suspend-safe payout hold.
+**Still separate / residual:** PSP mode, smart routing (no invent costs/approval rates), fraud scoring, commerce plugins, **chargeback wire** (recipes exist in `packages/ledger-client` with owner sign-off banner — **not wired** into svc-pay), subscription dunning / merchant surface / pre-charge notify, IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION §8.4).
 
 ---
 
@@ -35,24 +35,25 @@ Where value actually is, at each stage:
 
 Internal tRPC (`src/router.ts`). Money is a **decimal string** in both directions; the input schema rejects a JSON number.
 
-| Procedure           | Scope        | Input                                                                         | Output                                           |
-| ------------------- | ------------ | ----------------------------------------------------------------------------- | ------------------------------------------------ |
-| `health`            | public       | –                                                                             | `{ ok, service, rails }`                         |
-| `railHealth`        | `pay:read`   | –                                                                             | `RailHealth[]`                                   |
-| `merchant.create`   | `pay:write`  | `{ mode, pricing: { feeBps } }` — `userId` from the principal, never the body | `{ id, userId, mode, feeBps }`                   |
-| `merchant.profile`  | `pay:write`  | `{ merchantId, checkoutConfig, feeRouting, domains }`                         | `{ id, merchantId }`                             |
-| `merchant.balances` | `pay:read`   | `{ merchantId, assetId }`                                                     | `{ clearing, available }` — read from the ledger |
-| `payment.create`    | `pay:write`  | `{ merchantId, amount, assetId, method, railAdapter, instrument? }`           | `Payment`                                        |
-| `payment.authorize` | `pay:write`  | `{ paymentId }`                                                               | `Payment`                                        |
-| `payment.capture`   | `pay:write`  | `{ paymentId, amount? }`                                                      | `Payment`                                        |
-| `payment.refund`    | `pay:refund` | `{ paymentId, amount, refundId? }`                                            | `Payment`                                        |
-| `payment.get`       | `pay:read`   | `{ paymentId }`                                                               | `Payment`                                        |
-| `payment.history`   | `pay:read`   | `{ paymentId }`                                                               | `PaymentEvent[]`                                 |
-| `settlement.run`    | `pay:write`  | `{ merchantId, window, assetId }`                                             | `Settlement`                                     |
-| `settlement.payout` | `pay:payout` | `{ settlementId, railId, destination }`                                       | `Settlement`                                     |
-| `settlement.get`    | `pay:read`   | `{ settlementId }`                                                            | `Settlement`                                     |
+| Procedure            | Scope        | Input                                                                         | Output                                           |
+| -------------------- | ------------ | ----------------------------------------------------------------------------- | ------------------------------------------------ |
+| `health`             | public       | –                                                                             | `{ ok, service, rails }`                         |
+| `railHealth`         | `pay:read`   | –                                                                             | `RailHealth[]`                                   |
+| `merchant.create`    | `pay:write`  | `{ mode, pricing: { feeBps } }` — `userId` from the principal, never the body | `{ id, userId, mode, feeBps }`                   |
+| `merchant.profile`   | `pay:write`  | `{ merchantId, checkoutConfig, feeRouting, domains }`                         | `{ id, merchantId }`                             |
+| `merchant.balances`  | `pay:read`   | `{ merchantId, assetId }`                                                     | `{ clearing, available }` — read from the ledger |
+| `payment.create`     | `pay:write`  | `{ merchantId, amount, assetId, method, railAdapter, instrument? }`           | `Payment`                                        |
+| `payment.authorize`  | `pay:write`  | `{ paymentId }`                                                               | `Payment`                                        |
+| `payment.capture`    | `pay:write`  | `{ paymentId, amount? }`                                                      | `Payment`                                        |
+| `payment.refund`     | `pay:refund` | `{ paymentId, amount, refundId? }`                                            | `Payment`                                        |
+| `payment.get`        | `pay:read`   | `{ paymentId }`                                                               | `Payment`                                        |
+| `payment.history`    | `pay:read`   | `{ paymentId }`                                                               | `PaymentEvent[]`                                 |
+| `settlement.run`     | `pay:write`  | `{ merchantId, window, assetId }`                                             | `Settlement`                                     |
+| `settlement.payout`  | `pay:payout` | `{ settlementId, railId, destination }` — dest must match rail (EVM/IBAN)     | `Settlement`                                     |
+| `settlement.get`     | `pay:read`   | `{ settlementId }`                                                            | `Settlement`                                     |
+| `settlement.release` | `pay:write`  | `{ settlementId, reason }` — unstick pending freeze; **no ledger move**       | `Settlement`                                     |
 
-Refunds and payouts carry their own scopes. Taking a payment and sending money back out are not the same authority.
+Refunds and payouts carry their own scopes. Taking a payment and sending money back out are not the same authority. Bad destinations refuse as `pay.invalid_destination_ref` / `pay.destination_kind_mismatch` **before** any hold.
 
 **HTTP:** `POST /webhooks/:railId` (public, signature-authenticated), `GET /health`, `GET /ready`, hosted checkout `GET /checkout?token=` / `GET /pay/link/:token` (public HTML; browser via edge `/api/pay/checkout?token=`).
 
@@ -165,7 +166,7 @@ So this ships the **mechanism**, and `PERMISSION_AREAS` in `src/submerchants.ts`
 #### What is deliberately NOT here
 
 - **Settling a sub-merchant out of our account.** `settlingParty` accepts `'self'` only and refuses everything else by name (`pay.submerchant_settling_party_unsupported`). That is acquiring — a sponsor bank and an acquiring BIN, which `docs/SPEC-PAY-VERTICALS-2026-08-02.md` §8 puts on the owner's list and `socket.psp-partners` tracks. The column exists so adopting a partner later is configuration rather than a rewrite; it is not a switch this service can throw.
-- **Enforcing the areas on the gateway surface.** Nine of the eleven areas name procedures in `router.ts` that still authorize with `assertMerchantOwnership` — a single `merchant.userId === principal.userId` comparison, unchanged by this PR. That comparison is correct for a merchant acting on itself and is exactly the extension point `router.ts` already names: _"When PayFac trees or merchant teams land, this function is the one place a membership check replaces the equality."_ Wiring it is a second PR against `payment-service.ts` and the money paths, and doing it in the same change as the tree would put a rewrite of every merchant authorization into a schema PR.
+- **Areas on the gateway surface (W5).** Money and merchant procedures in `router.ts` / `public-rest.ts` call `assertMerchantAreaAccess` with the matching area (`payment`, `payment.refund`, `settlement`, `settlement.payout`, `payment.link`, `webhook`, `kyb`, …). Self still holds every area. A parent without a grant is `pay.submerchant_permission_denied`; a stranger stays `pay.merchant_forbidden`. Pins: `merchant-ownership.test.ts`.
 - **Split payments and sub-merchant fee routing.** Ledger recipes, Class M, and the owner's sign-off (`docs/PAY-LANE-HARVEST-AND-BUILD-PLAN-2026-08-08.md` §6.4).
 - **Sub-merchant KYB workflow and document capture.** `pay.psp`.
 
