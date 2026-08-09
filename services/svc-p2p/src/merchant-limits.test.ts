@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
-import { checkOfferLimit, describeLimits, limitFor, NO_OFFER_LIMITS, type OfferLimitPolicy } from './merchant-limits.js';
+import {
+  ceilingOnWire,
+  checkOfferLimit,
+  describeLimits,
+  limitFor,
+  limitsConfigured,
+  limitsOnWire,
+  NO_OFFER_LIMITS,
+  type OfferLimitPolicy,
+} from './merchant-limits.js';
 import type { MerchantStatus } from './merchant-programme.js';
 
 const policy = (standard: string | null, merchant: string | null): OfferLimitPolicy => ({
@@ -147,6 +156,49 @@ describe('merchant offer limits', () => {
       expect(posture.level).toBe('info');
       expect(posture.summary).toContain('1000');
       expect(posture.summary).toContain('unlimited');
+    });
+  });
+
+  describe('wire posture — clients learn ceilings without a refuse-first probe', () => {
+    it('marks unconfigured as not configured and null maxes', () => {
+      expect(limitsConfigured(NO_OFFER_LIMITS)).toBe(false);
+      const wire = limitsOnWire(NO_OFFER_LIMITS);
+      expect(wire.configured).toBe(false);
+      expect(wire.standardMax).toBeNull();
+      expect(wire.merchantMax).toBeNull();
+      expect(wire.summary).toMatch(/NONE CONFIGURED/);
+    });
+
+    it('exposes decimal strings when armed — never invents a missing half', () => {
+      expect(limitsConfigured(policy('1000', '5000'))).toBe(true);
+      const wire = limitsOnWire(policy('1000', null));
+      expect(wire.configured).toBe(true);
+      expect(wire.standardMax).toBe('1000');
+      expect(wire.merchantMax).toBeNull();
+    });
+
+    it('puts an approved merchant on the merchant band and everyone else on standard', () => {
+      const p = policy('1000', '5000');
+      expect(ceilingOnWire('approved', p)).toEqual({
+        maxAmount: '5000',
+        band: 'merchant',
+        merchantStatus: 'approved',
+      });
+      expect(ceilingOnWire('applied', p)).toEqual({
+        maxAmount: '1000',
+        band: 'standard',
+        merchantStatus: 'applied',
+      });
+      expect(ceilingOnWire(null, p)).toEqual({
+        maxAmount: '1000',
+        band: 'standard',
+        merchantStatus: null,
+      });
+      expect(ceilingOnWire(null, NO_OFFER_LIMITS)).toEqual({
+        maxAmount: null,
+        band: 'standard',
+        merchantStatus: null,
+      });
     });
   });
 });

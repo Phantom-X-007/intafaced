@@ -117,6 +117,8 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read           |
 | `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                           |
 | `merchants.me`                   | `p2p:read`               | Caller's merchant standing + history headers (Stage 1–2 programme)         |
+| `merchants.offerLimits`          | `p2p:read`               | Deployment ceilings (`standardMax` / `merchantMax` or null = unlimited)    |
+| `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing; null = unlimited)      |
 | `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                |
 | `merchants.withdraw`             | `p2p:write`              | Withdraw a pending application                                             |
 | `merchants.decide`               | `admin:compliance`       | Operator transition to approved / rejected / suspended                     |
@@ -129,7 +131,7 @@ HTTP (`src/index.ts`):
 
 | Route                              | Purpose                                                                                                                        |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /health`                      | liveness; discloses `moderationReachable` (allowlist non-empty)                                                                |
+| `GET /health`                      | liveness; discloses `moderationReachable` + `offerLimitsConfigured` (ceilings armed)                                           |
 | `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationReachable`                                                                  |
 | `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500 |
 | `GET /internal/reputation/:userId` | the hot path other modules read for `p2pLimitMultiplier`                                                                       |
@@ -408,7 +410,7 @@ It deliberately does **not** stop release, refund, dispute resolution, or either
 
 ## Out of scope / residual parks (do not invent)
 
-**Merchants (built Stage 1–2; policy still open).** The programme tables, apply/approve/suspend transitions, badge surface, and offer-ceiling **mechanism** ship in this service (`merchant-programme` · `merchant-service` · `merchant-limits`). Default policy is **no numeric ceiling** until an operator sets `P2P_OFFER_MAX_*` — inventing magnitudes here is product law, not craft residual. Stage-3 erase/pseudonymise of settled trades is owner-gated.
+**Merchants (built Stage 1–2; policy still open).** The programme tables, apply/approve/suspend transitions, badge surface, offer-ceiling **mechanism**, and honest limit API (`merchants.offerLimits` · `merchants.myOfferCeiling` · health `offerLimitsConfigured`) ship in this service. Default policy is **no numeric ceiling** until an operator sets `P2P_OFFER_MAX_*` — inventing magnitudes here is product law, not craft residual. Stage-3 erase/pseudonymise of settled trades is owner-gated.
 
 **The method registry is empty and stays empty until an operator fills it.** That is not a gap in the mechanism — it is where the mechanism ends and researched, jurisdictional content begins. Nobody can register a payment destination in a market until `instruments.methods.register` has been called for it, and any attempt to save that as engineering work by seeding a guess would produce destinations that validate and cannot be paid.
 
