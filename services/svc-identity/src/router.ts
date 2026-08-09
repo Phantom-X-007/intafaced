@@ -433,6 +433,23 @@ export function createIdentityRouter(
             throw toTrpcError(err);
           }
         }),
+
+      /**
+       * Retire one enrolled authenticator. Self-only via principal.
+       * Missing/foreign id → removed:false (never confirms existence).
+       */
+      remove: protectedProcedure
+        .input(z.object({ credentialId: z.string().min(1) }))
+        .output(z.object({ removed: z.boolean() }))
+        .mutation(async ({ ctx, input }) => {
+          if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
+          try {
+            const removed = await auth.removeWebauthnCredential(ctx.principal.userId, input.credentialId);
+            return { removed };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
     }),
 
     /**

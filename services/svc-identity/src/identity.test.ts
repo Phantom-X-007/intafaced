@@ -448,6 +448,28 @@ if (!available) {
         code: 'auth.webauthn_not_enrolled',
       });
     });
+
+    it('removes an enrolled credential and will not let a stranger retire it', async () => {
+      const owner = await register();
+      const stranger = await register();
+      const authenticator = softAuthenticator();
+      const options = await auth.startWebauthnRegistration(owner.userId);
+      const enrolled = await auth.confirmWebauthnRegistration(owner.userId, authenticator.registrationResponse(options.challenge));
+
+      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(1);
+      // Foreign principal: same shape as apiKeys.revoke — false, no leak.
+      expect(await auth.removeWebauthnCredential(stranger.userId, enrolled.credentialId)).toBe(false);
+      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(1);
+
+      expect(await auth.removeWebauthnCredential(owner.userId, enrolled.credentialId)).toBe(true);
+      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(0);
+      expect(await auth.removeWebauthnCredential(owner.userId, enrolled.credentialId)).toBe(false);
+
+      // Assertion path is gone for that key.
+      const handle = (await db.sql<Array<{ handle: string }>>`SELECT handle FROM users WHERE id = ${owner.userId}`)[0]!.handle;
+      const authOptions = await auth.startWebauthnAuthentication(handle);
+      expect(authOptions.allowCredentials).toEqual([]);
+    });
   });
 
   describe('session refresh and rotation', () => {
