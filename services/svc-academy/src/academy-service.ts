@@ -22,6 +22,7 @@ import {
 } from './ambassadors/residency.js';
 import { certById, listCertCatalog } from './certs/catalog.js';
 import {
+  alreadyGrantedAfterInsert,
   CertError,
   certIdempotencyKey,
   decideGrant,
@@ -1028,8 +1029,13 @@ export class AcademyService {
              freeze_reason = ${reason},
              updated_at = now()
        WHERE user_id = ${input.userId}
+         AND status = 'active'
        RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
     `;
+    if (rows.length === 0) {
+      // Concurrent freeze won the race — do not overwrite freeze_reason/by.
+      throw new AcademyError(`Ambassador ${input.userId} is already frozen`, 'academy.ambassador_already_frozen');
+    }
     return this.toAmbassador(rows[0]!);
   }
 
@@ -1430,19 +1436,36 @@ export class AcademyService {
     if (decision.alreadyGranted) {
       return { ...decision, xp: await this.certXp.publishCertXp(decision.grant) };
     }
+    // ON CONFLICT DO NOTHING — concurrent second writer must not hardcode
+    // alreadyGranted:false (UI would fire "just earned" twice; XP still safe).
     const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
       INSERT INTO academy.cert_grants (user_id, cert_id, granted_at, idempotency_key)
       VALUES (${decision.grant.userId}, ${decision.grant.certId}, ${decision.grant.grantedAt}, ${decision.grant.idempotencyKey})
-      ON CONFLICT (user_id, cert_id) DO UPDATE SET cert_id = EXCLUDED.cert_id
+      ON CONFLICT (user_id, cert_id) DO NOTHING
       RETURNING user_id, cert_id, granted_at, idempotency_key
     `;
+    if (rows.length === 0) {
+      const raced = await this.existingGrant(input.userId, input.certId);
+      if (!raced) {
+        throw new AcademyError(`Grant race left no cert row for ${input.certId}`, 'academy.cert_invalid');
+      }
+      return {
+        grant: raced,
+        alreadyGranted: alreadyGrantedAfterInsert(false),
+        xp: await this.certXp.publishCertXp(raced),
+      };
+    }
     const grant: CertGrantRecord = {
       userId: rows[0]!.user_id,
       certId: rows[0]!.cert_id,
       grantedAt: rows[0]!.granted_at,
       idempotencyKey: rows[0]!.idempotency_key,
     };
-    return { alreadyGranted: false, grant, xp: await this.certXp.publishCertXp(grant) };
+    return {
+      alreadyGranted: alreadyGrantedAfterInsert(true),
+      grant,
+      xp: await this.certXp.publishCertXp(grant),
+    };
   }
 
   async myCertGrants(userId: string): Promise<CertGrantRecord[]> {

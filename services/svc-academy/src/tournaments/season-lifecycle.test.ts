@@ -144,6 +144,13 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     expect(() => transitionSeason(s, 'live')).toThrow(TournamentError);
   });
 
+  it('refuses frozen → live (no re-rank without a new season)', () => {
+    const s = { ...base, status: 'frozen' as const };
+    expect(() => transitionSeason(s, 'live')).toThrow(TournamentError);
+    expect(isScoreWritable('frozen')).toBe(false);
+    expect(transitionSeason(s, 'ended').status).toBe('ended');
+  });
+
   it('freeze snapshot ranks standings with no money fields', () => {
     const live = { ...base, status: 'live' as const };
     const rows = [
@@ -219,10 +226,12 @@ describe('tournament Stage-2 season lifecycle (no prizes)', () => {
     expect(listScoreWritableSeasons([])).toEqual([]);
   });
 
-  it('L3 allowedNextStatuses ends empty; live may freeze', () => {
+  it('L3 allowedNextStatuses ends empty; live may freeze; frozen cannot re-open', () => {
     expect(allowedNextStatuses('ended')).toEqual([]);
     expect(allowedNextStatuses('live')).toContain('frozen');
     expect(allowedNextStatuses('scheduled')).toContain('live');
+    expect(allowedNextStatuses('frozen')).toEqual(['ended']);
+    expect(allowedNextStatuses('frozen')).not.toContain('live');
   });
 
   it('L3 filterSeasonsByStatus does not invent rows', () => {

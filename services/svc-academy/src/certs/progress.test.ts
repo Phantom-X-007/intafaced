@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  alreadyGrantedAfterInsert,
   CertError,
   MemoryCertStore,
   decideGrant,
@@ -80,6 +81,12 @@ describe('academy.certs Stage-1 progress spine', () => {
     expect(g1.idempotencyKey).toBe(g2.idempotencyKey);
     expect(g1.grantedAt.toISOString()).toBe(g2.grantedAt.toISOString());
     expect(store.listCerts('u1')).toHaveLength(1);
+  });
+
+  it('concurrent second INSERT (no RETURNING) reports alreadyGranted true', () => {
+    // Mirrors grantCert after ON CONFLICT DO NOTHING — not "you just earned" twice.
+    expect(alreadyGrantedAfterInsert(true)).toBe(false);
+    expect(alreadyGrantedAfterInsert(false)).toBe(true);
   });
 
   it('re-complete item is no-op (same timestamp)', () => {

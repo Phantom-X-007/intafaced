@@ -218,6 +218,74 @@ export const tournamentFreezeSnapshots = academy.table('tournament_freeze_snapsh
   createdAt: createdAt(),
 });
 
+/**
+ * Residency applications Stage-1 (NO PAY) — mirrors drizzle/0003_residencies.sql.
+ * Decision is accept|reject|withdraw only; IFC rates stay Class M refuse-closed.
+ */
+export const residencyStatusEnum = academy.enum('residency_status', ['applied', 'accepted', 'rejected', 'withdrawn']);
+
+export const residencyApplications = academy.table(
+  'residency_applications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    cohortSlug: text('cohort_slug').notNull(),
+    statement: text('statement').notNull(),
+    status: residencyStatusEnum('status').notNull().default('applied'),
+    appliedAt: tstz('applied_at').notNull().defaultNow(),
+    decidedAt: tstz('decided_at'),
+    decidedBy: uuid('decided_by'),
+    decisionNote: text('decision_note'),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('residency_user_idx').on(t.userId, t.appliedAt),
+    index('residency_status_cohort_idx').on(t.status, t.cohortSlug, t.appliedAt),
+  ],
+);
+
+/**
+ * Cert progress + grants Stage-1 — mirrors drizzle/0004_certs.sql.
+ * Definitions stay code-seeded (certs/catalog.ts). No XP amount columns here.
+ */
+export const certEnrollments = academy.table(
+  'cert_enrollments',
+  {
+    userId: uuid('user_id').notNull(),
+    pathSlug: text('path_slug').notNull(),
+    enrolledAt: tstz('enrolled_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('cert_enrollments_pk').on(t.userId, t.pathSlug)],
+);
+
+export const certItemCompletions = academy.table(
+  'cert_item_completions',
+  {
+    userId: uuid('user_id').notNull(),
+    itemSlug: text('item_slug').notNull(),
+    completedAt: tstz('completed_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('cert_item_completions_pk').on(t.userId, t.itemSlug),
+    index('cert_item_completions_user_idx').on(t.userId, t.completedAt),
+  ],
+);
+
+export const certGrants = academy.table(
+  'cert_grants',
+  {
+    userId: uuid('user_id').notNull(),
+    certId: text('cert_id').notNull(),
+    grantedAt: tstz('granted_at').notNull().defaultNow(),
+    idempotencyKey: text('idempotency_key').notNull(),
+  },
+  (t) => [
+    uniqueIndex('cert_grants_pk').on(t.userId, t.certId),
+    uniqueIndex('cert_grants_idempotency_uq').on(t.idempotencyKey),
+    index('cert_grants_user_idx').on(t.userId, t.grantedAt),
+  ],
+);
+
 export const schema = {
   rooms,
   roomInvites,
@@ -227,4 +295,8 @@ export const schema = {
   tournamentSeasons,
   tournamentStandings,
   tournamentFreezeSnapshots,
+  residencyApplications,
+  certEnrollments,
+  certItemCompletions,
+  certGrants,
 };

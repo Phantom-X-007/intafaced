@@ -39,8 +39,20 @@ describe('tournament lifecycle edges (service must call these)', () => {
     expect(() => transitionSeason(base('ended'), 'live')).toThrow(TournamentError);
   });
 
-  it('allows live → frozen and scheduled → live', () => {
+  it('refuses frozen → live (re-open re-rank + stale freeze snapshot hole)', () => {
+    expect(() => transitionSeason(base('frozen'), 'live')).toThrow(TournamentError);
+    try {
+      transitionSeason(base('frozen'), 'live');
+    } catch (e) {
+      expect(e).toBeInstanceOf(TournamentError);
+      expect((e as TournamentError).code).toBe('academy.season_invalid');
+      expect((e as TournamentError).message).toMatch(/frozen.*live/i);
+    }
+  });
+
+  it('allows live → frozen, frozen → ended, and scheduled → live', () => {
     expect(transitionSeason(base('live'), 'frozen').status).toBe('frozen');
+    expect(transitionSeason(base('frozen'), 'ended').status).toBe('ended');
     expect(transitionSeason(base('scheduled'), 'live').status).toBe('live');
   });
 
