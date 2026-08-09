@@ -228,3 +228,27 @@ describe('svc-indexer · EVM decode — ordering and identity', () => {
     expect(event).toMatchObject({ maker: MAKER.toLowerCase(), taker: TAKER.toLowerCase(), takerSide: 'sell' });
   });
 });
+
+describe('decodeVenueLog · fill price and quantity must be positive', () => {
+  it('refuses a fill with quantity zero at decode time', () => {
+    expect(() => decodeVenueLog(fillLog(10n ** 18n, 0n, 0))).toThrow(/fill quantity must be positive/);
+    try {
+      decodeVenueLog(fillLog(10n ** 18n, 0n, 0));
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'indexer.bad_amount' });
+    }
+  });
+
+  it('refuses a fill with price zero at decode time', () => {
+    expect(() => decodeVenueLog(fillLog(0n, 10n ** 18n, 0))).toThrow(/fill price must be positive/);
+    try {
+      decodeVenueLog(fillLog(0n, 10n ** 18n, 0));
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'indexer.bad_amount' });
+    }
+  });
+
+  it('still accepts a book level with quantity zero', () => {
+    expect(decodeVenueLog(bookLevelLog(0, 10n ** 18n, 0n))).toMatchObject({ quantity: '0' });
+  });
+});
