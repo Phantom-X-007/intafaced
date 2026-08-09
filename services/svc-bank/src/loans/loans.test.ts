@@ -1840,6 +1840,19 @@ if (!available) {
       expect(formatAmount(r.reserveBalance)).toBe('95000');
       expect(formatAmount(r.outstandingPrincipal)).toBe('5000');
       expect(formatAmount(r.funded)).toBe('100000');
+      // B-02: funded is still a tautology until journal aggregation exists.
+      // Drift 0 must not be readable as independent green health.
+      expect(r.independent).toBe(false);
+      expect(formatAmount(r.drift)).toBe('0');
+    });
+
+    it('reconcileReserve refuses to claim independent drift while funded is tautological', async () => {
+      await fundReserve('USDT', '50000');
+      const r = await loans.reconcileReserve('USDT');
+      expect(r.independent).toBe(false);
+      expect(formatAmount(r.drift)).toBe('0');
+      // Identity half still closes for an empty book.
+      expect(formatAmount(r.reserveBalance + r.outstandingPrincipal)).toBe(formatAmount(r.funded));
     });
 
     it('a borrower can never see another borrower&apos;s loan through the service', async () => {

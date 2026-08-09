@@ -1527,6 +1527,12 @@ export class LoanService {
     badDebt: Amount;
     funded: Amount;
     drift: Amount;
+    /**
+     * False until `funded` is summed from independent `loan.reserve.funded`
+     * journal (or a bank funding table). When false, `drift` is always 0 and
+     * must not be treated as a green ops health signal.
+     */
+    independent: boolean;
   }> {
     const reserve = await this.ledger.balance(loanReserve(debtAssetId));
 
@@ -1559,10 +1565,12 @@ export class LoanService {
     // `funded` is currently defined as reserve + outstanding principal — a
     // tautology, not an independent sum of `loan.reserve.funded` journal rows.
     // True drift needs ledger journal aggregation (or a bank funding table).
-    // Until that exists, report drift 0 and do not claim independent reconcile.
+    // Until that exists: drift 0 and independent:false so ops cannot treat
+    // "drift 0" as a green health signal.
     const outstandingClamped = outstandingPrincipal < 0n ? 0n : outstandingPrincipal;
     const funded = reserve.amount + outstandingClamped;
     const drift = 0n;
+    const independent = false;
 
     return {
       reserveBalance: reserve.amount,
@@ -1570,6 +1578,7 @@ export class LoanService {
       badDebt,
       funded,
       drift,
+      independent,
     };
   }
 
