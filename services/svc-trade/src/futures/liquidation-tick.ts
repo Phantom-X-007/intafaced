@@ -24,6 +24,7 @@ import {
   DEFAULT_FUTURES_LADDER_POLICY,
   DEPTH_UNKNOWN,
   FuturesLadderError,
+  mayLiquidateFromExpiredMarginCallGrace,
   planLadderLiquidation,
   summarizeLadder,
   type FuturesLadderPolicy,
@@ -142,6 +143,39 @@ export interface LiquidationLadderDeps {
   policy?: FuturesLadderPolicy;
 }
 
+/**
+ * Deliver a futures margin-call notice.
+ *
+ * Port, so RAISING the rung and TELLING the trader stay separable facts (same
+ * split as bank's `MarginCallSink`). Must return `delivered: true` only when
+ * transport accepted the notice — that is the sole predicate that may start a
+ * future grace clock (`mayStartMarginCallGrace` in `maintenance-ladder.ts`).
+ *
+ * Until a real channel is wired, use `stubMarginCallNotifier` (always
+ * undelivered). An optional port that defaults to "pretend delivered" would
+ * re-open C15; the stub defaults the other way on purpose.
+ */
+export interface MarginCallNotifier {
+  notifyMarginCall(input: {
+    positionId: string;
+    userId: string;
+    marketId: string;
+    /** Health ratio the ladder computed (bps). Diagnostic only — not a grace key. */
+    healthBps: number;
+    at: Date;
+  }): Promise<{ delivered: boolean }>;
+}
+
+/**
+ * Honest default until real notify transport exists: never claims delivery.
+ * Grace must not start; seizure must not proceed "from grace" off this.
+ */
+export const stubMarginCallNotifier: MarginCallNotifier = {
+  async notifyMarginCall() {
+    return { delivered: false };
+  },
+};
+
 /** Prevent double-liquidation attempts for the same position+attempt key. */
 export interface LiquidationAttemptStore {
   isDone(liquidationId: string): Promise<boolean>;
@@ -182,6 +216,13 @@ export interface LiquidationTickDeps {
    * full-close planner, unchanged. See the file header.
    */
   ladder?: LiquidationLadderDeps;
+  /**
+   * C15 transport for the `margin-call` rung. Defaults to
+   * `stubMarginCallNotifier` (delivered=false). Real notify must return
+   * delivered=true before any future grace field may start; the tick never
+   * treats margin_call as grace-expired seizure while grace is unimplemented.
+   */
+  notifyMarginCall?: MarginCallNotifier;
 }
 
 export interface LiquidationTickItemResult {
@@ -464,15 +505,59 @@ async function runLadderRung(
   }
 
   if (!decision.liquidate) {
+    if (decision.rung.action === 'margin-call') {
+      /**
+       * C15 — MARGIN CALL, NOT SEIZURE.
+       *
+       * Report the rung, attempt delivery, and STOP. Grace is not implemented
+       * on futures (no graceExpiresAt on the position); inventing a timer here
+       * would be D3. The seal `mayLiquidateFromExpiredMarginCallGrace` is the
+       * only lawful future path from "called" to "seize after grace", and with
+       * undelivered notice + null grace it always refuses. If a later change
+       * wrongly treats margin_call as grace-expired without delivery, that
+       * helper (and its tests) fail closed — do not liquidate from this branch.
+       */
+      const at = (deps.now ?? (() => new Date()))();
+      const notifier = deps.notifyMarginCall ?? stubMarginCallNotifier;
+      const delivery = await notifier.notifyMarginCall({
+        positionId: row.positionId,
+        userId: row.userId,
+        marketId: row.marketId,
+        healthBps: decision.rung.healthBps,
+        at,
+      });
+      // graceExpiresAt: null — no durable grace clock on futures today.
+      // Undelivered or no clock → never seize "from grace".
+      const seizeFromGrace = mayLiquidateFromExpiredMarginCallGrace({
+        delivered: delivery.delivered,
+        graceExpiresAt: null,
+        now: at,
+      });
+      if (seizeFromGrace) {
+        // Unreachable while graceExpiresAt is always null. Fail closed if a
+        // future edit breaks the seal without wiring real escalate-after-grace.
+        return {
+          positionId: row.positionId,
+          outcome: 'margin_call',
+          reason: 'margin_call_grace_not_wired',
+          summary: `${summarizeLadder(decision)}; refused seize-from-grace without durable grace state`,
+        };
+      }
+      return {
+        positionId: row.positionId,
+        outcome: 'margin_call',
+        reason: decision.reason,
+        summary: summarizeLadder(decision),
+      };
+    }
+
     const outcome =
-      decision.rung.action === 'margin-call'
-        ? 'margin_call'
-        : decision.rung.action === 'refuse' &&
-            (decision.reason === 'invalid_mark' || decision.reason === 'empty_position' || decision.reason === 'invalid_margin')
+      decision.rung.action === 'refuse' &&
+      (decision.reason === 'invalid_mark' || decision.reason === 'empty_position' || decision.reason === 'invalid_margin')
+        ? 'invalid'
+        : decision.rung.action === 'refuse'
           ? 'invalid'
-          : decision.rung.action === 'refuse'
-            ? 'invalid'
-            : 'skipped_healthy';
+          : 'skipped_healthy';
     return { positionId: row.positionId, outcome, reason: decision.reason, summary: summarizeLadder(decision) };
   }
 

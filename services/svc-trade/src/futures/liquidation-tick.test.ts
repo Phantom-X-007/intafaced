@@ -3,13 +3,16 @@ import { parseAmount as amt, type AccountRef, type Amount, type Balance, type Po
 import {
   memoryLiquidationAttemptStore,
   runLiquidationTick,
+  stubMarginCallNotifier,
   type LiquidationPositionRow,
   type MarkSource,
+  type MarginCallNotifier,
   type QuotedMarkSource,
 } from './liquidation-tick.js';
 import { DEFAULT_FUTURES_MARK_POLICY, type FuturesQuotedMark } from './mark-policy.js';
 import { memoryAcceptedMarkStore } from './accepted-mark.js';
 import { INSURANCE_UNDERFUNDED } from './insurance-bound.js';
+import { type FuturesLadderPolicy } from './maintenance-ladder.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -361,5 +364,199 @@ describe('runLiquidationTick — mark gates', () => {
     const { result, posts } = await tick(fixedMark('80'));
     expect(result.liquidated).toBe(1);
     expect(posts.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * C15 / unit 9 — margin-call transport stub + grace non-start seal on the tick.
+ *
+ * Ladder may report `margin-call`; the tick must notify (port) and must NOT
+ * seize from "grace" while delivery is false or grace is unimplemented.
+ * Would fail if someone escalates margin_call → liquidate without delivery.
+ */
+describe('runLiquidationTick — C15 margin-call transport + grace non-start', () => {
+  const AT = new Date('2026-08-09T12:00:00.000Z');
+  /** Flat mm so health bands are hand-checkable; same shape as gap-series tests. */
+  const POLICY: FuturesLadderPolicy = {
+    tiers: [{ uptoDepthBps: Number.MAX_SAFE_INTEGER, maintenanceBps: 500 }],
+    marginCallBps: 12_000,
+    targetBps: 15_000,
+    maxTrancheBps: 2_500,
+  };
+
+  /**
+   * Long 10 @ 100, margin 100 → notional 960 at mark 96, mm 500 bps → required 48,
+   * riskPnl −40, equity 60, health = 60/48 * 10_000 = 12_500 bps → still healthy.
+   * Mark 95 → equity 50, required 47.5, health ~10_526 → margin-call band.
+   */
+  function marginCallLong(): LiquidationPositionRow {
+    return {
+      positionId: 'pos-mc',
+      userId: USER,
+      side: 'long',
+      size: amt('10'),
+      entryPrice: amt('100'),
+      margin: amt('100'),
+      marginAsset: 'USDT',
+      marketId: 'm1',
+      symbol: 'BTC/USDT-PERP',
+    };
+  }
+
+  function quotedAt(price: string): QuotedMarkSource {
+    return {
+      async markPrice() {
+        return price;
+      },
+      async quote({ marketId, symbol }) {
+        return { marketId, symbol, price: amt(price), asOf: AT, quality: 'mid' };
+      },
+    };
+  }
+
+  it('undelivered margin call: notifies, never posts, never closes (not grace-expired)', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+    const reduced: string[] = [];
+    const notified: Array<{ positionId: string; delivered: boolean }> = [];
+
+    const notifier: MarginCallNotifier = {
+      async notifyMarginCall(input) {
+        notified.push({ positionId: input.positionId, delivered: false });
+        return { delivered: false };
+      },
+    };
+
+    const result = await runLiquidationTick({
+      marks: quotedAt('95'),
+      positions: {
+        async listOpen() {
+          return [marginCallLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      notifyMarginCall: notifier,
+      ladder: {
+        depth: {
+          async depthNotional() {
+            return amt('1000000');
+          },
+        },
+        reducer: {
+          async reduce(id) {
+            reduced.push(id);
+          },
+        },
+        policy: POLICY,
+      },
+    });
+
+    expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.marginCalls).toBe(1);
+    expect(result.liquidated).toBe(0);
+    expect(result.partial).toBe(0);
+    expect(posts).toEqual([]);
+    expect(closed).toEqual([]);
+    expect(reduced).toEqual([]);
+    expect(notified).toEqual([{ positionId: 'pos-mc', delivered: false }]);
+  });
+
+  it('stub notifier (default transport): still margin_call, never seizes', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+
+    const result = await runLiquidationTick({
+      marks: quotedAt('95'),
+      positions: {
+        async listOpen() {
+          return [marginCallLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      // explicit stub — same as default; documents the honest undelivered path
+      notifyMarginCall: stubMarginCallNotifier,
+      ladder: {
+        depth: {
+          async depthNotional() {
+            return amt('1000000');
+          },
+        },
+        reducer: {
+          async reduce() {
+            throw new Error('must not reduce on margin-call');
+          },
+        },
+        policy: POLICY,
+      },
+    });
+
+    expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.liquidated).toBe(0);
+    expect(posts).toEqual([]);
+    expect(closed).toEqual([]);
+  });
+
+  it('delivered=true still does not seize today — grace clock not implemented (D3)', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+    const notifier: MarginCallNotifier = {
+      async notifyMarginCall() {
+        return { delivered: true };
+      },
+    };
+
+    const result = await runLiquidationTick({
+      marks: quotedAt('95'),
+      positions: {
+        async listOpen() {
+          return [marginCallLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      notifyMarginCall: notifier,
+      ladder: {
+        depth: {
+          async depthNotional() {
+            return amt('1000000');
+          },
+        },
+        reducer: {
+          async reduce() {
+            throw new Error('must not reduce — no grace escalate path yet');
+          },
+        },
+        policy: POLICY,
+      },
+    });
+
+    // Delivery accepted, but graceExpiresAt is still null on the tick path.
+    expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.liquidated).toBe(0);
+    expect(posts).toEqual([]);
+    expect(closed).toEqual([]);
   });
 });

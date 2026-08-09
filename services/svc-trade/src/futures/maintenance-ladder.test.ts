@@ -10,6 +10,8 @@ import {
   depthRatioBps,
   healthRatioBps,
   maintenanceBpsFor,
+  mayLiquidateFromExpiredMarginCallGrace,
+  mayStartMarginCallGrace,
   planLadderLiquidation,
   planLadderRung,
   summarizeLadder,
@@ -676,5 +678,86 @@ describe('fixture sanity', () => {
     expect(formatAmount(mul(position().size, position().entryPrice, 'ceil'))).toBe('1000');
     expect(mul(position().margin, amt('10'), 'floor')).toBe(mul(position().size, position().entryPrice, 'ceil'));
     expect(SCALE).toBe(10n ** 18n);
+  });
+});
+
+/**
+ * C15 / unit 9 — undelivered margin call never starts grace or seizes "from grace".
+ *
+ * Product today has no grace clock (honest: no transport). These pure seals pin
+ * the law so a future grace field cannot open a seizure path without delivery.
+ * Fails if someone adds grace-without-delivery by bypassing these helpers.
+ */
+describe('C15 margin-call delivery before grace / seizure', () => {
+  const now = new Date('2026-08-09T12:00:00.000Z');
+  const past = new Date('2026-08-09T11:00:00.000Z');
+  const future = new Date('2026-08-09T13:00:00.000Z');
+
+  it('undelivered notice must not start grace', () => {
+    expect(mayStartMarginCallGrace({ delivered: false })).toBe(false);
+    expect(mayStartMarginCallGrace({ delivered: true })).toBe(true);
+  });
+
+  it('undelivered → never liquidate from "grace", even with a past expiry stamped', () => {
+    // The bug class: graceExpiresAt written without delivery, then seizure.
+    expect(
+      mayLiquidateFromExpiredMarginCallGrace({
+        delivered: false,
+        graceExpiresAt: past,
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  it('delivered but no grace clock started → never seize from grace (current product)', () => {
+    expect(
+      mayLiquidateFromExpiredMarginCallGrace({
+        delivered: true,
+        graceExpiresAt: null,
+        now,
+      }),
+    ).toBe(false);
+    expect(
+      mayLiquidateFromExpiredMarginCallGrace({
+        delivered: true,
+        graceExpiresAt: undefined,
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  it('delivered + grace still running → do not seize yet', () => {
+    expect(
+      mayLiquidateFromExpiredMarginCallGrace({
+        delivered: true,
+        graceExpiresAt: future,
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  it('delivered + grace expired → may seize (future path only; duration is owner D3)', () => {
+    expect(
+      mayLiquidateFromExpiredMarginCallGrace({
+        delivered: true,
+        graceExpiresAt: past,
+        now,
+      }),
+    ).toBe(true);
+  });
+
+  it('margin-call rung plans no recipes (ladder never liquidates from the call alone)', () => {
+    // Health under marginCallBps but still ≥ 10_000 → action margin-call, not liquidate.
+    const required = mulBps(amt('1000'), 50, 'ceil');
+    const atCall = (required * BigInt(DEFAULT_FUTURES_LADDER_POLICY.marginCallBps)) / 10_000n;
+    const decision = planLadderLiquidation({
+      liquidationId: 'mc-seal',
+      position: position({ margin: atCall - 1n }),
+      markPrice: amt('100'),
+      depthNotional: amt('1000000'),
+      policy: DEFAULT_FUTURES_LADDER_POLICY,
+    });
+    expect(decision.liquidate).toBe(false);
+    expect(decision.rung.action).toBe('margin-call');
   });
 });
