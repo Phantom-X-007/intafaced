@@ -152,6 +152,22 @@ export class AlertService {
   /**
    * Evaluate every active alert on a market against the injected mark source.
    * Dark / stale marks refuse every alert by name — nothing is invented.
+   *
+   * FIRE ORDER — notify first, then mark the watch fired.
+   *
+   * The previous order (`markFired` then `fireNotification`) permanently burned
+   * a watch when the create path wrote nothing: fan-out kill returns
+   * `{ inserted: false, notification: null }` without throwing, and a crash
+   * after mark-before-insert left `status: 'fired'` with an empty inbox. Either
+   * way the one-shot never retried. That is the same kill-lie the bus path
+   * already refuses (`fanout-off-pin`): a kill must write nothing, not invent a
+   * finished delivery.
+   *
+   * Notify first. `sourceIdempotencyKey` is `<alertId>:<markPrice>`, so a
+   * redelivery after insert-before-mark reuses the same inbox row (and the
+   * delivery claim stops a second channel send). Only when create produced or
+   * recovered a row do we retire the watch. Fan-out off leaves the watch active
+   * for a later pass.
    */
   async evaluateMarket(marketId: string, at: Date = new Date()): Promise<EvaluateMarketReport> {
     const quote = await this.marks.quote(marketId, at);
@@ -163,9 +179,13 @@ export class AlertService {
       let notificationId: string | null = null;
 
       if (outcome.kind === 'fire') {
-        const fired = await this.store.markFired(alert.userId, alert.id, at);
-        if (fired) {
-          const created = await this.fireNotification(fired, outcome.markPrice);
+        // Create first — never retire the watch on a pure no-op or a throw.
+        const created = await this.fireNotification(alert, outcome.markPrice);
+        // Fan-out off: both null. Redelivery recovery: notification may be null
+        // on the insert conflict path, but dispatch is set after findBySource.
+        const reachedInbox = created.notification !== null || created.dispatch !== null;
+        if (reachedInbox) {
+          await this.store.markFired(alert.userId, alert.id, at);
           notificationId = created.notification?.id ?? null;
         }
       }

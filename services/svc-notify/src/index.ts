@@ -101,7 +101,7 @@ const store = new PostgresNotifyStore(sql);
 const targets = new PostgresTargetStore(sql);
 // The claim lease has to outlast one gateway attempt and stay under the bus
 // `ack_wait`. `claimLeaseMsFromGatewayTimeout` keeps both bounds when an
-// operator raises NOTIFY_GATEWAY_TIMEOUT_MS toward the 30s ceiling.
+// operator raises NOTIFY_GATEWAY_TIMEOUT_MS toward MAX_GATEWAY_TIMEOUT_MS.
 const deliveries = new PostgresDeliveryStore(sql, {
   leaseMs: claimLeaseMsFromGatewayTimeout(env.NOTIFY_GATEWAY_TIMEOUT_MS),
 });

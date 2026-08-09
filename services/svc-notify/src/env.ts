@@ -110,8 +110,14 @@ const schema = serviceEnvSchema
        */
       NOTIFY_REQUIRED_CHANNELS: blankAsAbsent(z.string().optional()),
 
-      /** Budget for one gateway call. A slow gateway must not stall the consumer. */
-      NOTIFY_GATEWAY_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(5_000),
+      /**
+       * Budget for one gateway call. A slow gateway must not stall the consumer.
+       *
+       * Cap is `MAX_GATEWAY_TIMEOUT_MS` (ack_wait − lease slack = 25s), not 30s:
+       * above that the claim lease cannot both outlast the attempt and stay
+       * under bus redelivery, which reopens multi-replica double-send.
+       */
+      NOTIFY_GATEWAY_TIMEOUT_MS: z.coerce.number().int().min(250).max(25_000).default(5_000),
 
       /**
        * Characters before an SMS body is cut. Three GSM segments by default.
