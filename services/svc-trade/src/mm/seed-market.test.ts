@@ -16,12 +16,32 @@ import {
   seedOrderIdsForRun,
   summarizeCancelSeed,
   summarizeSeedMarket,
+  type SeedTradableMarket,
 } from './seed-market.js';
 import { mmSeedOrderIdFor } from '../spot/ids.js';
 
 async function fundMm(ledger: MemoryLedger, asset: string, amount: string, seedId: string) {
   await ledger.post(recipes.marketMakerSeedFund({ assetId: asset, amount: amt(amount), seedId }));
 }
+
+/** Active spot — the only market users can trade by default. */
+const ACTIVE_SPOT: SeedTradableMarket = {
+  symbol: 'BTC/USDT',
+  kind: 'spot',
+  status: 'active',
+};
+
+const HALTED_SPOT: SeedTradableMarket = {
+  symbol: 'BTC/USDT',
+  kind: 'spot',
+  status: 'halted',
+};
+
+const ACTIVE_FUTURES: SeedTradableMarket = {
+  symbol: 'BTC/USDT-PERP',
+  kind: 'futures',
+  status: 'active',
+};
 
 /** Minimal matching double — avoids pulling contracts via spot/testing. */
 class SeedStubMatching implements Pick<MatchingClient, 'submit' | 'cancel'> {
@@ -100,6 +120,118 @@ describe('mm seed ids', () => {
 const ALICE_FAKE = '11111111-1111-4111-8111-111111111111';
 
 describe('seedMarket', () => {
+  /**
+   * Handoff §7 / house-desk fairness rule 2: house is an ordinary participant.
+   * assertTradable must refuse before hold or matching.submit — same codes as
+   * user placeOrder. No isHouse bypass.
+   */
+  it('refuses halted market before hold and before matching.submit', async () => {
+    const ledger = new MemoryLedger();
+    await fundMm(ledger, 'USDT', '10000', 'fund-h');
+    await fundMm(ledger, 'BTC', '100', 'fund-h-b');
+    const matching = new SeedStubMatching();
+    const potUsdt = formatAmount((await ledger.balance(marketMaker('USDT'))).amount);
+    const potBtc = formatAmount((await ledger.balance(marketMaker('BTC'))).amount);
+
+    const result = await seedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-halted',
+      },
+      { ledger, matching, market: HALTED_SPOT },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('trade.market_not_tradable');
+    expect(result.placements).toHaveLength(0);
+    expect(matching.submitted).toHaveLength(0);
+    // no hold drawn
+    expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe(potUsdt);
+    expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe(potBtc);
+  });
+
+  it('refuses futures when TRADE_FUTURES_ENABLED is off — before hold/submit', async () => {
+    const ledger = new MemoryLedger();
+    await fundMm(ledger, 'USDT', '10000', 'fund-f');
+    await fundMm(ledger, 'BTC', '100', 'fund-f-b');
+    const matching = new SeedStubMatching();
+
+    const result = await seedMarket(
+      {
+        marketId: 'btc-usdt-perp',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-fut-off',
+      },
+      { ledger, matching, market: ACTIVE_FUTURES, futuresEnabled: false },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('trade.futures_disabled');
+    expect(matching.submitted).toHaveLength(0);
+    expect(result.placements).toHaveLength(0);
+  });
+
+  it('refuses futures when futuresEnabled is omitted (default is refusal)', async () => {
+    const ledger = new MemoryLedger();
+    const matching = new SeedStubMatching();
+    const result = await seedMarket(
+      {
+        marketId: 'btc-usdt-perp',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-fut-default',
+      },
+      { ledger, matching, market: ACTIVE_FUTURES },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('trade.futures_disabled');
+    expect(matching.submitted).toHaveLength(0);
+  });
+
+  it('seeds futures when futuresEnabled is true and market is active', async () => {
+    const ledger = new MemoryLedger();
+    await fundMm(ledger, 'USDT', '10000', 'fund-fon');
+    await fundMm(ledger, 'BTC', '100', 'fund-fon-b');
+    const matching = new SeedStubMatching();
+    const result = await seedMarket(
+      {
+        marketId: 'btc-usdt-perp',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: 100,
+        stepBps: 0,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-fut-on',
+      },
+      { ledger, matching, market: ACTIVE_FUTURES, futuresEnabled: true },
+    );
+    expect(result.ok).toBe(true);
+    expect(matching.submitted).toHaveLength(2);
+  });
+
   it('refuses missing mid — no hold, no submit', async () => {
     const ledger = new MemoryLedger();
     const matching = new SeedStubMatching();
@@ -115,7 +247,7 @@ describe('seedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-1',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -141,7 +273,7 @@ describe('seedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-a',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
 
     expect(result.ok).toBe(true);
@@ -199,7 +331,7 @@ describe('seedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-reject',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
 
     expect(result.ok).toBe(false);
@@ -229,14 +361,14 @@ describe('seedMarket', () => {
       runId: 'run-idem',
     } as const;
 
-    const first = await seedMarket(spec, { ledger, matching });
+    const first = await seedMarket(spec, { ledger, matching, market: ACTIVE_SPOT });
     expect(first.ok).toBe(true);
     const usdtAfterFirst = formatAmount((await ledger.balance(marketMaker('USDT'))).amount);
     const btcAfterFirst = formatAmount((await ledger.balance(marketMaker('BTC'))).amount);
 
     // Second run: hold posts are idempotent; matching gets another submit (caller
     // must not double-seed live books without cancel — residual ops concern).
-    const second = await seedMarket(spec, { ledger, matching });
+    const second = await seedMarket(spec, { ledger, matching, market: ACTIVE_SPOT });
     expect(second.ok).toBe(true);
     expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe(usdtAfterFirst);
     expect(formatAmount((await ledger.balance(marketMaker('BTC'))).amount)).toBe(btcAfterFirst);
@@ -260,7 +392,7 @@ describe('seedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-empty',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
 
     // plan order is buy then sell per level — buy hold fails first
@@ -302,7 +434,7 @@ describe('cancelSeedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-cancel',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
     expect(seeded.ok).toBe(true);
     expect(matching.live.size).toBe(2);
@@ -348,7 +480,7 @@ describe('cancelSeedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-nl',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
     expect(seeded.ok).toBe(true);
     // Simulate engine already empty (fills or external cancel) while holds remain.
@@ -389,7 +521,7 @@ describe('cancelSeedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-ind',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
 
     matching.cancelThrows = true;
@@ -431,7 +563,7 @@ describe('cancelSeedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-1',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
     expect(first.ok).toBe(true);
 
@@ -460,7 +592,7 @@ describe('cancelSeedMarket', () => {
         qtyPerLevel: '1',
         runId: 'run-2',
       },
-      { ledger, matching },
+      { ledger, matching, market: ACTIVE_SPOT },
     );
     expect(second.ok).toBe(true);
     if (!second.ok) return;

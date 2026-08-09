@@ -16,7 +16,7 @@ import { dirname } from 'node:path';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
-import { cancelSeedMarket, seedMarket, type CancelSeedResult, type SeedMarketResult } from './seed-market.js';
+import { cancelSeedMarket, seedMarket, type CancelSeedResult, type SeedMarketResult, type SeedTradableMarket } from './seed-market.js';
 
 export type MmSeedLastRun = { runId: string; levels: number };
 
@@ -80,6 +80,16 @@ export interface MmSeedJobsDeps {
    * External mid for a market. Null/empty → skip that market (never invent).
    */
   midSource: (marketId: string) => string | null | Promise<string | null>;
+  /**
+   * Catalog row for assertTradable (same gate as placeOrder). Null → skip
+   * that market — never invent active/spot to bypass the gate (handoff §7).
+   */
+  marketFor: (marketId: string) => SeedTradableMarket | null | Promise<SeedTradableMarket | null>;
+  /**
+   * Mirrors TRADE_FUTURES_ENABLED. Passed through to seedMarket / assertTradable.
+   * Default false when omitted.
+   */
+  futuresEnabled?: boolean;
   config: MmSeedJobsConfig;
   /**
    * Run id per seed cycle. Must be unique per cycle so holds re-draw after
@@ -144,6 +154,13 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
         continue;
       }
 
+      // Catalog row required for assertTradable — no invent-active fallback.
+      const market = await deps.marketFor(target.marketId);
+      if (market == null) {
+        deps.onResult?.(target.marketId, { skipped: 'market_unknown' });
+        continue;
+      }
+
       // Cancel prior seed: engine may already be empty (fills/cancels);
       // still release any leftover MM holds before a new runId draws again.
       // Includes runs restored from TRADE_MM_SEED_STATE_PATH after restart.
@@ -181,7 +198,12 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
           qtyPerLevel: deps.config.qtyPerLevel,
           runId,
         },
-        { ledger: deps.ledger, matching: deps.matching },
+        {
+          ledger: deps.ledger,
+          matching: deps.matching,
+          market,
+          futuresEnabled: deps.futuresEnabled,
+        },
       );
 
       // Track runs that may leave live orders or stranded holds for cancel path.

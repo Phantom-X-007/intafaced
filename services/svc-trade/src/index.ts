@@ -253,6 +253,13 @@ const mmSeedJobs = startMmSeedJobs({
   ledger,
   matching,
   midSource: mmMidSource,
+  // Same catalog + futures flag as placeOrder (handoff §7 assertTradable).
+  marketFor: async (marketId) => {
+    const m = await trade.marketById(marketId);
+    if (!m) return null;
+    return { symbol: m.symbol, kind: m.kind, status: m.status };
+  },
+  futuresEnabled: env.TRADE_FUTURES_ENABLED,
   config: {
     enabled: env.TRADE_MM_SEED_ENABLED,
     intervalMs: env.TRADE_MM_SEED_INTERVAL_MS,

@@ -1,8 +1,15 @@
 /**
  * Market-maker seeder (trade.mm-bot residual).
  *
- * Orchestrates: external mid → planSeedQuotes → ledger marketMakerOrderHold →
- * matching submit (post-only GTC limits) under house MM identity.
+ * Orchestrates: external mid → assertTradable → planSeedQuotes →
+ * ledger marketMakerOrderHold → matching submit (post-only GTC limits)
+ * under house MM identity.
+ *
+ * TRADABILITY (handoff §7 / house-desk fairness settled rule 2): house is an
+ * ordinary participant until the owner rules. Seed uses the SAME
+ * `assertTradable` as user placeOrder — no second gate, no isHouse bypass.
+ * Halted / futures-with-flag-off / unsupported kind refuse before any hold
+ * or matching.submit.
  *
  * Cancel/reseed: cancelSeedMarket cancels known seed order ids for a prior run
  * and releases remaining MM holds (balance-read, never invent amount). A new
@@ -27,6 +34,8 @@ import {
 } from '@intafaced/ledger-client';
 import type { EngineSubmitResult, MatchingClient } from '../spot/matching-client.js';
 import { mmSeedOrderIdFor } from '../spot/ids.js';
+import { assertTradable } from '../spot/risk.js';
+import { TradeError, type Market } from '../spot/types.js';
 import { planSeedQuotes, type SeedLevelIntent, type SeedPlanInput } from './seed-planner.js';
 
 /** Matching STP account for house market-maker — distinct from user ids. */
@@ -35,6 +44,9 @@ export const MM_MATCHING_ACCOUNT_ID = 'house:market-maker';
 export function isHouseMmAccount(accountId: string): boolean {
   return accountId === MM_MATCHING_ACCOUNT_ID;
 }
+
+/** Fields assertTradable reads — same surface as placeOrder's market row. */
+export type SeedTradableMarket = Pick<Market, 'symbol' | 'kind' | 'status'>;
 
 export interface SeedMarketSpec extends SeedPlanInput {
   marketId: string;
@@ -50,6 +62,16 @@ export interface SeedMarketSpec extends SeedPlanInput {
 export interface SeedMarketDeps {
   ledger: Pick<LedgerClient, 'post'>;
   matching: Pick<MatchingClient, 'submit'>;
+  /**
+   * Catalog row for assertTradable (kind / status / symbol). Required —
+   * never invent active/spot to skip the gate.
+   */
+  market: SeedTradableMarket;
+  /**
+   * Mirrors TRADE_FUTURES_ENABLED. Defaults false inside assertTradable
+   * when omitted — same refusal as placeOrder with the flag off.
+   */
+  futuresEnabled?: boolean;
   /** Override order id generation (tests). */
   orderIdFor?: (intent: SeedLevelIntent, index: number) => string;
 }
@@ -87,9 +109,24 @@ function defaultOrderId(runId: string, marketId: string, intent: SeedLevelIntent
 
 /**
  * Seed one market's book from an external mid.
- * Empty mid / bad params → ok:false, no posts.
+ * Empty mid / bad params / not tradable → ok:false, no posts.
+ *
+ * assertTradable runs before any ledger hold or matching.submit so house
+ * cannot rest depth users cannot trade (halted / futures flag off / kind).
  */
 export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Promise<SeedMarketResult> {
+  // Same gate as user placeOrder — before plan work that is cheap, and before
+  // any hold/submit that is money. Catch so jobs get a soft skip, not a crash.
+  // Cast: assertTradable's param is full Market; it only reads symbol/kind/status.
+  try {
+    assertTradable(deps.market as Market, { futuresEnabled: deps.futuresEnabled });
+  } catch (err) {
+    if (err instanceof TradeError) {
+      return { ok: false, reason: err.code, placements: [] };
+    }
+    throw err;
+  }
+
   const plan = planSeedQuotes({
     midPrice: spec.midPrice,
     halfSpreadBps: spec.halfSpreadBps,
