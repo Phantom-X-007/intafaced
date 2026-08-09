@@ -23,7 +23,9 @@ describe('W6 honesty residuals', () => {
     // deliberate, not accidental.
     const m = paymentService.match(/private assertMerchantActive\([^)]*\)[^{]*\{([\s\S]*?)\n  \}/);
     expect(m, 'assertMerchantActive missing').toBeTruthy();
-    const body = stripComments(m![1]);
+    const captured = m?.[1];
+    expect(captured, 'assertMerchantActive body missing').toEqual(expect.any(String));
+    const body = stripComments(captured as string);
     expect(body).toMatch(/merchant\.status/);
     expect(body).not.toMatch(/kybStatus|kyb_status|pay\.kyb_required/);
   });
@@ -34,7 +36,9 @@ describe('W6 honesty residuals', () => {
     expect(railAdapter).toMatch(/dispute\.|'voided'|\"voided\"/);
     const apply = paymentService.match(/async applyWebhook\([\s\S]*?\n  \}/);
     expect(apply, 'applyWebhook missing').toBeTruthy();
-    const body = stripComments(apply![0]);
+    const applySrc = apply?.[0];
+    expect(applySrc, 'applyWebhook source missing').toEqual(expect.any(String));
+    const body = stripComments(applySrc as string);
     expect(body).not.toMatch(/case\s+['\"]dispute\./);
     expect(body).not.toMatch(/case\s+['\"]voided['\"]/);
     // Still records unsolicited refunds without auto-moving money.
