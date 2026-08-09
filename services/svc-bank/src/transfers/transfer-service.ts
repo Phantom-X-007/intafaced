@@ -541,7 +541,7 @@ export class TransferService {
       count(await this.driveSchedule(toSchedule(row), now, options.maxCatchUp ?? MAX_CATCH_UP_PER_PASS));
     }
     for (const row of stranded) {
-      count(await this.sweepStrandedClaims(toSchedule(row)));
+      count(await this.sweepStrandedClaims(toSchedule(row), now));
     }
 
     return report;
@@ -555,7 +555,7 @@ export class TransferService {
    * before the process died finds the original transaction rather than moving
    * value a second time.
    */
-  private async sweepStrandedClaims(schedule: ScheduleRecord): Promise<FiringOutcome[]> {
+  private async sweepStrandedClaims(schedule: ScheduleRecord, now: Date = new Date()): Promise<FiringOutcome[]> {
     const stranded = await this.sql<Array<{ occurrence: number }>>`
       SELECT occurrence FROM bank.transfer_executions
        WHERE schedule_id = ${schedule.id} AND status = 'pending'
@@ -564,7 +564,7 @@ export class TransferService {
 
     const outcomes: FiringOutcome[] = [];
     for (const row of stranded) {
-      outcomes.push(await this.fireOccurrence(schedule, row.occurrence));
+      outcomes.push(await this.fireOccurrence(schedule, row.occurrence, now));
     }
     return outcomes;
   }
@@ -590,9 +590,9 @@ export class TransferService {
     // statement reads in the order the user's transfers were meant to happen.
     // `sweepStrandedClaims` is the same code the standalone sweep uses — one
     // definition of "finish what was started", not two that could drift.
-    const outcomes: FiringOutcome[] = await this.sweepStrandedClaims(schedule);
+    const outcomes: FiringOutcome[] = await this.sweepStrandedClaims(schedule, now);
     for (const occurrence of plan.occurrences) {
-      outcomes.push(await this.fireOccurrence(schedule, occurrence));
+      outcomes.push(await this.fireOccurrence(schedule, occurrence, now));
     }
 
     // Advance the scheduling hint LAST. If this update is lost, the next pass
@@ -634,7 +634,7 @@ export class TransferService {
    * no ledger transaction and no process left alive to make one — a transfer the
    * user was told would happen, that never will.
    */
-  private async fireOccurrence(schedule: ScheduleRecord, occurrence: number): Promise<FiringOutcome> {
+  private async fireOccurrence(schedule: ScheduleRecord, occurrence: number, now: Date = new Date()): Promise<FiringOutcome> {
     return withMoneySpan(
       'bank.transfer.scheduled',
       {
@@ -645,17 +645,23 @@ export class TransferService {
         assetId: schedule.assetId,
       },
       async (span) => {
-        const outcome = await this.fireOccurrenceInner(schedule, occurrence);
+        const outcome = await this.fireOccurrenceInner(schedule, occurrence, now);
         span.setAttribute('intafaced.outcome', outcome);
         return outcome;
       },
     );
   }
 
-  private async fireOccurrenceInner(schedule: ScheduleRecord, occurrence: number): Promise<FiringOutcome> {
-    const from = await this.spaces.get(schedule.fromSpaceId);
-    const to = await this.spaces.get(schedule.toSpaceId);
-
+  private async fireOccurrenceInner(schedule: ScheduleRecord, occurrence: number, now: Date): Promise<FiringOutcome> {
+    // Same product gates as a one-off transfer. A self-imposed lock or archive
+    // must stop the standing order too — bare `get` used to bypass them and
+    // drain a space the user had locked for rent.
+    //
+    // Resolve *inside* the claim transaction path so a locked debit still
+    // consumes the occurrence (reject + reason), matching insufficient funds:
+    // a locked March is a March transfer that did not run, not an infinite
+    // retry storm while the lock holds. Lock clock is the job's `now`, same as
+    // the due planner — not a separate wall-clock reading.
     return transaction(
       this.sql,
       async (tx) => {
@@ -666,6 +672,7 @@ export class TransferService {
           RETURNING id
         `;
 
+        let executionId: string;
         if (claimed.length === 0) {
           // Another pass owns this occurrence. Almost always it is finished; a
           // row still `pending` means a process died in a way that committed the
@@ -677,10 +684,42 @@ export class TransferService {
           `;
           const row = existing[0];
           if (!row || row.status !== 'pending') return 'already-fired' as const;
-          return this.settle(tx, row.id, schedule, from, to, occurrence);
+          executionId = row.id;
+        } else {
+          executionId = claimed[0]!.id;
         }
 
-        return this.settle(tx, claimed[0]!.id, schedule, from, to, occurrence);
+        let from: Awaited<ReturnType<SpaceService['get']>>;
+        let to: Awaited<ReturnType<SpaceService['get']>>;
+        try {
+          from = await this.spaces.resolveForDebit(schedule.fromSpaceId, now);
+          to = await this.spaces.resolveForCredit(schedule.toSpaceId);
+        } catch (err) {
+          if (err instanceof BankError && (err.code === 'bank.space_locked' || err.code === 'bank.space_archived')) {
+            // Crash window: claim rolled back (or never committed settle) AFTER
+            // ledger.post already moved value under bank.transfer:<id>:<n>. A
+            // later lock must RECOVER that movement as settled — never mark
+            // rejected while the ledger already moved money.
+            const prior = await this.ledger.getTxByKey(`bank.transfer:${schedule.id}:${occurrence}`);
+            if (prior) {
+              await tx`
+                UPDATE bank.transfer_executions
+                   SET status = 'settled', ledger_tx_id = ${prior.id}, settled_at = now()
+                 WHERE id = ${executionId}
+              `;
+              return 'settled';
+            }
+            await tx`
+              UPDATE bank.transfer_executions
+                 SET status = 'rejected', rejection_code = ${err.code}
+               WHERE id = ${executionId}
+            `;
+            return 'rejected';
+          }
+          throw err;
+        }
+
+        return this.settle(tx, executionId, schedule, from, to, occurrence);
       },
       // `read committed` is correct here because the ordering between competing
       // runs is already established by the unique index on (schedule,

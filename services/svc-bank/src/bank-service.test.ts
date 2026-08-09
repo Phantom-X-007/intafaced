@@ -388,6 +388,116 @@ if (!available) {
       expect(ledger.totalsByAsset().USDT ?? '0').toBe('0');
     });
 
+    it('refuses a standing debit from a locked space — same gate as a one-off, no silent drain', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const locked = await bank.spaces.create({
+        userId: USER_A,
+        assetId: 'USDT',
+        name: 'Locked rent pot',
+        lockedUntil: new Date('2027-01-01T00:00:00Z'),
+      });
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent due' });
+      await fund(USER_A, 'USDT', '500');
+      await bank.transfers.transfer({
+        transferId: 'seed-locked-so-1',
+        fromSpaceId: primary.id,
+        toSpaceId: locked.id,
+        amount: amt('200'),
+      });
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: locked.id,
+        toSpaceId: rent.id,
+        amount: amt('50'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+
+      expect(report.rejected).toBe(1);
+      expect(report.settled).toBe(0);
+      expect(formatAmount(await bank.spaces.balanceOf(locked))).toBe('200');
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('0');
+
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'bank.space_locked' });
+      // Occurrence is consumed — a later run with the lock still on does not retry March.
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-15T10:00:00Z') });
+      expect(await bank.transfers.executions(schedule.id)).toHaveLength(1);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('recovers a post-then-lock crash as settled, never rejected-with-money-moved', async () => {
+      // Adversarial: claim rolls back after ledger.post succeeds; user then locks
+      // the debit space. Re-drive must mark settled from the existing key — not
+      // reject while value already left the pot.
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent due' });
+      await fund(USER_A, 'USDT', '500');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('50'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      // Simulate external ledger success without a bank execution row (crash after post).
+      const from = await bank.spaces.get(primary.id);
+      const to = await bank.spaces.get(rent.id);
+      await ledger.post(
+        recipes.bankTransfer({
+          transferId: schedule.id,
+          occurrence: 0,
+          from: accountForSpace(from),
+          to: accountForSpace(to),
+          amount: amt('50'),
+          kind: 'scheduled',
+        }),
+      );
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('50');
+
+      // No public setLock — lock lands the way a concurrent user/session would.
+      await sql`UPDATE bank.spaces SET locked_until = ${new Date('2027-01-01T00:00:00Z')} WHERE id = ${primary.id}`;
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+      expect(report.settled).toBe(1);
+      expect(report.rejected).toBe(0);
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('50');
+      expect(formatAmount(await bank.spaces.balanceOf(primary))).toBe('450');
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('refuses a standing credit into an archived space and moves nothing', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const archiveMe = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Old jar' });
+      await fund(USER_A, 'USDT', '300');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: archiveMe.id,
+        amount: amt('40'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+      await bank.spaces.archive(archiveMe.id);
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+
+      expect(report.rejected).toBe(1);
+      expect(report.settled).toBe(0);
+      expect(await availableOf(USER_A, 'USDT')).toBe('300');
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'bank.space_archived' });
+    });
+
     it('does not retry an occurrence that was rejected — a missed March is not made up in April', async () => {
       const { rent, schedule } = await standingOrder('100', 'monthly');
 
