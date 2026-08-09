@@ -507,9 +507,15 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
       code: 'trade.algo_child_cancel_failed',
     });
     expect(engine.get(parent.id)!.status).not.toBe('cancelled');
-    expect(engine.get(parent.id)!.status).toBe('active');
+    // W4 C1: partial cancel pauses so the next tick cannot place more children.
+    expect(engine.get(parent.id)!.status).toBe('paused');
     // Collect-all: both children were asked before the flip decision.
     expect(attempted.sort()).toEqual(['order-0', 'order-1']);
+
+    ports.advance(2_000);
+    const after = await engine.tick(parent.id);
+    expect(after).toEqual({ kind: 'idle', reason: 'paused' });
+    expect(ports.placed).toHaveLength(2); // no third child
   });
 
   it('A: parent flips cancelled only after every child cancel succeeds', async () => {
@@ -529,6 +535,41 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
     expect(cancelled.status).toBe('cancelled');
     expect(order).toContain('cancel:order-0');
     expect(order).toContain('cancel:order-1');
+  });
+});
+
+describe('TwapEngine — tickAll isolation (W4 C2)', () => {
+  it('one parent throw does not starve the next active parent', async () => {
+    let firstPlaces = 0;
+    let secondPlaces = 0;
+    const ports = makePorts({
+      markFor: async (marketId) => {
+        if (marketId === 'm-bad') throw new Error('mark feed down');
+        return { bid: parseAmount('100'), ask: parseAmount('101') };
+      },
+      placeChild: async (input) => {
+        if (input.marketId === 'm-bad') firstPlaces += 1;
+        else secondPlaces += 1;
+        return { orderId: `order-${input.marketId}-${firstPlaces + secondPlaces}` };
+      },
+    });
+    const engine = new TwapEngine(ports);
+    const bad = engine.create(
+      USER,
+      { ...baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000 }), marketId: 'm-bad', symbol: 'BAD/USDT' },
+      LOT,
+    );
+    const good = engine.create(
+      USER,
+      { ...baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000 }), marketId: 'm-good', symbol: 'GOOD/USDT' },
+      LOT,
+    );
+    // Map iteration order is insertion order — bad first.
+    expect([bad.id, good.id]).toEqual([engine.get(bad.id)!.id, engine.get(good.id)!.id]);
+    await engine.tickAll();
+    expect(firstPlaces).toBe(0);
+    expect(secondPlaces).toBe(1);
+    expect(engine.get(good.id)!.children).toHaveLength(1);
   });
 });
 

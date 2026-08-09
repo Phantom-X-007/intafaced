@@ -238,8 +238,21 @@ export class TwapEngine {
     if (failures.length > 0) {
       const first = failures[0]!.reason;
       const message = first instanceof Error ? first.message : String(first);
+      // W4 C1: user asked to stop. Partial cancel must NOT leave the parent
+      // `active` — the next job tick would place more children under a stop
+      // that already failed once. Pause so tick idles; retry cancel later.
+      // (Still not `cancelled` until every child cancel succeeds — that half
+      // stays sealed from #1193.)
+      if (parent.status === 'active') {
+        this.replace(parentId, {
+          ...parent,
+          status: 'paused',
+          pausedAt: this.ports.now(),
+          scheduleStretchReason: 'user_pause',
+        });
+      }
       throw new TradeError(
-        `algo cancel refused: ${failures.length} of ${parent.children.length} child cancel(s) failed — parent left ${parent.status}: ${message}`,
+        `algo cancel refused: ${failures.length} of ${parent.children.length} child cancel(s) failed — parent left paused (no further slices until re-cancel succeeds): ${message}`,
         first instanceof TradeError && first.code === 'trade.algo_principal_unavailable'
           ? 'trade.algo_principal_unavailable'
           : 'trade.algo_child_cancel_failed',
@@ -403,11 +416,18 @@ export class TwapEngine {
     }
   }
 
-  /** Drive all active parents once (job host). */
+  /**
+   * Drive all active parents once (job host).
+   * One parent throw must not starve the rest of the sweep (W4 C2).
+   */
   async tickAll(): Promise<void> {
     for (const [id, parent] of this.parents) {
-      if (parent.status === 'active') {
+      if (parent.status !== 'active') continue;
+      try {
         await this.tick(id);
+      } catch {
+        // Per-parent isolation: log is the job host's onError if the whole
+        // tickAllAlgos throws; here we keep siblings moving.
       }
     }
   }
