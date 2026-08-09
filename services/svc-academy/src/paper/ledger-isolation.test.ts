@@ -62,6 +62,47 @@ function paperSources(): { readonly name: string; readonly text: string }[] {
     .map((name) => ({ name, text: readFileSync(join(HERE, name), 'utf8') }));
 }
 
+
+/** Router + service code that implements the paper wire surface (not under src/paper/). */
+function paperWireSurfaces(): { readonly name: string; readonly text: string }[] {
+  const root = join(HERE, '..');
+  const files = [
+    { name: 'router.ts', path: join(root, 'router.ts') },
+    { name: 'academy-service.ts', path: join(root, 'academy-service.ts') },
+  ];
+  return files.map(({ name, path }) => ({ name, text: readFileSync(path, 'utf8') }));
+}
+
+/** Extract only the paper-related procedure / method blocks from a larger file. */
+function stripComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+}
+
+function paperRelevantCode(name: string, text: string): string {
+  // Locate regions on the RAW source (comment markers), then strip comments
+  // so prose about the ledger does not trip the FORBIDDEN scan.
+  if (name === 'router.ts') {
+    const start = text.indexOf('paperDrill:');
+    // Next major surface after paper ops is lobbies rooms:
+    const end = text.indexOf('\n    rooms:');
+    if (start < 0 || end < 0 || end <= start) {
+      throw new Error('router.ts paper region markers not found — isolation scan cannot prove the wire path');
+    }
+    return stripComments(text.slice(start, end));
+  }
+  if (name === 'academy-service.ts') {
+    const start = text.indexOf('assertPaperTradingEnabled');
+    const end = text.indexOf('// ── Tournament ladders');
+    if (start < 0) throw new Error('academy-service paper methods not found');
+    return stripComments(text.slice(start, end > start ? end : undefined));
+  }
+  return stripComments(text);
+}
+
 describe('paper drills are structurally incapable of a real ledger post', () => {
   it('finds the paper modules at all — a scan over nothing proves nothing', () => {
     const names = paperSources().map((s) => s.name);
@@ -109,5 +150,19 @@ describe('paper drills are structurally incapable of a real ledger post', () => 
       // starts disagreeing with itself at the 17th decimal place.
       expect(/parseFloat|Number\s*\(\s*(price|size|mark)/i.test(code), `${name} parses money with a float`).toBe(false);
     }
+  });
+});
+
+describe('paper wire path (router + service) cannot post to the ledger', () => {
+  it('finds the paper regions on the router and service', () => {
+    const surfaces = paperWireSurfaces();
+    expect(surfaces.map((s) => s.name).sort()).toEqual(['academy-service.ts', 'router.ts']);
+  });
+
+  it.each(paperWireSurfaces())('$name paper region imports no ledger write surface', ({ name, text }) => {
+    const code = paperRelevantCode(name, text);
+    expect(code.length).toBeGreaterThan(50);
+    const hits = FORBIDDEN.filter(({ pattern }) => pattern.test(code)).map(({ pattern, why }) => `${pattern} — ${why}`);
+    expect(hits, `${name} paper wire reaches ledger write surface:\n  ${hits.join('\n  ')}`).toEqual([]);
   });
 });
