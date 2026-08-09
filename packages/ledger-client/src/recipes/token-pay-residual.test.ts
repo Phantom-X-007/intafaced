@@ -185,6 +185,46 @@ describe('burn', () => {
     expect(second.id).toBe(first.id);
     expect(formatAmount((await ledger.balance(burnAccount('IFC'))).amount)).toBe('10');
   });
+
+  it('keys burn by asset so the same runId on two assets is two burns', async () => {
+    // Without assetId in the key, the second burn would return the first tx and
+    // leave the second asset unburned — recon still green, supply still live.
+    await deposit(USER, '5', 'burn-ifc', 'IFC');
+    await deposit(USER, '5', 'burn-usdt', 'USDT');
+    const ifc = await ledger.post(
+      recipes.burn({ runId: 'shared-run', assetId: 'IFC', amount: amt('5'), from: userAvailable(USER, 'IFC') }),
+    );
+    const usdt = await ledger.post(
+      recipes.burn({ runId: 'shared-run', assetId: 'USDT', amount: amt('5'), from: userAvailable(USER, 'USDT') }),
+    );
+    expect(usdt.id).not.toBe(ifc.id);
+    expect(recipes.burn({ runId: 'shared-run', assetId: 'IFC', amount: amt('5'), from: userAvailable(USER, 'IFC') }).idempotencyKey).toBe(
+      'token.burn:IFC:shared-run',
+    );
+    expect(formatAmount((await ledger.balance(burnAccount('IFC'))).amount)).toBe('5');
+    expect(formatAmount((await ledger.balance(burnAccount('USDT'))).amount)).toBe('5');
+  });
+});
+
+describe('mintEmission keys', () => {
+  it('keys emission by asset so one epoch can mint more than one asset', () => {
+    // Same failure class as burn: epoch-only key drops the second asset's mint.
+    const ifc = recipes.mintEmission({
+      epoch: 42,
+      assetId: 'IFC',
+      amount: amt('100'),
+      destination: { ownerType: 'house', ownerId: 'rewards-engine', assetId: 'IFC', kind: 'available' },
+    });
+    const usdt = recipes.mintEmission({
+      epoch: 42,
+      assetId: 'USDT',
+      amount: amt('50'),
+      destination: { ownerType: 'house', ownerId: 'rewards-engine', assetId: 'USDT', kind: 'available' },
+    });
+    expect(ifc.idempotencyKey).toBe('token.emission:IFC:42');
+    expect(usdt.idempotencyKey).toBe('token.emission:USDT:42');
+    expect(ifc.idempotencyKey).not.toBe(usdt.idempotencyKey);
+  });
 });
 
 describe('sweepFeesToRewards + rewardPay', () => {
