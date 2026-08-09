@@ -7,7 +7,7 @@ import {
   type DepthSnapshot,
   type WireLevel,
 } from '@intafaced/market-data';
-import { CLOSE_POLICY, CLOSE_TRY_LATER, DepthHub, type DepthSink } from './hub.js';
+import { CLOSE_POLICY, CLOSE_TRY_LATER, DepthHub, type DepthHubOptions, type DepthSink } from './hub.js';
 import type { DepthSource } from './source.js';
 
 /**
@@ -97,7 +97,7 @@ class FakeSource implements DepthSource {
 /** Let every pending microtask and timer-0 continuation settle. */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-function hubFor(source: FakeSource, overrides: Partial<Parameters<typeof DepthHub.prototype.constructor>[1]> = {}) {
+function hubFor(source: FakeSource, overrides: Partial<DepthHubOptions> = {}) {
   return new DepthHub(source, {
     depthLimit: 50,
     highWaterBytes: 1_000,
