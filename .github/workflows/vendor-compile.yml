@@ -50,6 +50,29 @@ jobs:
       - name: Compile core module (skip tests)
         run: |
           set -euo pipefail
-          echo "Vendor compile probe — core only (path-filtered, continue-on-error)"
+          echo "Vendor compile probe — framework core only (path-filtered, continue-on-error)"
           mvn -B -q -pl core -am -DskipTests compile
           echo "✓ vendor compile probe: framework core compiled"
+
+  # wallet_rpc production bumps (#1142) never exercised the framework-core job.
+  # Compile the shared reactor module only — full multi-coin reactor still has a
+  # missing `xrp` directory and is not claimed green here. Same continue-on-error
+  # posture: signal for the Dependabot merger, never a required merge check.
+  compile-wallet-rpc-common:
+    name: Compile wallet_rpc (rpc-common)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    container:
+      image: maven:3.8.8-eclipse-temurin-8
+    defaults:
+      run:
+        working-directory: vendor/upstream-exchange/01_wallet_rpc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compile rpc-common module (skip tests)
+        run: |
+          set -euo pipefail
+          echo "Vendor compile probe — wallet_rpc rpc-common only (continue-on-error)"
+          mvn -B -q -pl rpc-common -am -DskipTests compile
+          echo "✓ vendor compile probe: wallet_rpc rpc-common compiled"
