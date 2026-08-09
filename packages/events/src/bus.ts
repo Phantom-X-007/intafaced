@@ -124,6 +124,29 @@ export class EventVersionMismatchError extends Error {
   }
 }
 
+/**
+ * The envelope names a different subject than the subscription asked for.
+ *
+ * JetStream `filter_subject` usually makes this unreachable. The gate still
+ * refuses, because both bus implementations route every delivery through
+ * `acceptEnvelope`, and a corrupt or hand-built envelope must not be parsed
+ * under the wrong catalog entry: same-shape payloads across subjects would
+ * otherwise pass silently with the wrong identity on the wire.
+ */
+export class EventSubjectMismatchError extends Error {
+  constructor(
+    readonly expectedSubject: string,
+    readonly envelopeSubject: string,
+    readonly producer: string,
+  ) {
+    super(
+      `Subject mismatch on delivery from producer "${producer}": subscription expects "${expectedSubject}", ` +
+        `envelope carries "${envelopeSubject}". Refused — the payload must not be read under the wrong catalog entry.`,
+    );
+    this.name = 'EventSubjectMismatchError';
+  }
+}
+
 const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
@@ -206,13 +229,16 @@ export function validatePayload<K extends EventName>(name: K, payload: unknown, 
 }
 
 /**
- * The consume-side gate: version, then schema, then drift.
+ * The consume-side gate: subject, then version, then schema, then drift.
  *
  * Both bus implementations route every delivery through this, so a consumer
  * cannot opt out of the check by being written carelessly.
  */
 export function acceptEnvelope<K extends EventName>(name: K, envelope: Envelope): Payload<K> {
   const def = EVENT_CATALOG[name] as EventDef;
+  if (envelope.subject !== def.subject) {
+    throw new EventSubjectMismatchError(def.subject, envelope.subject, envelope.producer);
+  }
   if (envelope.version !== def.version) {
     throw new EventVersionMismatchError(def.subject, envelope.producer, envelope.version, def.version);
   }
