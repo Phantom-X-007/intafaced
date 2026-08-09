@@ -226,9 +226,9 @@ jobs:
         run: |
           # "Created but empty" was the real failure mode, and it is
           # indistinguishable from success unless something asserts on contents.
-          expected=13
+          expected=14
           count=$(psql -h localhost -U intafaced -d intafaced_test -tAc \
-            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('identity','ledger','token','matching','trade','pay','p2p','blueprint','bank','agents','indexer','protocol','notify');")
+            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('identity','ledger','token','matching','trade','pay','p2p','blueprint','bank','agents','indexer','protocol','notify','support');")
           echo "service schemas in intafaced_test: $count / $expected"
           if [ "$count" -ne "$expected" ]; then
             echo "::error::intafaced_test missing service schemas ($count/$expected) — 02-intafaced-test-db.sh did not do its job"
