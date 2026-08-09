@@ -139,7 +139,7 @@ describe('ownership — the only thing standing between a query string and anoth
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/payments/${PAYMENT}`,
+      url: `/v1/payments/${PAYMENT}`,
       headers: signed(principal({ sub: STRANGER, userId: STRANGER })),
     });
 
@@ -154,7 +154,7 @@ describe('ownership — the only thing standing between a query string and anoth
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/payments?merchantId=${MERCHANT}`,
+      url: `/v1/payments?merchantId=${MERCHANT}`,
       headers: signed(principal({ sub: STRANGER, userId: STRANGER })),
     });
 
@@ -167,7 +167,7 @@ describe('ownership — the only thing standing between a query string and anoth
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/balances?merchantId=${MERCHANT}&assetId=USD`,
+      url: `/v1/balances?merchantId=${MERCHANT}&assetId=USD`,
       headers: signed(principal({ sub: STRANGER, userId: STRANGER })),
     });
 
@@ -178,7 +178,7 @@ describe('ownership — the only thing standing between a query string and anoth
   it('serves the owner', async () => {
     app = await build();
 
-    const res = await app.inject({ method: 'GET', url: `/api/pay/v1/payments/${PAYMENT}`, headers: signed() });
+    const res = await app.inject({ method: 'GET', url: `/v1/payments/${PAYMENT}`, headers: signed() });
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ id: PAYMENT, merchantId: MERCHANT, status: 'captured' });
@@ -191,7 +191,7 @@ describe('the mount boundary', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/payments/${PAYMENT}`,
+      url: `/v1/payments/${PAYMENT}`,
       headers: { 'x-intafaced-principal': encodePrincipal(principal()) },
     });
 
@@ -205,7 +205,7 @@ describe('the mount boundary', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/payments/${PAYMENT}`,
+      url: `/v1/payments/${PAYMENT}`,
       headers: {
         'x-intafaced-principal': raw,
         'x-intafaced-principal-sig': signPrincipalHeader(raw, 'a-different-secret-of-sufficient-length', 'DE'),
@@ -221,7 +221,7 @@ describe('the mount boundary', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/payments/${PAYMENT}`,
+      url: `/v1/payments/${PAYMENT}`,
       headers: signed(principal({ scopes: ['trade:read'] })),
     });
 
@@ -230,7 +230,7 @@ describe('the mount boundary', () => {
 
   it('refuses an unauthenticated request outright', async () => {
     app = await build();
-    const res = await app.inject({ method: 'GET', url: `/api/pay/v1/payments/${PAYMENT}` });
+    const res = await app.inject({ method: 'GET', url: `/v1/payments/${PAYMENT}` });
     expect(res.statusCode).toBe(401);
   });
 });
@@ -239,7 +239,7 @@ describe('money on the wire (ADR §2.3)', () => {
   it('sends amounts as DECIMAL STRINGS, never numbers and never minor units', async () => {
     app = await build();
 
-    const res = await app.inject({ method: 'GET', url: `/api/pay/v1/payments/${PAYMENT}`, headers: signed() });
+    const res = await app.inject({ method: 'GET', url: `/v1/payments/${PAYMENT}`, headers: signed() });
     const body = res.json();
 
     expect(body.amount).toBe('1.1');
@@ -253,7 +253,7 @@ describe('money on the wire (ADR §2.3)', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/balances?merchantId=${MERCHANT}&assetId=USD`,
+      url: `/v1/balances?merchantId=${MERCHANT}&assetId=USD`,
       headers: signed(),
     });
 
@@ -267,7 +267,7 @@ describe('refusals keep the pay.* vocabulary (ADR §2.6)', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/pay/v1/payments/66666666-6666-4666-8666-666666666666',
+      url: '/v1/payments/66666666-6666-4666-8666-666666666666',
       headers: signed(),
     });
 
@@ -279,7 +279,7 @@ describe('refusals keep the pay.* vocabulary (ADR §2.6)', () => {
     app = await build();
     const res = await app.inject({
       method: 'GET',
-      url: '/api/pay/v1/payments?merchantId=not-a-uuid',
+      url: '/v1/payments?merchantId=not-a-uuid',
       headers: signed(),
     });
     expect(res.statusCode).toBe(400);
@@ -292,9 +292,12 @@ describe('the spec is served, and describes what the routes actually do', () => 
 
     const spec = app.swagger() as {
       paths: Record<string, unknown>;
+      servers?: Array<{ url: string }>;
       components?: { securitySchemes?: Record<string, unknown> };
     };
 
+    // Paths are relative to servers[url]=/api/pay/v1 (transform strips service BASE).
+    // Full merchant URL = server + path = /api/pay/v1/payments — never /api/pay/v1/v1/….
     expect(Object.keys(spec.paths)).toEqual(
       expect.arrayContaining([
         '/payments/{id}',
@@ -305,13 +308,16 @@ describe('the spec is served, and describes what the routes actually do', () => 
         '/payments/{id}/refund',
       ]),
     );
+    expect(Object.keys(spec.paths).some((p) => p.startsWith('/v1/'))).toBe(false);
     expect(spec.components?.securitySchemes).toHaveProperty('apiKey');
+    // External path merchants call — edge prefix intact. Service mount is /v1.
+    expect(spec.servers?.map((s) => s.url)).toContain('/api/pay/v1');
   });
 
   it('serves the spec over HTTP, without shipping a static file server', async () => {
     app = await build();
 
-    const res = await app.inject({ method: 'GET', url: '/api/pay/v1/openapi.json' });
+    const res = await app.inject({ method: 'GET', url: '/v1/openapi.json' });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().info.title).toBe('Payments API');
@@ -336,11 +342,15 @@ describe('the spec is served, and describes what the routes actually do', () => 
     app = await build();
 
     // Every path @fastify/swagger-ui serves by default or by common config.
+    // Include both the service mount (/v1) and the external edge path so a
+    // future mount-prefix mistake cannot reintroduce a console on either.
     const consoleRoutes = [
       '/documentation',
       '/documentation/',
       '/documentation/index.html',
       '/documentation/static/index.html',
+      '/v1/documentation',
+      '/v1/docs',
       '/api/pay/v1/documentation',
       '/api/pay/v1/docs',
       '/docs',
@@ -355,7 +365,7 @@ describe('the spec is served, and describes what the routes actually do', () => 
 
   it('OpenAPI description matches sandbox-key + quickstart behaviour (step 5)', async () => {
     app = await build();
-    const res = await app.inject({ method: 'GET', url: '/api/pay/v1/openapi.json' });
+    const res = await app.inject({ method: 'GET', url: '/v1/openapi.json' });
     const desc = String(res.json().info.description ?? '');
     expect(desc).toContain('MERCHANT-PUBLIC-API-QUICKSTART');
     expect(desc).toMatch(/sandbox/i);
@@ -386,7 +396,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers: { ...sandboxSigned(), 'content-type': 'application/json' },
       payload: createBody,
     });
@@ -402,7 +412,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers: { ...sandboxSigned(), 'content-type': 'application/json', 'idempotency-key': 'create:order:42' },
       payload: createBody,
     });
@@ -421,8 +431,8 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     app = await build(pay);
     const headers = { ...sandboxSigned(), 'content-type': 'application/json', 'idempotency-key': 'create:order:99' };
 
-    const first = await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
-    const second = await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
+    const first = await app.inject({ method: 'POST', url: '/v1/payments', headers, payload: createBody });
+    const second = await app.inject({ method: 'POST', url: '/v1/payments', headers, payload: createBody });
 
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
@@ -435,10 +445,10 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
     app = await build(pay);
     const headers = { ...sandboxSigned(), 'content-type': 'application/json', 'idempotency-key': 'create:order:conflict' };
 
-    await app.inject({ method: 'POST', url: '/api/pay/v1/payments', headers, payload: createBody });
+    await app.inject({ method: 'POST', url: '/v1/payments', headers, payload: createBody });
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers,
       payload: { ...createBody, amount: '2.00' },
     });
@@ -455,7 +465,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const create = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers: { ...stranger, 'content-type': 'application/json', 'idempotency-key': 'stranger:create' },
       payload: createBody,
     });
@@ -464,7 +474,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const capture = await app.inject({
       method: 'POST',
-      url: `/api/pay/v1/payments/${PAYMENT}/capture`,
+      url: `/v1/payments/${PAYMENT}/capture`,
       headers: { ...stranger, 'content-type': 'application/json', 'idempotency-key': 'stranger:capture' },
       payload: {},
     });
@@ -478,7 +488,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const auth = await app.inject({
       method: 'POST',
-      url: `/api/pay/v1/payments/${PAYMENT}/authorize`,
+      url: `/v1/payments/${PAYMENT}/authorize`,
       headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'auth:1' },
       payload: {},
     });
@@ -487,7 +497,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const capture = await app.inject({
       method: 'POST',
-      url: `/api/pay/v1/payments/${PAYMENT}/capture`,
+      url: `/v1/payments/${PAYMENT}/capture`,
       headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'cap:1' },
       payload: { amount: '0.50' },
     });
@@ -497,7 +507,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const refund = await app.inject({
       method: 'POST',
-      url: `/api/pay/v1/payments/${PAYMENT}/refund`,
+      url: `/v1/payments/${PAYMENT}/refund`,
       headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'ref:1' },
       payload: { amount: '0.50', refundId: 'refund:order:1' },
     });
@@ -511,7 +521,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `/api/pay/v1/payments/${PAYMENT}/refund`,
+      url: `/v1/payments/${PAYMENT}/refund`,
       headers: {
         ...signed(principal({ scopes: ['pay:write'] })),
         'content-type': 'application/json',
@@ -529,7 +539,7 @@ describe('step 2 — mutating paths + Idempotency-Key (ADR §2.2)', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'num:1' },
       payload: { ...createBody, amount: 1.1 },
     });
@@ -545,7 +555,7 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/webhook-endpoints',
+      url: '/v1/webhook-endpoints',
       headers: { ...signed(), 'content-type': 'application/json' },
       payload: { merchantId: MERCHANT, url: 'https://merchant.example/hooks/pay' },
     });
@@ -562,7 +572,7 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/webhook-endpoints',
+      url: '/v1/webhook-endpoints',
       headers: {
         ...signed(principal({ sub: STRANGER, userId: STRANGER })),
         'content-type': 'application/json',
@@ -579,7 +589,7 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/api/pay/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed`,
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed`,
       headers: signed(),
     });
 
@@ -603,7 +613,7 @@ describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers: {
         ...signed(principal({ key_env: 'sandbox', kid: 'k-sandbox' })),
         'content-type': 'application/json',
@@ -623,7 +633,7 @@ describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers: {
         ...signed(principal({ key_env: 'live', kid: 'k-live' })),
         'content-type': 'application/json',
@@ -643,7 +653,7 @@ describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/pay/v1/payments',
+      url: '/v1/payments',
       headers: {
         ...signed(principal({ key_env: 'live', kid: 'k-live-2' })),
         'content-type': 'application/json',

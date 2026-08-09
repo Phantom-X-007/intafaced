@@ -14,8 +14,8 @@ function tokenOf(claim: RestIdempotencyClaim): string {
 
 describe('fingerprintRequest', () => {
   it('is stable under key reordering', () => {
-    const a = fingerprintRequest('POST', '/api/pay/v1/payments', { amount: '1.1', merchantId: 'm' });
-    const b = fingerprintRequest('POST', '/api/pay/v1/payments', { merchantId: 'm', amount: '1.1' });
+    const a = fingerprintRequest('POST', '/v1/payments', { amount: '1.1', merchantId: 'm' });
+    const b = fingerprintRequest('POST', '/v1/payments', { merchantId: 'm', amount: '1.1' });
     expect(a).toBe(b);
   });
 

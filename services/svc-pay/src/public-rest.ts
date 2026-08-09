@@ -66,8 +66,22 @@ import { resolveMerchantRail } from './sandbox-key-routing.js';
  * Not Class X go-live. Not a live acquirer. Outbound webhooks do not move value.
  */
 
-/** OpenAPI mount point. `/api/pay` is the edge prefix; `/v1` is ADR §2.7. */
-const BASE = '/api/pay/v1';
+/**
+ * Service-side mount. svc-edge strips `/api/pay` before forwarding
+ * (`services/svc-edge/src/routes.ts` — no `preservePath`), so a browser call to
+ * `/api/pay/v1/payments` arrives here as `/v1/payments`.
+ *
+ * Mounting at `/api/pay/v1` 404s every external call (edge already ate the
+ * prefix). Do **not** "fix" that by setting `preservePath: true` on the pay
+ * upstream — that would break `/api/pay/trpc` and `/api/pay/webhooks`, which
+ * correctly rely on stripping.
+ *
+ * External path (quickstart, OpenAPI `servers`) stays `/api/pay/v1` — that is
+ * what merchants call. `BASE` is only what this process listens on.
+ */
+const BASE = '/v1';
+/** Public edge path advertised in OpenAPI. Not a mount. */
+const EXTERNAL_BASE = '/api/pay/v1';
 
 const PAYMENT_STATUSES: readonly PaymentStatus[] = ['created', 'authorized', 'captured', 'settled', 'refunded', 'disputed', 'failed'];
 
@@ -304,7 +318,10 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           'This surface does **not** imply a live card acquirer (Class X / `socket.psp-partners`).',
         ].join('\n'),
       },
-      servers: [{ url: BASE }],
+      // External edge path. Service mount is BASE (`/v1`); edge strips `/api/pay`.
+      // Paths below are rewritten relative to this server so composition is
+      // `/api/pay/v1` + `/payments` = `/api/pay/v1/payments`, never a doubled `/v1`.
+      servers: [{ url: EXTERNAL_BASE }],
       components: {
         securitySchemes: {
           apiKey: { type: 'http', scheme: 'bearer', description: 'An `ifc_…` API key.' },
@@ -321,6 +338,15 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
       security: [{ apiKey: [] }],
       tags: [{ name: 'payments' }, { name: 'balances' }, { name: 'webhooks' }],
+    },
+    /**
+     * Routes mount at BASE (`/v1/…`) because that is what arrives after the edge
+     * strips `/api/pay`. OpenAPI must advertise paths relative to EXTERNAL_BASE
+     * so a generated client does not call `/api/pay/v1/v1/payments`.
+     */
+    transform: ({ schema, url }) => {
+      const path = url.startsWith(BASE) ? url.slice(BASE.length) || '/' : url;
+      return { schema, url: path };
     },
   });
 
