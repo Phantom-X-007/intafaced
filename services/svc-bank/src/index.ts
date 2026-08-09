@@ -305,6 +305,20 @@ app.post('/internal/jobs/resume-pending-loans', async (req, reply) => {
   return withSpan('bank.job.resumePendingLoans', async () => bank.loans.resumePending());
 });
 
+/**
+ * Re-drive earn deposits stuck between the ledger post and activate.
+ *
+ * Mirror of resume-pending-loans for the earn claim window: row is `pending`,
+ * funds may already be staked under bank.earn.deposit:<positionId>. Idempotent
+ * re-post + activate; safe to fire on a schedule.
+ */
+app.post('/internal/jobs/resume-pending-earn', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
+  return withSpan('bank.job.resumePendingEarn', async () => bank.earn.resumePending());
+});
+
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {

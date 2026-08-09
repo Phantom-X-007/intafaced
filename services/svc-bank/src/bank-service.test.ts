@@ -1269,6 +1269,122 @@ if (!available) {
       expect(await stakedOf(USER_A, 'USDT')).toBe('1000');
       expect(await availableOf(USER_A, 'USDT')).toBe('1');
     });
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * IF THE PROCESS DIES AFTER THE LEDGER POST AND BEFORE ACTIVATE, WHOSE FUNDS?
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * The deposit order is claim `pending` → ledger post → UPDATE `active`.
+     * A crash in that window leaves principal staked on the ledger while the
+     * row stays `pending` — invisible to positionsOf / principalOf / stakedOf
+     * (all filter active) and with no job to finish the claim. Loans already
+     * have resumePending; earn must too.
+     *
+     * Recovery re-posts (idempotent on bank.earn.deposit:<positionId>) and
+     * activates. Double-resume is a no-op. Withdraw refuses pending so a user
+     * cannot close a half-open claim under their feet — resume first.
+     */
+    describe('the crash window between earn deposit ledger post and activate', () => {
+      const POSITION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+      async function openFlexiblePool() {
+        return bank.earn.createPool({
+          assetId: 'USDT',
+          kind: 'flexible',
+          name: 'Crash-window USDT',
+          aprBps: 1000,
+        });
+      }
+
+      /**
+       * Simulate the crash: row is pending, funds already moved into the
+       * position's stake pot. Mirrors "process died after post, before UPDATE".
+       */
+      async function strandAfterPost(poolId: string, amount: string = '400') {
+        await fund(USER_A, 'USDT', '1000');
+        const now = new Date('2026-03-01T00:00:00Z');
+        await sql`
+          INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
+          VALUES (${POSITION_ID}, ${poolId}, ${USER_A}, 'USDT', ${amount}::numeric, ${now}, ${null}, 'pending')
+        `;
+        await ledger.post(
+          recipes.earnDeposit({
+            positionId: POSITION_ID,
+            poolId,
+            userId: USER_A,
+            assetId: 'USDT',
+            amount: amt(amount),
+          }),
+        );
+      }
+
+      it('leaves funds staked but invisible to principalOf / positions while pending', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+
+        // Ledger has the stake; product views that only count active do not.
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        expect(await availableOf(USER_A, 'USDT')).toBe('600');
+        expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('0');
+        expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('0');
+        expect(await bank.earn.positionsOf(USER_A)).toHaveLength(0);
+
+        const row = await sql<Array<{ status: string }>>`
+          SELECT status FROM bank.earn_positions WHERE id = ${POSITION_ID}
+        `;
+        expect(row[0]!.status).toBe('pending');
+      });
+
+      it('resumePending activates once, reconciles principalOf/stakedOf, and is double-safe', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+
+        const first = await bank.earn.resumePending();
+        expect(first).toHaveLength(1);
+        expect(first[0]).toMatchObject({ positionId: POSITION_ID, outcome: 'completed' });
+
+        const pos = await bank.earn.position(POSITION_ID);
+        expect(pos.status).toBe('active');
+        expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('400');
+        expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('400');
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        expect(await availableOf(USER_A, 'USDT')).toBe('600');
+        expect(await bank.earn.positionsOf(USER_A)).toHaveLength(1);
+
+        // Second pass: nothing left pending, ledger did not double-stake.
+        const second = await bank.earn.resumePending();
+        expect(second).toHaveLength(0);
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('400');
+      });
+
+      it('refuses withdraw while the position is still pending', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+
+        await expect(bank.earn.withdraw(POSITION_ID)).rejects.toMatchObject({
+          code: 'bank.position_pending',
+        });
+        // Funds still staked; claim still pending.
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        const row = await sql<Array<{ status: string }>>`
+          SELECT status FROM bank.earn_positions WHERE id = ${POSITION_ID}
+        `;
+        expect(row[0]!.status).toBe('pending');
+      });
+
+      it('after resume, withdraw returns the principal exactly once', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+        await bank.earn.resumePending();
+
+        await bank.earn.withdraw(POSITION_ID);
+        expect(await availableOf(USER_A, 'USDT')).toBe('1000');
+        expect(await stakedOf(USER_A, 'USDT')).toBe('0');
+        await expect(bank.earn.withdraw(POSITION_ID)).rejects.toMatchObject({ code: 'bank.position_closed' });
+      });
+    });
   });
 
   // ══ Spend analytics ═══════════════════════════════════════════════════════

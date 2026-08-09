@@ -53,7 +53,8 @@ export interface PositionRecord {
   principal: Amount;
   openedAt: Date;
   maturesAt: Date | null;
-  status: 'active' | 'closed';
+  /** `pending` is the claim before activate — not interest-eligible, not listable as open. */
+  status: 'pending' | 'active' | 'closed';
 }
 
 interface PoolRow {
@@ -75,7 +76,7 @@ interface PositionRow {
   principal: string;
   opened_at: Date;
   matures_at: Date | null;
-  status: 'active' | 'closed';
+  status: 'pending' | 'active' | 'closed';
 }
 
 function toPool(row: PoolRow): PoolRecord {
@@ -232,7 +233,8 @@ export class EarnService {
    * L3-3 ordering: **claim `pending` → ledger post → activate** (same as
    * svc-token stake). `pending` is not interest-eligible; if the ledger
    * refuses we delete the claim so nothing is left to accrue against.
-   * Ledger post is idempotent on `positionId` for crash recovery.
+   * Ledger post is idempotent on `positionId` for crash recovery — see
+   * `resumePending` when the process dies after the post and before activate.
    */
   async deposit(input: { poolId: string; userId: string; amount: Amount; positionId?: string; now?: Date }): Promise<PositionRecord> {
     const positionId = input.positionId ?? crypto.randomUUID();
@@ -275,15 +277,17 @@ export class EarnService {
         }
 
         try {
-          await this.ledger.post(
-            recipes.earnDeposit({
-              positionId,
-              poolId: pool.id,
-              userId: input.userId,
-              assetId: pool.assetId,
-              amount: input.amount,
-            }),
-          );
+          // Post alone is in the try: if it fails, funds never left available and
+          // deleting the claim is safe. If the process dies *after* a successful
+          // post and before activate, the row stays `pending` for resumePending —
+          // never delete a staked claim.
+          await this.postEarnDeposit({
+            positionId,
+            poolId: pool.id,
+            userId: input.userId,
+            assetId: pool.assetId,
+            amount: input.amount,
+          });
         } catch (err) {
           await this.sql`
             DELETE FROM bank.earn_positions WHERE id = ${positionId} AND status = 'pending'
@@ -291,10 +295,7 @@ export class EarnService {
           throw err;
         }
 
-        await this.sql`
-          UPDATE bank.earn_positions SET status = 'active' WHERE id = ${positionId} AND status = 'pending'
-        `;
-
+        await this.activatePending(positionId);
         return this.position(positionId);
       },
     );
@@ -337,6 +338,98 @@ export class EarnService {
     }
 
     return existing.status === 'pending' ? null : this.position(positionId);
+  }
+
+  /** Idempotent deposit post — key `bank.earn.deposit:<positionId>`. */
+  private async postEarnDeposit(input: {
+    positionId: string;
+    poolId: string;
+    userId: string;
+    assetId: string;
+    amount: Amount;
+  }): Promise<void> {
+    await this.ledger.post(
+      recipes.earnDeposit({
+        positionId: input.positionId,
+        poolId: input.poolId,
+        userId: input.userId,
+        assetId: input.assetId,
+        amount: input.amount,
+      }),
+    );
+  }
+
+  private async activatePending(positionId: string): Promise<void> {
+    await this.sql`
+      UPDATE bank.earn_positions SET status = 'active'
+       WHERE id = ${positionId} AND status = 'pending'
+    `;
+  }
+
+  /**
+   * Ledger post + activate for a row already claimed as `pending`.
+   *
+   * Used by `resumePending`. Idempotent on `bank.earn.deposit:<positionId>`, so
+   * a re-drive after a crash between the post and the activate does not stake
+   * twice. Failures leave the row pending for the next attempt (no delete).
+   */
+  private async drivePendingToActive(input: {
+    positionId: string;
+    poolId: string;
+    userId: string;
+    assetId: string;
+    amount: Amount;
+  }): Promise<void> {
+    await this.postEarnDeposit(input);
+    await this.activatePending(input.positionId);
+  }
+
+  /**
+   * Re-drive every `pending` earn deposit. The recovery path for "the process
+   * died after the ledger post and before activate".
+   *
+   * Safe to run at any time and any number of times: the deposit recipe is
+   * idempotent on `positionId`, and activate is conditional on `pending`. A
+   * second pass finds nothing left to do.
+   *
+   * Unlike `deposit`, a failed re-drive does **not** delete the row — the claim
+   * stays pending for the next attempt (or for ops to inspect).
+   */
+  async resumePending(
+    limit = 100,
+  ): Promise<Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
+    const rows = await this.sql<PositionRow[]>`
+      SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
+        FROM bank.earn_positions
+       WHERE status = 'pending'
+       ORDER BY opened_at ASC
+       LIMIT ${limit}
+    `;
+
+    const out: Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }> = [];
+
+    for (const row of rows) {
+      try {
+        await this.drivePendingToActive({
+          positionId: row.id,
+          poolId: row.pool_id,
+          userId: row.user_id,
+          assetId: row.asset_id,
+          amount: parseAmount(row.principal),
+        });
+        out.push({ positionId: row.id, outcome: 'completed' });
+      } catch (err) {
+        out.push({
+          positionId: row.id,
+          outcome: 'failed',
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return out;
+  }
+
   }
 
   async position(positionId: string): Promise<PositionRecord> {
@@ -405,6 +498,15 @@ export class EarnService {
         const row = rows[0];
         if (!row) throw new BankError(`Position ${positionId} not found`, 'bank.position_not_found');
         if (row.status === 'closed') throw new BankError('Position is already closed', 'bank.position_closed');
+        if (row.status === 'pending') {
+          // Resume first. Closing a pending claim would hide a half-open deposit
+          // (funds may already be staked) under a user withdraw, and would race
+          // the recovery job that is supposed to finish the claim.
+          throw new BankError(
+            `Position ${positionId} is still pending — resume the deposit before withdrawing`,
+            'bank.position_pending',
+          );
+        }
         if (row.matures_at && row.matures_at > now) {
           throw new BankError(`Fixed-term position is locked until ${row.matures_at.toISOString()}`, 'bank.position_locked');
         }
