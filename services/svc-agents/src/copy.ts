@@ -44,6 +44,7 @@ export const COPY_KEYS = [
   'agents.error.capability_unavailable',
   'agents.error.engine_unavailable',
   'agents.error.window_sealed',
+  'agents.error.request_id_replay',
   'agents.scanner.empty',
   'agents.scanner.unavailable',
   'agents.scanner.tier_closed',
@@ -97,6 +98,8 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.error.capability_unavailable': 'The Neural Engine cannot serve this kind of request right now.',
   'agents.error.engine_unavailable': 'The Neural Engine is unavailable. Nothing was run and nothing was charged.',
   'agents.error.window_sealed': 'This usage period is already settled.',
+  'agents.error.request_id_replay':
+    'That request was already processed for this session — start a new request rather than reusing the same id.',
 
   'agents.scanner.empty': 'No markets were provided to rank.',
   'agents.scanner.unavailable': 'Market signals are unavailable right now — quotes are missing or too old to trust.',

@@ -382,6 +382,24 @@ export class AgentRuntime {
       throw await this.appendRefusal(session, decision, { kind: 'completion', task: input.task });
     }
 
+    // 2b · Request-id replay must not re-enter the engine free of charge.
+    //
+    // Usage is unique on (session, request_id). A second think with the same id
+    // used to call the provider again, insert zero-cost usage (ON CONFLICT), and
+    // bypass the spend cap. Once a request id has been metered, the caller opens
+    // a new id — they do not get free re-inference under the old one.
+    const shouldMeter = session.metered && this.meteringEnabled;
+    if (shouldMeter && (await this.meter.hasRequest(session.id, input.requestId))) {
+      const err = new AgentError(
+        `Request id "${input.requestId}" was already metered on session ${session.id}`,
+        'agents.request_id_replay',
+        'agents.error.request_id_replay',
+        { requestId: input.requestId },
+      );
+      await this.appendFailure(session, { kind: 'completion', task: input.task, error: err });
+      throw err;
+    }
+
     // 3 · Execute.
     let completion: Awaited<ReturnType<ModelGateway['complete']>>;
     try {
@@ -407,7 +425,6 @@ export class AgentRuntime {
 
     const usage = completion.result.usage;
     const cost = usageCost(usage, route.price);
-    const shouldMeter = session.metered && this.meteringEnabled;
 
     // 4 · Meter and audit together.
     //

@@ -168,6 +168,22 @@ export class UsageMeter {
     return { windowId, recorded: rows.length > 0 };
   }
 
+  /**
+   * True when this session already recorded a usage row for `requestId`.
+   *
+   * The anti-double-bill key is unique on `(session_id, request_id)`. A second
+   * `think` with the same id must not re-enter the engine free of charge —
+   * callers that lost a response open a new request id (or read the audit log).
+   */
+  async hasRequest(sessionId: string, requestId: string): Promise<boolean> {
+    const rows = await this.sql<Array<{ n: string }>>`
+      SELECT 1::text AS n FROM agents.usage_records
+       WHERE session_id = ${sessionId} AND request_id = ${requestId}
+       LIMIT 1
+    `;
+    return rows.length > 0;
+  }
+
   /** Exact token totals per rate for one window. */
   async groupsFor(sql: Sql, sessionId: string, windowId: string): Promise<UsageGroup[]> {
     const rows = await sql<Array<{ input_tokens: string; output_tokens: string; in_price: string; out_price: string }>>`
