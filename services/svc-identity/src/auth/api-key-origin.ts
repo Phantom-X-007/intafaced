@@ -6,10 +6,7 @@
  * Missing origin with a non-empty list fails closed — a browser key that forgot
  * its Origin header must not open the door.
  */
-export function apiKeyOriginAllowed(
-  whitelist: readonly string[],
-  requestOrigin: string | null | undefined,
-): boolean {
+export function apiKeyOriginAllowed(whitelist: readonly string[], requestOrigin: string | null | undefined): boolean {
   if (whitelist.length === 0) return true;
   const host = normalizeOriginHost(requestOrigin);
   if (!host) return false;

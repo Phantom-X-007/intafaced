@@ -796,10 +796,7 @@ export class AuthService {
     if (!verified) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
 
     if (!apiKeyOriginAllowed(verified.domainWhitelist, requestOrigin)) {
-      throw new AuthError(
-        'API key is not allowed from this origin',
-        'auth.domain_not_allowed',
-      );
+      throw new AuthError('API key is not allowed from this origin', 'auth.domain_not_allowed');
     }
 
     const users = await this.sql<Array<{ status: string }>>`
