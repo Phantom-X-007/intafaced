@@ -66,7 +66,7 @@ if (!block) {
 const fragments = [...block[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 // Floor is the live inventory count on tip when this unit last tightened (2026-08-09).
 // A lower floor silently green-lights deleting money fragments (mega-audit residual).
-const FRAGMENT_FLOOR = 41;
+const FRAGMENT_FLOOR = 43;
 if (fragments.length < FRAGMENT_FLOOR) {
   console.error(
     `✖ dual-book-door-path-unit: fragment floor ${FRAGMENT_FLOOR} not met (found ${fragments.length}) — Spec DB-2 inventory class`,
@@ -106,11 +106,14 @@ const mustBlock = [
   '/uc/redenvelope/receive',
   '/admin/system/dividend/start',
   '/uc/promotion/promotioncard/exchangecard',
+  '/monitor/reset-trader',
+  '/monitor/start-trader',
   // percent-encoding must not skip the door (Spring routes on decoded path)
   '/admin/member/member-wallet/recharg%65',
   '/uc/withdraw/appl%79',
   '/otc/order/bu%79',
   '/uc/promotio%6e/promotioncard/exchangecard',
+  '/monitor/reset-trade%72',
 ];
 
 const mustAllow = ['/uc/member/login', '/market/symbol-thumb', '/health', '/actuator/health', '/uc/asset/wallet'];
