@@ -20,7 +20,7 @@ This says what that API looks like, and — more usefully — what it is not all
 
 | Capability                                                                   | Status       |
 | ---------------------------------------------------------------------------- | ------------ |
-| `createPayment` · `authorize` · `capture` (incl. partial) · `refund`         | built        |
+| `createPayment` · `authorize` · `capture` (full only) · `refund`             | built        |
 | `get` · `list` · `history`                                                   | built        |
 | merchants: `create` · `me` · `submitKyb` · `profile` · `balances`            | built        |
 | payment links: `createLink` · `listLinks` · `deactivateLink` · `resolveLink` | built        |

@@ -5,7 +5,7 @@ The payments core (§6.1). Merchants, the payment lifecycle, settlement into the
 **What it is NOT:** it does not hold balances (the ledger does), it does not choose between rails (smart routing is its own feature), and it does not know the name of a single payment processor. Every rail — the two here and every one that comes later — is an implementation of one interface, and `src/rails/conformance.ts` is what keeps that true.
 
 **On tip today:** gateway mode, rails (`crypto-native`, `card-sandbox`, absent `bank-payout`), public REST + webhooks, PayFac **sub-merchant trees + area fence on money paths** ([below](#payfac--sub-merchant-trees-61)), subscriptions as **invoice-and-watch** (schema / due runner / capture→execution settle — no on-chain pull), destination shape refuse (EVM + IBAN) before hold, G3 settlement release, G4 suspend-safe payout hold.
-**Still separate / residual:** PSP mode, smart routing (no invent costs/approval rates), fraud scoring, commerce plugins, **chargeback wire** (recipes exist in `packages/ledger-client` with owner sign-off banner — **not wired** into svc-pay), subscription dunning / merchant surface / pre-charge notify, IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION §8.4).
+**Still separate / residual:** PSP mode, smart routing (no invent costs/approval rates), fraud scoring, commerce plugins, **chargeback wire** (recipes exist in `packages/ledger-client` with owner sign-off banner — **not wired** into svc-pay), subscription dunning / pre-charge notify (merchant mandate surface is on tip), IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION §8.4).
 
 ---
 
@@ -259,7 +259,7 @@ The direction of the money decides the order:
 - **Inbound (capture):** the rail moves first, the ledger books second. We only book value we know has arrived. A crash in between leaves money captured at the rail and not yet in the book — the classic. Nothing is lost: both halves are keyed on the payment id, so re-running finishes the job.
 - **Outbound (refund, payout):** the ledger moves first, the rail second. The merchant must be shown to have the money before any of it goes somewhere irreversible; a post-settlement refund they cannot cover fails at the ledger, before the rail is asked. A crash in between leaves the book correct and only the status projection behind. If the rail then refuses, the ledger posting is reversed in the same call.
 
-A refund whose id is already in flight is **refused**, not re-sent: `RailAdapter.refund(ref, amount)` carries no refund id (§6.1), so the rail cannot dedupe it for us, and "send it again and hope" is how one refund becomes two.
+A refund whose id is already in flight is **refused**, not re-sent. Live crypto receives a durable `refundId` (M226-02) so a process restart reuses the same outbound broadcast key; card-sandbox ignores it. The **service** still refuses re-entry while `refund.posted` has no terminal `refunded` / `refund.reversed` — "send it again and hope" is how one refund becomes two on a rail that cannot dedupe.
 
 ### User money: whose funds are stranded, per branch
 

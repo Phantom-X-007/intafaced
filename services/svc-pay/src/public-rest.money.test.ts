@@ -425,6 +425,55 @@ if (!available) {
       expect(await clearingOf(m.id)).toBe('90');
       expect(keysMatching('payment.refund:')).toEqual(['payment.refund:merchant-refund-77']);
     });
+
+    it('same body refundId with a different amount conflicts — no silent success', async () => {
+      const http = await build(new MemoryRestIdempotencyStore());
+      const m = await merchant();
+      const id = await captured(http, m.id);
+
+      await http.inject({
+        method: 'POST',
+        url: `/v1/payments/${id}/refund`,
+        headers: { ...signed(), 'idempotency-key': `refund:${id}:a1` },
+        payload: { amount: '10', refundId: 'merchant-refund-bind' },
+      });
+      const conflict = await http.inject({
+        method: 'POST',
+        url: `/v1/payments/${id}/refund`,
+        headers: { ...signed(), 'idempotency-key': `refund:${id}:a2` },
+        payload: { amount: '50', refundId: 'merchant-refund-bind' },
+      });
+      expect(conflict.statusCode).toBe(409);
+      expect(conflict.json().error.code).toBe('pay.refund_id_conflict');
+      expect(await clearingOf(m.id)).toBe('90');
+      expect(new Set(keysMatching('payment.refund:')).size).toBe(1);
+    });
+
+    it('empty body refundId uses restRefundId — one stable ledger key', async () => {
+      const http = await build(new MemoryRestIdempotencyStore());
+      const m = await merchant();
+      const id = await captured(http, m.id);
+      const headers = { ...signed(), 'idempotency-key': `refund:${id}:blank` };
+
+      await http.inject({
+        method: 'POST',
+        url: `/v1/payments/${id}/refund`,
+        headers,
+        payload: { amount: '10', refundId: '' },
+      });
+      // Journal lost — same empty body + same key still once (not payment.refund: twice).
+      const retried = await build(new MemoryRestIdempotencyStore());
+      await retried.inject({
+        method: 'POST',
+        url: `/v1/payments/${id}/refund`,
+        headers,
+        payload: { amount: '10', refundId: '' },
+      });
+      expect(await clearingOf(m.id)).toBe('90');
+      expect(new Set(keysMatching('payment.refund:')).size).toBe(1);
+      const keys = keysMatching('payment.refund:');
+      expect(keys[0]).toMatch(new RegExp(`^payment\.refund:rest:${id}:`));
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

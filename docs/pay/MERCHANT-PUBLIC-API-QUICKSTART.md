@@ -68,11 +68,13 @@ Idempotency-Key: <your business key>
 
 Use a business id (order id, invoice id), never `randomUUID()` per attempt.
 
-**Refunds go one step further.** If you omit `refundId`, your `Idempotency-Key`
-becomes that refund's business identity for that payment — so the same key can
-never refund twice, even if your retry arrives after the idempotency record above
-has expired. Send a **new** key (or an explicit `refundId`) when you genuinely
-mean a second partial refund on the same payment.
+**Refunds go one step further.** If you omit `refundId` (or send empty /
+whitespace), your `Idempotency-Key` becomes that refund's business identity for
+that payment — so the same key can never refund twice, even if your retry arrives
+after the idempotency record above has expired. Send a **new** key (or an
+explicit `refundId`) when you genuinely mean a second partial refund on the same
+payment. The same explicit `refundId` with a **different amount** is a conflict
+(`pay.refund_id_conflict`), not a silent success of the old amount.
 
 ---
 
