@@ -30,7 +30,6 @@
  * learns instead of getting different behaviour than they asked for.
  */
 import type { Sql } from 'postgres';
-import { randomUUID } from 'node:crypto';
 import { positionIdFor } from './ids.js';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
@@ -112,14 +111,12 @@ export interface OpenPositionInput {
    */
   marginMode?: 'isolated';
   /**
-   * Caller-supplied open intent key. When present, the position id (and the
-   * margin lock key) are derived from (user, market, clientOpenId) the same way
-   * spot derives order ids from clientOrderId. A timeout + retry finds the
-   * original open instead of locking a second pot under randomUUID().
-   *
-   * Omitted → randomUUID (legacy clients). Prefer always sending one.
+   * Caller-supplied open intent key (required). Position id and margin lock key
+   * are derived from (user, market, clientOpenId) the same way spot derives
+   * order ids from clientOrderId. A timeout + retry finds the original open
+   * instead of locking a second pot under a random id.
    */
-  clientOpenId?: string;
+  clientOpenId: string;
 }
 
 export interface PositionServiceDeps {
@@ -374,6 +371,20 @@ export class PositionService {
       throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 503);
     }
 
+    /**
+     * IDEMPOTENT OPEN KEY (required) — refuse before mark/ledger.
+     * Same clientOpenId → same lock key → ledger no-ops on retry.
+     * Parity with spot clientOrderId — omit no longer mints randomUUID (double margin).
+     */
+    const clientOpenId = input.clientOpenId?.trim() ?? '';
+    if (clientOpenId.length === 0 || clientOpenId.length > 64) {
+      throw new FuturesError(
+        'clientOpenId is required (1–64 chars) — omit would double-lock margin on retry',
+        'trade.client_open_id_required',
+        400,
+      );
+    }
+
     const market = await this.sql<
       {
         id: string;
@@ -461,16 +472,7 @@ export class PositionService {
       entryPrice,
       leverage,
     });
-    /**
-     * IDEMPOTENT OPEN KEY. With clientOpenId the id is business-derived; without
-     * it we still mint a UUID (legacy). Same clientOpenId → same lock key →
-     * ledger no-ops the second post and the INSERT either wins or we re-read.
-     */
-    const clientOpenId = input.clientOpenId?.trim();
-    if (clientOpenId !== undefined && clientOpenId.length === 0) {
-      throw new FuturesError('clientOpenId must not be empty when supplied', 'trade.client_open_id_invalid', 400);
-    }
-    const positionId = clientOpenId !== undefined ? positionIdFor(input.userId, m.id, clientOpenId) : randomUUID();
+    const positionId = positionIdFor(input.userId, m.id, clientOpenId);
 
     // Money first — never a position row without a ledger claim.
     await this.ledger.post(
@@ -527,7 +529,7 @@ export class PositionService {
        * no-op'd on — the original position still owns it. Re-read and return.
        * Other failures still release (unique open on a *different* id, etc.).
        */
-      if (clientOpenId !== undefined) {
+      {
         const existing = await this.sql<PositionRow[]>`
           SELECT p.*, m.symbol
           FROM trade.positions p
