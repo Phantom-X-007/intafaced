@@ -361,6 +361,11 @@ describe('the websocket gateway, over a real socket', () => {
     const makerAccountId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     const takerAccountId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
+    // Open the tape first — unwatched markets do not pin a ring (W7 residual).
+    const client = connect(`market=${MARKET}&channel=trades`);
+    // Wait until the subscription is live (empty ring → no replay frames).
+    await new Promise((r) => setTimeout(r, 50));
+
     tradeHub.ingest({
       marketId: MARKET,
       makerOrderId,
@@ -376,7 +381,6 @@ describe('the websocket gateway, over a real socket', () => {
       side: 'buy',
     } as never);
 
-    const client = connect(`market=${MARKET}&channel=trades`);
     await client.frameCount(1);
 
     const wire = client.frames[0]!;

@@ -9,7 +9,7 @@ import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import type { DepthSnapshot, WireLevel } from '@intafaced/market-data';
 import { DepthHub } from '../depth/hub.js';
 import type { DepthSource } from '../depth/source.js';
-import { PrivateOrderHub } from '../private/hub.js';
+import { PrivateOrderHub, type PrivateOrderUpdate } from '../private/hub.js';
 import { createPrivateWebSocketGateway, PRIVATE_STREAM_PATH } from '../private/gateway.js';
 import { TradeHub } from '../trade/hub.js';
 import { createWebSocketGateway, STREAM_PATH } from './gateway.js';
@@ -246,5 +246,122 @@ describe('public + private WS co-mount (production shape)', () => {
       expect(f).not.toHaveProperty('bids');
       expect(f).not.toHaveProperty('asks');
     }
+  });
+
+  it('malformed Host does not clobber a public /stream upgrade', async () => {
+    server = createServer();
+    const { depthHub, tradeHub, privateHub } = mountHubs(log);
+
+    createWebSocketGateway({
+      server,
+      hub: depthHub,
+      tradeHub,
+      heartbeatMs: 30_000,
+      log,
+      enabled: () => true,
+    });
+    createPrivateWebSocketGateway({
+      server,
+      hub: privateHub,
+      heartbeatMs: 30_000,
+      log,
+      enabled: () => true,
+      tokens,
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') throw new Error('no listen address');
+    const base = `127.0.0.1:${addr.port}`;
+
+    // Hostile Host that would throw if private parsed `new URL(..., http://${host})`.
+    // Public path must still open and receive a depth snapshot.
+    const frames: unknown[] = [];
+    const ws = new WebSocket(`ws://${base}${STREAM_PATH}?market=${MARKET}`, {
+      headers: { Host: 'a b' },
+    });
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('public stream never delivered a frame')), 5_000);
+      ws.on('message', (data) => {
+        frames.push(JSON.parse(data.toString()));
+        clearTimeout(t);
+        resolve();
+      });
+      ws.on('close', () => {
+        if (frames.length === 0) {
+          clearTimeout(t);
+          reject(new Error(`public stream closed before frame: ${JSON.stringify(ws)}`));
+        }
+      });
+      ws.on('error', (err) => {
+        clearTimeout(t);
+        reject(err);
+      });
+    });
+    ws.terminate();
+
+    expect(frames[0]).toMatchObject({ type: 'snapshot', marketId: MARKET });
+  });
+
+  it('private order frames never land on a public depth socket', async () => {
+    server = createServer();
+    const { depthHub, tradeHub, privateHub } = mountHubs(log);
+
+    createWebSocketGateway({
+      server,
+      hub: depthHub,
+      tradeHub,
+      heartbeatMs: 30_000,
+      log,
+      enabled: () => true,
+    });
+    createPrivateWebSocketGateway({
+      server,
+      hub: privateHub,
+      heartbeatMs: 30_000,
+      log,
+      enabled: () => true,
+      tokens,
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') throw new Error('no listen address');
+    const base = `127.0.0.1:${addr.port}`;
+
+    const publicFrames: Array<Record<string, unknown>> = [];
+    const pub = new WebSocket(`ws://${base}${STREAM_PATH}?market=${MARKET}`);
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('no public snapshot')), 5_000);
+      pub.on('message', (data) => {
+        publicFrames.push(JSON.parse(data.toString()) as Record<string, unknown>);
+        if (publicFrames.some((f) => f.type === 'snapshot')) {
+          clearTimeout(t);
+          resolve();
+        }
+      });
+      pub.on('error', reject);
+    });
+
+    const privateOrder: PrivateOrderUpdate = {
+      orderId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      userId: USER,
+      marketId: MARKET,
+      status: 'open',
+      side: 'buy',
+      type: 'limit',
+      qty: '1',
+      filledQty: '0',
+      price: '100',
+      clientOrderId: null,
+      ts: '2026-08-09T00:00:00.000Z',
+    };
+    privateHub.publish(privateOrder);
+
+    await new Promise((r) => setTimeout(r, 50));
+    pub.terminate();
+
+    expect(publicFrames.every((f) => f.type === 'snapshot' || f.type === 'delta')).toBe(true);
+    expect(publicFrames.some((f) => f.channel === 'orders' || f.type === 'orderUpdated')).toBe(false);
   });
 });

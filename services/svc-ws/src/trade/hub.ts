@@ -13,8 +13,10 @@ import { CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type H
  *
  * Depth needs a sequenced book. Trades do not: each print stands alone and
  * `sequence` is only a dedupe key. On connect we replay the last N prints for
- * the market so a freshly opened tape is not empty, then stream live. A ring
- * bound (`recentLimit`) keeps history from growing with the market's life.
+ * the market **while someone is watching** so a mid-stream joiner is not empty,
+ * then stream live. A ring bound (`recentLimit`) caps history for watched markets.
+ * Unwatched markets store nothing — otherwise every `orderFilled` on the bus
+ * would pin memory forever for markets nobody opened.
  *
  * ── Backpressure ────────────────────────────────────────────────────────────
  *
@@ -150,8 +152,8 @@ export class TradeHub {
 
   /**
    * Ingest a fill-shaped payload (typically an `orderFilled` event). Returns
-   * the public print that was stored, or `null` when it was a duplicate or
-   * rejected by the shape check.
+   * the public print that was stored, or `null` when it was a duplicate,
+   * rejected by the shape check, or dropped because nobody is watching the market.
    */
   ingest(fill: FillLike): TradePrint | null {
     let print: TradePrint;
@@ -162,6 +164,12 @@ export class TradeHub {
         { err: err instanceof Error ? err.message : String(err), marketId: fill.marketId, sequence: fill.sequence },
         'ws: trade print rejected',
       );
+      return null;
+    }
+
+    // No watchers → no ring, no fan-out. Leaving the ring grow for idle markets
+    // would re-pin memory after #forgetIdleMarket and for markets never opened.
+    if (!this.#hasWatcher(print.marketId)) {
       return null;
     }
 
@@ -184,6 +192,13 @@ export class TradeHub {
 
     this.#fanOut(print);
     return print;
+  }
+
+  #hasWatcher(marketId: string): boolean {
+    for (const s of this.#subscriptions) {
+      if (!s.closed && s.marketId === marketId) return true;
+    }
+    return false;
   }
 
   #fanOut(print: TradePrint): void {

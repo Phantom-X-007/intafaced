@@ -79,11 +79,20 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
 
   const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
     void (async () => {
+      // Fixed base — never Host. Path+query live on `req.url`. A Host-derived
+      // base can throw (e.g. `Host: a b`) *before* the private-path check; the
+      // catch below would then HTTP-500/destroy a socket the public gateway
+      // already upgraded on the same server. That is a co-mount isolation break.
+      let url: URL;
       try {
-        const host = req.headers.host ?? 'localhost';
-        const url = new URL(req.url ?? '/', `http://${host}`);
-        if (url.pathname !== PRIVATE_STREAM_PATH) return;
+        url = new URL(req.url ?? '/', 'http://gateway.invalid');
+      } catch (err) {
+        log.warn({ err: String(err) }, 'ws-private: unreadable upgrade URL');
+        return;
+      }
+      if (url.pathname !== PRIVATE_STREAM_PATH) return;
 
+      try {
         if (!enabled()) {
           reject(socket, 503, 'Service Unavailable');
           return;
@@ -149,6 +158,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           log.info({ userId }, 'ws-private: client connected');
         });
       } catch (err) {
+        // Only runs for PRIVATE_STREAM_PATH after the early return above.
         log.warn({ err: String(err) }, 'ws-private: upgrade failed');
         try {
           reject(socket, 500, 'Internal Server Error');
