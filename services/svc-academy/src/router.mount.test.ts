@@ -144,6 +144,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'ambassadorRevenueShare',
         'appointAmbassador',
         'freezeAmbassador',
+        'unfreezeAmbassador',
         'applyResidency',
         'withdrawResidency',
         'myResidencies',

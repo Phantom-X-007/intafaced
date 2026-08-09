@@ -979,6 +979,19 @@ export function createAcademyRouter(academy: AcademyService) {
         ),
       ),
 
+    /** Reactivate a frozen ambassador without re-appoint (clear freeze reason). */
+    unfreezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ userId: z.string().uuid() }))
+      .output(ambassadorOut)
+      .mutation(({ input, ctx }) =>
+        guard(() =>
+          academy.unfreezeAmbassador({
+            userId: input.userId,
+            operatorId: ctx.principal!.userId,
+          }),
+        ),
+      ),
+
     /**
      * Class M IFC pay / revenue share — refuse-closed. Never invent rates.
      * Plane status is always dark until owner-published schedule + ledger recipes.
