@@ -29,6 +29,10 @@ export type BootRegisterResult = {
  *
  * Idempotent: `registerAgent` upserts on `agent_id`. Re-boot re-asserts the
  * current factory snapshot so a widened toolset is not stuck on an old row.
+ *
+ * First insert enables the agent. Re-boot must **not** re-enable an operator
+ * kill — `registerAgent` preserves `enabled` on conflict (see runtime).
+ * `{ enabled: true }` here only seeds the insert path.
  */
 export async function registerProductAgentsAtBoot(
   runtime: BootRegisterRuntime,

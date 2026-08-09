@@ -177,6 +177,16 @@ export class AgentRuntime {
    * contradiction in a security policy resolves however the enforcement code
    * happens to be ordered.
    */
+  /**
+   * Upsert a guardrail into `agent_definitions`.
+   *
+   * Insert defaults `enabled` to true (or `options.enabled`). On conflict,
+   * **guardrail + version are refreshed; `enabled` is preserved.** Operator
+   * kill (`enabled = false`) must survive boot re-register and redeploy —
+   * overwriting enabled on every upsert made the kill-switch a reboot lie.
+   * Re-enable is an explicit SQL / admin act on the flag, not a side-effect of
+   * re-shipping the factory snapshot.
+   */
   async registerAgent(input: unknown, options: { enabled?: boolean } = {}): Promise<Guardrail> {
     const guardrail = parseGuardrail(input);
     const body = serialiseGuardrail(guardrail);
@@ -187,7 +197,6 @@ export class AgentRuntime {
       ON CONFLICT (agent_id) DO UPDATE
         SET version = EXCLUDED.version,
             guardrail = EXCLUDED.guardrail,
-            enabled = EXCLUDED.enabled,
             updated_at = now()
     `;
 

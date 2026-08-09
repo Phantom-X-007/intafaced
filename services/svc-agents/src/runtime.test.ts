@@ -653,6 +653,28 @@ if (!available) {
       await expect(runtime.act({ sessionId: next.id, tool: 'trade.close', execute: async () => 'closed' })).resolves.toBeTruthy();
     });
 
+    it('operator kill (enabled=false) survives boot re-register of the guardrail', async () => {
+      // Kill-switch: DB flag stops new sessions. Boot re-upsert must refresh
+      // the factory snapshot without flipping the agent back on.
+      await sql`UPDATE agents.agent_definitions SET enabled = false WHERE agent_id = ${PROBE.agentId}`;
+      await expect(runtime.openSession({ userId: USER_A, agentId: PROBE.agentId })).rejects.toMatchObject({
+        code: 'agents.agent_not_found',
+      });
+
+      await runtime.registerAgent({
+        ...PROBE,
+        version: 9,
+        tools: [...PROBE.tools, { name: 'trade.close', module: 'trade', mode: 'write' }],
+      });
+
+      const def = await runtime.agentDefinition(PROBE.agentId);
+      expect(def?.enabled).toBe(false);
+      expect(def?.guardrail.version).toBe(9);
+      await expect(runtime.openSession({ userId: USER_A, agentId: PROBE.agentId })).rejects.toMatchObject({
+        code: 'agents.agent_not_found',
+      });
+    });
+
     it('refuses everything on a closed session', async () => {
       const session = await open();
       await runtime.closeSession(session.id);
