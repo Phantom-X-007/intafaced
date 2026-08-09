@@ -1,0 +1,55 @@
+# Vendor compile probe (Axis C2 residual — #1137 shipped Dependabot only).
+#
+# Promise (docs/AXIS-IMPROVEMENT-PLAN-2026-08-08.md §A2 item 2):
+#   mvn -q -DskipTests compile over the vendored framework, on PRs that touch
+#   vendor/**, continue-on-error: true. Reporting only — never a required check.
+#
+# Why path-filtered is safe here: this is NOT a required status. Supply-chain
+# must run on every PR because a required check that path-filters itself leaves
+# PRs pending forever. This job is advisory; path filter = no wasted minutes.
+#
+# What it proves: the scanned Java source still parses under the toolchain the
+# ADR pins (OpenJDK 8 + Maven 3.8). It does NOT prove jars match compose, does
+# NOT publish artifacts, and does NOT add jars to force a boot.
+#
+# If compile would need a new jar vendored or published: stop — owner gate
+# (ADR 2026-08-04: do not add a jar to make something boot).
+name: Vendor compile probe
+
+on:
+  pull_request:
+    paths:
+      - 'vendor/**'
+      - '.github/workflows/vendor-compile.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vendor-compile-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile-framework-core:
+    name: Compile framework (core)
+    runs-on: ubuntu-latest
+    # Reporting only. A red line here is a signal for the Dependabot merger,
+    # not a merge block — dual-book residual and Spring EOL make full green
+    # compile a long-horizon goal, not a gate that freezes the monorepo.
+    continue-on-error: true
+    container:
+      # Pin matches docs/adr/2026-07-28-vendored-exchange-integration.md
+      image: maven:3.8.8-eclipse-temurin-8
+    defaults:
+      run:
+        working-directory: vendor/upstream-exchange/00_framework
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compile core module (skip tests)
+        run: |
+          set -euo pipefail
+          echo "Vendor compile probe — core only (path-filtered, continue-on-error)"
+          mvn -B -q -pl core -am -DskipTests compile
+          echo "✓ vendor compile probe: framework core compiled"
