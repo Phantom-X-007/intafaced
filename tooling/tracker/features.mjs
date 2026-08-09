@@ -937,8 +937,16 @@ export const FEATURES = [
     module: 'bank',
     phase: '5',
     plane: 'P',
+    status: 'done',
     dependsOn: ['bank.cards', 'protocol.smart-accounts'],
-    note: '**Reclaimed 2026-08-04** M6 custodial half — agents thin; on-chain JIT contract half remains Shehzad protocol board.',
+    requires: [
+      'services/svc-bank/src/cards/conversion.ts',
+      'services/svc-bank/src/cards/card-service.ts',
+      'services/svc-bank/drizzle/0007_card_jit_conversion.sql',
+    ],
+    note:
+      '**Custodial half DONE #1174** (2026-08-09): settlement asset ≠ funding asset; rate frozen at auth; refuses invented marks ' +
+      '(bank.mark_*); no second book. On-chain JIT / smart-account funding half remains Shehzad protocol board.',
   }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',

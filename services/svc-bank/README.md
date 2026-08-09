@@ -6,7 +6,7 @@
 
 **What this service is not:** it is not a wallet, it does not hold balances, and it does not price anything. It stores names, policies, instructions, and records of jobs that already ran. Every "how much" question is answered by `ledger.balance(...)` at the moment it is asked.
 
-Also here: **loans** (§8.1), the **ledger half of cards**, and the **crypto ledger half of ramps**. `bank.sovereign-card` is a separate tracker feature and is not started. The card **live rail** and the ramp **fiat leg** are §13 sockets — see [Cards](#cards-what-is-built-and-what-is-a-contract) and [Ramps](#ramps-crypto-ledger-half-vs-fiat-socket).
+Also here: **loans** (§8.1), the **ledger half of cards** (including **custodial JIT conversion** for a settlement asset that is not the funding asset — #1174 / `cards/conversion.ts`), and the **crypto ledger half of ramps**. The card **live rail**, the ramp **fiat leg**, and the **on-chain** half of sovereign-card remain §13 sockets / Shehzad — see [Cards](#cards-what-is-built-and-what-is-a-contract) and [Ramps](#ramps-crypto-ledger-half-vs-fiat-socket).
 
 ---
 
@@ -247,6 +247,8 @@ bank.loan.reserve.fund:<debtAssetId>:<fundingId>     one reserve top-up
 ```
 
 `occurrence` is derived from `(startsAt, cadence, n)` — never from a counter. Two workers, a retry, and a catch-up run after an outage all compute the same index for the same intended transfer.
+
+**A key that is already taken is a retry only if the terms match.** `positionId` and `loanId` are client-supplied, so the id alone cannot separate "the same request arriving twice" from "a different request wearing an id somebody has already used" — and `ON CONFLICT (id) DO NOTHING` silently keeps the first row while every guard runs on the new input. Both paths therefore compare before they proceed, and refuse on a mismatch: `bank.position_conflict`, `bank.loan_principal_mismatch`, `bank.loan_borrower_mismatch`. Same id + same terms stays idempotent, which is the whole reason the id is the client's to choose.
 
 ---
 
