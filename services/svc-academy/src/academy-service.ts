@@ -52,8 +52,10 @@ import {
   type SeasonStatus,
   type StandingRecord,
 } from './tournaments/ladder.js';
-import { transitionSeason } from './tournaments/season-lifecycle.js';
+import { freezeSeasonWithSnapshot, transitionSeason } from './tournaments/season-lifecycle.js';
 import { assertNoPrizeAttachment } from './tournaments/prize-refuse.js';
+import { validateBulkScoreWrite, type ScorePatch } from './tournaments/bulk-score.js';
+import type { FreezeStandingsSnapshot } from './tournaments/season-lifecycle.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
@@ -685,6 +687,41 @@ export class AcademyService {
     } catch (e) {
       this.mapTournamentErr(e);
     }
+
+    // live→frozen: durable ranked snapshot (rank+score only, no prize invent).
+    if (current.status === 'live' && input.status === 'frozen') {
+      const standingRows = await this.sql<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+        SELECT season_id, user_id, score, updated_at FROM academy.tournament_standings
+         WHERE season_id = ${input.seasonId}
+      `;
+      let snapshot: FreezeStandingsSnapshot;
+      try {
+        const frozen = freezeSeasonWithSnapshot(
+          current,
+          standingRows.map((r) => ({
+            seasonId: r.season_id,
+            userId: r.user_id,
+            score: r.score,
+            updatedAt: r.updated_at,
+          })),
+        );
+        snapshot = frozen.snapshot;
+      } catch (e) {
+        this.mapTournamentErr(e);
+      }
+      const standingsJson = snapshot.standings.map((s) => ({
+        rank: s.rank,
+        userId: s.userId,
+        score: s.score,
+        updatedAt: s.updatedAt.toISOString(),
+      }));
+      await this.sql`
+        INSERT INTO academy.tournament_freeze_snapshots (season_id, frozen_at, standings)
+        VALUES (${input.seasonId}, ${snapshot.frozenAt}, ${this.sql.json(standingsJson as never)})
+        ON CONFLICT (season_id) DO NOTHING
+      `;
+    }
+
     const rows = await this.sql<
       Array<{
         id: string;
@@ -704,6 +741,28 @@ export class AcademyService {
     return this.toSeason(rows[0]!);
   }
 
+  /** Read durable freeze audit snapshot (null when season never frozen on this path). */
+  async freezeSnapshot(seasonId: string): Promise<{
+    seasonId: string;
+    frozenAt: Date;
+    standings: { rank: number; userId: string; score: number; updatedAt: string }[];
+  } | null> {
+    this.assertTournamentEnabled();
+    await this.season(seasonId);
+    const rows = await this.sql<Array<{ season_id: string; frozen_at: Date; standings: unknown }>>`
+      SELECT season_id, frozen_at, standings FROM academy.tournament_freeze_snapshots
+       WHERE season_id = ${seasonId}
+    `;
+    const r = rows[0];
+    if (!r) return null;
+    const standings = r.standings as { rank: number; userId: string; score: number; updatedAt: string }[];
+    return {
+      seasonId: r.season_id,
+      frozenAt: r.frozen_at,
+      standings: [...standings],
+    };
+  }
+
   async setStanding(input: { seasonId: string; userId: string; score: number }): Promise<StandingRecord> {
     this.assertTournamentEnabled();
     const season = await this.season(input.seasonId);
@@ -721,6 +780,40 @@ export class AcademyService {
     `;
     const r = rows[0]!;
     return { seasonId: r.season_id, userId: r.user_id, score: r.score, updatedAt: r.updated_at };
+  }
+
+  /**
+   * Operator bulk score write — Stage-2 L3 residual on the wire.
+   * Pure `validateBulkScoreWrite` owns refuse rules (live-only, no empty, no
+   * dup user, score bounds). Then each accepted patch uses the same upsert as
+   * setStanding. No prize fields, no invent scores.
+   */
+  async bulkSetStandings(input: {
+    seasonId: string;
+    patches: readonly ScorePatch[];
+  }): Promise<
+    { ok: true; accepted: number; standings: StandingRecord[] } | { ok: false; reason: string; message: string; badUserId?: string }
+  > {
+    this.assertTournamentEnabled();
+    const season = await this.season(input.seasonId);
+    const gate = validateBulkScoreWrite({
+      seasonStatus: season.status,
+      seasonId: input.seasonId,
+      patches: input.patches,
+    });
+    if (gate.status === 'refuse') {
+      return {
+        ok: false,
+        reason: gate.reason,
+        message: gate.message,
+        ...(gate.badUserId !== undefined ? { badUserId: gate.badUserId } : {}),
+      };
+    }
+    const standings: StandingRecord[] = [];
+    for (const p of gate.patches) {
+      standings.push(await this.setStanding({ seasonId: input.seasonId, userId: p.userId, score: p.score }));
+    }
+    return { ok: true, accepted: standings.length, standings };
   }
 
   async standings(seasonId: string): Promise<RankedStanding[]> {

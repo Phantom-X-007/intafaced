@@ -205,6 +205,19 @@ export const tournamentStandings = academy.table(
   ],
 );
 
+/**
+ * Ranked standings captured at freeze — audit only, no prize columns.
+ * Written on live→frozen; immutable thereafter (season_id PK).
+ */
+export const tournamentFreezeSnapshots = academy.table('tournament_freeze_snapshots', {
+  seasonId: uuid('season_id')
+    .primaryKey()
+    .references(() => tournamentSeasons.id, { onDelete: 'cascade' }),
+  frozenAt: tstz('frozen_at').notNull(),
+  standings: jsonb('standings').notNull().$type<readonly { rank: number; userId: string; score: number; updatedAt: string }[]>(),
+  createdAt: createdAt(),
+});
+
 export const schema = {
   rooms,
   roomInvites,
@@ -213,4 +226,5 @@ export const schema = {
   ambassadors,
   tournamentSeasons,
   tournamentStandings,
+  tournamentFreezeSnapshots,
 };

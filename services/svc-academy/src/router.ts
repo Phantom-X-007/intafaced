@@ -36,6 +36,7 @@ import {
 } from './paper/simulated-result.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
 import { decidePrizeIntent, isPrizeRefuseClosed, prizeRefuseStatusLine, type PrizeIntentKind } from './tournaments/prize-refuse.js';
+import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -1158,6 +1159,30 @@ export function createAcademyRouter(academy: AcademyService) {
       .mutation(({ input }) => guard(() => academy.setSeasonStatus(input))),
 
     /**
+     * Durable freeze audit — ranked standings at live→frozen (no prize fields).
+     * Null when the season was never frozen through setSeasonStatus.
+     */
+    freezeSnapshot: scopedProcedure('admin:read', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid() }))
+      .output(
+        z
+          .object({
+            seasonId: z.string().uuid(),
+            frozenAt: z.date(),
+            standings: z.array(
+              z.object({
+                rank: z.number().int().positive(),
+                userId: z.string(),
+                score: z.number().int(),
+                updatedAt: z.string(),
+              }),
+            ),
+          })
+          .nullable(),
+      )
+      .query(({ input }) => guard(() => academy.freezeSnapshot(input.seasonId))),
+
+    /**
      * Class N/M honesty — IFC prize pools refuse-closed on the wire.
      * Pure helpers already refuse; this mounts them so operators never see a
      * success path that invents pool amounts. No amount fields on the output.
@@ -1228,6 +1253,61 @@ export function createAcademyRouter(academy: AcademyService) {
       .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))
       .output(standingOut.omit({ rank: true }))
       .mutation(({ input }) => guard(() => academy.setStanding(input))),
+
+    /**
+     * Bulk score staging on the wire (was pure-only residual).
+     * Live season only; empty/dup/bad score refuse closed. No prize invent.
+     */
+    bulkSetStandings: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          seasonId: z.string().uuid(),
+          patches: z.array(z.object({ userId: z.string().uuid(), score: z.number().int() })).max(500),
+        }),
+      )
+      .output(
+        z.discriminatedUnion('ok', [
+          z.object({
+            ok: z.literal(true),
+            accepted: z.number().int().nonnegative(),
+            statusLine: z.string(),
+            standings: z.array(standingOut.omit({ rank: true })),
+          }),
+          z.object({
+            ok: z.literal(false),
+            reason: z.string(),
+            message: z.string(),
+            statusLine: z.string(),
+            badUserId: z.string().optional(),
+          }),
+        ]),
+      )
+      .mutation(({ input }) =>
+        guard(async () => {
+          const result = await academy.bulkSetStandings(input);
+          if (!result.ok) {
+            return {
+              ok: false as const,
+              reason: result.reason,
+              message: result.message,
+              statusLine: `ok=0 accepted=0 refused=1 reason=${result.reason}`,
+              ...(result.badUserId !== undefined ? { badUserId: result.badUserId } : {}),
+            };
+          }
+          return {
+            ok: true as const,
+            accepted: result.accepted,
+            statusLine: bulkScoreStatusLine(
+              validateBulkScoreWrite({
+                seasonStatus: 'live',
+                seasonId: input.seasonId,
+                patches: input.patches,
+              }),
+            ),
+            standings: result.standings,
+          };
+        }),
+      ),
 
     // ── Certifications (progress + grants + XP emit — NO PAY) ─────────────────
     //
