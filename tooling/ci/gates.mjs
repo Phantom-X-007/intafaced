@@ -36,7 +36,8 @@
  *   node tooling/ci/gates.mjs --list   print the gate ids, one per line
  */
 import { readdirSync, existsSync, readFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = process.cwd();
@@ -370,6 +371,28 @@ export const GATES = [
       'which is precisely the drift this file exists to make impossible, arriving through its own merge.',
   },
   {
+    id: 'empty-denominator',
+    script: 'tooling/ci/empty-denominator-gate.mjs',
+    doctrine: '§14 / empty-denominator law',
+    why:
+      'a check that reports on nothing and gets read as evidence is this repo’s single most repeated defect, and until ' +
+      'this entry NOTHING enforced the rule against it. Seven gates had each learned it separately and hand-rolled a ' +
+      'guard — brand-scan’s `scanned === 0`, i18n-scan, i18n-bypass-scan ("walked zero un-allowlisted files and ' +
+      'printed"), wallet-rpc-mainnet-scan’s "every denominator non-zero", event-wiring, shell-brand-scan, ' +
+      'vendor-java-money-scan — which meant the EIGHTH gate anyone wrote would not have it, because nothing would ask. ' +
+      'This asks: it runs every gate in this list against a tree where its denominator is genuinely zero and asserts ' +
+      'what it actually did, rather than grepping for a guard’s source text — which would prove a string exists, not ' +
+      'that a gate refuses. Measured on arrival: 22 gates refuse, 3 are exempt because their subject travels with them ' +
+      'in fixtures, and 7 print CLEAN over nothing and are frozen as debt that may only shrink. The loudest of the ' +
+      'seven is fabricated-money, which prints "NOTHING WAS SCANNED … discovery is broken" and then exits 0 — while ' +
+      'shell-brand-scan prints that same sentence and exits 1. Ordered last because it is the most expensive gate here ' +
+      '(~5s, it spawns every other gate once) and because it depends on nothing above it. It classifies ITSELF, and ' +
+      'since it cannot run inside its own fixture without recursing, a self-proof runs on every invocation instead: ' +
+      'handed a substitute list of zero gates, or one unclassified gate, it must refuse. That is the worktree-gc ' +
+      '--self-test and RULE_PROBES precedent, and it is not optional here — a meta-gate about empty denominators is the ' +
+      'most obvious candidate in this repo to BE one.',
+  },
+  {
     id: 'i18n',
     script: 'tooling/ci/i18n-scan.mjs',
     doctrine: '§9, §14.4',
@@ -451,76 +474,97 @@ function manifestCheck() {
 }
 
 // ── Run ────────────────────────────────────────────────────────────────────
-if (process.argv.includes('--list')) {
-  for (const gate of GATES) console.log(gate.id);
-  process.exit(0);
-}
+/**
+ * Guarded so this file can be IMPORTED as data without the import running 32
+ * gates as a side effect.
+ *
+ * `empty-denominator-gate.mjs` has to read the REAL `GATES` array to classify
+ * every entry in it and to assert its own classified count against
+ * `GATES.length`. Its alternative was to parse this file's source text — and a
+ * meta-gate whose census comes from a regex over source is the same species of
+ * defect it exists to police: it would prove a string appears in a file, not
+ * that a gate is in the list. So the array is the interface, and this guard is
+ * what makes reading it free.
+ *
+ * Behaviour when run directly (`node tooling/ci/gates.mjs`, `pnpm gates`, the
+ * `gates` job in ci.yml) is unchanged — `main()` is called immediately below.
+ */
+const RUN_AS_SCRIPT = process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
-const manifestProblems = manifestCheck();
-if (manifestProblems.length > 0) {
-  console.error('\n✖ GATE MANIFEST BROKEN\n');
-  for (const p of manifestProblems) console.error(`  · ${p}\n`);
-  process.exit(1);
-}
+if (RUN_AS_SCRIPT) main();
 
-console.log(`\n══ DOCTRINE GATES (${GATES.length}) ══\n`);
-
-const failed = [];
-const advisoryNoise = [];
-let totalMs = 0;
-
-for (const gate of GATES) {
-  const started = process.hrtime.bigint();
-  let ok = true;
-  let output = '';
-
-  try {
-    output = execFileSync(process.execPath, [join(ROOT, gate.script), ...(gate.args ?? [])], {
-      encoding: 'utf8',
-      cwd: ROOT,
-    });
-  } catch (err) {
-    ok = false;
-    output = (err.stdout ?? '') + (err.stderr ?? '');
+function main() {
+  if (process.argv.includes('--list')) {
+    for (const gate of GATES) console.log(gate.id);
+    process.exit(0);
   }
 
-  const ms = Number((process.hrtime.bigint() - started) / 1000000n);
-  totalMs += ms;
+  const manifestProblems = manifestCheck();
+  if (manifestProblems.length > 0) {
+    console.error('\n✖ GATE MANIFEST BROKEN\n');
+    for (const p of manifestProblems) console.error(`  · ${p}\n`);
+    process.exit(1);
+  }
 
-  // Every gate is run. None is skipped because an earlier one failed — you
-  // should see every broken gate in one run, not discover them one push apart.
-  if (ok) {
-    const summary = output.trim().split('\n').filter(Boolean).pop() ?? '(no output)';
-    console.log(`  ✓ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
-    if (gate.advisory && output.includes('⚠')) {
-      advisoryNoise.push({ gate, output });
-      console.log(`      ⚠ advisory findings — printed below, not a failure`);
-    } else {
-      console.log(`      ${summary.trim()}`);
+  console.log(`\n══ DOCTRINE GATES (${GATES.length}) ══\n`);
+
+  const failed = [];
+  const advisoryNoise = [];
+  let totalMs = 0;
+
+  for (const gate of GATES) {
+    const started = process.hrtime.bigint();
+    let ok = true;
+    let output = '';
+
+    try {
+      output = execFileSync(process.execPath, [join(ROOT, gate.script), ...(gate.args ?? [])], {
+        encoding: 'utf8',
+        cwd: ROOT,
+      });
+    } catch (err) {
+      ok = false;
+      output = (err.stdout ?? '') + (err.stderr ?? '');
     }
-  } else if (gate.advisory) {
-    advisoryNoise.push({ gate, output });
-    console.log(`  ⚠ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine} (advisory)`);
-  } else {
-    failed.push({ gate, output });
-    console.log(`  ✖ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
+
+    const ms = Number((process.hrtime.bigint() - started) / 1000000n);
+    totalMs += ms;
+
+    // Every gate is run. None is skipped because an earlier one failed — you
+    // should see every broken gate in one run, not discover them one push apart.
+    if (ok) {
+      const summary = output.trim().split('\n').filter(Boolean).pop() ?? '(no output)';
+      console.log(`  ✓ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
+      if (gate.advisory && output.includes('⚠')) {
+        advisoryNoise.push({ gate, output });
+        console.log(`      ⚠ advisory findings — printed below, not a failure`);
+      } else {
+        console.log(`      ${summary.trim()}`);
+      }
+    } else if (gate.advisory) {
+      advisoryNoise.push({ gate, output });
+      console.log(`  ⚠ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine} (advisory)`);
+    } else {
+      failed.push({ gate, output });
+      console.log(`  ✖ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
+    }
   }
-}
 
-for (const { gate, output } of advisoryNoise) {
-  console.log(`\n── ${gate.id} (advisory — does not fail the build) ──`);
-  console.log(output.trimEnd());
-}
-
-if (failed.length > 0) {
-  console.error(`\n✖ ${failed.length} of ${GATES.length} DOCTRINE GATE(S) FAILED\n`);
-  for (const { gate, output } of failed) {
-    console.error(`── ${gate.id} — ${gate.doctrine} ──`);
-    console.error(`   why this gate exists: ${gate.why}`);
-    console.error(output.trimEnd() + '\n');
+  for (const { gate, output } of advisoryNoise) {
+    console.log(`\n── ${gate.id} (advisory — does not fail the build) ──`);
+    console.log(output.trimEnd());
   }
-  console.error('  A red gate is not a discussion (AGENT_PROTOCOL §3).\n');
-  process.exit(1);
-}
 
-console.log(`\n✓ all ${GATES.length} doctrine gates passed — ${totalMs}ms total\n`);
+  if (failed.length > 0) {
+    console.error(`\n✖ ${failed.length} of ${GATES.length} DOCTRINE GATE(S) FAILED\n`);
+    for (const { gate, output } of failed) {
+      console.error(`── ${gate.id} — ${gate.doctrine} ──`);
+      console.error(`   why this gate exists: ${gate.why}`);
+      console.error(output.trimEnd() + '\n');
+    }
+    console.error('  A red gate is not a discussion (AGENT_PROTOCOL §3).\n');
+    process.exit(1);
+  }
+
+  console.log(`\n✓ all ${GATES.length} doctrine gates passed — ${totalMs}ms total\n`);
+}
