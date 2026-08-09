@@ -9,6 +9,7 @@ import { DELIVERY_REAP_INTERVAL_MS, PostgresDeliveryStore, PostgresTargetStore }
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
 import { PostgresMuteStore } from './preferences/mute-store.js';
+import { PostgresTargetRateLimiter } from './target-rate-limit.js';
 import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
@@ -75,6 +76,9 @@ await sql`SELECT 1 FROM notify.deliveries LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM notify.channel_mutes LIMIT 1`.catch(() => {
   throw new Error('notify.channel_mutes is missing — run migration 0003_notify_mute_prefs before starting svc-notify');
 });
+await sql`SELECT 1 FROM notify.target_rate_windows LIMIT 1`.catch(() => {
+  throw new Error('notify.target_rate_windows is missing — run migration 0005_notify_target_rate_windows before starting svc-notify');
+});
 
 // Consumer only — trade / p2p / identity / token / bank own their streams.
 // `ownedStreams: []` matches svc-ws: we never create a stream for subjects we do
@@ -104,9 +108,14 @@ const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
   mutePrefsOf: (userId) => muteStore.get(userId),
 });
 
+const targetRateLimiter = new PostgresTargetRateLimiter(sql);
 const notify = new NotifyService(
   store,
-  { fanoutEnabled: env.NOTIFY_FANOUT_ENABLED, verifyTtlMinutes: env.NOTIFY_VERIFY_TTL_MINUTES },
+  {
+    fanoutEnabled: env.NOTIFY_FANOUT_ENABLED,
+    verifyTtlMinutes: env.NOTIFY_VERIFY_TTL_MINUTES,
+    targetRateLimiter,
+  },
   { targets, deliveries, channels, dispatcher, muteStore },
 );
 
