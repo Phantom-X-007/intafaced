@@ -656,9 +656,9 @@ if (!available) {
 
     it('does not pay a staker who joined AFTER an empty window was claimed', async () => {
       // W4 residual / 0004: empty distribute used to write no plan row, so a
-      // later stake + re-run of the same window id planned the newcomer and
-      // paid them out of revenue already swept under that id. The header freezes
-      // the empty answer; late joiners use a new window id.
+      // later stake + re-run of the same window id planned the newcomer.
+      // Header freezes the empty answer; late joiners use a new window id.
+      // Empty claim does NOT sweep — fees stay in houseFees for the new id.
       await accrueFees('trade', '100');
       const empty = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(empty.recipients).toBe(0);
@@ -669,6 +669,7 @@ if (!available) {
       `;
       expect(headers).toHaveLength(1);
       expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
 
       await fund(USER_A, '1000');
       await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
@@ -677,12 +678,12 @@ if (!available) {
       expect(formatAmount(again.distributed)).toBe('0');
       expect(again.recipients).toBe(0);
       expect(await balanceOf(USER_A)).toBe('0');
-      // Revenue still in the engine for a NEW window id.
-      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
 
       const next = await token.distributeRevenue({ windowId: 'w-later-2', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(formatAmount(next.distributed)).toBe('100');
       expect(await balanceOf(USER_A)).toBe('100');
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('0');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
