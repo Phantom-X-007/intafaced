@@ -155,7 +155,13 @@ await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
-    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+    createContext: ({ req }) => {
+      const base = edgeContext({ headers: req.headers, id: req.id });
+      // Origin for apiKeys.exchange domain_whitelist (edge-forwarded; not body).
+      const raw = req.headers.origin ?? req.headers['x-forwarded-origin'];
+      const clientOrigin = Array.isArray(raw) ? raw[0] : raw;
+      return clientOrigin ? { ...base, clientOrigin } : base;
+    },
   } satisfies FastifyTRPCPluginOptions<IdentityRouter>['trpcOptions'],
 });
 

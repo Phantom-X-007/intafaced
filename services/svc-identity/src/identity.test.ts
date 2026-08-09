@@ -639,6 +639,46 @@ if (!available) {
       expect(await auth.verifyApiKey(key)).toBeNull();
       await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
     });
+
+    it('honours domain_whitelist on exchange (empty = open; foreign origin refused)', async () => {
+      const session = await register();
+
+      // Empty whitelist (server bots): exchange without origin still works.
+      const open = await auth.createApiKey({
+        userId: session.userId,
+        name: 'open-bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      await expect(auth.exchangeApiKey(open.key)).resolves.toMatchObject({ userId: session.userId });
+      await expect(auth.exchangeApiKey(open.key, 'https://evil.example')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+
+      // Non-empty whitelist: allowed origin passes; foreign / missing refuse.
+      const locked = await auth.createApiKey({
+        userId: session.userId,
+        name: 'browser-key',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        domainWhitelist: ['app.example.com', 'https://partner.example'],
+      });
+      await expect(auth.exchangeApiKey(locked.key, 'https://app.example.com')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+      await expect(auth.exchangeApiKey(locked.key, 'https://partner.example/path')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+      await expect(auth.exchangeApiKey(locked.key, 'https://evil.example')).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+      await expect(auth.exchangeApiKey(locked.key)).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+      await expect(auth.exchangeApiKey(locked.key, null)).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+    });
   });
 
   describe('sub-accounts', () => {
