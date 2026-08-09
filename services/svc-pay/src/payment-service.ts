@@ -2123,11 +2123,8 @@ export class PayService {
         // posted (crash between hold and rail/settle), money sits in the purpose
         // hold — resume must finish via the same idempotent key. Refusing with
         // merchant_inactive here strands the hold forever.
-        const openHold = (
-          await this.ledger.balance(
-            withdrawalHoldAccount(withdrawal.userId, withdrawal.assetId, withdrawal.withdrawalId),
-          )
-        ).amount;
+        const openHold = (await this.ledger.balance(withdrawalHoldAccount(withdrawal.userId, withdrawal.assetId, withdrawal.withdrawalId)))
+          .amount;
         if (openHold <= 0n) {
           // Money is about to leave available for a bank or a chain. A suspended
           // merchant keeps their posted settlement (funds stay in available) but
