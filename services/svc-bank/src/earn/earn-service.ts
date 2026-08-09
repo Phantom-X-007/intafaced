@@ -395,9 +395,7 @@ export class EarnService {
    * Unlike `deposit`, a failed re-drive does **not** delete the row — the claim
    * stays pending for the next attempt (or for ops to inspect).
    */
-  async resumePending(
-    limit = 100,
-  ): Promise<Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
+  async resumePending(limit = 100): Promise<Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
     const rows = await this.sql<PositionRow[]>`
       SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
         FROM bank.earn_positions
@@ -502,10 +500,7 @@ export class EarnService {
           // Resume first. Closing a pending claim would hide a half-open deposit
           // (funds may already be staked) under a user withdraw, and would race
           // the recovery job that is supposed to finish the claim.
-          throw new BankError(
-            `Position ${positionId} is still pending — resume the deposit before withdrawing`,
-            'bank.position_pending',
-          );
+          throw new BankError(`Position ${positionId} is still pending — resume the deposit before withdrawing`, 'bank.position_pending');
         }
         if (row.matures_at && row.matures_at > now) {
           throw new BankError(`Fixed-term position is locked until ${row.matures_at.toISOString()}`, 'bank.position_locked');
