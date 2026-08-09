@@ -139,33 +139,15 @@ public class MemberWalletController extends BaseAdminController {
             @RequestParam("unit") String unit,
             @RequestParam("uid") Long uid,
             @RequestParam("amount") BigDecimal amount) {
-        Coin coin = coinService.findByUnit(unit);
-        if (coin == null) {
-            return error("币种不存在");
-        }
-        MemberWallet memberWallet = memberWalletService.findByCoinAndMemberId(coin, uid);
-        Assert.notNull(memberWallet, "wallet null");
-        memberWallet.setBalance(memberWallet.getBalance().add(amount));
-
-        MemberTransaction memberTransaction = new MemberTransaction();
-        memberTransaction.setFee(BigDecimal.ZERO);
-        memberTransaction.setAmount(amount);
-        memberTransaction.setMemberId(memberWallet.getMemberId());
-        memberTransaction.setSymbol(unit);
-        memberTransaction.setType(TransactionType.ADMIN_RECHARGE);
-        memberTransaction.setCreateTime(DateUtil.getCurrentDate());
-        memberTransaction.setRealFee("0");
-        memberTransaction.setDiscountFee("0");
-        memberTransaction= memberTransactionService.save(memberTransaction);
-        
-        String[] adminList = admins.split(",");
-        for(int i = 0; i < adminList.length; i++) {
-			sendEmailMsg(adminList[i], "管理员人工充值(用户ID: " + uid + ", 币种: " + unit + ", 数量: " + amount + "); 操作者：" +admin.getUsername() + "/" + admin.getMobilePhone(), "人工充值通知");
-		}
-        
-        return success(messageSource.getMessage("SUCCESS"));
+        // Dual-book Option B — admin module has no compose service, so the HTTP
+        // 410 door never executes for these paths. Refuse at the method so a
+        // future jar rebuild cannot re-arm the mint. ADR 2026-08-04: agents may
+        // add a service-level throw where only a door stood.
+        // Queue target if ever re-enabled: ledger recipe deposit (not Java book).
+        throw new IllegalStateException(
+                "admin recharge is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
-    
+
     /**
      * 发送邮件
      * @param email
