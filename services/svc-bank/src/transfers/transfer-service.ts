@@ -696,6 +696,19 @@ export class TransferService {
           to = await this.spaces.resolveForCredit(schedule.toSpaceId);
         } catch (err) {
           if (err instanceof BankError && (err.code === 'bank.space_locked' || err.code === 'bank.space_archived')) {
+            // Crash window: claim rolled back (or never committed settle) AFTER
+            // ledger.post already moved value under bank.transfer:<id>:<n>. A
+            // later lock must RECOVER that movement as settled — never mark
+            // rejected while the ledger already moved money.
+            const prior = await this.ledger.getTxByKey(`bank.transfer:${schedule.id}:${occurrence}`);
+            if (prior) {
+              await tx`
+                UPDATE bank.transfer_executions
+                   SET status = 'settled', ledger_tx_id = ${prior.id}, settled_at = now()
+                 WHERE id = ${executionId}
+              `;
+              return 'settled';
+            }
             await tx`
               UPDATE bank.transfer_executions
                  SET status = 'rejected', rejection_code = ${err.code}
