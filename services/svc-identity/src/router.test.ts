@@ -98,6 +98,13 @@ function stubServices(): Stub {
       expiresAt: new Date('2026-07-28T09:05:00.000Z'),
       scopes: ['trade:withdraw'],
     })),
+    startWebauthnStepUp: record('startWebauthnStepUp', () => ({
+      challenge: 'chal-stepup',
+      timeout: 60000,
+      rpId: 'localhost',
+      allowCredentials: [{ type: 'public-key' as const, id: 'cred-1' }],
+      userVerification: 'preferred' as const,
+    })),
     createApiKey: record('createApiKey', () => ({ id: 'key-1', key: 'ifc_secret', prefix: 'ifc_abc', mode: 'live' as const })),
     exchangeApiKey: record('exchangeApiKey', () => ({
       accessToken: 'api.key.jwt',
@@ -399,7 +406,38 @@ describe('auth.stepUp is what makes a withdrawal reachable at all', () => {
     await api.auth.stepUp({ totpCode: '123456', scopes: ['admin:treasury'] } as never);
 
     const call = stub.calls.find((c) => c.method === 'stepUp')!;
-    expect(Object.keys(call.args[0] as object)).toEqual(['userId', 'sessionId', 'totpCode']);
+    const args = call.args[0] as Record<string, unknown>;
+    expect(args).toMatchObject({ userId: USER, sessionId: SESSION, totpCode: '123456' });
+    expect(args).not.toHaveProperty('scopes');
+    // webauthn may be present as undefined — never a client-chosen scope list.
+    expect(
+      Object.keys(args)
+        .filter((k) => k !== 'webauthn')
+        .sort(),
+    ).toEqual(['sessionId', 'totpCode', 'userId'].sort());
+  });
+
+  it('accepts a WebAuthn assertion path for passkey-only step-up', async () => {
+    const api = await caller(['identity:read']);
+    const assertion = {
+      id: 'cred-1',
+      rawId: 'cred-1',
+      type: 'public-key' as const,
+      response: {
+        clientDataJSON: 'eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0',
+        authenticatorData: 'YXV0aA',
+        signature: 'c2ln',
+      },
+    };
+    await api.auth.stepUp({ webauthn: assertion });
+    const call = stub.calls.find((c) => c.method === 'stepUp')!;
+    expect(call.args[0]).toMatchObject({ userId: USER, sessionId: SESSION, webauthn: assertion });
+  });
+
+  it('exposes stepUpOptions for the WebAuthn ceremony', async () => {
+    const api = await caller(['identity:read']);
+    await expect(api.auth.stepUpOptions()).resolves.toMatchObject({ challenge: 'chal-stepup' });
+    expect(stub.calls.some((c) => c.method === 'startWebauthnStepUp')).toBe(true);
   });
 
   it('refuses an anonymous caller', async () => {

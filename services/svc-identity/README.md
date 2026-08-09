@@ -67,7 +67,7 @@ There is **no verification-provider integration** here. Approval is an operator 
 
 `defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.
 
-A live session plus a fresh TOTP code buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no TOTP is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
+A live session plus a fresh TOTP code **or** a WebAuthn step-up assertion buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no TOTP is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
 
 > **Known gap, not introduced here:** a TOTP code is accepted anywhere in its validity window, so a captured code can be replayed within it. That is true of `auth.login` too and is platform-wide; fixing it means tracking a last-used counter per user and belongs in its own PR rather than being solved on one endpoint.
 

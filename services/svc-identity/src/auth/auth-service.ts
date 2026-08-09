@@ -677,6 +677,26 @@ export class AuthService {
     });
   }
 
+  /**
+   * WebAuthn ceremony for step-up (withdraw elevation). Bound to the live user;
+   * challenge kind is `step-up` so a login assertion cannot be replayed here.
+   */
+  async startWebauthnStepUp(userId: string) {
+    const rows = await this.sql<Array<{ id: string; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT id, status, webauthn_creds FROM users WHERE id = ${userId}
+    `;
+    const user = rows[0];
+    if (!user) throw new AuthError('User not found', 'auth.not_found');
+    if (user.status !== 'active') throw new AuthError(`Account is ${user.status}`, 'auth.account_frozen');
+    const creds = asCredentialList(user.webauthn_creds);
+    if (creds.length === 0) {
+      throw new AuthError('No security key enrolled', 'auth.webauthn_not_enrolled');
+    }
+    const challenge = generateChallenge();
+    this.challenges.put('step-up', challenge, userId);
+    return createAuthenticationOptions(this.webauthn, creds, challenge);
+  }
+
   // ── API keys ───────────────────────────────────────────────────────────────
 
   /**
@@ -1024,26 +1044,24 @@ export class AuthService {
    * matter: it lasts five minutes, it is bound to the session that asked for it,
    * and it is only issued to an account that actually has a second factor.
    */
-  async stepUp(input: { userId: string; sessionId: string; totpCode: string }): Promise<{
+  async stepUp(input: { userId: string; sessionId: string; totpCode?: string; webauthn?: AuthenticationResponseJSON }): Promise<{
     accessToken: string;
     expiresAt: Date;
     scopes: Scope[];
   }> {
-    const users = await this.sql<Array<{ totp_secret: string | null; status: string }>>`
-      SELECT totp_secret, status FROM users WHERE id = ${input.userId}
+    const hasTotp = typeof input.totpCode === 'string' && input.totpCode.length > 0;
+    const hasWebauthn = input.webauthn !== undefined && input.webauthn !== null;
+    if (hasTotp === hasWebauthn) {
+      // Exactly one factor proof per call — never both, never neither.
+      throw new AuthError('Provide either a TOTP code or a WebAuthn assertion', 'auth.mfa_invalid');
+    }
+
+    const users = await this.sql<Array<{ totp_secret: string | null; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT totp_secret, status, webauthn_creds FROM users WHERE id = ${input.userId}
     `;
     const user = users[0];
     if (!user) throw new AuthError('User not found', 'auth.not_found');
     if (user.status !== 'active') throw new AuthError(`Account is ${user.status}`, 'auth.account_frozen');
-
-    // §9: moving value off the platform requires a second factor. An account
-    // with none cannot be elevated — not "is elevated without one".
-    if (!user.totp_secret) {
-      throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
-    }
-    if (!verifyTotp(user.totp_secret, input.totpCode)) {
-      throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
-    }
 
     // The session must still be live. Elevating off a revoked session would let
     // a logout be undone by whoever still holds the old access token.
@@ -1052,6 +1070,44 @@ export class AuthService {
        WHERE id = ${input.sessionId} AND user_id = ${input.userId} AND revoked = false AND expires_at > now()
     `;
     if (!sessions[0]) throw new AuthError('Session is no longer valid', 'auth.session_invalid');
+
+    if (hasTotp) {
+      // §9: moving value off the platform requires a second factor.
+      if (!user.totp_secret) {
+        throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
+      }
+      if (!verifyTotp(user.totp_secret, input.totpCode!)) {
+        throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+      }
+    } else {
+      const creds = asCredentialList(user.webauthn_creds);
+      if (creds.length === 0) {
+        throw new AuthError('Enrol a security key before withdrawing with passkey step-up', 'auth.webauthn_not_enrolled');
+      }
+      const response = input.webauthn!;
+      const clientChallenge = readClientChallenge(response.response.clientDataJSON);
+      if (!clientChallenge) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+      const held = this.challenges.take(clientChallenge, 'step-up');
+      if (!held || held.userId !== input.userId) {
+        throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+      }
+      const responseId = normalizeCredId(response.id);
+      const credential = creds.find((c) => c.credentialId === responseId);
+      if (!credential) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+      let newCounter: number;
+      try {
+        ({ newCounter } = verifyAuthenticationResponse(this.webauthn, held.challenge, credential, response));
+      } catch (err) {
+        if (err instanceof WebAuthnError) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+        throw err;
+      }
+      const next = creds.map((c) => (c.credentialId === credential.credentialId ? { ...c, counter: newCounter } : c));
+      await this.sql`
+        UPDATE users
+           SET webauthn_creds = ${this.sql.json(next as never)}, updated_at = now()
+         WHERE id = ${input.userId}
+      `;
+    }
 
     const scopes: Scope[] = [...this.defaultScopes(), ...STEP_UP_SCOPES];
     const tier = await this.kycTier(input.userId);

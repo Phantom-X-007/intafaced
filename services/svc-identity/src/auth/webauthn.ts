@@ -107,7 +107,7 @@ export function b64urlDecode(input: string): Buffer {
 interface ChallengeEntry {
   challenge: string;
   userId: string | null;
-  kind: 'registration' | 'authentication';
+  kind: 'registration' | 'authentication' | 'step-up';
   expiresAt: number;
 }
 
