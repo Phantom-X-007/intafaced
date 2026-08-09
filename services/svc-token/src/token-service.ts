@@ -687,19 +687,37 @@ export class TokenService {
     windowId: string;
     sources: ReadonlyArray<{ module: string; amount: Amount }>;
   }): Promise<YieldRunResult> {
+    /**
+     * Collapse sources by module BEFORE sweeping or planning.
+     *
+     * The sweep ledger key is `token.fee.sweep:${windowId}:${module}:${asset}` —
+     * one post per (window, module). Two legs for the same module used to
+     * produce total = a+b while only the first post moved money (the second hit
+     * the idempotency key and became a silent no-op). The plan then paid against
+     * a figure larger than what the rewards engine actually held.
+     *
+     * Summing first makes one post of the full module amount, so plan total and
+     * value swept agree. Duplicate modules on the wire are operator noise, not
+     * two independent sweeps.
+     */
+    const byModule = new Map<string, Amount>();
     for (const source of input.sources) {
       if (source.amount <= 0n) continue;
+      byModule.set(source.module, (byModule.get(source.module) ?? 0n) + source.amount);
+    }
+
+    for (const [module, amount] of byModule) {
       await this.ledger.post(
         recipes.sweepFeesToRewards({
           windowId: input.windowId,
-          sourceModule: source.module,
+          sourceModule: module,
           assetId: this.assetId,
-          amount: source.amount,
+          amount,
         }),
       );
     }
 
-    const total = input.sources.reduce((acc, s) => acc + (s.amount > 0n ? s.amount : 0n), 0n);
+    const total = [...byModule.values()].reduce((acc, a) => acc + a, 0n);
     if (total <= 0n) throw new TokenError('No revenue to distribute for this window', 'token.nothing_to_distribute');
 
     const plan = await this.planYieldWindow(input.windowId, total);
@@ -742,11 +760,23 @@ export class TokenService {
       // enforces regardless of what this code does. A crash between the post
       // and this update leaves the row unpaid; the retry re-posts (idempotent
       // on the same key) and lands the same transaction id.
-      await this.sql`
+      //
+      // Conditional UPDATE is also the concurrent-call honesty gate: two
+      // operators settling the same unpaid plan both see ledgerTxId=null, both
+      // post (second is a ledger no-op), but only one UPDATE from paid_at IS
+      // NULL can win. The loser must not report a fresh payout in
+      // distributed/recipients — that is the same operator-channel lie #1076
+      // closed for sequential re-runs via alreadyPaid.
+      const marked = await this.sql<Array<{ user_id: string }>>`
         UPDATE token.yield_payouts
            SET ledger_tx_id = ${posted.id}, paid_at = now()
          WHERE window_id = ${input.windowId} AND user_id = ${row.userId} AND paid_at IS NULL
+     RETURNING user_id
       `;
+      if (marked.length === 0) {
+        alreadyPaid++;
+        continue;
+      }
 
       distributed += row.amount;
       recipients++;
@@ -947,6 +977,17 @@ export class TokenService {
       throw new TokenError(
         `Revenue window [${iso(input.revenueWindow.from)}, ${iso(input.revenueWindow.to)}) is empty or inverted`,
         'token.buyback_window_invalid',
+      );
+    }
+
+    // A zero (or negative) buy still CLAIMS the revenue window via the GiST
+    // exclusion on `[from,to)`. That permanently blocks a later real burn for
+    // the same interval while moving nothing — spend the window only when a
+    // real size is asserted.
+    if (input.tokensBought <= 0n) {
+      throw new TokenError(
+        'tokensBought must be positive — a zero buy still claims the revenue window and blocks a later real burn',
+        'token.buyback_revenue_invalid',
       );
     }
 

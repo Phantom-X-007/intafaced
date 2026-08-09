@@ -490,6 +490,52 @@ if (!available) {
       expect(again.alreadyPaid).toBe(1);
     });
 
+    it('collapses duplicate source modules so the plan total matches what was swept', async () => {
+      // Sweep key is per (window, module). Two legs of 50 used to plan 100 while
+      // only the first 50 moved — plan underfunded, payouts fail mid-loop or
+      // drain another window's residual in the rewards engine.
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '100');
+
+      const result = await token.distributeRevenue({
+        windowId: 'w-dup-module',
+        sources: [
+          { module: 'trade', amount: amt('50') },
+          { module: 'trade', amount: amt('50') },
+        ],
+      });
+
+      expect(formatAmount(result.distributed)).toBe('100');
+      expect(result.recipients).toBe(1);
+      expect(await balanceOf(USER_A)).toBe('100');
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('concurrent re-settles of the same unpaid plan report one payout, not two', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '100');
+
+      // First call plans + pays. Second wave of concurrent retries must not
+      // each report distributed=100 (money is ledger-safe; the operator channel
+      // used to lie).
+      await token.distributeRevenue({ windowId: 'w-conc', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          token.distributeRevenue({ windowId: 'w-conc', sources: [{ module: 'trade', amount: amt('100') }] }),
+        ),
+      );
+
+      expect(results.every((r) => formatAmount(r.distributed) === '0')).toBe(true);
+      expect(results.every((r) => r.recipients === 0)).toBe(true);
+      expect(results.every((r) => r.alreadyPaid === 1)).toBe(true);
+      expect(await balanceOf(USER_A)).toBe('100');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     /**
      * ═════════════════════════════════════════════════════════════════════════
      * A WINDOW PAYS THE STAKERS IT HAD, NOT THE STAKERS IT HAS
@@ -688,6 +734,35 @@ if (!available) {
       const burned = amt(emitted.payload.tokensBurned);
       const toRewards = amt(emitted.payload.tokensToRewards);
       expect(burned + toRewards).toBe(amt('777'));
+    });
+
+    it('refuses tokensBought=0 before claiming the window — zero must not spend the interval', async () => {
+      const window = { from: new Date('2026-10-01T00:00:00Z'), to: new Date('2026-10-08T00:00:00Z') };
+
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: window,
+          revenueTotal: { IFC: '0' },
+          tokensBought: amt('0'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_revenue_invalid' });
+
+      // No claim row — a later real burn for the same window must still be free.
+      const rows = await sql`SELECT id FROM token.buyback_runs`;
+      expect(rows).toHaveLength(0);
+      expect(await token.burnedSupply()).toBe(0n);
+
+      await accrueFees('trade', '500');
+      await token.distributeRevenue({ windowId: 'w-bb-zero-then-real', sources: [{ module: 'trade', amount: amt('500') }] });
+      const real = await token.recordBuyback({
+        runId: crypto.randomUUID(),
+        revenueWindow: window,
+        revenueTotal: { IFC: '500' },
+        tokensBought: amt('500'),
+      });
+      expect(real.burned + real.toRewards).toBe(amt('500'));
+      expect(await token.burnedSupply()).toBe(real.burned);
     });
   });
 
