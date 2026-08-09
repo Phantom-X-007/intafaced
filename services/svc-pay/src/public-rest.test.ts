@@ -314,6 +314,59 @@ describe('the spec is served, and describes what the routes actually do', () => 
     expect(spec.servers?.map((s) => s.url)).toContain('/api/pay/v1');
   });
 
+  /**
+   * THE CONTRACT AND THE ROUTER, COMPARED IN BOTH DIRECTIONS.
+   *
+   * The test above uses `arrayContaining`, which catches a route that vanished
+   * from the spec and nothing else. Two failures pass it:
+   *
+   *   · the spec DESCRIBES a route that is not mounted — a generated client
+   *     compiles and 404s at runtime;
+   *   · the spec OMITS a route that IS mounted — an undocumented public write
+   *     path on a payment API, which is how a surface grows in the dark.
+   *
+   * A machine-readable contract that lies is worse than none, so this compares
+   * the two SETS rather than checking membership one way. Derived from Fastify's
+   * own `onRoute` hook, not from a hand-kept list that would drift with it.
+   */
+  it('describes every mounted route and no route that is not mounted', async () => {
+    const mounted = new Set<string>();
+    const built = Fastify({ logger: false });
+    built.addHook('onRoute', (route) => {
+      // HEAD is generated for every GET; the spec does not document it.
+      const methods = Array.isArray(route.method) ? route.method : [route.method];
+      if (methods.every((m) => m === 'HEAD')) return;
+      // `{ hide: true }` is the spec's own opt-out — openapi.json describing
+      // itself is noise, and it is the one route legitimately absent below.
+      if ((route.schema as { hide?: boolean } | undefined)?.hide) return;
+      // Service mount (/v1/…) to advertised path (servers[0] = /api/pay/v1).
+      const path = route.url.startsWith('/v1') ? route.url.slice('/v1'.length) || '/' : route.url;
+      mounted.add(path.replace(/:([A-Za-z0-9_]+)/g, '{$1}'));
+    });
+    await registerPublicPayRest(built, {
+      edgeSecret: SECRET,
+      serviceName: 'svc-pay',
+      pay: stubPay(),
+      idempotency: new MemoryRestIdempotencyStore(),
+      // Webhook routes are conditional on this dep, so it must be present or the
+      // comparison would quietly be over the smaller surface.
+      webhooks: new MerchantWebhookService(new MemoryMerchantWebhookStore()),
+    });
+    await built.ready();
+    const described = new Set(Object.keys((built.swagger() as { paths: Record<string, unknown> }).paths));
+    await built.close();
+
+    // Non-vacuity: two empty sets are equal, and would make this test a comment.
+    //
+    // NINE PATHS, not nine routes — OpenAPI keys by path, and three pairs share
+    // one: GET+POST `/payments`, and GET+POST `/webhook-endpoints`.
+    //   payments: /payments, /payments/{id}, …/authorize, …/capture, …/refund
+    //   balances: /balances
+    //   webhooks: /webhook-endpoints, /webhook-endpoints/{id}, /webhook-deliveries
+    expect(mounted.size).toBe(9);
+    expect([...described].sort()).toEqual([...mounted].sort());
+  });
+
   it('serves the spec over HTTP, without shipping a static file server', async () => {
     app = await build();
 
