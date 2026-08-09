@@ -18,9 +18,8 @@ describe('video / stream provider park (no invent SFU)', () => {
 
   it('join credential path refuses by name rather than inventing a token', async () => {
     const p = new NullStreamProvider();
+    // NullStreamProvider.credential takes no params — refuse is the whole point.
     await expect(p.openRoom()).rejects.toThrow(/provider|configured|stream/i);
-    await expect(p.credential({ sessionId: 'sess-1', streamRoom: 'r1', userId: 'u1', role: 'attendee' })).rejects.toThrow(
-      /provider|configured|stream|lobby/i,
-    );
+    await expect(p.credential()).rejects.toThrow(/provider|configured|stream|lobby/i);
   });
 });
