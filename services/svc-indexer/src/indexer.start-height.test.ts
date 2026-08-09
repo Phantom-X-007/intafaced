@@ -52,3 +52,32 @@ describe('Indexer · startHeight cold start', () => {
     expect((await store.head())?.height).toBe(103);
   });
 });
+
+it('batchSize 1 applies one block per pass and reports not caught up until tip', async () => {
+  const source = new MemoryChainSource(CHAIN_ID, 0);
+  source.appendEmpty(3); // 0..2
+  const store = new MemoryProjectionStore(CHAIN_ID);
+  const indexer = new Indexer({
+    source,
+    store,
+    finalityDepth: 64,
+    batchSize: 1,
+    ingestEnabled: () => true,
+    startHeight: 0,
+  });
+
+  const a = await indexer.sync();
+  expect(a.blocksApplied).toBe(1);
+  expect(a.caughtUp).toBe(false);
+  expect((await store.head())?.height).toBe(0);
+
+  const b = await indexer.sync();
+  expect(b.blocksApplied).toBe(1);
+  expect((await store.head())?.height).toBe(1);
+
+  await indexer.sync(); // height 2
+  const done = await indexer.sync();
+  expect(done.blocksApplied).toBe(0);
+  expect(done.caughtUp).toBe(true);
+  expect((await store.head())?.height).toBe(2);
+});
