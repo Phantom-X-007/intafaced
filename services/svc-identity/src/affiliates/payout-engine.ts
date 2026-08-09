@@ -33,7 +33,7 @@ import {
 
 import { AffiliatePayoutRefuseError, AFFILIATE_PAYOUT_RESIDUAL } from './admin-tree-read.js';
 import type { AccrualTierLaw } from './commission-rate-law.js';
-import type { CommissionRow } from './commission.js';
+import { AFFILIATE_FEE_SOURCE_MODULE_RE, DEFAULT_AFFILIATE_FEE_SOURCE_MODULE, type CommissionRow } from './commission.js';
 import { DEFAULT_MAX_REFERRAL_DEPTH } from './referral-tree.js';
 
 /**
@@ -50,14 +50,13 @@ import { DEFAULT_MAX_REFERRAL_DEPTH } from './referral-tree.js';
 export const MAX_PAYOUT_TIER_DEPTH = DEFAULT_MAX_REFERRAL_DEPTH;
 
 /**
- * Which module's fee pool affiliate commission is paid out of.
+ * Legacy plan-level default when a row has no sourceModule (pre-migration).
  *
- * `houseFees('identity', asset)` — the pool must already hold the fee the
- * commission is a share OF. This engine never mints: it moves an existing fee
- * into the rewards engine and then to the beneficiary, so an unfunded pool
- * fails as InsufficientFunds rather than inventing value.
+ * Prefer `row.sourceModule` — durable accruals now carry the producer module
+ * so a trade fee sweeps houseFees("trade"), not this identity default.
+ * Unfunded pool still fails rather than inventing value.
  */
-export const AFFILIATE_PAYOUT_SOURCE_MODULE = 'identity';
+export const AFFILIATE_PAYOUT_SOURCE_MODULE = DEFAULT_AFFILIATE_FEE_SOURCE_MODULE;
 
 /** Ledger `reason` on the beneficiary leg — greppable in reconciliation. */
 export const AFFILIATE_PAYOUT_REASON = 'identity.affiliate.commission';
@@ -191,11 +190,15 @@ export function planAffiliatePayout(input: {
   readonly law: AccrualTierLaw;
   readonly frozenBeneficiaryIds?: ReadonlySet<string>;
   readonly maxTierDepth?: number;
+  /**
+   * Plan-level override only. Prefer each row's sourceModule (producer pool).
+   * Kept for tests that fund a single pool without stamping every row.
+   */
   readonly sourceModule?: string;
 }): AffiliatePayoutPlan {
   const feeEventId = input.feeEventId.trim();
   const maxTierDepth = input.maxTierDepth ?? MAX_PAYOUT_TIER_DEPTH;
-  const sourceModule = input.sourceModule ?? AFFILIATE_PAYOUT_SOURCE_MODULE;
+  const planDefaultModule = input.sourceModule ?? AFFILIATE_PAYOUT_SOURCE_MODULE;
 
   // Rate first, before anything else can look like progress. An operator who
   // asks to pay before the owner has published a rate gets the rate refusal —
@@ -268,6 +271,15 @@ export function planAffiliatePayout(input: {
     if (amount <= 0n) {
       refuse(
         `Accrual row for ${row.beneficiaryId} at hop ${row.hop} has non-positive commission — refusing to post a movement of nothing`,
+        'affiliate.payout.invalid',
+      );
+    }
+
+    // Sweep the pool the fee actually landed in — row wins over plan default.
+    const sourceModule = (row.sourceModule ?? planDefaultModule).trim();
+    if (!sourceModule || !AFFILIATE_FEE_SOURCE_MODULE_RE.test(sourceModule)) {
+      refuse(
+        `Accrual row at hop ${row.hop} has invalid sourceModule ${JSON.stringify(row.sourceModule)} — refusing to guess a fee pool`,
         'affiliate.payout.invalid',
       );
     }

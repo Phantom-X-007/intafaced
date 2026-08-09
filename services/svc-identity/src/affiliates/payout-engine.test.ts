@@ -251,6 +251,72 @@ describe('multi-tier fan-out across the tree', () => {
     // Nobody was paid out of a pool that never held the fee.
     expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe('0');
   });
+
+  it('sweeps the producer fee pool named on the accrual row (trade), not identity default', async () => {
+    // THE NAMED HOLE this closes: a trading fee lands in houseFees("trade").
+    // Before source_module, payout always swept houseFees("identity") and failed
+    // as InsufficientFunds while trade held the fee.
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({ userId: PAYER, assetId: ASSET, amount: parseAmount('1000'), rail: 'crypto-native', railRef: 'seed-trade' }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: FEE_EVENT,
+        userId: PAYER,
+        module: 'trade',
+        assetId: ASSET,
+        amount: parseAmount('100'),
+      }),
+    );
+    expect(await bal(ledger, houseFees('trade', ASSET))).toBe('100');
+    expect(await bal(ledger, houseFees(AFFILIATE_PAYOUT_SOURCE_MODULE, ASSET))).toBe('0');
+
+    const tradeRows = rows(PUBLISHED, feeEvent({ sourceModule: 'trade' }));
+    expect(tradeRows.every((r) => r.sourceModule === 'trade')).toBe(true);
+
+    const plan = planAffiliatePayout({ feeEventId: FEE_EVENT, rows: tradeRows, law: PUBLISHED });
+    // Plan must name trade in every sweep key path — not identity.
+    for (const leg of plan.legs) {
+      expect(leg.sweep.idempotencyKey).toContain('trade');
+    }
+
+    await postAffiliatePayout(ledger, plan);
+
+    expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe('10');
+    expect(await bal(ledger, userAvailable(HOP1, ASSET))).toBe('5');
+    expect(await bal(ledger, userAvailable(HOP2, ASSET))).toBe('2');
+    expect(await bal(ledger, houseFees('trade', ASSET))).toBe('83');
+    // Identity pool was never funded and must stay empty (no cross-pool invent).
+    expect(await bal(ledger, houseFees(AFFILIATE_PAYOUT_SOURCE_MODULE, ASSET))).toBe('0');
+  });
+
+  it('wrong-pool residual: trade-funded fee fails when rows still say identity', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({ userId: PAYER, assetId: ASSET, amount: parseAmount('1000'), rail: 'crypto-native', railRef: 'seed-wrong' }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: FEE_EVENT,
+        userId: PAYER,
+        module: 'trade',
+        assetId: ASSET,
+        amount: parseAmount('100'),
+      }),
+    );
+    // Rows without producer stamp still default to identity — the old hole.
+    const identityRows = rows(PUBLISHED, feeEvent()); // no sourceModule
+    expect(identityRows.every((r) => r.sourceModule === 'identity')).toBe(true);
+
+    await expect(
+      postAffiliatePayout(ledger, planAffiliatePayout({ feeEventId: FEE_EVENT, rows: identityRows, law: PUBLISHED })),
+    ).rejects.toThrow();
+    expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe('0');
+    expect(await bal(ledger, houseFees('trade', ASSET))).toBe('100');
+  });
 });
 
 // ── Retry pays once ──────────────────────────────────────────────────────────
@@ -420,6 +486,7 @@ describe('self-referral is refused', () => {
       commissionAmount: '10',
       asset: ASSET,
       accruedAt: new Date('2026-08-09T12:00:00.000Z'),
+      sourceModule: AFFILIATE_PAYOUT_SOURCE_MODULE,
     };
 
     const before = await bal(ledger, userAvailable(PAYER, ASSET));
@@ -457,6 +524,7 @@ describe('the depth bound is enforced', () => {
       commissionAmount: '2',
       asset: ASSET,
       accruedAt: new Date('2026-08-09T12:00:00.000Z'),
+      sourceModule: AFFILIATE_PAYOUT_SOURCE_MODULE,
     };
     const law: AccrualTierLaw = { published: true, tiers: [{ hop: MAX_PAYOUT_TIER_DEPTH, rate: '0.02' }] };
 

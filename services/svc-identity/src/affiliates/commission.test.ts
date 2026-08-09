@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MemoryReferralTree } from './referral-tree.js';
 import {
   accrueCommission,
+  assertAffiliateSourceModule,
   countCommissionRowsByHop,
   decimalMul,
   listCommissionBeneficiaryIds,
@@ -17,6 +18,7 @@ import {
   commissionSummaryExportText,
   commissionRowCountInRange,
   commissionSummaryIsZero,
+  CommissionError,
   type TierRate,
 } from './commission.js';
 
@@ -121,6 +123,32 @@ describe('affiliates Slice B — commission accrual (no payout)', () => {
     expect(listCommissionBeneficiaryIds([])).toEqual([]);
     expect(maxCommissionHop(rows)).toBe(0);
     expect(maxCommissionHop([])).toBeNull();
+  });
+
+  it('stamps sourceModule from the fee event (producer fee pool)', () => {
+    const tree = new MemoryReferralTree();
+    tree.attribute({ userId: 'u2', referrerId: 'u1' });
+    const parent = new Map(tree.listEdges().map((e) => [e.userId, e.referrerId]));
+    const rows = accrueCommission({
+      fee: {
+        feeEventId: 'f-trade',
+        userId: 'u2',
+        feeAmount: '100',
+        asset: 'USDT',
+        sourceModule: 'trade',
+        at: new Date(),
+      },
+      parent,
+      tiers: FIXTURE_TIERS,
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.sourceModule === 'trade')).toBe(true);
+  });
+
+  it('refuses invalid sourceModule rather than inventing a fee pool', () => {
+    expect(() => assertAffiliateSourceModule('')).toThrowError(CommissionError);
+    expect(() => assertAffiliateSourceModule('Trade')).toThrowError(CommissionError);
+    expect(assertAffiliateSourceModule('trade')).toBe('trade');
   });
 });
 

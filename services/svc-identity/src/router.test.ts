@@ -853,6 +853,7 @@ describe('affiliates.myAccruals (self-only durable accruals)', () => {
         commissionAmount: '10',
         asset: 'USDT',
         accruedAt: at,
+        sourceModule: 'trade',
       },
       {
         feeEventId: 'fee-theirs',
@@ -864,6 +865,7 @@ describe('affiliates.myAccruals (self-only durable accruals)', () => {
         commissionAmount: '5',
         asset: 'USDT',
         accruedAt: at,
+        sourceModule: 'pay',
       },
     ]);
 
@@ -929,6 +931,7 @@ describe('affiliates.payout on the mount', () => {
       commissionAmount: '10',
       asset: ASSET_U,
       accruedAt: new Date('2026-08-09T12:00:00.000Z'),
+      sourceModule: 'identity',
       ...over,
     };
   }

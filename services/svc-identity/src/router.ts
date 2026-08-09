@@ -998,6 +998,7 @@ export function createIdentityRouter(
                 commissionAmount: z.string(),
                 asset: z.string(),
                 accruedAt: z.string(),
+                sourceModule: z.string(),
               }),
             ),
           }),
@@ -1018,6 +1019,7 @@ export function createIdentityRouter(
                 commissionAmount: r.commissionAmount,
                 asset: r.asset,
                 accruedAt: r.accruedAt.toISOString(),
+                sourceModule: r.sourceModule,
               })),
             };
           } catch (err) {
@@ -1328,6 +1330,11 @@ export function createIdentityRouter(
             userId: z.string().uuid(),
             feeAmount: z.string().regex(/^(0|[1-9]\d*)(\.\d{1,18})?$/),
             asset: z.string().min(1).max(32),
+            /** Module fee pool that holds this fee (trade / pay / …). Default identity for legacy. */
+            sourceModule: z
+              .string()
+              .regex(/^[a-z][a-z0-9_-]{0,31}$/)
+              .optional(),
             at: z.string().datetime().optional(),
             tiers: z
               .array(
@@ -1353,6 +1360,7 @@ export function createIdentityRouter(
                 commissionAmount: z.string(),
                 asset: z.string(),
                 accruedAt: z.string(),
+                sourceModule: z.string(),
               }),
             ),
             frozenSkipped: z.number().int(),
@@ -1372,6 +1380,7 @@ export function createIdentityRouter(
               userId: input.userId,
               feeAmount: input.feeAmount,
               asset: input.asset,
+              sourceModule: input.sourceModule,
               at: input.at ? new Date(input.at) : new Date(),
             };
             const without = accrueCommission({ fee, parent, tiers });
@@ -1393,6 +1402,7 @@ export function createIdentityRouter(
                 commissionAmount: r.commissionAmount,
                 asset: r.asset,
                 accruedAt: r.accruedAt.toISOString(),
+                sourceModule: r.sourceModule,
               })),
             };
           } catch (err) {
@@ -1413,6 +1423,11 @@ export function createIdentityRouter(
             userId: z.string().uuid(),
             feeAmount: z.string().regex(/^(0|[1-9]\d*)(\.\d{1,18})?$/),
             asset: z.string().min(1).max(32),
+            /** Module fee pool that holds this fee (trade / pay / …). Default identity for legacy. */
+            sourceModule: z
+              .string()
+              .regex(/^[a-z][a-z0-9_-]{0,31}$/)
+              .optional(),
             at: z.string().datetime().optional(),
             tiers: z
               .array(
@@ -1439,6 +1454,7 @@ export function createIdentityRouter(
                 commissionAmount: z.string(),
                 asset: z.string(),
                 accruedAt: z.string(),
+                sourceModule: z.string(),
               }),
             ),
             frozenSkipped: z.number().int(),
@@ -1458,6 +1474,7 @@ export function createIdentityRouter(
               userId: input.userId,
               feeAmount: input.feeAmount,
               asset: input.asset,
+              sourceModule: input.sourceModule,
               at: input.at ? new Date(input.at) : new Date(),
             };
             const without = accrueCommission({ fee, parent, tiers });
@@ -1482,6 +1499,7 @@ export function createIdentityRouter(
                 commissionAmount: r.commissionAmount,
                 asset: r.asset,
                 accruedAt: r.accruedAt.toISOString(),
+                sourceModule: r.sourceModule,
               })),
             };
           } catch (err) {

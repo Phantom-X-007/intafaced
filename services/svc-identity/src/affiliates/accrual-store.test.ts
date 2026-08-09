@@ -59,6 +59,31 @@ describe('Slice B durable accrual store — no payout', () => {
     const listed = await store.listByFeeEvent('fee-1');
     expect(listed).toHaveLength(rows.length);
     expect(listed[0]!.commissionAmount).toBe('10');
+    // Default pool when fee omits sourceModule — legacy operator path only.
+    expect(listed.every((r) => r.sourceModule === 'identity')).toBe(true);
+  });
+
+  it('persists producer sourceModule so payout can sweep the right fee pool', async () => {
+    const store = new MemoryAccrualStore();
+    const fee: FeeEvent = {
+      feeEventId: 'fee-trade',
+      userId: PAYER,
+      feeAmount: '100',
+      asset: 'USDT',
+      sourceModule: 'trade',
+      at: new Date('2026-08-07T12:00:00.000Z'),
+    };
+    const parent = new Map([[PAYER, REF]]);
+    const rows = accrueCommission({
+      fee,
+      parent,
+      tiers: [{ hop: 0, rate: '0.10' }],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sourceModule).toBe('trade');
+    await store.saveRows(rows);
+    const listed = await store.listByFeeEvent('fee-trade');
+    expect(listed[0]!.sourceModule).toBe('trade');
   });
 
   it('listByBeneficiary is self-filter only — foreign id returns other rows not mixed', async () => {
@@ -75,6 +100,7 @@ describe('Slice B durable accrual store — no payout', () => {
         commissionAmount: '10',
         asset: 'USDT',
         accruedAt: at,
+        sourceModule: 'trade',
       },
       {
         feeEventId: 'f2',
@@ -86,6 +112,7 @@ describe('Slice B durable accrual store — no payout', () => {
         commissionAmount: '5',
         asset: 'USDT',
         accruedAt: at,
+        sourceModule: 'pay',
       },
     ]);
     const mine = await store.listByBeneficiary(REF);
