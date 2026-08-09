@@ -180,6 +180,7 @@ function stubService(): Stub {
       settlementRecord({ status: 'paid_out', payoutMethod: 'card-sandbox', payoutRef: 'po_1' }),
     ),
     getSettlement: record('getSettlement', () => settlementRecord()),
+    listSettlements: record('listSettlements', () => [settlementRecord()]),
     createPaymentLink: record('createPaymentLink', () => ({
       id: LINK,
       token: 'pl_generated_token',
@@ -697,6 +698,23 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
       gross: '100',
       net: '97.5',
     });
+  });
+
+  it('owner can list settlements for a merchant', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.settlement.list({ merchantId: MERCHANT, status: 'posted' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.gross).toBe('100');
+    expect(rows[0]!.net).toBe('97.5');
+    expect(stub.calls.filter((c) => c.method === 'listSettlements')).toHaveLength(1);
+  });
+
+  it('refuses settlement.list on another merchant, and never lists', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:read']);
+    const err = await api.settlement.list({ merchantId: MERCHANT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect(stub.calls.filter((c) => c.method === 'listSettlements')).toHaveLength(0);
   });
 
   it('refuses with FORBIDDEN rather than NOT_FOUND, consistently, on all three', async () => {

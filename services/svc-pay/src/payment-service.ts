@@ -2401,6 +2401,33 @@ export class PayService {
     return toSettlement(row);
   }
 
+  /**
+   * Merchant fleet list — settlements already stored; this only reads them.
+   * No freeze, no post, no payout. Caller fences merchant ownership / area.
+   */
+  async listSettlements(input: { merchantId: string; status?: SettlementStatus; limit?: number }): Promise<SettlementRecord[]> {
+    await this.getMerchant(input.merchantId);
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const rows = input.status
+      ? await this.sql<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net,
+                 payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements
+           WHERE merchant_id = ${input.merchantId} AND status = ${input.status}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net,
+                 payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements
+           WHERE merchant_id = ${input.merchantId}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    return rows.map(toSettlement);
+  }
+
   // ── Reads ──────────────────────────────────────────────────────────────────
 
   async getPayment(paymentId: string): Promise<PaymentView> {
