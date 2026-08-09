@@ -9,9 +9,9 @@
 
 ## Why this exists
 
-Dependabot opened four Maven PRs (#1142, #1143, #1146, #1147). CI is green on all of them because **CI does not compile Java**. Merging a 57-package or Spring-Cloud generation bump without a compile probe is a false green.
+Dependabot opened four Maven PRs (#1142, #1143, #1146, #1147). Ordinary CI green does **not** prove Java compiles.
 
-Axis C2 (#1137) landed **Maven Dependabot config only**. The compile probe is a separate unit.
+Axis C2 (#1137) landed Maven Dependabot config only. **#1217 MERGED** the path-filtered Vendor compile probe (`continue-on-error`) for `00_framework` core. **#1143/#1147** Hoxton jumps closed; **#1226** ignores `spring-cloud-dependencies` on both maven roots. **#1142/#1146** remain HOLD for compile-proof.
 
 This inventory is the **risk map** so a human (or a later agent with compile proof) can decide what is safe to land vs close.
 
@@ -39,12 +39,12 @@ This inventory is the **risk map** so a human (or a later agent with compile pro
 
 ## Dependabot open set — disposition rule
 
-| PR                                                                           | What it does                                | Land?                                                         | Why                                                                                                        |
-| ---------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **#1142** wallet_rpc production ×10 (incl. fastjson → 1.2.84, Boot → 1.5.22) | Patch/minor on 1.5 line + security fastjson | **Only after compile probe green on that branch**             | Highest security value; still on Boot 1.5.                                                                 |
-| **#1146** framework production ×57                                           | Large minor/patch batch                     | **Only after compile probe + manual skim of money-path poms** | Blast radius huge; CI green is irrelevant.                                                                 |
-| **#1143** wallet_rpc Spring Cloud → **Hoxton.RELEASE**                       | Generation jump (Edgware→Hoxton)            | **Close / do not merge** without explicit owner plan          | Hoxton targets Boot 2.x; Edgware is Boot 1.5. Dependabot “ignore majors” does not catch Cloud train names. |
-| **#1147** framework Spring Cloud → **Hoxton.RELEASE**                        | Same generation jump                        | **Close / do not merge** same as #1143                        | Same train mismatch.                                                                                       |
+| PR                                                                           | What it does                                | Land?                                                         | Why                                        |
+| ---------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------ |
+| **#1142** wallet_rpc production ×10 (incl. fastjson → 1.2.84, Boot → 1.5.22) | Patch/minor on 1.5 line + security fastjson | **Only after compile probe green on that branch**             | Highest security value; still on Boot 1.5. |
+| **#1146** framework production ×57                                           | Large minor/patch batch                     | **Only after compile probe + manual skim of money-path poms** | Blast radius huge; CI green is irrelevant. |
+| **#1143** wallet_rpc Spring Cloud → **Hoxton.RELEASE**                       | Generation jump (Edgware→Hoxton)            | **CLOSED**                                                    | Closed W4; #1226 ignore prevents re-open.  |
+| **#1147** framework Spring Cloud → **Hoxton.RELEASE**                        | Same generation jump                        | **CLOSED**                                                    | Closed W4; #1226 ignore prevents re-open.  |
 
 **Compile proof (Done bar for any land):**
 
@@ -62,11 +62,25 @@ This inventory is the **risk map** so a human (or a later agent with compile pro
 
 ---
 
-## Next agent pick-up
+## Next agent pick-up (wave 5)
 
-1. Land compile probe if not on tip.
-2. Rebase #1142 onto tip; require probe signal; merge only if core (and wallet_rpc subset) compile.
-3. Close #1143/#1147 with this doc linked.
-4. #1146 only after #1142 lesson + probe.
+1. **Compile probe on tip** — **DONE** (#1217).
+2. Rebase **#1142** onto tip; require Vendor compile probe **signal** (advisory red OK); merge only with doctrine green + no jar invent.
+3. **#1146** only after #1142 lesson + probe + money-path pom skim.
+4. Boot 2/3 upgrade remains multi-month — not residual craft.
 
 **Nitro must decide:** none for inventory itself. Class X only if counsel wants a formal third-party supply attestation beyond this risk map.
+
+---
+
+## Supply matrix (L16 W5)
+
+| Surface                    | State on tip (re-derive)                                  | Residual                                              |
+| -------------------------- | --------------------------------------------------------- | ----------------------------------------------------- |
+| Vendor compile probe       | **#1217 MERGED** — framework core only, continue-on-error | Wallet_rpc still unbuilt by design (M7 barrier)       |
+| Spring Cloud train jumps   | **#1226** ignore + **#1143/#1147 closed**                 | Hold **#1142/#1146**                                  |
+| Dual-book door             | **#1218** interceptor + 4 apps                            | Grade C body kills in flight (admin/ucenter)          |
+| Grade D mints              | Empty allowlist band (deleted)                            | Keep empty                                            |
+| NOTICE                     | Compiled 2026-07-29                                       | Refresh only from artefacts — **no invent generator** |
+| L11 desk `05_Web_Front/**` | Separate lane                                             | L16 one-writer: do not dual-write open L11 PRs        |
+| Licence / counsel          | Class X                                                   | Nitro only                                            |
