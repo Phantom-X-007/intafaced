@@ -135,8 +135,10 @@ export class LedgerService implements LedgerClient {
    */
   async freeze(reason: string, actor: string): Promise<FreezeState> {
     try {
-      const state = await writeFreeze(this.sql, { frozen: true, reason, actor });
-      await this.publishFreeze(state);
+      const { state, switched } = await writeFreeze(this.sql, { frozen: true, reason, actor });
+      // Same-attribution re-freeze is a true no-op (hourly recon). Do not
+      // re-publish — consumers would re-alarm under a stable key or a new one.
+      if (switched) await this.publishFreeze(state);
       return state;
     } catch (err) {
       // Already frozen under different attribution — keep the first reason
@@ -150,8 +152,8 @@ export class LedgerService implements LedgerClient {
   }
 
   async unfreeze(actor: string): Promise<FreezeState> {
-    const state = await writeFreeze(this.sql, { frozen: false, actor });
-    await this.publishFreeze(state);
+    const { state, switched } = await writeFreeze(this.sql, { frozen: false, actor });
+    if (switched) await this.publishFreeze(state);
     return state;
   }
 

@@ -254,9 +254,12 @@ export function hashTx(tx: HashableTx, previousHash: string | null): string {
     })),
   });
 
-  return createHash('sha256')
-    .update(previousHash ?? '')
-    .update(' ')
-    .update(canonical)
-    .digest('hex');
+  return (
+    createHash('sha256')
+      .update(previousHash ?? '')
+      // Field separator — written as \u0000 so the source file is not a binary blob.
+      .update('\u0000')
+      .update(canonical)
+      .digest('hex')
+  );
 }
