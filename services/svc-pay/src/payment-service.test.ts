@@ -761,6 +761,51 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    /**
+     * Dual-book lag: MemoryLedger post succeeds, then we throw so the SQL
+     * transaction rolls back (settlement stays pending / payments stay captured).
+     * Re-run must finish projection; recipe idempotency must not double-credit.
+     */
+    it('heals projection after ledger post when the DB transaction rolled back', async () => {
+      const m = await merchant(0);
+      const payment = await cardPayment(m.id, '40');
+      await pay.capture(payment.id);
+
+      const realPost = ledger.post.bind(ledger);
+      let crashAfterSettle = true;
+      (ledger as { post: typeof ledger.post }).post = async (req) => {
+        const result = await realPost(req);
+        if (crashAfterSettle && req.reason === 'pay.settled') {
+          crashAfterSettle = false;
+          throw new Error('injected crash after merchantSettlement');
+        }
+        return result;
+      };
+
+      await expect(settle(m.id, 'w-heal-lag')).rejects.toThrow(/injected crash after merchantSettlement/);
+
+      // Ledger moved; SQL projection did not.
+      expect(await availableOf(MERCHANT_USER)).toBe('40');
+      expect(await clearingOf(m.id)).toBe('0');
+      expect(ledger.journal().filter((t) => t.reason === 'pay.settled')).toHaveLength(1);
+      const pending = await sql<{ status: string }[]>`
+        SELECT status FROM pay.settlements WHERE merchant_id = ${m.id} AND "window" = 'w-heal-lag'
+      `;
+      expect(pending[0]?.status).toBe('pending');
+      expect((await pay.getPayment(payment.id)).status).toBe('captured');
+
+      // Restore real post; re-run heals projection.
+      ledger.post = realPost;
+      const healed = await settle(m.id, 'w-heal-lag');
+      expect(healed.status).toBe('posted');
+      expect(await availableOf(MERCHANT_USER)).toBe('40');
+      expect(await clearingOf(m.id)).toBe('0');
+      expect(ledger.journal().filter((t) => t.reason === 'pay.settled')).toHaveLength(1);
+      expect((await pay.getPayment(payment.id)).status).toBe('settled');
+      expect(await events(payment.id)).toContain('settled');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('settles each asset separately — one window, two currencies, two settlements', async () => {
       const m = await merchant(0);
       const usdt = await cardPayment(m.id, '100', 'USDT');
