@@ -69,7 +69,13 @@ function git(gitArgs) {
  * anyone else at all.
  */
 function myFiles() {
-  if (args.length > 0) return { source: 'arguments', files: args };
+  // Blank / whitespace-only argv used to count as "paths" and print ✓ clear
+  // without checking anything real (exit 0). Same false-clear class as empty
+  // no-args — strip them so the length===0 refuse below can fire.
+  if (args.length > 0) {
+    const files = args.map((a) => (typeof a === 'string' ? a.trim() : '')).filter(Boolean);
+    return { source: 'arguments', files };
+  }
 
   const base = git(['merge-base', 'origin/main', 'HEAD']) || 'origin/main';
   const committed = git(['diff', '--name-only', `${base}...HEAD`])
@@ -78,7 +84,19 @@ function myFiles() {
   const working = git(['status', '--porcelain'])
     .split('\n')
     .filter(Boolean)
-    .map((l) => l.slice(3).trim());
+    .flatMap((l) => {
+      // porcelain: XY<space>path | XY<space>old -> new (rename/copy)
+      // slice(3) on "R  a -> b" left "a -> b" as a fake path — false-clear
+      // because touches never matched real files.
+      const body = l.slice(3);
+      if (body.includes(' -> ')) {
+        return body
+          .split(' -> ')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      return [body.trim()].filter(Boolean);
+    });
 
   return { source: 'this branch (committed + working tree)', files: [...new Set([...committed, ...working])] };
 }
@@ -88,14 +106,16 @@ const { source, files: mine } = myFiles();
 if (mine.length === 0) {
   // Exit 2 = cannot answer (same class as gh failure). Exit 0 used to look like
   // "lane free" when an agent forgot to pass paths — the soft false-clear that
-  // ships agents into someone else's desk with a green checkmark.
-  console.error('  claim-check — CANNOT ANSWER: no paths given and this branch has no changes.');
+  // ships agents into someone else's desk with a green checkmark. Blank /
+  // whitespace-only argv used to take the same exit-0 path (#1252 residual).
+  console.error('  claim-check — CANNOT ANSWER: no real paths given (empty args or clean branch).');
   console.error('      Pass the paths you are about to edit, e.g. `pnpm claim:check services/svc-bank`.');
   console.error('      Not reporting "clear" — this tool has not checked anything.');
   process.exit(2);
 }
 
-const prs = gh(['pr', 'list', '--state', 'open', '--limit', '60', '--json', 'number,title,author,headRefName,files']);
+const PR_LIST_LIMIT = 100;
+const prs = gh(['pr', 'list', '--state', 'open', '--limit', String(PR_LIST_LIMIT), '--json', 'number,title,author,headRefName,files']);
 
 if (prs.__error) {
   // Refuse rather than reassure. "No conflicts found" when we could not look is
@@ -104,6 +124,32 @@ if (prs.__error) {
   console.error(`      ${prs.__error}`);
   console.error('      Not reporting "clear" — this tool has not checked anything.');
   process.exit(2);
+}
+
+// Hitting the list cap means more open PRs may exist unseen — clear would be a lie.
+if (Array.isArray(prs) && prs.length >= PR_LIST_LIMIT) {
+  console.error(`  claim-check — CANNOT ANSWER: open PR list hit the cap (${PR_LIST_LIMIT}).`);
+  console.error('      Some open PRs were not inspected. Not reporting "clear".');
+  console.error('      Raise PR_LIST_LIMIT or close/merge open work, then re-run.');
+  process.exit(2);
+}
+
+// `gh pr list --json files` returns at most ~100 paths per PR (GitHub GraphQL
+// page). A PR that hits that cap may have more files we never saw — reporting
+// clear on an unlisted path is a silent false-clear (L15 A3 / W5 park).
+const GH_FILES_PAGE_CAP = 100;
+if (Array.isArray(prs)) {
+  const truncated = prs.filter((pr) => (pr.files ?? []).length >= GH_FILES_PAGE_CAP);
+  if (truncated.length > 0) {
+    console.error(`  claim-check — CANNOT ANSWER: ${truncated.length} open PR(s) hit the per-PR files cap (${GH_FILES_PAGE_CAP}).`);
+    for (const pr of truncated.slice(0, 8)) {
+      console.error(`      #${pr.number} ${pr.title} — files listed: ${(pr.files ?? []).length}`);
+    }
+    if (truncated.length > 8) console.error(`      … and ${truncated.length - 8} more`);
+    console.error('      Overlap against unlisted paths was not checked. Not reporting "clear".');
+    console.error('      Fetch full file lists per PR (gh pr view N --json files) or shrink the PR.');
+    process.exit(2);
+  }
 }
 
 /**
@@ -128,6 +174,8 @@ async function ownedPaths() {
   try {
     const mod = await import(pathToFileURL(join(process.cwd(), 'tooling/tracker/features.mjs')).href);
     const out = [];
+    /** @type {{ id: string, owner: string, status: string }[]} */
+    const unmapped = [];
     for (const f of mod.FEATURES ?? []) {
       if (!f.owner) continue;
       // `done` means the mountain already shipped. A leftover owner field is a
@@ -150,8 +198,16 @@ async function ownedPaths() {
       if (f.module && reqs.length === 0) {
         out.push({ path: `services/svc-${f.module}`, owner: f.owner, id: f.id ?? '' });
       }
+
+      // Owner + non-done with neither requires nor module → invisible fence.
+      // Agents get ✓ clear on every path while a human still owns the mountain
+      // (connect.venue-vault @shehzad002 was the live case). Surface them —
+      // never pretend the ownership axis is complete.
+      if (reqs.length === 0 && !f.module) {
+        unmapped.push({ id: f.id ?? '', owner: f.owner, status: f.status ?? '' });
+      }
     }
-    return out;
+    return { paths: out, unmapped };
   } catch (error) {
     // Cannot read = cannot claim clear on this axis. Surfaced, never swallowed:
     // a silent failure here reproduces the exact bug this check was added for.
@@ -162,13 +218,16 @@ async function ownedPaths() {
 
 const owned = await ownedPaths();
 const lockHits = [];
+/** @type {{ id: string, owner: string, status: string }[]} */
+let unmappedOwners = [];
 if (owned === null) {
   console.error('  claim-check — CANNOT ANSWER: tracker ownership could not be read.');
   console.error(`      ${ownershipError}`);
   console.error('      The human-mountain check did NOT run. Not reporting clear.');
   process.exit(2);
 } else {
-  for (const o of owned) {
+  unmappedOwners = owned.unmapped;
+  for (const o of owned.paths) {
     if (mine.some((m) => touches(m, o.path))) {
       if (!lockHits.some((h) => h.path === o.path && h.owner === o.owner)) lockHits.push(o);
     }
@@ -201,6 +260,23 @@ if (lockHits.length > 0) {
 }
 
 if (collisions.length === 0) {
+  if (unmappedOwners.length > 0) {
+    // Path axis is clear. Ownership axis is incomplete — do not print the full
+    // "none is human-claimed" lie while a named owner has zero fenceable paths.
+    console.log('  ✓ clear of open PRs for these paths');
+    console.error(
+      `  ⚠ ownership axis incomplete — ${unmappedOwners.length} human-owned mountain(s) have no path map (requires/module empty):`,
+    );
+    for (const u of unmappedOwners.slice(0, 12)) {
+      console.error(`      ${u.id || '(no id)'} — @${u.owner} (${u.status || 'unknown'})`);
+    }
+    if (unmappedOwners.length > 12) {
+      console.error(`      … and ${unmappedOwners.length - 12} more`);
+    }
+    console.error('      Fix: add requires[] or module on the tracker row, or clear the owner.');
+    console.error('      Not claiming "none is human-claimed" until every owned mountain is fenceable.');
+    process.exit(0);
+  }
   console.log('  ✓ clear — no open PR touches these paths, and none is human-claimed');
   process.exit(0);
 }

@@ -910,13 +910,18 @@ function buildModel() {
   const productIds = new Set(
     claims.filter((c) => ['REGROUP', 'AFK', 'LANDER', 'INTEGRITY', 'IMPLEMENTABLE'].includes(c.track)).map((c) => c.id),
   );
+  // freeProduct already excludes claim locks (hides → status claimed). So:
+  //   free_spawnable = free product rows still needing a writer
+  //   claimed_product_locks = product claim files that hide free (already claimed)
+  // They are different sets — "gap" must NOT be read as free_spawnable − locks.
   const activeSpawned = listClaimLocks().filter((id) => productIds.has(id) && claimLockHidesFree(id)).length;
   const available = freeProduct.length;
-  const underGap = available;
+  const underGap = available; // free_spawnable count (name kept for FREEZE JSON compat)
+  // Mandate: do not idle with freeProduct>0 (SWARM-MANDATE spawn width). Fail open on free board.
   const underSpawnFail = available > 0;
   const underSpawnNote = underSpawnFail
-    ? `anti-under-spawn FAIL: available=${available} (shell=${freeShell.length} implementable=${freeImplementable.length}) active_spawned_locks=${activeSpawned} gap=${underGap} — spawn path-disjoint Class N (width 3–6 TRK / 6–8 shell).`
-    : `anti-under-spawn OK: available=0 shell=0 implementable=0 active_spawned_locks=${activeSpawned} gap=0.`;
+    ? `anti-under-spawn FAIL: free_spawnable=${available} (shell=${freeShell.length} implementable=${freeImplementable.length}) claimed_product_locks=${activeSpawned} — spawn path-disjoint Class N (width 3–6 TRK / 6–8 shell). free_spawnable already excludes claimed locks; do not subtract them again.`
+    : `anti-under-spawn OK: free_spawnable=0 shell=0 implementable=0 claimed_product_locks=${activeSpawned}.`;
 
   const opsChurn = countOpsOnlyChurn(30);
   const strandedRes = listStrandedBranches(prs);
@@ -994,7 +999,7 @@ function renderFreezeMd(m) {
   const lines = [];
   lines.push('# FREEZE-LIVE (generated)');
   lines.push('');
-  lines.push('**Do not hand-edit.** Regenerate: `pnpm swarm:freeze`');
+  lines.push('**Do not hand-edit.** Regenerate: `pnpm swarm:freeze` (also rewrites R00–R02 + DASHBOARD) or `pnpm swarm:report`');
   lines.push('');
   lines.push(`- **Tip:** \`${m.tip}\` — ${m.tipSubject}`);
   lines.push(`- **Generated:** ${m.generatedAt}`);
@@ -1003,7 +1008,7 @@ function renderFreezeMd(m) {
     `- **Free claims:** free=${m.free.length} freeShell=${(m.freeShell || []).length} freeImplementable=${(m.freeImplementable || []).length} freeTracker=${(m.freeTracker || []).length} blocked=${m.blocked.length} (freeProduct=${m.freeProduct.length}=shell+implementable)`,
   );
   lines.push(
-    `- **Spawn accounting:** available=${m.available ?? m.freeProduct.length} · active_spawned_locks=${m.activeSpawned ?? '?'} · gap=${m.underGap ?? m.freeProduct.length} · width_target=${m.spawnWidthTarget || '6-8'}`,
+    `- **Spawn accounting:** free_spawnable=${m.available ?? m.freeProduct.length} · claimed_product_locks=${m.activeSpawned ?? '?'} · width_target=${m.spawnWidthTarget || '6-8'}`,
   );
   lines.push(`- **Anti-under-spawn:** ${m.underSpawnNote}`);
   lines.push(`- **Mandate:** ${m.mandate || 'shell product only'}`);
@@ -1168,7 +1173,7 @@ function printStatus(m) {
     `  free=${m.free.length} freeShell=${freeShellN} freeImplementable=${freeImplN} freeTracker=${(m.freeTracker || []).length} blocked=${m.blocked.length}`,
   );
   console.log(
-    `  spawn: freeProduct=${freeProdN}(=shell+implementable) available=${m.available ?? freeProdN} active_spawned=${m.activeSpawned ?? '?'} gap=${m.underGap ?? freeProdN} width_target=${m.spawnWidthTarget || '6-8'}`,
+    `  spawn: freeProduct=${freeProdN}(=shell+implementable) free_spawnable=${m.available ?? freeProdN} claimed_product_locks=${m.activeSpawned ?? '?'} width_target=${m.spawnWidthTarget || '6-8'}`,
   );
   if (freeShellN === 0 && freeImplN > 0) {
     console.log(
@@ -1302,7 +1307,7 @@ function writeReports(m) {
     '',
     m.mandate || '',
     '',
-    `- Spawn accounting: available=${m.available ?? m.freeProduct.length} · active_spawned=${m.activeSpawned ?? '?'} · gap=${m.underGap ?? m.freeProduct.length} · width_target=${m.spawnWidthTarget || '6-8'}`,
+    `- Spawn accounting: free_spawnable=${m.available ?? m.freeProduct.length} · claimed_product_locks=${m.activeSpawned ?? '?'} · width_target=${m.spawnWidthTarget || '6-8'}`,
     '',
     'Commands: `pnpm swarm:freeze` · `pnpm swarm:status` · `pnpm swarm:report` · `pnpm swarm:next`',
     '',
@@ -1393,7 +1398,7 @@ function printNext(m, all = false) {
       console.log('');
     }
     console.log(
-      `ANTI-UNDER-SPAWN: available=${list.length} active_spawned_locks=${m.activeSpawned ?? 0} gap=${list.length} — spawn or residual-own every id above (width target 6–8 path-disjoint).`,
+      `ANTI-UNDER-SPAWN: free_spawnable=${list.length} claimed_product_locks=${m.activeSpawned ?? 0} — spawn or residual-own every id above (width target 6–8 path-disjoint).`,
     );
     return;
   }
@@ -1434,10 +1439,14 @@ if (m.error) {
 
 switch (cmd) {
   case 'freeze': {
+    // Co-write R00/R01/R02/DASHBOARD so freeze tip never desyncs from report tip
+    // (L15 meters honesty: freeze-only left FREEZE hours ahead of DASHBOARD).
     const path = writeFreeze(m);
+    const dir = writeReports(m);
     printStatus(m);
     console.log(`  wrote ${repoRelative(path)}`);
     console.log(`  wrote docs/ops/FREEZE-LIVE.json`);
+    console.log(`  wrote reports under ${repoRelative(dir)}`);
     break;
   }
   case 'status': {
