@@ -877,10 +877,12 @@ export interface MintInput {
 export function mintEmission(input: MintInput): PostRequest {
   requirePositive('emission amount', input.amount);
   return {
-    idempotencyKey: `token.emission:${input.epoch}`,
+    // Asset in the key: one epoch can mint more than one asset. Without it the
+    // second asset's post is an idempotent no-op of the first (supply never lands).
+    idempotencyKey: `token.emission:${input.assetId}:${input.epoch}`,
     module: 'token',
     reason: 'token.emission',
-    meta: { epoch: input.epoch },
+    meta: { epoch: input.epoch, assetId: input.assetId },
     entries: [credit(mintBoundary(input.assetId), input.amount), debit(input.destination, input.amount)],
   };
 }
@@ -896,10 +898,11 @@ export interface BurnInput {
 export function burn(input: BurnInput): PostRequest {
   requirePositive('burn amount', input.amount);
   return {
-    idempotencyKey: `token.burn:${input.runId}`,
+    // Asset in the key: same runId across assets must not collide.
+    idempotencyKey: `token.burn:${input.assetId}:${input.runId}`,
     module: 'token',
     reason: 'token.burn',
-    meta: { runId: input.runId },
+    meta: { runId: input.runId, assetId: input.assetId },
     entries: [credit(input.from, input.amount), debit(burnAccount(input.assetId), input.amount)],
   };
 }
