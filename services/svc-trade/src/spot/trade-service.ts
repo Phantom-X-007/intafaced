@@ -522,6 +522,10 @@ export class TradeService {
     assertSpotSurface(market, 'convert');
     assertTradable(market);
     assertQty(market, input.qty);
+    // Same schedule gate as placeOrder / TWAP create. A quote for a shut venue
+    // is a lie — convertExecute would then refuse market_closed after the user
+    // already saw a price (weekend EUR/USD was the live break).
+    assertMarketOpen(market, this.now());
 
     const depth = await this.matching.depth(market.id, 50);
     const levels = input.side === 'buy' ? depth.asks : depth.bids;
