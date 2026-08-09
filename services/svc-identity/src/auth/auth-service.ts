@@ -1,5 +1,6 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
+import type { AccountState } from '@intafaced/contracts';
 import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, type TokenConfig } from '@intafaced/auth';
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
@@ -985,6 +986,35 @@ export class AuthService {
       if (best === 'none' || order[row.tier] > order[best as 'basic' | 'full' | 'institutional']) best = row.tier;
     }
     return best;
+  }
+
+  /**
+   * ACCOUNT STATE for another service to READ (`accountStateSchema`).
+   *
+   * `users.status` has been read internally by nine call sites in this file
+   * since the beginning and returned by none of them. That is why the support
+   * desk had no way to know an account was frozen: the fact existed, was
+   * authoritative, and was not reachable from outside this service — so the only
+   * way for another service to have it was to keep a copy, which is the thing
+   * that must not happen for a fact this consequential.
+   *
+   * THREE FIELDS, AND THE SHORTNESS IS THE POINT. `status` and the derived KYC
+   * tier answer "can this person use the platform" and "how far are they
+   * verified". Nothing else is returned, so this cannot become the seam through
+   * which the encrypted KYC vault (a688e231) or a legal name leaks into a
+   * support ticket. §10 keeps documents in one place; this keeps that true by
+   * having nowhere to put one.
+   *
+   * `null` for an unknown user — the caller renders that as "not read", never as
+   * an account in good standing.
+   */
+  async accountState(userId: string): Promise<AccountState | null> {
+    const rows = await this.sql<Array<{ id: string; status: 'active' | 'frozen' | 'closed' }>>`
+      SELECT id, status FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    const user = rows[0];
+    if (!user) return null;
+    return { userId: user.id, status: user.status, kycTier: await this.kycTier(user.id) };
   }
 
   /**

@@ -16,6 +16,43 @@ export const kycTierSchema = z.enum(['none', 'basic', 'full', 'institutional']);
 export type KycTierValue = z.infer<typeof kycTierSchema>;
 
 /**
+ * ACCOUNT STATE — the whole of what a support operator may read about an
+ * account, and svc-identity is the only place it can be read FROM.
+ *
+ * Three fields, and the SHORTNESS is the contract. `identity.users.status` and
+ * the derived KYC tier answer the two questions a desk actually needs — "can
+ * this person use the platform" and "how far are they verified" — and nothing
+ * else is here to leak.
+ *
+ * WHAT IS DELIBERATELY ABSENT, because a support desk is exactly where these
+ * grow back:
+ *
+ *   · No balance, no equity, no PnL. §0.6 — a balance rendered on a ticket is a
+ *     second book the moment somebody caches it, and support has no reason to
+ *     see one that reading the ledger's own surface would not serve better.
+ *   · No document bytes, no legal name, no date of birth, no jurisdiction. §10
+ *     PII isolation — `identity.kyc_documents` is an encrypted vault whose read
+ *     path is operator tooling only (a688e231), and this projection must not
+ *     become the hole in its wall. A support view references a document by the
+ *     opaque id identity already holds; it never carries one.
+ *   · No email, no phone. Nothing a ticket body would then quote back.
+ *
+ * This mirrors `AccountProjectionFixture` in svc-agents' support agent, whose
+ * own comment says it best: "status + KYC tier and literally nothing else:
+ * there is no balance field to leak, invent, or drift." That shape was fixture
+ * data with no producer. This is the same shape, published, so the human desk
+ * and the agent read one contract rather than two that agree by luck.
+ */
+export const accountStateSchema = z.object({
+  userId: z.string().uuid(),
+  /** `identity.users.status` — the freeze/close fact, read never written here. */
+  status: z.enum(['active', 'frozen', 'closed']),
+  /** Highest approved, unexpired tier. Derived by identity, not stored twice. */
+  kycTier: kycTierSchema,
+});
+export type AccountState = z.infer<typeof accountStateSchema>;
+
+/**
  * The perk table other services query (§4.1). Machine-readable on purpose:
  * svc-trade reads `feeDiscountBps` and applies it without knowing what a rank
  * means, which is why rank can be re-tuned without touching a second service.

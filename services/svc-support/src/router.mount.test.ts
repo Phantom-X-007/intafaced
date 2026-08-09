@@ -70,9 +70,20 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     listOperatorQueue: vi.fn(async () => ({ status: 'empty' as const })),
     peekNext: vi.fn(async () => null),
     claimForOperator: vi.fn(),
+    listTicketEvents: vi.fn(async () => []),
+    readAccountState: vi.fn(async () => ({ status: 'unread' as const, reason: 'plane_dark' as const })),
+    escalate: vi.fn(),
+    getCaseFile: vi.fn(async () => null),
     ...overrides,
   } as unknown as SupportService;
 }
+
+const CITATION = {
+  kind: 'kb_article' as const,
+  ref: 'kb-account-access',
+  digest: 'a'.repeat(64),
+  readAt: '2026-08-09T10:00:00.000Z',
+};
 
 describe('svc-support mount', () => {
   it('refuses anonymous create', async () => {
@@ -240,5 +251,167 @@ describe('svc-support mount', () => {
     const claimed = await caller.claim({ ticketId });
     expect(claimed.assigneeId).toBe(OP);
     expect(support.claimForOperator).toHaveBeenCalledWith({ operatorId: OP, ticketId });
+  });
+
+  /* ----------------------------------------------------------------- *
+   * Stage-4 — audit trail, grounding, case file
+   *
+   * These hit the ROUTE through the real edge context and the real scope
+   * middleware. A test that constructed the router and called the service
+   * directly would pass on a procedure nothing had mounted, which is how seven
+   * guards in this repo were correct in isolation and unreachable in place.
+   * ----------------------------------------------------------------- */
+
+  const TICKET = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  it('events requires authentication', async () => {
+    const support = stubSupport();
+    await expect(createSupportRouter(support).createCaller(anonymous()).events({ ticketId: TICKET })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(support.listTicketEvents).not.toHaveBeenCalled();
+  });
+
+  it('events is reachable for the ticket OWNER on support:read alone', async () => {
+    // The owner seeing what happened to their own complaint is the point of
+    // keeping the trail, so this must NOT be an ops-only route.
+    const support = stubSupport({
+      listTicketEvents: vi.fn(async () => [
+        {
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          ticketId: TICKET,
+          sequence: 1,
+          kind: 'opened' as const,
+          actorId: USER,
+          actorRole: 'user' as const,
+          fromStatus: null,
+          toStatus: null,
+          note: null,
+          occurredAt: '2026-08-09T10:00:00.000Z',
+        },
+      ]),
+    });
+    const trail = await createSupportRouter(support).createCaller(signed()).events({ ticketId: TICKET });
+    expect(trail).toHaveLength(1);
+    expect(support.listTicketEvents).toHaveBeenCalledWith({ userId: USER, ticketId: TICKET, asOperator: false });
+  });
+
+  it('an operator reading a trail is passed asOperator from the PRINCIPAL', async () => {
+    const support = stubSupport();
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    await createSupportRouter(support).createCaller(signed(op)).events({ ticketId: TICKET });
+    expect(support.listTicketEvents).toHaveBeenCalledWith({ userId: OP, ticketId: TICKET, asOperator: true });
+  });
+
+  it('refuses accountState / escalate / caseFile without support:ops', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.accountState({ ticketId: TICKET })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.escalate({ ticketId: TICKET, reason: 'other', summary: 'S' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.caseFile({ ticketId: TICKET })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(support.readAccountState).not.toHaveBeenCalled();
+    expect(support.escalate).not.toHaveBeenCalled();
+    expect(support.getCaseFile).not.toHaveBeenCalled();
+  });
+
+  it('accountState is reachable with support:ops and takes the operator from the principal', async () => {
+    const support = stubSupport({
+      readAccountState: vi.fn(async () => ({
+        status: 'read' as const,
+        state: { userId: USER, status: 'frozen' as const, kycTier: 'basic' as const },
+        readAt: '2026-08-09T10:00:00.000Z',
+      })),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const grounding = await createSupportRouter(support).createCaller(signed(op)).accountState({ ticketId: TICKET });
+    expect(grounding).toMatchObject({ status: 'read' });
+    expect(support.readAccountState).toHaveBeenCalledWith({ operatorId: OP, ticketId: TICKET });
+  });
+
+  it('accountState takes NO userId — there is no platform-wide account lookup here', async () => {
+    const support = stubSupport();
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    // The input schema is strict about this on purpose: `support:ops` plus a
+    // free-text user id would be an authority no scope grants.
+    await expect(caller.accountState({ ticketId: TICKET, userId: USER } as unknown as { ticketId: string })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(support.readAccountState).not.toHaveBeenCalled();
+  });
+
+  it('escalate is reachable and returns the case file it wrote', async () => {
+    const support = stubSupport({
+      escalate: vi.fn(async () => ({
+        ticketId: TICKET,
+        escalatedBy: OP,
+        reason: 'money_request' as const,
+        citations: [CITATION],
+        grounding: { status: 'unread' as const, reason: 'plane_dark' as const },
+        summary: 'User asks for a refund.',
+        createdAt: '2026-08-09T10:00:00.000Z',
+      })),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const file = await createSupportRouter(support)
+      .createCaller(signed(op))
+      .escalate({ ticketId: TICKET, reason: 'money_request', summary: 'User asks for a refund.' });
+    expect(file.citations).toHaveLength(1);
+    expect(support.escalate).toHaveBeenCalledWith({
+      operatorId: OP,
+      ticketId: TICKET,
+      reason: 'money_request',
+      summary: 'User asks for a refund.',
+    });
+  });
+
+  it('a case file with zero citations cannot pass the route contract', async () => {
+    // The refusal is at the WIRE, so an ungrounded file cannot reach a client
+    // even if a future service implementation stopped refusing it.
+    const support = stubSupport({
+      escalate: vi.fn(async () => ({
+        ticketId: TICKET,
+        escalatedBy: OP,
+        reason: 'other' as const,
+        citations: [],
+        grounding: { status: 'unread' as const, reason: 'not_attempted' as const },
+        summary: 'Escalating.',
+        createdAt: '2026-08-09T10:00:00.000Z',
+      })),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    await expect(
+      createSupportRouter(support).createCaller(signed(op)).escalate({ ticketId: TICKET, reason: 'other', summary: 'Escalating.' }),
+    ).rejects.toThrow();
+  });
+
+  it('caseFile returns null for a ticket never escalated — never a fabricated empty file', async () => {
+    const support = stubSupport();
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    expect(await createSupportRouter(support).createCaller(signed(op)).caseFile({ ticketId: TICKET })).toBeNull();
+  });
+
+  it('setStatus carries an optional note through to the service', async () => {
+    const support = stubSupport({
+      setStatus: vi.fn(async () => ({
+        id: TICKET,
+        userId: USER,
+        category: 'other' as const,
+        subject: 'S',
+        body: 'B',
+        status: 'resolved' as const,
+        assigneeId: OP,
+        createdAt: '2026-08-09T10:00:00.000Z',
+        updatedAt: '2026-08-09T10:00:00.000Z',
+      })),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    await createSupportRouter(support).createCaller(signed(op)).setStatus({ ticketId: TICKET, status: 'resolved', note: 'fixed upstream' });
+    expect(support.setStatus).toHaveBeenCalledWith({
+      operatorId: OP,
+      ticketId: TICKET,
+      status: 'resolved',
+      note: 'fixed upstream',
+    });
   });
 });

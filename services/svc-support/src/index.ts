@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
 import { env } from './env.js';
+import { createAccountStateClient } from './account-state.js';
 import { SupportService } from './support-service.js';
 import { PostgresSupportStore } from './store.js';
 import { createSupportRouter, type SupportRouter } from './router.js';
@@ -33,8 +34,18 @@ await sql`SELECT 1 FROM support.tickets LIMIT 1`.catch(() => {
   throw new Error('support schema is missing — run migrations before starting svc-support');
 });
 
+// Migration 0001 is checked separately from 0000. A desk booting on 0000 alone
+// would serve tickets and silently record no history — the audit trail would be
+// permanently empty and nothing would say why, which is the failure mode this
+// whole slice exists to remove.
+await sql`SELECT 1 FROM support.ticket_events LIMIT 1`.catch(() => {
+  throw new Error('support.ticket_events is missing — apply migration 0001 before starting svc-support');
+});
+
 const store = new PostgresSupportStore(sql);
-const support = new SupportService(store);
+// Account state is READ from svc-identity per request, never cached here.
+const accounts = createAccountStateClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const support = new SupportService(store, accounts);
 const appRouter = createSupportRouter(support);
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
@@ -44,7 +55,14 @@ const edgeContext = createEdgeContext({
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, stage: '3-durable-queue', store: 'postgres' }));
+app.get('/ready', async () => ({
+  ready: true,
+  stage: '4-audited-grounded-desk',
+  store: 'postgres',
+  // Named so an operator can tell "no account state was readable" from "this
+  // desk was never pointed at an identity service" without reading the logs.
+  accountStateSource: 'svc-identity',
+}));
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
