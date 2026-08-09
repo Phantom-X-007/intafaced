@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { parseAmount as amt } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
+import { ACCESS_TIERS } from './economics/staking.js';
 import { createTokenRouter } from './router.js';
 import { TokenError, type StakeRecord, type TokenService } from './token-service.js';
 
@@ -142,6 +143,35 @@ describe('svc-token mount — authorisation', () => {
     expect(token.stakeOf).toHaveBeenCalledWith(USER);
     await createTokenRouter(token).createCaller(signed()).accessOf();
     expect(token.accessOf).toHaveBeenCalledWith(USER);
+  });
+
+  it('wires stake amounts as decimal strings — never the raw scaled bigint', async () => {
+    // Same class of bug #1100 sealed on /internal/stake. Amount is value×10^18;
+    // Amount.toString() emits the scaled integer, and any client that
+    // parseAmounts the field reads a stake 10^18× too large (fail-open).
+    const staked = amt('10000');
+    const operatorTier = ACCESS_TIERS.find((t) => t.name === 'Operator')!;
+    const token = stubToken({
+      stakeOf: vi.fn(async () => staked),
+      accessOf: vi.fn(async () => ({
+        staked,
+        tier: operatorTier,
+        feeDiscountBps: 2000,
+      })),
+    });
+
+    const stakeOf = await createTokenRouter(token).createCaller(signed()).stakeOf();
+    expect(stakeOf.staked).toBe(formatAmount(staked));
+    expect(stakeOf.staked).toBe('10000');
+    expect(stakeOf.staked).not.toBe(staked.toString());
+    expect(amt(stakeOf.staked)).toBe(staked);
+
+    const accessOf = await createTokenRouter(token).createCaller(signed()).accessOf();
+    expect(accessOf.staked).toBe('10000');
+    expect(accessOf.staked).not.toBe(staked.toString());
+    expect(amt(accessOf.staked)).toBe(staked);
+    expect(accessOf.tier).toBe('Operator');
+    expect(accessOf.feeDiscountBps).toBe(2000);
   });
 
   it('stakes as the principal — never as a userId from the client', async () => {
