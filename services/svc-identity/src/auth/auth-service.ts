@@ -652,6 +652,31 @@ export class AuthService {
     }));
   }
 
+  /**
+   * Drop one enrolled authenticator. Self-only; missing id → false (same shape
+   * as revokeApiKey — never confirm whether a foreign id existed).
+   *
+   * Lost/stolen keys had no retire path; listing alone is not a lifecycle.
+   */
+  async removeWebauthnCredential(userId: string, credentialId: string): Promise<boolean> {
+    const target = normalizeCredId(credentialId);
+    return transaction(this.sql, async (tx) => {
+      const rows = await tx<Array<{ webauthn_creds: unknown }>>`
+        SELECT webauthn_creds FROM users WHERE id = ${userId} FOR UPDATE
+      `;
+      if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
+      const creds = asCredentialList(rows[0].webauthn_creds);
+      const next = creds.filter((c) => c.credentialId !== target);
+      if (next.length === creds.length) return false;
+      await tx`
+        UPDATE users
+           SET webauthn_creds = ${tx.json(next as never)}, updated_at = now()
+         WHERE id = ${userId}
+      `;
+      return true;
+    });
+  }
+
   // ── API keys ───────────────────────────────────────────────────────────────
 
   /**

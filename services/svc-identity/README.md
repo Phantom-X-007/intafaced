@@ -20,7 +20,7 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `totp.enrol` / `totp.confirm`                          | session                   | Two-step; secret + recovery hashes persist only on confirm                               |
 | `webauthn.registerOptions` / `registerVerify`          | session                   | Enrol a passkey/security key; ES256, attestation `none`                                  |
 | `webauthn.authOptions` / `authVerify`                  | —                         | Passwordless login; same session tokens, `mfa: true`                                     |
-| `webauthn.list`                                        | session                   | Credential ids only — public keys never leave the server (remove is a separate residual) |
+| `webauthn.list` / `remove`                              | session                   | Ids only; remove retires a lost/stolen authenticator                                     |
 | `kyc.submit`                                           | `identity:write`          | Own record only; **grants nothing**; no client `providerRef`                             |
 | `kyc.status`                                           | `identity:read`           | Own records + effective tier; never `providerRef` / `reviewedBy`                         |
 | `kyc.pending`                                          | `admin:compliance`        | Operator review queue, oldest first                                                      |
