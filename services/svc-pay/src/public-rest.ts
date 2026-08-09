@@ -211,7 +211,11 @@ const refundBodySchema = {
   additionalProperties: false,
   properties: {
     amount: { description: 'Decimal string. Never a JSON number (ADR §2.3).' },
-    refundId: { type: 'string', description: 'Optional business refund id (business key, never a random UUID).' },
+    refundId: {
+      type: 'string',
+      description:
+        'Optional business refund id (business key, never a random UUID). Omit it and your `Idempotency-Key` becomes this refund’s business identity for this payment, so the same key can never refund twice — even if the retry arrives after the idempotency record has expired. Send a NEW key (or an explicit `refundId`) for a genuinely second partial refund.',
+    },
   },
 } as const;
 

@@ -621,8 +621,23 @@ export const FEATURES = [
     note:
       'Steps 1–5 + edge BASE on tip (#988/#994/#1006/#1014/#1024/#1181). ' +
       'Ghost nitro-pay-w3 cleared 2026-08-09 W4 (BASE residual sealed; no open owner session). ' +
-      'Residual honesty: pay:* grant path still DIRECTION §8.4 (Nitro — never invent). ' +
-      'Not Class X acquirer.',
+      'MONEY PATH NOW PROVEN, AND IT WAS WRONG (#1507). Every write test was against `stubPay()` — a fake that ' +
+      'moves nothing — asserting HTTP codes and CALL COUNTS, which only prove the HTTP journal deduped and say ' +
+      'nothing about the key the LEDGER saw. `PayService.refund` defaulted refundId to an ATTEMPT ORDINAL ' +
+      '(`paymentId:sequence+1`), so one business event retried became two ledger keys and two real debits of ' +
+      'merchant clearing: measured 80 not 90 on a 100 payment refunded 10 twice under one Idempotency-Key with ' +
+      'the journal lost. The journal is not the guard — it ABANDONS on 5xx by design and rows expire; a FULL ' +
+      'refund was saved only by refund_exceeds_captured, a PARTIAL one was externally reachable. Fixed in two ' +
+      'halves, each with its own red: public-rest.ts derives the default refund identity from the caller key + ' +
+      'payment (digested — ledger caps keys at 200, header allows 255), and payment-service.ts treats a completed ' +
+      'refundId as a REPLAY (a stable key alone left the ledger right and the projection wrong, since totalsFor ' +
+      'sums every refunded event). New `public-rest.money.test.ts`: own database, real PayService/ledger, real ' +
+      'mounted routes by HTTP inject, asserting BALANCES and the SET of ledger idempotency keys. Spec↔router now ' +
+      'compared BOTH ways (old check was arrayContaining). Eight console paths still 404. 704 tests / 32 files. ' +
+      'Residual honesty (UNCHANGED, and why this is `ready` not `done`): pay:* grant path + KYB gating on ' +
+      'pay:write are still DIRECTION §8.4 / §8 item 4 — OWNER-ONLY, never invent. assertMerchantActive still ' +
+      'does not read kybStatus and w6-honesty-residuals pins that absence. Dispute webhooks silent, chargebacks ' +
+      'unwired (both pinned). Not Class X acquirer.',
   }),
   f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
     module: 'p2p',
