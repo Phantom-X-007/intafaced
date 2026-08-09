@@ -143,7 +143,7 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
    */
   it('serves markets, accountFills and singular position with no credentials', async () => {
     const caller = (await seeded()).createCaller(anonymous());
-    const seededAccount = '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    // Seed applies uppercase 0xAA…; store normalises to lower (#1228).
     const lowerAccount = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const emptyAccount = '0x0000000000000000000000000000000000000001';
 
@@ -151,6 +151,7 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
     expect(markets).toContain('IFC-USD');
 
     // Mixed-case address must hit the same tape as the seed (case-insensitive).
+    // Stored addresses are lowercased (#1228) — assert the canonical form.
     const accountFills = await caller.accountFills({ account: lowerAccount, limit: 10 });
     expect(accountFills).toHaveLength(1);
     expect(accountFills[0]).toMatchObject({
@@ -318,6 +319,51 @@ describe('svc-indexer mount — status is honest', () => {
     expect(status.behindBy).toBe(3);
   });
 
+  /**
+   * Tip can be below the cursor after a shortening reorg race (or a lagging
+   * probe). Zero-clamping would lie as "current". Pin the signed subtraction.
+   */
+  it('behindBy is negative when the probe tip is below the cursor', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    await store.applyBlock({
+      chainId: CHAIN_ID,
+      height: 97,
+      hash: `0x${'a'.repeat(64)}`,
+      parentHash: `0x${'0'.repeat(64)}`,
+      timestamp: 1_700_000_000,
+      events: [],
+    });
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'evm',
+      chainProbe: async () => ({
+        kind: 'evm',
+        rpcUrl: 'http://probe.test',
+        venue: `0x${'1'.repeat(40)}`,
+        reachable: true,
+        observedChainId: CHAIN_ID,
+        chainHeight: 90,
+        venueDeployed: true,
+        refusalCode: null,
+        reason: null,
+      }),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.indexedHeight).toBe(97);
+    expect(status.behindBy).toBe(-7);
+  });
+
   it('dark chain: production-shaped null probe surfaces refusal, never a quiet zero lag', async () => {
     const store = new MemoryProjectionStore(CHAIN_ID);
     const indexer = new Indexer({
@@ -406,6 +452,51 @@ describe('svc-indexer mount — status is honest', () => {
     const status = await router.createCaller(anonymous()).status();
     expect(status.halted).not.toBeNull();
     expect(status.halted!.reason).toMatch(/re-index/);
+  });
+
+  it('refuses book/fills/positions when halted — status still answers', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const source = new MemoryChainSource(CHAIN_ID);
+    source.append([{ kind: 'book_level', logIndex: 0, market: 'IFC-USD', side: 'bid', price: '100', quantity: '5' }]);
+    for (let i = 0; i < 5; i++) source.append([]);
+
+    const indexer = new Indexer({ source, store, finalityDepth: 1, ingestEnabled: () => true, startHeight: 0 });
+    await indexer.sync();
+    // Book is still in the store after a deep halt — that is the trap: the
+    // projection was never unwound. Refusing the data path is what stops a
+    // client rendering a price from a branch that no longer exists.
+    expect((await store.book('IFC-USD', 10)).bids).toHaveLength(1);
+
+    source.reorg(0, [[], [], []]);
+    await expect(indexer.sync()).rejects.toThrow(/deeper than retained history/);
+
+    const caller = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 1,
+      ingestEnabled: () => true,
+      chainSource: 'memory',
+    }).createCaller(anonymous());
+
+    // status is the diagnostic surface — always answers.
+    await expect(caller.status()).resolves.toMatchObject({
+      halted: expect.objectContaining({ reason: expect.stringMatching(/re-index/) }),
+    });
+    // health is liveness — the process is up.
+    await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
+
+    // Every data procedure refuses. SERVICE_UNAVAILABLE, not a silent book.
+    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
   });
 });
 

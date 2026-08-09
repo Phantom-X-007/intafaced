@@ -9,6 +9,7 @@ import { EvmChainSource } from './chain/evm/source.js';
 import { PostgresProjectionStore } from './projection/postgres-store.js';
 import { Indexer } from './indexer.js';
 import { createIndexerRouter, type ChainProbe, type IndexerRouter } from './router.js';
+import { readinessOf } from './ready.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -166,15 +167,15 @@ app.get('/health', async () => ({
  * ordinary reason.
  */
 app.get('/ready', async (_req, reply) => {
-  const halted = indexer.halted;
-  if (halted) {
-    return reply.code(503).send({ ready: false, reason: halted.reason, haltedAt: halted.at.toISOString() });
-  }
+  // Halt wins over DB: a projection that knows it is wrong must leave the
+  // rotation even if Postgres still answers.
   try {
     await db.sql`SELECT 1`;
-    return { ready: true };
+    const answer = readinessOf(indexer.halted, true);
+    return reply.code(answer.httpStatus).send(answer.body);
   } catch (err) {
-    return reply.code(503).send({ ready: false, reason: (err as Error).message });
+    const answer = readinessOf(indexer.halted, false, (err as Error).message);
+    return reply.code(answer.httpStatus).send(answer.body);
   }
 });
 
@@ -250,7 +251,11 @@ export function setIngestEnabled(next: boolean): void {
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
-      indexer.stop();
+      try {
+        await indexer.stopAndDrain();
+      } catch (err) {
+        app.log.error({ err }, 'indexer drain timed out on shutdown — closing anyway');
+      }
       await app.close();
       await db.close();
       process.exit(0);
