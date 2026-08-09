@@ -184,11 +184,36 @@ export class FileJournal implements EngineJournal {
   }
 }
 
-function decodeAll(contents: string): JournalRecord[] {
+/**
+ * Decode an NDJSON journal body.
+ *
+ * A crash mid-write can leave a partial last line (write started, fsync never
+ * finished). That is not corruption of history — it is an input that never
+ * became durable, so recovery must skip it and boot. A broken line in the
+ * middle of the file is real corruption and still throws.
+ */
+export function decodeAll(contents: string): JournalRecord[] {
+  const lines = contents.split('\n');
   const records: JournalRecord[] = [];
-  for (const line of contents.split('\n')) {
+  // Last element of split is often '' after a trailing newline — track the
+  // last non-empty line index so we know when a parse failure is terminal residue.
+  let lastNonEmpty = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.trim().length > 0) lastNonEmpty = i;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     if (line.trim().length === 0) continue;
-    records.push(JSON.parse(line) as JournalRecord);
+    try {
+      records.push(JSON.parse(line) as JournalRecord);
+    } catch (err) {
+      if (i === lastNonEmpty) {
+        // Truncated tail — durable records above stand; this input never landed.
+        continue;
+      }
+      throw err;
+    }
   }
   return records;
 }
