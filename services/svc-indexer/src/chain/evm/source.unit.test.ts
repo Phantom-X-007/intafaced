@@ -175,4 +175,13 @@ describe('assertLogsBoundToBlock · getLogs answer must match the request', () =
   it('refuses a log whose blockNumber does not match the height we asked for', () => {
     expect(() => assertLogsBoundToBlock([fakeLog({ blockNumber: 99n })], expected)).toThrow(/height 99/i);
   });
+
+  it('refuses a log with no blockNumber — height bind is not optional', () => {
+    expect(() => assertLogsBoundToBlock([fakeLog({ blockNumber: null })], expected)).toThrow(/no blockNumber/i);
+    try {
+      assertLogsBoundToBlock([fakeLog({ blockNumber: undefined })], expected);
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'indexer.malformed_block' });
+    }
+  });
 });

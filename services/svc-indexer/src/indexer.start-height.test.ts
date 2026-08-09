@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryChainSource } from './chain/memory-source.js';
 import { MemoryProjectionStore } from './projection/memory-store.js';
-import { Indexer, StartHeightAboveTipError } from './indexer.js';
+import { Indexer, StartHeightAboveTipError, StartHeightUnavailableError } from './indexer.js';
 import { CHAIN_ID } from './testing/conformance.js';
 
 /**
@@ -99,5 +99,29 @@ it('startHeight above chain tip refuses — no healthy empty caughtUp', async ()
   expect(await store.head()).toBeNull();
   expect(indexer.lastError?.code).toBe('indexer.start_height_above_tip');
   // Must not look like a successful empty catch-up.
+  expect(indexer.halted).toBeNull();
+});
+
+/**
+ * Dual of above-tip: tip is ahead of startHeight, but the start block itself is
+ * missing (source begins at 100; indexer still asks for 0). Before this refuse,
+ * the pass returned caughtUp with an empty store — healthy-looking lie.
+ */
+it('startHeight missing under a live tip refuses — no healthy empty caughtUp', async () => {
+  const source = new MemoryChainSource(CHAIN_ID, 100);
+  source.appendEmpty(3); // tip 102; heights 0..99 do not exist
+  const store = new MemoryProjectionStore(CHAIN_ID);
+  const indexer = new Indexer({
+    source,
+    store,
+    finalityDepth: 64,
+    batchSize: 10,
+    ingestEnabled: () => true,
+    startHeight: 0,
+  });
+
+  await expect(indexer.sync()).rejects.toBeInstanceOf(StartHeightUnavailableError);
+  expect(await store.head()).toBeNull();
+  expect(indexer.lastError?.code).toBe('indexer.start_height_unavailable');
   expect(indexer.halted).toBeNull();
 });

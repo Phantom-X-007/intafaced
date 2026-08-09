@@ -101,15 +101,34 @@ export class PostgresProjectionStore implements ProjectionStore {
       // Parent link is the store's last line of defence (parity with memory-store).
       // The indexer checks the forward link; a second writer (or a corrupted apply)
       // must not plant a height that does not hang off the current canonical head.
-      if (block.height > 0) {
-        const [headRow] = await tx<BlockRow[]>`
-          SELECT chain_id, hash, parent_hash, height, status, block_time, event_count
-          FROM blocks
-          WHERE chain_id = ${this.chainId} AND status = 'canonical'
-          ORDER BY height DESC
+      const [headRow] = await tx<BlockRow[]>`
+        SELECT chain_id, hash, parent_hash, height, status, block_time, event_count
+        FROM blocks
+        WHERE chain_id = ${this.chainId} AND status = 'canonical'
+        ORDER BY height DESC
+        LIMIT 1
+      `;
+      const head = headRow ? toStoredBlock(headRow) : null;
+      // Under-tip plant (incl. height 0 while head is higher): poisons the tape.
+      // Idempotent re-apply of a known hash at that height is fine (duplicate path).
+      if (head && block.height < head.height) {
+        const [occupantRow] = await tx<Array<{ hash: string }>>`
+          SELECT hash FROM blocks
+          WHERE chain_id = ${this.chainId} AND height = ${block.height} AND status = 'canonical'
           LIMIT 1
         `;
-        const head = headRow ? toStoredBlock(headRow) : null;
+        if (!occupantRow) {
+          throw new Error(
+            `indexer.height_below_tip: cannot apply height ${block.height} when canonical head is ${head.height} — unwind first if reorg, do not plant under tip`,
+          );
+        }
+        if (occupantRow.hash !== block.hash) {
+          throw new Error(
+            `indexer.competing_canonical_block: height ${block.height} already holds canonical ${occupantRow.hash} — unwind first`,
+          );
+        }
+      }
+      if (block.height > 0) {
         const [parentRow] = await tx<Array<{ hash: string }>>`
           SELECT hash FROM blocks
           WHERE chain_id = ${this.chainId} AND hash = ${block.parentHash}

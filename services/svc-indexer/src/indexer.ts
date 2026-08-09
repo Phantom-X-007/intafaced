@@ -73,6 +73,27 @@ export class StartHeightAboveTipError extends Error {
   }
 }
 
+/**
+ * Cold start cannot read the configured start block even though the tip is at
+ * or above that height. Common shapes: non-archive RPC pruned history, or
+ * INDEXER_START_HEIGHT below the chain's real first height (MemoryChainSource
+ * with a non-zero start). Silent `caughtUp` + empty store would look healthy.
+ */
+export class StartHeightUnavailableError extends Error {
+  readonly code = 'indexer.start_height_unavailable' as const;
+
+  constructor(
+    readonly startHeight: number,
+    readonly tipHeight: number,
+  ) {
+    super(
+      `startHeight ${startHeight} is at or below chain tip ${tipHeight}, but blockAt(${startHeight}) returned nothing — ` +
+        `empty projection would look healthy; raise INDEXER_START_HEIGHT to a height the node still serves, or use an archive endpoint.`,
+    );
+    this.name = 'StartHeightUnavailableError';
+  }
+}
+
 export interface IndexerDeps {
   readonly source: ChainSource;
   readonly store: ProjectionStore;
@@ -238,8 +259,10 @@ export class Indexer {
           if (chainHead.height < startHeight) {
             throw new StartHeightAboveTipError(startHeight, chainHead.height);
           }
-          caughtUp = true;
-          break;
+          // Dual lie: tip is at/above startHeight but the start block itself is
+          // missing (pruned node, or startHeight below the source's first height).
+          // Do not claim caught-up with an empty store.
+          throw new StartHeightUnavailableError(startHeight, chainHead.height);
         }
         await store.applyBlock(first);
         blocksApplied++;
@@ -377,5 +400,8 @@ export class Indexer {
 }
 
 function idleResult(idle: 'disabled' | 'no-chain' | 'halted', head: StoredBlock | null): SyncResult {
-  return { blocksApplied: 0, blocksOrphaned: 0, reorgs: 0, head, caughtUp: true, idle };
+  // no-chain: nothing to catch up to. disabled/halted: do not claim caught-up —
+  // the cursor may still lag the tip (mid-batch kill already returns local caughtUp).
+  const caughtUp = idle === 'no-chain';
+  return { blocksApplied: 0, blocksOrphaned: 0, reorgs: 0, head, caughtUp, idle };
 }

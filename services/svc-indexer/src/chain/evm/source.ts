@@ -154,14 +154,20 @@ export function assertLogsBoundToBlock(
         `getLogs filtered address ${wantVenue} but log[${i}] is from ${log.address ?? 'null'}. Refusing to project another contract's log.`,
       );
     }
-    if (log.blockNumber !== null && log.blockNumber !== undefined) {
-      const n = typeof log.blockNumber === 'bigint' ? Number(log.blockNumber) : Number(log.blockNumber);
-      if (Number.isFinite(n) && n !== expected.height) {
-        throw new ChainUnavailableError(
-          'indexer.malformed_block',
-          `getLogs for height ${expected.height} returned log[${i}] at height ${n}. Refusing to project it.`,
-        );
-      }
+    // Height bind is mandatory. Omitting blockNumber used to skip this check —
+    // a partial answer could still name the right hash and wrong height.
+    if (log.blockNumber === null || log.blockNumber === undefined) {
+      throw new ChainUnavailableError(
+        'indexer.malformed_block',
+        `getLogs for ${wantHash} at ${expected.rpcUrl} returned log[${i}] with no blockNumber. Refusing to project an unbound log.`,
+      );
+    }
+    const n = typeof log.blockNumber === 'bigint' ? Number(log.blockNumber) : Number(log.blockNumber);
+    if (!Number.isFinite(n) || n !== expected.height) {
+      throw new ChainUnavailableError(
+        'indexer.malformed_block',
+        `getLogs for height ${expected.height} returned log[${i}] at height ${n}. Refusing to project it.`,
+      );
     }
   }
 }

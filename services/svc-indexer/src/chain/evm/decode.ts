@@ -168,6 +168,11 @@ export function decodeVenueLog(log: RawLog): ChainEvent | null {
   switch (decoded.eventName) {
     case 'BookLevel': {
       const args = decoded.args as { market: Hex; side: number; price: bigint; quantity: bigint };
+      // Quantity zero is an empty level (a fact). Price zero is not a price —
+      // refuse here so the cursor does not freeze on a late assertValidBlock.
+      if (args.price <= 0n) {
+        throw new ChainDataError(`book level price must be positive, got ${args.price}`, 'indexer.bad_amount');
+      }
       return {
         kind: 'book_level',
         logIndex,

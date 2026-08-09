@@ -102,9 +102,19 @@ export class MemoryProjectionStore implements ProjectionStore {
     // Parent link is the store's last line of defence. The indexer checks the
     // forward link; a second writer (or a corrupted apply) must not plant a
     // height that does not hang off the current canonical head.
+    const head = await this.head();
+    // Under-tip plant: with head at H, a new block at height < H that we do not
+    // already hold poisons the tape while head() still reports the real tip.
+    // Re-applying a known hash at that height (idempotent) still uses the
+    // occupant/duplicate path above; missing occupant = refuse.
+    // height 0 is included — the height>0 parent gates used to skip genesis.
+    if (head && block.height < head.height && !occupant) {
+      throw new Error(
+        `indexer.height_below_tip: cannot apply height ${block.height} when canonical head is ${head.height} — unwind first if reorg, do not plant under tip`,
+      );
+    }
     if (block.height > 0) {
       const parent = this.#blocks.get(block.parentHash);
-      const head = await this.head();
       if (head && head.height === block.height - 1 && head.hash !== block.parentHash) {
         throw new Error(
           `indexer.parent_mismatch: block ${block.height} claims parent ${block.parentHash} but canonical head is ${head.hash}`,
