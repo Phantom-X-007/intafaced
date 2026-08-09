@@ -12,6 +12,10 @@ import { CADENCES, occurrenceStart, planDue, type Cadence } from './schedule.js'
  *
  * Done bar slice: mandate exists, cancel is immediate, price raise without a
  * new mandate is refused by code (`pay.subscription_reconsent_required`).
+ *
+ * RESIDUAL (honest absent): SPEC §4 “notify before charge” is **not** wired —
+ * fire opens an invoice with no pre-charge webhook. Merchant webhooks still
+ * fire on payment.* after money-path events. Pin: `precharge-notify-absent.test.ts`.
  */
 
 export type MandateStatus = 'active' | 'cancelled' | 'expired';
