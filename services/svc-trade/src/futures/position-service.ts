@@ -371,6 +371,20 @@ export class PositionService {
       throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 503);
     }
 
+    /**
+     * IDEMPOTENT OPEN KEY (required) — refuse before mark/ledger.
+     * Same clientOpenId → same lock key → ledger no-ops on retry.
+     * Parity with spot clientOrderId — omit no longer mints randomUUID (double margin).
+     */
+    const clientOpenId = input.clientOpenId?.trim() ?? '';
+    if (clientOpenId.length === 0 || clientOpenId.length > 64) {
+      throw new FuturesError(
+        'clientOpenId is required (1–64 chars) — omit would double-lock margin on retry',
+        'trade.client_open_id_required',
+        400,
+      );
+    }
+
     const market = await this.sql<
       {
         id: string;
@@ -458,19 +472,6 @@ export class PositionService {
       entryPrice,
       leverage,
     });
-    /**
-     * IDEMPOTENT OPEN KEY (required). Same clientOpenId → same lock key →
-     * ledger no-ops the second post and the INSERT either wins or we re-read.
-     * Parity with spot clientOrderId — omit no longer mints randomUUID (double margin).
-     */
-    const clientOpenId = input.clientOpenId?.trim() ?? '';
-    if (clientOpenId.length === 0 || clientOpenId.length > 64) {
-      throw new FuturesError(
-        'clientOpenId is required (1–64 chars) — omit would double-lock margin on retry',
-        'trade.client_open_id_required',
-        400,
-      );
-    }
     const positionId = positionIdFor(input.userId, m.id, clientOpenId);
 
     // Money first — never a position row without a ledger claim.

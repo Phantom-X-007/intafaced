@@ -172,9 +172,11 @@ if (!available) {
     await db.drop();
   }, 30_000);
 
+  let openSeq = 0;
   const openLong = () =>
     service.open({
-      clientOpenId: 't-open-closing-position-uniqueness.test-1',
+      // Unique each call — same key would re-read the first row (retry path).
+      clientOpenId: `t-open-closing-position-uniqueness.test-${++openSeq}`,
       userId: ALICE,
       symbol: 'BTC/USDT-PERP',
       side: 'long',
