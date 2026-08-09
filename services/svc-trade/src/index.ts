@@ -489,6 +489,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       candleJobs.stop();
       mmSeedJobs.stop();
       algoJobs.stop();
+      reconcileJobs.stop();
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
       await bus.close();

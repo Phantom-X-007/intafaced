@@ -7,9 +7,16 @@ svc-matching; the money lives in svc-ledger. This service is the thing in betwee
 is allowed, funds it, hands it to the engine, and turns what comes back into ledger transactions.
 
 **Primary shipped surface here:** `trade.spot` + mounted Convert / OTC / CCXT REST / futures-orderable path (flagged).
-Copy trading (`src/copy/**`) and algo TWAP (`src/algo/**`) **code exists** under this service (tests pass) but are
-**not fully mounted for product use** — copy is unreachable from router/env; algo scheduler is dead code until
-explicitly mounted. See tracker rows `trade.copy` / `trade.algo` and [Not in this PR](#not-in-this-pr).
+
+| Surface                                     | Mount              | Default                                                                       |
+| ------------------------------------------- | ------------------ | ----------------------------------------------------------------------------- |
+| Convert                                     | tRPC `convert.*`   | ON (`TRADE_CONVERT_ENABLED`)                                                  |
+| OTC                                         | tRPC `otc.*`       | mounted; blank §8 law → refuse-closed                                         |
+| Algo TWAP create/ctrl                       | tRPC `algo.*`      | create ON; **scheduler job OFF** (`TRADE_ALGO_JOBS_ENABLED`, denylist enable) |
+| Copy                                        | `src/copy/**` only | **unmounted** (no router/env — deliberate)                                    |
+| Futures jobs / candle / MM seed / reconcile | job hosts          | **OFF**                                                                       |
+
+Wave-3 sealed money on tip (#1193 TWAP respace+jobs OFF, #1191/#1199 copy races, #1202–#1207 funding/insurance/reconcile, #1211 margin-call). See tracker `trade.copy` / `trade.algo` and [Not in this PR](#not-in-this-pr).
 
 ---
 
