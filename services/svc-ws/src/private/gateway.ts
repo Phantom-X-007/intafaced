@@ -194,6 +194,8 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
    * `/stream`: miss one pong window → terminate.
    */
   const heartbeat = setInterval(() => {
+    // Quiet lag: free seats held by slow consumers even when no events publish.
+    hub.sweepLag();
     for (const ws of wss.clients) {
       if (!alive.has(ws)) {
         ws.terminate();
