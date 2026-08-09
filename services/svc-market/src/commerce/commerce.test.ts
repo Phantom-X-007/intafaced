@@ -490,6 +490,61 @@ if (!available) {
     });
   });
 
+  describe('over-capacity listing prune', () => {
+    it('when stake drops under held slots, only the oldest listings stay sellable', async () => {
+      stakes.vendorSlots = 3;
+      await approvedVendor(VENDOR_USER);
+      const a = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'A first',
+        description: 'oldest',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      const b = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'B second',
+        description: 'middle',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      const c = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'C third',
+        description: 'newest',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      // Partial drop — vendor still listed (usable=1) but only one listing sells.
+      stakes.vendorSlots = 1;
+      const publicIds = (await commerce.publicListings()).map((l) => l.id);
+      expect(publicIds).toEqual([a.id]);
+      expect(publicIds).not.toContain(b.id);
+      expect(publicIds).not.toContain(c.id);
+
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-overcap',
+        }),
+      );
+      const buyA = await commerce.purchase({ buyerId: BUYER, listingId: a.id, purchaseId: randomUUID() });
+      expect(buyA.status).toBe('settled');
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: b.id, purchaseId: randomUUID() })).rejects.toMatchObject({
+        code: 'market.listing_over_capacity',
+      });
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: c.id, purchaseId: randomUUID() })).rejects.toMatchObject({
+        code: 'market.listing_over_capacity',
+      });
+    });
+  });
+
   describe('Class M re-drive snapshot', () => {
     it('settles a pending claim at the bps stored on the row even if env bps later changes', async () => {
       await approvedVendor(VENDOR_USER);

@@ -168,8 +168,9 @@ cannot pass by the rows quietly disappearing.
 
 **A partial drop still leaves them listed**, and that is deliberate: somebody at
 Initiate is entitled to a slot. Which of an over-held vendor's listings stays
-live is `market.commerce`'s to decide when it exists; this mountain answers at the
-vendor level.
+live is `market.commerce`'s: **oldest open slot first** (`claimed_at ASC`), count
+= current usable capacity. Excess listings stay in `myListings` but drop from the
+public catalogue and refuse purchase with `market.listing_over_capacity`.
 
 ### What a stranger sees
 

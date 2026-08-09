@@ -132,8 +132,8 @@ function mapError(err: unknown): never {
     if (err.code === 'market.commission_not_configured' || err.code === 'market.subscription_not_built') {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
     }
-    // Orphan listing / missing slot is a product precondition, not a bad payload.
-    if (err.code === 'market.listing_slot_missing' || err.code === 'market.slot_required') {
+    // Orphan listing / missing slot / over-quota after unstake — preconditions, not bad payloads.
+    if (err.code === 'market.listing_slot_missing' || err.code === 'market.slot_required' || err.code === 'market.listing_over_capacity') {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
     }
     if (err.code === 'market.listing_not_found') {

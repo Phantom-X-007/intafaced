@@ -268,6 +268,9 @@ export class CommerceService {
         const elig = await this.vendors.listingEligibility({ vendorId: row.vendor_id });
         if (!elig.listed) continue;
         if (!(await this.listingHoldsLiveSlot(row.id, row.vendor_id))) continue;
+        // Over-held after unstake: only the oldest usable slots stay shopfront.
+        const entitled = await this.vendors.entitledListingRefs(row.vendor_id);
+        if (!entitled.has(row.id)) continue;
         out.push(toListing(row));
       } catch (err) {
         // stake_unavailable and friends — drop this vendor's rows, keep the page.
@@ -438,7 +441,8 @@ export class CommerceService {
   }
 
   /**
-   * Vendor still listed + this listing still holds its own open slot.
+   * Vendor still listed + this listing still holds its own open slot + the
+   * listing is inside the usable stake quota (oldest open slots first).
    * Used before claim and again immediately before ledger post (TOCTOU close).
    */
   private async assertListingSellable(listing: ListingRecord): Promise<void> {
@@ -450,6 +454,13 @@ export class CommerceService {
       throw new MarketError(
         'This listing has no live slot — it cannot be sold until the vendor reclaims one',
         'market.listing_slot_missing',
+      );
+    }
+    const entitled = await this.vendors.entitledListingRefs(listing.vendorId);
+    if (!entitled.has(listing.id)) {
+      throw new MarketError(
+        'This listing is outside the vendor stake quota — only the oldest live slots remain sellable',
+        'market.listing_over_capacity',
       );
     }
   }
