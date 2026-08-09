@@ -27,8 +27,9 @@ import { SubMerchantService } from './submerchants.js';
 import { createSubMerchantRouter } from './submerchant-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { registerPublicPayRest } from './public-rest.js';
+import { SubscriptionService } from './subscriptions/index.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
+import { createEdgeContext, mergeRouters, verifyServiceHeaders } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -303,6 +304,44 @@ app.get('/ready', async () => ({
  * Browser reaches it via edge `/api/pay/checkout?token=…` (prefix stripped).
  */
 await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
+
+/**
+ * Subscription due-runner (SPEC §4). External cron, not setInterval.
+ *
+ * Crypto path opens a payment/invoice (never pull). Service credentials required
+ * so an unauthenticated caller cannot fan-out invoices.
+ */
+const subscriptions = new SubscriptionService(
+  sql,
+  () => new Date(),
+  async (input) => {
+    const payment = await pay.createPayment({
+      merchantId: input.merchantId,
+      amount: input.amount,
+      assetId: input.assetId,
+      method: 'crypto',
+      railAdapter: 'crypto-native',
+      metadata: {
+        source: 'subscription',
+        subscriptionId: input.subscriptionId,
+        occurrence: String(input.occurrence),
+        customerId: input.customerId,
+      },
+    });
+    return { paymentId: payment.id };
+  },
+);
+
+function requireService(req: { headers: Record<string, string | string[] | undefined> }): boolean {
+  return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;
+}
+
+app.post('/internal/jobs/run-due-subscriptions', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'pay.unauthenticated' });
+  }
+  return subscriptions.runDueSubscriptions();
+});
 
 /**
  * STEP 1–3 — the merchant REST surface (reads + mutations + webhooks).

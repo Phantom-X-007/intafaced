@@ -1,7 +1,8 @@
 import type { Sql } from 'postgres';
+import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { PayError } from '../payment-service.js';
-import { CADENCES, occurrenceStart, type Cadence } from './schedule.js';
+import { CADENCES, occurrenceStart, planDue, type Cadence } from './schedule.js';
 
 /**
  * SUBSCRIPTION LIFECYCLE (SPEC §4) — create / cancel / re-consent refuse.
@@ -126,10 +127,36 @@ export function assertMandateTermsUnchanged(
   }
 }
 
+/**
+ * Opens a payment/invoice for one occurrence. Crypto path uses this (never pull).
+ * Injected so the runner does not hard-wire PayService and tests stay light.
+ */
+export type SubscriptionInvoiceOpener = (input: {
+  merchantId: string;
+  customerId: string;
+  amount: Amount;
+  assetId: string;
+  subscriptionId: string;
+  occurrence: number;
+}) => Promise<{ paymentId: string }>;
+
+export type FiringOutcome = 'invoiced' | 'rejected' | 'already-fired' | 'skipped';
+
+export interface RunReport {
+  examined: number;
+  fired: number;
+  outcomes: Array<{ subscriptionId: string; occurrence: number; outcome: FiringOutcome; rejectionCode?: string }>;
+}
+
 export class SubscriptionService {
   constructor(
     private readonly sql: Sql,
     private readonly now: () => Date = () => new Date(),
+    /**
+     * Opens invoices for `crypto_invoice` path. Absent → refuse-closed on fire
+     * (`pay.subscription_driver_absent`), never silent skip.
+     */
+    private readonly openInvoice?: SubscriptionInvoiceOpener,
   ) {}
 
   async createMandate(input: {
@@ -263,6 +290,176 @@ export class SubscriptionService {
     );
     // Unreachable if amounts match — if they match, there is nothing to propose.
     throw new PayError('Mandate terms are unchanged; nothing to re-consent', 'pay.subscription_invalid');
+  }
+
+  /**
+   * Due pass — external cron, not setInterval (bank transplant law).
+   *
+   * Claims each occurrence once (`unique(subscription_id, occurrence)`), opens
+   * an invoice for crypto_invoice path, never pulls on-chain. Double-run safe.
+   */
+  async runDueSubscriptions(options: { now?: Date; limit?: number; maxCatchUp?: number } = {}): Promise<RunReport> {
+    const now = options.now ?? this.now();
+    const limit = options.limit ?? 50;
+    const maxCatchUp = options.maxCatchUp;
+
+    const due = await this.sql<SubRow[]>`
+      SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
+             cancelled_at, path, created_at
+        FROM pay.subscriptions
+       WHERE status = 'active' AND next_run_at <= ${now}
+       ORDER BY next_run_at ASC
+       LIMIT ${limit}
+    `;
+
+    const report: RunReport = { examined: due.length, fired: 0, outcomes: [] };
+
+    for (const row of due) {
+      const sub = toSub(row);
+      const mandate = await this.getMandate(sub.mandateId);
+      if (mandate.status !== 'active') {
+        await this.sql`
+          UPDATE pay.subscriptions SET status = 'cancelled', cancelled_at = ${now}, updated_at = ${now}
+           WHERE id = ${sub.id} AND status = 'active'
+        `;
+        continue;
+      }
+
+      const lastFired = await this.maxFiredOccurrence(sub.id);
+      const plan = planDue({
+        startsAt: mandate.startsAt,
+        cadence: mandate.cadence,
+        endsAt: mandate.endsAt,
+        lastFired,
+        now,
+        maxCatchUp,
+      });
+
+      for (const occurrence of plan.occurrences) {
+        const outcome = await this.fireOccurrence(sub, mandate, occurrence);
+        report.outcomes.push({
+          subscriptionId: sub.id,
+          occurrence,
+          outcome: outcome.kind,
+          rejectionCode: outcome.rejectionCode,
+        });
+        if (outcome.kind === 'invoiced') report.fired += 1;
+      }
+
+      if (plan.completed) {
+        await this.sql`
+          UPDATE pay.subscriptions
+             SET status = 'completed', next_run_at = ${plan.nextRunAt}, updated_at = ${now}
+           WHERE id = ${sub.id}
+        `;
+      } else {
+        await this.sql`
+          UPDATE pay.subscriptions
+             SET next_run_at = ${plan.nextRunAt}, updated_at = ${now}
+           WHERE id = ${sub.id} AND status = 'active'
+        `;
+      }
+    }
+
+    return report;
+  }
+
+  /**
+   * Claim occurrence then open invoice (crypto_invoice) or refuse by name.
+   * Ledger business key reserved: `pay.subscription:<subId>:<occurrence>`.
+   */
+  async fireOccurrence(
+    sub: SubscriptionRecord,
+    mandate: MandateRecord,
+    occurrence: number,
+  ): Promise<{ kind: FiringOutcome; rejectionCode?: string }> {
+    if (sub.status !== 'active') return { kind: 'skipped' };
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const claimed = await tx<Array<{ id: string }>>`
+          INSERT INTO pay.subscription_executions (
+            subscription_id, occurrence, amount, status
+          ) VALUES (
+            ${sub.id}, ${occurrence}, ${formatAmount(mandate.amount)}::numeric, 'pending'
+          )
+          ON CONFLICT (subscription_id, occurrence) DO NOTHING
+          RETURNING id
+        `;
+
+        let executionId: string;
+        if (claimed.length === 0) {
+          const existing = await tx<Array<{ id: string; status: string }>>`
+            SELECT id, status FROM pay.subscription_executions
+             WHERE subscription_id = ${sub.id} AND occurrence = ${occurrence}
+             FOR UPDATE
+          `;
+          const row = existing[0];
+          if (!row) return { kind: 'already-fired' as const };
+          if (row.status !== 'pending') return { kind: 'already-fired' as const };
+          executionId = row.id;
+        } else {
+          executionId = claimed[0]!.id;
+        }
+
+        // Card mandate rail not wired yet — refuse by name, leave execution rejected.
+        if (sub.path === 'card') {
+          await tx`
+            UPDATE pay.subscription_executions
+               SET status = 'rejected', rejection_code = 'pay.mandate_rail_absent'
+             WHERE id = ${executionId}
+          `;
+          return { kind: 'rejected' as const, rejectionCode: 'pay.mandate_rail_absent' };
+        }
+
+        // crypto_invoice (default): open a payment, never pull.
+        if (!this.openInvoice) {
+          await tx`
+            UPDATE pay.subscription_executions
+               SET status = 'rejected', rejection_code = 'pay.subscription_driver_absent'
+             WHERE id = ${executionId}
+          `;
+          return { kind: 'rejected' as const, rejectionCode: 'pay.subscription_driver_absent' };
+        }
+
+        try {
+          const { paymentId } = await this.openInvoice({
+            merchantId: sub.merchantId,
+            customerId: sub.customerId,
+            amount: mandate.amount,
+            assetId: mandate.assetId,
+            subscriptionId: sub.id,
+            occurrence,
+          });
+          await tx`
+            UPDATE pay.subscription_executions
+               SET status = 'invoiced', payment_id = ${paymentId}, settled_at = now()
+             WHERE id = ${executionId}
+          `;
+          return { kind: 'invoiced' as const };
+        } catch (err) {
+          const code = err instanceof PayError ? err.code : err instanceof Error ? err.message.slice(0, 120) : 'invoice.failed';
+          await tx`
+            UPDATE pay.subscription_executions
+               SET status = 'rejected', rejection_code = ${code}
+             WHERE id = ${executionId}
+          `;
+          return { kind: 'rejected' as const, rejectionCode: code };
+        }
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  private async maxFiredOccurrence(subscriptionId: string): Promise<number | null> {
+    const rows = await this.sql<Array<{ m: number | null }>>`
+      SELECT MAX(occurrence) AS m FROM pay.subscription_executions
+       WHERE subscription_id = ${subscriptionId}
+         AND status IN ('pending', 'settled', 'invoiced', 'rejected')
+    `;
+    const m = rows[0]?.m;
+    return m === null || m === undefined ? null : Number(m);
   }
 
   private async requireMerchant(merchantId: string): Promise<{ id: string; status: string }> {
