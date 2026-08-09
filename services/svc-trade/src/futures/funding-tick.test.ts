@@ -159,6 +159,86 @@ describe('runFundingTick', () => {
    * second time. The ledger below dedupes the way the real one does, so if the
    * key stops being stable this test fails on the payer's total.
    */
+  /**
+   * C14 — a position OPENED between a crashed post and its replay must not
+   * charge the original payer again.
+   *
+   * Without freezeMembership the replay re-plans open-now, the new short
+   * creates a fresh (period, payer, payee) key, and the ledger posts an extra
+   * leg while applyFundingNets has already claimed the original payer for the
+   * period. Ledger > margin_current for the payer.
+   */
+  it('a position opened after the first plan for a period is not charged on replay', async () => {
+    const long = {
+      positionId: 'plong',
+      userId: A,
+      side: 'long' as const,
+      size: amt('1'),
+      entryPrice: amt('50000'),
+      marginAsset: 'USDT',
+    };
+    const shortX = { ...long, positionId: 'pshortX', userId: B, side: 'short' as const };
+    const shortNew = { ...long, positionId: 'pshortNew', userId: B, side: 'short' as const };
+
+    const seen = new Map<string, PostRequest>();
+    const attempts: PostRequest[] = [];
+    const ledger = {
+      async post(req: PostRequest) {
+        attempts.push(req);
+        if (!seen.has(req.idempotencyKey)) seen.set(req.idempotencyKey, req);
+        return { id: req.idempotencyKey, idempotencyKey: req.idempotencyKey } as never;
+      },
+    };
+    // Real freeze store; settle marker always crashes (post→settle gap).
+    const basePeriods = memoryFundingPeriodStore();
+    const periods = {
+      ...basePeriods,
+      async isSettled() {
+        return false;
+      },
+      async markSettled() {
+        throw new Error('crashed before the settle marker was written');
+      },
+    };
+    const margins = memoryFundingMarginApplier();
+    const rates = fixedRate('0.0001', 'm1:period-membership-open');
+
+    // Attempt 1: book is long + shortX. Posts, then crashes on settle.
+    await expect(runFundingTick({ rates, positions: positionsOf([long, shortX]), periods, margins, ledger }, 'm1')).rejects.toThrow(
+      /crashed/,
+    );
+    expect(seen.size).toBe(1);
+    const afterFirstKeys = new Set(seen.keys());
+    const onePeriod = (amt('0.0001') * ((amt('1') * amt('50000')) / 10n ** 18n)) / 10n ** 18n;
+    expect(margins.paidByPosition('plong')).toBe(onePeriod);
+
+    // New short opens. Replay must NOT mint a second leg for plong.
+    await expect(
+      runFundingTick({ rates, positions: positionsOf([long, shortX, shortNew]), periods, margins, ledger }, 'm1'),
+    ).rejects.toThrow(/crashed/);
+
+    const newKeys = [...seen.keys()].filter((k) => !afterFirstKeys.has(k));
+    expect(newKeys).toEqual([]);
+    expect(seen.size).toBe(1);
+
+    // Original payer charged once on ledger and once on margin.
+    const charged = [...seen.values()]
+      .filter((req) => (req.meta as { payerPositionId?: string }).payerPositionId === 'plong')
+      .reduce((a, req) => a + (req.entries[0]!.amount as bigint), 0n);
+    expect(charged).toBe(onePeriod);
+    expect(margins.paidByPosition('plong')).toBe(onePeriod);
+    expect(margins.paidByPosition('pshortNew')).toBe(0n);
+    expect(attempts.length).toBeGreaterThan(seen.size);
+  });
+
+  it('freezeMembership is first-writer: a second open set cannot widen the plan', async () => {
+    const periods = memoryFundingPeriodStore();
+    const first = await periods.freezeMembership('m1:p', ['a', 'b']);
+    const second = await periods.freezeMembership('m1:p', ['a', 'b', 'c']);
+    expect(first).toEqual(['a', 'b']);
+    expect(second).toEqual(['a', 'b']);
+  });
+
   it('replaying a crashed tick against a CHANGED book charges no one twice', async () => {
     const long = {
       positionId: 'plong',

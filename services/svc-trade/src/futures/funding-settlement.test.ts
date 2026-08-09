@@ -64,16 +64,11 @@ describe('funding-settlement planner', () => {
   });
 
   /**
-   * KNOWN RESIDUAL (funding period membership) — prove, do not fix.
-   *
-   * The loader returns positions open *now*, not as of the period. A position
-   * opened between a failed tick and its replay is a new pair with a new key,
-   * so the ledger posts an extra leg. applyFundingNets is idempotent on
-   * (position, period) and records only the first net for the original payer —
-   * ledger-vs-margin divergence. Product law needed for membership; this test
-   * freezes the arithmetic of the residual so a silent "fix" cannot land.
+   * Planner honesty: handed a larger book, it plans more legs. Membership is
+   * the tick's job (`freezeMembership`); this pure function must not invent a
+   * filter, and must not silently drop ids it was given.
    */
-  it('documents membership residual: a new position mid-period adds a new ledger key for the same period', () => {
+  it('plans every position it is handed — membership filtering is not this module', () => {
     const periodId = 'm1:period-membership';
     const first = planFundingSettlement({
       periodId,

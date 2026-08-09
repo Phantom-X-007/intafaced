@@ -51,6 +51,15 @@ export interface FundingPeriodStore {
   isSettled(periodId: string): Promise<boolean>;
   markSettled(periodId: string, meta: { legCount: number; totalPosted: number }): Promise<void>;
   /**
+   * Freeze period membership on first plan for `periodId`.
+   *
+   * First call stores `candidateIds` as the only positions eligible for this
+   * period. Later calls return that frozen set and ignore new candidates.
+   * Required: without a freeze, a crash between post and settle re-plans
+   * against open-now and a position opened mid-gap posts an extra leg (C14).
+   */
+  freezeMembership(periodId: string, candidateIds: readonly string[]): Promise<readonly string[]>;
+  /**
    * Record a skip that is NOT a settled zero-leg period.
    * Optional on older stores — tick still returns skipped; production wires it.
    */
@@ -152,11 +161,28 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
     return { status: 'skipped', reason: 'no_positions', periodId: quote.periodId };
   }
 
+  // Membership is frozen on the first plan for this periodId. A position that
+  // opens between a crashed post and its replay must not enter the plan: new
+  // (payer, payee) pairs mint new ledger keys while applyFundingNets stays
+  // idempotent on (position, period) for the original payers — ledger vs
+  // margin_current diverge (C14 / funding-settlement residual).
+  const frozenIds = await deps.periods.freezeMembership(
+    quote.periodId,
+    open.map((p) => p.positionId),
+  );
+  const frozen = new Set(frozenIds);
+  const members = open.filter((p) => frozen.has(p.positionId));
+  if (members.length === 0) {
+    // Every frozen member has closed; period completes with no live book.
+    await deps.periods.markSettled(quote.periodId, { legCount: 0, totalPosted: 0 });
+    return { status: 'skipped', reason: 'no_legs', periodId: quote.periodId };
+  }
+
   const legs = planFundingSettlement({
     periodId: quote.periodId,
     marketId: quote.marketId,
     rate: quote.rate,
-    positions: open,
+    positions: members,
   });
 
   if (legs.length === 0) {
@@ -256,12 +282,19 @@ export function memoryFundingMarginApplier(): FundingMarginApplier & {
 export function memoryFundingPeriodStore(): FundingPeriodStore {
   const settled = new Map<string, number>();
   const skips = new Map<string, { reason: FundingSkipReason; marketId: string }>();
+  const membership = new Map<string, readonly string[]>();
   return {
     async isSettled(periodId) {
       return settled.has(periodId);
     },
     async markSettled(periodId, meta) {
       settled.set(periodId, meta.legCount);
+    },
+    async freezeMembership(periodId, candidateIds) {
+      if (!membership.has(periodId)) {
+        membership.set(periodId, [...candidateIds]);
+      }
+      return membership.get(periodId)!;
     },
     async recordSkip(periodId, meta) {
       skips.set(periodId, { reason: meta.reason, marketId: meta.marketId });

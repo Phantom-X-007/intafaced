@@ -28,22 +28,17 @@
  * left open. That is the third funding double-charge in this file's history;
  * the first two are #1034 and #1047.
  *
- * KNOWN RESIDUAL, deliberately not fixed here: the loader returns positions
- * open *now*, not positions open as of the period. A position OPENED between a
- * failed attempt and its replay is a genuinely new pair with a genuinely new
- * key, so the replay posts an extra leg.
- *
- * The victim is NOT the new position — it is consistent, charged once in both
- * the ledger and its margin. The victim is the PAYER, whose collateral the
- * ledger drains for both the original legs and the new one while
- * `applyFundingNets` (idempotent on (position, period)) records only the first.
- * That is the same ledger-vs-`margin_current` divergence as #1034 and #1047,
- * which is the thing to say out loud: this residual is in the same family as
- * the bug above it, not a fairness question about period membership.
- *
- * It is unchanged by this fix — measured identical under the old and new keys —
- * so nothing was traded away. Closing it needs a decision about what a period's
- * membership IS, which is product law, not a refactor.
+ * Membership for a period is NOT decided here — the planner plans whatever
+ * positions it is handed. `runFundingTick` freezes the open-position set on
+ * the first plan for a periodId (`FundingPeriodStore.freezeMembership`) and
+ * only passes that set (intersected with currently open rows) into this
+ * planner. That closes the residual where a position OPENED between a failed
+ * post and its replay minted a new (payer, payee) key: the original payer's
+ * ledger was drained for the new leg while `applyFundingNets` (idempotent on
+ * (position, period)) recorded only the first net — same divergence family as
+ * #1034 / #1047. Product law about "who should have paid at the boundary" is
+ * still open; freeze-at-first-plan is the money-safe rule that needs no owner
+ * number and stops the double-charge.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
 
