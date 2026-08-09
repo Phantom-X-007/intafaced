@@ -377,6 +377,48 @@ function provenanceOf(list: ScreeningList): ScreeningProvenance {
   };
 }
 
+/**
+ * Platform sentinel for "caller region was never resolved".
+ *
+ * svc-edge stamps `DEFAULT_REGION` (default `XX`) onto every principal until
+ * per-request geo resolution exists (§13 `socket.geo-region-resolution`). `XX`
+ * is not an ISO country we serve; it is the honest "unknown" marker.
+ *
+ * Historically every decision treated `XX` like any other code with no matrix
+ * entry — fall through to `DEFAULT_MODULE_RULES`, which is open for every
+ * module. Protocol boot still asserts that path under the fail-closed flag
+ * OFF (`allowed.permissionless`). What was missing: the decision object never
+ * said the region was unresolved, so logs/UI could not tell "we know you are
+ * in GB" from "we never looked".
+ */
+export const UNRESOLVED_REGION = 'XX';
+
+/**
+ * Process-wide fail-closed switch for an unresolved region.
+ *
+ * Default OFF so protocol/indexer sovereignty boot (`region: 'XX'` →
+ * `allowed.permissionless`) keeps working. When ON, `checkAccess` returns
+ * `denied.region_unknown` for the unresolved sentinel. Mechanism only — does
+ * not invent geo-IP, and does not populate sanctions content (Class X).
+ *
+ * Accepted truthy forms (case-insensitive): `1`, `true`, `yes`, `on`.
+ */
+export const REGION_FAIL_CLOSED_ENV = 'INTAFACED_REGION_FAIL_CLOSED';
+
+/** True when `region` is not the platform unresolved sentinel. */
+export function isRegionResolved(region: RegionCode): boolean {
+  return region.toUpperCase() !== UNRESOLVED_REGION;
+}
+
+/**
+ * Read the fail-closed switch from an env map (defaults to `process.env`).
+ * Explicit `AccessQuery.regionFailClosed` always wins over this.
+ */
+export function regionFailClosedFromEnv(env: Record<string, string | undefined> = process.env): boolean {
+  const raw = env[REGION_FAIL_CLOSED_ENV]?.trim().toLowerCase() ?? '';
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
 export interface AccessQuery {
   readonly module: ModuleId;
   readonly region: RegionCode;
@@ -405,6 +447,15 @@ export interface AccessQuery {
    * Omitted — every production call site — means the shipped matrix.
    */
   readonly business?: readonly BusinessBlock[];
+  /**
+   * When true, refuse if `region` is the unresolved sentinel (`XX`).
+   *
+   * Omitted → `regionFailClosedFromEnv()`. Default env is OFF so existing boot
+   * invariants (protocol/indexer sovereignty with `region: 'XX'`) keep passing.
+   * Pass `true` in tests, or set `INTAFACED_REGION_FAIL_CLOSED`, when a surface
+   * must not serve under an unknown jurisdiction.
+   */
+  readonly regionFailClosed?: boolean;
 }
 
 export interface AccessDecision {
@@ -414,6 +465,7 @@ export interface AccessDecision {
     | 'allowed'
     | 'allowed.permissionless'
     | 'denied.region_blocked'
+    | 'denied.region_unknown'
     | 'denied.module_blocked'
     | 'denied.kyc_required'
     | 'denied.plane_unsupported';
@@ -429,6 +481,19 @@ export interface AccessDecision {
    * nobody". This field can.
    */
   readonly screening: ScreeningProvenance;
+  /**
+   * Was the caller's jurisdiction actually resolved?
+   *
+   * Present on EVERY decision, allowed ones included — same honesty pattern as
+   * `screening.listConfigured`. `false` means the platform is operating on the
+   * unresolved sentinel (`XX`, typically stamped by svc-edge when no geo
+   * resolution exists). That is NOT the same as "region cleared screening",
+   * and until this field existed the two were indistinguishable on the wire.
+   *
+   * Does not invent geo-IP: it only reports whether the code we were given is
+   * the sentinel for "never resolved".
+   */
+  readonly regionResolved: boolean;
   /**
    * WHICH AUTHORITY refused the region, on a `denied.region_blocked`.
    *
@@ -499,11 +564,19 @@ export function unreviewedRegions(): RegionCode[] {
  * §22: zero-KYC follows custody. If the module cannot take custody on the
  * requested plane, access is permissionless and this returns immediately —
  * we never gate what we do not hold.
+ *
+ * Region honesty: every decision carries `regionResolved`. The unresolved
+ * sentinel (`XX`) is distinguishable from a real code even when the outcome is
+ * still `allowed` (fail-closed OFF, the default). Flip
+ * `INTAFACED_REGION_FAIL_CLOSED` (or pass `regionFailClosed: true`) to refuse
+ * with `denied.region_unknown` instead of falling open on defaults.
  */
 export function checkAccess(q: AccessQuery): AccessDecision {
   const mod = MODULES[q.module];
   const screening = q.screening ?? activeScreeningList();
   const provenance = provenanceOf(screening);
+  const regionResolved = isRegionResolved(q.region);
+  const failClosed = q.regionFailClosed ?? regionFailClosedFromEnv();
 
   if (!mod.planes.includes(q.plane)) {
     return {
@@ -513,6 +586,28 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: `${q.module} does not operate on the ${q.plane} plane`,
       screening: provenance,
+      regionResolved,
+    };
+  }
+
+  // Unresolved-region fail-closed. Default OFF: protocol boot and every
+  // existing call site keep the historical "XX falls through to defaults"
+  // behaviour, but the decision now *says* the region was unresolved. When ON,
+  // refuse before screening/permissionless so an unknown jurisdiction cannot
+  // ride the open defaults. Not Class X content — mechanism only.
+  if (!regionResolved && failClosed) {
+    return {
+      allowed: false,
+      code: 'denied.region_unknown',
+      status: 'blocked',
+      limitMultiplier: 0,
+      reason:
+        `Caller region is unresolved (${UNRESOLVED_REGION}). ` +
+        `Hosted access refuses under ${REGION_FAIL_CLOSED_ENV}. ` +
+        `Set a real DEFAULT_REGION or close §13 socket.geo-region-resolution; ` +
+        `do not treat ${UNRESOLVED_REGION} as a restrictive jurisdiction — it is not.`,
+      screening: provenance,
+      regionResolved,
     };
   }
 
@@ -553,6 +648,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
         limitMultiplier: 0,
         reason: regionBlockReason ?? `Hosted access unavailable in ${q.region}`,
         screening: provenance,
+        regionResolved,
         blockedBy,
       };
     }
@@ -563,6 +659,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: rule.limitMultiplier ?? 1,
       reason: 'Non-custodial: no identity requirement (§22)',
       screening: provenance,
+      regionResolved,
     };
   }
 
@@ -575,6 +672,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: regionBlockReason ?? `Not served in ${q.region}`,
       screening: provenance,
+      regionResolved,
       blockedBy,
     };
   }
@@ -587,6 +685,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: rule.notes ?? `${q.module} is not offered in ${q.region}`,
       screening: provenance,
+      regionResolved,
     };
   }
 
@@ -599,6 +698,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: `Verification tier "${rule.minTier}" required for ${q.module} in ${q.region}`,
       screening: provenance,
+      regionResolved,
     };
   }
 
@@ -609,6 +709,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
     limitMultiplier: rule.limitMultiplier ?? 1,
     reason: rule.notes ?? 'Permitted',
     screening: provenance,
+    regionResolved,
   };
 }
 

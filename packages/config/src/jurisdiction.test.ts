@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { checkAccess, assertReviewed, UnreviewedJurisdictionError, tierSatisfies } from './jurisdiction.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  REGION_FAIL_CLOSED_ENV,
+  UNRESOLVED_REGION,
+  assertReviewed,
+  checkAccess,
+  isRegionResolved,
+  regionFailClosedFromEnv,
+  UnreviewedJurisdictionError,
+  tierSatisfies,
+} from './jurisdiction.js';
 import { MODULES } from './modules.js';
 
 describe('§22 sovereignty law — zero-KYC follows custody', () => {
@@ -7,6 +16,7 @@ describe('§22 sovereignty law — zero-KYC follows custody', () => {
     const d = checkAccess({ module: 'protocol', region: 'US', plane: 'protocol', kycTier: 'none' });
     expect(d.allowed).toBe(true);
     expect(d.code).toBe('allowed.permissionless');
+    expect(d.regionResolved).toBe(true);
   });
 
   it('never lets a protocol-plane module demand KYC, for any region in the matrix', () => {
@@ -24,6 +34,7 @@ describe('§22 sovereignty law — zero-KYC follows custody', () => {
     expect(d.allowed).toBe(false);
     expect(d.code).toBe('denied.kyc_required');
     expect(d.requiredTier).toBe('full');
+    expect(d.regionResolved).toBe(true);
   });
 
   it('allows a custodial module once the tier is met', () => {
@@ -41,6 +52,7 @@ describe('§22 sovereignty law — zero-KYC follows custody', () => {
   it('denies a plane the module does not operate on', () => {
     const d = checkAccess({ module: 'pay', region: 'DE', plane: 'protocol', kycTier: 'full' });
     expect(d.code).toBe('denied.plane_unsupported');
+    expect(d.regionResolved).toBe(true);
   });
 
   it('the bridge is custodial and therefore always tiered', () => {
@@ -48,6 +60,123 @@ describe('§22 sovereignty law — zero-KYC follows custody', () => {
     const d = checkAccess({ module: 'bridge', region: 'DE', plane: 'protocol', kycTier: 'none' });
     expect(d.allowed).toBe(false);
     expect(d.code).toBe('denied.kyc_required');
+  });
+});
+
+/**
+ * THE GAP THIS CLOSES (region half).
+ *
+ * Screening already reports whether a *list* was consulted. The caller's
+ * *region* had a second unknown: edge stamps DEFAULT_REGION='XX' on every
+ * request, XX is not in the matrix, and checkAccess fell open on defaults —
+ * while env comments claimed XX was "restrictive". Allowed decisions for XX
+ * and for GB looked the same on the wire.
+ *
+ * regionResolved (always) + optional denied.region_unknown (fail-closed ON)
+ * make the states different. Fail-closed defaults OFF so protocol boot's
+ * sovereignty assert (region XX → allowed.permissionless) still holds.
+ */
+describe('unresolved region is distinguishable — and can fail closed', () => {
+  const original = process.env[REGION_FAIL_CLOSED_ENV];
+  afterEach(() => {
+    if (original === undefined) delete process.env[REGION_FAIL_CLOSED_ENV];
+    else process.env[REGION_FAIL_CLOSED_ENV] = original;
+  });
+
+  it('treats XX as the unresolved sentinel, case-insensitive', () => {
+    expect(UNRESOLVED_REGION).toBe('XX');
+    expect(isRegionResolved('XX')).toBe(false);
+    expect(isRegionResolved('xx')).toBe(false);
+    expect(isRegionResolved('GB')).toBe(true);
+    expect(isRegionResolved('DE')).toBe(true);
+  });
+
+  it('marks regionResolved false on an ALLOWED decision for XX (default fail-open)', () => {
+    // Protocol boot invariant: unknown region still permissionless when the
+    // fail-closed flag is off. What changed is the decision now *says* so.
+    const d = checkAccess({
+      module: 'protocol',
+      plane: 'protocol',
+      region: UNRESOLVED_REGION,
+      kycTier: 'none',
+      regionFailClosed: false,
+    });
+    expect(d.allowed).toBe(true);
+    expect(d.code).toBe('allowed.permissionless');
+    expect(d.regionResolved).toBe(false);
+  });
+
+  it('marks regionResolved true for a real code even when that code has no matrix entry', () => {
+    // No matrix entry ≠ unresolved. DE falls through to defaults, but we were
+    // told the caller is in DE — that is a resolved claim, not the sentinel.
+    const d = checkAccess({ module: 'protocol', plane: 'protocol', region: 'DE', kycTier: 'none' });
+    expect(d.code).toBe('allowed.permissionless');
+    expect(d.regionResolved).toBe(true);
+  });
+
+  it('refuses XX with denied.region_unknown when regionFailClosed is true', () => {
+    const d = checkAccess({
+      module: 'protocol',
+      plane: 'protocol',
+      region: UNRESOLVED_REGION,
+      kycTier: 'none',
+      regionFailClosed: true,
+    });
+    expect(d.allowed).toBe(false);
+    expect(d.code).toBe('denied.region_unknown');
+    expect(d.regionResolved).toBe(false);
+    expect(d.reason).toContain(REGION_FAIL_CLOSED_ENV);
+  });
+
+  it('does not refuse a resolved region under fail-closed', () => {
+    const d = checkAccess({
+      module: 'protocol',
+      plane: 'protocol',
+      region: 'GB',
+      kycTier: 'none',
+      regionFailClosed: true,
+    });
+    expect(d.code).toBe('allowed.permissionless');
+    expect(d.regionResolved).toBe(true);
+  });
+
+  it('reads INTAFACED_REGION_FAIL_CLOSED from the environment when the query omits the flag', () => {
+    expect(regionFailClosedFromEnv({})).toBe(false);
+    expect(regionFailClosedFromEnv({ [REGION_FAIL_CLOSED_ENV]: 'true' })).toBe(true);
+    expect(regionFailClosedFromEnv({ [REGION_FAIL_CLOSED_ENV]: '1' })).toBe(true);
+    expect(regionFailClosedFromEnv({ [REGION_FAIL_CLOSED_ENV]: 'no' })).toBe(false);
+
+    process.env[REGION_FAIL_CLOSED_ENV] = 'yes';
+    const refused = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'xx',
+      kycTier: 'none',
+    });
+    expect(refused.code).toBe('denied.region_unknown');
+
+    // Explicit query flag wins over env — keeps sovereignty tests hermetic.
+    const overridden = checkAccess({
+      module: 'protocol',
+      plane: 'protocol',
+      region: UNRESOLVED_REGION,
+      kycTier: 'none',
+      regionFailClosed: false,
+    });
+    expect(overridden.code).toBe('allowed.permissionless');
+    expect(overridden.regionResolved).toBe(false);
+  });
+
+  it('still surfaces plane_unsupported before region_unknown (module/plane is the denser fact)', () => {
+    const d = checkAccess({
+      module: 'pay',
+      plane: 'protocol',
+      region: UNRESOLVED_REGION,
+      kycTier: 'full',
+      regionFailClosed: true,
+    });
+    expect(d.code).toBe('denied.plane_unsupported');
+    expect(d.regionResolved).toBe(false);
   });
 });
 

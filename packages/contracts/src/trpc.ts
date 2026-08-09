@@ -17,12 +17,12 @@ import { requireServiceCaller } from './service-auth.js';
  * A refusal that came from the JURISDICTION_MATRIX rather than from the token.
  *
  * It exists to carry `AccessDecision.code` — `denied.kyc_required`,
- * `denied.region_blocked`, `denied.module_blocked`, `denied.plane_unsupported`
- * — out to the caller. Before it, a matrix refusal was thrown as a bare
- * TRPCError with prose and no `cause`, so `intafacedCode` came back undefined
- * and the only machine-readable fact about the densest gate in the OS was
- * "403". A user short of KYC and a user in a blocked region were the same event
- * to every client, dashboard and metric.
+ * `denied.region_blocked`, `denied.region_unknown`, `denied.module_blocked`,
+ * `denied.plane_unsupported` — out to the caller. Before it, a matrix refusal
+ * was thrown as a bare TRPCError with prose and no `cause`, so `intafacedCode`
+ * came back undefined and the only machine-readable fact about the densest
+ * gate in the OS was "403". A user short of KYC and a user in a blocked region
+ * were the same event to every client, dashboard and metric.
  *
  * `requiredTier` is the actionable half: it is what lets a screen say "verify
  * to tier full" rather than "refused".
