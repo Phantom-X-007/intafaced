@@ -259,7 +259,7 @@ The direction of the money decides the order:
 - **Inbound (capture):** the rail moves first, the ledger books second. We only book value we know has arrived. A crash in between leaves money captured at the rail and not yet in the book — the classic. Nothing is lost: both halves are keyed on the payment id, so re-running finishes the job.
 - **Outbound (refund, payout):** the ledger moves first, the rail second. The merchant must be shown to have the money before any of it goes somewhere irreversible; a post-settlement refund they cannot cover fails at the ledger, before the rail is asked. A crash in between leaves the book correct and only the status projection behind. If the rail then refuses, the ledger posting is reversed in the same call.
 
-A refund whose id is already in flight is **refused**, not re-sent: `RailAdapter.refund(ref, amount)` carries no refund id (§6.1), so the rail cannot dedupe it for us, and "send it again and hope" is how one refund becomes two.
+A refund whose id is already in flight is **refused**, not re-sent. Live crypto receives a durable `refundId` (M226-02) so a process restart reuses the same outbound broadcast key; card-sandbox ignores it. The **service** still refuses re-entry while `refund.posted` has no terminal `refunded` / `refund.reversed` — "send it again and hope" is how one refund becomes two on a rail that cannot dedupe.
 
 ### User money: whose funds are stranded, per branch
 
