@@ -52,7 +52,7 @@ Internal tRPC (§1). Every log query is scoped to `ctx.principal.userId` — an 
 
 ### Metered agent runs
 
-Most agent procedures are **pure**: they answer "what would this agent say" without a session, so the declared guardrail is enforced by nothing at call time and the usage is metered by nothing at all. These three drive the real runtime instead — `openSession → act → settle → closeSession` — so every tool call is guardrail-checked and audited, and the run settles through `UsageMeter` → ledger.
+Most agent procedures are **pure**: they answer "what would this agent say" without a session, so the declared guardrail is enforced by nothing at call time and the usage is metered by nothing at all. These five drive the real runtime instead — `openSession → act → settle → closeSession` — so every tool call is guardrail-checked and audited, and the run settles through `UsageMeter` → ledger.
 
 | Procedure              | Scope            | Input                            | Output                                                 |
 | ---------------------- | ---------------- | -------------------------------- | ------------------------------------------------------ |
@@ -62,7 +62,7 @@ Most agent procedures are **pure**: they answer "what would this agent say" with
 | `merchant.runSession`  | `agents:execute` | plane, tier law, approval points | approval-rate watch + what the run cost                |
 | `copyIntel.runSession` | `agents:execute` | plane, tier law, leader fixtures | audited leader stats + what the run cost               |
 
-All five are mutations, and all three report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
+All five are mutations, and all five report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
 
 None of them calls the engine — a rank is arithmetic, and an answer is an echo of tool output — so each opens no usage window and settles to `0`. That zero is reported as a zero. A synthetic charge so a run "looks metered" would be a fabricated cost, which is the same class of lie as a fabricated price.
 
@@ -86,7 +86,7 @@ Also `GET /health` and `GET /ready`.
 | `usefulPath.task`      | First completion task that is currently servable, or null.                                          |
 | `usefulPath.residual`  | Why not / what this still is not (mock residual, orphan routes, outage).                            |
 
-A green container with `providerMode: mock` and `usefulPath.available: true` means the gateway answers with the deterministic stand-in. It does **not** mean Navigator / Support / the rest of the product fleet are registered — those agents are separate work. Process stays in the fleet when the engine is down so operators can still read session logs; degradation is `usefulPath.available: false`, not 503.
+A green container with `providerMode: mock` and `usefulPath.available: true` means the gateway answers with the deterministic stand-in. It does **not** mean production inference is live — mock residual is intentional. Stage-1 product agents (navigator / support / scanner / merchant / copy-intel) **are** boot-registered and counted on `productAgentsRegistered` + the `fleet` card; registration is not the same as upstream AI. Process stays in the fleet when the engine is down so operators can still read session logs; degradation is `usefulPath.available: false`, not 503.
 
 The thin useful path on the gateway itself is `runUsefulPath` in `src/useful-path.ts` (one completion, no session/ledger). Fleet metering still goes through `openSession → think → settle`.
 
@@ -220,11 +220,11 @@ The service checks these; the database enforces them regardless.
 
 ## Kill-switches
 
-| Switch                                         | Effect when off                                                                                                                                      |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agents.premiumTiers` flag (`packages/config`) | metered tiers unavailable — the module-wide gate in the admin console                                                                                |
-| `AGENTS_METERING_ENABLED=false`                | billing halts. **No** `usage_records` / window / feeCharge. Action audit still holds token counts (knowable cost without inventing a deferred bill). |
-| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close                                                                       |
+| Switch                                         | Effect when off                                                                                                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agents.premiumTiers` flag (`packages/config`) | Registry / admin label only — `NOT_ENFORCED` today; **nothing in svc-agents reads it**. Do not treat the flag as a live billing gate.                                                       |
+| `AGENTS_METERING_ENABLED=false`                | billing halts. **No** `usage_records` / window / feeCharge — including settle of leftover windows. Action audit still holds token counts (knowable cost without inventing a deferred bill). |
+| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close                                                                                                              |
 
 ---
 
@@ -263,19 +263,19 @@ Pure layers (no database): cost arithmetic, guardrails, adapters, **readiness ho
 
 ### Residual (honest — not Done by this package alone)
 
-| Gap                               | State on tip (W5 banked; wave-6 residual table)                                                                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Guardrail registration at boot    | **Wired** — `registerProductAgentsAtBoot` upserts the five Stage-1 factories into `agent_definitions` before listen (#1336).                                                               |
-| Stage-1 product agents (5)        | Factories + routing + metered `runSession` for navigator / support / scanner / merchant / copy-intel on tip (#1285 matrix 5/5).                                                            |
-| Fleet integrity pins              | Mount matrix (`#1296`), money-write register deny (`#1300`), request-id free-replay (`#1306`), sealed-unbilled recover (`#1286`), money-scope pin (`#1339`).                               |
-| Live data behind agent tools      | Caller-supplied fixtures. Dark / blank-tier / empty refuse unbilled. Live allowlists are Class X.                                                                                          |
-| i18n surface keys                 | svc-agents `COPY_KEYS` complete; packages/i18n EN parity banked (`#1337`).                                                                                                                 |
-| Production inference              | `AGENTS_PROVIDER=upstream` + vault credentials (Class X). Mock residual on `/ready` is intentional.                                                                                        |
-| Agent pricing §8                  | Rates on routing table / env; blank rate refuses. Product magnitudes are Nitro-only.                                                                                                       |
-| Metering kill-switch              | `AGENTS_METERING_ENABLED=false` posts no `feeCharge` and writes no `usage_records`. Token counts stay on the action audit only — re-open full usage_records path only with product ruling. |
-| Admin multi-window settle         | `usage.settle` is per-window; full-session multi-window settle is `session.close` (or residual admin route when mounted).                                                                  |
-| v2 agents (portfolio…growth)      | Doctrine names only — no factory until product law.                                                                                                                                        |
-| Full premium-tier product surface | Phase 5 shell UX + live planes on top of this runtime.                                                                                                                                     |
+| Gap                               | State on tip (W6 banked; W9 residual honesty)                                                                                                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guardrail registration at boot    | **Wired** — `registerProductAgentsAtBoot` upserts the five Stage-1 factories into `agent_definitions` before listen (#1336).                                                                                           |
+| Stage-1 product agents (5)        | Factories + routing + metered `runSession` for navigator / support / scanner / merchant / copy-intel on tip (#1285 matrix 5/5).                                                                                        |
+| Fleet integrity pins              | Mount matrix (`#1296`), money-write register deny (`#1300`), request-id free-replay (`#1306`), sealed-unbilled recover (`#1286`), money-scope pin (`#1339`), hostile fleet pin (`#1433` + `bank.withdraw`).            |
+| Live data behind agent tools      | Caller-supplied fixtures. Dark / blank-tier / empty refuse unbilled. Live allowlists are Class X.                                                                                                                      |
+| i18n surface keys                 | svc-agents `COPY_KEYS` complete; packages/i18n EN parity banked (`#1337`).                                                                                                                                             |
+| Production inference              | `AGENTS_PROVIDER=upstream` + vault credentials (Class X). Mock residual on `/ready` is intentional.                                                                                                                    |
+| Agent pricing §8                  | Rates on routing table / env; blank rate refuses. Product magnitudes are Nitro-only.                                                                                                                                   |
+| Metering kill-switch              | **Wired** — `AGENTS_METERING_ENABLED=false` writes no `usage_records`, posts no `feeCharge` (including settle of leftover windows). Token counts on action audit only. Re-open usage_records only with product ruling. |
+| Admin multi-window settle         | **Wired** — `usage.settleSession` is `admin:write` multi-window (#1426). `usage.settle` remains per-window; `session.close` still settles.                                                                             |
+| v2 agents (portfolio…growth)      | Doctrine names only — no factory until product law.                                                                                                                                                                    |
+| Full premium-tier product surface | Phase 5 shell UX + live planes on top of this runtime. `agents.premiumTiers` flag is `NOT_ENFORCED` (registry only).                                                                                                   |
 
 The money and audit paths run against real Postgres with the ledger's in-memory reference implementation, which the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Real Postgres because every property worth testing here — append-only, the window seal, the unique request id — lives in the database, and a fake would test the fake.
 

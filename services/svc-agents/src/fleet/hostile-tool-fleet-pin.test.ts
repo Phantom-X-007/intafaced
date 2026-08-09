@@ -31,8 +31,27 @@ describe('hostile money tools refused on the whole Stage-1 fleet', () => {
 
   it('hard denylist covers ledger/pay/bank/trade/p2p write verbs', () => {
     expect(FLEET_HARD_MONEY_WRITE_TOOLS.length).toBeGreaterThanOrEqual(5);
-    for (const need of ['ledger.post', 'trade.order', 'bank.transfer', 'pay.route.change'] as const) {
+    for (const need of ['ledger.post', 'trade.order', 'bank.transfer', 'bank.withdraw', 'pay.route.change'] as const) {
       expect(isFleetHardMoneyWriteTool(need), need).toBe(true);
+    }
+  });
+
+  it('parseGuardrail refuses bank.withdraw on every product agentId', () => {
+    for (const agentId of PRODUCT_AGENT_IDS) {
+      expect(() =>
+        parseGuardrail({
+          agentId,
+          version: 1,
+          tools: [{ name: 'bank.withdraw', module: 'bank', mode: 'write' }],
+          limits: {
+            maxActionsPerSession: 1,
+            maxOutputTokensPerCall: 64,
+            maxSpendPerSession: '0',
+            allowedModules: ['bank'],
+            allowedTasks: ['navigator.plan'],
+          },
+        }),
+      ).toThrow(/cannot grant money-moving tool/);
     }
   });
 

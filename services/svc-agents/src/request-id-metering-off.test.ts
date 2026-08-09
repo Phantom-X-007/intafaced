@@ -36,4 +36,17 @@ describe('request-id replay gate is metering-gated', () => {
       testSrc.includes('keeps the audit when billing is off') || testSrc.includes('records usage even when billing is switched off');
     expect(hasNew).toBe(true);
   });
+
+  it('settleWindow refuses feeCharge while meteringEnabled is false', () => {
+    const src = readFileSync(join(HERE, 'runtime.ts'), 'utf8');
+    // Kill-switch must gate settle, not only think/record.
+    expect(src).toMatch(/async settleWindow[\s\S]*?if \(!this\.meteringEnabled\)/);
+    expect(src).toMatch(/if \(!this\.meteringEnabled\)[\s\S]*?settled:\s*false/);
+  });
+
+  it('metering-off leftover-window settle is pinned in runtime suite', () => {
+    const testSrc = readFileSync(join(HERE, 'runtime.test.ts'), 'utf8');
+    expect(testSrc).toContain('metering-off settle refuses feeCharge for windows left from metering-on');
+    expect(testSrc).toContain('metering-off allows the same requestId twice and never invents request_id_replay');
+  });
 });

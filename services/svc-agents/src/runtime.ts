@@ -16,7 +16,7 @@ import {
 import { digestOfText, type ModelGateway } from './gateway/gateway.js';
 import type { RouteDef } from './gateway/routing.js';
 import { usageCost } from './metering/pricing.js';
-import type { SettlementResult, UsageMeter } from './metering/meter.js';
+import { chargeKeyFor, type SettlementResult, type UsageMeter } from './metering/meter.js';
 import type { TokenUsage } from './providers/provider.js';
 import { withEngineSpan } from './tracing.js';
 
@@ -558,9 +558,26 @@ export class AgentRuntime {
    * The audit row is appended in the same step that records the ledger
    * transaction id, so a settlement that was posted but not yet recorded
    * resumes to exactly one charge and exactly one log line.
+   *
+   * When `meteringEnabled` is false, returns `settled: false` and posts nothing
+   * — leftover windows stay open for a later metering-on process.
    */
   async settleWindow(sessionId: string, windowId: string): Promise<SettlementResult> {
     const session = await this.requireSession(sessionId, { allowClosed: true });
+    // Kill-switch: never feeCharge while metering is off — including leftover
+    // windows from a prior metering-on process. When billing returns, open
+    // windows are settled again; while off, inventing a charge would break the
+    // audit-only promise.
+    if (!this.meteringEnabled) {
+      return {
+        sessionId,
+        windowId,
+        chargeKey: chargeKeyFor(sessionId, windowId),
+        amount: 0n,
+        chargeTxId: null,
+        settled: false,
+      };
+    }
     const result = await this.meter.settle({ sessionId, userId: session.userId, windowId });
 
     // Only a settlement that actually happened is logged. A repeat call finds

@@ -121,6 +121,7 @@ export const FLEET_HARD_MONEY_WRITE_TOOLS = [
   'pay.capture',
   'pay.route.change',
   'bank.transfer',
+  'bank.withdraw',
   'bank.loan',
   'trade.order',
   'trade.cancel',

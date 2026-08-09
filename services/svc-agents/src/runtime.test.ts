@@ -479,6 +479,56 @@ if (!available) {
       expect(completion.cost).toBe(0n);
     });
 
+    it('metering-off allows the same requestId twice and never invents request_id_replay', async () => {
+      // Unit card done bar (#1434 residual): when billing is off, replaying a
+      // request id must not pretend a charge existed.
+      const unbilled = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const session = await unbilled.openSession({ userId: USER_A, agentId: 'probe' });
+      const first = await unbilled.think({
+        sessionId: session.id,
+        requestId: 'r-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      const second = await unbilled.think({
+        sessionId: session.id,
+        requestId: 'r-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      expect(first.metered).toBe(false);
+      expect(second.metered).toBe(false);
+      expect(first.cost).toBe(0n);
+      expect(second.cost).toBe(0n);
+      expect(provider.callCount).toBe(2);
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+    });
+
+    it('metering-off settle refuses feeCharge for windows left from metering-on', async () => {
+      // Kill-switch must halt bill posts, not only new usage_records. A process
+      // that flipped AGENTS_METERING_ENABLED=false still sees leftover windows.
+      const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
+      const session = await on.openSession({ userId: USER_A, agentId: 'probe' });
+      const call = await on.think({ sessionId: session.id, requestId: 'r-then-off', task: 'plan', messages: MESSAGES });
+      expect(call.metered).toBe(true);
+      expect(call.windowId).not.toBeNull();
+
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const attempt = await off.settleWindow(session.id, call.windowId!);
+      expect(attempt.settled).toBe(false);
+      expect(attempt.amount).toBe(0n);
+      expect(attempt.chargeTxId).toBeNull();
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+
+      // Window remains open — when metering returns, settle can finish honestly.
+      const stillOpen = await meter.openWindows(session.id);
+      expect(stillOpen).toContain(call.windowId!);
+    });
+
     it('keeps each user’s meter to themselves', async () => {
       const a = await open(USER_A);
       const b = await open(USER_B);
