@@ -1442,8 +1442,15 @@ export const FEATURES = [
     module: 'bank',
     phase: '5',
     plane: 'B',
+    status: 'wip',
+    owner: 'nitro-w10-l08',
     dependsOn: ['bank.accounts', 'bank.cards', 'bank.earn', 'trade.convert', 'protocol.smart-accounts'],
-    note: 'Law §31:805, gap-closed 2026-08-08. §31:805 phases it 5 and §38:854 records B/svc-bank/5. Scope: DCA on any asset or basket at any cadence, card round-ups sweeping spare change into a chosen asset or yield vault, threshold sweeps ("anything over X moves to yield"), and explicitly "Both planes; ledger recipes (F) / allowance contracts (P)". THE FIAT HALF IS BUILDABLE TODAY, and that is worth saying plainly even though the row reads blocked: bank.accounts, bank.cards, bank.earn and trade.convert are all `done`, so scheduled buys, round-ups on card spend and sweeps into an earn pool are ordinary ledger-recipe work over shipped rows. It reads blocked because §31:805 specifies BOTH planes and the sovereign half funds a vault "via standing session-key allowance" — that is protocol.smart-accounts, which is `ready` and the chain owner\'s, not `done`. Whoever claims this ships the F half and leaves the allowance half behind its real blocker; a standing allowance simulated custodially is the opposite of what the law asked for. §0.6 APPLIES WITHOUT EXCEPTION: a recurring buy is a ledger recipe and no schedule holds its own balance. NOTHING HERE NEEDS AN OWNER NUMBER — round-up granularity and sweep thresholds are user settings, not platform magnitudes, so D-S-14 does not gate this row.',
+    requires: ['services/svc-bank'],
+    note:
+      'Law §31:805 F-plane PARTIAL (W10 L08): threshold_sweep → earn via earnDeposit on main path; ' +
+      'createDca refuses bank.auto_invest_rate_unset without ConvertPort (no invent §8); ops.runAutoInvest + AUTO_INVEST_ENABLED. ' +
+      'Still open: card round-ups (capture hook), ConvertPort→trade.convert wire, P-plane session-key allowance (protocol.smart-accounts / Shehzad). ' +
+      '§0.6: rules hold no balance. Residual law: gap-closed 2026-08-08 note on both planes still stands for Done.',
   }),
   f('bank.business', 'svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31)', {
     module: 'bank',

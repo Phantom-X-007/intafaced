@@ -8,6 +8,7 @@ import { LoanService, type LoanServiceOptions } from './loans/loan-service.js';
 import { fixedPriceSource } from './loans/prices.js';
 import { CardService, type CardServiceOptions } from './cards/card-service.js';
 import { RampService, type RampServiceOptions } from './ramps/ramp-service.js';
+import { AutoInvestService, type AutoInvestServiceOptions } from './auto-invest/auto-invest-service.js';
 import type { LedgerHistory } from './analytics/ledger-history.js';
 
 /**
@@ -32,6 +33,7 @@ export interface BankServices {
   readonly loans: LoanService;
   readonly cards: CardService;
   readonly ramps: RampService;
+  readonly autoInvest: AutoInvestService;
 }
 
 export interface BankServiceOptions {
@@ -69,6 +71,14 @@ export interface BankServiceOptions {
    * `ramps/rails.ts` and `bank.fiat_ramp_socket`.
    */
   ramps?: RampServiceOptions;
+  /**
+   * Auto-invest wiring: optional convert port for DCA.
+   *
+   * Not defaulted. Absent convert = every DCA create/run refuses
+   * `bank.auto_invest_rate_unset` rather than inventing a §8 rate. Threshold
+   * sweeps need no convert (same-asset earn deposit).
+   */
+  autoInvest?: AutoInvestServiceOptions;
 }
 
 export function createBankServices(sql: Sql, ledger: LedgerClient, history: LedgerHistory, options: BankServiceOptions = {}): BankServices {
@@ -85,11 +95,13 @@ export function createBankServices(sql: Sql, ledger: LedgerClient, history: Ledg
   const cards = new CardService(sql, ledger, options.cards ?? {});
   // No ramp programme = every ramp procedure refuses `bank.no_ramp_rail`.
   const ramps = new RampService(sql, ledger, options.ramps ?? {});
+  // No convert port = DCA refuses rates-unset; threshold sweeps still work.
+  const autoInvest = new AutoInvestService(sql, ledger, earn, spaces, options.autoInvest ?? {});
 
-  return { spaces, transfers, earn, analytics, loans, cards, ramps };
+  return { spaces, transfers, earn, analytics, loans, cards, ramps, autoInvest };
 }
 
-export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService, CardService, RampService };
+export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService, CardService, RampService, AutoInvestService };
 export { BankError, type BankErrorCode } from './errors.js';
 export { accountForSpace, type SpaceRecord, type SpaceView } from './spaces/space-service.js';
 export { planDue, occurrenceStart, dueOccurrence, type Cadence } from './transfers/schedule.js';

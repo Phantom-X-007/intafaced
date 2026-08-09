@@ -948,6 +948,55 @@ export const rampOfframps = bank.table(
   ],
 );
 
+// ── Auto-invest (§31:805 F-plane) ────────────────────────────────────────────
+// Rules are instructions; runs are write-once records. No balance column.
+
+export const autoInvestKindEnum = bank.enum('auto_invest_kind', ['threshold_sweep', 'dca']);
+export const autoInvestRuleStatusEnum = bank.enum('auto_invest_rule_status', ['active', 'paused', 'cancelled']);
+export const autoInvestRunStatusEnum = bank.enum('auto_invest_run_status', ['pending', 'settled', 'rejected', 'skipped']);
+
+export const autoInvestRules = bank.table(
+  'auto_invest_rules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(),
+    kind: autoInvestKindEnum('kind').notNull(),
+    assetId: text('asset_id').notNull(),
+    threshold: amount('threshold'),
+    targetPoolId: uuid('target_pool_id'),
+    buyAssetId: text('buy_asset_id'),
+    amount: amount('amount'),
+    cadence: transferCadenceEnum('cadence'),
+    nextRunAt: tstz('next_run_at'),
+    status: autoInvestRuleStatusEnum('status').notNull().default('active'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('auto_invest_rules_user_idx').on(t.userId, t.status)],
+);
+
+export const autoInvestRuns = bank.table(
+  'auto_invest_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => autoInvestRules.id),
+    clientRunId: text('client_run_id').notNull(),
+    status: autoInvestRunStatusEnum('status').notNull().default('pending'),
+    amount: amount('amount'),
+    ledgerTxId: text('ledger_tx_id'),
+    positionId: text('position_id'),
+    rejectionCode: text('rejection_code'),
+    createdAt: createdAt(),
+    settledAt: tstz('settled_at'),
+  },
+  (t) => [
+    uniqueIndex('auto_invest_runs_unique_claim').on(t.ruleId, t.clientRunId),
+    index('auto_invest_runs_rule_idx').on(t.ruleId, t.createdAt),
+  ],
+);
+
 export const schema = {
   spaces,
   scheduledTransfers,
@@ -969,4 +1018,6 @@ export const schema = {
   cardCashback,
   rampOnramps,
   rampOfframps,
+  autoInvestRules,
+  autoInvestRuns,
 };
