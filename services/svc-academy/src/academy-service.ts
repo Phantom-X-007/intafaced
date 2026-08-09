@@ -51,6 +51,8 @@ import {
   type SeasonStatus,
   type StandingRecord,
 } from './tournaments/ladder.js';
+import { transitionSeason } from './tournaments/season-lifecycle.js';
+import { assertNoPrizeAttachment } from './tournaments/prize-refuse.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
@@ -564,6 +566,19 @@ export class AcademyService {
     if (rules.length < 8 || rules.length > 4000) {
       throw new AcademyError('Rules summary 8–4000 characters', 'academy.season_invalid');
     }
+    // Refuse prize-shaped fields if a caller ever spreads invent payload into season shape.
+    try {
+      assertNoPrizeAttachment({
+        slug,
+        title,
+        rulesSummary: rules,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt ?? null,
+        status: 'scheduled',
+      });
+    } catch (e) {
+      this.mapTournamentErr(e);
+    }
     const rows = await this.sql<
       Array<{
         id: string;
@@ -636,7 +651,14 @@ export class AcademyService {
 
   async setSeasonStatus(input: { seasonId: string; status: SeasonStatus }): Promise<SeasonRecord> {
     this.assertTournamentEnabled();
-    await this.season(input.seasonId);
+    const current = await this.season(input.seasonId);
+    // Pure lifecycle owns legal edges — raw SQL used to allow scheduled→frozen etc.
+    try {
+      assertNoPrizeAttachment(current);
+      transitionSeason(current, input.status);
+    } catch (e) {
+      this.mapTournamentErr(e);
+    }
     const rows = await this.sql<
       Array<{
         id: string;

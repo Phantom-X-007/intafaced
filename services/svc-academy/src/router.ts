@@ -35,6 +35,12 @@ import {
   type PublishedFill,
 } from './paper/simulated-result.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
+import {
+  decidePrizeIntent,
+  isPrizeRefuseClosed,
+  prizeRefuseStatusLine,
+  type PrizeIntentKind,
+} from './tournaments/prize-refuse.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -1124,6 +1130,73 @@ export function createAcademyRouter(academy: AcademyService) {
       .input(z.object({ seasonId: z.string().uuid(), status: seasonStatus }))
       .output(seasonOut)
       .mutation(({ input }) => guard(() => academy.setSeasonStatus(input))),
+
+    /**
+     * Class N/M honesty — IFC prize pools refuse-closed on the wire.
+     * Pure helpers already refuse; this mounts them so operators never see a
+     * success path that invents pool amounts. No amount fields on the output.
+     */
+    tournamentPrizePlane: scopedProcedure('admin:read', { module: 'academy' })
+      .output(
+        z.object({
+          prizesEnabled: z.literal(false),
+          ledgerRecipeReady: z.literal(false),
+          academyHoldsPrizeBalance: z.literal(false),
+          statusLine: z.string(),
+          intents: z.array(
+            z.object({
+              kind: z.enum(['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance']),
+              status: z.literal('refuse'),
+              code: z.literal('academy.prize_refuse_closed'),
+            }),
+          ),
+        }),
+      )
+      .query(() => {
+        const kinds: PrizeIntentKind[] = ['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance'];
+        const intents = kinds.map((kind) => {
+          const d = decidePrizeIntent(kind);
+          if (!isPrizeRefuseClosed(d)) {
+            // Unreachable while Stage-3 refuse is absolute — fail closed if that ever softens.
+            throw new AcademyError('Prize plane must stay refuse-closed', 'academy.season_invalid');
+          }
+          return { kind: d.kind, status: 'refuse' as const, code: d.code };
+        });
+        return {
+          prizesEnabled: false as const,
+          ledgerRecipeReady: false as const,
+          academyHoldsPrizeBalance: false as const,
+          statusLine: prizeRefuseStatusLine(),
+          intents,
+        };
+      }),
+
+    /** Operator attempt to fund/pay/escrow — always PRECONDITION_FAILED, never invents amounts. */
+    tournamentPrizeIntent: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ kind: z.enum(['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance']) }))
+      .output(
+        z.object({
+          ok: z.literal(false),
+          status: z.literal('refuse'),
+          code: z.literal('academy.prize_refuse_closed'),
+          kind: z.enum(['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance']),
+          message: z.string(),
+          academyHoldsPrizeBalance: z.literal(false),
+          ledgerRecipeReady: z.literal(false),
+        }),
+      )
+      .mutation(({ input }) => {
+        const d = decidePrizeIntent(input.kind);
+        return {
+          ok: false as const,
+          status: 'refuse' as const,
+          code: d.code,
+          kind: d.kind,
+          message: d.message,
+          academyHoldsPrizeBalance: false as const,
+          ledgerRecipeReady: false as const,
+        };
+      }),
 
     setStanding: scopedProcedure('admin:write', { module: 'academy' })
       .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))

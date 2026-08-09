@@ -161,6 +161,8 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'standings',
         'createSeason',
         'setSeasonStatus',
+        'tournamentPrizePlane',
+        'tournamentPrizeIntent',
         'setStanding',
         'endSession',
         'health',
