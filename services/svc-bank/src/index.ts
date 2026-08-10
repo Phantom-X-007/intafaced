@@ -83,6 +83,7 @@ const bank = createBankServices(sql, ledger, history, {
     // The half that was missing. Without this the risk sweep raises calls into
     // a database column and svc-notify's finished consumer never sees one.
     marginCalls: eventMarginCallSink(bus),
+    moduleEnabled: env.BANK_LOANS_ENABLED,
   },
   /**
    * THE OTHER HALF THAT WAS MISSING, and it was missing in the same shape.
@@ -118,6 +119,7 @@ const bank = createBankServices(sql, ledger, history, {
      * they consult no rate at all.
      */
     rates: tickerPriceSource({ baseUrl: env.TRADE_URL }),
+    moduleEnabled: env.BANK_CARDS_ENABLED,
   },
   /**
    * RAMPS — same missing-wiring shape as cards.

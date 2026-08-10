@@ -221,8 +221,12 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   def('pay.payfac', 'pay', null, 'PayFac sub-merchant trees', NOT_ENFORCED),
   def('pay.laneA', 'pay', null, 'Permissionless crypto rails (§24 Lane A)', NOT_ENFORCED),
   def('p2p.sovereignEscrow', 'p2p', null, 'Contract escrow (Protocol Plane)', NOT_ENFORCED),
-  def('bank.loans', 'bank', null, 'Collateralised loans', NOT_ENFORCED),
-  def('bank.cards', 'bank', null, 'Card issuance', NOT_ENFORCED),
+  // Boot-time module kills on svc-bank — OFF refuses open/issue (and card auth).
+  // Job-level stops (accrual, risk sweep) stay separate env vars; these flags are
+  // the product module switches the admin console used to paint as controls while
+  // nothing read them (NOT_ENFORCED honesty residual, wave 13 L03).
+  def('bank.loans', 'bank', null, 'Collateralised loans', serviceEnv('svc-bank', 'BANK_LOANS_ENABLED')),
+  def('bank.cards', 'bank', null, 'Card issuance (ledger half)', serviceEnv('svc-bank', 'BANK_CARDS_ENABLED')),
   def('bank.sovereignCard', 'bank', null, 'Self-custody funded card (§18)', NOT_ENFORCED),
   def('protocol.smartAccounts', 'protocol', null, 'Passkey smart accounts (§17.4)', serviceEnv('svc-protocol', 'PROTOCOL_RELAY_ENABLED')),
   // `protocol.amm`: `router.ts` mounts `amm.quoteExactIn`, `amm.quoteFromPool`,

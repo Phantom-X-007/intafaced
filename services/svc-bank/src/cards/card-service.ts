@@ -271,6 +271,11 @@ export interface CardServiceOptions {
   readonly conversionPolicy?: CardConversionPolicy;
   /** Injectable so a test can hold the staleness guards at a fixed instant. */
   readonly clock?: () => Date;
+  /**
+   * Module kill (`BANK_CARDS_ENABLED` / FLAG_REGISTRY bank.cards). Default true.
+   * When false, issue and authorise refuse `bank.cards_disabled`.
+   */
+  readonly moduleEnabled?: boolean;
 }
 
 export class CardService {
@@ -278,6 +283,7 @@ export class CardService {
   private readonly rates: PriceSource;
   private readonly conversionPolicy: CardConversionPolicy;
   private readonly clock: () => Date;
+  private readonly moduleEnabled: boolean;
 
   constructor(
     private readonly sql: Sql,
@@ -288,6 +294,13 @@ export class CardService {
     this.rates = options.rates ?? noConversionRates;
     this.conversionPolicy = options.conversionPolicy ?? DEFAULT_CARD_CONVERSION_POLICY;
     this.clock = options.clock ?? (() => new Date());
+    this.moduleEnabled = options.moduleEnabled !== false;
+  }
+
+  private assertModuleEnabled(): void {
+    if (!this.moduleEnabled) {
+      throw new BankError('Cards module is disabled (BANK_CARDS_ENABLED / bank.cards)', 'bank.cards_disabled');
+    }
   }
 
   /** What this deployment's card programme is, and whether it is real. */
@@ -322,6 +335,7 @@ export class CardService {
     cashbackBps?: number;
     perAuthorizationLimit: Amount;
   }): Promise<CardRecord> {
+    this.assertModuleEnabled();
     if (input.perAuthorizationLimit <= 0n) {
       throw new BankError('A card needs a positive per-authorisation limit', 'bank.card_limit_exceeded');
     }
@@ -401,6 +415,7 @@ export class CardService {
     amount: Amount;
     merchantCategory?: string;
   }): Promise<AuthorizationRecord> {
+    this.assertModuleEnabled();
     const card = await this.card(input.cardId);
 
     // Idempotency, before anything else. An issuer redelivering an

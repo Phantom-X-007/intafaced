@@ -218,6 +218,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.loan_accrual_disabled':
       case 'bank.loan_risk_sweep_disabled':
       case 'bank.auto_invest_disabled':
+      case 'bank.loans_disabled':
+      case 'bank.cards_disabled':
         return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: err.message, cause: err });
 
       default: {

@@ -410,13 +410,17 @@ Editing a standing order cancels it and writes a new one, so the history of what
 | `LOAN_ACCRUAL_ENABLED`                          | Loan interest capitalisation is its own flag — stopping earn payout must not stop charging borrowers               |
 | `LOAN_RISK_SWEEP_ENABLED`                       | Defaults **off**. Sells people's collateral; a fresh deploy must not liquidate until a human has checked marks     |
 | `AUTO_INVEST_ENABLED`                           | Stops threshold sweeps and DCA runs after an operator hit stop                                                     |
+| `BANK_LOANS_ENABLED`                            | Module kill for loans (`FLAG_REGISTRY` bank.loans) — OFF refuses new opens                                         |
+| `BANK_CARDS_ENABLED`                            | Module kill for cards ledger half (`bank.cards`) — OFF refuses issue and authorise                                 |
 | `TRANSFER_BATCH_SIZE` / `LOAN_SWEEP_BATCH_SIZE` | Bounds the blast radius of a single bad pass                                                                       |
 
 Each env job flag gates **both** the HTTP `/internal/jobs/*` endpoint **and** the matching `ops.*` tRPC mutation (same 503 / named code). tRPC is not a back door past an emergency stop.
 
-| Registry flag (`FLAG_REGISTRY`)                                       | What it is today                                                                                                                                                                                                                                                                                                                                                      |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bank.loans`, `bank.cards`, `bank.sovereignCard`, `bank.cardWaitlist` | **Named only** — `NOT_ENFORCED` in `packages/config`. The admin console can show them; **svc-bank does not read them**. Turning one off in the registry alone does **not** stop loans, cards, or waitlist procedures. Real emergency stops for money jobs are the env variables above. Wiring true module kills is a deliberate product decision, not a silent claim. |
+| Registry flag (`FLAG_REGISTRY`)           | What it is today                                                                                                                                                                              |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bank.loans`                              | **Enforced** — `service-env` → `BANK_LOANS_ENABLED` on svc-bank. OFF refuses **new loan opens** (`bank.loans_disabled`). Accrual / risk-sweep stay on their own job flags. Restart required.  |
+| `bank.cards`                              | **Enforced** — `service-env` → `BANK_CARDS_ENABLED` on svc-bank. OFF refuses **issue and authorise** (`bank.cards_disabled`). Issuer setting still names the programme when the module is on. |
+| `bank.sovereignCard`, `bank.cardWaitlist` | **Named only** — `NOT_ENFORCED`. Sovereign card is §13 / Shehzad; waitlist has no money path.                                                                                                 |
 
 The scheduler is external (an endpoint, not a `setInterval`) so it can be paused, inspected and re-run by an operator. Duplicate firing is safe — that is the whole point of the idempotency work — but "safe when it happens" is not a reason to make it happen on every deploy.
 

@@ -216,6 +216,16 @@ export type BankErrorCode =
    * Defaults off in production; tRPC must not liquidate past the HTTP stop.
    */
   | 'bank.loan_risk_sweep_disabled'
+  /**
+   * Module kill for loans (`BANK_LOANS_ENABLED=false` / FLAG_REGISTRY bank.loans).
+   * New opens refuse; job kills stay on their own env vars.
+   */
+  | 'bank.loans_disabled'
+  /**
+   * Module kill for cards ledger half (`BANK_CARDS_ENABLED=false` / bank.cards).
+   * Issue and authorise refuse.
+   */
+  | 'bank.cards_disabled'
   // ── Auto-invest (§31:805 / bank.auto-invest F-plane) ───────────────────────
   /**
    * Cross-asset DCA needs a convert rate counterparty. This service never
