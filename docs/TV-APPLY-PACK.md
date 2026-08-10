@@ -18,11 +18,11 @@ Confirm at submit (Denon): **Gate into Sensorium** or **Nitrogenics** (prefer ne
 
 ## Product description (short)
 
-INTAFACED Sovereign OS is a complete financial operating system: exchange (spot, futures, options, OTC), protocol/DEX plane, P2P, launchpad, bank, payments, prediction markets, academy, and token economy — with a documented path to our own Layer 1. One identity, one ledger, one token.
+INTAFACED is an exchange-first financial platform with a pro trading terminal (spot, perpetuals, options path, OTC) and a wider Sovereign OS (protocol plane, P2P, launchpad, bank, payments, academy, token). One identity, one ledger, one token. Live site leads with the exchange desk and charting surface.
 
 ## Product description (long)
 
-Paste-ready: see live site manifesto + TRADE section. We are building a professional trading terminal that requires TradingView Advanced Charts for drawings, indicators, and pro chart UX. Order execution remains on INTAFACED infrastructure (not Trading Platform Broker API at first grant).
+Paste-ready: live site hero + TRADE terminal. We need Advanced Charts for professional drawings, indicators, and multi-layout analysis inside our exchange terminal. Order execution remains on INTAFACED infrastructure (not Trading Platform Broker API at first grant). Demo series on the site are illustrative only.
 
 ## Markets
 

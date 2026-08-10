@@ -1,5 +1,6 @@
 import { ShiftCard } from '@/components/bits/shift-card';
 import { SpotlightCard } from '@/components/bits/spotlight-card';
+import { ExchangeTerminal } from '@/components/exchange/ExchangeTerminal';
 import { BentoCard, BentoGrid } from '@/components/magicui/bento-grid';
 import { BlurFade } from '@/components/magicui/blur-fade';
 import { BorderBeam } from '@/components/magicui/border-beam';
@@ -12,13 +13,11 @@ import { HeroSection } from '@/components/hero/HeroSection';
 import { SiteLoader } from '@/components/SiteLoader';
 import { List } from '@phosphor-icons/react/dist/csr/List';
 import { X } from '@phosphor-icons/react/dist/csr/X';
-import { lazy, Suspense, useState } from 'react';
-
-const TradeChart = lazy(() => import('@/components/trade-chart').then((m) => ({ default: m.TradeChart })));
+import { useState } from 'react';
 
 const ROOMS = [
   { code: '00', name: 'Identity', role: 'One account, one rank, one wallet set', hot: false, span: '' },
-  { code: '01', name: 'Trade', role: 'Spot, futures, options, OTC, copy, forex', hot: true, span: 'md:col-span-2 md:row-span-2' },
+  { code: '01', name: 'Trade', role: 'Spot · perps · options · OTC · pro charts', hot: true, span: 'md:col-span-2 md:row-span-2' },
   { code: '02', name: 'Protocol', role: 'Self-custody · zero KYC by architecture', hot: false, span: '' },
   { code: '03', name: 'P2P', role: 'Street rails · escrow · 100+ currencies', hot: false, span: '' },
   { code: '04', name: 'Launch', role: 'Launchpad · meme factory · RWA', hot: false, span: '' },
@@ -33,20 +32,25 @@ const ROOMS = [
 
 const INSIDE = [
   {
-    t: 'Execution empire',
-    b: 'Own venue fabric, smart router, algos, arb, MM, risk spine.',
-    d: 'Cross-venue brain on our rails — not a borrowed stack.',
+    t: 'Matching & risk',
+    b: 'Own books, margin engine, liquidation, smart router.',
+    d: 'Exchange spine first — venue fabric on our rails.',
   },
+  {
+    t: 'Pro charting',
+    b: 'Drawings, indicators, multi-layout for power traders.',
+    d: 'Licensed pro chart path in progress. Demo series on site.',
+  },
+  { t: 'Execution empire', b: 'Algos, arb, MM, cross-venue brain.', d: 'Not a borrowed stack — our order path.' },
   { t: 'Sovereign banking', b: 'Zero KYC by architecture on the protocol plane.', d: 'Fiat plane stays custodial and stated plainly.' },
   { t: 'P2P', b: 'Where banking rails fail, street rails win.', d: 'Escrow-protected, 100+ currencies.' },
-  { t: 'Launch', b: 'Where culture mints.', d: 'Launchpad + meme factory with anti-rug posture.' },
-  { t: 'Agents', b: 'A workforce, not a chatbot.', d: 'Navigator, portfolio, scanner, copy-intel — inside your limits.' },
-  { t: 'Academy', b: 'Lobbies, not lectures.', d: 'Ambassadors live. Certs that cut fees.' },
-  { t: 'Token', b: 'The bloodstream of the OS.', d: 'Mineable, useful, gated, yield-bearing, scarce by design.' },
-  { t: 'Core', b: 'The engine room under everything.', d: 'Ledger law, recipes only, no balances outside the book.' },
+  { t: 'Agents', b: 'Scanner, portfolio, copy-intel inside your limits.', d: 'Workforce for the desk — not a chatbot toy.' },
+  { t: 'Token', b: 'Fee discounts, staking, buybacks on exchange flow.', d: 'Every fill can feed the community upside.' },
+  { t: 'Core', b: 'Ledger law under every trade.', d: 'Recipes only. No balances outside the book.' },
 ] as const;
 
-const TICKER = 'DEMO TAPE · $4,820 CARD LDN→AMS · AED 6,207 USDC · ESCROW LOCKED · BLOCK FINALISED · BUYBACK · BURN · 0 KYB · ';
+const TICKER =
+  'DEMO · BTC-PERP 67412.2 +2.4% · ETH-PERP 3412.8 +1.1% · FILL 0.42 BTC @ 67410 · FUNDING +0.012% · OI $1.2B · SOL-PERP 178.44 −0.6% · ';
 
 export default function App() {
   const [plane, setPlane] = useState<'fiat' | 'proto'>('fiat');
@@ -67,14 +71,14 @@ export default function App() {
             <BrandMark compact />
           </a>
           <nav className="ml-4 hidden gap-4 font-mono text-[11px] uppercase tracking-[0.08em] text-mute md:flex">
-            <a href="#planes" className="hover:text-lime">
-              Planes
-            </a>
-            <a href="#rooms" className="hover:text-lime">
-              Rooms
-            </a>
             <a href="#trade" className="hover:text-lime">
               Trade
+            </a>
+            <a href="#rooms" className="hover:text-lime">
+              Markets
+            </a>
+            <a href="#planes" className="hover:text-lime">
+              Planes
             </a>
             <a href="#inside" className="hover:text-lime">
               Inside
@@ -90,16 +94,16 @@ export default function App() {
             {menu ? <X size={16} /> : <List size={16} />}
           </button>
           <a
-            href="#key"
+            href="#trade"
             className="ml-auto hidden bg-lime px-3 py-2 font-extrabold text-[11px] tracking-[0.06em] text-[#081008] md:inline-flex"
           >
-            CUT MY KEY
+            OPEN TERMINAL
           </a>
         </header>
 
         {menu ? (
           <div className="fixed inset-x-0 top-14 z-30 border-b border-line bg-panel p-4 font-mono text-xs uppercase tracking-wider text-mute md:hidden">
-            {['planes', 'rooms', 'trade', 'inside', 'key'].map((id) => (
+            {['trade', 'rooms', 'planes', 'inside', 'key'].map((id) => (
               <a key={id} href={`#${id}`} className="block py-2 hover:text-lime" onClick={() => setMenu(false)}>
                 {id}
               </a>
@@ -110,7 +114,7 @@ export default function App() {
         <main id="top" className="relative z-[1] w-full">
           <HeroSection />
 
-          {/* TICKER */}
+          {/* EXCHANGE TAPE */}
           <div className="border-y border-line bg-panel">
             <Marquee className="py-2.5 font-mono text-[11px] text-mute">
               <span className="mx-4 whitespace-nowrap">
@@ -120,28 +124,33 @@ export default function App() {
             </Marquee>
           </div>
 
+          {/* TERMINAL — high on page for TV reviewers */}
+          <BlurFade>
+            <ExchangeTerminal />
+          </BlurFade>
+
           {/* MANIFESTO */}
           <BlurFade>
             <section className="mx-auto grid max-w-6xl xl:max-w-7xl gap-8 px-4 py-16 md:grid-cols-2 md:px-6 md:py-20">
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Manifesto</p>
-                <h2 className="mt-2 max-w-[12ch] text-3xl font-extrabold tracking-tight md:text-4xl">
-                  Built by the streets.
+                <h2 className="mt-2 max-w-[14ch] text-3xl font-extrabold tracking-tight md:text-4xl">
+                  An exchange first.
                   <br />
-                  Not by suits.
+                  An OS under it.
                 </h2>
               </div>
               <div className="space-y-4 text-mute">
                 <p>
-                  Every financial platform before this one was built by suits, for suits. The people moving money at 3am got filed as a risk
-                  category.
+                  Most platforms bury the desk behind banking copy. We put the book, the chart, and the ticket up front — for people who
+                  trade at 3am.
                 </p>
                 <p>
-                  <strong className="text-ink">INTAFACED flips the table.</strong> Exchange. Broker. Bank. Payments. Launchpad. Predict.
-                  Academy. Plus our own Layer 1 path underneath.
+                  <strong className="text-ink">INTAFACED is a full exchange layer</strong> — spot, perps, options path, OTC — then broker,
+                  bank, payments, launchpad, predict, academy under one key. Plus our own Layer 1 path underneath.
                 </p>
                 <p className="border-l-2 border-lime pl-3 font-semibold text-ink">
-                  Nothing here looks like a bank — that is the entire point. People share what looks like them.
+                  Built by the streets, not by suits. The terminal is the face. The house is the depth.
                 </p>
               </div>
             </section>
@@ -153,9 +162,9 @@ export default function App() {
               <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Three laws</p>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 {[
-                  ['01', 'Everything is one login', 'Trade, borrow, spend, launch, learn, earn. One identity. One rank. Every room.'],
-                  ['02', 'Everything pays the user', 'Mining. Staking. Referrals. Certs that cut fees. Participation gets rewarded.'],
-                  ['03', 'Everything feeds the token', 'Every fee, launch, lobby, swipe, block. The community holds the upside.'],
+                  ['01', 'Trade is one login', 'Spot, perps, options, OTC, borrow, spend. One identity. One rank. Every room.'],
+                  ['02', 'Every fill can pay you', 'Fee discounts. Mining. Staking. Referrals. Participation gets rewarded.'],
+                  ['03', 'Exchange flow feeds the token', 'Fees, funding, launches. The community holds the upside.'],
                 ].map(([n, t, b], i) => (
                   <SpotlightCard key={n} className={i === 1 ? 'md:-translate-y-2' : ''}>
                     <span className="font-mono text-xs text-lime">{n}</span>
@@ -225,11 +234,11 @@ export default function App() {
           {/* ROOMS */}
           <BlurFade>
             <section id="rooms" className="mx-auto max-w-6xl xl:max-w-7xl px-4 py-14 md:px-6">
-              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Twelve rooms · one house · one key</p>
-              <h2 className="mt-2 max-w-[12ch] text-3xl font-extrabold tracking-tight md:text-4xl">
-                Separate rooms.
+              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Twelve rooms · trade leads · one key</p>
+              <h2 className="mt-2 max-w-[14ch] text-3xl font-extrabold tracking-tight md:text-4xl">
+                Exchange at the core.
                 <br />
-                One empire.
+                Rooms around it.
               </h2>
               <BentoGrid className="mt-8">
                 {ROOMS.map((r) => (
@@ -269,50 +278,6 @@ export default function App() {
                   One asset across rooms and planes. Fee discounts. Rewards. Buybacks. The community holds the upside.
                 </TabsContent>
               </Tabs>
-            </section>
-          </BlurFade>
-
-          {/* TRADE */}
-          <BlurFade>
-            <section id="trade" className="mx-auto grid max-w-6xl xl:max-w-7xl gap-8 px-4 py-14 md:grid-cols-2 md:items-center md:px-6">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Trade · the heart</p>
-                <h2 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
-                  Pro terminal energy.
-                  <br />
-                  Not a spreadsheet.
-                </h2>
-                <p className="mt-4 max-w-[36ch] text-mute">
-                  Spot. Futures. Options. OTC. Convert. Copy. Forex. Pro charting for people who actually trade — drawings, indicators,
-                  multi-layout analysis.
-                </p>
-                <p className="mt-3 font-mono text-[11px] text-mute">
-                  Chart panel is a demo series only. Licensed pro charting path in progress — no live prices.
-                </p>
-              </div>
-              <div className="relative overflow-hidden rounded-[3px] border border-line bg-[#040705] shadow-2xl">
-                <BorderBeam />
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 border-b border-line px-3 py-2 font-mono text-[11px]">
-                    <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_#c4f000]" />
-                    <span>BTC-PERP</span>
-                    <span className="text-mute">CROSS</span>
-                    <span className="text-mute">DEMO</span>
-                  </div>
-                  <Suspense
-                    fallback={
-                      <div className="flex h-[300px] items-center justify-center font-mono text-[11px] text-mute">Loading chart…</div>
-                    }
-                  >
-                    <TradeChart />
-                  </Suspense>
-                  <div className="flex gap-4 border-t border-line px-3 py-2 font-mono text-[11px] text-mute">
-                    <span>Mark 67,412.2</span>
-                    <span className="text-lime">+2.4%</span>
-                    <span>Illustrative demo series</span>
-                  </div>
-                </div>
-              </div>
             </section>
           </BlurFade>
 
@@ -448,20 +413,20 @@ export default function App() {
             <div className="relative mx-auto max-w-3xl">
               <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">The drop</p>
               <h2 className="mt-3 text-[clamp(1.6rem,4.5vw,2.8rem)] font-extrabold leading-[1.05] tracking-tight">
-                THE INFRASTRUCTURE IS READY.
+                THE DESK IS READY.
                 <br />
-                THE CULTURE IS WAITING.
+                THE CHARTS ARE WAITING.
                 <br />
                 <span className="text-lime">THE DROP IS COMING.</span>
               </h2>
-              <p className="mt-4 text-mute">see you in the lobby</p>
+              <p className="mt-4 text-mute">see you on the book</p>
               <a
-                href="mailto:hello@intafaced.com?subject=CUT%20MY%20KEY"
+                href="mailto:hello@intafaced.com?subject=OPEN%20THE%20TERMINAL"
                 className="mt-8 inline-flex bg-lime px-6 py-3.5 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(196,240,0,0.2)]"
               >
-                CUT MY KEY
+                OPEN THE TERMINAL
               </a>
-              <p className="mt-4 font-mono text-[11px] tracking-wide text-mute">Ranked waves. Refer and move up. Rank carries forever.</p>
+              <p className="mt-4 font-mono text-[11px] tracking-wide text-mute">Ranked waves. Trade access first. Rank carries forever.</p>
             </div>
           </section>
 
