@@ -98,6 +98,19 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
+       * Module kill for collateralised loans (`FLAG_REGISTRY` bank.loans).
+       *
+       * OFF refuses new loan opens (and product-facing money paths that mint
+       * debt). Accrual / risk-sweep keep their own flags — this is "stop the
+       * product", not "stop one job". Defaults ON so existing deploys keep
+       * working; flip to stop without inventing a console that never bit.
+       */
+      BANK_LOANS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
        * THE ONE THAT SELLS PEOPLE'S COLLATERAL.
        *
        * Defaults to OFF. Every other job in this service defaults on, because the
@@ -148,6 +161,18 @@ const schema = serviceEnvSchema
        * which act was performed, so it can be checked rather than assumed.
        */
       BANK_CARD_ISSUER: z.enum(CARD_ISSUER_SETTINGS).default('none'),
+
+      /**
+       * Module kill for the card ledger half (`FLAG_REGISTRY` bank.cards).
+       *
+       * OFF refuses issue and authorise. Issuer setting (`BANK_CARD_ISSUER`)
+       * still names which programme exists when the module is on; this flag is
+       * the emergency product stop, not a substitute for "no issuer".
+       */
+      BANK_CARDS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       // ── Ramps (§8.1 / D-S-09, crypto ledger half) ───────────────────────────
 

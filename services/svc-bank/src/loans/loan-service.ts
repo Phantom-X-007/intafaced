@@ -271,6 +271,11 @@ export interface LoanServiceOptions {
   readonly marginCalls?: MarginCallSink;
   readonly markPolicy?: MarkPolicy;
   readonly daysPerYear?: number;
+  /**
+   * Module kill (`BANK_LOANS_ENABLED` / FLAG_REGISTRY bank.loans). Default true.
+   * When false, `open` refuses `bank.loans_disabled`.
+   */
+  readonly moduleEnabled?: boolean;
 }
 
 const ONE = parseAmount('1');
@@ -447,6 +452,9 @@ export class LoanService {
     principal: Amount;
     now?: Date;
   }): Promise<{ loan: LoanRecord; ltvBps: number; collateralLedgerTxId: string; drawLedgerTxId: string }> {
+    if (this.options.moduleEnabled === false) {
+      throw new BankError('Loans module is disabled (BANK_LOANS_ENABLED / bank.loans)', 'bank.loans_disabled');
+    }
     const now = input.now ?? new Date();
     const product = await this.product(input.productId);
 
