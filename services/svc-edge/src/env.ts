@@ -144,6 +144,18 @@ const schema = baseEnvSchema
       EDGE_TRUST_PROXY: z.string().optional(),
 
       /**
+       * Trusted geo country header name (mechanism half of socket.geo-region-resolution).
+       *
+       * Empty/unset → every request still stamps `DEFAULT_REGION` (constant).
+       * Set (e.g. `cf-ipcountry`) **and** `EDGE_TRUST_PROXY` set → per-request
+       * region from that header. Header without trustProxy is ignored (forge path).
+       * Missing/invalid header → unresolved `XX` (regionResolved false).
+       *
+       * Never invents a geo vendor product or sanctions list content (Class X).
+       */
+      EDGE_GEO_COUNTRY_HEADER: z.string().optional(),
+
+      /**
        * Max request body bytes the edge will parse before refusing with 413.
        *
        * Fastify's default is ~1 MiB. An explicit env makes the budget an operator

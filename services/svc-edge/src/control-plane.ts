@@ -1,8 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { AuthError } from '@intafaced/auth';
-import type { ComplianceQueueDispositionRequest } from '@intafaced/config';
+import {
+  checkNetworkAccess,
+  type ComplianceQueueDispositionRequest,
+  type ComplianceQueueItem,
+  type ComplianceQueueKind,
+} from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
+import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
+
+const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
 
 /**
  * Parse disposition body for the compliance queue. Unknown status refuses closed.
@@ -126,6 +134,10 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     // 503 with `retry-after`, not 403: this is a temporary operational state, and
     // a client that reads 403 as "you may never do this" will stop retrying once
     // the incident is over.
+    //
+    // Wave 13: halt codes residual — operatorReason + haltCode so a client never
+    // confuses "module killed" with undecidable/network refuse.
+    const operatorReason = decision.module != null ? (killSwitches.reasonFor(decision.module) ?? null) : null;
     return reply
       .code(503)
       .header('retry-after', '30')
@@ -133,7 +145,48 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
         error: `module "${decision.module}" is switched off by the operator`,
         code: 'edge.module_killed',
         module: decision.module,
+        haltCode: decision.reason,
+        operatorReason,
       });
+  });
+}
+
+/**
+ * Network-signal fail-closed guard on the product door (`/api/*`).
+ *
+ * Status already surfaces unset≠clear (#1582). Product Done bar: when
+ * INTAFACED_NETWORK_SIGNAL_FAIL_CLOSED is armed, traffic refuses with a typed
+ * code — not silent allow. Does not invent a VPN partner (Class X).
+ *
+ * Admin / health / ready stay open so operators can still see why the door is
+ * closed and un-arm the switch.
+ */
+export function registerNetworkAccessGuard(app: FastifyInstance): void {
+  app.addHook('onRequest', async (req, reply) => {
+    const pathname = resolvedPathname(req.url);
+    if (pathname === null) return; // kill-switch path already refused unresolvable
+    if (!pathname.startsWith('/api/')) return;
+
+    const access = checkNetworkAccess(process.env);
+    if (access.allowed) return;
+
+    const edgeCode =
+      access.code === 'denied.network_flagged'
+        ? 'edge.network_flagged'
+        : access.code === 'denied.network_dark'
+          ? 'edge.network_dark'
+          : 'edge.network_unconfigured';
+
+    req.log.warn(
+      { path: pathname, networkCode: access.code, declaration: access.signal.declaration },
+      'edge: refused — network signal fail-closed',
+    );
+    return reply.code(503).header('retry-after', '30').send({
+      error: access.reason,
+      code: edgeCode,
+      networkCode: access.code,
+      declaration: access.signal.declaration,
+    });
   });
 }
 
@@ -179,6 +232,12 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
     const snap = admin.read();
     const honesty = admin.honesty();
     const ops = admin.opsHonesty();
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
     return {
       ok: true,
       service: 'svc-edge',
@@ -203,9 +262,18 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       flagEdgeGateway: honesty.flagEdgeGateway,
       // Reminder for operators reading JSON at 3am — full path list is in the runbook.
       releaseRule: 'reads and cancels pass under a kill; new commitments refuse (503 edge.module_killed)',
-      // ── ops.compliance / ops.analytics residual (wave 10) ─────────────────
+      // ── ops.compliance / ops.analytics residual (wave 10 + 13) ────────────
       // #1551 mechanisms at the door: unset≠clear, invent freeze refuse,
       // partner_cleared refuse, warehouse dark — never silent green ticks.
+      // Wave 13: region source honesty + network fail-closed on /api path.
+      region: {
+        code: region.region,
+        regionResolved: region.regionResolved,
+        source: region.source,
+        headerName: region.headerName,
+        statusLine: regionResolutionStatusLine(region),
+        note: region.note,
+      },
       networkSignal: {
         declaration: ops.network.signal.declaration,
         partnerConfigured: ops.network.signal.partnerConfigured,
@@ -214,6 +282,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         accessAllowed: ops.network.access.allowed,
         accessCode: ops.network.access.code,
         summary: ops.network.signal.summary,
+        enforcedOnApiPath: true,
       },
       freezeAuthority: {
         soleKey: ops.freeze.soleKey,
@@ -236,6 +305,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         surfaceStatus: ops.analytics.surface.status,
         mayLabelLive: ops.analytics.surface.mayLabelLive,
         statusLine: ops.analytics.statusLine,
+        etlWatermark: ops.analytics.etlWatermark,
       },
     };
   });
@@ -247,6 +317,50 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   app.get('/admin/compliance/queue', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
     return admin.complianceQueueSnapshot();
+  });
+
+  /**
+   * Open a screening/review case. Never auto-invented — empty stays empty until
+   * an operator (or future intake path) opens explicitly.
+   */
+  app.post('/admin/compliance/queue/open', async (req, reply) => {
+    const auth = await operator(req.headers.authorization, reply, 'module');
+    if (!auth) return reply;
+
+    const body = (req.body ?? {}) as {
+      id?: string;
+      kind?: string;
+      subjectId?: string;
+      openedAt?: string;
+    };
+    const id = typeof body.id === 'string' ? body.id.trim() : '';
+    const kind = typeof body.kind === 'string' ? body.kind.trim() : '';
+    const subjectId = typeof body.subjectId === 'string' ? body.subjectId.trim() : '';
+    if (id === '' || subjectId === '' || !QUEUE_KINDS.has(kind as ComplianceQueueKind)) {
+      return reply.code(400).send({
+        error: 'id, subjectId, and kind (screening_hit|kyc_review|network_flag|manual) required',
+        code: 'edge.invalid_compliance_open',
+      });
+    }
+
+    const item: ComplianceQueueItem = {
+      id,
+      kind: kind as ComplianceQueueKind,
+      subjectId,
+      openedAt: typeof body.openedAt === 'string' && body.openedAt.trim() !== '' ? body.openedAt.trim() : new Date().toISOString(),
+    };
+
+    try {
+      const queue = admin.openComplianceCase(item);
+      req.log.warn({ operator: auth.principal.userId, itemId: id, kind }, 'edge: compliance queue open');
+      return queue;
+    } catch (err) {
+      const message = (err as Error).message;
+      const conflict = /already open/i.test(message);
+      return reply
+        .code(conflict ? 409 : 400)
+        .send({ error: message, code: conflict ? 'edge.compliance_case_exists' : 'edge.invalid_compliance_open' });
+    }
   });
 
   /**
@@ -286,6 +400,26 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       'edge: compliance queue disposition',
     );
     return { ...result, queue: admin.complianceQueueSnapshot() };
+  });
+
+  /**
+   * Analytics warehouse door — dark/unavailable honesty, never live cubes
+   * without lag probe. ETL watermark is always `absent` on this edge.
+   */
+  app.get('/admin/analytics/warehouse', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    const a = admin.opsHonesty().analytics;
+    return {
+      replicaConfigured: a.replicaConfigured,
+      replicaCount: a.replicaCount,
+      refuse: a.refuse,
+      surfaceStatus: a.surface.status,
+      mayLabelLive: a.surface.mayLabelLive,
+      statusLine: a.statusLine,
+      etlWatermark: a.etlWatermark,
+      etlNote: a.etlNote,
+      surface: a.surface,
+    };
   });
 
   app.get('/admin/kill-switches', async (req, reply) => {

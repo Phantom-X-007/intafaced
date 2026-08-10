@@ -133,6 +133,8 @@ describe('edge analytics honesty residual', () => {
     expect(h.analytics.surface.status).toBe('unavailable');
     expect(h.analytics.surface.mayLabelLive).toBe(false);
     expect(h.analytics.statusLine).toMatch(/unavailable|live=0/);
+    expect(h.analytics.etlWatermark).toBe('absent');
+    expect(h.analytics.etlNote).toMatch(/watermark/i);
   });
 
   it('writer-looking replica URL refuses — no fake pass', () => {

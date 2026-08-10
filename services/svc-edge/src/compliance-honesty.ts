@@ -74,6 +74,29 @@ export type EdgeAnalyticsHonesty = {
   readonly refuse: string | null;
   readonly surface: WarehouseSurfaceResult;
   readonly statusLine: string;
+  /**
+   * ETL watermark honesty residual (ops.analytics Done bar).
+   *
+   * `absent` — this edge has no watermark: empty cannot claim "ETL ran and
+   * found nothing" vs "ETL never ran". Never invent a watermark or cubes.
+   */
+  readonly etlWatermark: 'absent';
+  readonly etlNote: string;
+};
+
+/** Disposition audit entry — process-local; durable case product residual. */
+export type ComplianceQueueAuditEntry = {
+  readonly at: string;
+  readonly itemId: string;
+  readonly ok: boolean;
+  readonly status: string | null;
+  readonly actor: string | null;
+  readonly code?: string;
+  readonly reason?: string;
+};
+
+export type ComplianceQueueDoorSnapshot = ComplianceQueueSnapshot & {
+  readonly recentAudit: readonly ComplianceQueueAuditEntry[];
 };
 
 export type EdgeComplianceHonesty = {
@@ -141,30 +164,36 @@ export function edgeComplianceHonesty(
   };
 }
 
+const ETL_ABSENT_NOTE = 'ETL watermark: ABSENT on this edge — cannot claim "ran and found nothing" vs "never ran". No fake cubes.';
+
+function withEtl(base: Omit<EdgeAnalyticsHonesty, 'etlWatermark' | 'etlNote'>): EdgeAnalyticsHonesty {
+  return { ...base, etlWatermark: 'absent', etlNote: ETL_ABSENT_NOTE };
+}
+
 function analyticsHonesty(env: Record<string, string | undefined>): EdgeAnalyticsHonesty {
   const listed = listConfiguredAnalyticsReplicaUrls(env);
   if (listed.length === 0) {
     const surface = queryWarehouseSurface({ replicaConfigured: false, lagSeconds: null, facts: [] });
-    return {
+    return withEtl({
       replicaConfigured: false,
       replicaCount: 0,
       refuse: null,
       surface,
       statusLine: warehouseSurfaceStatusLine(surface),
-    };
+    });
   }
 
   for (const { source, url } of listed) {
     const role = assertAnalyticsReplicaRole(url, 'readonly');
     if (!role.ok) {
       const surface = queryWarehouseSurface({ replicaConfigured: false, lagSeconds: null, facts: [] });
-      return {
+      return withEtl({
         replicaConfigured: false,
         replicaCount: listed.length,
         refuse: `analytics replica ${source}: ${role.reason}`,
         surface,
         statusLine: `status=refuse reason=writer_or_bad_role source=${source} live=0`,
-      };
+      });
     }
   }
 
@@ -176,13 +205,13 @@ function analyticsHonesty(env: Record<string, string | undefined>): EdgeAnalytic
     lagSource: 'unknown',
     facts: [],
   });
-  return {
+  return withEtl({
     replicaConfigured: true,
     replicaCount: listed.length,
     refuse: null,
     surface,
     statusLine: warehouseSurfaceStatusLine(surface),
-  };
+  });
 }
 
 /**
@@ -190,25 +219,38 @@ function analyticsHonesty(env: Record<string, string | undefined>): EdgeAnalytic
  *
  * Persistence/UI product remains residual. Mechanism Done bar: partner_cleared
  * refuses without screening partner; empty is honest empty; no invent cases.
+ * Wave 13: explicit open path + disposition audit (process-local).
  */
 export class EdgeComplianceQueue {
   private readonly items = new Map<string, ComplianceQueueItem>();
+  private readonly audit: ComplianceQueueAuditEntry[] = [];
+  private static readonly AUDIT_CAP = 50;
 
   constructor(private readonly env: () => Record<string, string | undefined> = () => process.env) {}
 
-  snapshot(): ComplianceQueueSnapshot {
-    return complianceQueueSnapshot([...this.items.values()], assertScreeningConfigured(this.env()).configured);
+  snapshot(): ComplianceQueueDoorSnapshot {
+    const base = complianceQueueSnapshot([...this.items.values()], assertScreeningConfigured(this.env()).configured);
+    return { ...base, recentAudit: [...this.audit] };
   }
 
   /**
    * Seed a case for review. Does not invent cases on empty — caller must open.
-   * Used by tests and by a future ticket intake path; not auto-filled.
+   * Used by tests and by the admin open route; not auto-filled.
    */
-  open(item: ComplianceQueueItem): ComplianceQueueSnapshot {
+  open(item: ComplianceQueueItem): ComplianceQueueDoorSnapshot {
     const id = item.id.trim();
     if (id === '') throw new Error('compliance queue: item id required');
     if (this.items.has(id)) throw new Error(`compliance queue: item ${id} already open`);
-    this.items.set(id, { ...item, id });
+    const subjectId = item.subjectId.trim();
+    if (subjectId === '') throw new Error('compliance queue: subjectId required');
+    this.items.set(id, { ...item, id, subjectId });
+    this.pushAudit({
+      at: new Date().toISOString(),
+      itemId: id,
+      ok: true,
+      status: 'opened',
+      actor: 'operator',
+    });
     return this.snapshot();
   }
 
@@ -216,9 +258,35 @@ export class EdgeComplianceQueue {
     const item = this.items.get(itemId.trim()) ?? null;
     const partnerConfigured = assertScreeningConfigured(this.env()).configured;
     const result = applyComplianceQueueDisposition(item, request, partnerConfigured);
-    if (result.ok && result.status !== 'pending') {
-      this.items.delete(itemId.trim());
+    if (result.ok) {
+      this.pushAudit({
+        at: new Date().toISOString(),
+        itemId: result.itemId,
+        ok: true,
+        status: result.status,
+        actor: result.actor,
+      });
+      if (result.status !== 'pending') {
+        this.items.delete(itemId.trim());
+      }
+    } else {
+      this.pushAudit({
+        at: new Date().toISOString(),
+        itemId: itemId.trim() || '(unknown)',
+        ok: false,
+        status: null,
+        actor: null,
+        code: result.code,
+        reason: result.reason,
+      });
     }
     return result;
+  }
+
+  private pushAudit(entry: ComplianceQueueAuditEntry): void {
+    this.audit.unshift(entry);
+    if (this.audit.length > EdgeComplianceQueue.AUDIT_CAP) {
+      this.audit.length = EdgeComplianceQueue.AUDIT_CAP;
+    }
   }
 }
