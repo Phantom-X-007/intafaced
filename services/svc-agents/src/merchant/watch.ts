@@ -41,6 +41,11 @@ export type WatchOk = {
   readonly considered: number;
   readonly skippedStale: number;
   readonly skippedIncomplete: number;
+  /**
+   * Points with attempts below the sample floor (including attempts=0).
+   * Not alerts — a 0% rate on zero attempts is noise, not a rail failure.
+   */
+  readonly skippedLowSample: number;
   readonly alerts: readonly MerchantAlert[];
 };
 
@@ -98,6 +103,10 @@ export function filterRailsByAllowlist(
 /**
  * Watch fixture approval-rate series. Emit alerts when rate < threshold.
  * Never invents rates; never changes rails.
+ *
+ * Sample floor (ops honesty): attempts must be ≥ 1. A rate on zero attempts is
+ * not a metric — alerting on it invents a rail failure from empty data. Callers
+ * may raise the floor with `minAttempts` (default 1).
  */
 export function watchApprovalFixtures(
   points: readonly ApprovalRatePoint[],
@@ -109,6 +118,11 @@ export function watchApprovalFixtures(
     payPlane?: PayPlaneState;
     /** Stage-2 L3: only watch these rail ids when provided and non-empty. */
     railAllowlist?: ReadonlySet<string> | readonly string[];
+    /**
+     * Minimum attempts before a point can alert. Default 1 (zero-sample is
+     * never an alert). Raised floors skip as `skippedLowSample`, not invent.
+     */
+    minAttempts?: number;
   } = {},
 ): WatchResult {
   const now = options.now ?? new Date();
@@ -122,6 +136,10 @@ export function watchApprovalFixtures(
     return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
   }
 
+  // Floor is at least 1 — zero attempts is never a usable sample.
+  const minAttempts =
+    options.minAttempts === undefined ? 1 : Number.isInteger(options.minAttempts) && options.minAttempts >= 1 ? options.minAttempts : 1;
+
   const { kept: scoped, skippedNotAllowed } = filterRailsByAllowlist(points, options.railAllowlist);
 
   if (scoped.length === 0) {
@@ -130,6 +148,7 @@ export function watchApprovalFixtures(
 
   let skippedStale = 0;
   let skippedIncomplete = skippedNotAllowed;
+  let skippedLowSample = 0;
   const alerts: MerchantAlert[] = [];
 
   for (const p of scoped) {
@@ -149,6 +168,12 @@ export function watchApprovalFixtures(
       skippedIncomplete += 1;
       continue;
     }
+    // Zero / below-floor samples are not incomplete fields — they are known-empty
+    // metrics. Do not invent a below_threshold alert from them.
+    if (p.attempts < minAttempts) {
+      skippedLowSample += 1;
+      continue;
+    }
     const rate = parseRate(p.approvalRate);
     if (rate == null) {
       skippedIncomplete += 1;
@@ -165,12 +190,12 @@ export function watchApprovalFixtures(
     }
   }
 
-  const usable = scoped.length - skippedStale - (skippedIncomplete - skippedNotAllowed);
+  const usable = scoped.length - skippedStale - (skippedIncomplete - skippedNotAllowed) - skippedLowSample;
   if (usable === 0 && alerts.length === 0) {
-    if (skippedStale > 0 && skippedIncomplete === skippedNotAllowed) {
+    if (skippedStale > 0 && skippedIncomplete === skippedNotAllowed && skippedLowSample === 0) {
       return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'stale' };
     }
-    if (skippedIncomplete > skippedNotAllowed || skippedStale > 0) {
+    if (skippedIncomplete > skippedNotAllowed || skippedStale > 0 || skippedLowSample > 0) {
       return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
     }
     return { status: 'empty', userMessageKey: 'agents.merchant.empty' };
@@ -182,6 +207,7 @@ export function watchApprovalFixtures(
     considered: scoped.length + skippedNotAllowed,
     skippedStale,
     skippedIncomplete,
+    skippedLowSample,
     alerts,
   };
 }

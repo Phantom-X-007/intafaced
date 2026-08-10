@@ -75,6 +75,7 @@ export type MerchantRunOk = {
   readonly considered: number;
   readonly skippedStale: number;
   readonly skippedIncomplete: number;
+  readonly skippedLowSample: number;
   readonly alerts: readonly MerchantAlert[];
   /** Points the metrics tool accepted. */
   readonly pointsAccepted: number;
@@ -146,6 +147,8 @@ export type MerchantRunInput = {
   readonly points: readonly ApprovalRatePoint[];
   readonly threshold?: string;
   readonly railAllowlist?: ReadonlySet<string> | readonly string[];
+  /** Minimum attempts before a point can alert. Default 1 (zero-sample never alerts). */
+  readonly minAttempts?: number;
   readonly now?: Date;
 };
 
@@ -220,6 +223,7 @@ export async function runMerchantWatchSession(input: MerchantRunInput): Promise<
       payPlane: input.plane,
       ...(input.threshold === undefined ? {} : { threshold: input.threshold }),
       ...(input.railAllowlist === undefined ? {} : { railAllowlist: input.railAllowlist }),
+      ...(input.minAttempts === undefined ? {} : { minAttempts: input.minAttempts }),
     });
 
     metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
@@ -231,6 +235,7 @@ export async function runMerchantWatchSession(input: MerchantRunInput): Promise<
         considered: watched.considered,
         skippedStale: watched.skippedStale,
         skippedIncomplete: watched.skippedIncomplete,
+        skippedLowSample: watched.skippedLowSample,
         alerts: watched.alerts,
         pointsAccepted: accepted.length,
         pointsRefusedByGuardrail,
