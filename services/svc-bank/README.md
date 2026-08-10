@@ -133,15 +133,18 @@ Interest **capitalises** (raises debt, posts nothing). Mark / margin call / liqu
 
 `ops.runAutoInvest` (`admin:treasury`) and `POST /internal/jobs/run-auto-invest` fire due rules. Kill switch: `AUTO_INVEST_ENABLED` — same code `bank.auto_invest_disabled` on both surfaces. Card round-ups and sovereign allowance plane are not here — round-ups need the capture path; P-plane is `protocol.smart-accounts` (Shehzad).
 
-### `business` — **maker/checker partial. Not full bank-biz.**
+### `business` — **maker/checker with ledger holds. Not full bank-biz.**
 
-| Procedure                     | Scope                 | What it does                                                  |
-| ----------------------------- | --------------------- | ------------------------------------------------------------- |
-| `business.list` / `create`    | `bank:read` / `write` | Corporate account + spend threshold                           |
-| `business.addMember`          | `bank:write`          | admin/maker/checker roles                                     |
-| `business.proposeTransfer`    | `bank:write`          | Under threshold posts; at/above → pending dual control        |
-| `business.approve` / `reject` | `bank:write`          | Checker (not maker) decides; posts via existing transfer rail |
-| `business.pending`            | `bank:read`           | Open approvals                                                |
+| Procedure                    | Scope                 | What it does                                                                  |
+| ---------------------------- | --------------------- | ----------------------------------------------------------------------------- |
+| `business.list` / `create`   | `bank:read` / `write` | Corporate account + spend threshold                                           |
+| `business.addMember`         | `bank:write`          | admin/maker/checker roles                                                     |
+| `business.proposeTransfer`   | `bank:write`          | Under threshold posts; at/above → **purposed ledger hold** + pending approval |
+| `business.approve`           | `bank:write`          | Checker (not maker) settles hold → destination                                |
+| `business.reject` / `cancel` | `bank:write`          | Checker reject or maker/admin cancel — hold returns to debit pot              |
+| `business.pending`           | `bank:read`           | Open approvals (each carries `holdLedgerTxId` while pending)                  |
+
+KYB / payroll / invoicing / expense cards remain residual or §13 — not invented here.
 
 Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-recipient payroll atomicity, dedicated org principal — not invented here.
 

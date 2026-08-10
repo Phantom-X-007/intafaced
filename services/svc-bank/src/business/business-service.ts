@@ -1,16 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import type { Sql } from 'postgres';
-import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { InsufficientFundsError, formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
-import type { SpaceService } from '../spaces/space-service.js';
+import { accountForSpace, type SpaceService } from '../spaces/space-service.js';
 import type { TransferService } from '../transfers/transfer-service.js';
 import { withMoneySpan } from '../tracing.js';
 
 /**
- * BUSINESS BANKING — honest partial (§31:811 / bank.business).
+ * BUSINESS BANKING — maker/checker with ledger holds (§31:811 / bank.business).
  *
- * Corporate account + multi-user roles + maker/checker for over-threshold
- * transfers. Value moves only via TransferService (bankTransfer recipe).
+ * Corporate account + multi-user roles + dual control for over-threshold
+ * transfers. Under threshold posts immediately via TransferService. At/above
+ * threshold: funds move into a purposed hold (`business-approval:<id>`) so the
+ * maker cannot spend them while a checker decides; approve settles hold →
+ * destination; reject/cancel releases hold → debit pot.
  *
  * Residual / §13 (not invent-risk here): KYB Lane B, expense cards, invoicing
  * (pay.gateway), multi-recipient payroll atomicity, dedicated org principal.
@@ -45,6 +48,7 @@ export interface BusinessApproval {
   amount: Amount;
   status: BusinessApprovalStatus;
   transferId: string | null;
+  holdLedgerTxId: string | null;
   ledgerTxId: string | null;
   rejectionCode: string | null;
   createdAt: Date;
@@ -77,6 +81,7 @@ interface ApprovalRow {
   amount: string;
   status: BusinessApprovalStatus;
   transfer_id: string | null;
+  hold_ledger_tx_id: string | null;
   ledger_tx_id: string | null;
   rejection_code: string | null;
   created_at: Date;
@@ -110,6 +115,7 @@ function toApproval(row: ApprovalRow): BusinessApproval {
     amount: parseAmount(row.amount),
     status: row.status,
     transferId: row.transfer_id,
+    holdLedgerTxId: row.hold_ledger_tx_id,
     ledgerTxId: row.ledger_tx_id,
     rejectionCode: row.rejection_code,
     createdAt: row.created_at,
@@ -120,6 +126,7 @@ function toApproval(row: ApprovalRow): BusinessApproval {
 export class BusinessService {
   constructor(
     private readonly sql: Sql,
+    private readonly ledger: LedgerClient,
     private readonly spaces: SpaceService,
     private readonly transfers: TransferService,
   ) {}
@@ -189,8 +196,9 @@ export class BusinessService {
     if (account.status !== 'active') throw new BankError('Business account is closed', 'bank.business_closed');
     await this.assertRole(input.accountId, input.makerUserId, ['admin', 'maker']);
 
-    const from = await this.spaces.get(input.fromSpaceId);
-    const to = await this.spaces.get(input.toSpaceId);
+    const now = new Date();
+    const from = await this.spaces.resolveForDebit(input.fromSpaceId, now);
+    const to = await this.spaces.resolveForCredit(input.toSpaceId);
     if (from.assetId !== account.assetId || to.assetId !== account.assetId) {
       throw new BankError(`Business account ${account.assetId} cannot move ${from.assetId}→${to.assetId}`, 'bank.asset_mismatch');
     }
@@ -208,24 +216,55 @@ export class BusinessService {
       return { kind: 'posted', transferId: posted.transferId, ledgerTxId: posted.ledgerTxId };
     }
 
-    const rows = await this.sql<ApprovalRow[]>`
-      INSERT INTO bank.business_approvals
-        (account_id, maker_user_id, from_space_id, to_space_id, asset_id, amount, status)
-      VALUES (
-        ${input.accountId}::uuid, ${input.makerUserId},
-        ${input.fromSpaceId}::uuid, ${input.toSpaceId}::uuid,
-        ${account.assetId}, ${formatAmount(input.amount)}::numeric, 'pending'
-      )
-      RETURNING id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
-                asset_id, amount, status, transfer_id, ledger_tx_id, rejection_code,
-                created_at, decided_at
-    `;
-    return { kind: 'pending', approval: toApproval(rows[0]!) };
+    // Over threshold: hold funds first so concurrent spend cannot empty the pot,
+    // then record the pending approval. Hold key is approval id (idempotent).
+    const approvalId = randomUUID();
+    const fromAcct = accountForSpace(from);
+
+    return withMoneySpan(
+      'bank.business.proposeHold',
+      { operation: 'business-propose-hold', userId: input.makerUserId, amount: formatAmount(input.amount) },
+      async () => {
+        let holdTxId: string;
+        try {
+          const held = await this.ledger.post(
+            recipes.businessApprovalHold({
+              approvalId,
+              from: fromAcct,
+              amount: input.amount,
+            }),
+          );
+          holdTxId = held.id;
+        } catch (err) {
+          // Router maps InsufficientFundsError to ledger.insufficient_funds.
+          if (err instanceof InsufficientFundsError) throw err;
+          throw err;
+        }
+
+        const rows = await this.sql<ApprovalRow[]>`
+          INSERT INTO bank.business_approvals
+            (id, account_id, maker_user_id, from_space_id, to_space_id, asset_id, amount, status, hold_ledger_tx_id)
+          VALUES (
+            ${approvalId}::uuid, ${input.accountId}::uuid, ${input.makerUserId},
+            ${input.fromSpaceId}::uuid, ${input.toSpaceId}::uuid,
+            ${account.assetId}, ${formatAmount(input.amount)}::numeric, 'pending', ${holdTxId}
+          )
+          RETURNING id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
+                    asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id,
+                    rejection_code, created_at, decided_at
+        `;
+        return { kind: 'pending' as const, approval: toApproval(rows[0]!) };
+      },
+    );
   }
 
   async approve(input: { approvalId: string; checkerUserId: string }): Promise<{ transferId: string; ledgerTxId: string }> {
     return withMoneySpan('bank.business.approve', { operation: 'business-approve', userId: input.checkerUserId }, async () => {
       const approval = await this.approval(input.approvalId);
+      if (approval.status === 'approved' && approval.ledgerTxId) {
+        // Re-drive: settle key is approval id; row already closed.
+        return { transferId: approval.transferId ?? approval.id, ledgerTxId: approval.ledgerTxId };
+      }
       if (approval.status !== 'pending') {
         throw new BankError(`Approval ${approval.id} is ${approval.status}`, 'bank.business_approval_inactive');
       }
@@ -234,23 +273,39 @@ export class BusinessService {
       }
       await this.assertRole(approval.accountId, input.checkerUserId, ['admin', 'checker']);
 
-      const posted = await this.transfers.transfer({
-        transferId: approval.id,
-        fromSpaceId: approval.fromSpaceId,
-        toSpaceId: approval.toSpaceId,
-        amount: approval.amount,
-      });
-
-      await this.sql`
+      // Claim pending first so concurrent reject/cancel cannot also release the hold.
+      const claimed = await this.sql<ApprovalRow[]>`
           UPDATE bank.business_approvals
              SET status = 'approved',
                  checker_user_id = ${input.checkerUserId},
-                 transfer_id = ${posted.transferId},
-                 ledger_tx_id = ${posted.ledgerTxId},
+                 transfer_id = ${approval.id},
                  decided_at = now()
            WHERE id = ${approval.id}::uuid AND status = 'pending'
+          RETURNING id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
+                    asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id,
+                    rejection_code, created_at, decided_at
         `;
-      return { transferId: posted.transferId, ledgerTxId: posted.ledgerTxId };
+      if (!claimed[0]) {
+        throw new BankError(`Approval ${approval.id} is no longer pending`, 'bank.business_approval_inactive');
+      }
+
+      const from = await this.spaces.get(approval.fromSpaceId);
+      const to = await this.spaces.resolveForCredit(approval.toSpaceId);
+      const settled = await this.ledger.post(
+        recipes.businessApprovalSettle({
+          approvalId: approval.id,
+          from: accountForSpace(from),
+          to: accountForSpace(to),
+          amount: approval.amount,
+        }),
+      );
+
+      await this.sql`
+          UPDATE bank.business_approvals
+             SET ledger_tx_id = ${settled.id}
+           WHERE id = ${approval.id}::uuid
+        `;
+      return { transferId: approval.id, ledgerTxId: settled.id };
     });
   }
 
@@ -263,27 +318,76 @@ export class BusinessService {
       throw new BankError('Maker cannot reject their own transfer as checker', 'bank.business_self_approve');
     }
     await this.assertRole(approval.accountId, input.checkerUserId, ['admin', 'checker']);
-    await this.sql`
-      UPDATE bank.business_approvals
-         SET status = 'rejected',
-             checker_user_id = ${input.checkerUserId},
-             rejection_code = 'bank.business_rejected',
-             decided_at = now()
-       WHERE id = ${approval.id}::uuid AND status = 'pending'
-    `;
+    await this.claimAndRelease(approval, {
+      actorUserId: input.checkerUserId,
+      status: 'rejected',
+      rejectionCode: 'bank.business_rejected',
+    });
+  }
+
+  /**
+   * Maker cancels their pending proposal, or an admin cancels any pending one.
+   * Hold returns to the debit pot.
+   */
+  async cancel(input: { approvalId: string; actorUserId: string }): Promise<void> {
+    const approval = await this.approval(input.approvalId);
+    if (approval.status !== 'pending') {
+      throw new BankError(`Approval ${approval.id} is ${approval.status}`, 'bank.business_approval_inactive');
+    }
+    if (approval.makerUserId === input.actorUserId) {
+      await this.assertMember(approval.accountId, input.actorUserId);
+    } else {
+      await this.assertRole(approval.accountId, input.actorUserId, ['admin']);
+    }
+    await this.claimAndRelease(approval, {
+      actorUserId: input.actorUserId,
+      status: 'cancelled',
+      rejectionCode: 'bank.business_cancelled',
+    });
   }
 
   async listPending(accountId: string, actorUserId: string): Promise<BusinessApproval[]> {
     await this.assertMember(accountId, actorUserId);
     const rows = await this.sql<ApprovalRow[]>`
       SELECT id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
-             asset_id, amount, status, transfer_id, ledger_tx_id, rejection_code,
+             asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id, rejection_code,
              created_at, decided_at
         FROM bank.business_approvals
        WHERE account_id = ${accountId} AND status = 'pending'
        ORDER BY created_at ASC
     `;
     return rows.map(toApproval);
+  }
+
+  /**
+   * CAS claim the pending row, then release the purposed hold.
+   * Claim-first so approve cannot settle after reject has already won the row.
+   */
+  private async claimAndRelease(
+    approval: BusinessApproval,
+    opts: { actorUserId: string; status: 'rejected' | 'cancelled'; rejectionCode: string },
+  ): Promise<void> {
+    const claimed = await this.sql<Array<{ id: string }>>`
+      UPDATE bank.business_approvals
+         SET status = ${opts.status},
+             checker_user_id = ${opts.actorUserId},
+             rejection_code = ${opts.rejectionCode},
+             decided_at = now()
+       WHERE id = ${approval.id}::uuid AND status = 'pending'
+      RETURNING id
+    `;
+    if (!claimed[0]) {
+      throw new BankError(`Approval ${approval.id} is no longer pending`, 'bank.business_approval_inactive');
+    }
+
+    const from = await this.spaces.get(approval.fromSpaceId);
+    await this.ledger.post(
+      recipes.businessApprovalRelease({
+        approvalId: approval.id,
+        from: accountForSpace(from),
+        amount: approval.amount,
+      }),
+    );
   }
 
   private async account(id: string): Promise<BusinessAccount> {
@@ -298,7 +402,7 @@ export class BusinessService {
   private async approval(id: string): Promise<BusinessApproval> {
     const rows = await this.sql<ApprovalRow[]>`
       SELECT id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
-             asset_id, amount, status, transfer_id, ledger_tx_id, rejection_code,
+             asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id, rejection_code,
              created_at, decided_at
         FROM bank.business_approvals WHERE id = ${id}
     `;

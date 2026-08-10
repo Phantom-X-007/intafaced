@@ -99,7 +99,7 @@ export function createBankServices(sql: Sql, ledger: LedgerClient, history: Ledg
   const ramps = new RampService(sql, ledger, options.ramps ?? {});
   // No convert port = DCA refuses rates-unset; threshold sweeps still work.
   const autoInvest = new AutoInvestService(sql, ledger, earn, spaces, options.autoInvest ?? {});
-  const business = new BusinessService(sql, spaces, transfers);
+  const business = new BusinessService(sql, ledger, spaces, transfers);
 
   return { spaces, transfers, earn, analytics, loans, cards, ramps, autoInvest, business };
 }

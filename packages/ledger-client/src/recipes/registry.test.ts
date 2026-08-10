@@ -20,7 +20,7 @@ import { recipes, type RecipeName } from './index.js';
 describe('recipes registry', () => {
   it('exports every named recipe and nothing unnamed', () => {
     const names = Object.keys(recipes) as RecipeName[];
-    expect(names.length).toBe(50);
+    expect(names.length).toBe(53);
     expect(names).toContain('marketPurchase');
     // Every key is a callable pure function.
     for (const name of names) {

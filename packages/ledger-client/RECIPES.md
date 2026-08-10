@@ -54,6 +54,9 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | `earnWithdraw`                 | `bank`     | `bank.earn.withdrawn`                                            |
 | `earnPoolFund`                 | `bank`     | `bank.earn.pool.funded`                                          |
 | `earnInterest`                 | `bank`     | `bank.earn.interest`                                             |
+| `businessApprovalHold`         | `bank`     | `bank.business.approval.held`                                    |
+| `businessApprovalRelease`      | `bank`     | `bank.business.approval.released`                                |
+| `businessApprovalSettle`       | `bank`     | `bank.business.approval.settled`                                 |
 | `subAccountTransfer`           | `identity` | `identity.sub_account.transfer`                                  |
 | `marketPurchase`               | `market`   | `market.purchase`                                                |
 
@@ -62,7 +65,7 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | File                          | Owns                                                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------------------- |
 | `src/recipes/index.ts`        | core trade / pay / token / futures / escrow / stake + registry                              |
-| `src/recipes/bank.ts`         | transfer + earn                                                                             |
+| `src/recipes/bank.ts`         | transfer + earn + business dual-control holds                                               |
 | `src/recipes/loans.ts`        | collateral / draw / repay / liquidate / bad debt / reserve                                  |
 | `src/recipes/chargeback.ts`   | chargeback open / shortfall / won / recovered (owner sign-off banner; not wired to svc-pay) |
 | `src/recipes/sub-accounts.ts` | only legal cross-partition transfer                                                         |

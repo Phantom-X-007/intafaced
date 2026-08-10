@@ -1040,6 +1040,9 @@ export const businessApprovals = bank.table(
     amount: amount('amount').notNull(),
     status: businessApprovalStatusEnum('status').notNull().default('pending'),
     transferId: text('transfer_id'),
+    /** Purposed hold post while pending dual control. */
+    holdLedgerTxId: text('hold_ledger_tx_id'),
+    /** Settle (approve) post — null while pending or after release-only paths. */
     ledgerTxId: text('ledger_tx_id'),
     rejectionCode: text('rejection_code'),
     createdAt: createdAt(),

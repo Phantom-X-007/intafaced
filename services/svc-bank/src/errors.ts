@@ -239,7 +239,8 @@ export type BankErrorCode =
   | 'bank.business_approval_not_found'
   | 'bank.business_approval_inactive'
   | 'bank.business_self_approve'
-  | 'bank.business_rejected';
+  | 'bank.business_rejected'
+  | 'bank.business_cancelled';
 
 export class BankError extends Error {
   constructor(
