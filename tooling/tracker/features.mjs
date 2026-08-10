@@ -1391,8 +1391,7 @@ export const FEATURES = [
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', {
     module: 'notify',
     phase: '5',
-    status: 'wip',
-    owner: 'w13-l12-notify',
+    status: 'ready',
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
     note:
@@ -1404,7 +1403,7 @@ export const FEATURES = [
       'procedures carry evaluation {markSource,canFire,code} so the gap is disclosed in code (Class C). Also mount.reachable.test.ts — the tRPC mount over ' +
       'a real socket; nothing in the repo had ever exercised fastifyTRPCPlugin, and createCaller stays green on a mount that was never registered. ' +
       '**Wave 10 #1586**: trade public ticker MarkSource when TRADE_URL set; unset stays dark. ' +
-      '**Wave 13 (L12)**: compose sets TRADE_URL for svc-notify (same surface bank uses) so the stack is not dark-by-default while trade is up; ' +
+      '**Wave 13 #1638 (L12)**: compose sets TRADE_URL for svc-notify (same surface bank uses) so the stack is not dark-by-default while trade is up; ' +
       'settle ownership by attempt so a late gateway after reclaim cannot stamp accepted over attempt N+1; claim never abandons under a live lease. ' +
       '**MUST NOT flip to done:** out-of-app channels refuse channel.not_configured until Class X gateway credentials (owner). In-app DELIVERS. ' +
       'email/push/sms transports are wired and proven against a real HTTP server (gateway-wire.test.ts counts at the server) but cannot deliver without ' +
