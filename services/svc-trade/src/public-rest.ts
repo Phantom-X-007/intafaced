@@ -419,6 +419,25 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
 export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): void {
   const now = deps.now ?? (() => Date.now());
 
+  /**
+   * Bot-ready capability inventory (trade.ccxt-api Done bar deepen).
+   * Same rows as `ccxt-capability-matrix.ts` — claim ≡ wire, discoverable
+   * without reading source or probing 501s. Never invents mids/rates.
+   */
+  app.get('/api/v1/capabilities', async (_req, reply) => {
+    const { CCXT_CAPABILITY_MATRIX, CCXT_REFUSE_ARMS } = await import('./ccxt-capability-matrix.js');
+    return reply.code(200).send({
+      asOfMs: now(),
+      routes: CCXT_CAPABILITY_MATRIX,
+      refuseArms: CCXT_REFUSE_ARMS,
+      notes: {
+        paperListPolicy: 'paper markets stay listed with paper:true — exclude-from-list is Nitro product (N3)',
+        rateLimit: 'Published RATE_LIMITS in exchange-contract may differ from edge default 300/min — edge enforces; N4 residual',
+        neverInvent: 'mids, funding rates, candles, leverage live re-set',
+      },
+    });
+  });
+
   app.get('/api/v1/markets', async (_req, reply) => {
     const markets = await deps.markets();
     const ts = now();

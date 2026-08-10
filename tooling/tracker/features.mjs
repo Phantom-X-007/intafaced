@@ -355,9 +355,10 @@ export const FEATURES = [
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/copy'],
     note:
-      'W10 L02 product mount 2026-08-09: tRPC copy.follow/killFeeShare/unfollow/settleFeeShare/deskStatus + TRADE_COPY_* env (blank refuse) + drizzle 0021 copy_mirrored_fills. ' +
+      'W13 L10 2026-08-10: settle fillId claim (no re-bump period on redelivery) + drizzle 0022 copy_settled_fee_shares; listMyFollows + planMirror mounted. ' +
+      'W10 L02 product mount: follow/killFeeShare/unfollow/settleFeeShare/deskStatus + TRADE_COPY_* env (blank refuse) + 0021 mirrored_fills. ' +
       'Stage #1009 + money seals #1191/#1199/#1386. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      'Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: owner rates (Nitro §8); session-key caps; auto-mirror into spot engine — not mount.',
+      'Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: owner rates (Nitro §8); session-key caps (protocol); auto-mirror place into spot — plan only.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
@@ -392,7 +393,7 @@ export const FEATURES = [
       'services/svc-trade/src/private-rest.ts',
       'services/svc-trade/src/ccxt-capability-matrix.ts',
     ],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). Residual after matrix: public paper-list policy (N3), rate-limit published vs edge (N4), mm seed ops.',
+    note: 'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). W13 L10: public GET /api/v1/capabilities serves matrix+refuse arms. Residual: paper-list exclude policy (N3 Nitro), rate-limit published vs edge 300/min (N4), mm seed ops.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',

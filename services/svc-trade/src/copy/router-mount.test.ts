@@ -161,4 +161,57 @@ describe('trade.copy product mount', () => {
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
+
+  it('listMyFollows returns only the caller’s follows', async () => {
+    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
+    const caller = router.createCaller(signed());
+    expect(await caller.copy.listMyFollows()).toEqual([]);
+
+    const follow = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const listed = await caller.copy.listMyFollows();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.followId).toBe(follow.followId);
+  });
+
+  it('planMirror plans within envelope and redelivers the same fillId', async () => {
+    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
+    const caller = router.createCaller(signed());
+    const follow = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+
+    const plan = await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'leader-fill-1',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.1',
+      notional: '100',
+    });
+    expect(plan.reason).toBe('within_envelope');
+    expect(plan.fillId).toBe('leader-fill-1');
+
+    const again = await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'leader-fill-1',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.1',
+      notional: '100',
+    });
+    expect(again.fillId).toBe(plan.fillId);
+    expect(again.nextExposure).toBe(plan.nextExposure);
+  });
 });

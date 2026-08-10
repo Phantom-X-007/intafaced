@@ -69,6 +69,15 @@ export class CopyService {
   }
 
   /**
+   * List the caller's own follows (product desk). Never invents other users'
+   * envelopes — store is filtered by followerId after the full list read.
+   */
+  async listMyFollows(principal: Principal) {
+    const all = await this.store.listFollows();
+    return all.filter((f) => f.followerId === principal.userId).map(presentCopyFollow);
+  }
+
+  /**
    * Follow a leader under a scoped envelope. Jurisdiction law must be published.
    * Does not move value — follower funds stay in follower account.
    */
@@ -261,6 +270,8 @@ export class CopyService {
    * Ledger keys stay on fillId. Period boundary (D11) is not invented here —
    * pair-lifetime counters remain as today.
    * Same-fill redelivery on the mirror path is closed via claimMirrorFill.
+   * Same-fill redelivery on **this** path is closed via runFeeShareSettleOnce —
+   * reserveEarnings must not fire twice for one fillId (period poison).
    */
   async settleFeeShare(
     principal: Principal,
@@ -282,63 +293,105 @@ export class CopyService {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
 
-    const key = `${follow.leaderId}:${follow.followerId}`;
-    const period = await this.store.getPeriodStats(key);
-    const attribution = attributeCopyFeeShare({
-      law: this.feeShareLaw,
-      fillId: input.fillId,
-      leaderId: follow.leaderId,
-      followerId: follow.followerId,
-      assetId: input.assetId.trim(),
-      followerFillNotional: parseAmount(input.followerFillNotional),
-      protocolFeeBps: input.protocolFeeBps,
-      ...(input.fillFeeAmount !== undefined ? { fillFeeAmount: parseAmount(input.fillFeeAmount) } : {}),
-      roundTripsThisPeriod: period.roundTrips,
-      earningsPaidThisPeriod: period.earningsPaid,
-      feeShareKilled: follow.feeShareKilled,
+    const once = await this.store.runFeeShareSettleOnce(follow.followId, input.fillId, async () => {
+      const key = `${follow.leaderId}:${follow.followerId}`;
+      const period = await this.store.getPeriodStats(key);
+      const attribution = attributeCopyFeeShare({
+        law: this.feeShareLaw,
+        fillId: input.fillId,
+        leaderId: follow.leaderId,
+        followerId: follow.followerId,
+        assetId: input.assetId.trim(),
+        followerFillNotional: parseAmount(input.followerFillNotional),
+        protocolFeeBps: input.protocolFeeBps,
+        ...(input.fillFeeAmount !== undefined ? { fillFeeAmount: parseAmount(input.fillFeeAmount) } : {}),
+        roundTripsThisPeriod: period.roundTrips,
+        earningsPaidThisPeriod: period.earningsPaid,
+        feeShareKilled: follow.feeShareKilled,
+      });
+
+      // Cap is owner-published law only — never invent. requirePublished ran inside attribute.
+      const law = this.feeShareLaw;
+      if (law.published !== true) {
+        // attributeCopyFeeShare already throws on blank; this is defensive for types.
+        throw new CopyError(
+          'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+          'trade.copy_fee_share_blank',
+        );
+      }
+      const cap = parseAmount(law.earningsCapPerFollower);
+
+      // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
+      // reserveEarnings always +1 round-trip so decay still advances on skips.
+      const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
+      const reserved = await this.store.reserveEarnings(key, intend, cap);
+
+      if (reserved.reserved <= 0n) {
+        const skipped =
+          attribution.skippedReason !== null
+            ? attribution
+            : {
+                ...attribution,
+                cappedLeaderShare: 0n,
+                skippedReason: 'cap_reached' as const,
+              };
+        return {
+          fillId: skipped.fillId,
+          followId: follow.followId,
+          leaderId: skipped.leaderId,
+          followerId: skipped.followerId,
+          assetId: skipped.assetId,
+          protocolFee: skipped.protocolFee,
+          appliedShareBps: skipped.appliedShareBps,
+          grossLeaderShare: skipped.grossLeaderShare,
+          cappedLeaderShare: skipped.cappedLeaderShare,
+          skippedReason: skipped.skippedReason,
+          settled: false as const,
+        };
+      }
+
+      const finalAttribution = {
+        ...attribution,
+        cappedLeaderShare: reserved.reserved,
+        skippedReason: null as null,
+      };
+      const plan = planCopyFeeShareSettle(finalAttribution);
+      try {
+        await postCopyFeeShareSettle(this.ledger, plan);
+      } catch (err) {
+        await this.store.releaseEarnings(key, reserved.reserved);
+        throw err;
+      }
+      return {
+        fillId: finalAttribution.fillId,
+        followId: follow.followId,
+        leaderId: finalAttribution.leaderId,
+        followerId: finalAttribution.followerId,
+        assetId: finalAttribution.assetId,
+        protocolFee: finalAttribution.protocolFee,
+        appliedShareBps: finalAttribution.appliedShareBps,
+        grossLeaderShare: finalAttribution.grossLeaderShare,
+        cappedLeaderShare: finalAttribution.cappedLeaderShare,
+        skippedReason: null as null,
+        settled: true as const,
+      };
     });
 
-    // Cap is owner-published law only — never invent. requirePublished ran inside attribute.
-    const law = this.feeShareLaw;
-    if (law.published !== true) {
-      // attributeCopyFeeShare already throws on blank; this is defensive for types.
-      throw new CopyError(
-        'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
-        'trade.copy_fee_share_blank',
-      );
-    }
-    const cap = parseAmount(law.earningsCapPerFollower);
-
-    // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
-    // reserveEarnings always +1 round-trip so decay still advances on skips.
-    const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
-    const reserved = await this.store.reserveEarnings(key, intend, cap);
-
-    if (reserved.reserved <= 0n) {
-      const skipped =
-        attribution.skippedReason !== null
-          ? attribution
-          : {
-              ...attribution,
-              cappedLeaderShare: 0n,
-              skippedReason: 'cap_reached' as const,
-            };
-      return { ...presentFeeShareAttribution(skipped), settled: false as const };
-    }
-
-    const finalAttribution = {
-      ...attribution,
-      cappedLeaderShare: reserved.reserved,
-      skippedReason: null as null,
+    const record = once.record;
+    return {
+      ...presentFeeShareAttribution({
+        fillId: record.fillId,
+        leaderId: record.leaderId,
+        followerId: record.followerId,
+        assetId: record.assetId,
+        protocolFee: record.protocolFee,
+        appliedShareBps: record.appliedShareBps,
+        grossLeaderShare: record.grossLeaderShare,
+        cappedLeaderShare: record.cappedLeaderShare,
+        skippedReason: record.skippedReason,
+      }),
+      settled: record.settled,
     };
-    const plan = planCopyFeeShareSettle(finalAttribution);
-    try {
-      await postCopyFeeShareSettle(this.ledger, plan);
-    } catch (err) {
-      await this.store.releaseEarnings(key, reserved.reserved);
-      throw err;
-    }
-    return { ...presentFeeShareAttribution(finalAttribution), settled: true as const };
   }
 
   /** Forbidden surfaces — explicit refuse for honesty tests. */
