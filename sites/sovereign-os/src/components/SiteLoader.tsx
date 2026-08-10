@@ -1,19 +1,22 @@
-import { useEffect, useState } from 'react';
+import { BrandMark } from '@/components/BrandMark';
 import { detectWebGL } from '@/components/hero/webglDetect';
+import { useEffect, useRef, useState } from 'react';
 
 type Props = {
   children: React.ReactNode;
 };
 
 /**
- * Premium boot loader — brand mono + lime progress.
- * Preloads Three wave-grid chunk while visible so hero isn't cold-start lag.
- * Pattern family: Magic UI Terminal / progress loaders (brand-skinned).
+ * Brand boot overlay. Content stays mounted + fully visible underneath.
+ * Only the overlay fades out — never both layers at opacity 0 (black flash bug).
+ * Preloads Three while overlay is up.
  */
 export function SiteLoader({ children }: Props) {
-  const [phase, setPhase] = useState<'boot' | 'exit' | 'done'>('boot');
+  const [overlay, setOverlay] = useState(true);
+  const [fading, setFading] = useState(false);
   const [pct, setPct] = useState(0);
   const [line, setLine] = useState('CUTTING THE KEY…');
+  const finished = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,51 +27,40 @@ export function SiteLoader({ children }: Props) {
       setLine(lines[li]);
     }, 480);
 
-    // Smooth progress while we preload 3D
     let p = 0;
     const tick = window.setInterval(() => {
-      p = Math.min(p + (p < 70 ? 4 : 1.2), 92);
+      p = Math.min(p + (p < 70 ? 5 : 1.5), 90);
       setPct(Math.floor(p));
-    }, 40);
+    }, 45);
 
-    const preload = async () => {
-      try {
-        if (detectWebGL() && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          // Pull wave engine + three into cache before reveal
-          await import('@/components/hero/waveGridEngine');
-        }
-      } catch {
-        /* fallback path still fine */
-      }
-      if (cancelled) return;
+    const finish = () => {
+      if (cancelled || finished.current) return;
+      finished.current = true;
       window.clearInterval(tick);
+      window.clearInterval(lineTimer);
       setPct(100);
       setLine('SEE YOU IN THE LOBBY');
       window.setTimeout(() => {
         if (cancelled) return;
-        setPhase('exit');
+        setFading(true);
         window.setTimeout(() => {
-          if (!cancelled) setPhase('done');
-        }, 520);
-      }, 220);
+          if (!cancelled) setOverlay(false);
+        }, 450);
+      }, 200);
     };
 
-    // Minimum boot time so it feels intentional, not a flash
-    const minWait = new Promise((r) => window.setTimeout(r, 900));
-    void Promise.all([preload(), minWait]).then(() => {
-      if (!cancelled) {
-        window.clearInterval(tick);
-        setPct(100);
-        setLine('SEE YOU IN THE LOBBY');
-        window.setTimeout(() => {
-          if (cancelled) return;
-          setPhase('exit');
-          window.setTimeout(() => {
-            if (!cancelled) setPhase('done');
-          }, 520);
-        }, 180);
+    const preload = async () => {
+      try {
+        if (detectWebGL() && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          await import('@/components/hero/waveGridEngine');
+        }
+      } catch {
+        /* ok */
       }
-    });
+    };
+
+    const minWait = new Promise((r) => window.setTimeout(r, 750));
+    void Promise.all([preload(), minWait]).then(finish);
 
     return () => {
       cancelled = true;
@@ -78,18 +70,20 @@ export function SiteLoader({ children }: Props) {
   }, []);
 
   return (
-    <>
-      {phase !== 'done' ? (
+    <div className="relative min-h-dvh bg-void">
+      <div className="relative z-0 min-h-dvh">{children}</div>
+
+      {overlay ? (
         <div
           className={[
             'fixed inset-0 z-[100] flex flex-col items-center justify-center bg-void',
-            'transition-opacity duration-500 ease-out',
-            phase === 'exit' ? 'opacity-0 pointer-events-none' : 'opacity-100',
+            'transition-opacity duration-[450ms] ease-out',
+            fading ? 'pointer-events-none opacity-0' : 'opacity-100',
           ].join(' ')}
-          aria-busy={phase === 'boot'}
+          aria-busy={!fading}
           aria-live="polite"
         >
-          <div className="absolute inset-0 opacity-30">
+          <div className="absolute inset-0 opacity-30" aria-hidden>
             <div
               className="absolute inset-0"
               style={{
@@ -101,9 +95,7 @@ export function SiteLoader({ children }: Props) {
             />
           </div>
           <div className="relative z-10 w-[min(360px,86vw)] text-center">
-            <p className="font-extrabold tracking-tight text-ink">
-              INTA<span className="text-lime">FACED</span>
-            </p>
+            <BrandMark className="justify-center" />
             <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.2em] text-lime">{line}</p>
             <div className="mt-5 h-[2px] w-full overflow-hidden bg-line">
               <div
@@ -115,7 +107,6 @@ export function SiteLoader({ children }: Props) {
           </div>
         </div>
       ) : null}
-      <div className={phase === 'done' ? 'opacity-100 transition-opacity duration-500' : 'opacity-0'}>{children}</div>
-    </>
+    </div>
   );
 }

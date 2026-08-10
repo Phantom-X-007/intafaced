@@ -8,6 +8,7 @@ import { Marquee } from '@/components/magicui/marquee';
 import { TradeChart } from '@/components/trade-chart';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BrandMark } from '@/components/BrandMark';
 import { HeroSection } from '@/components/hero/HeroSection';
 import { SiteLoader } from '@/components/SiteLoader';
 import { List, X } from '@phosphor-icons/react';
@@ -61,8 +62,8 @@ export default function App() {
         </div>
 
         <header className="sticky top-0 z-40 flex h-14 w-full items-center gap-4 border-b border-line bg-void/85 px-5 backdrop-blur-md sm:px-8 lg:px-12">
-          <a href="#top" className="font-extrabold tracking-tight">
-            INTA<span className="text-lime">FACED</span>
+          <a href="#top" className="inline-flex items-center no-underline">
+            <BrandMark compact />
           </a>
           <nav className="ml-4 hidden gap-4 font-mono text-[11px] uppercase tracking-[0.08em] text-mute md:flex">
             <a href="#planes" className="hover:text-lime">
@@ -465,10 +466,10 @@ export default function App() {
           </div>
         </main>
 
-        <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-line px-4 py-8 text-sm text-mute md:px-6">
+        <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-line px-5 py-8 text-sm text-mute sm:px-8 lg:px-12">
           <div>
-            <a href="#top" className="font-extrabold text-ink">
-              INTA<span className="text-lime">FACED</span>
+            <a href="#top" className="inline-flex no-underline">
+              <BrandMark compact />
             </a>
             <p className="mt-1">Twelve rooms. Two planes. One economy.</p>
           </div>
