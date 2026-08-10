@@ -10,6 +10,7 @@ import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-own
 import type { PermissionArea } from './submerchants.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
 import { evaluateFraud } from './fraud/evaluate.js';
+import { PAY_PUBLIC_API_BASE } from './plugins/reference-client.js';
 
 /**
  * svc-pay's internal tRPC surface (§2 — cross-service calls go through
@@ -802,6 +803,16 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             skippedDisabled: [...decision.skippedDisabled],
           };
         }),
+    }),
+
+    /**
+     * pay.plugins — reference path surface (TS client, not PHP CMS trees).
+     * Exposes the public base path so integrators and contract tests share one symbol.
+     */
+    plugins: router({
+      publicBase: publicProcedure.output(z.object({ base: z.string() })).query(() => ({
+        base: PAY_PUBLIC_API_BASE,
+      })),
     }),
 
     /**

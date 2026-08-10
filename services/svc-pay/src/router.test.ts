@@ -750,6 +750,11 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     expect(d.reasons[0]!.ruleId).toBe('blocklist_ip');
   });
 
+  it('plugins.publicBase exposes the public API path for integrators', async () => {
+    const api = await caller([]);
+    await expect(api.plugins.publicBase()).resolves.toEqual({ base: '/api/pay/v1' });
+  });
+
   it('refuses with FORBIDDEN rather than NOT_FOUND, consistently, on all three', async () => {
     stub.ownedBy(ANOTHER_USER);
     const api = await caller(['pay:read']);
