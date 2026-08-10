@@ -635,6 +635,10 @@ services:
       SERVICE_NAME: svc-notify
       HTTP_PORT: '4015'
       DATABASE_URL: postgres://svc_notify:svc_notify@postgres:5432/intafaced
+      # Same public ticker surface svc-bank already uses for loan marks (#1586).
+      # Without this, price watches stay dark forever in the compose stack even
+      # though trade is up and the live MarkSource factory is wired in code.
+      TRADE_URL: http://svc-trade:4004
       NOTIFY_FANOUT_ENABLED: ${NOTIFY_FANOUT_ENABLED:-true}
       NOTIFY_OUT_OF_APP_ENABLED: ${NOTIFY_OUT_OF_APP_ENABLED:-true}
       NOTIFY_EMAIL_GATEWAY_URL: ${NOTIFY_EMAIL_GATEWAY_URL:-}
@@ -652,6 +656,10 @@ services:
     healthcheck: *healthcheck
     depends_on:
       <<: [*needs-schema, *needs-bus]
+      # Mark feed is optional at the env layer (unset stays dark) but compose
+      # sets TRADE_URL, so trade must be answerable for watches to fire.
+      svc-trade:
+        condition: service_healthy
 
   # Support desk tickets + KB (ops.support). Durable Postgres store; no ledger.
   svc-support:

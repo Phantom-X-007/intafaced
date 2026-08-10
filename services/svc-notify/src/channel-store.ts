@@ -185,6 +185,12 @@ export type ClaimResult =
 
 export interface SettleInput {
   id: string;
+  /**
+   * The claim attempt this settle belongs to. A late settle from a reclaimed
+   * attempt must not overwrite the live attempt's row (multi-replica free SMS
+   * / status corruption when lease expired mid-gateway).
+   */
+  attempt: number;
   status: Exclude<DeliveryStatus, 'pending'>;
   refusalCode?: RefusalCode | null;
   detail?: string | null;
@@ -327,17 +333,18 @@ export class MemoryDeliveryStore implements DeliveryStore {
     if (existing.status === 'refused' || existing.status === 'abandoned') {
       return { claimed: false, reason: 'terminal', record: existing };
     }
+
+    // Active lease first — never abandon or reclaim under a live holder.
+    if (existing.status === 'pending' && existing.leaseUntil != null && existing.leaseUntil.getTime() > now.getTime()) {
+      return { claimed: false, reason: 'in_flight', record: existing };
+    }
+
     if (existing.attempts >= maxAttempts) {
       existing.status = 'abandoned';
       existing.refusalCode = 'channel.attempts_exhausted';
       existing.leaseUntil = null;
       existing.updatedAt = now;
       return { claimed: false, reason: 'exhausted', record: existing };
-    }
-
-    // Active lease on a still-pending row: another worker owns the send.
-    if (existing.status === 'pending' && existing.leaseUntil != null && existing.leaseUntil.getTime() > now.getTime()) {
-      return { claimed: false, reason: 'in_flight', record: existing };
     }
 
     // Reclaim: failed (retryable settle) or pending with expired / null lease.
@@ -351,6 +358,10 @@ export class MemoryDeliveryStore implements DeliveryStore {
   async settle(input: SettleInput): Promise<void> {
     const record = this.byId.get(input.id);
     if (!record) return;
+    // Ownership: only the claim attempt that owns the row may settle it. A late
+    // gateway response after reclaim must not stamp accepted over attempt N+1.
+    if (record.attempts !== input.attempt) return;
+    if (record.status !== 'pending') return;
     const now = this.now();
     record.status = input.status;
     record.refusalCode = input.refusalCode ?? null;
@@ -595,6 +606,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
     // The upsert was blocked. Say precisely why, and retire a row that has run
     // out of attempts rather than leaving it 'failed' forever, which would read
     // as "still being retried" when nothing is retrying it.
+    // Exhausted only when nobody owns a live lease — never abandon under a holder.
     const retired = await this.sql<DeliveryPgRow[]>`
       UPDATE notify.deliveries
          SET status = 'abandoned',
@@ -603,8 +615,14 @@ export class PostgresDeliveryStore implements DeliveryStore {
              updated_at = now()
        WHERE notification_id = ${notificationId}
          AND channel = ${channel}
-         AND status IN ('pending', 'failed')
          AND attempts >= ${maxAttempts}
+         AND (
+           status = 'failed'
+           OR (
+             status = 'pending'
+             AND (lease_until IS NULL OR lease_until <= now())
+           )
+         )
       RETURNING id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at
     `;
     if (retired.length > 0) return { claimed: false, reason: 'exhausted', record: fromDeliveryPg(retired[0]!) };
@@ -625,6 +643,7 @@ export class PostgresDeliveryStore implements DeliveryStore {
   }
 
   async settle(input: SettleInput): Promise<void> {
+    // Ownership: attempt number must still match. Late settle after reclaim is a no-op.
     await this.sql`
       UPDATE notify.deliveries
          SET status = ${input.status},
@@ -636,6 +655,8 @@ export class PostgresDeliveryStore implements DeliveryStore {
              lease_until = NULL,
              updated_at = now()
        WHERE id = ${input.id}
+         AND status = 'pending'
+         AND attempts = ${input.attempt}
     `;
   }
 
