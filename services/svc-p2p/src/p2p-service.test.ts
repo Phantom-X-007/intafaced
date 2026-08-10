@@ -176,8 +176,10 @@ if (!available) {
       fields: [{ key: 'account_reference', label: 'Account reference', required: true }],
     });
 
+    // Every fiat a sellOffer test may list — sell create requires a live destination.
+    const fiats = ['USD', 'EUR', 'JPY', 'KWD', 'NGN', 'BRL', 'VND'];
     for (const ownerId of [MAKER, TAKER, OTHER, MODERATOR]) {
-      for (const fiatCurrency of ['USD', 'EUR']) {
+      for (const fiatCurrency of fiats) {
         await instruments.createInstrument({
           ownerId,
           methodId: 'sepa',

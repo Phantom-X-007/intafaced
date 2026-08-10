@@ -894,7 +894,10 @@ export class P2pService {
     // Read the offer once, unlocked, purely to decide whether a reference price
     // is needed. Fetching a mark price is a network call; holding the offer's
     // row lock across it would serialise every taker behind the slowest feed.
-    const preview = await this.getOffer(input.offerId);
+    // Raw load: board projection must not make an unboardable sell look like a
+    // missing offer mid-take. Take still refuses with the uniform message when
+    // the destination is gone; get/list stay honest for strangers.
+    const preview = await this.loadOfferRaw(input.offerId);
     const referencePrice =
       preview.priceType === 'float' ? ((await this.referencePrices?.price(preview.asset, preview.fiatCurrency)) ?? null) : null;
 
