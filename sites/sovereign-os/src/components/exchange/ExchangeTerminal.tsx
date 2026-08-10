@@ -18,12 +18,13 @@ export function ExchangeTerminal() {
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Exchange · the terminal</p>
           <h2 className="mt-2 max-w-[18ch] text-3xl font-extrabold tracking-tight md:text-4xl">
-            Spot. Perps. Options.
+            Full terminal
             <br />
-            One pro surface.
+            not a toy chart
           </h2>
-          <p className="mt-3 max-w-[42ch] text-sm text-mute">
-            The chart is the desk. Drawings, indicators, multi-layout — for people who actually trade. Execution stays on our rails.
+          <p className="mt-3 max-w-[44ch] text-sm text-mute">
+            Markets list, candlesticks, order book, and ticket on one surface. Drawings and multi-layout charting for people who trade —
+            execution stays on our rails.
           </p>
         </div>
         <p className="font-mono text-[10px] uppercase tracking-wider text-mute">Demo data only · licensed pro charting path in progress</p>

@@ -134,23 +134,19 @@ export default function App() {
             <section className="mx-auto grid max-w-6xl xl:max-w-7xl gap-8 px-4 py-16 md:grid-cols-2 md:px-6 md:py-20">
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Manifesto</p>
-                <h2 className="mt-2 max-w-[14ch] text-3xl font-extrabold tracking-tight md:text-4xl">
-                  An exchange first.
-                  <br />
-                  An OS under it.
-                </h2>
+                <h2 className="mt-2 max-w-[16ch] text-3xl font-extrabold tracking-tight md:text-4xl">The desk is the product</h2>
               </div>
               <div className="space-y-4 text-mute">
                 <p>
-                  Most platforms bury the desk behind banking copy. We put the book, the chart, and the ticket up front — for people who
-                  trade at 3am.
+                  Too many platforms hide trading behind banking pages and roadmap decks. We put the book, the chart, and the ticket where
+                  you can see them — for people who actually size trades at 3am.
                 </p>
                 <p>
-                  <strong className="text-ink">INTAFACED is a full exchange layer</strong> — spot, perps, options path, OTC — then broker,
-                  bank, payments, launchpad, predict, academy under one key. Plus our own Layer 1 path underneath.
+                  <strong className="text-ink">INTAFACED is an exchange with a full house behind it</strong> — spot, perps, options path,
+                  OTC first, then protocol, bank, payments, launch, academy on the same key. Layer 1 is on the map, not dressed as live.
                 </p>
                 <p className="border-l-2 border-lime pl-3 font-semibold text-ink">
-                  Built by the streets, not by suits. The terminal is the face. The house is the depth.
+                  Built by the streets, not by suits. Terminal up front. Depth underneath.
                 </p>
               </div>
             </section>

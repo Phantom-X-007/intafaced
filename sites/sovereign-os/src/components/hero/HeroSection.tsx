@@ -1,4 +1,6 @@
 import { SplitHeading } from '@/components/bits/split-heading';
+import { HeroDesk } from '@/components/exchange/HeroDesk';
+import { MarketPills } from '@/components/exchange/MarketPills';
 import { NumberTicker } from '@/components/magicui/number-ticker';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { HeroFallback } from './HeroFallback';
@@ -20,12 +22,11 @@ function useReducedMotion() {
   return reduce;
 }
 
-/** Exchange-first side rails — Trade leads */
-const SIDE_CHIPS = ['SPOT', 'PERPS', 'OPTIONS', 'OTC', 'TRADE', 'CHARTS', 'PROTOCOL', 'P2P', 'BANK', 'PAY', 'TOKEN', 'AGENTS'];
+const SIDE_CHIPS = ['SPOT', 'PERPS', 'OPTIONS', 'OTC', 'DEPTH', 'CHARTS', 'MARGIN', 'FUNDING', 'PROTOCOL', 'P2P', 'TOKEN', 'AGENTS'];
 
 /**
- * Full-bleed hero — exchange / pro terminal first (TV acceptance).
- * OS architecture still present under the claim.
+ * Exchange-hero: copy (audited) + live-looking desk chrome + restored density.
+ * H1 has no trailing periods. Exchange first; OS secondary CTA only.
  */
 export function HeroSection() {
   const reduce = useReducedMotion();
@@ -37,6 +38,7 @@ export function HeroSection() {
 
   return (
     <section className="relative min-h-[100dvh] w-full overflow-hidden border-b border-line">
+      {/* Atmosphere */}
       <div className="absolute inset-0 z-0">
         {want3d ? (
           <Suspense fallback={<HeroFallback />}>
@@ -50,48 +52,50 @@ export function HeroSection() {
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-void/70 via-void/25 to-void/80" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-void/75 via-void/30 to-void/90" aria-hidden />
       <div
-        className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_80%_70%_at_30%_45%,rgba(5,8,6,0.55),transparent_65%)]"
+        className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_70%_60%_at_25%_40%,rgba(5,8,6,0.5),transparent_60%)]"
         aria-hidden
       />
 
+      {/* Side rails */}
       <aside
-        className="pointer-events-none absolute bottom-[12%] left-3 top-[18%] z-[2] hidden w-14 flex-col justify-between xl:flex 2xl:left-6 2xl:w-16"
+        className="pointer-events-none absolute bottom-[12%] left-3 top-[18%] z-[2] hidden w-12 flex-col justify-between 2xl:flex 2xl:left-5"
         aria-hidden
       >
         <div className="flex flex-1 flex-col justify-center gap-2 overflow-hidden">
           {SIDE_CHIPS.slice(0, 6).map((c) => (
             <span
               key={c}
-              className="font-mono text-[9px] tracking-[0.18em] text-lime/35"
+              className="font-mono text-[9px] tracking-[0.18em] text-lime/30"
               style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
             >
               {c}
             </span>
           ))}
         </div>
-        <div className="h-24 w-px bg-gradient-to-b from-transparent via-lime/40 to-transparent" />
+        <div className="h-20 w-px bg-gradient-to-b from-transparent via-lime/35 to-transparent" />
       </aside>
       <aside
-        className="pointer-events-none absolute bottom-[12%] right-3 top-[18%] z-[2] hidden w-14 flex-col items-end justify-between xl:flex 2xl:right-6 2xl:w-16"
+        className="pointer-events-none absolute bottom-[12%] right-3 top-[18%] z-[2] hidden w-12 flex-col items-end justify-between 2xl:flex 2xl:right-5"
         aria-hidden
       >
-        <div className="h-24 w-px bg-gradient-to-b from-transparent via-lime/40 to-transparent" />
+        <div className="h-20 w-px bg-gradient-to-b from-transparent via-lime/35 to-transparent" />
         <div className="flex flex-1 flex-col justify-center gap-2 overflow-hidden">
           {SIDE_CHIPS.slice(6).map((c) => (
-            <span key={c} className="font-mono text-[9px] tracking-[0.18em] text-lime/35" style={{ writingMode: 'vertical-rl' }}>
+            <span key={c} className="font-mono text-[9px] tracking-[0.18em] text-lime/30" style={{ writingMode: 'vertical-rl' }}>
               {c}
             </span>
           ))}
         </div>
       </aside>
 
-      <div className="pointer-events-none absolute right-[8%] top-[22%] z-[2] hidden flex-col gap-2 lg:flex" aria-hidden>
-        {['SPOT · READY', 'PERPS · ARMED', 'CHARTS · PRO'].map((t) => (
+      {/* Status chips — product surface, not plane jargon */}
+      <div className="pointer-events-none absolute right-[6%] top-[18%] z-[2] hidden flex-col gap-2 xl:flex" aria-hidden>
+        {['SPOT', 'PERPS', 'DEPTH'].map((t) => (
           <span
             key={t}
-            className="border border-line/60 bg-panel/50 px-2.5 py-1.5 font-mono text-[10px] tracking-wider text-mute backdrop-blur-md"
+            className="border border-line/60 bg-panel/55 px-2.5 py-1.5 font-mono text-[10px] tracking-[0.14em] text-mute backdrop-blur-md"
           >
             <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_#c4f000]" />
             {t}
@@ -99,17 +103,22 @@ export function HeroSection() {
         ))}
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col justify-center px-5 pb-16 pt-24 sm:px-8 lg:px-12 xl:px-16">
-        <div className="max-w-3xl xl:max-w-4xl">
-          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-lime-dim">INTAFACED · EXCHANGE · PRO TERMINAL</p>
+      {/* Main — two column exchange hero */}
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col justify-center gap-10 px-5 pb-14 pt-24 sm:px-8 lg:px-12 xl:flex-row xl:items-center xl:gap-12 xl:px-14">
+        {/* Copy column */}
+        <div className="max-w-xl shrink-0 xl:max-w-[520px]">
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.18em] text-lime-dim">INTAFACED · EXCHANGE</p>
+
           <SplitHeading
-            className="max-w-[16ch] text-[clamp(2.4rem,6.2vw,4.6rem)] drop-shadow-[0_2px_28px_rgba(5,8,6,0.9)]"
+            className="max-w-[11ch] text-[clamp(2.6rem,6.8vw,4.85rem)] drop-shadow-[0_2px_28px_rgba(5,8,6,0.9)]"
             accentLine={1}
-            lines={['TRADE THE BOOK.', 'CHART LIKE A PRO.', 'RUN THE HOUSE.']}
+            lines={['ONE EXCHANGE', 'ONE TERMINAL', 'EVERY MARKET']}
           />
-          <p className="mt-5 max-w-[42ch] text-base text-mute md:text-lg">
-            Spot, perpetuals, options, OTC — one identity, one ledger. A real exchange desk with the charting power traders expect.
+
+          <p className="mt-5 max-w-[40ch] text-base leading-relaxed text-mute md:text-lg">
+            Spot, perps, options, and OTC on one desk — charts, depth, and tickets together. One identity. One ledger.
           </p>
+
           <div className="mt-8 flex flex-wrap gap-3">
             <a
               href="#trade"
@@ -124,16 +133,16 @@ export function HeroSection() {
               SEE THE FULL HOUSE
             </a>
           </div>
-          <ul className="mt-10 grid max-w-3xl grid-cols-3 gap-2 sm:grid-cols-6">
+
+          <MarketPills />
+
+          <ul className="mt-8 grid max-w-md grid-cols-3 gap-2">
             {[
-              [12, 'Markets'],
-              [6, 'Order types'],
-              [24, 'Pairs demo'],
-              [2, 'Planes'],
-              [1, 'Terminal'],
-              [1, 'Key'],
+              [4, 'Market types'],
+              [12, 'Rooms'],
+              [1, 'Login'],
             ].map(([n, label]) => (
-              <li key={String(label)} className="border border-line/70 bg-panel/60 p-2.5 backdrop-blur-md">
+              <li key={String(label)} className="border border-line/70 bg-panel/55 p-2.5 backdrop-blur-md">
                 <strong className="block font-mono text-xl text-lime">
                   <NumberTicker value={n as number} />
                 </strong>
@@ -141,9 +150,13 @@ export function HeroSection() {
               </li>
             ))}
           </ul>
-          <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.08em] text-mute">
-            The exchange is the front door. The OS is the house under it.
-          </p>
+
+          <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.1em] text-mute">Markets first · the OS runs under them</p>
+        </div>
+
+        {/* Desk column — the exchange face */}
+        <div className="relative flex flex-1 justify-center xl:justify-end">
+          <HeroDesk />
         </div>
       </div>
     </section>
