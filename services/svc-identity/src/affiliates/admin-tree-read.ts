@@ -45,6 +45,11 @@ export type AffiliatePayoutRefuseCode =
   | 'affiliate.payout.beneficiary_frozen'
   /** Fan-out spans more than one asset — sum-to-zero is per asset. */
   | 'affiliate.payout.mixed_asset'
+  /**
+   * Fan-out names more than one fee pool for one fee event.
+   * One fee lands in one houseFees(module); mixed pools is corruption, not multi-module pay.
+   */
+  | 'affiliate.payout.mixed_source_module'
   /** Legs do not sum to the reported total. */
   | 'affiliate.payout.plan_unbalanced'
   /** No durable accrual rows — refuse rather than report a paid zero. */
@@ -82,6 +87,28 @@ export const AFFILIATE_PAYOUT_RESIDUAL =
   'DIRECTION §8 fee-share / IB tier rates are owner-only — payout refuse-closed until published (mechanism is wired; the rate is not ours to choose)';
 
 /**
+ * How many freeze ids sit on a tree participant (child or parent of an edge).
+ *
+ * Freezes of users who never appear in the attribution graph are still durable
+ * operator state, but they must not inflate the TREE board's frozenCount —
+ * that card is "this multi-tier graph", not the global freeze ledger.
+ * Matches members roster honesty (`frozenInList` among listed edges only).
+ */
+export function countFrozenTreeParticipants(parent: ReadonlyMap<string, string>, frozenIds?: ReadonlySet<string> | null): number {
+  if (!frozenIds || frozenIds.size === 0 || parent.size === 0) return 0;
+  const participants = new Set<string>();
+  for (const [userId, referrerId] of parent.entries()) {
+    participants.add(userId);
+    participants.add(referrerId);
+  }
+  let n = 0;
+  for (const id of frozenIds) {
+    if (participants.has(id)) n += 1;
+  }
+  return n;
+}
+
+/**
  * Build tree board from parent map + freeze set.
  * Empty tree → zeros (never invent edges).
  */
@@ -101,7 +128,7 @@ export function buildAffiliateTreeBoard(input: {
     edges: input.parent.size,
     referrers: referrers.size,
     maxDepth,
-    frozenCount: input.frozenIds?.size ?? 0,
+    frozenCount: countFrozenTreeParticipants(input.parent, input.frozenIds),
     maxDepthCap,
   };
 }

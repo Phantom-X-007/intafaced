@@ -53,6 +53,25 @@ describe('affiliates Stage — admin tree read (non-pay)', () => {
     expect(affiliateTreeStatusLine(board)).toContain('frozen=1');
   });
 
+  it('frozenCount counts only freezes on tree participants — not the global freeze ledger', () => {
+    // THE HOLE: freezing users who never appear in the attribution graph used to
+    // inflate treeStatus frozen=N. Ops board is "this multi-tier graph", not the
+    // whole freeze table. Same honesty class as members frozenInList.
+    const tree = new MemoryReferralTree();
+    tree.attribute({ userId: U(2), referrerId: U(1) });
+    tree.attribute({ userId: U(3), referrerId: U(2) });
+    const parent = parentFrom(tree);
+    const outsider = U(9); // never an edge key or referrer
+    const board = buildAffiliateTreeBoard({
+      parent,
+      frozenIds: new Set([U(2), outsider, U(8)]),
+    });
+    expect(board.frozenCount).toBe(1);
+    expect(affiliateTreeStatusLine(board)).toContain('frozen=1');
+    // Empty tree + freezes → still zero (never invent tree presence from freezes).
+    expect(buildAffiliateTreeBoard({ parent: new Map(), frozenIds: new Set([U(1), U(2)]) }).frozenCount).toBe(0);
+  });
+
   it('node status: root vs attributed vs downline', () => {
     const tree = new MemoryReferralTree();
     const at = new Date('2026-08-07T12:00:00.000Z');

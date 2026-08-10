@@ -1303,10 +1303,11 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     status: 'wip',
-    owner: 'agent:w10-l05',
+    owner: 'agent:w13-l04',
     dependsOn: ['ledger.double-entry'],
     note:
-      'Wave 10 #L05 source_module on accruals (fee-pool provenance for payout sweep) — land before producer wire. ' +
+      'Wave 13 L04 honesty: mixed sourceModule on one fee event refuses `affiliate.payout.mixed_source_module` (no multi-pool debit); treeStatus frozenCount = freezes on tree participants only (not global freeze ledger). ' +
+      'Wave 10 #L05 / #1589 source_module on accruals (fee-pool provenance for payout sweep) — land before producer wire. ' +
       'Rate invent FIXED #1133 (2026-08-08): blank / unpublished accrual tiers refuse-closed; DEFAULT_ACCRUAL_TIERS gone. ' +
       'Wave 3 residual #1180 (2026-08-09): attribute under txn + advisory lock + post-insert cycle recheck; `affiliates.myAccruals` self-only ' +
       'reads durable rows (never invents rates). Stage-1 #996 tree/payout refuse · Stage-2 #1008 members/freeze · Stage-3 #1027 accrue store. ' +

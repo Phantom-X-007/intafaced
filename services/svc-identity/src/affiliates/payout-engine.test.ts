@@ -317,6 +317,32 @@ describe('multi-tier fan-out across the tree', () => {
     expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe('0');
     expect(await bal(ledger, houseFees('trade', ASSET))).toBe('100');
   });
+
+  it('mixed sourceModule on one fee event refuses before any ledger post', async () => {
+    // Accrue always stamps one module per fee. A hand-assembled / corrupt set
+    // that names trade AND pay would debit two houseFees pools for one event.
+    // Same corruption class as mixed_asset — refuse the plan, move nothing.
+    const ledger = await fundedLedger();
+    const base = rows(PUBLISHED, feeEvent({ sourceModule: 'trade' }));
+    expect(base.length).toBeGreaterThanOrEqual(2);
+    const mixed: CommissionRow[] = [
+      { ...base[0]!, sourceModule: 'trade' },
+      { ...base[1]!, sourceModule: 'pay' },
+    ];
+    const beforeHop0 = await bal(ledger, userAvailable(HOP0, ASSET));
+    const beforePool = await bal(ledger, houseFees(AFFILIATE_PAYOUT_SOURCE_MODULE, ASSET));
+
+    try {
+      planAffiliatePayout({ feeEventId: FEE_EVENT, rows: mixed, law: PUBLISHED });
+      expect.unreachable('must refuse mixed fee pools on one fee event');
+    } catch (err) {
+      expect(err).toBeInstanceOf(AffiliatePayoutRefuseError);
+      expect((err as AffiliatePayoutRefuseError).code).toBe('affiliate.payout.mixed_source_module');
+    }
+
+    expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe(beforeHop0);
+    expect(await bal(ledger, houseFees(AFFILIATE_PAYOUT_SOURCE_MODULE, ASSET))).toBe(beforePool);
+  });
 });
 
 // ── Retry pays once ──────────────────────────────────────────────────────────
