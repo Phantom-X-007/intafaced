@@ -79,4 +79,38 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
     expect(r.alerts.map((a) => a.railId)).toEqual(['card-b']);
     expect(r.skippedIncomplete).toBe(1);
   });
+
+  it('never alerts on zero attempts — empty sample is not a rail failure', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'ghost', approvalRate: '0.00', attempts: 0 }), pt({ railId: 'real', approvalRate: '0.99', attempts: 100 })],
+      { now: NOW, threshold: '0.85' },
+    );
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.alerts).toEqual([]);
+    expect(r.skippedLowSample).toBe(1);
+  });
+
+  it('zero-sample-only series is unavailable (no invent green/red board)', () => {
+    const r = watchApprovalFixtures([pt({ railId: 'ghost', approvalRate: '0.00', attempts: 0 })], {
+      now: NOW,
+      threshold: '0.85',
+    });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'no_metrics',
+    });
+  });
+
+  it('minAttempts floor skips low samples — no invent alert from n=1 noise', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'tiny', approvalRate: '0.00', attempts: 1 }), pt({ railId: 'solid', approvalRate: '0.70', attempts: 200 })],
+      { now: NOW, threshold: '0.85', minAttempts: 30 },
+    );
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.skippedLowSample).toBe(1);
+    expect(r.alerts.map((a) => a.railId)).toEqual(['solid']);
+  });
 });

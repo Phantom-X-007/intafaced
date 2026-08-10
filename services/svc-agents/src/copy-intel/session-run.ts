@@ -30,8 +30,15 @@ import { buildLeaderStats, type AuditWrite, type CopyPlaneState, type LeaderPerf
 /** The agent id the copy-intel guardrail is registered under. */
 export const COPY_INTEL_AGENT_ID = 'copy-intel';
 
-/** The one tool a stats run invokes. Declared read in `guardrail.ts`. */
+/** Declared read — pull leader performance fixtures. */
 export const COPY_INTEL_LEADERS_TOOL = 'trade.copy.leaders.read';
+
+/**
+ * Declared write — audited leader stats land through the runtime so
+ * `agent_actions` records the write (provenance), not only an in-memory array.
+ * Declared on the guardrail; must be invoked by the metered run.
+ */
+export const COPY_INTEL_STATS_WRITE_TOOL = 'trade.copy.stats.write';
 
 export type CopyIntelRunSettlement = {
   readonly windowId: string;
@@ -51,10 +58,13 @@ export type CopyIntelRunMetering = {
 export type CopyIntelRunOk = {
   readonly status: 'ok';
   readonly stats: readonly LeaderStat[];
+  /** Only rows that passed `trade.copy.stats.write` through the runtime. */
   readonly audit: readonly AuditWrite[];
   readonly skippedIncomplete: number;
   readonly fixturesAccepted: number;
   readonly fixturesRefusedByGuardrail: number;
+  /** Built audit rows the write tool refused (budget / undeclared). */
+  readonly writesRefusedByGuardrail: number;
   readonly metering: CopyIntelRunMetering;
 };
 
@@ -73,9 +83,10 @@ export type CopyIntelRunUnavailable = {
 
 export type CopyIntelRunRefuse = {
   readonly status: 'refuse';
-  readonly reason: 'copy_plane_dark' | 'no_live_leaders';
+  readonly reason: 'copy_plane_dark' | 'no_live_leaders' | 'writes_refused';
   readonly userMessageKey: 'agents.copy_intel.unavailable';
   readonly fixturesRefusedByGuardrail: number;
+  readonly writesRefusedByGuardrail: number;
   readonly metering: CopyIntelRunMetering;
 };
 
@@ -119,7 +130,11 @@ export type CopyIntelRunInput = {
 /**
  * Run `copy_intel.stats` as a metered, guardrailed session over pure stats.
  *
- * Each fixture is read through `runtime.act` on `trade.copy.leaders.read`.
+ * Each fixture is **read** through `runtime.act` on `trade.copy.leaders.read`,
+ * then each audited stat is **written** through `trade.copy.stats.write`.
+ * The mountain promise is "writes audited leader stats" — a pure in-memory
+ * array without the write tool would leave the declared write dead on the
+ * guardrail and no row in `agent_actions` for the write itself.
  * Never invents PnL for a refused or missing leader.
  */
 export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promise<CopyIntelRunResult> {
@@ -131,6 +146,7 @@ export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promis
       reason: 'copy_plane_dark',
       userMessageKey: 'agents.copy_intel.unavailable',
       fixturesRefusedByGuardrail: 0,
+      writesRefusedByGuardrail: 0,
       metering: unmetered(input.feeAssetId),
     };
   }
@@ -174,6 +190,7 @@ export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promis
         reason: 'no_live_leaders',
         userMessageKey: 'agents.copy_intel.unavailable',
         fixturesRefusedByGuardrail,
+        writesRefusedByGuardrail: 0,
         metering,
       };
     }
@@ -184,28 +201,63 @@ export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promis
       ...(input.leaderAllowlist === undefined ? {} : { leaderAllowlist: input.leaderAllowlist }),
     });
 
-    metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
-
-    if (built.status === 'ok') {
+    if (built.status !== 'ok') {
+      metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
+      if (built.status === 'empty') {
+        return { status: 'empty', userMessageKey: built.userMessageKey, metering };
+      }
       return {
-        status: 'ok',
-        stats: built.stats,
-        audit: built.audit,
-        skippedIncomplete: built.skippedIncomplete,
-        fixturesAccepted: accepted.length,
-        fixturesRefusedByGuardrail,
+        status: 'unavailable',
+        userMessageKey: built.userMessageKey,
+        reason: built.reason,
         metering,
       };
     }
 
-    if (built.status === 'empty') {
-      return { status: 'empty', userMessageKey: built.userMessageKey, metering };
+    // Audited write path — each built row goes through the declared write tool.
+    // Stats returned to the caller are only those that actually wrote.
+    const written: AuditWrite[] = [];
+    let writesRefusedByGuardrail = 0;
+    for (const row of built.audit) {
+      try {
+        const act = await input.runtime.act({
+          sessionId: session.id,
+          tool: COPY_INTEL_STATS_WRITE_TOOL,
+          execute: async () => row,
+        });
+        written.push(act.result as AuditWrite);
+      } catch (err) {
+        if (err instanceof RefusedError) {
+          writesRefusedByGuardrail += 1;
+          continue;
+        }
+        throw err;
+      }
     }
 
+    metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
+
+    if (written.length === 0) {
+      // Built stats but could not write any — never ship unwritten "audit".
+      return {
+        status: 'refuse',
+        reason: 'writes_refused',
+        userMessageKey: 'agents.copy_intel.unavailable',
+        fixturesRefusedByGuardrail,
+        writesRefusedByGuardrail,
+        metering,
+      };
+    }
+
+    const writtenLeaderIds = new Set(written.map((w) => w.leaderId));
     return {
-      status: 'unavailable',
-      userMessageKey: built.userMessageKey,
-      reason: built.reason,
+      status: 'ok',
+      stats: built.stats.filter((s) => writtenLeaderIds.has(s.leaderId)),
+      audit: written,
+      skippedIncomplete: built.skippedIncomplete,
+      fixturesAccepted: accepted.length,
+      fixturesRefusedByGuardrail,
+      writesRefusedByGuardrail,
       metering,
     };
   } finally {

@@ -109,6 +109,9 @@ describe('support.runSession route', () => {
       userMessageKey: 'agents.support.escalated',
     });
     expect(result.metering.billedAmount).toBe('0');
+    if (result.status !== 'escalate') return;
+    expect(result.caseFile.moneyRequest).toBe(true);
+    expect(result.caseFile.reason).toBe('money_request');
   });
 
   it('is empty when nothing was asked', async () => {

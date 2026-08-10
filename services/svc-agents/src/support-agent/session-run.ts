@@ -172,12 +172,72 @@ export type SupportRunOk = {
 };
 
 /**
+ * Case file for a human desk handoff (doctrine §8.2: "escalation w/ case file").
+ *
+ * Pure projection of what the agent already read — never invents balances,
+ * refund amounts, or policy. Account rows carry status + KYC only (§0.6).
+ * `ops.support` owns durable ticket write; this is the agent-side package a
+ * person (or Denon's desk once #1626 lands) can attach without dual-editing
+ * the support service.
+ */
+export type SupportCaseFile = {
+  readonly reason: SupportRunEscalateReason;
+  /** True when the user asked money to move — person uses ops/ledger recipes. */
+  readonly moneyRequest: boolean;
+  readonly findings: readonly SupportDataToolOk[];
+  readonly unanswered: readonly SupportUnanswered[];
+  readonly ticketIds: readonly string[];
+  readonly citedArticleKeys: readonly string[];
+  /** Status + KYC only — no balance field exists on this shape. */
+  readonly accounts: readonly {
+    readonly userId: string;
+    readonly status: 'active' | 'frozen' | 'closed';
+    readonly kycTier: string;
+  }[];
+};
+
+/** Build the escalate case file from findings already in hand. */
+export function buildSupportCaseFile(input: {
+  reason: SupportRunEscalateReason;
+  findings?: readonly SupportDataToolOk[];
+  unanswered?: readonly SupportUnanswered[];
+  moneyRequest?: boolean;
+}): SupportCaseFile {
+  const findings = input.findings ?? [];
+  const ticketIds: string[] = [];
+  const citedArticleKeys: string[] = [];
+  const accounts: SupportCaseFile['accounts'][number][] = [];
+  for (const f of findings) {
+    if (f.tool === 'support.ticket.read') {
+      ticketIds.push(f.ticket.ticketId);
+    } else if (f.tool === 'support.kb.search') {
+      for (const a of f.articles) citedArticleKeys.push(a.articleKey);
+    } else if (f.tool === 'identity.account.read') {
+      accounts.push({
+        userId: f.account.userId,
+        status: f.account.status,
+        kycTier: f.account.kycTier,
+      });
+    }
+  }
+  return {
+    reason: input.reason,
+    moneyRequest: input.moneyRequest === true || input.reason === 'money_request',
+    findings,
+    unanswered: input.unanswered ?? [],
+    ticketIds,
+    citedArticleKeys,
+    accounts,
+  };
+}
+
+/**
  * The typed "this goes to a person".
  *
  * A first-class product outcome, not an error: the desk reached far enough to
  * know it cannot ground an answer, so it hands over rather than improvising.
- * `findings` still travels, because a human picking up the ticket should see
- * what the agent could read before it stopped.
+ * `caseFile` packages what the agent could read so a human does not start from
+ * a blank ticket.
  */
 export type SupportRunEscalate = {
   readonly status: 'escalate';
@@ -185,6 +245,7 @@ export type SupportRunEscalate = {
   readonly userMessageKey: 'agents.support.escalated';
   readonly findings: readonly SupportDataToolOk[];
   readonly unanswered: readonly SupportUnanswered[];
+  readonly caseFile: SupportCaseFile;
   readonly metering: SupportRunMetering;
 };
 
@@ -303,6 +364,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
       userMessageKey: 'agents.support.escalated',
       findings: [],
       unanswered: [],
+      caseFile: buildSupportCaseFile({ reason: 'money_request', moneyRequest: true }),
       metering: unmetered(input.feeAssetId),
     };
   }
@@ -342,6 +404,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
       userMessageKey: 'agents.support.escalated',
       findings: [],
       unanswered: [],
+      caseFile: buildSupportCaseFile({ reason: 'kb_no_hit' }),
       metering: unmetered(input.feeAssetId),
     };
   }
@@ -444,12 +507,14 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     // hand over to a person, because "we do not know what the KB said" is never
     // a licence to compose a reply.
     if (kb === null || kb.by === 'guardrail') {
+      const reason = kb === null ? 'kb_no_hit' : 'desk_refused';
       return {
         status: 'escalate',
-        reason: kb === null ? 'kb_no_hit' : 'desk_refused',
+        reason,
         userMessageKey: 'agents.support.escalated',
         findings,
         unanswered,
+        caseFile: buildSupportCaseFile({ reason, findings, unanswered }),
         metering,
       };
     }
@@ -464,6 +529,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
         userMessageKey: decision.userMessageKey,
         findings,
         unanswered,
+        caseFile: buildSupportCaseFile({ reason: decision.reason, findings, unanswered }),
         metering,
       };
     }

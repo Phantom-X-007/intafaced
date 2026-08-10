@@ -428,6 +428,15 @@ describe('support.reply metered session run', () => {
     // What it could read still travels, so the person picking this up sees it.
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]).toMatchObject({ tool: 'identity.account.read' });
+    // Doctrine case file: human handoff carries account status, never a balance.
+    expect(result.caseFile.reason).toBe('kb_no_hit');
+    expect(result.caseFile.moneyRequest).toBe(false);
+    expect(result.caseFile.accounts).toEqual([{ userId: USER, status: 'active', kycTier: 'tier2' }]);
+    expect(result.caseFile).not.toHaveProperty('balance');
+    // Account projection is status+KYC only — no money fields on the case file.
+    for (const acct of result.caseFile.accounts) {
+      expect(Object.keys(acct).sort()).toEqual(['kycTier', 'status', 'userId']);
+    }
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
   });
@@ -458,6 +467,12 @@ describe('support.reply metered session run', () => {
       reason: 'money_request',
       userMessageKey: 'agents.support.escalated',
     });
+    if (result.status !== 'escalate') return;
+    // Case file flags money — person uses ops/ledger, agent invents no amount.
+    expect(result.caseFile.moneyRequest).toBe(true);
+    expect(result.caseFile.findings).toEqual([]);
+    expect(result.caseFile.accounts).toEqual([]);
+    expect(result.caseFile).not.toHaveProperty('refundAmount');
     // A refund is `ops.support` + a ledger recipe. The agent does not look it up
     // and does not bill for discovering it cannot help.
     expect(fake.openCalls).toBe(0);

@@ -2130,6 +2130,21 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               userMessageKey: z.literal('agents.support.escalated'),
               findings: z.array(supportFindingOutput),
               unanswered: z.array(supportUnansweredOutput),
+              caseFile: z.object({
+                reason: z.enum(['kb_no_hit', 'money_request', 'desk_refused']),
+                moneyRequest: z.boolean(),
+                findings: z.array(supportFindingOutput),
+                unanswered: z.array(supportUnansweredOutput),
+                ticketIds: z.array(z.string()),
+                citedArticleKeys: z.array(z.string()),
+                accounts: z.array(
+                  z.object({
+                    userId: z.string(),
+                    status: z.enum(['active', 'frozen', 'closed']),
+                    kycTier: z.string(),
+                  }),
+                ),
+              }),
               metering: runMeteringOutput,
             }),
             z.object({
@@ -2205,12 +2220,22 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             );
 
             if (result.status === 'escalate') {
+              const cf = result.caseFile;
               return {
                 status: 'escalate' as const,
                 reason: result.reason,
                 userMessageKey: result.userMessageKey,
                 findings,
                 unanswered,
+                caseFile: {
+                  reason: cf.reason,
+                  moneyRequest: cf.moneyRequest,
+                  findings,
+                  unanswered,
+                  ticketIds: [...cf.ticketIds],
+                  citedArticleKeys: [...cf.citedArticleKeys],
+                  accounts: cf.accounts.map((a) => ({ ...a })),
+                },
                 metering,
               };
             }
@@ -2398,6 +2423,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               skippedIncomplete: z.number().int(),
               fixturesAccepted: z.number().int(),
               fixturesRefusedByGuardrail: z.number().int(),
+              writesRefusedByGuardrail: z.number().int(),
               metering: runMeteringOutput,
             }),
             z.object({
@@ -2413,9 +2439,10 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['copy_plane_dark', 'no_live_leaders']),
+              reason: z.enum(['copy_plane_dark', 'no_live_leaders', 'writes_refused']),
               userMessageKey: z.literal('agents.copy_intel.unavailable'),
               fixturesRefusedByGuardrail: z.number().int(),
+              writesRefusedByGuardrail: z.number().int(),
               metering: runMeteringOutput,
             }),
           ]),
@@ -2451,6 +2478,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 skippedIncomplete: result.skippedIncomplete,
                 fixturesAccepted: result.fixturesAccepted,
                 fixturesRefusedByGuardrail: result.fixturesRefusedByGuardrail,
+                writesRefusedByGuardrail: result.writesRefusedByGuardrail,
                 stats: result.stats.map((s) => ({ ...s })),
                 audit: result.audit.map((a) => ({
                   id: a.id,
@@ -2482,6 +2510,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               reason: result.reason,
               userMessageKey: result.userMessageKey,
               fixturesRefusedByGuardrail: result.fixturesRefusedByGuardrail,
+              writesRefusedByGuardrail: result.writesRefusedByGuardrail,
               metering,
             };
           }),
@@ -2511,6 +2540,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             threshold: z.string().optional(),
             payPlane: z.enum(['live', 'dark']).optional(),
             railAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            /** Sample floor — default 1 (zero attempts never alerts). */
+            minAttempts: z.number().int().min(1).max(1_000_000).optional(),
             now: z.string().datetime().optional(),
           }),
         )
@@ -2522,6 +2553,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               considered: z.number().int(),
               skippedStale: z.number().int(),
               skippedIncomplete: z.number().int(),
+              skippedLowSample: z.number().int(),
               alerts: z.array(
                 z.object({
                   railId: z.string(),
@@ -2548,6 +2580,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.threshold === undefined ? {} : { threshold: input.threshold }),
             ...(input.payPlane === undefined ? {} : { payPlane: input.payPlane }),
             ...(input.railAllowlist === undefined ? {} : { railAllowlist: input.railAllowlist }),
+            ...(input.minAttempts === undefined ? {} : { minAttempts: input.minAttempts }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
           });
           if (result.status === 'ok') {
@@ -2557,6 +2590,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               considered: result.considered,
               skippedStale: result.skippedStale,
               skippedIncomplete: result.skippedIncomplete,
+              skippedLowSample: result.skippedLowSample,
               alerts: result.alerts.map((a) => ({ ...a })),
             };
           }
@@ -2589,6 +2623,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .max(50),
             threshold: z.string().optional(),
             railAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
+            minAttempts: z.number().int().min(1).max(1_000_000).optional(),
             now: z.string().datetime().optional(),
           }),
         )
@@ -2600,6 +2635,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               considered: z.number().int(),
               skippedStale: z.number().int(),
               skippedIncomplete: z.number().int(),
+              skippedLowSample: z.number().int(),
               alerts: z.array(
                 z.object({
                   railId: z.string(),
@@ -2643,6 +2679,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               points: input.points,
               ...(input.threshold === undefined ? {} : { threshold: input.threshold }),
               ...(input.railAllowlist === undefined ? {} : { railAllowlist: input.railAllowlist }),
+              ...(input.minAttempts === undefined ? {} : { minAttempts: input.minAttempts }),
               ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             });
 
@@ -2666,6 +2703,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 considered: result.considered,
                 skippedStale: result.skippedStale,
                 skippedIncomplete: result.skippedIncomplete,
+                skippedLowSample: result.skippedLowSample,
                 alerts: result.alerts.map((a) => ({ ...a })),
                 pointsAccepted: result.pointsAccepted,
                 pointsRefusedByGuardrail: result.pointsRefusedByGuardrail,

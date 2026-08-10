@@ -5,7 +5,7 @@ import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } fro
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { copyIntelAgentGuardrail } from './guardrail.js';
-import { COPY_INTEL_AGENT_ID, COPY_INTEL_LEADERS_TOOL, runCopyIntelStatsSession } from './session-run.js';
+import { COPY_INTEL_AGENT_ID, COPY_INTEL_LEADERS_TOOL, COPY_INTEL_STATS_WRITE_TOOL, runCopyIntelStatsSession } from './session-run.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const SESSION = '33333333-3333-4333-8333-333333333333';
@@ -153,7 +153,14 @@ describe('copy_intel.stats metered session run', () => {
     if (result.status !== 'ok') return;
     expect(result.stats).toHaveLength(2);
     expect(result.fixturesAccepted).toBe(2);
-    expect(fake.toolCalls).toEqual([COPY_INTEL_LEADERS_TOOL, COPY_INTEL_LEADERS_TOOL]);
+    expect(result.writesRefusedByGuardrail).toBe(0);
+    // read ×2 then audited write ×2 — write path is the mountain promise
+    expect(fake.toolCalls).toEqual([
+      COPY_INTEL_LEADERS_TOOL,
+      COPY_INTEL_LEADERS_TOOL,
+      COPY_INTEL_STATS_WRITE_TOOL,
+      COPY_INTEL_STATS_WRITE_TOOL,
+    ]);
     expect(fake.openCalls).toBe(1);
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
@@ -221,6 +228,9 @@ describe('copy_intel.stats metered session run', () => {
   it('counts a guardrail refusal instead of inventing stats around it', async () => {
     const fake = new FakeRuntime();
     fake.guardrail = copyIntelAgentGuardrail();
+    // Budget 1: first leader is read; extra fixtures refuse. Reads happen before
+    // writes, so the audited write is also refused — never invent stats for
+    // refused leaders and never ship unwritten audit as "ok".
     (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 1;
 
     const result = await runCopyIntelStatsSession({
@@ -228,10 +238,33 @@ describe('copy_intel.stats metered session run', () => {
       fixtures: [fixture('a'), fixture('b'), fixture('c')],
     });
 
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'writes_refused',
+      fixturesRefusedByGuardrail: 2,
+      writesRefusedByGuardrail: 1,
+    });
+    if (result.status !== 'refuse') return;
+    expect(fake.toolCalls).toEqual([COPY_INTEL_LEADERS_TOOL]);
+  });
+
+  it('writes audited stats only for leaders that passed the write tool', async () => {
+    const fake = new FakeRuntime();
+    // Budget exactly covers one read + one write — product write path on the wire.
+    fake.guardrail = copyIntelAgentGuardrail();
+    (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 2;
+
+    const result = await runCopyIntelStatsSession({
+      ...baseInput(fake),
+      fixtures: [fixture('solo')],
+    });
+
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
-    expect(result.fixturesAccepted).toBe(1);
-    expect(result.fixturesRefusedByGuardrail).toBe(2);
+    expect(result.stats.map((s) => s.leaderId)).toEqual(['solo']);
+    expect(result.audit).toHaveLength(1);
+    expect(result.writesRefusedByGuardrail).toBe(0);
+    expect(fake.toolCalls).toEqual([COPY_INTEL_LEADERS_TOOL, COPY_INTEL_STATS_WRITE_TOOL]);
   });
 
   it('refuses the whole run when every fixture was refused by the guardrail', async () => {
@@ -248,9 +281,30 @@ describe('copy_intel.stats metered session run', () => {
       status: 'refuse',
       reason: 'no_live_leaders',
       fixturesRefusedByGuardrail: 2,
+      writesRefusedByGuardrail: 0,
     });
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
+  });
+
+  it('refuses when reads succeed but every audited write is blocked by budget', async () => {
+    const fake = new FakeRuntime();
+    fake.guardrail = copyIntelAgentGuardrail();
+    // One action: the read; the write tool then hits the budget.
+    (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 1;
+
+    const result = await runCopyIntelStatsSession({
+      ...baseInput(fake),
+      fixtures: [fixture('a')],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'writes_refused',
+      fixturesRefusedByGuardrail: 0,
+      writesRefusedByGuardrail: 1,
+    });
+    expect(fake.toolCalls).toEqual([COPY_INTEL_LEADERS_TOOL]);
   });
 
   it('settles and closes even when the run throws', async () => {
@@ -263,11 +317,11 @@ describe('copy_intel.stats metered session run', () => {
     expect(fake.closeCalls).toBe(1);
   });
 
-  it('only ever asks for the declared read tool — never trade.order or fee-share invent paths', async () => {
+  it('uses only declared read + write tools — never trade.order or fee-share invent paths', async () => {
     const fake = new FakeRuntime();
     await runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [fixture('a'), fixture('b')] });
 
-    expect(new Set(fake.toolCalls)).toEqual(new Set([COPY_INTEL_LEADERS_TOOL]));
+    expect(new Set(fake.toolCalls)).toEqual(new Set([COPY_INTEL_LEADERS_TOOL, COPY_INTEL_STATS_WRITE_TOOL]));
     expect(fake.toolCalls.some((t) => t === 'trade.order' || t === 'ledger.post' || t.includes('fee'))).toBe(false);
   });
 });
