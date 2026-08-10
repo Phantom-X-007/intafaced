@@ -5,13 +5,69 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="INTAFACED Sovereign OS — twelve rooms, two planes, one key. Financial operating system for TradingView Advanced Charts review."
+      content="INTAFACED Sovereign OS — twelve rooms, two planes, one key. Financial operating system. Built by the streets, not by suits."
     />
     <meta name="theme-color" content="#050806" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>INTAFACED · Sovereign OS</title>
+    <!-- Critical paint: void + brand before CSS/JS. Kills white/black empty flash. -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #050806;
+        color: #eef6f0;
+        min-height: 100%;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #050806;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      #boot svg {
+        width: 56px;
+        height: 48px;
+        fill: #c4f000;
+      }
+      #boot .wm {
+        margin-top: 14px;
+        font-weight: 800;
+        font-size: 1.5rem;
+        letter-spacing: -0.02em;
+      }
+      #boot .wm span {
+        color: #c4f000;
+      }
+      #boot .line {
+        margin-top: 1.25rem;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #c4f000;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot" aria-busy="true" aria-live="polite">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" aria-hidden="true">
+          <rect x="0" y="0" width="61" height="62" rx="4" />
+          <rect x="80" y="22" width="39" height="40" rx="3.5" />
+          <rect x="52" y="74" width="27" height="26" rx="3" />
+        </svg>
+        <div class="wm">INTA<span>FACED</span></div>
+        <p class="line">CUTTING THE KEY…</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

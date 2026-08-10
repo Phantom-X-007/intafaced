@@ -18,7 +18,7 @@
 
 ## Theme
 
-void `#050806` · lime `#c6ff3d` · all demos re-skinned (no purple)
+void `#050806` · lime `#c4f000` (brand kit) · all demos re-skinned (no purple)
 
 ## Caps
 

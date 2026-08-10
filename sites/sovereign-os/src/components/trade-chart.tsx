@@ -21,17 +21,17 @@ export function TradeChart() {
       rightPriceScale: { borderColor: '#1a261f' },
       timeScale: { borderColor: '#1a261f' },
       crosshair: {
-        vertLine: { color: 'rgba(198,255,61,0.25)' },
-        horzLine: { color: 'rgba(198,255,61,0.25)' },
+        vertLine: { color: 'rgba(196,240,0,0.25)' },
+        horzLine: { color: 'rgba(196,240,0,0.25)' },
       },
       width: el.clientWidth,
       height: 300,
     });
 
     const series = chart.addSeries(AreaSeries, {
-      lineColor: '#c6ff3d',
-      topColor: 'rgba(198,255,61,0.28)',
-      bottomColor: 'rgba(198,255,61,0.01)',
+      lineColor: '#c4f000',
+      topColor: 'rgba(196,240,0,0.28)',
+      bottomColor: 'rgba(196,240,0,0.01)',
       lineWidth: 2,
     });
 

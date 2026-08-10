@@ -7,7 +7,9 @@ import { detectWebGL } from './webglDetect';
 const HeroWaveCanvas = lazy(() => import('./HeroWaveCanvas').then((m) => ({ default: m.HeroWaveCanvas })));
 
 function useReducedMotion() {
-  const [reduce, setReduce] = useState(false);
+  const [reduce, setReduce] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false,
+  );
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     setReduce(mq.matches);
@@ -28,11 +30,11 @@ export function HeroSection() {
   const [want3d, setWant3d] = useState(false);
 
   useEffect(() => {
-    if (!reduce && detectWebGL()) setWant3d(true);
+    setWant3d(!reduce && detectWebGL());
   }, [reduce]);
 
   return (
-    <section id="top" className="relative min-h-[100dvh] w-full overflow-hidden border-b border-line">
+    <section className="relative min-h-[100dvh] w-full overflow-hidden border-b border-line">
       {/* Full-bleed 3D / fallback */}
       <div className="absolute inset-0 z-0">
         {want3d ? (
@@ -89,12 +91,12 @@ export function HeroSection() {
 
       {/* Floating status chips — alive without cluttering mobile */}
       <div className="pointer-events-none absolute right-[8%] top-[22%] z-[2] hidden flex-col gap-2 lg:flex" aria-hidden>
-        {['FIAT PLANE · LIVE', 'PROTOCOL · ARMED', 'RANK · OPEN'].map((t) => (
+        {['FIAT PLANE · READY', 'PROTOCOL · ARMED', 'RANK · OPEN'].map((t) => (
           <span
             key={t}
             className="border border-line/60 bg-panel/50 px-2.5 py-1.5 font-mono text-[10px] tracking-wider text-mute backdrop-blur-md"
           >
-            <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_#c6ff3d]" />
+            <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_#c4f000]" />
             {t}
           </span>
         ))}
@@ -115,7 +117,7 @@ export function HeroSection() {
           <div className="mt-8 flex flex-wrap gap-3">
             <a
               href="#key"
-              className="bg-lime px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(198,255,61,0.22)]"
+              className="bg-lime px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(196,240,0,0.22)]"
             >
               ENTER THE CHAIN
             </a>

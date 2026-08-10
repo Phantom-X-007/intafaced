@@ -1,45 +1,81 @@
-# Sovereign OS site — product-ready mega audit + finish plan (2026-08-10)
+# Sovereign OS site — product-ready mega audit + finish (2026-08-10)
 
-**Status:** EXECUTING  
+**Status:** DONE  
 **Live:** https://zenyoda3.github.io/intafaced-sovereign-os/  
-**Code:** `sites/sovereign-os` (worktree `feat/tv-sovereign-os-apply-site`)
+**Code:** `sites/sovereign-os` · branch `feat/tv-sovereign-os-apply-site`  
+**Pages tip:** redeployed after product-ready pass (real logo + anti-flash + splits)
 
 ## P0 bugs
-| ID | Bug | Fix |
-| --- | --- | --- |
-| B1 | Black flash on load | Content always visible under overlay; only overlay fades (SiteLoader rewrite) |
-| B2 | Double finish race in loader | Single `finished` gate |
-| B3 | Logo missing | BrandMark component; SVG when brand kit arrives |
 
-## Fan-out audit checklist (product-ready)
+| ID  | Bug                 | Status                                                                                                 |
+| --- | ------------------- | ------------------------------------------------------------------------------------------------------ |
+| B1  | Black flash on load | **FIXED** — content always opaque under overlay; static `#boot` first paint; only overlay fades        |
+| B2  | Double finish race  | **FIXED** — single `finished` gate                                                                     |
+| B3  | Logo missing        | **FIXED** — official brand mark from `Documents/intafaced branding` in nav / loader / footer / favicon |
+
+## Fan-out audit (3 parallel explore agents)
 
 ### Load / motion
-- [ ] No black frame between loader and content
-- [ ] Loader fades cleanly
-- [ ] 3D preloads during boot; fade-in after warm frames
-- [ ] Reduced-motion: no 3D, short loader
-- [ ] Tab hidden: 3D pauses
+
+- [x] No black frame between loader and content
+- [x] Loader fades cleanly
+- [x] 3D preloads during boot; fade-in after warm frames
+- [x] Reduced-motion: no 3D (sync init), short loader
+- [x] Tab hidden: 3D pauses (`document.hidden` + visibilitychange)
+- [x] StrictMode dispose safety on hero engine
 
 ### Layout / brand
-- [ ] Full-bleed alive edges
-- [ ] Logo in nav, loader, footer
-- [ ] CTAs always clickable
-- [ ] Contrast over 3D
+
+- [x] Full-bleed alive edges
+- [x] Logo in nav, loader, footer, favicon, first paint
+- [x] Brand lime `#c4f000` (kit official)
+- [x] CTAs clickable
+- [x] Focus-visible rings + mobile menu `aria-expanded`
+- [x] Duplicate `id="top"` removed from hero
 
 ### Perf
-- [ ] Three code-split
-- [ ] DPR capped
-- [ ] No duplicate engines (StrictMode safe dispose)
+
+- [x] Three code-split (~533 kB async)
+- [x] Trade chart / LWC lazy (~165 kB async)
+- [x] Phosphor CSR deep imports (5020 → 487 modules)
+- [x] Main ~416 kB (was ~581 kB)
+- [x] BlurFade no CSS filter blur (cheaper)
+- [x] DPR capped; quality tiers low/med/high
 
 ### Content / legal
-- [ ] MIT credit for wave-grid
-- [ ] No fake prices as real
-- [ ] No Advanced Charts binary
+
+- [x] MIT credit wave-grid (NOTICE + footer)
+- [x] Demo/illustrative prices + DEMO TAPE
+- [x] No Advanced Charts binary (LWC only)
+- [x] Vendor names stripped from UI meta
 
 ### Ship
-- [ ] `npm run build` green
-- [ ] Pages redeployed
-- [ ] Hard-refresh verified
 
-## Finished means
-All P0 fixed + build green + live URL serves new assets + scoreboard DONE.
+- [x] `npm run build` green
+- [x] `oxlint` 0 errors
+- [x] Pages redeployed
+- [ ] Hard-refresh verified by Nitro on his device
+
+## Bundle (post-optimize)
+
+| Chunk          | ~gzip  |
+| -------------- | ------ |
+| index (main)   | 131 kB |
+| trade-chart    | 54 kB  |
+| waveGridEngine | 134 kB |
+| CSS            | 7.5 kB |
+
+## Finished means (peace of mind)
+
+1. **Load:** hard refresh → brand boot → site appears; **no full black dip** mid-transition.
+2. **Brand:** three-block mark + INTA**FACED** wordmark in header, boot, footer; lime favicon.
+3. **Motion:** reduced-motion users get no WebGL hero.
+4. **Honesty:** chart + tape marked demo; MIT credit visible.
+5. **Live URL serves current assets** (hash changes after each deploy).
+6. **Residual (not blockers):** GPU can warm under boot overlay; composer DPR not separate; Google Drive brand kit link still optional if more assets needed.
+
+## Residual human holds
+
+- Optional: paste Google brand-kit link if newer assets supersede `Documents/intafaced branding`
+- Optional: custom domain `trade.intafaced.com` DNS
+- TV form submit (human) when ready

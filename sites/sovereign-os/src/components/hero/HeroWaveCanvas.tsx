@@ -62,16 +62,23 @@ export function HeroWaveCanvas({ active, className, onReady }: Props) {
 
     const io = new IntersectionObserver(
       ([entry]) => {
-        engineRef.current?.setVisible(entry.isIntersecting);
+        engineRef.current?.setVisible(entry.isIntersecting && !document.hidden);
       },
       { threshold: 0.05 },
     );
     io.observe(wrap);
 
+    const onVis = () => {
+      const inView = wrap.getBoundingClientRect().bottom > 0 && wrap.getBoundingClientRect().top < window.innerHeight;
+      engineRef.current?.setVisible(inView && !document.hidden);
+    };
+    document.addEventListener('visibilitychange', onVis);
+
     return () => {
       cancelled = true;
       if (readyTimer) window.clearTimeout(readyTimer);
       io.disconnect();
+      document.removeEventListener('visibilitychange', onVis);
       engineRef.current?.dispose();
       engineRef.current = null;
     };

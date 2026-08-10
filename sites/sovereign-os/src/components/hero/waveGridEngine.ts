@@ -141,7 +141,7 @@ export class WaveGridEngine {
       key.shadow.bias = 0.0001;
     }
     this.scene.add(key);
-    const fill = new THREE.DirectionalLight(0xc6ff3d, 0.85);
+    const fill = new THREE.DirectionalLight(0xc4f000, 0.85);
     fill.position.set(12, 6, -4);
     this.scene.add(fill);
 
@@ -244,7 +244,7 @@ export class WaveGridEngine {
       waveJitter: 0.2,
       waveMaxHeight: 0.45,
       colorBase: '#1a2420',
-      colorHigh: '#c6ff3d',
+      colorHigh: '#c4f000',
       fadeTime: 2.2,
     };
     this.uFadeTime.value = params.fadeTime;

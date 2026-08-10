@@ -1,6 +1,6 @@
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { cn } from '@/lib/utils';
-import { CaretDown } from '@phosphor-icons/react';
+import { CaretDown } from '@phosphor-icons/react/dist/csr/CaretDown';
 import type { ComponentPropsWithoutRef } from 'react';
 
 export const Accordion = AccordionPrimitive.Root;

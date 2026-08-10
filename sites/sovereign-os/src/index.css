@@ -7,8 +7,9 @@
   --color-line: #1a261f;
   --color-ink: #eef6f0;
   --color-mute: #7f9186;
-  --color-lime: #c6ff3d;
-  --color-lime-dim: #7ab01f;
+  /* Brand kit official lime (Documents/intafaced branding) */
+  --color-lime: #c4f000;
+  --color-lime-dim: #8ab000;
   --color-danger: #ff5c45;
   --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -40,6 +41,17 @@ body {
 
 ::selection {
   background: color-mix(in srgb, var(--color-lime) 35%, transparent);
+}
+
+/* Global focus ring — keyboard users */
+:focus-visible {
+  outline: 2px solid var(--color-lime);
+  outline-offset: 2px;
+}
+
+a:focus:not(:focus-visible),
+button:focus:not(:focus-visible) {
+  outline: none;
 }
 
 @keyframes marquee {

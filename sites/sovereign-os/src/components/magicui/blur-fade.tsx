@@ -18,9 +18,9 @@ export function BlurFade({ children, className, delay = 0 }: { children: ReactNo
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: 16, filter: 'blur(6px)' }}
-      animate={inView ? { opacity: 1, y: 0, filter: 'blur(0px)' } : undefined}
-      transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
+      initial={{ opacity: 0, y: 14 }}
+      animate={inView ? { opacity: 1, y: 0 } : undefined}
+      transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
       className={cn(className)}
     >
       {children}

@@ -5,14 +5,16 @@ import { BlurFade } from '@/components/magicui/blur-fade';
 import { BorderBeam } from '@/components/magicui/border-beam';
 import { GridPattern } from '@/components/magicui/grid-pattern';
 import { Marquee } from '@/components/magicui/marquee';
-import { TradeChart } from '@/components/trade-chart';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BrandMark } from '@/components/BrandMark';
 import { HeroSection } from '@/components/hero/HeroSection';
 import { SiteLoader } from '@/components/SiteLoader';
-import { List, X } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { List } from '@phosphor-icons/react/dist/csr/List';
+import { X } from '@phosphor-icons/react/dist/csr/X';
+import { lazy, Suspense, useState } from 'react';
+
+const TradeChart = lazy(() => import('@/components/trade-chart').then((m) => ({ default: m.TradeChart })));
 
 const ROOMS = [
   { code: '00', name: 'Identity', role: 'One account, one rank, one wallet set', hot: false, span: '' },
@@ -44,8 +46,7 @@ const INSIDE = [
   { t: 'Core', b: 'The engine room under everything.', d: 'Ledger law, recipes only, no balances outside the book.' },
 ] as const;
 
-const TICKER =
-  '$4,820 CARD LDN→AMS APPROVED · AED 6,207 USDC SETTLED · ESCROW LOCKED · BLOCK FINALISED · BUYBACK EXECUTED · BURN POSTED · 0 KYB · ';
+const TICKER = 'DEMO TAPE · $4,820 CARD LDN→AMS · AED 6,207 USDC · ESCROW LOCKED · BLOCK FINALISED · BUYBACK · BURN · 0 KYB · ';
 
 export default function App() {
   const [plane, setPlane] = useState<'fiat' | 'proto'>('fiat');
@@ -81,9 +82,10 @@ export default function App() {
           </nav>
           <button
             type="button"
-            className="ml-auto border border-line px-2 py-1 font-mono text-[11px] text-mute md:hidden"
+            className="ml-auto border border-line px-2 py-1 font-mono text-[11px] text-mute focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime md:hidden"
             onClick={() => setMenu((v) => !v)}
             aria-label="Menu"
+            aria-expanded={menu}
           >
             {menu ? <X size={16} /> : <List size={16} />}
           </button>
@@ -281,27 +283,33 @@ export default function App() {
                   Not a spreadsheet.
                 </h2>
                 <p className="mt-4 max-w-[36ch] text-mute">
-                  Spot. Futures. Options. OTC. Convert. Copy. Forex. Advanced charting for people who actually trade — drawings, indicators,
+                  Spot. Futures. Options. OTC. Convert. Copy. Forex. Pro charting for people who actually trade — drawings, indicators,
                   multi-layout analysis.
                 </p>
                 <p className="mt-3 font-mono text-[11px] text-mute">
-                  Demo uses Lightweight Charts (Apache-2.0). Advanced Charts licence path in progress.
+                  Chart panel is a demo series only. Licensed pro charting path in progress — no live prices.
                 </p>
               </div>
               <div className="relative overflow-hidden rounded-[3px] border border-line bg-[#040705] shadow-2xl">
                 <BorderBeam />
                 <div className="relative z-10">
                   <div className="flex items-center gap-3 border-b border-line px-3 py-2 font-mono text-[11px]">
-                    <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_#c6ff3d]" />
+                    <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_#c4f000]" />
                     <span>BTC-PERP</span>
                     <span className="text-mute">CROSS</span>
                     <span className="text-mute">DEMO</span>
                   </div>
-                  <TradeChart />
+                  <Suspense
+                    fallback={
+                      <div className="flex h-[300px] items-center justify-center font-mono text-[11px] text-mute">Loading chart…</div>
+                    }
+                  >
+                    <TradeChart />
+                  </Suspense>
                   <div className="flex gap-4 border-t border-line px-3 py-2 font-mono text-[11px] text-mute">
                     <span>Mark 67,412.2</span>
                     <span className="text-lime">+2.4%</span>
-                    <span>Illustrative series</span>
+                    <span>Illustrative demo series</span>
                   </div>
                 </div>
               </div>
@@ -436,7 +444,7 @@ export default function App() {
 
           {/* CLOSE */}
           <section id="key" className="relative overflow-hidden border-t border-line px-4 py-20 text-center md:px-6">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_100%,rgba(198,255,61,0.12),transparent_60%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_100%,rgba(196,240,0,0.12),transparent_60%)]" />
             <div className="relative mx-auto max-w-3xl">
               <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">The drop</p>
               <h2 className="mt-3 text-[clamp(1.6rem,4.5vw,2.8rem)] font-extrabold leading-[1.05] tracking-tight">
@@ -449,7 +457,7 @@ export default function App() {
               <p className="mt-4 text-mute">see you in the lobby</p>
               <a
                 href="mailto:hello@intafaced.com?subject=CUT%20MY%20KEY"
-                className="mt-8 inline-flex bg-lime px-6 py-3.5 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(198,255,61,0.2)]"
+                className="mt-8 inline-flex bg-lime px-6 py-3.5 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(196,240,0,0.2)]"
               >
                 CUT MY KEY
               </a>
@@ -468,10 +476,16 @@ export default function App() {
 
         <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-line px-5 py-8 text-sm text-mute sm:px-8 lg:px-12">
           <div>
-            <a href="#top" className="inline-flex no-underline">
+            <a
+              href="#top"
+              className="inline-flex no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime"
+            >
               <BrandMark compact />
             </a>
             <p className="mt-1">Twelve rooms. Two planes. One economy.</p>
+            <p className="mt-2 max-w-sm font-mono text-[10px] leading-relaxed tracking-wide text-mute/80">
+              Wave grid adapted from franky-adl/3d-wave-grid (MIT). Chart panel is demo data only.
+            </p>
           </div>
           <p className="font-mono text-[11px] tracking-wide">Separate rooms. One house. One key.</p>
           <a href="mailto:hello@intafaced.com" className="font-mono text-[11px] hover:text-lime">

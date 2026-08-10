@@ -1,5 +1,4 @@
 import { cn } from '@/lib/utils';
-import type { ReactNode } from 'react';
 
 /** Cult UI–inspired shift card: more detail on hover */
 export function ShiftCard({ title, blurb, detail, className }: { title: string; blurb: string; detail?: string; className?: string }) {
