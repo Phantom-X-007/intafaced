@@ -31,6 +31,8 @@ import {
 } from './affiliates/commission-rate-law.js';
 import { accrueWithFreezes } from './affiliates/freeze.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
+import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
+import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
 
 /**
  * svc-identity's API (§4.1).
@@ -41,10 +43,43 @@ import type { AccrualStore } from './affiliates/accrual-store.js';
  */
 
 function toTrpcError(err: unknown): TRPCError {
+  // Already shaped for the wire — do not re-wrap.
+  if (err instanceof TRPCError) return err;
+
   // A guard rejection (`requireMfa`) is not a server fault. It arrives as the
   // shared package's AuthError, which is a different class from this service's.
   if (err instanceof GuardError) {
     return new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
+  }
+
+  if (err instanceof KycDocumentError) {
+    switch (err.code) {
+      case 'kyc_doc.not_found':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'kyc_doc.key_missing':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      case 'kyc_doc.forbidden':
+      case 'kyc_doc.reader_missing':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'kyc_doc.too_large':
+      case 'kyc_doc.bad_content_type':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      case 'kyc_doc.decrypt_failed':
+        return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+    }
+  }
+
+  if (err instanceof ProviderRefBindError) {
+    switch (err.code) {
+      case 'kyc_bind.record_not_found':
+      case 'kyc_bind.doc_mismatch':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'kyc_bind.record_not_pending':
+      case 'kyc_bind.already_set':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'kyc_bind.invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
   }
 
   if (err instanceof ReferralError) {
@@ -184,6 +219,25 @@ function presentKyc(record: KycRecordView) {
   };
 }
 
+/** Meta only on the wire — never bytes, never ciphertext. */
+function presentDocMeta(meta: StoredDocumentMeta) {
+  return {
+    id: meta.id,
+    userId: meta.userId,
+    contentType: meta.contentType,
+    byteLength: meta.byteLength,
+    createdAt: meta.createdAt.toISOString(),
+  };
+}
+
+const kycDocMetaOutput = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  contentType: z.string(),
+  byteLength: z.number().int().positive(),
+  createdAt: z.string(),
+});
+
 export function createIdentityRouter(
   auth: AuthService,
   rank: RankService,
@@ -208,6 +262,17 @@ export function createIdentityRouter(
      * Absent → payout plans but refuses to post (`affiliate.payout.ledger_unwired`).
      */
     ledger?: Pick<LedgerClient, 'post'>;
+    /**
+     * §10 encrypted KYC document vault. Optional so light tests and boot without
+     * IDENTITY_KYC_DOC_KEY still serve auth. When absent, document procedures
+     * refuse closed (PRECONDITION_FAILED) — never invent a key.
+     */
+    kycDocs?: KycDocumentVault;
+    /**
+     * Operator bind of vault document id → kyc_records.provider_ref.
+     * Injected so this router never holds a free SQL handle for records.
+     */
+    bindKycProviderRef?: (input: BindProviderRefInput) => Promise<BindProviderRefResult>;
   },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
@@ -216,6 +281,8 @@ export function createIdentityRouter(
   const accruals = options.accruals;
   const accrualTierLaw = options.accrualTierLaw ?? UNPUBLISHED_ACCRUAL_TIER_LAW;
   const ledger = options.ledger;
+  const kycDocs = options.kycDocs;
+  const bindKycProviderRef = options.bindKycProviderRef;
 
   function requireReferral(): ReferralService {
     if (!referral) {
@@ -236,6 +303,26 @@ export function createIdentityRouter(
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Affiliate accrual store is not configured' });
     }
     return accruals;
+  }
+
+  function requireKycDocs(): KycDocumentVault {
+    if (!kycDocs) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'KYC document vault is not configured (set IDENTITY_KYC_DOC_KEY and wire kycDocs)',
+      });
+    }
+    return kycDocs;
+  }
+
+  function requireBindKyc(): (input: BindProviderRefInput) => Promise<BindProviderRefResult> {
+    if (!bindKycProviderRef) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'KYC provider_ref bind is not configured',
+      });
+    }
+    return bindKycProviderRef;
   }
 
   return router({
@@ -651,6 +738,105 @@ export function createIdentityRouter(
         .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
         .output(z.array(kycRecordOutput))
         .query(async ({ input }) => (await auth.listPendingKyc(input?.limit ?? 50)).map(presentKyc)),
+
+      /**
+       * §10 — operator stores a KYC document into the encrypted vault.
+       *
+       * Returns meta + opaque id only. NEVER returns plaintext/ciphertext.
+       * Live vendor webhook remains Class X; this is the in-house store path.
+       * MFA required: same privilege class as approve (document = PII grant prep).
+       */
+      storeDocument: scopedProcedure('admin:compliance')
+        .input(
+          z.object({
+            userId: z.string().uuid(),
+            contentType: z.string().min(1).max(128),
+            /** Base64 document bytes (max 10 MiB decoded). */
+            bytesBase64: z.string().min(1).max(14_000_000),
+          }),
+        )
+        .output(kycDocMetaOutput)
+        .mutation(async ({ ctx, input }) => {
+          try {
+            requireMfa(ctx.principal);
+            const vault = requireKycDocs();
+            let bytes: Buffer;
+            try {
+              bytes = Buffer.from(input.bytesBase64, 'base64');
+            } catch {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: 'bytesBase64 is not valid base64' });
+            }
+            // Empty after decode is a put refusal from the store; reject early for a clean code.
+            if (bytes.length === 0) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: 'Document bytes empty' });
+            }
+            return presentDocMeta(
+              await vault.put({
+                userId: input.userId,
+                contentType: input.contentType,
+                bytes,
+              }),
+            );
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Meta-only list for one subject. No document bytes on the wire.
+       * Compliance scope only — not a free userId lookup for ordinary sessions.
+       */
+      listDocuments: scopedProcedure('admin:compliance')
+        .input(z.object({ userId: z.string().uuid() }))
+        .output(z.array(kycDocMetaOutput))
+        .query(async ({ input }) => {
+          try {
+            const vault = requireKycDocs();
+            return (await vault.listMetaForUser(input.userId)).map(presentDocMeta);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Bind vault document id as kyc_records.provider_ref for a pending record.
+       * Ownership of the document must match the record subject — cross-user bind refused.
+       * Returns the opaque pointer only (never bytes).
+       */
+      bindDocument: scopedProcedure('admin:compliance')
+        .input(
+          z.object({
+            recordId: z.string().uuid(),
+            documentId: z.string().uuid(),
+          }),
+        )
+        .output(
+          z.object({
+            recordId: z.string().uuid(),
+            userId: z.string().uuid(),
+            providerRef: z.string().uuid(),
+            document: kycDocMetaOutput,
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          try {
+            requireMfa(ctx.principal);
+            const bind = requireBindKyc();
+            const result = await bind({
+              recordId: input.recordId,
+              documentId: input.documentId,
+              operatorId: ctx.principal.userId,
+            });
+            return {
+              recordId: result.recordId,
+              userId: result.userId,
+              providerRef: result.providerRef,
+              document: presentDocMeta(result.document),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
     }),
 
     rank: router({

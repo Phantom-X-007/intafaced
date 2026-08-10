@@ -14,19 +14,19 @@
 
 Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 11/55 · **5P** 1/4
 
-**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Multi-tier affiliate / IB trees, payout automation (agent:w13-l04) · Screening queues, geo-block, VPN/Tor detection (w10-l04-edge) · Warehouse — read replica + cube layer (w10-l04-edge)
+**In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Multi-tier affiliate / IB trees, payout automation (agent:w13-l04) · Screening queues, geo-block, VPN/Tor detection (w10-l04-edge) · Warehouse — read replica + cube layer (w10-l04-edge)
 
-**🟢 33 ready to claim** — nothing blocks these:
+**🟢 32 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
-- `identity.pii-isolation` — PII isolation — KYC documents in a separate encrypted store (§10)
 - `trade.futures` — Perps: isolated margin, funding, partial-liquidation ladder
 - `trade.otc` — OTC RFQ desk, staked-tier gate
 - `trade.copy` — Copy trading, audited leaders, fee-share (not profit-share)
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
 - `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
-- …and 25 more
+- `trade.mm-bot` — Internal market-maker seeding books at launch
+- …and 24 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

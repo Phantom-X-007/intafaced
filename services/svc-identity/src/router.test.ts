@@ -1,3 +1,7 @@
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { SESSION_SCOPES, issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
@@ -7,6 +11,8 @@ import type { RankService } from './rank/rank-service.js';
 import { MemoryAccrualStore } from './affiliates/accrual-store.js';
 import type { CommissionRow } from './affiliates/commission.js';
 import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
+import { MemoryKycDocumentStore } from './kyc/document-store.js';
+import type { BindProviderRefInput, BindProviderRefResult } from './kyc/provider-ref-bind.js';
 
 /**
  * The tRPC boundary for KYC and step-up.
@@ -1088,5 +1094,140 @@ describe('affiliates.payout on the mount', () => {
     const err = await api.affiliates.payout({ feeEventId: FEE_EVT }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('UNAUTHORIZED');
     expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('0');
+  });
+});
+
+// ── §10 KYC document vault on the tRPC boundary ──────────────────────────────
+
+describe('kyc document procedures — meta only, no free cross-user bytes', () => {
+  const DOC_USER = USER;
+  const OTHER = '99999999-9999-4999-8999-999999999999';
+
+  function vaultRouter(bind?: (input: BindProviderRefInput) => Promise<BindProviderRefResult>) {
+    const store = new MemoryKycDocumentStore(randomBytes(32).toString('base64'));
+    const r = createIdentityRouter(stub.auth, stub.rank, {
+      registrationOpen: true,
+      kycDocs: store,
+      bindKycProviderRef: bind,
+    });
+    return { store, r };
+  }
+
+  it('storeDocument requires admin:compliance + MFA and returns meta only', async () => {
+    const { r } = vaultRouter();
+    const user = r.createCaller(await ctx(['identity:write'], { userId: DOC_USER }));
+    expect(
+      codeOf(
+        await user.kyc
+          .storeDocument({
+            userId: DOC_USER,
+            contentType: 'image/jpeg',
+            bytesBase64: Buffer.from('scan').toString('base64'),
+          })
+          .catch((e: unknown) => e),
+      ),
+    ).toBe('FORBIDDEN');
+
+    const noMfa = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: false }));
+    expect(
+      codeOf(
+        await noMfa.kyc
+          .storeDocument({
+            userId: DOC_USER,
+            contentType: 'image/jpeg',
+            bytesBase64: Buffer.from('scan').toString('base64'),
+          })
+          .catch((e: unknown) => e),
+      ),
+    ).toBe('UNAUTHORIZED');
+
+    const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
+    const meta = await op.kyc.storeDocument({
+      userId: DOC_USER,
+      contentType: 'image/jpeg',
+      bytesBase64: Buffer.from('passport-bytes').toString('base64'),
+    });
+    expect(meta.userId).toBe(DOC_USER);
+    expect(meta.contentType).toBe('image/jpeg');
+    expect(meta.byteLength).toBe(Buffer.byteLength('passport-bytes'));
+    expect(meta).not.toHaveProperty('bytes');
+    expect(meta).not.toHaveProperty('bytesBase64');
+    expect(meta).not.toHaveProperty('ciphertext');
+  });
+
+  it('listDocuments is compliance-only and never includes foreign users or bytes', async () => {
+    const { r, store } = vaultRouter();
+    await store.put({ userId: DOC_USER, contentType: 'image/png', bytes: Buffer.from('a') });
+    await store.put({ userId: OTHER, contentType: 'image/png', bytes: Buffer.from('b') });
+
+    const user = r.createCaller(await ctx(['identity:read'], { userId: DOC_USER }));
+    expect(codeOf(await user.kyc.listDocuments({ userId: DOC_USER }).catch((e: unknown) => e))).toBe('FORBIDDEN');
+
+    const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR }));
+    const list = await op.kyc.listDocuments({ userId: DOC_USER });
+    expect(list).toHaveLength(1);
+    expect(list[0]!.userId).toBe(DOC_USER);
+    expect(list[0]).not.toHaveProperty('bytes');
+  });
+
+  it('bindDocument refuses when vault bind is unwired; succeeds with opaque pointer only', async () => {
+    const unwired = createIdentityRouter(stub.auth, stub.rank, {
+      registrationOpen: true,
+      kycDocs: new MemoryKycDocumentStore(randomBytes(32).toString('base64')),
+    });
+    const opUnwired = unwired.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
+    expect(
+      codeOf(
+        await opUnwired.kyc.bindDocument({ recordId: RECORD, documentId: '55555555-5555-4555-8555-555555555555' }).catch((e: unknown) => e),
+      ),
+    ).toBe('PRECONDITION_FAILED');
+
+    const docId = '66666666-6666-4666-8666-666666666666';
+    const bind = async (input: BindProviderRefInput): Promise<BindProviderRefResult> => ({
+      recordId: input.recordId,
+      userId: DOC_USER,
+      providerRef: input.documentId,
+      document: {
+        id: input.documentId,
+        userId: DOC_USER,
+        contentType: 'image/jpeg',
+        byteLength: 12,
+        createdAt: new Date('2026-08-10T00:00:00.000Z'),
+      },
+    });
+    const { r } = vaultRouter(bind);
+    const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
+    const bound = await op.kyc.bindDocument({ recordId: RECORD, documentId: docId });
+    expect(bound.providerRef).toBe(docId);
+    expect(bound.document).not.toHaveProperty('bytes');
+  });
+
+  it('storeDocument without vault refuses closed — never invents a key', async () => {
+    const r = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true });
+    const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
+    expect(
+      codeOf(
+        await op.kyc
+          .storeDocument({
+            userId: DOC_USER,
+            contentType: 'image/jpeg',
+            bytesBase64: Buffer.from('x').toString('base64'),
+          })
+          .catch((e: unknown) => e),
+      ),
+    ).toBe('PRECONDITION_FAILED');
+  });
+});
+
+describe('kyc surface never mounts a document-bytes read procedure', () => {
+  it('router source has no getDocument / readDocument / decryptDocument on the wire path', () => {
+    // router.test.ts lives next to router.ts
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'router.ts'), 'utf8');
+    expect(src).not.toMatch(/getDocument|readDocument|downloadDocument/);
+    // getFor may exist only if someone mistakenly mounts it — forbid mounting decrypt on kyc procedures.
+    expect(src).not.toMatch(/vault\.getFor|kycDocs\.getFor|\.getFor\(/);
+    expect(src).toContain('storeDocument');
+    expect(src).toContain('listDocuments');
+    expect(src).toContain('bindDocument');
   });
 });
