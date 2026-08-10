@@ -8,6 +8,7 @@ import { RAIL_CAPABILITIES, RAIL_MODES } from './rails/rail-adapter.js';
 import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.js';
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
 import type { PermissionArea } from './submerchants.js';
+import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
 
 /**
  * svc-pay's internal tRPC surface (§2 — cross-service calls go through
@@ -683,6 +684,46 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             return toSettlementOut(await pay.releasePendingSettlement(input));
           }),
         ),
+    }),
+
+    /**
+     * pay.routing — smart-routing input honesty (SPEC §5 / DIRECTION §8).
+     * When a profile requires geo/method/risk, blank data refuses rather than
+     * inventing approval rates or default bands. Moves no value.
+     */
+    routing: router({
+      assertInputs: publicProcedure
+        .input(
+          z.object({
+            required: z.array(z.enum(['geo', 'method', 'risk'])),
+            geoCountry: z.string().nullable().optional(),
+            method: z.string().nullable().optional(),
+            riskBand: z.string().nullable().optional(),
+          }),
+        )
+        .output(z.object({ ok: z.literal(true) }))
+        .query(({ input }) => {
+          try {
+            assertRoutingInputsPresent(
+              { required: input.required },
+              {
+                geoCountry: input.geoCountry,
+                method: input.method,
+                riskBand: input.riskBand,
+              },
+            );
+            return { ok: true as const };
+          } catch (e) {
+            if (e instanceof RoutingInputError) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${e.code}: ${e.message}`,
+                cause: e,
+              });
+            }
+            throw e;
+          }
+        }),
     }),
 
     /**
