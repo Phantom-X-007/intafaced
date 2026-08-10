@@ -292,6 +292,23 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/capabilities exposes matrix + refuse arms without auth', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      asOfMs: number;
+      routes: Array<{ name: string; kind: string }>;
+      refuseArms: Array<{ id: string; httpStatus: number }>;
+    };
+    expect(body.asOfMs).toBe(1_700_000_000_000);
+    expect(body.routes.length).toBeGreaterThan(10);
+    expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'refuse')).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'setLeverage' && a.httpStatus === 501)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'openPosition')).toBe(true);
+    await app.close();
+  });
+
   it('GET /api/v1/orderbook/:symbol returns depth with decimal strings', async () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT?limit=10' });

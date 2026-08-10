@@ -487,6 +487,7 @@ app.log.info(
     reconcileJobs: reconcileJobs.host.list(),
     trpc: true,
     publicRest: [
+      '/api/v1/capabilities',
       '/api/v1/markets',
       '/api/v1/orderbook/:symbol',
       '/api/v1/ticker/:symbol',

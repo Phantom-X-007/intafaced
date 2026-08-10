@@ -661,6 +661,39 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           }),
         ),
 
+      /** Caller's follows only — product desk list. */
+      listMyFollows: scopedProcedure('trade:read', { module: 'trade' }).query(({ ctx }) =>
+        guard(async () => {
+          if (!copy) return [];
+          return copy.listMyFollows(ctx.principal);
+        }),
+      ),
+
+      /**
+       * Plan a mirror of a leader fill under one of the caller's follows.
+       * Envelope / cap / expiry refuse typed — never invents a different shape.
+       * Does not place a spot order (auto-mirror execution is a separate residual).
+       */
+      planMirror: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            followId: z.string().min(1).max(64),
+            fillId: z.string().min(1).max(120),
+            marketId: z.string().min(1).max(64),
+            side: z.enum(['buy', 'sell']),
+            qty: decimal,
+            notional: decimal,
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.planMirrorForFollow(ctx.principal, input);
+          }),
+        ),
+
       /**
        * Attribute + settle leader fee-share for a follower fill.
        * Blank §8 → PRECONDITION_FAILED. Never invents rates.

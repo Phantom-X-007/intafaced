@@ -727,4 +727,91 @@ describe('CopyService', () => {
     expect(exposure).toBe(parseAmount('100'));
     expect(exposure <= parseAmount('150')).toBe(true);
   });
+
+  /**
+   * Same fillId redelivery must not re-reserve earnings / re-bump round-trips.
+   * Mirror path already claims fillId (#1199); settle had only ledger keys —
+   * redelivery re-ran reserveEarnings and poisoned the period counters.
+   */
+  it('redelivered settleFeeShare does not re-bump period stats or double-pay', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+        rail: 'test',
+        railRef: 'copy-redeliver-seed',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'redeliver-seed-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('10'),
+      }),
+    );
+
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+
+    const input = {
+      followId: follow.followId,
+      fillId: 'fill-once-only',
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10,
+    } as const;
+
+    const first = await svc.settleFeeShare(principal, input);
+    expect(first.settled).toBe(true);
+    expect(first.cappedLeaderShare).toBe('0.5');
+
+    const afterFirst = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(afterFirst.earningsPaid).toBe(parseAmount('0.5'));
+    expect(afterFirst.roundTrips).toBe(1);
+
+    const leaderAfterFirst = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+
+    // Redeliver the same fill — must be a no-op on counters and balances.
+    const second = await svc.settleFeeShare(principal, input);
+    expect(second.settled).toBe(true);
+    expect(second.cappedLeaderShare).toBe(first.cappedLeaderShare);
+    expect(second.fillId).toBe(first.fillId);
+
+    const afterSecond = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(afterSecond.earningsPaid).toBe(afterFirst.earningsPaid);
+    expect(afterSecond.roundTrips).toBe(1);
+
+    const leaderAfterSecond = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+    expect(leaderAfterSecond).toBe(leaderAfterFirst);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+
+    // Concurrent redelivery of the same fill must still hold.
+    const concurrent = await Promise.all([
+      svc.settleFeeShare(principal, input),
+      svc.settleFeeShare(principal, input),
+      svc.settleFeeShare(principal, input),
+    ]);
+    expect(concurrent.every((r) => r.settled && r.cappedLeaderShare === first.cappedLeaderShare)).toBe(true);
+    const afterConcurrent = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(afterConcurrent.roundTrips).toBe(1);
+    expect(afterConcurrent.earningsPaid).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(leaderAfterFirst);
+  });
 });

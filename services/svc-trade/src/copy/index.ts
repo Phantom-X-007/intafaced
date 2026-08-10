@@ -13,6 +13,8 @@ export {
   type AddExposureResult,
   type StoredMirrorPlan,
   type ClaimMirrorFillResult,
+  type StoredSettledFeeShare,
+  type RunFeeShareSettleOnceResult,
 } from './follow-store.js';
 export { CopyError, COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, type CopyErrorCode } from './errors.js';
 export {
