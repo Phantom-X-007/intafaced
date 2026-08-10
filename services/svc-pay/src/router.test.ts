@@ -736,6 +736,20 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     ).resolves.toEqual({ ok: true });
   });
 
+  it('fraud.evaluate declines a blocklisted IP with a reason', async () => {
+    const api = await caller([]);
+    const d = await api.fraud.evaluate({
+      merchantId: MERCHANT,
+      amount: '10',
+      assetId: 'USDT',
+      ip: '203.0.113.9',
+      blocklists: { ips: ['203.0.113.9'] },
+    });
+    expect(d.outcome).toBe('decline');
+    expect(d.reasons.length).toBeGreaterThan(0);
+    expect(d.reasons[0]!.ruleId).toBe('blocklist_ip');
+  });
+
   it('refuses with FORBIDDEN rather than NOT_FOUND, consistently, on all three', async () => {
     stub.ownedBy(ANOTHER_USER);
     const api = await caller(['pay:read']);

@@ -9,6 +9,7 @@ import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.j
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
 import type { PermissionArea } from './submerchants.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
+import { evaluateFraud } from './fraud/evaluate.js';
 
 /**
  * svc-pay's internal tRPC surface (§2 — cross-service calls go through
@@ -723,6 +724,83 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             }
             throw e;
           }
+        }),
+    }),
+
+    /**
+     * pay.fraud — scoring mechanism only (SPEC §3). Moves no value.
+     * Ledger reverse-money recipes stay unwired (Class X park). Declines always explain.
+     */
+    fraud: router({
+      evaluate: publicProcedure
+        .input(
+          z.object({
+            merchantId: z.string().min(1),
+            amount: amountSchema,
+            assetId: assetIdSchema,
+            ip: z.string().nullable().optional(),
+            deviceId: z.string().nullable().optional(),
+            recentPaymentCount: z.number().int().min(0).optional(),
+            recentVolume: amountSchema.optional(),
+            baselineAmount: amountSchema.nullable().optional(),
+            thresholds: z
+              .object({
+                maxPaymentsInWindow: z.number().int().min(0).optional(),
+                maxVolumeInWindow: amountSchema.optional(),
+                amountAnomalyMultiplier: z.number().positive().optional(),
+                velocityCountAction: z.enum(['review', 'decline']).optional(),
+                velocityVolumeAction: z.enum(['review', 'decline']).optional(),
+                amountAnomalyAction: z.enum(['review', 'decline']).optional(),
+              })
+              .optional(),
+            blocklists: z
+              .object({
+                ips: z.array(z.string()).optional(),
+                devices: z.array(z.string()).optional(),
+              })
+              .optional(),
+            enabled: z
+              .object({
+                velocity_count: z.boolean().optional(),
+                velocity_volume: z.boolean().optional(),
+                amount_anomaly: z.boolean().optional(),
+                blocklist_ip: z.boolean().optional(),
+                blocklist_device: z.boolean().optional(),
+              })
+              .optional(),
+          }),
+        )
+        .output(
+          z.object({
+            outcome: z.enum(['allow', 'review', 'decline']),
+            reasons: z.array(z.object({ ruleId: z.string(), detail: z.string() })),
+            skippedDisabled: z.array(z.string()),
+          }),
+        )
+        .query(({ input }) => {
+          const decision = evaluateFraud({
+            merchantId: input.merchantId,
+            amount: input.amount,
+            assetId: input.assetId,
+            ip: input.ip,
+            deviceId: input.deviceId,
+            recentPaymentCount: input.recentPaymentCount,
+            recentVolume: input.recentVolume,
+            baselineAmount: input.baselineAmount,
+            thresholds: input.thresholds,
+            blocklists: input.blocklists
+              ? {
+                  ips: input.blocklists.ips,
+                  devices: input.blocklists.devices,
+                }
+              : undefined,
+            enabled: input.enabled,
+          });
+          return {
+            outcome: decision.outcome,
+            reasons: decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+            skippedDisabled: [...decision.skippedDisabled],
+          };
         }),
     }),
 
