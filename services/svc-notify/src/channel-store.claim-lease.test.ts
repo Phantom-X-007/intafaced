@@ -83,6 +83,8 @@ describe('MemoryDeliveryStore claim lease', () => {
 
     nowMs += 60_001;
     const second = await store.claim('n5', 'sms', 3);
+    expect(second.claimed).toBe(true);
+    if (!second.claimed) return;
     expect(second).toEqual({ claimed: true, id: first.id, attempt: 2 });
 
     // Late response from attempt 1 — must not invent accepted for the live claim.

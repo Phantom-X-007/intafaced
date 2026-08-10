@@ -64,24 +64,21 @@ const SMS_CREDS = {
  * code. Only `PATH` and `SystemRoot` are carried, because node needs them.
  */
 function boot(over: Record<string, string>): { code: number | null; stderr: string } {
-  const result = spawnSync(
-    process.execPath,
-    ['--import', 'tsx', ENTRYPOINT],
-    {
-      cwd: PKG,
-      encoding: 'utf8',
-      timeout: 60_000,
-      env: {
-        PATH: process.env.PATH ?? '',
-        ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
-        SERVICE_NAME: 'svc-notify',
-        DATABASE_URL: UNREACHABLE_DB,
-        EDGE_PRINCIPAL_SECRET: 'e'.repeat(40),
-        ...over,
-      },
+  // timeout lives on the options object — spawnSync takes at most 3 args.
+  // A 4th positional (legacy) fails typecheck and was never applied.
+  const result = spawnSync(process.execPath, ['--import', 'tsx', ENTRYPOINT], {
+    cwd: PKG,
+    encoding: 'utf8',
+    timeout: BOOT_TIMEOUT_MS,
+    env: {
+      PATH: process.env.PATH ?? '',
+      ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+      SERVICE_NAME: 'svc-notify',
+      DATABASE_URL: UNREACHABLE_DB,
+      EDGE_PRINCIPAL_SECRET: 'e'.repeat(40),
+      ...over,
     },
-    BOOT_TIMEOUT_MS,
-  );
+  });
   return { code: result.status, stderr: result.stderr ?? '' };
 }
 
