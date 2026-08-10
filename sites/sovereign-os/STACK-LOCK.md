@@ -1,40 +1,25 @@
-# STACK-LOCK — Sovereign OS apply site
+# STACK-LOCK V4 multi (2026-08-10)
 
-**Locked 2026-08-09 · AFK run**
+| ID    | Library                 | Component          | Local path                                 | Section           | Licence             |
+| ----- | ----------------------- | ------------------ | ------------------------------------------ | ----------------- | ------------------- |
+| M1    | Magic UI pattern        | Marquee            | `src/components/magicui/marquee.tsx`       | ticker / close    | MIT-style reimpl    |
+| M2    | Magic UI pattern        | Number Ticker      | `src/components/magicui/number-ticker.tsx` | hero stats        | MIT-style + motion  |
+| M3    | Magic UI pattern        | Border Beam        | `src/components/magicui/border-beam.tsx`   | trade / blueprint | MIT-style           |
+| M4    | Magic UI pattern        | Bento Grid         | `src/components/magicui/bento-grid.tsx`    | rooms             | MIT-style           |
+| M5    | Magic UI pattern        | Blur Fade          | `src/components/magicui/blur-fade.tsx`     | sections          | MIT-style + motion  |
+| M6    | Magic UI pattern        | Grid Pattern       | `src/components/magicui/grid-pattern.tsx`  | ambient           | MIT-style           |
+| R1    | React Bits pattern      | Split Heading      | `src/components/bits/split-heading.tsx`    | hero              | pattern + motion    |
+| R2/A1 | Aceternity/Bits pattern | Background Beams   | `src/components/bits/background-beams.tsx` | hero              | pattern, lime theme |
+| R3/A2 | Ace/Bits pattern        | Spotlight Card     | `src/components/bits/spotlight-card.tsx`   | laws / planes     | pattern             |
+| C1    | Cult UI pattern         | Shift Card         | `src/components/bits/shift-card.tsx`       | inside house      | pattern             |
+| S1    | shadcn/Radix            | Tabs / Accordion   | `src/components/ui/*`                      | systems / depth   | MIT                 |
+| S2    | TradingView             | lightweight-charts | `src/components/trade-chart.tsx`           | trade             | Apache-2.0          |
+| S3    | Phosphor                | icons              | package                                    | nav/mobile        | MIT                 |
 
-| Layer       | Choice                                                                                       | Licence / note                                                  |
-| ----------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Delivery    | Static HTML + CSS + JS                                                                       | No framework build (env has no pnpm; max reliability overnight) |
-| Host target | GitHub raw Pages / Cloudflare tunnel / custom `trade.intafaced.com`                          | First public HTTPS wins                                         |
-| Tokens      | CSS variables: void black, lime accent, mono + display system fonts with selective grotesque | No Inter-default purple                                         |
-| Motion      | CSS only (marquee, fade)                                                                     | prefers-reduced-motion respected                                |
-| Icons       | Inline SVG minimal / unicode                                                                 | No icon npm pack                                                |
-| Charts      | CSS terminal mock only                                                                       | No Advanced Charts; no unlicensed TV files                      |
-| Content     | Denon bank MD / inlined sections                                                             | Words SoT                                                       |
+## Theme
 
-## Section → source
+void `#050806` · lime `#c6ff3d` · all demos re-skinned (no purple)
 
-| Section                 | Source                                                 |
-| ----------------------- | ------------------------------------------------------ |
-| Nav, footer             | CUSTOM                                                 |
-| Hero + stats + ticker   | CUSTOM + CSS marquee (Magic UI pattern, reimplemented) |
-| Manifesto, laws         | CUSTOM editorial                                       |
-| Planes                  | CUSTOM split                                           |
-| Rooms bento             | CUSTOM grid                                            |
-| Systems tabs            | CUSTOM JS tabs                                         |
-| TRADE                   | CUSTOM + terminal mock                                 |
-| Drop / never-do / close | CUSTOM                                                 |
-| Accordion walls         | CUSTOM details/summary                                 |
+## Caps
 
-## Kill list
-
-Aceternity purple demos, three equal SaaS cards as identity, payments cal.com primary, Advanced Charts package, three.js.
-
-## V2 additions (audit fix)
-
-- Lightweight Charts 4.2.0 via unpkg CDN (Apache-2.0) for TRADE demo only
-- Beam border cards (Magic UI-style pattern, re-themed lime)
-- CSS marquee tickers (max 2: open + close)
-- Plane toggle, systems tabs, blueprint card, stream pills
-- Noise + grid ambient layers
-- Full Denon section map I–XXIV via content.json generator
+≤2 marquees · 1 heavy BG · 1 beam family · no Advanced Charts binary

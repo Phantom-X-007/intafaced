@@ -1,0 +1,94 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-void: #050806;
+  --color-panel: #0a0f0c;
+  --color-panel-2: #0f1511;
+  --color-line: #1a261f;
+  --color-ink: #eef6f0;
+  --color-mute: #7f9186;
+  --color-lime: #c6ff3d;
+  --color-lime-dim: #7ab01f;
+  --color-danger: #ff5c45;
+  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-marquee,
+  .animate-border-beam,
+  .animate-pulse-slow,
+  .animate-beam-drift {
+    animation: none !important;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--color-void);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-lime) 35%, transparent);
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee var(--duration, 45s) linear infinite;
+}
+
+@keyframes border-beam {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-border-beam {
+  animation: border-beam linear infinite;
+}
+
+@keyframes pulse-slow {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 8s ease-in-out infinite;
+}
+
+@keyframes beam-drift {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-beam-drift {
+  animation: beam-drift 5s ease-in-out infinite;
+}

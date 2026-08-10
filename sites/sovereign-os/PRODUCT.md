@@ -1,11 +1,8 @@
-# PRODUCT.md — trade.intafaced.com (TV apply surface)
+# PRODUCT.md — Sovereign OS apply site V4
 
-**Register:** marketing / long-form launch manifesto  
-**Audience:** TradingView reviewers + traders; street-culture crypto OS  
-**Job:** Prove INTAFACED is a real exchange/OS product company so Advanced Charts can be granted  
-**Not:** payments orchestration apex clone; not live trading app; not Advanced Charts embed
+**Register:** marketing / product drop  
+**Audience:** TradingView reviewers + traders / street culture  
+**Job:** Premium face for Advanced Charts application + brand-true OS map  
+**Not:** payments apex · whitepaper dump · empty stub · Advanced Charts pre-grant
 
-**Primary CTA:** CUT MY KEY / waitlist interest  
-**Nav:** TRADE · PROTOCOL · P2P · LAUNCH · BANK · PAY · PREDICT · QUANT · ACADEMY · TOKEN · CHAIN (in-page)
-
-**Design read:** long-form product launch for traders, black glass + bright green + poster type + terminal density, not bank SaaS.
+**Design read:** long-form product drop, black glass + bright green + poster type + terminal/lobby density.

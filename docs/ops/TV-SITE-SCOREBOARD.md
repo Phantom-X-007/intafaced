@@ -1,15 +1,14 @@
-# TV Site Scoreboard — AFK + Audit V2
+# TV Site Scoreboard — V4 multi DONE
 
-| Wave      | Status                 | Evidence                                                   |
-| --------- | ---------------------- | ---------------------------------------------------------- |
-| W0–W4 v1  | DONE                   | first ship                                                 |
-| Audit V2  | DONE                   | full Denon map, hero, LWC, components                      |
-| Live      | DONE                   | https://zenyoda3.github.io/intafaced-sovereign-os/ (~80KB) |
-| W5 Submit | PACK-READY-HUMAN-CLICK | docs/TV-APPLY-PACK.md                                      |
-| W6        | NOT THIS RUN           |                                                            |
+| Wave           | Status     | Evidence                                           |
+| -------------- | ---------- | -------------------------------------------------- |
+| V4 multi build | DONE       | Vite/React + multi-lib components                  |
+| Live           | DONE       | https://zenyoda3.github.io/intafaced-sovereign-os/ |
+| Leverage       | PASS       | STACK-LOCK M1–M6 R1 R2/A1 R3/A2 C1 S1–S3           |
+| W5 Submit      | PACK-READY | human click TV form                                |
 
-**V2 adds:** sections I–XXIV, split hero + lobby visual, Lightweight Charts demo, plane toggle, blueprint card, beam cards, stream grid, ambient grid/noise, closing ticker.
+**Leverage used:** Magic UI patterns (marquee, ticker, beam, bento, blur-fade, grid) · React Bits split heading · Aceternity-style beams + spotlight cards · Cult-style shift cards · shadcn/Radix tabs+accordion · Lightweight Charts · Phosphor
 
-**PR:** #1597 merged (v1); v2 on `feat/tv-sovereign-os-apply-site` + pages main.
+**Denon spine:** hero, manifesto, laws, planes, 12 rooms+roles, systems tabs, trade+chart, chain P0–P3, blueprint, never, drop, inside-house, close
 
-**You:** submit TV form with live URL when ready; optional `trade.intafaced.com` DNS.
+**You:** hard-refresh live URL · submit TV when ready
