@@ -23,3 +23,10 @@ void `#050806` · lime `#c6ff3d` · all demos re-skinned (no purple)
 ## Caps
 
 ≤2 marquees · 1 heavy BG · 1 beam family · no Advanced Charts binary
+
+## Hero 3D (2026-08-10)
+
+| ID | Source | Path | Notes |
+| H1 | franky-adl/3d-wave-grid MIT | src/components/hero/waveGridEngine.ts | adapted, lime/void, no GUI |
+| H2 | same | HeroWaveCanvas (lazy) | DPR/quality scale, pause offscreen |
+| H3 | fallback | HeroFallback | CSS grid when reduced-motion / no WebGL |

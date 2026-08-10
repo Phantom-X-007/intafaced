@@ -1,0 +1,4 @@
+3d-wave-grid (MIT)
+Copyright (c) 2026 franky-adl
+https://github.com/franky-adl/3d-wave-grid
+Adapted for INTAFACED Sovereign OS hero (themed, no debug GUI).

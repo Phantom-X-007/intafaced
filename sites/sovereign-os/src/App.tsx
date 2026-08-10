@@ -1,16 +1,14 @@
-import { BackgroundBeams } from '@/components/bits/background-beams';
 import { ShiftCard } from '@/components/bits/shift-card';
-import { SplitHeading } from '@/components/bits/split-heading';
 import { SpotlightCard } from '@/components/bits/spotlight-card';
 import { BentoCard, BentoGrid } from '@/components/magicui/bento-grid';
 import { BlurFade } from '@/components/magicui/blur-fade';
 import { BorderBeam } from '@/components/magicui/border-beam';
 import { GridPattern } from '@/components/magicui/grid-pattern';
 import { Marquee } from '@/components/magicui/marquee';
-import { NumberTicker } from '@/components/magicui/number-ticker';
 import { TradeChart } from '@/components/trade-chart';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { HeroSection } from '@/components/hero/HeroSection';
 import { List, X } from '@phosphor-icons/react';
 import { useState } from 'react';
 
@@ -100,55 +98,7 @@ export default function App() {
       ) : null}
 
       <main id="top">
-        {/* HERO */}
-        <section className="relative overflow-hidden px-4 pb-10 pt-16 md:px-6 md:pt-24">
-          <BackgroundBeams />
-          <div className="relative mx-auto max-w-5xl">
-            <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-lime-dim">INTAFACED · SOVEREIGN OS</p>
-            <SplitHeading
-              className="max-w-[12ch] text-[clamp(2.4rem,7vw,4.4rem)]"
-              accentLine={1}
-              lines={['WEB2 RAILS IN.', 'WEB3 SETTLEMENT OUT.', 'INTELLIGENCE BINDING THEM.']}
-            />
-            <p className="mt-5 max-w-[36ch] text-base text-mute md:text-lg">
-              Twelve rooms. Two planes. One identity, one ledger, one token — and one key that opens every door.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <a
-                href="#key"
-                className="bg-lime px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(198,255,61,0.18)]"
-              >
-                ENTER THE CHAIN
-              </a>
-              <a
-                href="#rooms"
-                className="border border-line px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-ink hover:border-lime-dim"
-              >
-                SEE ALL TWELVE ROOMS
-              </a>
-            </div>
-            <ul className="mt-10 grid max-w-2xl grid-cols-3 gap-2 md:grid-cols-6">
-              {[
-                [12, 'Modules'],
-                [28, 'Products'],
-                [30, 'Streams'],
-                [10, 'Agents'],
-                [2, 'Planes'],
-                [1, 'Chain'],
-              ].map(([n, label]) => (
-                <li key={String(label)} className="border border-line bg-panel/80 p-2.5">
-                  <strong className="block font-mono text-xl text-lime">
-                    <NumberTicker value={n as number} />
-                  </strong>
-                  <em className="text-[9px] not-italic uppercase tracking-[0.1em] text-mute">{label as string}</em>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.08em] text-mute">
-              They built rooms. We built the house. Then we built the ground under it.
-            </p>
-          </div>
-        </section>
+        <HeroSection />
 
         {/* TICKER */}
         <div className="border-y border-line bg-panel">
