@@ -1,7 +1,8 @@
 /**
- * Official INTAFACED mark (three offset blocks) + wordmark.
- * Assets: public/brand/ from Documents/intafaced branding.
- * Lime token aligned to brand kit #c4f000 for the mark fill.
+ * Official INTAFACED mark + wordmark.
+ * Source of truth: Google Drive brand kit (same bytes as local kit).
+ * Rules: Lime #C4F000 · Ink #0A0A0A · wordmark = Geist Mono · dark bg → lime mark.
+ * Full lockup PNGs: public/brand/lockup/ (use on dark / use on light).
  */
 
 type Props = {
@@ -19,7 +20,7 @@ const markSize = {
   lg: 'h-12 w-14',
 } as const;
 
-/** Inline SVG — no FOUC, works offline / first paint */
+/** Inline SVG from kit — no FOUC, first paint safe */
 export function LogoMark({ className = '', size = 'md' }: { className?: string; size?: 'sm' | 'md' | 'lg' }) {
   return (
     <svg
@@ -40,7 +41,7 @@ export function BrandMark({ className = '', compact = false, markOnly = false, s
   const s = size ?? (compact ? 'sm' : 'md');
   return (
     <span
-      className={['inline-flex items-center gap-2 font-extrabold tracking-tight text-ink', className].filter(Boolean).join(' ')}
+      className={['inline-flex items-center gap-2 font-mono font-bold tracking-tight text-ink', className].filter(Boolean).join(' ')}
       aria-label="INTAFACED"
     >
       <LogoMark size={s} />

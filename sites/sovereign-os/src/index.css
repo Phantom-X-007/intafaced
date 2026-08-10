@@ -7,12 +7,13 @@
   --color-line: #1a261f;
   --color-ink: #eef6f0;
   --color-mute: #7f9186;
-  /* Brand kit official lime (Documents/intafaced branding) */
+  /* Brand kit: Lime #C4F000 · Ink #0A0A0A */
   --color-lime: #c4f000;
   --color-lime-dim: #8ab000;
+  --color-brand-ink: #0a0a0a;
   --color-danger: #ff5c45;
   --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 html {
