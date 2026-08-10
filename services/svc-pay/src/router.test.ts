@@ -717,6 +717,25 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     expect(stub.calls.filter((c) => c.method === 'listSettlements')).toHaveLength(0);
   });
 
+  it('routing.assertInputs refuses missing geo without inventing a country', async () => {
+    const api = await caller([]);
+    const err = await api.routing.assertInputs({ required: ['geo'], method: 'card', riskBand: 'low' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_input_missing/);
+  });
+
+  it('routing.assertInputs passes when required dimensions are present', async () => {
+    const api = await caller([]);
+    await expect(
+      api.routing.assertInputs({
+        required: ['geo', 'method', 'risk'],
+        geoCountry: 'DE',
+        method: 'crypto',
+        riskBand: 'external:ok',
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+
   it('refuses with FORBIDDEN rather than NOT_FOUND, consistently, on all three', async () => {
     stub.ownedBy(ANOTHER_USER);
     const api = await caller(['pay:read']);
