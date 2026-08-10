@@ -131,17 +131,32 @@ export function loanReserve(assetId: string): AccountRef {
 
 /**
  * A sub-account's spendable balance — svc-bank's "spaces" read this.
- *
- * There is deliberately no `subAccountHold` beside it. One existed and had no
- * caller, because it could not have had a working one: it built `kind: 'hold'`
- * with no purpose, and `assertPurposedLocks` refuses every such post. A hold on
- * a space needs the same treatment as `houseHold` — a required purpose naming
- * what the value is being held FOR — and is worth writing when something
- * actually holds one, rather than left as a constructor whose every output the
- * ledger rejects.
  */
 export function subAccountAvailable(subAccountId: string, assetId: string): AccountRef {
   return { ownerType: 'subaccount', ownerId: subAccountId, assetId, kind: 'available' };
+}
+
+/**
+ * A sub-account hold FOR ONE PURPOSE (P0-3).
+ *
+ * Added when bank.business dual-control needed a real ledger hold on a named
+ * space: over-threshold maker/checker must reserve value from the debit space,
+ * which may be a named pot (`ownerType: 'subaccount'`), not only primary
+ * `userAvailable`. Purpose is required — an unpurposed sub-account hold was
+ * correctly refused forever; this constructor only exists so a named purpose
+ * (e.g. `business-approval:<id>`) can pair with the same space's available pot.
+ */
+export function subAccountHold(subAccountId: string, assetId: string, purpose: string): AccountRef {
+  if (!purpose?.trim()) {
+    throw new Error('subAccountHold requires a purpose (P0-3) — e.g. `business-approval:<id>`');
+  }
+  return {
+    ownerType: 'subaccount',
+    ownerId: subAccountId,
+    assetId,
+    kind: 'hold',
+    purpose: purpose.trim(),
+  };
 }
 
 /** Where a module's fee revenue lands. Staking yield is distributed from here (§4.3). */

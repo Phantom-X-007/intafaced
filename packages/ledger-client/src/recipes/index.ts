@@ -1,7 +1,16 @@
 import { mulBps, sub, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
-import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
+import {
+  bankTransfer,
+  earnDeposit,
+  earnWithdraw,
+  earnPoolFund,
+  earnInterest,
+  businessApprovalHold,
+  businessApprovalRelease,
+  businessApprovalSettle,
+} from './bank.js';
 import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
 import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfallRecovered } from './chargeback.js';
 import { subAccountTransfer } from './sub-accounts.js';
@@ -1090,6 +1099,10 @@ export const recipes = {
   earnWithdraw,
   earnPoolFund,
   earnInterest,
+  // bank.business dual-control — purposed holds so pending is not paper-only.
+  businessApprovalHold,
+  businessApprovalRelease,
+  businessApprovalSettle,
   // SPEC-SUBACCOUNTS — only legal cross-partition value path. See ./sub-accounts.ts.
   subAccountTransfer,
   // §8.7 market.commerce — one-time purchase + house commission. Flagged shared-package.

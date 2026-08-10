@@ -35,6 +35,36 @@ async function deposit(userId: string, amount: string, tag: string): Promise<voi
   );
 }
 
+describe('businessApprovalHold / settle / release', () => {
+  it('holds, settles to destination, and is re-drive safe', async () => {
+    await deposit(USER, '100', 'biz-hold');
+    const approvalId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const from = userAvailable(USER, 'USDT');
+    const to = userAvailable(USER_B, 'USDT');
+    const held = await ledger.post(recipes.businessApprovalHold({ approvalId, from, amount: amt('40') }));
+    const heldAgain = await ledger.post(recipes.businessApprovalHold({ approvalId, from, amount: amt('40') }));
+    expect(heldAgain.id).toBe(held.id);
+    expect(formatAmount((await ledger.balance(from)).amount)).toBe('60');
+
+    const settled = await ledger.post(recipes.businessApprovalSettle({ approvalId, from, to, amount: amt('40') }));
+    const settledAgain = await ledger.post(recipes.businessApprovalSettle({ approvalId, from, to, amount: amt('40') }));
+    expect(settledAgain.id).toBe(settled.id);
+    expect(formatAmount((await ledger.balance(to)).amount)).toBe('40');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('release returns hold to source', async () => {
+    await deposit(USER, '50', 'biz-rel');
+    const approvalId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const from = userAvailable(USER, 'USDT');
+    await ledger.post(recipes.businessApprovalHold({ approvalId, from, amount: amt('20') }));
+    expect(formatAmount((await ledger.balance(from)).amount)).toBe('30');
+    await ledger.post(recipes.businessApprovalRelease({ approvalId, from, amount: amt('20') }));
+    expect(formatAmount((await ledger.balance(from)).amount)).toBe('50');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+});
+
 describe('bankTransfer', () => {
   it('moves available → available and is re-drive safe per occurrence', async () => {
     await deposit(USER, '100', 't1');

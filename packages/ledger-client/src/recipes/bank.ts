@@ -2,7 +2,7 @@ import { sum, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
 import { accountKey } from '../client.js';
-import { earnPoolReserve, earnStakeAccount, houseFees, userAvailable } from '../accounts.js';
+import { earnPoolReserve, earnStakeAccount, houseFees, subAccountHold, userAvailable, userHold } from '../accounts.js';
 
 /**
  * BANK RECIPES (§8.1).
@@ -227,5 +227,88 @@ export function earnInterest(input: EarnInterestInput): PostRequest {
       credit(earnPoolReserve(input.poolId, input.assetId), total),
       ...input.payouts.map((p) => debit(userAvailable(p.userId, input.assetId), p.amount)),
     ],
+  };
+}
+
+// ── Business dual-control holds (bank.business / §31:811) ────────────────────
+
+/** Hold pot paired to the debit available pot (primary user or named space). */
+function businessApprovalHoldFor(from: AccountRef, approvalId: string): AccountRef {
+  const purpose = `business-approval:${approvalId}`;
+  if (from.kind !== 'available') {
+    throw new InvalidEntryError('Business approval hold requires an available source pot');
+  }
+  if (from.ownerType === 'user') return userHold(from.ownerId, from.assetId, purpose);
+  if (from.ownerType === 'subaccount') return subAccountHold(from.ownerId, from.assetId, purpose);
+  throw new InvalidEntryError(`Business approval hold unsupported ownerType ${from.ownerType}`);
+}
+
+export interface BusinessApprovalHoldInput {
+  /** Approval id — also the ledger purpose key. */
+  approvalId: string;
+  /** Debit space available pot (primary or named). */
+  from: AccountRef;
+  amount: Amount;
+}
+
+/**
+ * Reserve value while a checker decides — available → purposed hold on the same owner.
+ *
+ * Without this, "pending approval" was only a row and the maker could still spend
+ * the funds (or a concurrent transfer could empty the pot before approve).
+ */
+export function businessApprovalHold(input: BusinessApprovalHoldInput): PostRequest {
+  requirePositive('business approval hold amount', input.amount);
+  const hold = businessApprovalHoldFor(input.from, input.approvalId);
+  if (input.from.assetId !== hold.assetId) {
+    throw new InvalidEntryError('Business approval hold cannot change asset');
+  }
+  return {
+    idempotencyKey: `bank.business.hold:${input.approvalId}`,
+    module: 'bank',
+    reason: 'bank.business.approval.held',
+    meta: { approvalId: input.approvalId },
+    entries: [credit(input.from, input.amount), debit(hold, input.amount)],
+  };
+}
+
+/** Checker rejected or maker cancelled — hold returns to the debit pot. */
+export function businessApprovalRelease(input: BusinessApprovalHoldInput): PostRequest {
+  requirePositive('business approval release amount', input.amount);
+  const hold = businessApprovalHoldFor(input.from, input.approvalId);
+  return {
+    idempotencyKey: `bank.business.release:${input.approvalId}`,
+    module: 'bank',
+    reason: 'bank.business.approval.released',
+    meta: { approvalId: input.approvalId },
+    entries: [credit(hold, input.amount), debit(input.from, input.amount)],
+  };
+}
+
+export interface BusinessApprovalSettleInput {
+  approvalId: string;
+  /** Original debit space (defines the hold pot owner). */
+  from: AccountRef;
+  /** Credit destination available pot. */
+  to: AccountRef;
+  amount: Amount;
+}
+
+/** Checker approved — purposed hold → destination available (one atomic post). */
+export function businessApprovalSettle(input: BusinessApprovalSettleInput): PostRequest {
+  requirePositive('business approval settle amount', input.amount);
+  if (input.to.kind !== 'available') {
+    throw new InvalidEntryError('Business approval settle destination must be available');
+  }
+  if (input.from.assetId !== input.to.assetId) {
+    throw new InvalidEntryError(`Business approval settle cannot change asset (${input.from.assetId} → ${input.to.assetId})`);
+  }
+  const hold = businessApprovalHoldFor(input.from, input.approvalId);
+  return {
+    idempotencyKey: `bank.business.settle:${input.approvalId}`,
+    module: 'bank',
+    reason: 'bank.business.approval.settled',
+    meta: { approvalId: input.approvalId },
+    entries: [credit(hold, input.amount), debit(input.to, input.amount)],
   };
 }

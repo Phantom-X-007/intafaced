@@ -8,15 +8,16 @@ import { createBankServices, type BankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 
 /**
- * Unit card — bank.business maker/checker honest partial (wave 10 L08)
+ * Unit card — bank.business dual-control LEDger holds (wave 13 L03)
  *
- * 1. Promise: §31:811 / tracker — maker/checker spend thresholds
- * 2. Break: no dual-control; over-threshold transfers single-actor
- * 3. Done bar: over-threshold needs second member; self-approve refused; under threshold posts
+ * 1. Promise: §31:811 / Engine A Done bar — maker/checker holds
+ * 2. Break on tip: over-threshold "pending" left available spendable (paper hold only)
+ * 3. Done bar: over-threshold reserves purposed hold; concurrent drain fails;
+ *    approve settles hold→dest; reject/cancel releases hold; self-approve refused
  * 4. Class M
- * 5. Paths: services/svc-bank/**
- * 6. RED: this suite
- * 7. Collision: bank wall under nitro-w10-l08 claim
+ * 5. Paths: services/svc-bank/** · packages/ledger-client recipes (shared money path)
+ * 6. RED: this suite (available drops on propose; cancel restores)
+ * 7. Collision: claim-check clear; Denon #1625–1627 no svc-bank paths
  */
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
@@ -72,7 +73,7 @@ if (!available) {
     await db.drop();
   }, 30_000);
 
-  describe('maker/checker dual control', () => {
+  describe('maker/checker dual control with ledger holds', () => {
     it('posts under threshold without a checker', async () => {
       const account = await bank.business.createAccount({
         name: 'Ops Co',
@@ -97,7 +98,7 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
-    it('holds over-threshold until a different checker approves', async () => {
+    it('reserves over-threshold on propose; checker settle lands at destination', async () => {
       const account = await bank.business.createAccount({
         name: 'Ops Co',
         assetId: 'USDT',
@@ -122,16 +123,19 @@ if (!available) {
         amount: amt('250'),
       });
       expect(proposed.kind).toBe('pending');
-      expect(await availableOf(MAKER, 'USDT')).toBe('1000');
+      // LEDger hold: available drops immediately; pot not credited yet.
+      expect(await availableOf(MAKER, 'USDT')).toBe('750');
+      expect(formatAmount(await bank.spaces.balanceOf(pot))).toBe('0');
+      if (proposed.kind !== 'pending') throw new Error('expected pending');
+      expect(proposed.approval.holdLedgerTxId).toBeTruthy();
 
       await expect(
         bank.business.approve({
-          approvalId: proposed.kind === 'pending' ? proposed.approval.id : '',
+          approvalId: proposed.approval.id,
           checkerUserId: MAKER,
         }),
       ).rejects.toMatchObject({ code: 'bank.business_self_approve' });
 
-      if (proposed.kind !== 'pending') throw new Error('expected pending');
       const posted = await bank.business.approve({
         approvalId: proposed.approval.id,
         checkerUserId: CHECKER,
@@ -139,6 +143,107 @@ if (!available) {
       expect(posted.ledgerTxId).toBeTruthy();
       expect(await availableOf(MAKER, 'USDT')).toBe('750');
       expect(formatAmount(await bank.spaces.balanceOf(pot))).toBe('250');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('held funds cannot be double-spent while pending', async () => {
+      const account = await bank.business.createAccount({
+        name: 'Ops Co',
+        assetId: 'USDT',
+        spendThreshold: amt('50'),
+        creatorUserId: MAKER,
+      });
+      await bank.business.addMember({
+        accountId: account.id,
+        actorUserId: MAKER,
+        userId: CHECKER,
+        role: 'checker',
+      });
+      const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+      const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'A' });
+      const other = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'B' });
+      await fund(MAKER, 'USDT', '100');
+
+      const proposed = await bank.business.proposeTransfer({
+        accountId: account.id,
+        makerUserId: MAKER,
+        fromSpaceId: primary.id,
+        toSpaceId: pot.id,
+        amount: amt('100'),
+      });
+      if (proposed.kind !== 'pending') throw new Error('expected pending');
+      expect(await availableOf(MAKER, 'USDT')).toBe('0');
+
+      await expect(
+        bank.transfers.transfer({
+          transferId: 'drain-attempt',
+          fromSpaceId: primary.id,
+          toSpaceId: other.id,
+          amount: amt('1'),
+        }),
+      ).rejects.toBeTruthy();
+
+      await bank.business.approve({ approvalId: proposed.approval.id, checkerUserId: CHECKER });
+      expect(formatAmount(await bank.spaces.balanceOf(pot))).toBe('100');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('reject releases the hold back to available', async () => {
+      const account = await bank.business.createAccount({
+        name: 'Ops Co',
+        assetId: 'USDT',
+        spendThreshold: amt('10'),
+        creatorUserId: MAKER,
+      });
+      await bank.business.addMember({
+        accountId: account.id,
+        actorUserId: MAKER,
+        userId: CHECKER,
+        role: 'checker',
+      });
+      const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+      const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'X' });
+      await fund(MAKER, 'USDT', '100');
+
+      const proposed = await bank.business.proposeTransfer({
+        accountId: account.id,
+        makerUserId: MAKER,
+        fromSpaceId: primary.id,
+        toSpaceId: pot.id,
+        amount: amt('50'),
+      });
+      if (proposed.kind !== 'pending') throw new Error('expected pending');
+      expect(await availableOf(MAKER, 'USDT')).toBe('50');
+
+      await bank.business.reject({ approvalId: proposed.approval.id, checkerUserId: CHECKER });
+      expect(await availableOf(MAKER, 'USDT')).toBe('100');
+      expect(formatAmount(await bank.spaces.balanceOf(pot))).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('maker cancel releases the hold', async () => {
+      const account = await bank.business.createAccount({
+        name: 'Ops Co',
+        assetId: 'USDT',
+        spendThreshold: amt('10'),
+        creatorUserId: MAKER,
+      });
+      const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+      const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Y' });
+      await fund(MAKER, 'USDT', '80');
+
+      const proposed = await bank.business.proposeTransfer({
+        accountId: account.id,
+        makerUserId: MAKER,
+        fromSpaceId: primary.id,
+        toSpaceId: pot.id,
+        amount: amt('40'),
+      });
+      if (proposed.kind !== 'pending') throw new Error('expected pending');
+      expect(await availableOf(MAKER, 'USDT')).toBe('40');
+
+      await bank.business.cancel({ approvalId: proposed.approval.id, actorUserId: MAKER });
+      expect(await availableOf(MAKER, 'USDT')).toBe('80');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 

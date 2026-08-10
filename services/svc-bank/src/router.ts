@@ -168,6 +168,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.business_approval_inactive':
       case 'bank.business_self_approve':
       case 'bank.business_rejected':
+      case 'bank.business_cancelled':
       // CONFLICT rather than BAD_REQUEST: the request is well-formed, it just
       // collides with a loan that already exists under that id on other terms.
       case 'bank.loan_principal_mismatch':
@@ -2099,6 +2100,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     amount: amountString,
     status: z.enum(['pending', 'approved', 'rejected', 'cancelled']),
     transferId: z.string().nullable(),
+    holdLedgerTxId: z.string().nullable(),
     ledgerTxId: z.string().nullable(),
     createdAt: z.string(),
   });
@@ -2215,6 +2217,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
               amount: formatAmount(a.amount),
               status: a.status,
               transferId: a.transferId,
+              holdLedgerTxId: a.holdLedgerTxId,
               ledgerTxId: a.ledgerTxId,
               createdAt: a.createdAt.toISOString(),
             },
@@ -2239,6 +2242,16 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         }),
       ),
 
+    cancel: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ approvalId: z.string().uuid() }))
+      .output(z.object({ ok: z.literal(true) }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          await bank.business.cancel({ approvalId: input.approvalId, actorUserId: ctx.principal.userId });
+          return { ok: true as const };
+        }),
+      ),
+
     pending: scopedProcedure('bank:read', { module: 'bank' })
       .input(z.object({ accountId: z.string().uuid() }))
       .output(z.array(businessApprovalOutput))
@@ -2256,6 +2269,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             amount: formatAmount(a.amount),
             status: a.status,
             transferId: a.transferId,
+            holdLedgerTxId: a.holdLedgerTxId,
             ledgerTxId: a.ledgerTxId,
             createdAt: a.createdAt.toISOString(),
           }));
