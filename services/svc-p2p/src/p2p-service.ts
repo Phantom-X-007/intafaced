@@ -1175,6 +1175,13 @@ export class P2pService {
       if (trade.sellerId !== actorId) {
         throw new P2pError('Only the seller can confirm the fiat was received', 'p2p.not_the_seller');
       }
+      // Same legible refuse as cancel: a disputed escrow terminates only on a
+      // human ruling. Without this, the seller hits the DB trigger as a raw
+      // check_violation instead of `p2p.dispute_already_open` — money still
+      // safe, but the API lied about which path failed.
+      if (trade.status === 'disputed') {
+        throw new P2pError('A disputed trade is resolved by a moderator, not by the seller confirming receipt', 'p2p.dispute_already_open');
+      }
       // Defense in depth: take already refuses unpostable dust, but a trade row
       // could predate the gate or arrive via a future writer.
       assertReleasePostable(trade.amount, trade.feeBps);
