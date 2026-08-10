@@ -25,6 +25,11 @@ export type PutDocumentInput = {
   userId: string;
   contentType: string;
   bytes: Buffer;
+  /**
+   * Operator / tooling principal who put the document (compliance audit).
+   * Required on the operator tRPC path; optional for internal tooling tests.
+   */
+  storedBy?: string | null;
 };
 
 export type StoredDocumentMeta = {
@@ -32,6 +37,8 @@ export type StoredDocumentMeta = {
   userId: string;
   contentType: string;
   byteLength: number;
+  /** Operator who stored ciphertext — never the document subject by default. */
+  storedBy: string | null;
   createdAt: Date;
 };
 
@@ -119,20 +126,31 @@ export class KycDocumentStore implements KycDocumentVault {
     if (input.bytes.length === 0 || input.bytes.length > MAX_BYTES) {
       throw new KycDocumentError(`Document must be 1..${MAX_BYTES} bytes`, 'kyc_doc.too_large');
     }
+    const storedBy = input.storedBy?.trim() ? input.storedBy.trim() : null;
     const key = this.requireKey();
     const { ciphertext, nonce } = encryptDocument(key, input.bytes);
 
-    const rows = await this.sql<Array<{ id: string; user_id: string; content_type: string; byte_length: number; created_at: Date }>>`
-      INSERT INTO kyc_documents (user_id, content_type, byte_length, ciphertext, nonce, key_id)
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        content_type: string;
+        byte_length: number;
+        stored_by: string | null;
+        created_at: Date;
+      }>
+    >`
+      INSERT INTO kyc_documents (user_id, content_type, byte_length, ciphertext, nonce, key_id, stored_by)
       VALUES (
         ${input.userId},
         ${input.contentType},
         ${input.bytes.length},
         ${ciphertext},
         ${nonce},
-        ${this.keyId}
+        ${this.keyId},
+        ${storedBy}
       )
-      RETURNING id, user_id, content_type, byte_length, created_at
+      RETURNING id, user_id, content_type, byte_length, stored_by, created_at
     `;
     const row = rows[0]!;
     return {
@@ -140,6 +158,7 @@ export class KycDocumentStore implements KycDocumentVault {
       userId: row.user_id,
       contentType: row.content_type,
       byteLength: row.byte_length,
+      storedBy: row.stored_by,
       createdAt: row.created_at,
     };
   }
@@ -153,12 +172,13 @@ export class KycDocumentStore implements KycDocumentVault {
         user_id: string;
         content_type: string;
         byte_length: number;
+        stored_by: string | null;
         ciphertext: Buffer;
         nonce: Buffer;
         created_at: Date;
       }>
     >`
-      SELECT id, user_id, content_type, byte_length, ciphertext, nonce, created_at
+      SELECT id, user_id, content_type, byte_length, stored_by, ciphertext, nonce, created_at
         FROM kyc_documents WHERE id = ${id}
     `;
     const row = rows[0];
@@ -172,6 +192,7 @@ export class KycDocumentStore implements KycDocumentVault {
           userId: row.user_id,
           contentType: row.content_type,
           byteLength: row.byte_length,
+          storedBy: row.stored_by,
           createdAt: row.created_at,
         },
         bytes,
@@ -183,8 +204,17 @@ export class KycDocumentStore implements KycDocumentVault {
   }
 
   async listMetaForUser(userId: string): Promise<StoredDocumentMeta[]> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; content_type: string; byte_length: number; created_at: Date }>>`
-      SELECT id, user_id, content_type, byte_length, created_at
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        content_type: string;
+        byte_length: number;
+        stored_by: string | null;
+        created_at: Date;
+      }>
+    >`
+      SELECT id, user_id, content_type, byte_length, stored_by, created_at
         FROM kyc_documents
        WHERE user_id = ${userId}
        ORDER BY created_at DESC
@@ -194,6 +224,7 @@ export class KycDocumentStore implements KycDocumentVault {
       userId: row.user_id,
       contentType: row.content_type,
       byteLength: row.byte_length,
+      storedBy: row.stored_by,
       createdAt: row.created_at,
     }));
   }
@@ -214,8 +245,17 @@ export class KycDocumentStore implements KycDocumentVault {
   }
 
   async assertDocumentForUser(documentId: string, userId: string): Promise<StoredDocumentMeta> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; content_type: string; byte_length: number; created_at: Date }>>`
-      SELECT id, user_id, content_type, byte_length, created_at
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        content_type: string;
+        byte_length: number;
+        stored_by: string | null;
+        created_at: Date;
+      }>
+    >`
+      SELECT id, user_id, content_type, byte_length, stored_by, created_at
         FROM kyc_documents WHERE id = ${documentId}
     `;
     const row = rows[0];
@@ -227,6 +267,7 @@ export class KycDocumentStore implements KycDocumentVault {
       userId: row.user_id,
       contentType: row.content_type,
       byteLength: row.byte_length,
+      storedBy: row.stored_by,
       createdAt: row.created_at,
     };
   }
@@ -244,6 +285,7 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
       userId: string;
       contentType: string;
       byteLength: number;
+      storedBy: string | null;
       ciphertext: Buffer;
       nonce: Buffer;
       createdAt: Date;
@@ -270,6 +312,7 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
     if (input.bytes.length === 0 || input.bytes.length > MAX_BYTES) {
       throw new KycDocumentError(`Document must be 1..${MAX_BYTES} bytes`, 'kyc_doc.too_large');
     }
+    const storedBy = input.storedBy?.trim() ? input.storedBy.trim() : null;
     const key = this.requireKey();
     const { ciphertext, nonce } = encryptDocument(key, input.bytes);
     const id = randomUUID();
@@ -279,6 +322,7 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
       userId: input.userId,
       contentType: input.contentType,
       byteLength: input.bytes.length,
+      storedBy,
       ciphertext,
       nonce,
       createdAt,
@@ -288,6 +332,7 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
       userId: input.userId,
       contentType: input.contentType,
       byteLength: input.bytes.length,
+      storedBy,
       createdAt,
     };
   }
@@ -306,6 +351,7 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
           userId: row.userId,
           contentType: row.contentType,
           byteLength: row.byteLength,
+          storedBy: row.storedBy,
           createdAt: row.createdAt,
         },
         bytes,
@@ -325,6 +371,7 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
         userId: r.userId,
         contentType: r.contentType,
         byteLength: r.byteLength,
+        storedBy: r.storedBy,
         createdAt: r.createdAt,
       }));
   }
@@ -348,6 +395,7 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
       userId: row.userId,
       contentType: row.contentType,
       byteLength: row.byteLength,
+      storedBy: row.storedBy,
       createdAt: row.createdAt,
     };
   }

@@ -28,6 +28,19 @@ describe('PII access control — no free cross-user document read', () => {
     expect(() => assertDocAccess(USER_A, { kind: 'owner', userId: '' })).toThrow(/principal/i);
   });
 
+  it('records storedBy on meta for compliance audit — never on the subject by default', async () => {
+    const store = new MemoryKycDocumentStore(keyB64());
+    const meta = await store.put({
+      userId: USER_A,
+      contentType: 'image/jpeg',
+      bytes: Buffer.from('scan'),
+      storedBy: OP,
+    });
+    expect(meta.storedBy).toBe(OP);
+    expect(meta.userId).toBe(USER_A);
+    expect(meta.storedBy).not.toBe(USER_A);
+  });
+
   it('owner can decrypt own bytes; foreign owner cannot', async () => {
     const store = new MemoryKycDocumentStore(keyB64());
     const plain = Buffer.from('passport-scan-user-a');
