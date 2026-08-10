@@ -203,8 +203,8 @@ const PINNED = {
   // 1 — services/svc-ledger
   'services/svc-ledger': [[1, 'src/s2s-http.test.ts | TS2554 | Expected 4 arguments, but got 3.']],
 
-  // 1 — services/svc-notify
-  'services/svc-notify': [[1, 'src/boot-refusal.test.ts | TS2554 | Expected 1-3 arguments, but got 4.']],
+  // 0 — services/svc-notify (Wave 13 L12: spawnSync arity fixed; pin deleted)
+  'services/svc-notify': [],
 
   // 3 — services/svc-p2p
   'services/svc-p2p': [

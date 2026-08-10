@@ -190,7 +190,14 @@ export class NotificationDispatcher {
     // column is the difference between "the provider was down" and "we never
     // had anywhere to send it", and collapsing the two loses the answer a
     // borrower is owed.
-    await this.deliveries.settle({ id: claim.id, status: 'refused', refusalCode: code, detail, attempted: false });
+    await this.deliveries.settle({
+      id: claim.id,
+      attempt: claim.attempt,
+      status: 'refused',
+      refusalCode: code,
+      detail,
+      attempted: false,
+    });
     return { channel, status: 'refused', code, detail, retryable: false };
   }
 
@@ -218,12 +225,25 @@ export class NotificationDispatcher {
         idempotencyKey: `${notification.id}:${channel}`,
       });
 
-      await this.deliveries.settle({ id: claim.id, status: 'accepted', reference: receipt.reference, attempted: true });
+      await this.deliveries.settle({
+        id: claim.id,
+        attempt: claim.attempt,
+        status: 'accepted',
+        reference: receipt.reference,
+        attempted: true,
+      });
       return { channel, status: 'accepted', code: null, detail: null, retryable: false };
     } catch (err) {
       if (err instanceof ChannelRefusal) {
         // The adapter declined before doing anything — no credentials, typically.
-        await this.deliveries.settle({ id: claim.id, status: 'refused', refusalCode: err.code, detail: err.message, attempted: false });
+        await this.deliveries.settle({
+          id: claim.id,
+          attempt: claim.attempt,
+          status: 'refused',
+          refusalCode: err.code,
+          detail: err.message,
+          attempted: false,
+        });
         return { channel, status: 'refused', code: err.code, detail: err.message, retryable: false };
       }
 
@@ -239,6 +259,7 @@ export class NotificationDispatcher {
 
       await this.deliveries.settle({
         id: claim.id,
+        attempt: claim.attempt,
         status,
         refusalCode,
         detail,

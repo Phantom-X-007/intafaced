@@ -70,7 +70,7 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
     const claim = await store.claim('n2', 'sms', 1);
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
-    await store.settle({ id: claim.id, status: 'failed', attempted: true, detail: '503' });
+    await store.settle({ id: claim.id, attempt: claim.attempt, status: 'failed', attempted: true, detail: '503' });
 
     // 'failed' says "will be tried again". At the attempt ceiling that is false.
     expect(await store.reapExhausted(1)).toBe(1);
@@ -133,7 +133,7 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
     const claim = await store.claim('n5', 'email', 1);
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
-    await store.settle({ id: claim.id, status: 'accepted', attempted: true, reference: 'gw-1' });
+    await store.settle({ id: claim.id, attempt: claim.attempt, status: 'accepted', attempted: true, reference: 'gw-1' });
 
     expect(await store.reapExhausted(1)).toBe(0);
     expect((await store.listForNotification('n5'))[0]?.status).toBe('accepted');
@@ -145,7 +145,7 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
     const claim = await store.claim('n6', 'push', 1);
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
-    await store.settle({ id: claim.id, status: 'failed', attempted: true });
+    await store.settle({ id: claim.id, attempt: claim.attempt, status: 'failed', attempted: true });
 
     expect(await store.reapExhausted(1)).toBe(1);
     expect(await store.reapExhausted(1)).toBe(0);
