@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import { assertScreeningConfigured } from '@intafaced/config';
 import { createAdminApi, httpLedgerOperator } from './admin-api.js';
-import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
+import { registerAdminRoutes, registerKillSwitchGuard, registerNetworkAccessGuard } from './control-plane.js';
+import { resolveRequestRegion } from './geo-region.js';
 import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
 import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
@@ -228,6 +229,9 @@ app.get('/ready', async () => ({
 // through a test-only copy of the rule is not verified.
 
 registerKillSwitchGuard(app, killSwitches);
+// Network fail-closed on /api — product Done bar for VPN/signal residual.
+// Must not invent a partner; refuses only when env arms fail-closed / flagged.
+registerNetworkAccessGuard(app);
 registerAdminRoutes(app, admin);
 
 /**
@@ -251,13 +255,19 @@ app.all('/api/*', async (req, reply) => {
   // for why it is a hook and not a check here: a guard inside one handler
   // protects that handler, a hook protects the door.
 
+  // Region: DEFAULT_REGION, or trusted geo header when EDGE_GEO_COUNTRY_HEADER
+  // + EDGE_TRUST_PROXY are both set. Never caller-supplied free-form region.
+  const regionRes = resolveRequestRegion({
+    defaultRegion: env.DEFAULT_REGION,
+    trustProxy: env.EDGE_TRUST_PROXY !== undefined,
+    geoHeaderName: env.EDGE_GEO_COUNTRY_HEADER,
+    headers: req.headers as Record<string, string | string[] | undefined>,
+  });
+
   const exchanged = await exchangePrincipal(req.headers, {
     tokens: tokenConfig,
     edgeSecret: env.EDGE_PRINCIPAL_SECRET,
-    // Resolved here, never read from the request: region drives the
-    // jurisdiction matrix, so a caller who could set it would choose its own
-    // regulator. A single configured value today; geo-IP replaces this line.
-    region: env.DEFAULT_REGION,
+    region: regionRes.region,
     // Direct to identity for `ifc_…` API keys — never via this edge (loop).
     identityUrl: env.IDENTITY_URL,
   });
