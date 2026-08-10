@@ -267,8 +267,15 @@ export const FEATURES = [
     module: 'identity',
     phase: '1',
     plane: 'F',
+    status: 'wip',
+    owner: 'ZenYoda3',
     dependsOn: ['identity.kyc', 'identity.kyc-review'],
-    note: 'Law §10:443, gap-closed 2026-08-08: "PII isolation: KYC docs in separate encrypted store; services get status flags, never documents." Compliance-load-bearing and unrowed since the law was written (audit §A1.a #16). HALF OF IT ALREADY HOLDS — AND IT HOLDS VACUOUSLY, WHICH IS THE POINT OF THE ROW. `services/svc-identity/src/db/schema.ts` cites §10:443 by name and gives kyc_records one `provider_ref` column documented as "a pointer, never a document, a name, or a date of birth", so the services-get-flags half is honoured in code today. But it is honoured because NO DOCUMENT EXISTS ANYWHERE: no verification provider is integrated, so there is nothing yet to isolate. An invariant that holds only because the feature is empty is not an invariant; it is a coincidence with a deadline. WHY THIS READS `ready`: what is claimable now is the store itself (envelope encryption, separate credentials, no service-level read path) and a GATE asserting no service schema ever grows a document column. Both have to exist BEFORE the first document arrives — retrofitting isolation after a provider is wired is the expensive order, and the cheap window is open precisely because the store is empty. WHAT NEEDS THE OWNER: which verification provider. That is a commercial and jurisdictional choice, and Class X where real identity documents are involved — same class as the sanctions list (DIRECTION §8.7). PHASE: §10 is not phased by the law; `1` is stated so it sits with identity.kyc, the row whose data it protects.',
+    requires: [
+      'services/svc-identity/src/kyc/document-store.ts',
+      'services/svc-identity/src/kyc/provider-ref-bind.ts',
+      'services/svc-identity/drizzle/0010_kyc_document_store.sql',
+    ],
+    note: 'Law §10:443. WIP L11 wave 13 (2026-08-10): encrypted vault (#1348) + principal-bound getFor/deleteFor (no free get-by-id cross-user read) + operator tRPC storeDocument/listDocuments/bindDocument (meta only, never bytes) + provider_ref bind ownership gate + monorepo gate no foreign service touches kyc_documents. STILL NOT done: (1) production index.ts must wire kycDocs when IDENTITY_KYC_DOC_KEY set — held while Denon #1626 dual-writes index/auth-service; (2) live verification vendor webhook Class X owner. Services get status flags only; kyc.status never returns provider_ref or document bytes.',
   }),
   f('infra.drop-flags', 'Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11)', {
     module: 'core-ops',

@@ -26,6 +26,9 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `kyc.status`                                           | `identity:read`           | Own records + effective tier; never `providerRef` / `reviewedBy`                                          |
 | `kyc.pending`                                          | `admin:compliance`        | Operator review queue, oldest first                                                                       |
 | `kyc.approve` / `kyc.reject`                           | `admin:compliance` + MFA  | **Approval grants custodial access**                                                                      |
+| `kyc.storeDocument`                                    | `admin:compliance` + MFA  | Encrypted vault put; **meta only** on wire; needs `IDENTITY_KYC_DOC_KEY`                                  |
+| `kyc.listDocuments`                                    | `admin:compliance`        | Meta list for one subject — **never bytes**                                                               |
+| `kyc.bindDocument`                                     | `admin:compliance` + MFA  | Opaque vault id → pending `provider_ref` (same-user only)                                                 |
 | `rank.get`                                             | `identity:read`           | Rank, XP, XP to next tier                                                                                 |
 | `rank.perks`                                           | `identity:read`           | **The hot path** — every module calls this                                                                |
 | `rank.awardXp`                                         | service                   | Modules award XP here, never by writing `rank_state`                                                      |
@@ -64,7 +67,7 @@ There is **no verification-provider integration** here. Approval is an operator 
 
 **`provider_ref` is never client-written.** `kyc.submit` accepts only `tier` + `jurisdiction`. A free-text `providerRef` from the user was a PII side-channel into the pointer column (§10: pointer never holds name/DOB/docs). Opaque refs are minted by the encrypted document store (or operator tools) when that store lands; until then the column stays null and `kyc.status` never returns it.
 
-**Encrypted document store (mechanism):** table `identity.kyc_documents` holds AES-256-GCM ciphertext under `IDENTITY_KYC_DOC_KEY`. Opaque ids are what `provider_ref` may point at. No user-facing procedure returns document bytes. Live vendor webhook remains Class X.
+**Encrypted document store (mechanism):** table `identity.kyc_documents` holds AES-256-GCM ciphertext under `IDENTITY_KYC_DOC_KEY`. Opaque ids are what `provider_ref` may point at. No user-facing procedure returns document bytes. Reads are **principal-bound** (`getFor` owner|compliance) — there is no free get-by-id (cross-user PII read is refused as not-found). Operator procedures: `kyc.storeDocument` / `listDocuments` / `bindDocument`. Boot without the key leaves the vault unwired and those procedures refuse closed. Live vendor webhook remains Class X.
 
 **TOTP secret at rest:** `users.totp_secret` is AES-256-GCM sealed (`enc:v1:…`) under `IDENTITY_TOTP_SECRET_KEY` (32-byte base64 or 64-char hex). Enrol refuses without the key; prod boot refuses if missing. Dual-read still accepts legacy unprefixed plaintext until re-enrol.
 
