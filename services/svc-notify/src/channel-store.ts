@@ -186,7 +186,7 @@ export type ClaimResult =
 export interface SettleInput {
   id: string;
   /**
-   * The claim attempt this settle belongs to. A late settle from a reclaimed
+   * Wave 13 L12: ownership by attempt. A late settle from a reclaimed
    * attempt must not overwrite the live attempt's row (multi-replica free SMS
    * / status corruption when lease expired mid-gateway).
    */
