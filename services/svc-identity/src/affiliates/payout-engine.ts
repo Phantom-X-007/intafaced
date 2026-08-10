@@ -221,6 +221,8 @@ export function planAffiliatePayout(input: {
   const seen = new Set<string>();
   const beneficiaries = new Set<string>();
   let total: Amount = 0n;
+  /** First resolved fee pool for this fee event — mixed pools refuse (mirrors mixed asset). */
+  let feeEventSourceModule: string | null = null;
 
   for (const row of input.rows) {
     if (row.feeEventId !== feeEventId) {
@@ -281,6 +283,17 @@ export function planAffiliatePayout(input: {
       refuse(
         `Accrual row at hop ${row.hop} has invalid sourceModule ${JSON.stringify(row.sourceModule)} — refusing to guess a fee pool`,
         'affiliate.payout.invalid',
+      );
+    }
+    // One fee event → one houseFees module. A hand-assembled / corrupt row set
+    // that names both trade and pay would debit two pools for one event —
+    // refuse before any post, same class as mixed_asset.
+    if (feeEventSourceModule === null) {
+      feeEventSourceModule = sourceModule;
+    } else if (sourceModule !== feeEventSourceModule) {
+      refuse(
+        `Fee event ${feeEventId} has accrual rows naming both ${feeEventSourceModule} and ${sourceModule} fee pools — refusing a mixed-pool fan-out`,
+        'affiliate.payout.mixed_source_module',
       );
     }
 
