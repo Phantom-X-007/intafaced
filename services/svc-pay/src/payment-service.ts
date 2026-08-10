@@ -171,7 +171,39 @@ export type PayErrorCode =
   | 'pay.mandate_inactive'
   | 'pay.subscription_invalid'
   | 'pay.subscription_driver_absent'
-  | 'pay.mandate_rail_absent';
+  | 'pay.mandate_rail_absent'
+  // ── Recurring charge cycle (`subscriptions/charge-cycle.ts`) ──
+  /**
+   * The charge is larger than the mandate authorises, or falls outside its
+   * window. Checked at the moment of the CHARGE, not the moment of the plan: a
+   * period claimed under one mandate reading can be retried after those terms
+   * were lowered or replaced. The mandate is the ceiling, in money and in time.
+   */
+  | 'pay.subscription_exceeds_mandate'
+  /**
+   * No fee rate is published for this merchant and no default is configured.
+   * Refuse-closed, per the standing ruling that an unset rate does not fall back
+   * to a source seed, a zero, or a "sensible default" — `fee-share-law.ts` is the
+   * reference. Refused BEFORE the period is claimed, so the period stays owed and
+   * no attempt is spent on an operator's configuration gap.
+   */
+  | 'pay.subscription_fee_unpublished'
+  /**
+   * An invoice for a period was still unpaid a full interval later. Not a
+   * caller's mistake — the code exists so an unsettled period is a named fact
+   * rather than a row that sits `invoiced` forever while the subscription
+   * reports itself healthy and collects nothing.
+   */
+  | 'pay.subscription_invoice_unpaid'
+  /**
+   * Resuming would re-space periods past the mandate's `endsAt`.
+   *
+   * `adr/2026-08-08-twap-overdue-slice-disposition.md` forbids compressing the
+   * schedule to fit and rejects silently dropping the tail. What is left is to
+   * refuse and say by how much, so the merchant re-consents with a new mandate —
+   * the same disposition that ADR gives a resume past 2× the original duration.
+   */
+  | 'pay.subscription_resume_exceeds_mandate';
 
 export class PayError extends Error {
   constructor(
