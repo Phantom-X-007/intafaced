@@ -10,7 +10,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
-import { ANY_COUNTRY, InstrumentError } from './instruments.js';
+import { ANY_COUNTRY, InstrumentError, methodIdKey } from './instruments.js';
 import { createP2pRouter } from './router.js';
 import { P2pErasure } from './erasure.js';
 
@@ -309,14 +309,30 @@ if (!available) {
   describe('taking an offer', () => {
     it('refuses before any lock when the seller has nowhere to be paid', async () => {
       await fund(SELLER, '1000');
-      // A USD destination exists; the offer is priced in GBP.
+      // A USD destination exists; a GBP sell cannot list the method at all now
+      // (board honesty). The residual take path is: create with a live destination,
+      // remove it, then take — still refuse before any lock.
       await sellerInstrument({ fiatCurrency: 'USD' });
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'GBP',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          totalAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_method_no_destination' });
 
       const offer = await p2p.createOffer({
         makerId: SELLER,
         side: 'sell',
         asset: ASSET,
-        fiatCurrency: 'GBP',
+        fiatCurrency: 'USD',
         priceType: 'fixed',
         price: amt('1'),
         minAmt: amt('10'),
@@ -324,6 +340,8 @@ if (!available) {
         totalAmt: amt('500'),
         methods: [METHOD],
       });
+      const [header] = await instruments.listInstruments(SELLER);
+      await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
 
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
         code: 'p2p.take_refused',
@@ -336,8 +354,8 @@ if (!available) {
       expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
       expect(await sql`SELECT trade_id FROM p2p.trade_payment_instruments`).toHaveLength(0);
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
-      const after = await p2p.getOffer(offer.id);
-      expect(after.remainingAmt).toBe(amt('500'));
+      // Off the board once the destination is gone — strangers cannot probe it.
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
     });
 
     it('freezes the destination onto the trade in the same transaction', async () => {
@@ -461,6 +479,7 @@ if (!available) {
         details: { account_reference: CANARY, holder_name: 'A Seller' },
       });
 
+      // List the method they DO hold; probe a different method at take.
       const offer = await p2p.createOffer({
         makerId: SELLER,
         side: 'sell',
@@ -471,7 +490,7 @@ if (!available) {
         minAmt: amt('10'),
         maxAmt: amt('500'),
         totalAmt: amt('500'),
-        methods: ['Other_Rail'],
+        methods: ['Bank_Transfer'],
       });
 
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Other_Rail' })).rejects.toMatchObject({
@@ -498,9 +517,27 @@ if (!available) {
    * indistinguishable, and every one of them must be on the record.
    */
   describe('the take oracle', () => {
-    /** An offer that lists `methodId`, from a seller funded and ready. */
+    /**
+     * An offer that lists `methodId`, from a seller funded and ready.
+     * Sell create requires a live destination for each listed method — pass
+     * `withInstrument: false` only after one was created and then removed
+     * (legacy residual / mid-life removal).
+     */
     async function offerListing(methodId: string, fiatCurrency = 'USD') {
       await fund(SELLER, '1000');
+      // Ensure a live destination for create; caller may remove afterwards.
+      const existing = await instruments.listInstruments(SELLER);
+      const has = existing.some((h) => h.methodId === methodIdKey(methodId) && h.fiatCurrency === fiatCurrency && h.status === 'active');
+      if (!has) {
+        await instruments.createInstrument({
+          ownerId: SELLER,
+          methodId,
+          country: 'DE',
+          fiatCurrency,
+          label: 'for board',
+          details: { account_reference: CANARY, holder_name: 'A Seller' },
+        });
+      }
       return p2p.createOffer({
         makerId: SELLER,
         side: 'sell',
@@ -513,6 +550,12 @@ if (!available) {
         totalAmt: amt('500'),
         methods: [methodId],
       });
+    }
+
+    async function removeAllSellerInstruments() {
+      for (const h of await instruments.listInstruments(SELLER)) {
+        if (h.status === 'active') await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
+      }
     }
 
     /** Everything a caller can observe from one refused take. */
@@ -542,13 +585,20 @@ if (!available) {
       await registerMethod();
       await registerMethod({ methodId: 'other-rail' });
 
-      // (a) The offer lists the method. The seller has NO instrument for it.
+      // (a) Offer listed the method; destination was removed after post.
       const noInstrument = await offerListing('other-rail');
+      await removeAllSellerInstruments();
       const a = await refusalShape(noInstrument.id, 'other-rail');
 
-      // (b) The offer does NOT list the method. The seller DOES hold one.
+      // (b) The offer does NOT list the method. The seller DOES hold one for METHOD only.
       await sellerInstrument();
-      const notAccepted = await offerListing('other-rail');
+      const notAccepted = await offerListing('other-rail'); // needs other-rail instrument to create
+      // Keep METHOD instrument; drop other-rail so take with METHOD is "not accepted" by offer.
+      for (const h of await instruments.listInstruments(SELLER)) {
+        if (h.methodId === 'other-rail' && h.status === 'active') {
+          await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
+        }
+      }
       const b = await refusalShape(notAccepted.id, METHOD);
 
       expect(a.code).toBe('BAD_REQUEST');
@@ -569,11 +619,13 @@ if (!available) {
       await registerMethod();
       await registerMethod({ methodId: 'other-rail' });
       const offer = await offerListing('other-rail');
+      await removeAllSellerInstruments();
 
       await expect(refusalShape(offer.id, 'other-rail')).resolves.toMatchObject({ code: 'BAD_REQUEST' });
 
       expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
-      expect((await p2p.getOffer(offer.id)).remainingAmt).toBe(amt('500'));
+      // Off the board (no live destination) — remaining inventory still in DB via raw.
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
 
       // THE LOG ROW SURVIVED THE ROLLBACK. Not written on the reserve
@@ -600,10 +652,16 @@ if (!available) {
       await registerMethod({ methodId: 'other-rail' });
 
       const noInstrument = await offerListing('other-rail');
+      await removeAllSellerInstruments();
       await refusalShape(noInstrument.id, 'other-rail');
 
       await sellerInstrument();
       const notAccepted = await offerListing('other-rail');
+      for (const h of await instruments.listInstruments(SELLER)) {
+        if (h.methodId === 'other-rail' && h.status === 'active') {
+          await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
+        }
+      }
       await refusalShape(notAccepted.id, METHOD);
 
       const log = await instruments.accessLogFor(SELLER);
@@ -624,6 +682,7 @@ if (!available) {
       await registerMethod();
       await registerMethod({ methodId: 'other-rail' });
       const offer = await offerListing('other-rail');
+      await removeAllSellerInstruments();
 
       for (let i = 0; i < 5; i++) await refusalShape(offer.id, 'other-rail');
 
@@ -907,6 +966,112 @@ if (!available) {
       expect(JSON.stringify(board)).not.toContain(CANARY);
       expect(board.find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
       expect(trade.id).toBeTruthy();
+    });
+  });
+
+  // ── Sell board honesty: no method without a live destination ─────────────
+
+  describe('a sell offer only advertises methods the maker can be paid on', () => {
+    it('refuses create when the maker lists a method with no active destination', async () => {
+      // beforeEach registered the method schema; no instrument for SELLER.
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_method_no_destination' });
+    });
+
+    it('drops the offer from the board after the destination is removed', async () => {
+      await sellerInstrument();
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      expect((await p2p.listOffers({})).some((o) => o.id === offer.id)).toBe(true);
+
+      const [header] = await instruments.listInstruments(SELLER);
+      await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
+
+      // Residual closed: board no longer advertises a method that cannot be paid.
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)).toBeUndefined();
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
+    });
+
+    it('does not force buy offers to hold destinations at create', async () => {
+      // Maker is the buyer; seller is the eventual taker — unknown at post time.
+      await expect(
+        p2p.createOffer({
+          makerId: BUYER,
+          side: 'buy',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).resolves.toMatchObject({ side: 'buy', methods: [METHOD] });
+    });
+
+    it('filters a multi-method sell offer down to live rails only', async () => {
+      await registerMethod({ methodId: 'other-rail' });
+      await sellerInstrument(); // METHOD only
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD, 'other-rail'],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_method_no_destination' });
+
+      // After both destinations exist, both list; remove one → board shows one.
+      await instruments.createInstrument({
+        ownerId: SELLER,
+        methodId: 'other-rail',
+        country: 'DE',
+        fiatCurrency: 'USD',
+        label: 'Other',
+        details: { account_reference: 'x', holder_name: 'A Seller' },
+      });
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD, 'other-rail'],
+      });
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)?.methods).toEqual([METHOD, 'other-rail']);
+
+      const headers = await instruments.listInstruments(SELLER);
+      const other = headers.find((h) => h.methodId === 'other-rail');
+      await instruments.removeInstrument({ instrumentId: other!.id, ownerId: SELLER });
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
     });
   });
 

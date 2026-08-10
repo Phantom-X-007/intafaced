@@ -471,6 +471,23 @@ export class InstrumentService {
   }
 
   /**
+   * Active method ids for one owner in one fiat — the board's "can they be paid?"
+   * answer without disclosing destinations.
+   *
+   * Method ids are already stored lowercased; returned keys match `methodIdKey`.
+   */
+  async liveMethodKeys(ownerId: string, fiatCurrency: string): Promise<ReadonlySet<string>> {
+    const fiat = fiatCurrency.trim().toUpperCase();
+    const rows = await this.sql<Array<{ method_id: string }>>`
+      SELECT DISTINCT method_id FROM p2p.payment_instruments
+       WHERE owner_id = ${ownerId}
+         AND fiat_currency = ${fiat}
+         AND status = 'active'
+    `;
+    return new Set(rows.map((r) => methodIdKey(r.method_id)));
+  }
+
+  /**
    * The owner reads their own details. Logged like everyone else's read.
    *
    * The owner is not exempt, because an account takeover reads exactly like an

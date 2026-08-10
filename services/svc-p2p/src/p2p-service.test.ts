@@ -176,8 +176,10 @@ if (!available) {
       fields: [{ key: 'account_reference', label: 'Account reference', required: true }],
     });
 
+    // Every fiat a sellOffer test may list — sell create requires a live destination.
+    const fiats = ['USD', 'EUR', 'JPY', 'KWD', 'NGN', 'BRL', 'VND'];
     for (const ownerId of [MAKER, TAKER, OTHER, MODERATOR]) {
-      for (const fiatCurrency of ['USD', 'EUR']) {
+      for (const fiatCurrency of fiats) {
         await instruments.createInstrument({
           ownerId,
           methodId: 'sepa',
@@ -637,6 +639,22 @@ if (!available) {
       });
 
       // Escrow still held; nothing settled.
+      const held = await p2p.getTrade(trade.id);
+      expect(held.status).toBe('disputed');
+      expect(held.resolution).toBeNull();
+      expect(held.settledAt).toBeNull();
+    });
+
+    it('refuses seller confirm once a dispute is open — same legible refuse as cancel', async () => {
+      // Without the service gate the seller hit the DB ruling trigger as a raw
+      // check_violation; money stayed safe, the API did not name the path.
+      const trade = await escrowedTrade('100');
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'stuck' });
+
+      await expect(p2p.confirmFiatReceived(trade.id, MAKER)).rejects.toMatchObject({
+        code: 'p2p.dispute_already_open',
+      });
+
       const held = await p2p.getTrade(trade.id);
       expect(held.status).toBe('disputed');
       expect(held.resolution).toBeNull();

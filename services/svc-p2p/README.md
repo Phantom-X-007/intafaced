@@ -235,6 +235,8 @@ The **number** is an operator decision, not an engineering one, and where a mark
 
 A taker who genuinely takes an offer becomes a counterparty and is entitled to the seller's destination. Someone willing to open small trades can therefore collect account details from many sellers. That is inherent to P2P — a buyer who cannot see where to pay cannot pay — and it is not solved here. What exists against it is the access log (every look attributed, visible to the seller), the minimum-amount bound on every offer, and the reputation record. It is named here so nobody assumes it was overlooked.
 
+**Sell offers only list methods with a live destination.** Create refuses methods the maker cannot be paid on; the board and `offers.get` project methods to live rails and drop a sell offer with none left. Buy offers are unchanged (seller is the taker). This closes the take-oracle residual named on the uniform take refusal.
+
 **Not encrypted at rest.** `details` is `jsonb` in Postgres. Envelope encryption is the right next step and it needs a key-management decision that is owner-gated (Class X, `AGENTS.md`); doing it with a key improvised in this service would be the appearance of the protection without the substance. §13 socket: **payment-instrument encryption at rest**.
 
 ---

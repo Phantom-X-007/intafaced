@@ -5,11 +5,15 @@ import {
   MAX_PATTERN_LENGTH,
   MAX_VALUE_LENGTH,
   fingerprintDetails,
+  methodIdFromOfferEntry,
   methodIdKey,
+  methodsWithLiveDestination,
+  missingSellDestinations,
   normaliseCountry,
   normaliseMethodId,
   parseFieldSpecs,
   pickSchema,
+  sellOfferBoardable,
   validateDetails,
   type MethodSchema,
 } from './instruments.js';
@@ -415,5 +419,35 @@ describe('picking the schema that applies', () => {
   it('returns null rather than a near miss', () => {
     expect(pickSchema([specific], 'test-method', 'DE')).toBeNull();
     expect(pickSchema([wildcard], 'another-method', 'DE')).toBeNull();
+  });
+});
+
+describe('sell offers only advertise methods with a live destination', () => {
+  it('reads method ids from string and { id } board shapes', () => {
+    expect(methodIdFromOfferEntry('SEPA')).toBe('sepa');
+    expect(methodIdFromOfferEntry({ id: 'Bank_Transfer' })).toBe('bank_transfer');
+    expect(methodIdFromOfferEntry({})).toBeNull();
+    expect(methodIdFromOfferEntry(null)).toBeNull();
+    expect(methodIdFromOfferEntry(12)).toBeNull();
+  });
+
+  it('RED: a method with no live destination is not boardable', () => {
+    const live = new Set(['sepa']);
+    const declared = ['sepa', 'wise', { id: 'PayPal' }];
+    expect(methodsWithLiveDestination(declared, live)).toEqual(['sepa']);
+    expect(missingSellDestinations(declared, live)).toEqual(['wise', 'paypal']);
+    expect(sellOfferBoardable(['wise'], live)).toBe(false);
+    expect(sellOfferBoardable(['sepa', 'wise'], live)).toBe(true);
+  });
+
+  it('keeps declaration order and drops junk entries', () => {
+    const live = new Set(['a', 'b']);
+    expect(methodsWithLiveDestination([{ id: 'b' }, 'nope', 'a', { id: 'b' }], live)).toEqual([{ id: 'b' }, 'a', { id: 'b' }]);
+  });
+
+  it('an empty live set removes every method from a sell offer', () => {
+    expect(methodsWithLiveDestination(['sepa'], new Set())).toEqual([]);
+    expect(missingSellDestinations(['sepa', 'wise'], new Set())).toEqual(['sepa', 'wise']);
+    expect(sellOfferBoardable(['sepa'], new Set())).toBe(false);
   });
 });

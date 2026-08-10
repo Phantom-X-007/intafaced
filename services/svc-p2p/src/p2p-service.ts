@@ -44,7 +44,7 @@ import {
   type TradeOutcome,
   type XpPolicy,
 } from './reputation.js';
-import { methodIdKey } from './instruments.js';
+import { methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
 import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
@@ -231,6 +231,15 @@ export interface TradeInstrumentAttacher {
    * `duringTake` scope that ends by writing it down.
    */
   refuseTake(input: { takerId: string; sellerId: string; tradeId?: string; sink: DenialSink }): Promise<never>;
+
+  /**
+   * Method ids the owner can actually be paid on right now, for one fiat.
+   *
+   * Keys are lowercased (same rule as `methodIdKey` / instrument storage). Used
+   * by sell-offer create and the board so a method with no live destination is
+   * never advertised — closing the residual named on `TAKE_REFUSED_MESSAGE`.
+   */
+  liveMethodKeys(ownerId: string, fiatCurrency: string): Promise<ReadonlySet<string>>;
 }
 
 export interface P2pServiceOptions {
@@ -592,6 +601,25 @@ export class P2pService {
     }
 
     /**
+     * SELL OFFERS ONLY LIST METHODS THE MAKER CAN BE PAID ON.
+     *
+     * A sell maker is the seller. Advertising a method with no active destination
+     * turns every take attempt into a confirm/deny of "do they hold details for
+     * this rail" — the residual left after take refusals became uniform. Buy
+     * offers skip this: the seller is the taker, unknown at post time.
+     */
+    if (input.side === 'sell') {
+      const live = await this.instruments.liveMethodKeys(input.makerId, fiatCurrency);
+      const missing = missingSellDestinations(input.methods, live);
+      if (missing.length > 0) {
+        throw new PricingError(
+          'A sell offer can only list payment methods you have an active destination for in this currency. Register the destination first, then list the method.',
+          'p2p.offer_method_no_destination',
+        );
+      }
+    }
+
+    /**
      * OFFER CEILING BY MERCHANT STANDING (TRK-p2p.merchants Stage 2).
      *
      * An offer is a promise to complete a trade of that size, and an account
@@ -670,14 +698,61 @@ export class P2pService {
        ORDER BY price ASC, created_at ASC
        LIMIT ${limit}
     `;
-    return rows.map(toOffer);
+    const offers = rows.map(toOffer);
+    return this.projectBoardMethods(offers);
   }
 
   async getOffer(offerId: string): Promise<OfferRecord> {
+    const offer = await this.loadOfferRaw(offerId);
+    const [projected] = await this.projectBoardMethods([offer]);
+    // Sell with zero live methods is not on the public board — same answer as
+    // missing, so get-by-id cannot confirm "listed rails, no destination".
+    if (!projected) throw new P2pError(`Offer ${offerId} not found`, 'p2p.offer_not_found');
+    return projected;
+  }
+
+  /** Maker management / take path — unfiltered methods as stored. */
+  private async loadOfferRaw(offerId: string): Promise<OfferRecord> {
     const rows = await this.sql<OfferRow[]>`SELECT * FROM p2p.offers WHERE id = ${offerId}`;
     const row = rows[0];
     if (!row) throw new P2pError(`Offer ${offerId} not found`, 'p2p.offer_not_found');
     return toOffer(row);
+  }
+
+  /**
+   * Board honesty: sell offers only expose methods with a live destination.
+   *
+   * Buy offers pass through unchanged (seller is the taker). Sell offers with
+   * zero live methods drop off the board entirely — an empty methods list would
+   * re-open the "accept anything" take oracle that create already refuses.
+   *
+   * Live lookup is cached per (maker, fiat) inside one call so a 50-row board
+   * does not issue 50 identical queries for one maker.
+   */
+  private async projectBoardMethods(offers: OfferRecord[]): Promise<OfferRecord[]> {
+    const cache = new Map<string, ReadonlySet<string>>();
+    const liveFor = async (ownerId: string, fiat: string): Promise<ReadonlySet<string>> => {
+      const key = `${ownerId}\0${fiat}`;
+      let hit = cache.get(key);
+      if (!hit) {
+        hit = await this.instruments.liveMethodKeys(ownerId, fiat);
+        cache.set(key, hit);
+      }
+      return hit;
+    };
+
+    const out: OfferRecord[] = [];
+    for (const offer of offers) {
+      if (offer.side !== 'sell') {
+        out.push(offer);
+        continue;
+      }
+      const live = await liveFor(offer.makerId, offer.fiatCurrency);
+      if (!sellOfferBoardable(offer.methods, live)) continue;
+      const methods = methodsWithLiveDestination(offer.methods, live);
+      out.push(methods === offer.methods ? offer : { ...offer, methods });
+    }
+    return out;
   }
 
   /**
@@ -691,7 +766,7 @@ export class P2pService {
       RETURNING *
     `;
     if (!rows[0]) {
-      const existing = await this.getOffer(offerId);
+      const existing = await this.loadOfferRaw(offerId);
       if (existing.makerId !== makerId) throw new P2pError('Only the maker can close an offer', 'p2p.not_a_party');
       return existing;
     }
@@ -714,7 +789,7 @@ export class P2pService {
       RETURNING *
     `;
     if (!rows[0]) {
-      const existing = await this.getOffer(offerId);
+      const existing = await this.loadOfferRaw(offerId);
       if (existing.makerId !== makerId) throw new P2pError('Only the maker can pause an offer', 'p2p.not_a_party');
       if (existing.status === 'paused') return existing;
       if (existing.status === 'closed') {
@@ -737,7 +812,7 @@ export class P2pService {
       RETURNING *
     `;
     if (!rows[0]) {
-      const existing = await this.getOffer(offerId);
+      const existing = await this.loadOfferRaw(offerId);
       if (existing.makerId !== makerId) throw new P2pError('Only the maker can resume an offer', 'p2p.not_a_party');
       if (existing.status === 'active') return existing;
       if (existing.status === 'closed') {
@@ -819,7 +894,10 @@ export class P2pService {
     // Read the offer once, unlocked, purely to decide whether a reference price
     // is needed. Fetching a mark price is a network call; holding the offer's
     // row lock across it would serialise every taker behind the slowest feed.
-    const preview = await this.getOffer(input.offerId);
+    // Raw load: board projection must not make an unboardable sell look like a
+    // missing offer mid-take. Take still refuses with the uniform message when
+    // the destination is gone; get/list stay honest for strangers.
+    const preview = await this.loadOfferRaw(input.offerId);
     const referencePrice =
       preview.priceType === 'float' ? ((await this.referencePrices?.price(preview.asset, preview.fiatCurrency)) ?? null) : null;
 
@@ -1099,6 +1177,13 @@ export class P2pService {
       const trade = await this.getTrade(tradeId);
       if (trade.sellerId !== actorId) {
         throw new P2pError('Only the seller can confirm the fiat was received', 'p2p.not_the_seller');
+      }
+      // Same legible refuse as cancel: a disputed escrow terminates only on a
+      // human ruling. Without this, the seller hits the DB trigger as a raw
+      // check_violation instead of `p2p.dispute_already_open` — money still
+      // safe, but the API lied about which path failed.
+      if (trade.status === 'disputed') {
+        throw new P2pError('A disputed trade is resolved by a moderator, not by the seller confirming receipt', 'p2p.dispute_already_open');
       }
       // Defense in depth: take already refuses unpostable dust, but a trade row
       // could predate the gate or arrive via a future writer.

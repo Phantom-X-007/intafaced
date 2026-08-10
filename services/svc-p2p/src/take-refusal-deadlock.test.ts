@@ -358,17 +358,22 @@ if (!available) {
     it('same error and same log row, whichever reason applied', async () => {
       await registerMethod('other-rail');
 
-      // (a) The offer LISTS the method; the seller holds no destination for it.
-      //     Refused inside `attachToTrade`, after the trade row was inserted.
+      // (a) Offer listed the method; destination removed after post.
+      //     Refused inside `attachToTrade` (uniform take refuse).
+      await sellerInstrument('other-rail');
       const [listed] = await offers(1, ['other-rail']);
+      for (const h of await instruments.listInstruments(SELLER)) {
+        if (h.status === 'active') await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
+      }
       const a = await p2p.takeOffer({ offerId: listed!.id, takerId: BUYER, amount: amt('100'), method: 'other-rail' }).then(
         () => null,
         (e: Error & { code?: string }) => ({ name: e.name, code: e.code, message: e.message }),
       );
 
-      // (b) The offer does NOT list the method; the seller DOES hold one.
-      //     Refused by `methodAllowed`, before any of that.
-      await sellerInstrument();
+      // (b) The offer lists other-rail; take tries METHOD which is not listed.
+      //     Seller holds METHOD. Refused by methodAllowed path → same refuseTake.
+      await sellerInstrument(METHOD);
+      await sellerInstrument('other-rail');
       const [notListed] = await offers(1, ['other-rail']);
       const b = await p2p.takeOffer({ offerId: notListed!.id, takerId: BUYER, amount: amt('100'), method: METHOD }).then(
         () => null,

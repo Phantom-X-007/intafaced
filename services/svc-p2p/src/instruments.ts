@@ -148,18 +148,86 @@ export class InstrumentError extends Error {
  *     attributable and lands in the OWNER's own access log, like every other
  *     read of instrument existence.
  *
- * WHAT THIS DOES NOT CLOSE, stated plainly rather than implied: an offer
- * publishes its `methods`, so a caller who takes against a method the offer
- * DOES list and is refused can still infer the instrument is missing. That
- * residual is offer-side, not instrument-side, and the fix for it is
- * offer-side too — an offer whose seller has no live destination for a method
- * should not advertise that method. That is a change to the board query and
- * belongs in its own PR; it is not smuggled in here.
+ * OFFER-SIDE residual is closed by `methodsWithLiveDestination` / sell create
+ * gate (see helpers below). Take still uses this one message so a method the
+ * offer lists but the seller later removed stays indistinguishable from any
+ * other refuse — the board simply stops advertising it.
  */
 export const TAKE_REFUSED_MESSAGE = 'This offer cannot be taken with the selected payment method';
 
 export function takeRefused(): InstrumentError {
   return new InstrumentError(TAKE_REFUSED_MESSAGE, 'p2p.take_refused');
+}
+
+/**
+ * OFFER-SIDE CLOSE OF THE TAKE ORACLE RESIDUAL.
+ *
+ * The take path cannot tell a stranger *why* a method failed (instrument missing
+ * vs offer not listing it). That leaves one remaining leak: an offer that
+ * *advertises* a method the seller cannot actually be paid on. A successful-
+ * shape take that then returns `p2p.take_refused` means "listed but no
+ * destination" — still an existence oracle, just one step later.
+ *
+ * The fix is on the board, not on the take:
+ *   · a **sell** offer may only declare methods the maker has an active
+ *     destination for in the offer's fiat;
+ *   · the board / offer read surface only returns those methods that still have
+ *     a live destination (removal after post drops the method from the board);
+ *   · a sell offer with zero live methods is off the board (cannot be taken).
+ *
+ * **Buy** offers are unchanged: the seller is the *taker*, so no destination is
+ * known at post time — take-time attach remains the gate.
+ */
+
+/** Pull a method id out of a board entry (`"sepa"` or `{ id: "sepa" }`). */
+export function methodIdFromOfferEntry(entry: unknown): string | null {
+  if (typeof entry === 'string') {
+    const id = methodIdKey(entry);
+    return id.length > 0 ? id : null;
+  }
+  if (entry && typeof entry === 'object' && 'id' in entry) {
+    const id = (entry as { id: unknown }).id;
+    if (typeof id === 'string') {
+      const key = methodIdKey(id);
+      return key.length > 0 ? key : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Declared methods that still have a live destination, in declaration order.
+ * Unknown shapes are dropped (they can never be taken).
+ */
+export function methodsWithLiveDestination(declared: readonly unknown[], liveMethodKeys: ReadonlySet<string>): unknown[] {
+  const out: unknown[] = [];
+  for (const entry of declared) {
+    const id = methodIdFromOfferEntry(entry);
+    if (id !== null && liveMethodKeys.has(id)) out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * Which declared methods a sell maker still lacks a destination for.
+ * Returns method keys (lowercased), not display strings.
+ */
+export function missingSellDestinations(declared: readonly unknown[], liveMethodKeys: ReadonlySet<string>): string[] {
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of declared) {
+    const id = methodIdFromOfferEntry(entry);
+    if (id === null) continue;
+    if (liveMethodKeys.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    missing.push(id);
+  }
+  return missing;
+}
+
+/** A sell offer is board-visible only when at least one method can still be paid. */
+export function sellOfferBoardable(declared: readonly unknown[], liveMethodKeys: ReadonlySet<string>): boolean {
+  return methodsWithLiveDestination(declared, liveMethodKeys).length > 0;
 }
 
 const KEY_RE = /^[a-z][a-z0-9_]{0,39}$/;
