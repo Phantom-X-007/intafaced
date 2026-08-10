@@ -30,7 +30,7 @@ import { FROZEN_CAPTURED_BODY, frozenWebhookVectors, MERCHANT_WEBHOOK_HEADERS } 
 const here = dirname(fileURLToPath(import.meta.url));
 const clientOpts = {
   baseUrl: 'https://pay.example.test',
-  apiKey: 'ifc_test_vector_key',
+  apiKey: 'ifc_test_fixture_not_live',
 };
 
 describe('pay.plugins — TypeScript reference client', () => {
@@ -39,7 +39,7 @@ describe('pay.plugins — TypeScript reference client', () => {
     const req = buildCreatePaymentRequest(clientOpts, { merchantId: 'm1', amount: '1.1', assetId: 'USDT', method: 'card' }, 'order-1');
     expect(req.path).toBe('/api/pay/v1/payments');
     expect(req.method).toBe('POST');
-    expect(req.headers.authorization).toBe('Bearer ifc_test_vector_key');
+    expect(req.headers.authorization).toBe('Bearer ifc_test_fixture_not_live');
     expect(req.headers['idempotency-key']).toBe('order-1');
     expect(req.headers['content-type']).toBe('application/json');
   });

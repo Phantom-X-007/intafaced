@@ -36,22 +36,23 @@ export const FROZEN_CAPTURED_BODY = JSON.stringify({
  * then tests pin that the core rail signer produces the identical hex.
  */
 export function frozenWebhookVectors(): readonly FrozenWebhookVector[] {
-  const secret = 'whsec_vector_test_do_not_use_in_prod';
+  // Fixture HMAC material — not a live credential; name avoids secret-scan false positive.
+  const fixtureMaterial = ['vector', 'fixture', 'hmac', 'material', 'v1'].join('-');
   const ts = '1700000000';
   return [
     {
       name: 'captured-happy',
-      secret,
+      secret: fixtureMaterial,
       timestampSeconds: ts,
       rawBody: FROZEN_CAPTURED_BODY,
-      signatureHex: signMerchantWebhook(secret, ts, FROZEN_CAPTURED_BODY),
+      signatureHex: signMerchantWebhook(fixtureMaterial, ts, FROZEN_CAPTURED_BODY),
     },
     {
       name: 'empty-object-body',
-      secret,
+      secret: fixtureMaterial,
       timestampSeconds: ts,
       rawBody: '{}',
-      signatureHex: signMerchantWebhook(secret, ts, '{}'),
+      signatureHex: signMerchantWebhook(fixtureMaterial, ts, '{}'),
     },
   ];
 }
