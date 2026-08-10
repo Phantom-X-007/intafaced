@@ -174,8 +174,8 @@ export class WaveGridEngine {
 
     this.bindEvents();
     this.resize();
-    // seed a few waves so first paint isn't flat
-    for (let i = 0; i < 3; i++) this.addRandomPoint(0.9);
+    // Seed several waves so first fade-in is already alive (not a flat grid)
+    for (let i = 0; i < 6; i++) this.addRandomPoint(0.85 + Math.random() * 0.25);
   }
 
   private overrideVertexShader(vertexShader: string) {

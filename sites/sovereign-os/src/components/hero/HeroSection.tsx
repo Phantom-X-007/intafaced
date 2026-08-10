@@ -18,84 +18,135 @@ function useReducedMotion() {
   return reduce;
 }
 
+const SIDE_CHIPS = ['TRADE', 'PROTOCOL', 'P2P', 'LAUNCH', 'BANK', 'PAY', 'PREDICT', 'ACADEMY', 'TOKEN', 'MINE', 'MARKET', 'AGENTS'];
+
 /**
- * Premium hero: full MIT wave-grid (desktop/GPU) + intentional fallback.
- * Does not strip the effect — scales quality, never ships a dead empty hero.
+ * Full-bleed premium hero: wave grid to edges, ambient side rails, soft scrims only.
  */
 export function HeroSection() {
   const reduce = useReducedMotion();
   const [want3d, setWant3d] = useState(false);
 
   useEffect(() => {
-    // Enable 3D when WebGL exists and motion OK — including mobile (low quality)
     if (!reduce && detectWebGL()) setWant3d(true);
   }, [reduce]);
 
   return (
-    <section id="top" className="relative min-h-[min(94vh,900px)] overflow-hidden border-b border-line">
-      {/* Layer 0: 3D or fallback */}
-      {want3d ? (
-        <Suspense fallback={<HeroFallback />}>
-          <HeroWaveCanvas active className="absolute inset-0 z-0" />
-        </Suspense>
-      ) : (
-        <HeroFallback />
-      )}
-
-      {/* Readability scrims — keep premium depth, protect type */}
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-r from-void/90 via-void/55 to-void/25" aria-hidden />
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-t from-void via-transparent to-void/50" aria-hidden />
-
-      {/* Copy / CTAs */}
-      <div className="relative z-10 mx-auto flex min-h-[min(94vh,900px)] max-w-5xl flex-col justify-center px-4 pb-12 pt-20 md:px-6 md:pt-24">
-        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-lime-dim">INTAFACED · SOVEREIGN OS</p>
-        <SplitHeading
-          className="max-w-[12ch] text-[clamp(2.4rem,7vw,4.4rem)] drop-shadow-[0_2px_24px_rgba(5,8,6,0.85)]"
-          accentLine={1}
-          lines={['WEB2 RAILS IN.', 'WEB3 SETTLEMENT OUT.', 'INTELLIGENCE BINDING THEM.']}
-        />
-        <p className="mt-5 max-w-[36ch] text-base text-mute md:text-lg">
-          Twelve rooms. Two planes. One identity, one ledger, one token — and one key that opens every door.
-        </p>
-        <div className="mt-7 flex flex-wrap gap-3">
-          <a
-            href="#key"
-            className="bg-lime px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(198,255,61,0.22)]"
-          >
-            ENTER THE CHAIN
-          </a>
-          <a
-            href="#rooms"
-            className="border border-line/80 bg-void/40 px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-ink backdrop-blur-sm hover:border-lime-dim"
-          >
-            SEE ALL TWELVE ROOMS
-          </a>
-        </div>
-        <ul className="mt-10 grid max-w-2xl grid-cols-3 gap-2 md:grid-cols-6">
-          {[
-            [12, 'Modules'],
-            [28, 'Products'],
-            [30, 'Streams'],
-            [10, 'Agents'],
-            [2, 'Planes'],
-            [1, 'Chain'],
-          ].map(([n, label]) => (
-            <li key={String(label)} className="border border-line/80 bg-panel/70 p-2.5 backdrop-blur-sm">
-              <strong className="block font-mono text-xl text-lime">
-                <NumberTicker value={n as number} />
-              </strong>
-              <em className="text-[9px] not-italic uppercase tracking-[0.1em] text-mute">{label as string}</em>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.08em] text-mute">
-          They built rooms. We built the house. Then we built the ground under it.
-        </p>
+    <section id="top" className="relative min-h-[100dvh] w-full overflow-hidden border-b border-line">
+      {/* Full-bleed 3D / fallback */}
+      <div className="absolute inset-0 z-0">
         {want3d ? (
-          <p className="mt-3 font-mono text-[9px] tracking-wide text-mute/70">
-            Interactive wave grid · move pointer · MIT franky-adl/3d-wave-grid
+          <Suspense fallback={<HeroFallback />}>
+            <HeroWaveCanvas active className="absolute inset-0" />
+            {/* Fallback sits under until canvas fades in */}
+            <div className="absolute inset-0 -z-10">
+              <HeroFallback />
+            </div>
+          </Suspense>
+        ) : (
+          <HeroFallback />
+        )}
+      </div>
+
+      {/* Soft full-field scrim — not a black pillar on the sides */}
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-void/70 via-void/25 to-void/80" aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_80%_70%_at_30%_45%,rgba(5,8,6,0.55),transparent_65%)]"
+        aria-hidden
+      />
+
+      {/* Side ambient rails — fill wide screens */}
+      <aside
+        className="pointer-events-none absolute bottom-[12%] left-3 top-[18%] z-[2] hidden w-14 flex-col justify-between xl:flex 2xl:left-6 2xl:w-16"
+        aria-hidden
+      >
+        <div className="flex flex-1 flex-col justify-center gap-2 overflow-hidden">
+          {SIDE_CHIPS.slice(0, 6).map((c) => (
+            <span
+              key={c}
+              className="font-mono text-[9px] tracking-[0.18em] text-lime/35"
+              style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+        <div className="h-24 w-px bg-gradient-to-b from-transparent via-lime/40 to-transparent" />
+      </aside>
+      <aside
+        className="pointer-events-none absolute bottom-[12%] right-3 top-[18%] z-[2] hidden w-14 flex-col items-end justify-between xl:flex 2xl:right-6 2xl:w-16"
+        aria-hidden
+      >
+        <div className="h-24 w-px bg-gradient-to-b from-transparent via-lime/40 to-transparent" />
+        <div className="flex flex-1 flex-col justify-center gap-2 overflow-hidden">
+          {SIDE_CHIPS.slice(6).map((c) => (
+            <span key={c} className="font-mono text-[9px] tracking-[0.18em] text-lime/35" style={{ writingMode: 'vertical-rl' }}>
+              {c}
+            </span>
+          ))}
+        </div>
+      </aside>
+
+      {/* Floating status chips — alive without cluttering mobile */}
+      <div className="pointer-events-none absolute right-[8%] top-[22%] z-[2] hidden flex-col gap-2 lg:flex" aria-hidden>
+        {['FIAT PLANE · LIVE', 'PROTOCOL · ARMED', 'RANK · OPEN'].map((t) => (
+          <span
+            key={t}
+            className="border border-line/60 bg-panel/50 px-2.5 py-1.5 font-mono text-[10px] tracking-wider text-mute backdrop-blur-md"
+          >
+            <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_#c6ff3d]" />
+            {t}
+          </span>
+        ))}
+      </div>
+
+      {/* Copy — wider container, left-weighted but not a thin column */}
+      <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1400px] flex-col justify-center px-5 pb-16 pt-24 sm:px-8 lg:px-12 xl:px-16">
+        <div className="max-w-3xl xl:max-w-4xl">
+          <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-lime-dim">INTAFACED · SOVEREIGN OS</p>
+          <SplitHeading
+            className="max-w-[14ch] text-[clamp(2.5rem,6.5vw,4.75rem)] drop-shadow-[0_2px_28px_rgba(5,8,6,0.9)]"
+            accentLine={1}
+            lines={['WEB2 RAILS IN.', 'WEB3 SETTLEMENT OUT.', 'INTELLIGENCE BINDING THEM.']}
+          />
+          <p className="mt-5 max-w-[40ch] text-base text-mute md:text-lg">
+            Twelve rooms. Two planes. One identity, one ledger, one token — and one key that opens every door.
           </p>
-        ) : null}
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a
+              href="#key"
+              className="bg-lime px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(198,255,61,0.22)]"
+            >
+              ENTER THE CHAIN
+            </a>
+            <a
+              href="#rooms"
+              className="border border-line/80 bg-void/50 px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-ink backdrop-blur-sm hover:border-lime-dim"
+            >
+              SEE ALL TWELVE ROOMS
+            </a>
+          </div>
+          <ul className="mt-10 grid max-w-3xl grid-cols-3 gap-2 sm:grid-cols-6">
+            {[
+              [12, 'Modules'],
+              [28, 'Products'],
+              [30, 'Streams'],
+              [10, 'Agents'],
+              [2, 'Planes'],
+              [1, 'Chain'],
+            ].map(([n, label]) => (
+              <li key={String(label)} className="border border-line/70 bg-panel/60 p-2.5 backdrop-blur-md">
+                <strong className="block font-mono text-xl text-lime">
+                  <NumberTicker value={n as number} />
+                </strong>
+                <em className="text-[9px] not-italic uppercase tracking-[0.1em] text-mute">{label as string}</em>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.08em] text-mute">
+            They built rooms. We built the house. Then we built the ground under it.
+          </p>
+        </div>
       </div>
     </section>
   );
