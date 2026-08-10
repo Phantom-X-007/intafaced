@@ -21,7 +21,7 @@ describe('bank module kills (FLAG_REGISTRY service-env)', () => {
   it('loan open refuses when moduleEnabled is false — before any ledger post', async () => {
     const ledger = new MemoryLedger();
     const loans = new LoanService({} as never, ledger, {
-      priceSource: fixedPriceSource({ BTC: parseAmount('50000'), USDT: parseAmount('1') }),
+      priceSource: fixedPriceSource({ BTC: { price: '50000', quality: 'mid' } }),
       moduleEnabled: false,
     });
     await expect(
