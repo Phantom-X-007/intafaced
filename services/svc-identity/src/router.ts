@@ -226,6 +226,7 @@ function presentDocMeta(meta: StoredDocumentMeta) {
     userId: meta.userId,
     contentType: meta.contentType,
     byteLength: meta.byteLength,
+    storedBy: meta.storedBy,
     createdAt: meta.createdAt.toISOString(),
   };
 }
@@ -235,6 +236,7 @@ const kycDocMetaOutput = z.object({
   userId: z.string().uuid(),
   contentType: z.string(),
   byteLength: z.number().int().positive(),
+  storedBy: z.string().nullable(),
   createdAt: z.string(),
 });
 
@@ -775,6 +777,7 @@ export function createIdentityRouter(
                 userId: input.userId,
                 contentType: input.contentType,
                 bytes,
+                storedBy: ctx.principal.userId,
               }),
             );
           } catch (err) {

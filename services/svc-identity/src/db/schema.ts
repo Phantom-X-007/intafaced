@@ -141,6 +141,12 @@ export const kycDocuments = identity.table(
     ciphertext: bytea('ciphertext').notNull(),
     nonce: bytea('nonce').notNull(),
     keyId: text('key_id').notNull().default('v1'),
+    /**
+     * Operator (or tooling principal) who put the ciphertext.
+     * Text not FK — same reason as kyc_records.reviewed_by: admin console
+     * identities may not be platform users. Never holds document bytes.
+     */
+    storedBy: text('stored_by'),
     createdAt: createdAt(),
   },
   (t) => [index('kyc_documents_user_idx').on(t.userId, t.createdAt)],

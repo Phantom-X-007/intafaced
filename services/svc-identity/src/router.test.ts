@@ -1150,6 +1150,7 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
     expect(meta.userId).toBe(DOC_USER);
     expect(meta.contentType).toBe('image/jpeg');
     expect(meta.byteLength).toBe(Buffer.byteLength('passport-bytes'));
+    expect(meta.storedBy).toBe(OPERATOR);
     expect(meta).not.toHaveProperty('bytes');
     expect(meta).not.toHaveProperty('bytesBase64');
     expect(meta).not.toHaveProperty('ciphertext');
@@ -1192,6 +1193,7 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
         userId: DOC_USER,
         contentType: 'image/jpeg',
         byteLength: 12,
+        storedBy: OPERATOR,
         createdAt: new Date('2026-08-10T00:00:00.000Z'),
       },
     });
