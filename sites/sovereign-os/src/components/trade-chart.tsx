@@ -3,10 +3,12 @@ import { useEffect, useRef } from 'react';
 
 type Props = {
   height?: number;
+  /** Base price seed - changes series when market mode switches */
+  seed?: number;
 };
 
-/** Demo candlestick chart — illustrative series only. */
-export function TradeChart({ height = 300 }: Props) {
+/** Demo candlestick chart. Illustrative only. */
+export function TradeChart({ height = 300, seed = 64000 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,15 +44,17 @@ export function TradeChart({ height = 300 }: Props) {
       wickDownColor: '#ff5c45',
     });
 
+    // Deterministic from seed so mode switches feel intentional, not random noise
+    let close = seed;
+    const amp = Math.max(seed * 0.004, 8);
     const data: { time: string; open: number; high: number; low: number; close: number }[] = [];
-    let close = 64000;
     const start = new Date(Date.UTC(2025, 0, 1));
     for (let i = 0; i < 90; i++) {
       const open = close;
-      const drift = Math.sin(i / 5) * 180 + (Math.random() - 0.48) * 320;
-      close = open + drift;
-      const high = Math.max(open, close) + Math.random() * 120;
-      const low = Math.min(open, close) - Math.random() * 120;
+      const wave = Math.sin((i + (seed % 17)) / 5) * amp + Math.sin(i / 11) * amp * 0.4;
+      close = Math.max(0.01, open + wave);
+      const high = Math.max(open, close) + amp * 0.35;
+      const low = Math.min(open, close) - amp * 0.35;
       const d = new Date(start);
       d.setUTCDate(start.getUTCDate() + i);
       data.push({
@@ -72,7 +76,7 @@ export function TradeChart({ height = 300 }: Props) {
       ro.disconnect();
       chart.remove();
     };
-  }, [height]);
+  }, [height, seed]);
 
   return <div ref={ref} className="w-full" style={{ height }} />;
 }

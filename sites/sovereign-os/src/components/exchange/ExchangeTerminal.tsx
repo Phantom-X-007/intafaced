@@ -1,120 +1,203 @@
 import { BorderBeam } from '@/components/magicui/border-beam';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { lazy, Suspense } from 'react';
+import { MODES, type MarketMode, modeById } from '@/lib/marketModes';
+import { lazy, Suspense, useState } from 'react';
 import { MarketsList } from './MarketsList';
 import { OrderBook } from './OrderBook';
 import { OrderTicket } from './OrderTicket';
 
 const TradeChart = lazy(() => import('@/components/trade-chart').then((m) => ({ default: m.TradeChart })));
 
+const CHAIN = [
+  { strike: '66,000', call: '3,120', put: '410', iv: '44%' },
+  { strike: '67,000', call: '2,110', put: '720', iv: '48%' },
+  { strike: '68,000', call: '1,240', put: '1,180', iv: '49%' },
+  { strike: '69,000', call: '680', put: '1,920', iv: '51%' },
+  { strike: '70,000', call: '340', put: '2,860', iv: '53%' },
+];
+
 /**
- * Full exchange terminal mock for TV reviewers:
- * markets · chart · order book · ticket. All demo data.
+ * Full terminal. Hover (or focus) market modes to swap chart, pairs, book, ticket.
+ * Click still works for touch / a11y.
  */
 export function ExchangeTerminal() {
+  const [mode, setMode] = useState<MarketMode>('perp');
+  const cfg = modeById(mode);
+
   return (
     <section id="trade" className="mx-auto max-w-6xl xl:max-w-7xl px-4 py-14 md:px-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">Exchange · the terminal</p>
-          <h2 className="mt-2 max-w-[18ch] text-3xl font-extrabold tracking-tight md:text-4xl">
+          <h2 className="max-w-[16ch] text-3xl font-extrabold tracking-tight md:text-4xl">
             Full terminal
             <br />
             not a toy chart
           </h2>
           <p className="mt-3 max-w-[44ch] text-sm text-mute">
-            Markets list, candlesticks, order book, and ticket on one surface. Drawings and multi-layout charting for people who trade —
-            execution stays on our rails.
+            Hover a market type - the desk shifts. Pairs, candles, book, and ticket all change. Demo data only.
           </p>
         </div>
-        <p className="font-mono text-[10px] uppercase tracking-wider text-mute">Demo data only · licensed pro charting path in progress</p>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-mute">Preview numbers · pro charting path in progress</p>
       </div>
 
-      <Tabs defaultValue="perp" className="mb-3">
-        <TabsList>
-          <TabsTrigger value="spot">Spot</TabsTrigger>
-          <TabsTrigger value="perp">Perpetuals</TabsTrigger>
-          <TabsTrigger value="opt">Options</TabsTrigger>
-          <TabsTrigger value="otc">OTC</TabsTrigger>
-        </TabsList>
-        <TabsContent value="spot" className="text-sm text-mute">
-          Cash markets. Convert. Full depth when live.
-        </TabsContent>
-        <TabsContent value="perp" className="text-sm text-mute">
-          Cross / isolated. Mark price. Funding. Liquidation engine on the book.
-        </TabsContent>
-        <TabsContent value="opt" className="text-sm text-mute">
-          Roadmap surface — same terminal chrome, same identity.
-        </TabsContent>
-        <TabsContent value="otc" className="text-sm text-mute">
-          Block size. RFQ. Settlement on the plane you choose.
-        </TabsContent>
-      </Tabs>
+      {/* Hover strip */}
+      <div
+        className="mb-3 flex flex-wrap gap-1 border border-line bg-panel p-1"
+        role="tablist"
+        aria-label="Market type"
+        onMouseLeave={() => {
+          /* keep last mode sticky - don't jump away */
+        }}
+      >
+        {MODES.map((m) => {
+          const on = mode === m.id;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onMouseEnter={() => setMode(m.id)}
+              onFocus={() => setMode(m.id)}
+              onClick={() => setMode(m.id)}
+              className={
+                on
+                  ? 'bg-lime px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-wider text-[#081008] transition'
+                  : 'px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-mute transition hover:text-ink'
+              }
+            >
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mb-4 min-h-[1.25rem] font-mono text-[11px] text-mute transition-opacity">{cfg.blurb}</p>
 
       <div className="relative overflow-hidden rounded-[3px] border border-line bg-[#040705] shadow-2xl">
         <BorderBeam />
         <div className="relative z-10">
-          {/* Top bar */}
           <div className="flex flex-wrap items-center gap-3 border-b border-line px-3 py-2 font-mono text-[11px]">
             <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_#c4f000]" />
-            <span className="font-bold">BTC-PERP</span>
-            <span className="text-mute">CROSS · 20×</span>
-            <span className="text-lime">Mark 67,412.2</span>
-            <span className="text-lime">+2.4%</span>
+            <span className="font-bold">{cfg.symbol}</span>
+            <span className="text-mute">{cfg.meta}</span>
+            <span className={cfg.up ? 'text-lime' : 'text-danger'}>
+              {cfg.mark} {cfg.change}
+            </span>
             <span className="ml-auto rounded-sm border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-mute">DEMO</span>
           </div>
 
-          {/* Terminal grid */}
           <div className="grid lg:grid-cols-[160px_1fr_180px]">
             <div className="hidden lg:block">
-              <MarketsList />
+              <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
             </div>
             <div className="min-w-0 border-line lg:border-x">
               <Suspense
                 fallback={<div className="flex h-[320px] items-center justify-center font-mono text-[11px] text-mute">Loading chart…</div>}
               >
-                <TradeChart height={320} />
+                <TradeChart key={cfg.id} height={320} seed={cfg.seed} />
               </Suspense>
               <div className="flex flex-wrap gap-4 border-t border-line px-3 py-2 font-mono text-[10px] text-mute">
-                <span>
-                  OI <span className="text-ink">$1.2B</span>
-                </span>
-                <span>
-                  24h vol <span className="text-ink">$840M</span>
-                </span>
-                <span>
-                  Funding <span className="text-lime">+0.012%</span>
-                </span>
-                <span className="text-mute/80">Illustrative series</span>
+                {cfg.footer.map((f) => (
+                  <span key={f.k}>
+                    {f.k} <span className="text-ink">{f.v}</span>
+                  </span>
+                ))}
+                <span className="text-mute/80">Illustrative</span>
               </div>
             </div>
-            <div className="hidden md:block">
-              <OrderBook />
+            <div className="hidden min-h-[280px] md:block">
+              {cfg.panel === 'book' ? (
+                <OrderBook asks={cfg.asks} bids={cfg.bids} mark={cfg.mark} />
+              ) : cfg.panel === 'chain' ? (
+                <OptionsChain />
+              ) : (
+                <RfqPanel mark={cfg.mark} />
+              )}
             </div>
           </div>
 
-          {/* Ticket + mobile book */}
           <div className="grid border-t border-line md:grid-cols-[1fr_220px]">
             <div className="grid grid-cols-2 gap-0 md:hidden">
-              <MarketsList />
-              <OrderBook />
+              <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
+              {cfg.panel === 'book' ? (
+                <OrderBook asks={cfg.asks} bids={cfg.bids} mark={cfg.mark} />
+              ) : cfg.panel === 'chain' ? (
+                <OptionsChain />
+              ) : (
+                <RfqPanel mark={cfg.mark} />
+              )}
             </div>
             <div className="hidden items-center gap-6 px-4 font-mono text-[11px] text-mute md:flex">
               <span>
-                Position <span className="text-ink">—</span>
+                Mode <span className="text-ink">{cfg.label}</span>
               </span>
               <span>
-                Margin <span className="text-ink">—</span>
+                Symbol <span className="text-ink">{cfg.symbol}</span>
               </span>
-              <span>
-                Liq. <span className="text-ink">—</span>
-              </span>
-              <span className="text-mute/70">Demo terminal — no live account</span>
+              <span className="text-mute/70">Hover modes above to switch desk</span>
             </div>
-            <OrderTicket />
+            <OrderTicket
+              buyLabel={cfg.ticket.buy}
+              sellLabel={cfg.ticket.sell}
+              sizeLabel={cfg.ticket.sizeLabel}
+              size={cfg.ticket.size}
+              price={cfg.mark}
+              note={cfg.ticket.note}
+            />
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function OptionsChain() {
+  return (
+    <div className="flex h-full min-h-[280px] flex-col border-l border-line bg-[#040705] font-mono text-[10px]">
+      <div className="border-b border-line px-2 py-2 text-mute">
+        <span className="uppercase tracking-wider">Options chain</span>
+        <span className="ml-2 text-lime/80">DEMO</span>
+      </div>
+      <div className="grid grid-cols-4 gap-1 border-b border-line px-2 py-1 text-[8px] uppercase text-mute">
+        <span>Strike</span>
+        <span className="text-right">Call</span>
+        <span className="text-right">Put</span>
+        <span className="text-right">IV</span>
+      </div>
+      {CHAIN.map((row) => (
+        <div key={row.strike} className="grid grid-cols-4 gap-1 px-2 py-1.5 hover:bg-panel">
+          <span className="text-ink">{row.strike}</span>
+          <span className="text-right text-lime">{row.call}</span>
+          <span className="text-right text-danger">{row.put}</span>
+          <span className="text-right text-mute">{row.iv}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RfqPanel({ mark }: { mark: string }) {
+  return (
+    <div className="flex h-full min-h-[280px] flex-col justify-between border-l border-line bg-[#040705] p-3 font-mono text-[10px]">
+      <div>
+        <p className="uppercase tracking-wider text-mute">OTC desk</p>
+        <p className="mt-3 text-2xl font-bold text-ink">{mark}</p>
+        <p className="mt-1 text-mute">Indicative mid · demo</p>
+        <ul className="mt-4 space-y-2 text-mute">
+          <li className="flex justify-between border-b border-line pb-1">
+            <span>Min</span>
+            <span className="text-ink">10 BTC</span>
+          </li>
+          <li className="flex justify-between border-b border-line pb-1">
+            <span>Settle</span>
+            <span className="text-ink">T+0 / plane</span>
+          </li>
+          <li className="flex justify-between border-b border-line pb-1">
+            <span>Side</span>
+            <span className="text-ink">Two-way</span>
+          </li>
+        </ul>
+      </div>
+      <p className="text-[9px] text-mute">RFQ panel replaces the book on OTC hover.</p>
+    </div>
   );
 }
