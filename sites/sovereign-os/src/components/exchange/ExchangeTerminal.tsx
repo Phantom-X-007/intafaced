@@ -1,4 +1,5 @@
 import { BorderBeam } from '@/components/magicui/border-beam';
+import { GlowingEffect } from '@/components/ui/glowing-effect';
 import { formatPrice } from '@/lib/candles';
 import { MODES, type MarketMode, modeById } from '@/lib/marketModes';
 import { lazy, Suspense, useCallback, useState } from 'react';
@@ -90,6 +91,7 @@ export function ExchangeTerminal() {
       <p className="mb-4 min-h-[1.25rem] font-mono text-[11px] text-mute transition-opacity">{cfg.blurb}</p>
 
       <div className="relative overflow-hidden rounded-[3px] border border-line bg-[#040705] shadow-2xl">
+        <GlowingEffect spread={36} glow proximity={72} inactiveZone={0.25} borderWidth={1.5} />
         <BorderBeam />
         <div className="relative z-10">
           <div className="flex flex-wrap items-center gap-3 border-b border-line px-3 py-2 font-mono text-[11px]">

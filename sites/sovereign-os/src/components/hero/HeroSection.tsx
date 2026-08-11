@@ -1,7 +1,12 @@
 import { SplitHeading } from '@/components/bits/split-heading';
+import { FlipWords } from '@/components/ui/flip-words';
+import { HoverBorderGradient } from '@/components/ui/hover-border-gradient';
+import { MovingBorderButton } from '@/components/ui/moving-border';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { HeroFallback } from './HeroFallback';
 import { detectWebGL } from './webglDetect';
+
+const MARKET_WORDS = ['Spot', 'Perps', 'Options', 'OTC'];
 
 const HeroWaveCanvas = lazy(() => import('./HeroWaveCanvas').then((m) => ({ default: m.HeroWaveCanvas })));
 
@@ -74,22 +79,23 @@ export function HeroSection() {
             accentLine={1}
             lines={['ONE EXCHANGE', 'ONE TERMINAL', 'EVERY MARKET']}
           />
-          <p className="mt-5 max-w-[38ch] text-base leading-relaxed text-mute md:text-lg">
-            Spot, perps, options, and OTC on one desk - charts, depth, and tickets together. One identity. One ledger.
+          <p className="mt-5 max-w-[42ch] text-base leading-relaxed text-mute md:text-lg">
+            <span className="inline-flex min-w-[5.5ch] items-baseline">
+              <FlipWords words={MARKET_WORDS} className="font-semibold" />
+            </span>{' '}
+            on one desk - charts, depth, and tickets together. One identity. One ledger.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <MovingBorderButton
               href="#trade"
-              className="bg-lime px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(196,240,0,0.22)] active:scale-[0.98]"
+              containerClassName="shadow-[0_0_32px_rgba(196,240,0,0.18)]"
+              className="px-5 active:scale-[0.98]"
             >
               OPEN THE TERMINAL
-            </a>
-            <a
-              href="#rooms"
-              className="border border-line/80 bg-void/50 px-5 py-3 text-xs font-extrabold tracking-[0.06em] text-ink backdrop-blur-sm hover:border-lime-dim active:scale-[0.98]"
-            >
+            </MovingBorderButton>
+            <HoverBorderGradient href="#rooms" className="active:scale-[0.98]">
               SEE THE FULL HOUSE
-            </a>
+            </HoverBorderGradient>
           </div>
           <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.12em] text-mute">
             Markets first · OS under them · preview numbers

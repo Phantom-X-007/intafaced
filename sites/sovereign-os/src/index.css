@@ -105,3 +105,27 @@ button:focus:not(:focus-visible) {
 .animate-beam-drift {
   animation: beam-drift 5s ease-in-out infinite;
 }
+
+@keyframes meteor-effect {
+  0% {
+    transform: rotate(45deg) translateX(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(45deg) translateX(-520px);
+    opacity: 0;
+  }
+}
+
+.animate-meteor-effect {
+  animation: meteor-effect linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-meteor-effect {
+    animation: none !important;
+  }
+}

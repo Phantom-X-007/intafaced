@@ -1,3 +1,4 @@
+import { Meteors } from '@/components/ui/meteors';
 import { useState } from 'react';
 
 const PHASES = [
@@ -16,8 +17,9 @@ export function DropPhases() {
   const pct = (i / (PHASES.length - 1)) * 100;
 
   return (
-    <section className="border-y border-line bg-void py-14 md:py-16">
-      <div className="mx-auto max-w-6xl xl:max-w-7xl px-4 md:px-6">
+    <section id="drop" className="relative overflow-hidden border-y border-line bg-void py-14 md:py-16">
+      <Meteors number={10} />
+      <div className="relative z-[1] mx-auto max-w-6xl xl:max-w-7xl px-4 md:px-6">
         <div className="grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-end">
           <div>
             <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">Not a fintech announcement. A game release.</h2>

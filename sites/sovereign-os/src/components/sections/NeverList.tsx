@@ -1,3 +1,5 @@
+import { EncryptedText } from '@/components/ui/encrypted-text';
+
 const LINES = [
   'Never hold a balance outside the ledger',
   'Never store money in a floating-point number',
@@ -12,6 +14,15 @@ export function NeverList() {
   return (
     <section className="mx-auto max-w-6xl xl:max-w-7xl px-4 py-16 md:px-6">
       <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">What we will never do</h2>
+      <p className="mt-3 max-w-[48ch] text-sm text-mute">
+        Hard law, not marketing.{' '}
+        <EncryptedText
+          text="Proven in the build, not the deck."
+          className="text-lime"
+          encryptedClassName="text-mute/50"
+          revealedClassName="text-lime"
+        />
+      </p>
       <ul className="mt-8 divide-y divide-line border-y border-line">
         {LINES.map((line) => (
           <li key={line}>

@@ -14,7 +14,12 @@ import { NeverList } from '@/components/sections/NeverList';
 import { PlanesSplit } from '@/components/sections/PlanesSplit';
 import { RoomsFloor } from '@/components/sections/RoomsFloor';
 import { SystemsPanel } from '@/components/sections/SystemsPanel';
+import { SiteDock } from '@/components/SiteDock';
 import { SiteLoader } from '@/components/SiteLoader';
+import { BackgroundBeams } from '@/components/ui/background-beams';
+import { MovingBorderButton } from '@/components/ui/moving-border';
+import { Spotlight } from '@/components/ui/spotlight-new';
+import { TextGenerateEffect } from '@/components/ui/text-generate-effect';
 import { List } from '@phosphor-icons/react/dist/csr/List';
 import { X } from '@phosphor-icons/react/dist/csr/X';
 import { useState } from 'react';
@@ -118,29 +123,33 @@ export default function App() {
           </BlurFade>
           <InsideScroll />
 
-          <section id="key" className="relative overflow-hidden border-t border-line px-4 py-24 text-center md:px-6">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_100%,rgba(196,240,0,0.14),transparent_60%)]" />
-            <div className="relative mx-auto max-w-3xl">
-              <h2 className="text-[clamp(1.7rem,4.5vw,2.9rem)] font-extrabold leading-[1.05] tracking-tight">
-                THE DESK IS READY
-                <br />
-                THE CHARTS ARE WAITING
-                <br />
-                <span className="text-lime">THE DROP IS COMING</span>
-              </h2>
+          <section id="key" className="relative overflow-hidden border-t border-line px-4 py-28 text-center md:px-6">
+            <BackgroundBeams className="opacity-90" />
+            <Spotlight />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_100%,rgba(196,240,0,0.12),transparent_60%)]" />
+            <div className="relative z-[1] mx-auto max-w-3xl">
+              <TextGenerateEffect words="THE DESK IS READY THE CHARTS ARE WAITING" className="text-[clamp(1.55rem,4.2vw,2.7rem)]" />
+              <p className="mt-3 text-[clamp(1.55rem,4.2vw,2.7rem)] font-extrabold leading-[1.05] tracking-tight text-lime">
+                THE DROP IS COMING
+              </p>
               <p className="mt-4 text-mute">see you on the book</p>
-              <a
-                href="mailto:hello@intafaced.com?subject=OPEN%20THE%20TERMINAL"
-                className="mt-8 inline-flex bg-lime px-6 py-3.5 text-xs font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_32px_rgba(196,240,0,0.2)] active:scale-[0.98]"
-              >
-                OPEN THE TERMINAL
-              </a>
+              <div className="mt-8 flex justify-center">
+                <MovingBorderButton
+                  href="mailto:hello@intafaced.com?subject=OPEN%20THE%20TERMINAL"
+                  containerClassName="h-12 shadow-[0_0_32px_rgba(196,240,0,0.2)]"
+                  className="px-6"
+                >
+                  OPEN THE TERMINAL
+                </MovingBorderButton>
+              </div>
               <p className="mt-4 font-mono text-[11px] tracking-wide text-mute">Ranked waves. Trade access first. Rank carries forever.</p>
             </div>
           </section>
         </main>
 
-        <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-line px-5 py-8 text-sm text-mute sm:px-8 lg:px-12">
+        <SiteDock />
+
+        <footer className="flex flex-wrap items-end justify-between gap-4 border-t border-line px-5 py-8 pb-28 text-sm text-mute sm:px-8 lg:px-12 md:pb-28">
           <div>
             <a
               href="#top"
