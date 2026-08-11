@@ -1,4 +1,3 @@
-import { BorderBeam } from '@/components/magicui/border-beam';
 import { formatPrice } from '@/lib/candles';
 import { MODES, type MarketMode, modeById } from '@/lib/marketModes';
 import { lazy, Suspense, useCallback, useState } from 'react';
@@ -17,9 +16,9 @@ const CHAIN = [
 ];
 
 /**
- * Full terminal. Hover market modes to swap chart / book / ticket.
- * Layout: pairs | chart | book+ticket (no empty footer row under the desk).
- * Scroll is stable — no glow-on-scroll, no sub-pixel chart reflow zoom.
+ * Full terminal - classic desk layout:
+ * pairs | chart / book under | ticket (buy · limit · market) full right rail
+ * No empty footer band. Chart does not wheel-zoom on page scroll.
  */
 export function ExchangeTerminal() {
   const [mode, setMode] = useState<MarketMode>('perp');
@@ -39,7 +38,7 @@ export function ExchangeTerminal() {
   const chgStr = quote ? `${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}%` : cfg.change;
   const up = quote ? quote.changePct >= 0 : cfg.up;
 
-  const sidePanel =
+  const depth =
     cfg.panel === 'book' ? (
       <OrderBook asks={cfg.asks} bids={cfg.bids} mark={markStr} />
     ) : cfg.panel === 'chain' ? (
@@ -58,7 +57,7 @@ export function ExchangeTerminal() {
             real market candles
           </h2>
           <p className="mt-3 max-w-[46ch] text-sm text-mute">
-            Hover a market type - the desk shifts. Candles pull free public market data (1h). Book and ticket stay demo chrome.
+            Hover a market type - the desk shifts. Candles are public market OHLC. Ticket is demo chrome.
           </p>
         </div>
         <p className="font-mono text-[10px] uppercase tracking-wider text-mute">
@@ -91,75 +90,53 @@ export function ExchangeTerminal() {
       </div>
       <p className="mb-4 min-h-[1.25rem] font-mono text-[11px] text-mute">{cfg.blurb}</p>
 
-      <div className="relative overflow-hidden rounded-[3px] border border-line bg-[#040705] shadow-2xl">
-        {/* Static lime edge only — no scroll-reactive glow (that read as zoom) */}
-        <BorderBeam duration={12} />
-        <div className="relative z-10">
-          <div className="flex flex-wrap items-center gap-3 border-b border-line px-3 py-2 font-mono text-[11px]">
-            <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_#c4f000]" />
-            <span className="font-bold">{cfg.symbol}</span>
-            <span className="text-mute">{cfg.meta}</span>
-            <span className={up ? 'text-lime' : 'text-danger'}>
-              {markStr} {chgStr}
+      <div className="overflow-hidden rounded-[3px] border border-line bg-[#040705] shadow-2xl">
+        {/* Header strip - mode + mark live here (not in a dead footer) */}
+        <div className="flex flex-wrap items-center gap-3 border-b border-line px-3 py-2 font-mono text-[11px]">
+          <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_#c4f000]" />
+          <span className="font-bold">{cfg.symbol}</span>
+          <span className="text-mute">{cfg.meta}</span>
+          <span className={up ? 'text-lime' : 'text-danger'}>
+            {markStr} {chgStr}
+          </span>
+          <span className="hidden rounded-sm border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-mute sm:inline">
+            {cfg.label}
+          </span>
+          {cfg.footer.slice(0, 3).map((f) => (
+            <span key={f.k} className="hidden text-mute lg:inline">
+              {f.k} <span className="text-ink">{f.v}</span>
             </span>
-            <span className="hidden text-mute sm:inline">· {cfg.label}</span>
-            <span className="ml-auto rounded-sm border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-mute">
-              {quote?.source === 'live' ? 'LIVE OHLC' : 'OHLC'}
-            </span>
+          ))}
+          <span className="ml-auto rounded-sm border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-mute">
+            {quote?.source === 'live' ? 'LIVE OHLC' : 'OHLC'}
+          </span>
+        </div>
+
+        {/*
+          Desktop desk:
+            [ pairs | chart     | ticket ]
+            [ pairs | depth     | ticket ]
+          Ticket (buy / sell / limit / market) is the full right column - never a hollow band under the chart.
+        */}
+        <div className="hidden md:grid md:grid-cols-[1fr_220px] lg:grid-cols-[148px_minmax(0,1fr)_228px]">
+          <div className="hidden border-r border-line lg:row-span-2 lg:block">
+            <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
           </div>
 
-          {/*
-            Pro desk: pairs | chart | book+ticket stacked.
-            Ticket (buy / limit / market) lives in the right rail — no dead footer band.
-          */}
-          <div className="grid lg:grid-cols-[148px_minmax(0,1fr)_228px]">
-            <div className="hidden lg:block">
-              <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
-            </div>
-
-            <div className="min-w-0 border-line bg-[#070c09] lg:border-x">
-              <Suspense
-                fallback={
-                  <div className="flex h-[340px] flex-col items-center justify-center gap-2 bg-[#070c09] font-mono text-[11px] text-mute">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-lime" />
-                    Loading {cfg.chartSymbol}…
-                  </div>
-                }
-              >
-                <TradeChart key={cfg.chartSymbol} height={340} symbol={cfg.chartSymbol} onQuote={onQuote} />
-              </Suspense>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line bg-panel/80 px-3 py-2 font-mono text-[10px] text-mute">
-                <span className="text-lime">{cfg.chartSymbol}</span>
-                {cfg.footer.map((f) => (
-                  <span key={f.k}>
-                    {f.k} <span className="text-ink">{f.v}</span>
-                  </span>
-                ))}
-                <span className="ml-auto text-mute/70">Candles = market · ticket demo</span>
-              </div>
-            </div>
-
-            {/* Right rail: depth / chain / RFQ + order ticket (buy · limit · market) */}
-            <div className="hidden min-h-0 flex-col md:flex">
-              <div className="min-h-0 flex-1 overflow-hidden border-b border-line">{sidePanel}</div>
-              <OrderTicket
-                buyLabel={cfg.ticket.buy}
-                sellLabel={cfg.ticket.sell}
-                sizeLabel={cfg.ticket.sizeLabel}
-                size={cfg.ticket.size}
-                price={markStr}
-                note={cfg.ticket.note}
-                compact
-              />
-            </div>
+          <div className="min-w-0 bg-[#070c09] lg:border-r lg:border-line">
+            <Suspense
+              fallback={
+                <div className="flex h-[340px] flex-col items-center justify-center gap-2 font-mono text-[11px] text-mute">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-lime" />
+                  Loading {cfg.chartSymbol}…
+                </div>
+              }
+            >
+              <TradeChart key={cfg.chartSymbol} height={340} symbol={cfg.chartSymbol} onQuote={onQuote} />
+            </Suspense>
           </div>
 
-          {/* Mobile / tablet: pairs + depth, then full ticket (no empty mode strip) */}
-          <div className="border-t border-line md:hidden">
-            <div className="grid grid-cols-2">
-              <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
-              {sidePanel}
-            </div>
+          <div className="row-span-2 border-l border-line md:border-l-0 lg:border-l">
             <OrderTicket
               buyLabel={cfg.ticket.buy}
               sellLabel={cfg.ticket.sell}
@@ -169,6 +146,27 @@ export function ExchangeTerminal() {
               note={cfg.ticket.note}
             />
           </div>
+
+          <div className="max-h-[220px] overflow-hidden border-t border-line bg-[#040705]">{depth}</div>
+        </div>
+
+        {/* Mobile */}
+        <div className="md:hidden">
+          <Suspense fallback={<div className="flex h-[280px] items-center justify-center font-mono text-[11px] text-mute">Loading…</div>}>
+            <TradeChart key={`m-${cfg.chartSymbol}`} height={280} symbol={cfg.chartSymbol} onQuote={onQuote} />
+          </Suspense>
+          <div className="grid grid-cols-2 border-t border-line">
+            <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
+            <div className="max-h-[220px] overflow-hidden border-l border-line">{depth}</div>
+          </div>
+          <OrderTicket
+            buyLabel={cfg.ticket.buy}
+            sellLabel={cfg.ticket.sell}
+            sizeLabel={cfg.ticket.sizeLabel}
+            size={cfg.ticket.size}
+            price={markStr}
+            note={cfg.ticket.note}
+          />
         </div>
       </div>
     </section>
@@ -177,7 +175,7 @@ export function ExchangeTerminal() {
 
 function OptionsChain() {
   return (
-    <div className="flex h-full min-h-[200px] max-h-[220px] flex-col bg-[#040705] font-mono text-[10px]">
+    <div className="flex h-full min-h-[180px] flex-col bg-[#040705] font-mono text-[10px]">
       <div className="border-b border-line px-2 py-2 text-mute">
         <span className="uppercase tracking-wider">Options chain</span>
         <span className="ml-2 text-lime/80">DEMO</span>
@@ -202,12 +200,12 @@ function OptionsChain() {
 
 function RfqPanel({ mark }: { mark: string }) {
   return (
-    <div className="flex h-full min-h-[200px] max-h-[220px] flex-col justify-between bg-[#040705] p-3 font-mono text-[10px]">
+    <div className="flex h-full min-h-[180px] flex-col justify-between bg-[#040705] p-3 font-mono text-[10px]">
       <div>
         <p className="uppercase tracking-wider text-mute">OTC desk</p>
-        <p className="mt-3 text-2xl font-bold text-ink">{mark}</p>
+        <p className="mt-2 text-2xl font-bold text-ink">{mark}</p>
         <p className="mt-1 text-mute">Indicative mid · demo</p>
-        <ul className="mt-4 space-y-2 text-mute">
+        <ul className="mt-3 space-y-2 text-mute">
           <li className="flex justify-between border-b border-line pb-1">
             <span>Min</span>
             <span className="text-ink">10 BTC</span>

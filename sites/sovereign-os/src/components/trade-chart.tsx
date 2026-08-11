@@ -55,6 +55,19 @@ export function TradeChart({ height = 320, symbol = 'BTCUSDT', onQuote }: Props)
         vertLine: { color: 'rgba(196,240,0,0.28)', labelBackgroundColor: '#1a261f' },
         horzLine: { color: 'rgba(196,240,0,0.28)', labelBackgroundColor: '#1a261f' },
       },
+      // Critical: page scroll must pass through. LWC default wheel-zoom made the desk "zoom" while scrolling.
+      handleScroll: {
+        mouseWheel: false,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        mouseWheel: false,
+        pinch: false,
+        axisPressedMouseMove: { time: false, price: false },
+        axisDoubleClickReset: { time: true, price: true },
+      },
       width: el.clientWidth,
       height: chartH,
     });

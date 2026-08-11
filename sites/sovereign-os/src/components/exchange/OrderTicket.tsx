@@ -18,7 +18,9 @@ export function OrderTicket({ buyLabel, sellLabel, sizeLabel, size, price, note,
   return (
     <div
       className={
-        compact ? 'border-line bg-[#040705] p-2.5 font-mono text-[11px]' : 'border-t border-line bg-[#040705] p-3 font-mono text-[11px]'
+        compact
+          ? 'h-full border-line bg-[#040705] p-2.5 font-mono text-[11px]'
+          : 'h-full border-t border-line bg-[#040705] p-3 font-mono text-[11px] md:border-t-0'
       }
     >
       <div className="mb-2 flex gap-1">
