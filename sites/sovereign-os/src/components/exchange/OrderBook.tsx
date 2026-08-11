@@ -13,7 +13,7 @@ export function OrderBook({
 }) {
   const max = Math.max(...asks.map((a) => a.s), ...bids.map((b) => b.s), 0.01);
   return (
-    <div className="flex h-full min-h-[280px] flex-col border-l border-line bg-[#040705] font-mono text-[10px]">
+    <div className="flex h-full min-h-[200px] max-h-[240px] flex-col bg-[#040705] font-mono text-[10px] lg:max-h-none lg:min-h-[220px]">
       <div className="flex items-center justify-between border-b border-line px-2 py-2 text-mute">
         <span className="uppercase tracking-wider">Order book</span>
         <span className="text-lime/80">DEMO</span>

@@ -7,14 +7,20 @@ type Props = {
   size: string;
   price: string;
   note: string;
+  /** Tighter padding when stacked under book in the right rail */
+  compact?: boolean;
 };
 
-export function OrderTicket({ buyLabel, sellLabel, sizeLabel, size, price, note }: Props) {
+export function OrderTicket({ buyLabel, sellLabel, sizeLabel, size, price, note, compact }: Props) {
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [type, setType] = useState<'market' | 'limit'>('limit');
 
   return (
-    <div className="border-t border-line bg-[#040705] p-3 font-mono text-[11px] md:border-l md:border-t-0">
+    <div
+      className={
+        compact ? 'border-line bg-[#040705] p-2.5 font-mono text-[11px]' : 'border-t border-line bg-[#040705] p-3 font-mono text-[11px]'
+      }
+    >
       <div className="mb-2 flex gap-1">
         {(
           [
@@ -38,7 +44,7 @@ export function OrderTicket({ buyLabel, sellLabel, sizeLabel, size, price, note 
           </button>
         ))}
       </div>
-      <div className="mb-3 flex gap-1">
+      <div className="mb-2 flex gap-1">
         {(
           [
             ['limit', 'Limit'],
@@ -62,12 +68,12 @@ export function OrderTicket({ buyLabel, sellLabel, sizeLabel, size, price, note 
         <input
           readOnly
           value={type === 'market' ? 'Market' : price}
-          className="w-full border border-line bg-panel px-2 py-2 text-ink outline-none"
+          className="w-full border border-line bg-panel px-2 py-1.5 text-ink outline-none"
         />
       </label>
-      <label className="mb-3 block">
+      <label className="mb-2 block">
         <span className="mb-1 block text-[9px] uppercase tracking-wider text-mute">{sizeLabel}</span>
-        <input readOnly value={size} className="w-full border border-line bg-panel px-2 py-2 text-ink outline-none" />
+        <input readOnly value={size} className="w-full border border-line bg-panel px-2 py-1.5 text-ink outline-none" />
       </label>
       <button
         type="button"
@@ -79,7 +85,7 @@ export function OrderTicket({ buyLabel, sellLabel, sizeLabel, size, price, note 
       >
         {side === 'buy' ? buyLabel : sellLabel} · DEMO
       </button>
-      <p className="mt-2 text-center text-[9px] text-mute">{note}</p>
+      <p className="mt-1.5 text-center text-[9px] text-mute">{note}</p>
     </div>
   );
 }

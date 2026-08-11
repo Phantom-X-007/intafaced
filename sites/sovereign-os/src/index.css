@@ -18,6 +18,8 @@
 
 html {
   scroll-behavior: smooth;
+  /* Prevents width jump when scrollbar appears — chart looked like it zoomed on scroll */
+  scrollbar-gutter: stable;
 }
 
 @media (prefers-reduced-motion: reduce) {

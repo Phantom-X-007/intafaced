@@ -79,13 +79,24 @@ export function TradeChart({ height = 320, symbol = 'BTCUSDT', onQuote }: Props)
     candleRef.current = candles;
     volRef.current = volume;
 
+    // Only reflow on real width changes. Sub-pixel / scrollbar thrash was
+    // making candles look like they zoom in-out while the page scrolled.
+    let lastW = el.clientWidth;
+    let raf = 0;
     const ro = new ResizeObserver(() => {
       if (!hostRef.current) return;
-      chart.applyOptions({ width: hostRef.current.clientWidth, height: chartH });
+      const w = hostRef.current.clientWidth;
+      if (Math.abs(w - lastW) < 2) return;
+      lastW = w;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        chart.applyOptions({ width: w, height: chartH });
+      });
     });
     ro.observe(el);
 
     return () => {
+      cancelAnimationFrame(raf);
       ro.disconnect();
       chart.remove();
       chartRef.current = null;

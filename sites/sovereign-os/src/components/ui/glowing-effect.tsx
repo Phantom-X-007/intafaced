@@ -106,15 +106,14 @@ const GlowingEffect = memo(
     useEffect(() => {
       if (disabled) return;
 
-      const handleScroll = () => handleMove();
+      // Pointer only — no scroll listener. Scroll+rect math made the desk
+      // border breathe / "zoom" while reading the chart.
       const handlePointerMove = (e: PointerEvent) => handleMove(e);
 
-      window.addEventListener('scroll', handleScroll, { passive: true });
       document.body.addEventListener('pointermove', handlePointerMove, { passive: true });
 
       return () => {
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        window.removeEventListener('scroll', handleScroll);
         document.body.removeEventListener('pointermove', handlePointerMove);
       };
     }, [handleMove, disabled]);
