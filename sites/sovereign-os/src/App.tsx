@@ -1,5 +1,6 @@
 import { ExchangeTerminal } from '@/components/exchange/ExchangeTerminal';
 import { BorderBeam } from '@/components/magicui/border-beam';
+import { BlurFade } from '@/components/magicui/blur-fade';
 import { GridPattern } from '@/components/magicui/grid-pattern';
 import { Marquee } from '@/components/magicui/marquee';
 import { BrandMark } from '@/components/BrandMark';
@@ -99,51 +100,61 @@ export default function App() {
           <ExchangeTerminal />
 
           <ManifestoBand />
-          <LawsRail />
+          <BlurFade>
+            <LawsRail />
+          </BlurFade>
           <PlanesSplit />
           <RoomsFloor />
-          <SystemsPanel />
-          <ChainTimeline />
+          <BlurFade>
+            <SystemsPanel />
+          </BlurFade>
+          <BlurFade>
+            <ChainTimeline />
+          </BlurFade>
 
           {/* Blueprint - framed identity card (different family) */}
-          <section className="mx-auto grid max-w-6xl xl:max-w-7xl gap-8 px-4 py-16 md:grid-cols-2 md:items-center md:px-6">
-            <div>
-              <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">
-                Onboarding is not a form.
-                <br />
-                It is the first flex.
-              </h2>
-              <p className="mt-3 max-w-[38ch] text-sm text-mute">
-                A short conversational session. The OS bends around who you actually are - built to be the first screenshot people share.
-              </p>
-            </div>
-            <div className="relative overflow-hidden rounded-[3px] border border-line bg-panel p-5">
-              <BorderBeam duration={10} />
-              <div className="relative z-10">
-                <div className="flex justify-between font-mono text-[10px] tracking-wider text-mute">
-                  <span>SOVEREIGN BLUEPRINT</span>
-                  <span className="text-lime">RANK · FOUNDING</span>
-                </div>
-                <p className="mt-4 text-2xl font-extrabold tracking-tight">YOUR IDENTITY CARD</p>
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  {[
-                    ['DECISION', 'Aggressive clarity'],
-                    ['RISK', 'Controlled fire'],
-                    ['ENERGY', 'Night session'],
-                    ['CREW', 'Caller / scout'],
-                  ].map(([k, v]) => (
-                    <div key={k} className="border border-line bg-panel-2 p-2.5">
-                      <span className="block font-mono text-[10px] text-lime">{k}</span>
-                      <span className="text-sm">{v}</span>
-                    </div>
-                  ))}
+          <BlurFade>
+            <section className="mx-auto grid max-w-6xl xl:max-w-7xl gap-8 px-4 py-16 md:grid-cols-2 md:items-center md:px-6">
+              <div>
+                <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">
+                  Onboarding is not a form.
+                  <br />
+                  It is the first flex.
+                </h2>
+                <p className="mt-3 max-w-[38ch] text-sm text-mute">
+                  A short conversational session. The OS bends around who you actually are - built to be the first screenshot people share.
+                </p>
+              </div>
+              <div className="relative overflow-hidden rounded-[3px] border border-line bg-panel p-5">
+                <BorderBeam duration={10} />
+                <div className="relative z-10">
+                  <div className="flex justify-between font-mono text-[10px] tracking-wider text-mute">
+                    <span>SOVEREIGN BLUEPRINT</span>
+                    <span className="text-lime">RANK · FOUNDING</span>
+                  </div>
+                  <p className="mt-4 text-2xl font-extrabold tracking-tight">YOUR IDENTITY CARD</p>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {[
+                      ['DECISION', 'Aggressive clarity'],
+                      ['RISK', 'Controlled fire'],
+                      ['ENERGY', 'Night session'],
+                      ['CREW', 'Caller / scout'],
+                    ].map(([k, v]) => (
+                      <div key={k} className="border border-line bg-panel-2 p-2.5">
+                        <span className="block font-mono text-[10px] text-lime">{k}</span>
+                        <span className="text-sm">{v}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </BlurFade>
 
           <DropPhases />
-          <NeverList />
+          <BlurFade>
+            <NeverList />
+          </BlurFade>
           <InsideScroll />
 
           <section id="key" className="relative overflow-hidden border-t border-line px-4 py-24 text-center md:px-6">

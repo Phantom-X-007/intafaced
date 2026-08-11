@@ -10,11 +10,12 @@ export type ModeConfig = {
   label: string;
   blurb: string;
   symbol: string;
+  /** Binance public symbol for real OHLC */
+  chartSymbol: 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT';
   meta: string;
   mark: string;
   change: string;
   up: boolean;
-  seed: number;
   pairs: PairRow[];
   asks: BookRow[];
   bids: BookRow[];
@@ -29,11 +30,11 @@ export const MODES: ModeConfig[] = [
     label: 'Spot',
     blurb: 'Cash markets. Convert. Full depth when live.',
     symbol: 'BTC-USD',
+    chartSymbol: 'BTCUSDT',
     meta: 'SPOT · CASH',
-    mark: '67,390.0',
-    change: '+2.3%',
+    mark: '—',
+    change: '—',
     up: true,
-    seed: 67390,
     pairs: [
       { s: 'BTC-USD', p: '67,390', c: '+2.3%', up: true },
       { s: 'ETH-USD', p: '3,408', c: '+0.9%', up: true },
@@ -67,11 +68,11 @@ export const MODES: ModeConfig[] = [
     label: 'Perpetuals',
     blurb: 'Cross / isolated. Mark. Funding. Liquidation on the book.',
     symbol: 'BTC-PERP',
+    chartSymbol: 'BTCUSDT',
     meta: 'CROSS · 20×',
-    mark: '67,412.2',
-    change: '+2.4%',
+    mark: '—',
+    change: '—',
     up: true,
-    seed: 67412,
     pairs: [
       { s: 'BTC-PERP', p: '67,412', c: '+2.4%', up: true },
       { s: 'ETH-PERP', p: '3,412', c: '+1.1%', up: true },
@@ -105,11 +106,11 @@ export const MODES: ModeConfig[] = [
     label: 'Options',
     blurb: 'Chain view on the same desk chrome. Path live later.',
     symbol: 'BTC-OPT',
-    meta: 'EXP 28 MAR · IV 48%',
-    mark: '67,400',
-    change: 'ATM',
+    chartSymbol: 'ETHUSDT',
+    meta: 'UNDERLYING · IV path',
+    mark: '—',
+    change: '—',
     up: true,
-    seed: 67400,
     pairs: [
       { s: 'BTC 68C', p: '1,240', c: '+8%', up: true },
       { s: 'BTC 67C', p: '2,110', c: '+3%', up: true },
@@ -143,11 +144,11 @@ export const MODES: ModeConfig[] = [
     label: 'OTC',
     blurb: 'Block size. RFQ. Settlement on the plane you choose.',
     symbol: 'BTC-OTC',
+    chartSymbol: 'SOLUSDT',
     meta: 'RFQ · BLOCK',
-    mark: '67,385',
-    change: '−8 bps',
-    up: false,
-    seed: 67385,
+    mark: '—',
+    change: '—',
+    up: true,
     pairs: [
       { s: 'BTC block', p: '50+', c: 'RFQ', up: true },
       { s: 'ETH block', p: '500+', c: 'RFQ', up: true },

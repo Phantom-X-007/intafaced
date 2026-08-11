@@ -236,16 +236,17 @@ export class WaveGridEngine {
 
     // Dark base → lime peaks (INTAFACED)
     const material = new THREE.MeshPhongMaterial({ color: 0x1a2420 });
+    // Stronger pointer response (Nitro: hero hover should feel alive, not subtle)
     const params = {
-      waveSpeed: 6.0,
-      waveFrequency: 1.2,
-      waveWidth: 3.0,
-      waveAmplitude: 0.45,
-      waveJitter: 0.2,
-      waveMaxHeight: 0.45,
+      waveSpeed: 7.2,
+      waveFrequency: 1.35,
+      waveWidth: 2.4,
+      waveAmplitude: 0.78,
+      waveJitter: 0.18,
+      waveMaxHeight: 0.82,
       colorBase: '#1a2420',
       colorHigh: '#c4f000',
-      fadeTime: 2.2,
+      fadeTime: 2.6,
     };
     this.uFadeTime.value = params.fadeTime;
 
@@ -327,8 +328,9 @@ export class WaveGridEngine {
   }
 
   private updateCameraPose(mx: number, my: number) {
-    const alpha = my * Math.PI * 0.03;
-    const beta = mx * Math.PI * 0.05;
+    // Stronger camera sway with pointer (still stable, not nauseous)
+    const alpha = my * Math.PI * 0.065;
+    const beta = mx * Math.PI * 0.1;
     const r = this.camRadius;
     this.camera.position.set(-r * Math.cos(alpha) * Math.sin(beta), r * Math.cos(alpha) * Math.cos(beta), r * Math.sin(alpha));
     this.camera.up.set(0, 0, -1);
@@ -353,10 +355,11 @@ export class WaveGridEngine {
         const dx = x - this.lastPoint.x;
         const dz = z - this.lastPoint.z;
         distDelta = Math.hypot(dx, dz);
-        if (distDelta < 0.1) return;
+        // Lower threshold = denser trail under cursor
+        if (distDelta < 0.035) return;
       }
       if (this.trail.length >= MAX_TRAIL) this.trail.shift();
-      this.trail.push({ x, z, age: 0, distDelta: Math.max(distDelta, 0.15) });
+      this.trail.push({ x, z, age: 0, distDelta: Math.max(distDelta * 1.35, 0.28) });
       this.lastPoint = { x, z };
       this.timeSinceLastMove = 0;
       this.isPlacingRandom = false;
@@ -459,8 +462,8 @@ export class WaveGridEngine {
     this.lastT = now;
 
     this.updateTrail(delta);
-    this.camLerped.x += (this.camMouse.x - this.camLerped.x) * 0.04;
-    this.camLerped.y += (this.camMouse.y - this.camLerped.y) * 0.04;
+    this.camLerped.x += (this.camMouse.x - this.camLerped.x) * 0.07;
+    this.camLerped.y += (this.camMouse.y - this.camLerped.y) * 0.07;
     this.updateCameraPose(this.camLerped.x, this.camLerped.y);
 
     if (this.composer) this.composer.render();

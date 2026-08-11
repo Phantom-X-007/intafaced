@@ -1,6 +1,7 @@
 import { BorderBeam } from '@/components/magicui/border-beam';
+import { formatPrice } from '@/lib/candles';
 import { MODES, type MarketMode, modeById } from '@/lib/marketModes';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { MarketsList } from './MarketsList';
 import { OrderBook } from './OrderBook';
 import { OrderTicket } from './OrderTicket';
@@ -22,6 +23,20 @@ const CHAIN = [
 export function ExchangeTerminal() {
   const [mode, setMode] = useState<MarketMode>('perp');
   const cfg = modeById(mode);
+  const [quote, setQuote] = useState<{ last: number; changePct: number; source: 'live' | 'baked' } | null>(null);
+
+  const setModeSafe = (id: MarketMode) => {
+    setMode(id);
+    setQuote(null);
+  };
+
+  const onQuote = useCallback((q: { last: number; changePct: number; source: 'live' | 'baked' }) => {
+    setQuote(q);
+  }, []);
+
+  const markStr = quote ? formatPrice(quote.last) : cfg.mark;
+  const chgStr = quote ? `${quote.changePct >= 0 ? '+' : ''}${quote.changePct.toFixed(2)}%` : cfg.change;
+  const up = quote ? quote.changePct >= 0 : cfg.up;
 
   return (
     <section id="trade" className="mx-auto max-w-6xl xl:max-w-7xl px-4 py-14 md:px-6">
@@ -30,13 +45,15 @@ export function ExchangeTerminal() {
           <h2 className="max-w-[16ch] text-3xl font-extrabold tracking-tight md:text-4xl">
             Full terminal
             <br />
-            not a toy chart
+            real market candles
           </h2>
-          <p className="mt-3 max-w-[44ch] text-sm text-mute">
-            Hover a market type - the desk shifts. Pairs, candles, book, and ticket all change. Demo data only.
+          <p className="mt-3 max-w-[46ch] text-sm text-mute">
+            Hover a market type - the desk shifts. Candles pull free public market data (1h). Book and ticket stay demo chrome.
           </p>
         </div>
-        <p className="font-mono text-[10px] uppercase tracking-wider text-mute">Preview numbers · pro charting path in progress</p>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-mute">
+          {quote?.source === 'live' ? 'Live OHLC' : 'Snapshot OHLC'} · pro multi-layout path later
+        </p>
       </div>
 
       {/* Hover strip */}
@@ -56,9 +73,9 @@ export function ExchangeTerminal() {
               type="button"
               role="tab"
               aria-selected={on}
-              onMouseEnter={() => setMode(m.id)}
-              onFocus={() => setMode(m.id)}
-              onClick={() => setMode(m.id)}
+              onMouseEnter={() => setModeSafe(m.id)}
+              onFocus={() => setModeSafe(m.id)}
+              onClick={() => setModeSafe(m.id)}
               className={
                 on
                   ? 'bg-lime px-3 py-2 font-mono text-[11px] font-bold uppercase tracking-wider text-[#081008] transition'
@@ -79,10 +96,12 @@ export function ExchangeTerminal() {
             <span className="h-2 w-2 rounded-full bg-lime shadow-[0_0_10px_#c4f000]" />
             <span className="font-bold">{cfg.symbol}</span>
             <span className="text-mute">{cfg.meta}</span>
-            <span className={cfg.up ? 'text-lime' : 'text-danger'}>
-              {cfg.mark} {cfg.change}
+            <span className={up ? 'text-lime' : 'text-danger'}>
+              {markStr} {chgStr}
             </span>
-            <span className="ml-auto rounded-sm border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-mute">DEMO</span>
+            <span className="ml-auto rounded-sm border border-line px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-mute">
+              {quote?.source === 'live' ? 'LIVE OHLC' : 'OHLC'}
+            </span>
           </div>
 
           <div className="grid lg:grid-cols-[160px_1fr_180px]">
@@ -91,9 +110,9 @@ export function ExchangeTerminal() {
             </div>
             <div className="min-w-0 border-line lg:border-x">
               <Suspense
-                fallback={<div className="flex h-[320px] items-center justify-center font-mono text-[11px] text-mute">Loading chart…</div>}
+                fallback={<div className="flex h-[320px] items-center justify-center font-mono text-[11px] text-mute">Loading market…</div>}
               >
-                <TradeChart key={cfg.id} height={320} seed={cfg.seed} />
+                <TradeChart key={cfg.chartSymbol} height={320} symbol={cfg.chartSymbol} onQuote={onQuote} />
               </Suspense>
               <div className="flex flex-wrap gap-4 border-t border-line px-3 py-2 font-mono text-[10px] text-mute">
                 {cfg.footer.map((f) => (
@@ -101,16 +120,16 @@ export function ExchangeTerminal() {
                     {f.k} <span className="text-ink">{f.v}</span>
                   </span>
                 ))}
-                <span className="text-mute/80">Illustrative</span>
+                <span className="text-mute/80">Book/ticket demo · candles real</span>
               </div>
             </div>
             <div className="hidden min-h-[280px] md:block">
               {cfg.panel === 'book' ? (
-                <OrderBook asks={cfg.asks} bids={cfg.bids} mark={cfg.mark} />
+                <OrderBook asks={cfg.asks} bids={cfg.bids} mark={markStr} />
               ) : cfg.panel === 'chain' ? (
                 <OptionsChain />
               ) : (
-                <RfqPanel mark={cfg.mark} />
+                <RfqPanel mark={markStr} />
               )}
             </div>
           </div>
@@ -119,11 +138,11 @@ export function ExchangeTerminal() {
             <div className="grid grid-cols-2 gap-0 md:hidden">
               <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
               {cfg.panel === 'book' ? (
-                <OrderBook asks={cfg.asks} bids={cfg.bids} mark={cfg.mark} />
+                <OrderBook asks={cfg.asks} bids={cfg.bids} mark={markStr} />
               ) : cfg.panel === 'chain' ? (
                 <OptionsChain />
               ) : (
-                <RfqPanel mark={cfg.mark} />
+                <RfqPanel mark={markStr} />
               )}
             </div>
             <div className="hidden items-center gap-6 px-4 font-mono text-[11px] text-mute md:flex">
@@ -131,7 +150,7 @@ export function ExchangeTerminal() {
                 Mode <span className="text-ink">{cfg.label}</span>
               </span>
               <span>
-                Symbol <span className="text-ink">{cfg.symbol}</span>
+                Feed <span className="text-ink">{cfg.chartSymbol}</span>
               </span>
               <span className="text-mute/70">Hover modes above to switch desk</span>
             </div>
@@ -140,7 +159,7 @@ export function ExchangeTerminal() {
               sellLabel={cfg.ticket.sell}
               sizeLabel={cfg.ticket.sizeLabel}
               size={cfg.ticket.size}
-              price={cfg.mark}
+              price={markStr}
               note={cfg.ticket.note}
             />
           </div>

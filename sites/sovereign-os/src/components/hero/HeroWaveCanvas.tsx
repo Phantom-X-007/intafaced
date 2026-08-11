@@ -40,7 +40,8 @@ export function HeroWaveCanvas({ active, className, onReady }: Props) {
         engine = new WaveGridEngine({
           canvas,
           quality: pickQuality(),
-          pointerRoot: wrap.parentElement,
+          // Full hero section hitbox so cursor waves track across copy + atmosphere
+          pointerRoot: wrap.closest('section') ?? wrap.parentElement,
         });
         if (cancelled) {
           engine.dispose();
