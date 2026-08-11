@@ -34,7 +34,7 @@ const TRADE: Room = {
   name: 'Trade',
   role: 'Spot · perps · options · OTC · pro charts',
   body: 'The desk is the product. One terminal for every market type - not a bank page with charts bolted on.',
-  image: `${MEDIA}/trade.jpg`,
+  image: `${MEDIA}/trade-v3.jpg`,
   hot: true,
   href: '#trade',
   Icon: ChartLine,
