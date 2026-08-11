@@ -10,9 +10,8 @@ import { ShieldCheck } from '@phosphor-icons/react/dist/csr/ShieldCheck';
 import { Storefront } from '@phosphor-icons/react/dist/csr/Storefront';
 import { Target } from '@phosphor-icons/react/dist/csr/Target';
 import { UsersThree } from '@phosphor-icons/react/dist/csr/UsersThree';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import type { ComponentType } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type IconProps = { size?: number; weight?: 'thin' | 'light' | 'regular' | 'bold' | 'fill' | 'duotone'; className?: string };
 
@@ -144,14 +143,24 @@ const ORBIT: Room[] = [
   },
 ];
 
+const ALL_ROOMS: Room[] = [TRADE, ...ORBIT];
+
 /**
  * House map: Trade core + orbit.
- * Bottom readout sits ON ambient stock art that fades in softly (background only - not a product-card dump).
+ * Bottom stage: room photo is clearly visible (right side open), text on a soft left scrim.
+ * Preloaded stack + CSS opacity only - no wait-mode crossfade lag.
  */
 export function RoomsFloor() {
   const [focus, setFocus] = useState<Room>(TRADE);
-  const reduce = useReducedMotion();
   const isTrade = focus.code === TRADE.code;
+
+  // Warm the cache so first hover is instant
+  useEffect(() => {
+    for (const room of ALL_ROOMS) {
+      const img = new Image();
+      img.src = room.image;
+    }
+  }, []);
 
   return (
     <section id="rooms" className="relative overflow-hidden border-y border-line bg-[#060a08] py-20">
@@ -164,7 +173,7 @@ export function RoomsFloor() {
               rooms around it
             </h2>
             <p className="mt-2 max-w-[42ch] text-sm text-mute">
-              Hover a room. Trade stays the core. The other rooms open below with a quiet scene behind the words.
+              Hover a room. Trade stays the core. The scene below switches with the room - picture and words together.
             </p>
           </div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">12 rooms · 1 key</p>
@@ -265,41 +274,39 @@ export function RoomsFloor() {
         </div>
 
         {/*
-          Explain strip: ambient photo in the BACK only (low opacity + heavy scrim).
-          Text stays readable. No big AI feature card / direction-aware dump.
+          Room stage: photo clearly visible (esp. right half), text on soft left wash.
+          All images stacked + opacity swap = snappy, no decode lag / wait-mode flash.
         */}
-        <div className="relative mt-12 min-h-[200px] overflow-hidden border border-line md:min-h-[220px]">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={focus.image}
-              initial={reduce ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={reduce ? undefined : { opacity: 0 }}
-              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-              className="pointer-events-none absolute inset-0"
-              aria-hidden
-            >
+        <div className="relative mt-12 min-h-[260px] overflow-hidden border border-line md:min-h-[300px]">
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            {ALL_ROOMS.map((room) => (
               <img
-                src={focus.image}
+                key={room.code}
+                src={room.image}
                 alt=""
-                className="h-full w-full scale-105 object-cover opacity-[0.28]"
-                loading="lazy"
+                className={[
+                  'absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-200 ease-out',
+                  focus.code === room.code ? 'opacity-100' : 'opacity-0',
+                ].join(' ')}
+                loading="eager"
                 decoding="async"
+                draggable={false}
               />
-              <div className="absolute inset-0 bg-void/75" />
-              <div className="absolute inset-0 bg-gradient-to-r from-void via-void/70 to-void/40" />
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_80%_50%,rgba(196,240,0,0.06),transparent_60%)]" />
-            </motion.div>
-          </AnimatePresence>
+            ))}
+            {/* Left: keep copy readable. Right: let the photo read. */}
+            <div className="absolute inset-0 bg-gradient-to-r from-void from-0% via-void/85 via-40% to-void/20 to-100%" />
+            <div className="absolute inset-0 bg-gradient-to-t from-void/55 via-transparent to-void/25" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_70%_at_85%_45%,rgba(196,240,0,0.08),transparent_55%)]" />
+          </div>
 
-          <div className="relative z-[1] flex flex-col justify-between gap-6 px-5 py-7 sm:flex-row sm:items-end sm:px-8 md:py-9">
-            <div className="max-w-xl">
+          <div className="relative z-[1] flex min-h-[260px] flex-col justify-between gap-6 px-5 py-8 sm:flex-row sm:items-end sm:px-8 md:min-h-[300px] md:py-10">
+            <div className="max-w-md rounded-[2px] border border-white/5 bg-void/35 p-4 backdrop-blur-[2px] sm:max-w-lg sm:p-5">
               <p className="font-mono text-[10px] tracking-[0.16em] text-lime">
                 {focus.code} · {focus.hot ? 'CORE' : 'ROOM'}
               </p>
               <h3 className="mt-2 text-2xl font-extrabold tracking-tight text-ink md:text-3xl">{focus.name}</h3>
               <p className="mt-1 text-sm font-medium text-mute">{focus.role}</p>
-              <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-mute">{focus.body}</p>
+              <p className="mt-3 max-w-[42ch] text-[15px] leading-relaxed text-ink/85">{focus.body}</p>
               {!focus.hot ? (
                 <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-mute/80">
                   Same key as the desk · these rooms open with the house
@@ -310,12 +317,12 @@ export function RoomsFloor() {
               {focus.hot && focus.href ? (
                 <a
                   href={focus.href}
-                  className="inline-flex bg-lime px-4 py-2.5 text-[11px] font-extrabold tracking-[0.06em] text-[#081008] active:scale-[0.98]"
+                  className="inline-flex bg-lime px-4 py-2.5 text-[11px] font-extrabold tracking-[0.06em] text-[#081008] shadow-[0_0_24px_rgba(196,240,0,0.15)] active:scale-[0.98]"
                 >
                   OPEN TERMINAL
                 </a>
               ) : (
-                <span className="inline-flex border border-line bg-void/50 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-mute backdrop-blur-sm">
+                <span className="inline-flex border border-line/80 bg-void/55 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-mute backdrop-blur-sm">
                   House room
                 </span>
               )}
