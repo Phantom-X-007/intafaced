@@ -7,8 +7,8 @@ export function ManifestoBand() {
       <div className="grid lg:grid-cols-2">
         <div className="relative min-h-[280px] lg:min-h-[420px]">
           <img
-            src="./media/manifesto-desk-v2.jpg"
-            alt="Professional trading monitors with market charts"
+            src="./media/desk.jpg"
+            alt="Dark trading desk with market screens"
             className="absolute inset-0 h-full w-full object-cover object-center"
             loading="lazy"
             decoding="async"
