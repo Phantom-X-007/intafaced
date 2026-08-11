@@ -15,6 +15,8 @@ type Seat = {
   traits: [string, string][];
   image: string;
   Icon: ComponentType<IconProps>;
+  /** Tailwind object-* classes for portrait crop */
+  objectClass?: string;
 };
 
 /**
@@ -41,14 +43,16 @@ const EXAMPLES: Seat[] = [
   {
     id: 'founding',
     rank: 'EXAMPLE',
-    title: 'Founding energy',
-    line: 'How a reveal can read at the top of the stack.',
+    title: 'Flex energy',
+    line: 'How a reveal can read when the house is loud.',
     traits: [
-      ['ENERGY', 'Prime hours'],
-      ['MODE', 'Desk first'],
+      ['ENERGY', 'Peak flex'],
+      ['MODE', 'Show the card'],
     ],
     image: './media/identity/founding.jpg',
     Icon: Moon,
+    /** Bunny portrait - keep face/grillz high in the frame */
+    objectClass: 'object-cover object-[center_22%]',
   },
   {
     id: 'scout',
@@ -61,11 +65,14 @@ const EXAMPLES: Seat[] = [
     ],
     image: './media/identity/scout.jpg',
     Icon: Crosshair,
+    /** Subject + car - slight upper bias so face and lime car read */
+    objectClass: 'object-cover object-[center_28%]',
   },
 ];
 
 function IdentityGlareCard({ seat, size }: { seat: Seat; size: 'hero' | 'example' }) {
   const hero = size === 'hero';
+  const objectClass = seat.objectClass ?? (hero ? 'object-cover object-[center_38%]' : 'object-cover object-center');
   return (
     <GlareCard
       containerClassName={
@@ -76,12 +83,20 @@ function IdentityGlareCard({ seat, size }: { seat: Seat; size: 'hero' | 'example
       <img
         src={seat.image}
         alt=""
-        className="absolute inset-0 h-full w-full object-cover object-center"
+        className={['absolute inset-0 h-full w-full', objectClass].join(' ')}
         loading={hero ? 'eager' : 'lazy'}
         decoding="async"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#050806] via-[#050806]/75 to-[#050806]/15" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_15%,rgba(196,240,0,0.12),transparent_55%)]" />
+      {/* Lighter mid wash so faces stay crisp; only bottom holds type */}
+      <div
+        className={[
+          'absolute inset-0',
+          hero
+            ? 'bg-gradient-to-t from-[#050806] via-[#050806]/55 to-[#050806]/10'
+            : 'bg-gradient-to-t from-[#050806] via-[#050806]/65 to-[#050806]/12',
+        ].join(' ')}
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_15%,rgba(196,240,0,0.1),transparent_55%)]" />
 
       <div className={['relative z-10 flex h-full flex-col justify-between', hero ? 'p-7 sm:p-8' : 'p-4 sm:p-5'].join(' ')}>
         <div className="flex items-start justify-between gap-3">
