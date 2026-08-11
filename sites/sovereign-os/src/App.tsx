@@ -22,10 +22,10 @@ const TICKER =
   'DEMO · BTC-PERP 67412.2 +2.4% · ETH-PERP 3412.8 +1.1% · FILL 0.42 BTC @ 67410 · FUNDING +0.012% · OI $1.2B · SOL-PERP 178.44 −0.6% · ';
 
 /**
- * Section layout families (no two adjacent share the same pattern):
- * Hero editorial · Tape marquee · Terminal cockpit · Manifesto band · Laws rail ·
- * Planes split · Rooms floor scroll · Systems hover panel · Chain timeline ·
- * Blueprint card · Drop phases · Never strike list · Inside scroll · Close
+ * Layout families (no collision of card-rails):
+ * Hero editorial · Tape · Terminal cockpit · Manifesto band · Laws doctrine stack ·
+ * Planes split · Rooms orbital house map · Systems underline · Chain timeline ·
+ * Blueprint card · Drop phase track · Never strike · Inside kernel doc · Close
  */
 export default function App() {
   const [menu, setMenu] = useState(false);

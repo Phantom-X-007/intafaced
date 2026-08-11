@@ -6,69 +6,61 @@ const SYSTEMS = [
     label: 'Identity',
     title: 'The Identity',
     body: 'Verify once. Trade, bank, launch, learn, sell, predict - everywhere. Rank earned in any room counts in every room.',
-    visual: ['LOGIN', 'RANK', 'WALLET SET'],
+    line: 'login → rank → every room',
   },
   {
     id: 'bal',
     label: 'Balance',
     title: 'The Balance',
     body: 'Money is never trapped in a room. Double-entry always. No module holds a balance. Recipes only.',
-    visual: ['LEDGER', 'RECIPES', 'NO SILVER BALANCES'],
+    line: 'ledger only · recipes only',
   },
   {
     id: 'tok',
     label: 'Token',
     title: 'The Token',
     body: 'One asset across rooms and planes. Fee discounts. Rewards. Buybacks. The community holds the upside.',
-    visual: ['FEES', 'STAKE', 'BUYBACK'],
+    line: 'fees → stake → buyback',
   },
 ] as const;
 
-/** Shared systems - hover rails with a living status strip, not plain tabs alone */
+/** Underline index + open prose - no chip soup, no heavy bordered sidebar */
 export function SystemsPanel() {
   const [id, setId] = useState(0);
   const s = SYSTEMS[id]!;
 
   return (
-    <section className="mx-auto max-w-6xl xl:max-w-7xl px-4 py-16 md:px-6">
+    <section className="mx-auto max-w-6xl xl:max-w-7xl px-4 py-20 md:px-6">
       <h2 className="max-w-[18ch] text-2xl font-extrabold tracking-tight md:text-3xl">
         If a feature needs a fourth system, the design is wrong
       </h2>
-      <div className="mt-8 grid gap-6 lg:grid-cols-[200px_1fr]">
-        <div className="flex flex-row gap-1 lg:flex-col" role="tablist">
-          {SYSTEMS.map((sys, i) => (
-            <button
-              key={sys.id}
-              type="button"
-              role="tab"
-              aria-selected={id === i}
-              onMouseEnter={() => setId(i)}
-              onFocus={() => setId(i)}
-              onClick={() => setId(i)}
-              className={
-                id === i
-                  ? 'border border-lime/40 bg-lime/10 px-3 py-3 text-left font-mono text-[11px] font-bold uppercase tracking-wider text-lime'
-                  : 'border border-line px-3 py-3 text-left font-mono text-[11px] uppercase tracking-wider text-mute hover:text-ink'
-              }
-            >
-              {sys.label}
-            </button>
-          ))}
+
+      <div className="mt-10 flex flex-wrap gap-6 border-b border-line" role="tablist">
+        {SYSTEMS.map((sys, i) => (
+          <button
+            key={sys.id}
+            type="button"
+            role="tab"
+            aria-selected={id === i}
+            onMouseEnter={() => setId(i)}
+            onFocus={() => setId(i)}
+            onClick={() => setId(i)}
+            className={[
+              '-mb-px border-b-2 pb-3 font-mono text-[11px] uppercase tracking-[0.12em] transition',
+              id === i ? 'border-lime text-lime' : 'border-transparent text-mute hover:text-ink',
+            ].join(' ')}
+          >
+            {sys.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-8 grid gap-8 md:grid-cols-[1fr_auto] md:items-end">
+        <div>
+          <h3 className="text-2xl font-bold tracking-tight text-ink">{s.title}</h3>
+          <p className="mt-3 max-w-[48ch] text-[15px] leading-relaxed text-mute">{s.body}</p>
         </div>
-        <div className="relative min-h-[200px] overflow-hidden border border-line bg-panel p-6">
-          <div className="pointer-events-none absolute inset-0 opacity-40" aria-hidden>
-            <div className="absolute -right-10 top-0 h-40 w-40 rounded-full bg-lime/10 blur-3xl" />
-          </div>
-          <h3 className="relative text-xl font-bold text-ink">{s.title}</h3>
-          <p className="relative mt-3 max-w-[48ch] text-sm leading-relaxed text-mute">{s.body}</p>
-          <div className="relative mt-6 flex flex-wrap gap-2">
-            {s.visual.map((chip) => (
-              <span key={chip} className="border border-line bg-void px-2.5 py-1 font-mono text-[10px] tracking-wider text-lime">
-                {chip}
-              </span>
-            ))}
-          </div>
-        </div>
+        <p className="font-mono text-[11px] tracking-[0.08em] text-lime">{s.line}</p>
       </div>
     </section>
   );
