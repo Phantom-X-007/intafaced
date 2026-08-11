@@ -285,7 +285,9 @@ export function RoomsFloor() {
                 src={room.image}
                 alt=""
                 className={[
-                  'absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-200 ease-out',
+                  // Protocol vault needs full door in frame - bias slightly up-center
+                  'absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ease-out',
+                  room.code === '02' ? 'object-[center_35%]' : 'object-center',
                   focus.code === room.code ? 'opacity-100' : 'opacity-0',
                 ].join(' ')}
                 loading="eager"
