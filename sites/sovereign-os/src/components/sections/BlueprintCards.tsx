@@ -18,12 +18,12 @@ type Seat = {
 };
 
 /**
- * Identity Blueprint — shareable acquisition card (doctrine §7).
- * Layout: ONE hero pass (very large) + TWO example reveals (secondary).
- * Not three product tiers — same product, example faces. Art: media/identity/{id}.jpg
+ * Identity Blueprint - share acquisition card.
+ * ONE grand pass in the middle (hero) + two example faces.
+ * Hero art = night / "granny" flex (user pick) - flanks are founding + scout.
  */
 const HERO: Seat = {
-  id: 'founding',
+  id: 'night',
   rank: 'FOUNDING',
   title: 'Your Identity Blueprint',
   line: 'Session → reveal → first flex. One card you would actually post.',
@@ -33,21 +33,21 @@ const HERO: Seat = {
     ['ENERGY', 'Night session'],
     ['CREW', 'Caller / scout'],
   ],
-  image: './media/identity/founding.jpg',
+  image: './media/identity/night.jpg',
   Icon: IdentificationCard,
 };
 
 const EXAMPLES: Seat[] = [
   {
-    id: 'night',
+    id: 'founding',
     rank: 'EXAMPLE',
-    title: 'Night energy',
-    line: 'How a reveal can read after hours.',
+    title: 'Founding energy',
+    line: 'How a reveal can read at the top of the stack.',
     traits: [
-      ['ENERGY', 'After hours'],
-      ['MODE', 'Spot + perps'],
+      ['ENERGY', 'Prime hours'],
+      ['MODE', 'Desk first'],
     ],
-    image: './media/identity/night.jpg',
+    image: './media/identity/founding.jpg',
     Icon: Moon,
   },
   {
@@ -70,14 +70,14 @@ function IdentityGlareCard({ seat, size }: { seat: Seat; size: 'hero' | 'example
     <GlareCard
       containerClassName={
         hero
-          ? 'max-w-none w-[min(94vw,520px)] sm:w-[480px] lg:w-[520px] xl:w-[560px]'
-          : 'max-w-none w-[min(72vw,260px)] sm:w-[240px] lg:w-[260px]'
+          ? 'max-w-none w-[min(94vw,540px)] sm:w-[500px] lg:w-[540px] xl:w-[580px]'
+          : 'max-w-none w-[min(68vw,220px)] sm:w-[210px] lg:w-[230px]'
       }
       className="relative flex flex-col justify-end overflow-hidden p-0"
     >
       <img src={seat.image} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#050806] via-[#050806]/72 to-[#050806]/18" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_15%,rgba(196,240,0,0.14),transparent_55%)]" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#050806] via-[#050806]/75 to-[#050806]/15" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_15%,rgba(196,240,0,0.12),transparent_55%)]" />
 
       <div className={['relative z-10 flex h-full flex-col justify-between', hero ? 'p-7 sm:p-8' : 'p-4 sm:p-5'].join(' ')}>
         <div className="flex items-start justify-between gap-3">
@@ -136,14 +136,14 @@ export function BlueprintCards() {
             It is the first flex
           </h2>
           <p className="mx-auto mt-4 max-w-[44ch] text-sm leading-relaxed text-mute md:text-base">
-            Short session. Profile reveals. A share card you would post - rank, energy, crew role on one pass. The big card is the product;
-            the two beside it are example faces of the same idea.
+            Short session. Profile reveals. A share card you would post. The big card in the middle is the product. The two beside it are
+            example faces of the same idea.
           </p>
         </div>
 
-        {/* Hero + examples: card-game presence, one product story */}
-        <div className="mt-16 flex flex-col items-center gap-10 lg:mt-20 lg:flex-row lg:items-end lg:justify-center lg:gap-8 xl:gap-10">
-          <div className="order-2 flex flex-row gap-4 sm:gap-5 lg:order-1 lg:flex-col lg:pb-6">
+        {/* Grand card dead-center; flanks smaller and lower */}
+        <div className="mt-16 grid grid-cols-1 items-end justify-items-center gap-8 lg:mt-20 lg:grid-cols-[1fr_auto_1fr] lg:gap-6 xl:gap-10">
+          <div className="order-2 hidden justify-self-end lg:order-1 lg:block lg:pb-10">
             <IdentityGlareCard seat={EXAMPLES[0]!} size="example" />
           </div>
 
@@ -151,15 +151,16 @@ export function BlueprintCards() {
             <IdentityGlareCard seat={HERO} size="hero" />
           </div>
 
-          <div className="order-3 flex flex-row gap-4 sm:gap-5 lg:flex-col lg:pb-6">
+          <div className="order-3 hidden justify-self-start lg:block lg:pb-10">
+            <IdentityGlareCard seat={EXAMPLES[1]!} size="example" />
+          </div>
+
+          {/* Mobile examples under hero */}
+          <div className="order-4 flex w-full flex-wrap justify-center gap-4 lg:hidden">
+            <IdentityGlareCard seat={EXAMPLES[0]!} size="example" />
             <IdentityGlareCard seat={EXAMPLES[1]!} size="example" />
           </div>
         </div>
-
-        {/* Mobile: stack examples under hero in a row */}
-        <p className="mt-12 text-center font-mono text-[10px] tracking-wider text-mute">
-          Art slots · founding (hero) · night · scout · under <span className="text-ink">media/identity/</span>
-        </p>
       </div>
     </section>
   );

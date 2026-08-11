@@ -1,4 +1,3 @@
-import { DirectionAwareHover } from '@/components/ui/direction-aware-hover';
 import { Bank } from '@phosphor-icons/react/dist/csr/Bank';
 import { ChartLine } from '@phosphor-icons/react/dist/csr/ChartLine';
 import { Cpu } from '@phosphor-icons/react/dist/csr/Cpu';
@@ -22,7 +21,6 @@ type Room = {
   name: string;
   role: string;
   body: string;
-  points: string[];
   image: string;
   hot?: boolean;
   href?: string;
@@ -37,7 +35,6 @@ const TRADE: Room = {
   name: 'Trade',
   role: 'Spot · perps · options · OTC · pro charts',
   body: 'The desk is the product. One terminal for every market type - not a bank page with charts bolted on.',
-  points: ['Real public market candles on this page', 'Depth + ticket in one frame', 'Pro multi-layout path next'],
   image: `${MEDIA}/trade.jpg`,
   hot: true,
   href: '#trade',
@@ -50,8 +47,7 @@ const ORBIT: Room[] = [
     code: '00',
     name: 'Identity',
     role: 'One account, one rank, one wallet set',
-    body: 'Verify once. Rank earned in any room counts in every room. Session to share-card is the flex.',
-    points: ['Passkey-first path', 'Rank carries across rooms', 'Share card is the artifact'],
+    body: 'Verify once. Rank earned in any room counts in every room.',
     image: `${MEDIA}/identity.jpg`,
     Icon: IdentificationCard,
     deg: 0,
@@ -60,8 +56,7 @@ const ORBIT: Room[] = [
     code: '02',
     name: 'Protocol',
     role: 'Self-custody · zero KYC by architecture',
-    body: 'You hold the keys. Zero-KYC is not a loophole - it is the build. No withdrawal rights for us.',
-    points: ['Non-custodial by design', 'Session keys you grant and revoke', 'Nothing fuzzy on custody'],
+    body: 'You hold the keys. Zero-KYC is the build - not a loophole.',
     image: `${MEDIA}/protocol.jpg`,
     Icon: ShieldCheck,
     deg: 30,
@@ -71,7 +66,6 @@ const ORBIT: Room[] = [
     name: 'P2P',
     role: 'Street rails · escrow · 100+ currencies',
     body: 'Where banking rails fail, street rails win. Escrow-protected local liquidity.',
-    points: ['Escrow on every deal', 'Local currency depth', 'Same identity, street settlement'],
     image: `${MEDIA}/p2p.jpg`,
     Icon: UsersThree,
     deg: 60,
@@ -80,8 +74,7 @@ const ORBIT: Room[] = [
     code: '04',
     name: 'Launch',
     role: 'Launchpad · meme factory · RWA',
-    body: 'Raise and launch on the same key as the desk. Not a third-party casino tab.',
-    points: ['Pad tied to house identity', 'Meme factory path', 'RWA lane on the same rails'],
+    body: 'Raise and launch on the same key as the desk.',
     image: `${MEDIA}/launch.jpg`,
     Icon: RocketLaunch,
     deg: 90,
@@ -90,8 +83,7 @@ const ORBIT: Room[] = [
     code: '05',
     name: 'Bank',
     role: 'Accounts, loans, yield, cards',
-    body: 'Fiat plane: we hold it, we say so. Double-entry on every movement. No cosplay custody.',
-    points: ['Custodial and honest', 'Ledger recipes only', 'Cards and yield on the plane'],
+    body: 'Fiat plane: we hold it, we say so. Double-entry always.',
     image: `${MEDIA}/bank.jpg`,
     Icon: Bank,
     deg: 120,
@@ -100,8 +92,7 @@ const ORBIT: Room[] = [
     code: '06',
     name: 'Pay',
     role: 'Gateway · routing · merchant',
-    body: 'Merchant rails that settle into the same house. Routing you can audit, not a black box.',
-    points: ['Gateway for merchants', 'Smart routing', 'Settles into house balance law'],
+    body: 'Merchant rails that settle into the same house.',
     image: `${MEDIA}/pay.jpg`,
     Icon: Lightning,
     deg: 150,
@@ -110,8 +101,7 @@ const ORBIT: Room[] = [
     code: '07',
     name: 'Predict',
     role: 'Real markets on real books',
-    body: 'Prediction markets with real books - not a casino skin. Same risk grammar as the desk.',
-    points: ['Real books', 'Clear settlement', 'Same identity and rank'],
+    body: 'Prediction markets with real books - not a casino skin.',
     image: `${MEDIA}/predict.jpg`,
     Icon: Target,
     deg: 180,
@@ -120,8 +110,7 @@ const ORBIT: Room[] = [
     code: '08',
     name: 'Market',
     role: 'Bots, tools, data, strategies',
-    body: 'The marketplace for tools that plug into the desk. Strategies and data - not random app spam.',
-    points: ['Bots and strategies', 'Data products', 'Desk-native tools'],
+    body: 'Tools that plug into the desk - strategies and data, not app spam.',
     image: `${MEDIA}/market.jpg`,
     Icon: Storefront,
     deg: 210,
@@ -130,8 +119,7 @@ const ORBIT: Room[] = [
     code: '09',
     name: 'Academy',
     role: 'Lobbies, not lectures',
-    body: 'Learn where traders hang. Lobbies and drills - not a course farm selling hope.',
-    points: ['Lobby-first learning', 'Practice on house rails', 'Rank from skill, not slides'],
+    body: 'Learn where traders hang. Lobbies and drills - not a course farm.',
     image: `${MEDIA}/academy.jpg`,
     Icon: GraduationCap,
     deg: 240,
@@ -140,8 +128,7 @@ const ORBIT: Room[] = [
     code: '10',
     name: 'Token',
     role: 'Mine, stake, govern, burn',
-    body: 'Fee flow feeds the community. Stake, govern, buyback - bloodstream, not a sticker.',
-    points: ['Fee discounts', 'Stake and govern', 'Buybacks from real flow'],
+    body: 'Fee flow feeds the community. Bloodstream, not a sticker.',
     image: `${MEDIA}/token.jpg`,
     Icon: Network,
     deg: 270,
@@ -150,8 +137,7 @@ const ORBIT: Room[] = [
     code: '11',
     name: 'Core',
     role: 'Engine room · AI workforce',
-    body: 'Ledger law under every trade. Agents work inside your limits - not a chatbot toy.',
-    points: ['Recipes only', 'No balances outside ledger', 'Agents under risk caps'],
+    body: 'Ledger law under every trade. Agents work inside your limits.',
     image: `${MEDIA}/core.jpg`,
     Icon: Cpu,
     deg: 300,
@@ -159,8 +145,8 @@ const ORBIT: Room[] = [
 ];
 
 /**
- * House map: Trade core + orbit nodes.
- * Hover updates a rich bottom stage (image + doctrine) - not a thin text strip.
+ * House map: Trade core + orbit.
+ * Bottom readout sits ON ambient stock art that fades in softly (background only - not a product-card dump).
  */
 export function RoomsFloor() {
   const [focus, setFocus] = useState<Room>(TRADE);
@@ -168,8 +154,8 @@ export function RoomsFloor() {
   const isTrade = focus.code === TRADE.code;
 
   return (
-    <section id="rooms" className="border-y border-line bg-[#060a08] py-20">
-      <div className="mx-auto max-w-6xl xl:max-w-7xl px-4 md:px-6">
+    <section id="rooms" className="relative overflow-hidden border-y border-line bg-[#060a08] py-20">
+      <div className="relative z-[1] mx-auto max-w-6xl xl:max-w-7xl px-4 md:px-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="max-w-[12ch] text-3xl font-extrabold tracking-tight md:text-4xl">
@@ -178,7 +164,7 @@ export function RoomsFloor() {
               rooms around it
             </h2>
             <p className="mt-2 max-w-[42ch] text-sm text-mute">
-              Hover a room. The stage below is the room - image, job, and how it locks to the desk.
+              Hover a room. Trade stays the core. The other rooms open below with a quiet scene behind the words.
             </p>
           </div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">12 rooms · 1 key</p>
@@ -190,13 +176,10 @@ export function RoomsFloor() {
           <div className="pointer-events-none absolute inset-[28%] rounded-full border border-dashed border-line/50" aria-hidden />
           <div className="pointer-events-none absolute inset-0 rounded-full border border-line/40" aria-hidden />
 
-          {/* spoke to active room */}
           {!isTrade ? (
             <div
-              className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-px w-[38%] origin-left bg-gradient-to-r from-lime/50 to-transparent transition-transform duration-300"
-              style={{
-                transform: `rotate(${focus.deg - 90}deg)`,
-              }}
+              className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-px w-[38%] origin-left bg-gradient-to-r from-lime/45 to-transparent transition-transform duration-300"
+              style={{ transform: `rotate(${focus.deg - 90}deg)` }}
               aria-hidden
             />
           ) : null}
@@ -246,7 +229,7 @@ export function RoomsFloor() {
           })}
         </div>
 
-        {/* Mobile / tablet chips */}
+        {/* Mobile chips */}
         <div className="mt-10 lg:hidden">
           <button
             type="button"
@@ -281,60 +264,63 @@ export function RoomsFloor() {
           </div>
         </div>
 
-        {/* Stage - image + doctrine. Crossfades on hover. */}
-        <div className="mt-12 border border-line bg-panel/40">
+        {/*
+          Explain strip: ambient photo in the BACK only (low opacity + heavy scrim).
+          Text stays readable. No big AI feature card / direction-aware dump.
+        */}
+        <div className="relative mt-12 min-h-[200px] overflow-hidden border border-line md:min-h-[220px]">
           <AnimatePresence mode="wait">
             <motion.div
-              key={focus.code}
-              initial={reduce ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={reduce ? undefined : { opacity: 0, y: -6 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="grid md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]"
+              key={focus.image}
+              initial={reduce ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={reduce ? undefined : { opacity: 0 }}
+              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+              className="pointer-events-none absolute inset-0"
+              aria-hidden
             >
-              <div className="relative min-h-[220px] border-b border-line md:min-h-[300px] md:border-b-0 md:border-r">
-                <DirectionAwareHover
-                  imageUrl={focus.image}
-                  className="absolute inset-0 h-full w-full rounded-none"
-                  imageClassName="opacity-90"
-                >
-                  <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-lime">
-                    {focus.code} · {focus.hot ? 'CORE' : 'ROOM'}
-                  </span>
-                  <p className="mt-1 text-lg font-extrabold tracking-tight drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">{focus.name}</p>
-                </DirectionAwareHover>
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-void/80 via-transparent to-void/20 md:bg-gradient-to-r md:from-transparent md:via-transparent md:to-void/40" />
-              </div>
-
-              <div className="flex flex-col justify-center px-5 py-6 sm:px-8 md:py-8">
-                <p className="font-mono text-[10px] tracking-[0.16em] text-lime">
-                  {focus.code} · {focus.hot ? 'CORE' : 'ROOM'}
-                </p>
-                <h3 className="mt-2 text-2xl font-extrabold tracking-tight text-ink md:text-3xl">{focus.name}</h3>
-                <p className="mt-1 text-sm font-medium text-mute">{focus.role}</p>
-                <p className="mt-4 max-w-[42ch] text-[15px] leading-relaxed text-mute">{focus.body}</p>
-                <ul className="mt-5 space-y-2">
-                  {focus.points.map((p) => (
-                    <li key={p} className="flex gap-2 border-l border-lime/35 pl-3 text-sm text-ink/90">
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-6">
-                  {focus.hot && focus.href ? (
-                    <a
-                      href={focus.href}
-                      className="inline-flex bg-lime px-4 py-2.5 text-[11px] font-extrabold tracking-[0.06em] text-[#081008] active:scale-[0.98]"
-                    >
-                      OPEN TERMINAL
-                    </a>
-                  ) : (
-                    <p className="font-mono text-[10px] uppercase tracking-wider text-mute">Same key as the desk · opens with the house</p>
-                  )}
-                </div>
-              </div>
+              <img
+                src={focus.image}
+                alt=""
+                className="h-full w-full scale-105 object-cover opacity-[0.28]"
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="absolute inset-0 bg-void/75" />
+              <div className="absolute inset-0 bg-gradient-to-r from-void via-void/70 to-void/40" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_80%_at_80%_50%,rgba(196,240,0,0.06),transparent_60%)]" />
             </motion.div>
           </AnimatePresence>
+
+          <div className="relative z-[1] flex flex-col justify-between gap-6 px-5 py-7 sm:flex-row sm:items-end sm:px-8 md:py-9">
+            <div className="max-w-xl">
+              <p className="font-mono text-[10px] tracking-[0.16em] text-lime">
+                {focus.code} · {focus.hot ? 'CORE' : 'ROOM'}
+              </p>
+              <h3 className="mt-2 text-2xl font-extrabold tracking-tight text-ink md:text-3xl">{focus.name}</h3>
+              <p className="mt-1 text-sm font-medium text-mute">{focus.role}</p>
+              <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-mute">{focus.body}</p>
+              {!focus.hot ? (
+                <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-mute/80">
+                  Same key as the desk · these rooms open with the house
+                </p>
+              ) : null}
+            </div>
+            <div className="shrink-0">
+              {focus.hot && focus.href ? (
+                <a
+                  href={focus.href}
+                  className="inline-flex bg-lime px-4 py-2.5 text-[11px] font-extrabold tracking-[0.06em] text-[#081008] active:scale-[0.98]"
+                >
+                  OPEN TERMINAL
+                </a>
+              ) : (
+                <span className="inline-flex border border-line bg-void/50 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-mute backdrop-blur-sm">
+                  House room
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </section>
