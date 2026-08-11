@@ -57,7 +57,7 @@ export function ExchangeTerminal() {
             real market candles
           </h2>
           <p className="mt-3 max-w-[46ch] text-sm text-mute">
-            Hover a market type - the desk shifts. Candles are public market OHLC. Ticket is demo chrome.
+            Spot, perps, options, OTC - one desk. Candles are public market OHLC. Book and ticket are demo chrome.
           </p>
         </div>
         <p className="font-mono text-[10px] uppercase tracking-wider text-mute">
@@ -147,7 +147,7 @@ export function ExchangeTerminal() {
             />
           </div>
 
-          <div className="max-h-[220px] overflow-hidden border-t border-line bg-[#040705]">{depth}</div>
+          <div className="min-h-[240px] border-t border-line bg-[#040705] md:min-h-[260px]">{depth}</div>
         </div>
 
         {/* Mobile */}
@@ -157,7 +157,7 @@ export function ExchangeTerminal() {
           </Suspense>
           <div className="grid grid-cols-2 border-t border-line">
             <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
-            <div className="max-h-[220px] overflow-hidden border-l border-line">{depth}</div>
+            <div className="min-h-[240px] border-l border-line">{depth}</div>
           </div>
           <OrderTicket
             buyLabel={cfg.ticket.buy}

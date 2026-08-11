@@ -23,7 +23,7 @@ export function DropPhases() {
         <div className="grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-end">
           <div>
             <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">Not a fintech announcement. A game release.</h2>
-            <p className="mt-3 text-sm text-mute">Walk the path. Hover a stage.</p>
+            <p className="mt-3 text-sm text-mute">From signal to open house. Ranked waves.</p>
           </div>
           <div className="border border-line bg-panel px-5 py-4">
             <p className="font-mono text-[11px] tracking-[0.14em] text-lime">

@@ -37,7 +37,7 @@ export function ChainTimeline() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="max-w-[16ch] text-2xl font-extrabold tracking-tight md:text-3xl">Not a tenant on somebody else&apos;s chain</h2>
-            <p className="mt-2 max-w-[40ch] text-sm text-mute">Hover a phase. Path is product, not empty padding.</p>
+            <p className="mt-2 max-w-[40ch] text-sm text-mute">Settlement path under the house. Near-term first.</p>
           </div>
           <span className="font-mono text-[10px] tracking-wider text-lime">INTACHAIN · PATH</span>
         </div>
@@ -69,7 +69,7 @@ export function ChainTimeline() {
         </div>
 
         <div className="mt-4 border border-line bg-void px-5 py-4">
-          <p className="font-mono text-[10px] tracking-[0.14em] text-lime">{step.p} · ACTIVE</p>
+          <p className="font-mono text-[10px] tracking-[0.14em] text-lime">{step.p}</p>
           <p className="mt-1 text-base text-ink">{step.d}</p>
         </div>
       </div>

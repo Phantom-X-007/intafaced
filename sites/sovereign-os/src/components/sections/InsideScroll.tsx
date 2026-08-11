@@ -22,7 +22,7 @@ const CHAPTERS: {
     id: 'match',
     t: 'Matching & risk',
     b: 'Own books, margin engine, liquidation, smart router.',
-    d: 'Exchange spine first - venue fabric on our rails, not a borrowed stack with a skin.',
+    d: 'Exchange spine first - on our rails, not a borrowed stack with a skin.',
     Icon: Scales,
   },
   {
@@ -34,8 +34,8 @@ const CHAPTERS: {
   },
   {
     id: 'exec',
-    t: 'Execution empire',
-    b: 'Algos, arb, MM, cross-venue brain.',
+    t: 'Execution',
+    b: 'Algos, arb, MM, cross-venue routing.',
     d: 'Order path we own. Not a middleman API dressed as product.',
     Icon: Lightning,
   },
@@ -89,7 +89,7 @@ export function InsideScroll() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">Inside the house</h2>
-            <p className="mt-2 max-w-[44ch] text-sm text-mute">Hover a cell. Depth without empty black.</p>
+            <p className="mt-2 max-w-[44ch] text-sm text-mute">The systems under every trade and every room.</p>
           </div>
           <span className="font-mono text-[10px] tracking-wider text-mute">8 SYSTEMS · 1 KEY</span>
         </div>

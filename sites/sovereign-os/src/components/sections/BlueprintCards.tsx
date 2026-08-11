@@ -151,9 +151,7 @@ function IdentityGlareCard({ seat, size }: { seat: Seat; size: 'hero' | 'example
             </div>
           )}
 
-          {hero ? (
-            <p className="mt-4 font-mono text-[10px] tracking-wider text-mute/80">Hover - foil glare · tilt · share-card shell</p>
-          ) : null}
+          {hero ? <p className="mt-4 font-mono text-[10px] tracking-wider text-mute/80">The share card is the first flex</p> : null}
         </div>
       </div>
     </GlareCard>

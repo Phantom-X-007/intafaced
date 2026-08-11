@@ -76,7 +76,7 @@ export function PlanesSplit() {
       <div className="relative mx-auto max-w-6xl xl:max-w-7xl px-4 py-14 md:px-6">
         <h2 className="text-3xl font-extrabold tracking-tight text-balance md:text-4xl md:whitespace-nowrap">We refuse the trade-off</h2>
         <p className="mt-2 max-w-[48ch] text-sm text-mute">
-          Hover a plane. Who holds the keys is never fuzzy - custody is either ours and said, or yours and enforced.
+          Who holds the keys is never fuzzy - custody is either ours and said, or yours and enforced.
         </p>
 
         {/* Compare strip - fills void with live grammar */}
@@ -158,7 +158,7 @@ export function PlanesSplit() {
                       {cfg.label}
                     </span>
                     <span className={['font-mono text-[9px] uppercase tracking-wider', on ? 'text-lime' : 'text-mute/70'].join(' ')}>
-                      {on ? 'ACTIVE' : 'HOVER'}
+                      {on ? 'LIVE' : 'STANDBY'}
                     </span>
                   </div>
 
@@ -199,7 +199,7 @@ export function PlanesSplit() {
                         </ul>
                       </motion.div>
                     ) : (
-                      <p className="font-mono text-[11px] tracking-wider text-mute/60">Hover to open this plane</p>
+                      <p className="font-mono text-[11px] tracking-wider text-mute/60">Select this plane</p>
                     )}
                   </AnimatePresence>
                 </div>

@@ -97,9 +97,7 @@ export function HeroSection() {
               SEE THE FULL HOUSE
             </HoverBorderGradient>
           </div>
-          <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.12em] text-mute">
-            Markets first · OS under them · preview numbers
-          </p>
+          <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.12em] text-mute">Markets first · house under them</p>
         </div>
       </div>
     </section>

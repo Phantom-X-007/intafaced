@@ -172,9 +172,7 @@ export function RoomsFloor() {
               <br />
               rooms around it
             </h2>
-            <p className="mt-2 max-w-[42ch] text-sm text-mute">
-              Hover a room. Trade stays the core. The scene below switches with the room - picture and words together.
-            </p>
+            <p className="mt-2 max-w-[42ch] text-sm text-mute">Trade is the core. Every other room opens on the same key.</p>
           </div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-mute">12 rooms · 1 key</p>
         </div>
@@ -309,11 +307,7 @@ export function RoomsFloor() {
               <h3 className="mt-2 text-2xl font-extrabold tracking-tight text-ink md:text-3xl">{focus.name}</h3>
               <p className="mt-1 text-sm font-medium text-mute">{focus.role}</p>
               <p className="mt-3 max-w-[42ch] text-[15px] leading-relaxed text-ink/85">{focus.body}</p>
-              {!focus.hot ? (
-                <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-mute/80">
-                  Same key as the desk · these rooms open with the house
-                </p>
-              ) : null}
+              {!focus.hot ? <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-mute/80">Same key as the desk</p> : null}
             </div>
             <div className="shrink-0">
               {focus.hot && focus.href ? (
@@ -325,7 +319,7 @@ export function RoomsFloor() {
                 </a>
               ) : (
                 <span className="inline-flex border border-line/80 bg-void/55 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-mute backdrop-blur-sm">
-                  House room
+                  Opens with the house
                 </span>
               )}
             </div>
