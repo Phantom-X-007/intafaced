@@ -1,9 +1,10 @@
-import { GlareCard } from '@/components/ui/glare-card';
 import { BrandMark } from '@/components/BrandMark';
+import { GlareCard } from '@/components/ui/glare-card';
+import { Crosshair } from '@phosphor-icons/react/dist/csr/Crosshair';
 import { IdentificationCard } from '@phosphor-icons/react/dist/csr/IdentificationCard';
 import { Moon } from '@phosphor-icons/react/dist/csr/Moon';
-import { Crosshair } from '@phosphor-icons/react/dist/csr/Crosshair';
 import type { ComponentType } from 'react';
+import { useState } from 'react';
 
 type IconProps = { size?: number; weight?: 'thin' | 'light' | 'regular' | 'bold' | 'fill' | 'duotone'; className?: string };
 
@@ -15,12 +16,12 @@ type Seat = {
   traits: [string, string][];
   image: string;
   Icon: ComponentType<IconProps>;
-  featured?: boolean;
 };
 
 /**
- * Premium Blueprint section — Aceternity Glare Cards as sovereign identity seats.
- * Hover for Linear-style foil glare + 3D tilt. Swap images in public/media/identity/.
+ * Blueprint = card-game hand of Glare Cards (Aceternity Linear foil).
+ * Keep GlareCard pure; this section only composes size, focus, and copy.
+ * Art: public/media/identity/{id}.jpg — swap when Nitro drops Pinterest stills.
  */
 const SEATS: Seat[] = [
   {
@@ -34,7 +35,6 @@ const SEATS: Seat[] = [
     ],
     image: './media/identity/founding.jpg',
     Icon: IdentificationCard,
-    featured: true,
   },
   {
     id: 'night',
@@ -62,73 +62,102 @@ const SEATS: Seat[] = [
   },
 ];
 
-function IdentityGlareCard({ seat }: { seat: Seat }) {
+function IdentityGlareCard({ seat, active, onFocus }: { seat: Seat; active: boolean; onFocus: () => void }) {
   return (
-    <GlareCard className="relative flex flex-col justify-end overflow-hidden p-0">
-      <img src={seat.image} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#050806] via-[#050806]/75 to-[#050806]/20" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(196,240,0,0.12),transparent_55%)]" />
+    <div
+      className={[
+        'origin-bottom transition duration-300 ease-out',
+        active ? 'z-20 scale-105' : 'z-10 scale-[0.92] opacity-85 hover:opacity-100',
+      ].join(' ')}
+      onMouseEnter={onFocus}
+      onFocus={onFocus}
+    >
+      <GlareCard
+        containerClassName="max-w-none w-[min(92vw,400px)] sm:w-[380px] lg:w-[400px]"
+        className="relative flex flex-col justify-end overflow-hidden p-0"
+      >
+        <img src={seat.image} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050806] via-[#050806]/70 to-[#050806]/15" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_15%,rgba(196,240,0,0.14),transparent_55%)]" />
 
-      <div className="relative z-10 flex h-full flex-col justify-between p-5">
-        <div className="flex items-start justify-between">
-          <BrandMark compact markOnly className="opacity-90" />
-          <span className="inline-flex items-center gap-1 border border-lime/40 bg-void/50 px-2 py-1 font-mono text-[9px] tracking-[0.14em] text-lime backdrop-blur-sm">
-            <seat.Icon size={12} weight="bold" />
-            {seat.rank}
-          </span>
-        </div>
-
-        <div>
-          <p className="font-mono text-[10px] tracking-[0.16em] text-lime">SOVEREIGN BLUEPRINT</p>
-          <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-ink">{seat.title}</h3>
-          <p className="mt-1 text-sm text-mute">{seat.line}</p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {seat.traits.map(([k, v]) => (
-              <div key={k} className="border border-white/10 bg-void/55 px-2 py-2 backdrop-blur-sm">
-                <span className="block font-mono text-[9px] tracking-wider text-lime">{k}</span>
-                <span className="text-xs font-semibold text-ink">{v}</span>
-              </div>
-            ))}
+        <div className="relative z-10 flex h-full flex-col justify-between p-6 sm:p-7">
+          <div className="flex items-start justify-between gap-3">
+            <BrandMark compact markOnly />
+            <span className="inline-flex items-center gap-1.5 border border-lime/45 bg-void/55 px-2.5 py-1.5 font-mono text-[10px] tracking-[0.16em] text-lime backdrop-blur-sm">
+              <seat.Icon size={14} weight="bold" />
+              {seat.rank}
+            </span>
           </div>
-          <p className="mt-4 font-mono text-[9px] tracking-wider text-mute/80">Hover - foil glare · tilt</p>
+
+          <div>
+            <p className="font-mono text-[11px] tracking-[0.18em] text-lime">SOVEREIGN BLUEPRINT</p>
+            <h3 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-[2rem]">{seat.title}</h3>
+            <p className="mt-2 text-base text-mute">{seat.line}</p>
+            <div className="mt-5 grid grid-cols-2 gap-2.5">
+              {seat.traits.map(([k, v]) => (
+                <div key={k} className="border border-white/12 bg-void/60 px-3 py-2.5 backdrop-blur-sm">
+                  <span className="block font-mono text-[10px] tracking-wider text-lime">{k}</span>
+                  <span className="text-sm font-semibold text-ink">{v}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-5 font-mono text-[10px] tracking-wider text-mute/90">Move cursor - foil + tilt</p>
+          </div>
         </div>
-      </div>
-    </GlareCard>
+      </GlareCard>
+    </div>
   );
 }
 
 export function BlueprintCards() {
+  const [active, setActive] = useState(0);
+
   return (
-    <section id="blueprint" className="relative overflow-hidden border-y border-line py-20">
+    <section id="blueprint" className="relative overflow-hidden border-y border-line bg-[#060a08] py-24 md:py-28">
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_60%_at_70%_40%,rgba(196,240,0,0.06),transparent_60%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_55%_50%_at_50%_0%,rgba(196,240,0,0.07),transparent_55%)]"
         aria-hidden
       />
 
-      <div className="relative mx-auto max-w-6xl xl:max-w-7xl px-4 md:px-6">
-        <div className="max-w-xl">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-lime">Blueprint</p>
-          <h2 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">
+      <div className="relative mx-auto max-w-7xl px-4 md:px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-lime">Blueprint · identity seats</p>
+          <h2 className="mt-3 text-3xl font-extrabold tracking-tight md:text-5xl">
             Your seat on the desk
             <br />
             is the first flex
           </h2>
-          <p className="mt-3 max-w-[42ch] text-sm leading-relaxed text-mute">
-            Onboarding is not a form - it is an identity card you would actually post. Hover a card: foil glare and tilt like a physical
-            pass. Swap the art later with your own stills.
+          <p className="mx-auto mt-4 max-w-[40ch] text-sm leading-relaxed text-mute md:text-base">
+            Not a form. A physical pass you would post. Hover a card for foil glare and tilt. Your Pinterest art swaps in later.
           </p>
         </div>
 
-        <div className="mt-12 flex flex-wrap items-start justify-center gap-8 lg:justify-between">
-          {SEATS.map((seat) => (
-            <div key={seat.id} className={seat.featured ? 'lg:-mt-2' : 'lg:mt-6'}>
-              <IdentityGlareCard seat={seat} />
-            </div>
+        {/* Card-game hand: large, fanned, active card pops */}
+        <div className="mt-14 flex flex-col items-center gap-10 lg:mt-16 lg:flex-row lg:items-end lg:justify-center lg:gap-4 xl:gap-6">
+          {SEATS.map((seat, i) => (
+            <IdentityGlareCard key={seat.id} seat={seat} active={active === i} onFocus={() => setActive(i)} />
           ))}
         </div>
 
-        <p className="mt-10 text-center font-mono text-[10px] tracking-wider text-mute">
-          Drop custom art into <span className="text-ink">public/media/identity/</span> · founding · night · scout
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+          {SEATS.map((seat, i) => (
+            <button
+              key={seat.id}
+              type="button"
+              onClick={() => setActive(i)}
+              onMouseEnter={() => setActive(i)}
+              className={[
+                'font-mono text-[11px] uppercase tracking-[0.14em] transition',
+                active === i ? 'text-lime' : 'text-mute hover:text-ink',
+              ].join(' ')}
+            >
+              {seat.rank}
+            </button>
+          ))}
+        </div>
+
+        <p className="mt-8 text-center font-mono text-[10px] tracking-wider text-mute">
+          Art slots ready · founding · night · scout · under <span className="text-ink">media/identity/</span>
         </p>
       </div>
     </section>

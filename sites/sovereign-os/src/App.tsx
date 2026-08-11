@@ -48,14 +48,14 @@ export default function App() {
             <a href="#trade" className="hover:text-lime">
               Trade
             </a>
+            <a href="#blueprint" className="hover:text-lime">
+              Seats
+            </a>
             <a href="#rooms" className="hover:text-lime">
               Rooms
             </a>
             <a href="#planes" className="hover:text-lime">
               Planes
-            </a>
-            <a href="#inside" className="hover:text-lime">
-              Inside
             </a>
           </nav>
           <button
@@ -77,7 +77,7 @@ export default function App() {
 
         {menu ? (
           <div className="fixed inset-x-0 top-14 z-30 border-b border-line bg-panel p-4 font-mono text-xs uppercase tracking-wider text-mute md:hidden">
-            {['trade', 'rooms', 'planes', 'inside', 'key'].map((id) => (
+            {['trade', 'blueprint', 'rooms', 'planes', 'key'].map((id) => (
               <a key={id} href={`#${id}`} className="block py-2 hover:text-lime" onClick={() => setMenu(false)}>
                 {id}
               </a>

@@ -68,12 +68,14 @@ export function GlareCard({ children, className, containerClassName }: Props) {
     <div
       style={containerStyle}
       className={cn(
-        'relative isolate w-full max-w-[300px] [aspect-ratio:17/21] transition-transform delay-[var(--delay)] duration-[var(--duration)] ease-[var(--easing)] will-change-transform [contain:layout_style] [perspective:600px]',
+        // Default playable size; override with containerClassName (card-game layout uses ~380–420)
+        'relative isolate w-full max-w-[min(100%,420px)] [aspect-ratio:17/21] transition-transform delay-[var(--delay)] duration-[var(--duration)] ease-[var(--easing)] will-change-transform [contain:layout_style] [perspective:900px]',
         containerClassName,
       )}
       ref={refElement}
       onPointerMove={(event) => {
-        const rotateFactor = 0.55;
+        // Stronger tilt than stock Aceternity — more “physical pass” feel
+        const rotateFactor = 0.72;
         const rect = event.currentTarget.getBoundingClientRect();
         const position = {
           x: event.clientX - rect.left,
