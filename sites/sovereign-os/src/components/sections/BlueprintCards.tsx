@@ -35,13 +35,15 @@ const HERO: Seat = {
     ['ENERGY', 'Night session'],
     ['CREW', 'Caller / scout'],
   ],
-  image: './media/identity/night.jpg',
+  // v2 filename = cache bust (old night.jpg stayed in browsers)
+  image: './media/identity/granny-hero-v2.jpg',
   Icon: IdentificationCard,
+  objectClass: 'object-cover object-[center_38%]',
 };
 
 const EXAMPLES: Seat[] = [
   {
-    id: 'founding',
+    id: 'bunny',
     rank: 'EXAMPLE',
     title: 'Flex energy',
     line: 'How a reveal can read when the house is loud.',
@@ -49,9 +51,9 @@ const EXAMPLES: Seat[] = [
       ['ENERGY', 'Peak flex'],
       ['MODE', 'Show the card'],
     ],
-    image: './media/identity/founding.jpg',
+    // Pinterest bunny/grillz pin - new path so cache cannot keep Scarface
+    image: './media/identity/bunny-grillz-v2.jpg',
     Icon: Moon,
-    /** Bunny portrait - keep face/grillz high in the frame */
     objectClass: 'object-cover object-[center_22%]',
   },
   {
@@ -63,9 +65,8 @@ const EXAMPLES: Seat[] = [
       ['CREW', 'Caller'],
       ['LANE', 'Markets'],
     ],
-    image: './media/identity/scout.jpg',
+    image: './media/identity/crew-scout-v2.jpg',
     Icon: Crosshair,
-    /** Subject + car - slight upper bias so face and lime car read */
     objectClass: 'object-cover object-[center_28%]',
   },
 ];
