@@ -16,15 +16,23 @@ export function DropPhases() {
   const pct = (i / (PHASES.length - 1)) * 100;
 
   return (
-    <section className="border-y border-line py-20">
+    <section className="border-y border-line bg-void py-14 md:py-16">
       <div className="mx-auto max-w-6xl xl:max-w-7xl px-4 md:px-6">
-        <div className="max-w-xl">
-          <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">Not a fintech announcement. A game release.</h2>
-          <p className="mt-3 text-sm text-mute">Walk the path. Hover a stage.</p>
+        <div className="grid gap-8 md:grid-cols-[1fr_1.2fr] md:items-end">
+          <div>
+            <h2 className="text-2xl font-extrabold tracking-tight md:text-3xl">Not a fintech announcement. A game release.</h2>
+            <p className="mt-3 text-sm text-mute">Walk the path. Hover a stage.</p>
+          </div>
+          <div className="border border-line bg-panel px-5 py-4">
+            <p className="font-mono text-[11px] tracking-[0.14em] text-lime">
+              PHASE {p.id} · {p.name.toUpperCase()}
+            </p>
+            <p className="mt-2 text-lg font-semibold text-ink">{p.d}</p>
+          </div>
         </div>
 
         {/* Track */}
-        <div className="relative mt-14">
+        <div className="relative mt-10 border border-line bg-panel/50 px-3 py-6 md:px-6">
           <div className="absolute left-0 right-0 top-3 h-px bg-line" aria-hidden />
           <div className="absolute left-0 top-3 h-px bg-lime transition-all duration-300" style={{ width: `${pct}%` }} aria-hidden />
           <div className="relative flex justify-between gap-1">
@@ -52,13 +60,6 @@ export function DropPhases() {
               );
             })}
           </div>
-        </div>
-
-        <div className="mt-10 min-h-[4.5rem]">
-          <p className="font-mono text-[11px] tracking-[0.14em] text-lime">
-            PHASE {p.id} · {p.name.toUpperCase()}
-          </p>
-          <p className="mt-2 text-xl font-semibold text-ink">{p.d}</p>
         </div>
       </div>
     </section>

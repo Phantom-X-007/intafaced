@@ -99,6 +99,9 @@ export default function App() {
 
           <ExchangeTerminal />
 
+          {/* Identity Blueprint early - share-card product (Denon), easy to find */}
+          <BlueprintCards />
+
           <ManifestoBand />
           <BlurFade>
             <LawsRail />
@@ -108,12 +111,7 @@ export default function App() {
           <BlurFade>
             <SystemsPanel />
           </BlurFade>
-          <BlurFade>
-            <ChainTimeline />
-          </BlurFade>
-
-          <BlueprintCards />
-
+          <ChainTimeline />
           <DropPhases />
           <BlurFade>
             <NeverList />

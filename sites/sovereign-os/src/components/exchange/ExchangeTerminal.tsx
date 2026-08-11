@@ -108,19 +108,25 @@ export function ExchangeTerminal() {
             <div className="hidden lg:block">
               <MarketsList pairs={cfg.pairs} active={cfg.symbol} />
             </div>
-            <div className="min-w-0 border-line lg:border-x">
+            <div className="min-w-0 border-line bg-[#070c09] lg:border-x">
               <Suspense
-                fallback={<div className="flex h-[320px] items-center justify-center font-mono text-[11px] text-mute">Loading market…</div>}
+                fallback={
+                  <div className="flex h-[340px] flex-col items-center justify-center gap-2 bg-[#070c09] font-mono text-[11px] text-mute">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-lime" />
+                    Loading {cfg.chartSymbol}…
+                  </div>
+                }
               >
-                <TradeChart key={cfg.chartSymbol} height={320} symbol={cfg.chartSymbol} onQuote={onQuote} />
+                <TradeChart key={cfg.chartSymbol} height={340} symbol={cfg.chartSymbol} onQuote={onQuote} />
               </Suspense>
-              <div className="flex flex-wrap gap-4 border-t border-line px-3 py-2 font-mono text-[10px] text-mute">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-line bg-panel/80 px-3 py-2.5 font-mono text-[10px] text-mute">
+                <span className="text-lime">{cfg.chartSymbol}</span>
                 {cfg.footer.map((f) => (
                   <span key={f.k}>
                     {f.k} <span className="text-ink">{f.v}</span>
                   </span>
                 ))}
-                <span className="text-mute/80">Book/ticket demo · candles real</span>
+                <span className="ml-auto text-mute/70">Candles = market OHLC · book/ticket demo</span>
               </div>
             </div>
             <div className="hidden min-h-[280px] md:block">
