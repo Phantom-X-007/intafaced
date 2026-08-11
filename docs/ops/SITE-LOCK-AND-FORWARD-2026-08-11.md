@@ -3,7 +3,7 @@
 **Live:** https://zenyoda3.github.io/intafaced-sovereign-os/  
 **Build branch:** `feat/tv-sovereign-os-apply-site` (worktree `tv-sovereign-os-site`)  
 **Pages:** `ZenYoda3/intafaced-sovereign-os` · `main`  
-**Status this file writes:** **LOCK CANDIDATE** — product surface freezes unless Nitro opens a named fix.
+**Status this file writes:** **LOCKED** (Nitro 2026-08-11 — exchange-first confirmed). Product surface freezes unless Nitro opens a named fix.
 
 ---
 
