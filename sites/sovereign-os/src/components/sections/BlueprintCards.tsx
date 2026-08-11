@@ -19,8 +19,8 @@ type Seat = {
 
 /**
  * Identity Blueprint - share acquisition card.
- * ONE grand pass in the middle (hero) + two example faces.
- * Hero art = night / "granny" flex (user pick) - flanks are founding + scout.
+ * Granny (night.jpg) is the ONE grand card dead-center.
+ * Equal-width side rails keep optical center true (not grid 1fr_auto_1fr drift).
  */
 const HERO: Seat = {
   id: 'night',
@@ -69,13 +69,17 @@ function IdentityGlareCard({ seat, size }: { seat: Seat; size: 'hero' | 'example
   return (
     <GlareCard
       containerClassName={
-        hero
-          ? 'max-w-none w-[min(94vw,540px)] sm:w-[500px] lg:w-[540px] xl:w-[580px]'
-          : 'max-w-none w-[min(68vw,220px)] sm:w-[210px] lg:w-[230px]'
+        hero ? '!max-w-none w-[min(92vw,560px)] sm:w-[520px] lg:w-[540px]' : '!max-w-none w-[200px] sm:w-[210px] lg:w-[220px]'
       }
       className="relative flex flex-col justify-end overflow-hidden p-0"
     >
-      <img src={seat.image} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" />
+      <img
+        src={seat.image}
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover object-center"
+        loading={hero ? 'eager' : 'lazy'}
+        decoding="async"
+      />
       <div className="absolute inset-0 bg-gradient-to-t from-[#050806] via-[#050806]/75 to-[#050806]/15" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_15%,rgba(196,240,0,0.12),transparent_55%)]" />
 
@@ -141,22 +145,29 @@ export function BlueprintCards() {
           </p>
         </div>
 
-        {/* Grand card dead-center; flanks smaller and lower */}
-        <div className="mt-16 grid grid-cols-1 items-end justify-items-center gap-8 lg:mt-20 lg:grid-cols-[1fr_auto_1fr] lg:gap-6 xl:gap-10">
-          <div className="order-2 hidden justify-self-end lg:order-1 lg:block lg:pb-10">
-            <IdentityGlareCard seat={EXAMPLES[0]!} size="example" />
+        {/*
+          True dead-center: equal side rails (fixed width) + hero in the middle column.
+          Flex-center alone drifts when left/right content widths differ.
+        */}
+        <div className="mt-16 flex w-full flex-col items-center lg:mt-20">
+          <div className="flex w-full max-w-[1100px] items-end justify-center">
+            {/* Left rail - same width as right so hero sits on page center */}
+            <div className="hidden w-[240px] shrink-0 items-end justify-end pb-8 pr-3 lg:flex xl:w-[260px] xl:pr-5">
+              <IdentityGlareCard seat={EXAMPLES[0]!} size="example" />
+            </div>
+
+            {/* Granny hero - optical center of the section */}
+            <div className="relative z-20 shrink-0">
+              <IdentityGlareCard seat={HERO} size="hero" />
+            </div>
+
+            <div className="hidden w-[240px] shrink-0 items-end justify-start pb-8 pl-3 lg:flex xl:w-[260px] xl:pl-5">
+              <IdentityGlareCard seat={EXAMPLES[1]!} size="example" />
+            </div>
           </div>
 
-          <div className="order-1 z-20 lg:order-2">
-            <IdentityGlareCard seat={HERO} size="hero" />
-          </div>
-
-          <div className="order-3 hidden justify-self-start lg:block lg:pb-10">
-            <IdentityGlareCard seat={EXAMPLES[1]!} size="example" />
-          </div>
-
-          {/* Mobile examples under hero */}
-          <div className="order-4 flex w-full flex-wrap justify-center gap-4 lg:hidden">
+          {/* Mobile examples under granny */}
+          <div className="mt-8 flex flex-wrap justify-center gap-4 lg:hidden">
             <IdentityGlareCard seat={EXAMPLES[0]!} size="example" />
             <IdentityGlareCard seat={EXAMPLES[1]!} size="example" />
           </div>

@@ -68,8 +68,8 @@ export function GlareCard({ children, className, containerClassName }: Props) {
     <div
       style={containerStyle}
       className={cn(
-        // Default playable size; override with containerClassName (card-game layout uses ~380–420)
-        'relative isolate w-full max-w-[min(100%,420px)] [aspect-ratio:17/21] transition-transform delay-[var(--delay)] duration-[var(--duration)] ease-[var(--easing)] will-change-transform [contain:layout_style] [perspective:900px]',
+        // Size comes from containerClassName (Blueprint hero/example). No hard max-w here - it stole dead-center.
+        'relative isolate [aspect-ratio:17/21] transition-transform delay-[var(--delay)] duration-[var(--duration)] ease-[var(--easing)] will-change-transform [contain:layout_style] [perspective:900px]',
         containerClassName,
       )}
       ref={refElement}
