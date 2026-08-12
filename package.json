@@ -48,6 +48,7 @@
     "scan:deps": "node tooling/ci/dependency-audit.mjs",
     "scan:wallet-rpc-auth": "node tooling/ci/wallet-rpc-auth-scan.mjs",
     "scan:wallet-rpc-mainnet": "node tooling/ci/wallet-rpc-mainnet-scan.mjs",
+    "scan:wallet-rpc-perimeter": "node tooling/ci/wallet-rpc-perimeter-refuse.mjs",
     "scan:secrets:mutate": "node tooling/ci/secret-scan.mutation.mjs --verbose",
     "scan:money-property:mutate": "node tooling/ci/money-property.mutation.mjs",
     "scan:wallet-rpc-mainnet:mutate": "node tooling/ci/wallet-rpc-mainnet-scan.mutation.mjs",
