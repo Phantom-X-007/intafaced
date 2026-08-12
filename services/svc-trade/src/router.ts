@@ -467,8 +467,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
     otc: router({
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!otc) {
-          const deskLaw =
-            'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed';
+          const deskLaw = 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed';
           return {
             published: false,
             statusLine: 'published=0 residual=DIRECTION_§8_refuse_closed',
