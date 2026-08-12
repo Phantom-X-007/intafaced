@@ -363,7 +363,7 @@ describe('support.reply metered session run', () => {
 
   // ── Honesty: never fabricate what a tool could not return ─────────────────
 
-  it('drops a read the data tool refuses instead of filling it in', async () => {
+  it('refuses when account-state was asked and missing — no invent from KB alone', async () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
@@ -374,16 +374,164 @@ describe('support.reply metered session run', () => {
       ],
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') return;
-    expect(result.answered).toBe(1);
-    expect(result.complete).toBe(false);
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'account_state_missing',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'refuse') return;
     expect(result.unanswered.map((u) => [u.refusedBy, u.reason])).toEqual([
       ['tool', 'missing_fixture'],
       ['tool', 'account_owner_mismatch'],
     ]);
-    // The only facts carried are the ones a tool actually returned.
+    // KB hit is not enough to invent account state — refuse, settle, no silent fee.
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
+  it('stops mid-run on abort without running remaining tools or inventing a feeCharge', async () => {
+    const fake = new FakeRuntime();
+    const ac = new AbortController();
+    ac.abort();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      signal: ac.signal,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'aborted',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'stopped') return;
+    expect(fake.openCalls).toBe(0);
+    expect(fake.executed).toEqual([]);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result.metering.sessionId).toBeNull();
+  });
+
+  it('stops after a partial ask list and still settles the open session', async () => {
+    const fake = new FakeRuntime();
+    const ac = new AbortController();
+    // Abort after the first tool would have been scheduled: pre-abort the signal
+    // once openSession has been called by wrapping act.
+    const originalAct = fake.act.bind(fake);
+    let calls = 0;
+    fake.act = async (input) => {
+      calls += 1;
+      if (calls === 1) ac.abort();
+      return originalAct(input);
+    };
+
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      signal: ac.signal,
+      asks: [kbAsk(), accountAsk(), ticketAsk()],
+    });
+
+    expect(result.status).toBe('stopped');
+    if (result.status !== 'stopped') return;
+    // First ask ran; later asks did not.
+    expect(fake.executed).toEqual([SUPPORT_KB_TOOL]);
     expect(result.findings).toHaveLength(1);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
+  it('grounds a reply from published kbCatalog + accountGrounding (no invent)', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: [
+        {
+          id: 'kb-account-access',
+          titleKey: 'support.kb.account_access.title',
+          bodyKey: 'support.kb.account_access.body',
+        },
+      ],
+      asks: [
+        { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
+        {
+          tool: 'identity.account.read',
+          accountGrounding: {
+            status: 'read',
+            state: { userId: USER, status: 'active', kycTier: 'basic' },
+            readAt: '2026-08-12T00:00:00.000Z',
+          },
+        },
+      ],
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.citedArticleKeys).toEqual(['kb-account-access']);
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool: 'identity.account.read',
+          account: { userId: USER, status: 'active', kycTier: 'basic' },
+        }),
+      ]),
+    );
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('refuses when accountGrounding is plane_dark — KB alone is not invent account-state', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: [
+        {
+          id: 'kb-account-access',
+          titleKey: 'support.kb.account_access.title',
+          bodyKey: 'support.kb.account_access.body',
+        },
+      ],
+      asks: [
+        { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
+        {
+          tool: 'identity.account.read',
+          accountGrounding: { status: 'unread', reason: 'plane_dark' },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'account_state_missing',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'refuse') return;
+    expect(result.unanswered.map((u) => [u.tool, u.reason])).toEqual([['identity.account.read', 'account_plane_dark']]);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
+  it('escalates when kbQuery misses the catalog but other grounded reads worked', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: [
+        {
+          id: 'kb-orders-status',
+          titleKey: 'support.kb.orders_status.title',
+          bodyKey: 'support.kb.orders_status.body',
+        },
+      ],
+      // Account is readable; KB miss must not invent an article to answer with.
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'definitely-not-an-article-xyz' }, accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'escalate',
+      reason: 'kb_no_hit',
+      userMessageKey: 'agents.support.escalated',
+    });
+    expect(result.metering.billedAmount).toBe('0');
   });
 
   it('refuses the whole run when NO data source was reachable — no invented answer', async () => {

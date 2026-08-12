@@ -1035,8 +1035,14 @@ export const FEATURES = [
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession, boot-register, money denylist. STILL NOT done: live ops.support KB plane in production env. Not tracker done until grounded env.',
+    requires: ['services/svc-agents/src/support-agent', 'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts'],
+    note:
+      '**D26-P1-A2 Done-bar sealed 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
+      'refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. ' +
+      'Live ops.support production credentials remain Class X residual (not agent-done). No packages/i18n.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',

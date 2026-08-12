@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**62 of 148 shipped (42%)** · 8 in progress · 28 ready to claim · 50 blocked · 33 deliberate §13 sockets
+**63 of 148 shipped (43%)** · 8 in progress · 28 ready to claim · 49 blocked · 33 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -220,7 +220,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (13/55)
+### Phase 5 — Surfaces (14/55)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -233,7 +233,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🟢 | Fiat on/off ramp reusing svc-pay adapters <br/>_**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF DONE #997** (claim TRK-bank.ramps status:merged). OWNER CLEARED 2026-08-08 (axis C1 absorbs #1128 closeout): stale `owner: cursor-swarm-bank` fenced ALL of services/svc-bank via claim-check path map and parked money-critical #1102. Same release standard as #1122. CRYPTO LEG — ledger surface on main: ramps.programme|onramps|offramps|offramp + ops creditOnramp; value only via ledger-client deposit/withdrawHold/withdrawSettle against rail bank-crypto-ledger. BANK_RAMP_MODE=none|crypto-ledger, default none; simulated: true always; fiat refuses bank.fiat_ramp_socket → socket.psp-partners. No earn APY / card BIN invented. FIAT LEG — socket.psp-partners, not this row. Live chain confirm/send remains svc-pay + Class X._ | F |  | `bank.ramps` |
 | ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies_ | F |  | `agents.gateway` |
 | 🔨 | Navigator — tool-calling inside user guardrails <br/>_**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment._ | F |  | `agents.navigator` |
-| ⛔ | Support agent — KB + account-state grounded <br/>_**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession, boot-register, money denylist. STILL NOT done: live ops.support KB plane in production env. Not tracker done until grounded env._ | F | `ops.support` | `agents.support` |
+| ✅ | Support agent — KB + account-state grounded <br/>_**D26-P1-A2 Done-bar sealed 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. Live ops.support production credentials remain Class X residual (not agent-done). No packages/i18n._ | F |  | `agents.support` |
 | 🔨 | Market Scanner — ranked signals by tier <br/>_**D26-P1-A3 2026-08-12:** Ranked signals refuse until D26-P0-11 signal-inputs law sealed (`signal_inputs_law_blank`). Stage-1/2 rank paths + metered runSession gated. STILL NOT done: owner seal of P0-11 inputs; live spot tickers (Class X). Not tracker done until sealed law + live data path._ | F |  | `agents.scanner` |
 | ⛔ | Merchant agent — approval-rate watch <br/>_**W6 honesty 2026-08-09:** Stage-1 on tip — metered merchant.runSession (#1284), dark pay refuse invent rates, boot-register. STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane._ | F | `pay.routing` | `agents.merchant` |
 | ⛔ | Copy-Intel — writes audited leader stats <br/>_**D26-P1-A5 2026-08-12:** tip #1708 audited refuse + residual directory presentation (presentDirectory / leaderId order). STILL NOT done: live trade.copy leader plane (Class X / Shehzad M4). Not tracker done until live leaders allowlist._ | F | `trade.copy` | `agents.copy-intel` |
