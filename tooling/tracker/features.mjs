@@ -731,10 +731,14 @@ export const FEATURES = [
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
     phase: '3',
-    status: 'ready',
+    status: 'done',
     dependsOn: ['p2p.reputation'],
     requires: ['services/svc-p2p'],
-    note: 'GHOST OWNER CLEARED 2026-08-09 L03 W4. Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings mechanism on main. Stage 2 honest API (W10 L07): merchants.offerLimits + merchants.myOfferCeiling + health.offerLimitsConfigured — clients learn posture without refuse-first; null max = unlimited, magnitudes still owner env only. Standing read per offer create; only approved gets merchant ceiling; env P2P_OFFER_MAX_STANDARD/MERCHANT unset = unlimited = pre-Stage-2 behaviour (numbers are owner product law, not invented). reputation.get exposes merchant:boolean|null for counterparty badge. Stage 3 merchant API keys/scopes/rate limits EXPLICITLY CUT 2026-08-09 L03 W4 — identity.apikeys already owns named keys; dual-writing a second key plane inside svc-p2p is refused. STILL ready not done: owner must either set ceiling env (or confirm unlimited is the product choice) and accept the Stage 3 cut. Eligibility thresholds remain conservative defaults (spec §5).',
+    note:
+      'DONE 2026-08-12 D26-P1-I2 under dispute law. Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings + honest API (W10 L07 offerLimits/myOfferCeiling/health.offerLimitsConfigured). ' +
+      'Stage 3 second key plane CUT — identity.apikeys + edge throttle + merchants.apiAccess (#1697); API keys cannot moderate (D-S-08). ' +
+      'Product-complete seal: moderated dispute loss suspends approved standing when live reputation fails programme eligibility (same maxDisputesLost policy as apply) — badge/API/ceilings stop vouching immediately; operator reinstate remains human override. ' +
+      'Unlimited ceilings when env unset accepted as product posture (magnitudes stay owner env, not invented). Eligibility defaults remain conservative (spec §5). Residual Class X / owner: who moderates, apps/admin console, optional ceiling magnitudes.',
   }),
 
   f('api.gateway', 'Public API — ONE gateway in front of trade, pay and data (§9)', {

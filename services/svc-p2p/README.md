@@ -117,7 +117,7 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read           |
 | `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                           |
 | `merchants.me`                   | `p2p:read`               | Caller's merchant standing + history headers (Stage 1–2 programme)         |
-| `merchants.apiAccess`            | `p2p:read`               | Current standing → API eligibility; names shared identity/edge planes      |
+| `merchants.apiAccess`            | `p2p:read`               | Current standing → API eligibility; names shared identity/edge planes; `disputeResolution: interactive_human_only` |
 | `merchants.offerLimits`          | `p2p:read`               | Deployment ceilings (`standardMax` / `merchantMax` or null = unlimited)    |
 | `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing; null = unlimited)      |
 | `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                |

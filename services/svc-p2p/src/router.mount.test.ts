@@ -456,6 +456,115 @@ describe('svc-p2p mount — the moderator queue', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(resolved).toBe(0);
   });
+
+  it('pulls merchant standing for the party who lost a moderated dispute (release → seller)', async () => {
+    const MOD = BUYER;
+    const suspended: Array<{ userId: string; tradeId: string; disputeId: string; actorId: string }> = [];
+    const resolvedTrade = {
+      id: dispute.tradeId,
+      offerId: dispute.tradeId,
+      takerId: BUYER,
+      makerId: SELLER,
+      sellerId: SELLER,
+      buyerId: BUYER,
+      asset: 'USDT',
+      amount: 100n,
+      fiatCurrency: 'EUR',
+      fiatAmount: 100n,
+      price: 1n,
+      method: 'sepa',
+      feeBps: 0,
+      status: 'released' as const,
+      resolution: 'released' as const,
+      resolutionReason: 'moderator:release',
+      deadlines: {},
+      deadlineAt: null,
+      createdAt: new Date('2026-07-20T00:00:00.000Z'),
+      escrowedAt: new Date('2026-07-20T00:00:00.000Z'),
+      fiatSentAt: null,
+      resolvedAt: new Date('2026-08-04T02:00:00.000Z'),
+      settledAt: new Date('2026-08-04T02:00:00.000Z'),
+    };
+    const p2p = stubP2p({
+      resolveDispute: async () => resolvedTrade,
+      getDispute: async () => ({ ...dispute, status: 'resolved' as const, resolution: 'release' as const }),
+    });
+    const merchants = {
+      ...merchantStub('approved'),
+      suspendIfStandingBrokenByDisputeLaw: async (input: {
+        userId: string;
+        tradeId: string;
+        disputeId: string;
+        actorId: string;
+        actorScope: string;
+      }) => {
+        suspended.push({
+          userId: input.userId,
+          tradeId: input.tradeId,
+          disputeId: input.disputeId,
+          actorId: input.actorId,
+        });
+        return null;
+      },
+    };
+    const ctx = signed(principal({ userId: MOD, sub: MOD, scopes: ['p2p:read'] }));
+
+    await createP2pRouter(p2p, stubInstruments(), undefined, { moderatorUserIds: [MOD] }, merchants as never)
+      .createCaller(ctx)
+      .disputes.resolve({ tradeId: dispute.tradeId, resolution: 'release' });
+
+    expect(suspended).toEqual([
+      { userId: SELLER, tradeId: dispute.tradeId, disputeId: dispute.id, actorId: MOD },
+    ]);
+  });
+
+  it('attributes a refund loss to the buyer for merchant suspension', async () => {
+    const MOD = '77777777-7777-4777-8777-777777777777';
+    const suspended: string[] = [];
+    const resolvedTrade = {
+      id: dispute.tradeId,
+      offerId: dispute.tradeId,
+      takerId: BUYER,
+      makerId: SELLER,
+      sellerId: SELLER,
+      buyerId: BUYER,
+      asset: 'USDT',
+      amount: 100n,
+      fiatCurrency: 'EUR',
+      fiatAmount: 100n,
+      price: 1n,
+      method: 'sepa',
+      feeBps: 0,
+      status: 'cancelled' as const,
+      resolution: 'refunded' as const,
+      resolutionReason: 'moderator:refund',
+      deadlines: {},
+      deadlineAt: null,
+      createdAt: new Date('2026-07-20T00:00:00.000Z'),
+      escrowedAt: new Date('2026-07-20T00:00:00.000Z'),
+      fiatSentAt: null,
+      resolvedAt: new Date('2026-08-04T02:00:00.000Z'),
+      settledAt: new Date('2026-08-04T02:00:00.000Z'),
+    };
+    const p2p = stubP2p({
+      resolveDispute: async () => resolvedTrade,
+      getDispute: async () => ({ ...dispute, status: 'resolved' as const, resolution: 'refund' as const }),
+    });
+    const merchants = {
+      ...merchantStub('approved'),
+      suspendIfStandingBrokenByDisputeLaw: async (input: { userId: string }) => {
+        suspended.push(input.userId);
+        return null;
+      },
+    };
+    const ctx = signed(principal({ userId: MOD, sub: MOD, scopes: ['p2p:read'] }));
+
+    await createP2pRouter(p2p, stubInstruments(), undefined, { moderatorUserIds: [MOD] }, merchants as never)
+      .createCaller(ctx)
+      .disputes.resolve({ tradeId: dispute.tradeId, resolution: 'refund' });
+
+    expect(suspended).toEqual([BUYER]);
+  });
 });
 
 describe('svc-p2p mount — trade/dispute read IDOR', () => {

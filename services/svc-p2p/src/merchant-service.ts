@@ -4,6 +4,7 @@ import {
   canTransition,
   checkEligibility,
   DEFAULT_ELIGIBILITY,
+  standingBrokenByDisputeLaw,
   type EligibilityPolicy,
   type MerchantStatus,
   type TransitionActor,
@@ -207,6 +208,39 @@ export class MerchantService {
   async get(userId: string): Promise<MerchantRecord | null> {
     const [row] = await this.sql<MerchantRow[]>`SELECT * FROM p2p.p2p_merchants WHERE user_id = ${userId}`;
     return row ? toRecord(row) : null;
+  }
+
+  /**
+   * Suspend approved standing when live reputation no longer meets programme
+   * rules — called after a human moderator attributes a dispute loss.
+   *
+   * Idempotent for non-approved rows. Leaves a reviewable history row naming
+   * the dispute; does not move escrow (the ruling already did, via ledger).
+   */
+  async suspendIfStandingBrokenByDisputeLaw(input: {
+    userId: string;
+    tradeId: string;
+    disputeId: string;
+    actorId: string;
+    actorScope: string;
+  }): Promise<MerchantRecord | null> {
+    const current = await this.get(input.userId);
+    if (!current) return null;
+
+    const snapshot = await this.p2p.reputationOf(input.userId);
+    const broken = standingBrokenByDisputeLaw(current.status, snapshot, this.eligibility);
+    if (!broken.broken) return null;
+
+    return this.transition({
+      userId: input.userId,
+      to: 'suspended',
+      by: 'operator',
+      reason:
+        `Dispute law: merchant standing suspended after moderated ruling on trade ${input.tradeId} ` +
+        `(dispute ${input.disputeId}). ${broken.reason}`,
+      actorId: input.actorId,
+      actorScope: input.actorScope,
+    });
   }
 
   /** Newest first — the current standing is what somebody is usually asking about. */
