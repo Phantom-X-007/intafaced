@@ -224,7 +224,11 @@ describe('MerchantWebhookService', () => {
     // frozen `now` is never behind that stamp (same pattern as processDue tests).
     for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
 
+    // Enqueue stamps nextAttemptAt = wall clock. A fixed "now" that falls before
+    // that stamp (e.g. tip-day noon UTC while CI runs after noon) makes claimDue
+    // return [] — pin due, then claim at an explicit instant.
     const now = new Date('2026-08-12T12:00:00.000Z');
+    for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
     const first = await store.claimDue(25, now);
     expect(first).toHaveLength(1);
     expect(first[0]!.nextAttemptAt.getTime()).toBe(now.getTime() + WEBHOOK_CLAIM_LEASE_MS);
