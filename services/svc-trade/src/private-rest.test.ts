@@ -23,6 +23,9 @@ import {
 import { TradeError } from './spot/types.js';
 import type { PlaceOrderInput } from './spot/trade-service.js';
 import { fakeMarket } from './public-rest.js';
+import { FuturesError } from './futures/position-service.js';
+import { DEFAULT_FUTURES_MARK_POLICY, acceptableForEntry } from './futures/mark-policy.js';
+import { markSourceFromBook } from './futures/mark-source.js';
 
 /**
  * Mount boundary for private CCXT REST (docs/decisions/mount-boundary.md).
@@ -1383,6 +1386,76 @@ describe('private REST — mount boundary + order write path', () => {
       expect(res.json().error).toBe('trade.price_not_accepted');
       expect(res.json().message).toContain('exitPrice');
       expect(called).toBe(false);
+      await app.close();
+    });
+
+    it('DELETE /positions/:id?markPrice= → 400, and closePosition is never called', async () => {
+      let called = false;
+      const app = await build(
+        deps({
+          closePosition: async () => {
+            called = true;
+            throw new Error('should not reach the money path');
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/positions/${ORDER_ID}?markPrice=999999`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('trade.price_not_accepted');
+      expect(res.json().message).toContain('markPrice');
+      expect(called).toBe(false);
+      await app.close();
+    });
+
+    /**
+     * D26-P1-T1a public door: last-trade must not open through POST /positions.
+     * Same entry gate PositionService.markFor runs (`acceptableForEntry`) — the
+     * REST edge must surface the refuse before any money path flag is set.
+     */
+    it('POST /positions refuses when the mark port only has last-trade (DIRECTION MVP-1)', async () => {
+      let moneyPath = false;
+      const marks = markSourceFromBook({
+        async readBook() {
+          return { bestBid: null, bestAsk: null, last: '50000' };
+        },
+      });
+      const app = await build(
+        deps({
+          openPosition: async (_p, input) => {
+            const at = new Date();
+            const quoted = await marks.quote!({ marketId: 'door-m1', symbol: input.symbol, at });
+            if (!quoted) {
+              throw new FuturesError('no mark', 'trade.mark_missing', 503);
+            }
+            const check = acceptableForEntry(quoted, at, DEFAULT_FUTURES_MARK_POLICY);
+            if (!check.ok) {
+              throw new FuturesError(`Refusing to value this position — ${check.reason}`, check.code ?? 'trade.mark_unusable', 503);
+            }
+            moneyPath = true;
+            return { id: 'should-not-open', symbol: input.symbol } as never;
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: {
+          clientOpenId: 'door-last-trade',
+          symbol: 'BTC/USDT-PERP',
+          side: 'long',
+          size: '1',
+          leverage: '10',
+        },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json().error).toBe('trade.mark_unusable');
+      expect(res.json().message).toContain('last-trade');
+      expect(moneyPath).toBe(false);
       await app.close();
     });
 

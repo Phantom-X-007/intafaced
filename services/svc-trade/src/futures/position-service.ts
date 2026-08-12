@@ -39,6 +39,7 @@ import { planClose } from './close-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
 import {
   DEFAULT_FUTURES_MARK_POLICY,
+  acceptableForEntry,
   acceptableForLiquidation,
   acceptableForMarking,
   markMissing,
@@ -279,13 +280,25 @@ export class PositionService {
     return { ok: true, mark: quoted };
   }
 
-  /** Open path: darkness refuses. Close path uses `tryMarkForMarking` + freeze. */
+  /**
+   * Open path: darkness refuses, and so does last-trade (DIRECTION MVP-1).
+   * Close path uses `tryMarkForMarking` + freeze — losing exits may still mark
+   * on `last`; entry may not.
+   */
   private async markFor(marketId: string, symbol: string, at: Date, authorisesSize: Amount | null): Promise<FuturesQuotedMark> {
     const got = await this.tryMarkForMarking(marketId, symbol, at, authorisesSize);
     if (!got.ok) {
       throw new FuturesError(
         got.reason === 'trade.mark_missing' ? got.detail : `Refusing to value this position — ${got.detail}`,
         got.reason,
+        503,
+      );
+    }
+    const entry = acceptableForEntry(got.mark, at, this.markPolicy);
+    if (!entry.ok) {
+      throw new FuturesError(
+        entry.code === 'trade.mark_missing' ? (entry.reason ?? 'mark missing') : `Refusing to value this position — ${entry.reason}`,
+        entry.code ?? 'trade.mark_unusable',
         503,
       );
     }

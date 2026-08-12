@@ -15,6 +15,7 @@ import {
   type PublicRestDeps,
 } from './public-rest.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
+import { markSourceFromBook } from './futures/mark-source.js';
 
 describe('bpsToRate / decimalPlaces', () => {
   it('converts integer bps to a decimal rate string', () => {
@@ -723,6 +724,79 @@ describe('public REST routes', () => {
     const body = res.json();
     expect(body.symbol).toBe('BTC/USDT-PERP');
     expect(body.fundingRate).toBe('0.0001');
+    await app.close();
+  });
+
+  /**
+   * D26-P1-T1a public door: public mark uses the same liquidation-gated port as
+   * index.ts (`futuresJobs.markPrice` → `markPriceFromQuote`). A book that only
+   * has last-trade must not appear as markPrice on the wire.
+   */
+  it('GET /api/v1/funding-rate/:symbol markPrice is null when the mark port only has last-trade', async () => {
+    const perp = fakeMarket({
+      id: '11111111-1111-4111-8111-111111111111',
+      symbol: 'BTC/USDT-PERP',
+      kind: 'futures',
+    });
+    const marks = markSourceFromBook({
+      async readBook() {
+        return { bestBid: null, bestAsk: null, last: '50000' };
+      },
+    });
+    const app = await build(
+      deps({
+        marketBySymbol: async (s) => (s === perp.symbol ? perp : null),
+        fundingRateForMarket: async (marketId) => {
+          const markPrice = await marks.markPrice({ marketId, at: new Date() });
+          return {
+            fundingRate: '0.0001',
+            fundingTimestamp: 1_700_000_000_000,
+            fundingDatetime: '2023-11-14T22:13:20.000Z',
+            nextFundingTimestamp: null,
+            markPrice,
+            indexPrice: null,
+          };
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/funding-rate/BTC%2FUSDT-PERP' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.fundingRate).toBe('0.0001');
+    expect(body.markPrice).toBeNull();
+    await app.close();
+  });
+
+  it('GET /api/v1/funding-rate/:symbol serves mid markPrice from the same mark port', async () => {
+    const perp = fakeMarket({
+      id: '11111111-1111-4111-8111-111111111111',
+      symbol: 'BTC/USDT-PERP',
+      kind: 'futures',
+    });
+    const marks = markSourceFromBook({
+      async readBook() {
+        return { bestBid: '49900', bestAsk: '50100', last: '48000' };
+      },
+    });
+    const app = await build(
+      deps({
+        marketBySymbol: async (s) => (s === perp.symbol ? perp : null),
+        fundingRateForMarket: async (marketId) => {
+          const markPrice = await marks.markPrice({ marketId, at: new Date() });
+          return {
+            fundingRate: '0.0001',
+            fundingTimestamp: 1_700_000_000_000,
+            fundingDatetime: '2023-11-14T22:13:20.000Z',
+            nextFundingTimestamp: null,
+            markPrice,
+            indexPrice: null,
+          };
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/funding-rate/BTC%2FUSDT-PERP' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().markPrice).toBe('50000');
     await app.close();
   });
 
