@@ -89,14 +89,15 @@ export type {
  * understands).
  *
  * Producing the grade is this file's job. CONSUMING it — an §28 cost model that
- * weights the grade against expected impact and transfer cost — belongs to
- * `execution.sor`, which is a separate boarded row and is blocked. §28:770 makes
- * the grade ONE INPUT to that model, never a ranking rule of its own, and
- * D-S-06 (`docs/adr/2026-08-04-matching-dual-target.md`, Accepted) leaves the
- * bounded, tested 5 bps internal tie-break in `router.ts` as the only permitted
- * preference. A second latency-shaped ranking rule is therefore not a matter of
- * taste here; it is forbidden. Connect's score feed stops at eligibility weight
- * (D26-P1-X2): unscored → 0. Letter scaling is §28's problem.
+ * requires a graded latency term alongside fees, expected impact and transfer
+ * cost — lives in `cost-model.ts` / `planRoute({ costTermsByVenue })`
+ * (D26-P1-X3). §28:770 makes the grade ONE INPUT to that model, never a ranking
+ * rule of its own, and D-S-06 leaves the bounded, tested 5 bps internal
+ * tie-break in `router.ts` as the only permitted preference. A second
+ * latency-shaped ranking rule is therefore not a matter of taste here; it is
+ * forbidden. Connect's score feed stops at eligibility weight (D26-P1-X2):
+ * unscored → 0. Letter→bps scaling stays an owner magnitude (D-S-14), not
+ * invented on this surface.
  */
 
 /**
