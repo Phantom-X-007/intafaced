@@ -1,6 +1,6 @@
 # Ledger recipe matrix
 
-**50 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
+**53 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
 
 Generated from `src/recipes/index.ts` registry. If this table and the registry disagree, the registry wins and this file is wrong.
 
@@ -76,3 +76,4 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 - **Chargeback** recipes ship with an owner-sign-off banner and are deliberately unwired from svc-pay (L04 residual).
 - **Market commerce** recipes (if any) are L07 wall — not dual-edited here.
 - Conformance + MemoryLedger prove sum-to-zero; Postgres proves CHECK constraints.
+- **D26-P2-11 live-path closure:** every registry key is `live` (production caller) or explicit §13 socket — machine inventory in `src/recipes/live-path-inventory.ts` (executed by `live-path-inventory.test.ts`). Do not invent recipes to close a path; socket it.
