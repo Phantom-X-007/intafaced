@@ -14,7 +14,7 @@ import {
 import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
 import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfallRecovered } from './chargeback.js';
 import { subAccountTransfer } from './sub-accounts.js';
-import { marketPurchase } from './market.js';
+import { marketListingFee, marketPremiumPlacement, marketPurchase } from './market.js';
 import {
   burnAccount,
   houseFees,
@@ -1040,7 +1040,14 @@ export function rewardPay(input: RewardPayInput): PostRequest {
 export * from './bank.js';
 export * from './loans.js';
 export * from './chargeback.js';
-export * from './market.js';
+export {
+  marketPurchase,
+  marketListingFee,
+  marketPremiumPlacement,
+  type MarketPurchaseInput,
+  type MarketListingFeeInput,
+  type MarketPremiumPlacementInput,
+} from './market.js';
 
 export const recipes = {
   deposit,
@@ -1105,8 +1112,11 @@ export const recipes = {
   businessApprovalSettle,
   // SPEC-SUBACCOUNTS — only legal cross-partition value path. See ./sub-accounts.ts.
   subAccountTransfer,
-  // §8.7 market.commerce — one-time purchase + house commission. Flagged shared-package.
+  // §8.7 market — purchase (live) + listing/premium fees (§13 unwired; D26-P1-M2).
+  // Flagged shared-package. No existing recipe body was rewritten for the fee legs.
   marketPurchase,
+  marketListingFee,
+  marketPremiumPlacement,
 } as const;
 
 export type RecipeName = keyof typeof recipes;

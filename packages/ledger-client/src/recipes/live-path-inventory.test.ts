@@ -76,6 +76,8 @@ const PINNED_SOCKETS: readonly { name: RecipeName; fingerprint: string }[] = [
     name: 'chargebackShortfallRecovered',
     fingerprint: reasonFingerprint(RECIPE_MATRIX.chargebackShortfallRecovered.reason),
   },
+  { name: 'marketListingFee', fingerprint: reasonFingerprint(RECIPE_MATRIX.marketListingFee.reason) },
+  { name: 'marketPremiumPlacement', fingerprint: reasonFingerprint(RECIPE_MATRIX.marketPremiumPlacement.reason) },
 ];
 
 describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
@@ -88,10 +90,10 @@ describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
     expect(inventory.live.length + inventory.sockets.length).toBe(inventory.recipes.length);
   });
 
-  it('pins live vs §13 socket counts on tip (53 = 46 live + 7 socket)', () => {
+  it('pins live vs §13 socket counts on tip (55 = 46 live + 9 socket)', () => {
     const counts = countByKind(inventory);
-    expect(counts).toEqual({ live: 46, socket: 7 });
-    expect(inventory.recipes).toHaveLength(53);
+    expect(counts).toEqual({ live: 46, socket: 9 });
+    expect(inventory.recipes).toHaveLength(55);
     expect(liveRecipeKeys(inventory)).toHaveLength(46);
     expect(socketRecipeKeys(inventory)).toEqual(PINNED_SOCKETS.map((s) => s.name).sort());
   });
@@ -224,6 +226,37 @@ describe('D26-P2-11 executed MemoryLedger for §13 socket recipes', () => {
         rail: 'card-sandbox',
       }),
     );
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('marketListingFee conserves (socket — D26-P1-M2 vendor fee)', async () => {
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('25'), rail: 'test', railRef: 'd26-list' }));
+    await ledger.post(
+      recipes.marketListingFee({
+        listingId: 'listing-d26',
+        vendorUserId: USER,
+        assetId: 'USDT',
+        amount: amt('25'),
+      }),
+    );
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('0');
+    expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('25');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('marketPremiumPlacement conserves (socket — D26-P1-M2 placement fee)', async () => {
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('15'), rail: 'test', railRef: 'd26-prem' }));
+    await ledger.post(
+      recipes.marketPremiumPlacement({
+        placementId: 'place-d26',
+        listingId: 'listing-d26',
+        vendorUserId: USER,
+        assetId: 'USDT',
+        amount: amt('15'),
+      }),
+    );
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('0');
+    expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('15');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 });
