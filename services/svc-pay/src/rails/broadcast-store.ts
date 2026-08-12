@@ -1,16 +1,17 @@
 /**
  * Idempotent outbound broadcast journal.
  *
- * `ChainSendRequest.idempotencyKey` must never produce a second broadcast. A
- * process that dies after eth_sendRawTransaction but before remembering the
- * hash will, on retry, ask again — and without this store that is a second
- * transfer of real money that will not come back.
+ * `ChainSendRequest.idempotencyKey` must never produce a second spend. DIRECTION
+ * §3.1 / D26-P1-P9: the signed raw transaction is persisted before
+ * eth_sendRawTransaction so a crash mid-broadcast resumes the same bytes.
  *
  * Ordering for Class M:
- *   1. `claim` — exactly one caller may broadcast for a key
- *   2. `eth_sendRawTransaction`
- *   3. `put` the returned hash **before** waiting for the receipt
- *   4. wait for receipt (retryable; hash already journalled)
+ *   1. `claim` — exactly one caller may sign for a key (`mine`), or resume
+ *      a persisted signed payload (`resume`), or converge on a hash (`done`)
+ *   2. `putSigned` — journal signed raw **before** any broadcast RPC
+ *   3. `eth_sendRawTransaction` (identical bytes on resume)
+ *   4. `put` the returned hash **before** waiting for the receipt
+ *   5. wait for receipt (retryable; hash already journalled)
  *
  * The port talks to this interface, not to Postgres, so the conformance suite
  * and unit tests can use the in-memory implementation. Production multi-replica
@@ -20,16 +21,24 @@
 /** Sentinel while a worker owns the right to broadcast but has not yet put a hash. */
 export const BROADCAST_PENDING = '__pending__' as const;
 
-export type ClaimResult = { readonly kind: 'mine' } | { readonly kind: 'done'; readonly txHash: string };
+export type ClaimResult =
+  { readonly kind: 'mine' } | { readonly kind: 'done'; readonly txHash: string } | { readonly kind: 'resume'; readonly signedRaw: string };
 
 export interface BroadcastStore {
   /** Prior txHash for this business key, or null if never completed. */
   get(idempotencyKey: string): Promise<string | null>;
   /**
    * Atomically reserve the key for broadcast. Exactly one concurrent caller
-   * receives `mine`; others receive `done` once the winner puts a hash.
+   * receives `mine` for a fresh key; callers that find a persisted signed raw
+   * with no hash yet receive `resume`; others receive `done` once a hash lands.
    */
   claim(idempotencyKey: string): Promise<ClaimResult>;
+  /**
+   * Persist signed raw bytes before broadcast. Refuses to overwrite a different
+   * signed payload for the same key. No-op (idempotent) when the same bytes
+   * are already stored.
+   */
+  putSigned(idempotencyKey: string, signedRaw: string): Promise<void>;
   /**
    * Record a broadcast. If the key already holds a real hash, leave it and
    * return it — never overwrite. Pending sentinels are replaced by the hash.
@@ -40,6 +49,7 @@ export interface BroadcastStore {
 /** In-memory journal — tests and single-process local runners. Not multi-replica safe. */
 export class MemoryBroadcastStore implements BroadcastStore {
   private readonly map = new Map<string, string>();
+  private readonly signed = new Map<string, string>();
   private readonly waiters = new Map<string, Array<() => void>>();
 
   async get(idempotencyKey: string): Promise<string | null> {
@@ -55,15 +65,39 @@ export class MemoryBroadcastStore implements BroadcastStore {
       return { kind: 'done', txHash: existing };
     }
     if (existing === BROADCAST_PENDING) {
+      const raw = this.signed.get(idempotencyKey);
+      if (raw) return { kind: 'resume', signedRaw: raw };
       await this.#waitUntilSettled(idempotencyKey);
       const settled = this.map.get(idempotencyKey);
-      if (!settled || settled === BROADCAST_PENDING) {
-        throw new Error(`broadcast claim for ${idempotencyKey} stalled while pending`);
+      if (settled && settled !== BROADCAST_PENDING) {
+        return { kind: 'done', txHash: settled };
       }
-      return { kind: 'done', txHash: settled };
+      const resumed = this.signed.get(idempotencyKey);
+      if (resumed) return { kind: 'resume', signedRaw: resumed };
+      throw new Error(`broadcast claim for ${idempotencyKey} stalled while pending`);
     }
     this.map.set(idempotencyKey, BROADCAST_PENDING);
     return { kind: 'mine' };
+  }
+
+  async putSigned(idempotencyKey: string, signedRaw: string): Promise<void> {
+    if (!signedRaw || signedRaw === BROADCAST_PENDING) {
+      throw new Error('signedRaw must be a non-empty signed transaction');
+    }
+    const existing = this.map.get(idempotencyKey);
+    if (!existing) {
+      throw new Error(`broadcast putSigned for ${idempotencyKey}: no claim row (call claim first)`);
+    }
+    if (existing !== BROADCAST_PENDING) {
+      // Already settled — signed bytes are irrelevant; keep first hash.
+      return;
+    }
+    const prior = this.signed.get(idempotencyKey);
+    if (prior && prior !== signedRaw) {
+      throw new Error(`broadcast putSigned for ${idempotencyKey}: signed payload mismatch`);
+    }
+    this.signed.set(idempotencyKey, signedRaw);
+    this.#release(idempotencyKey);
   }
 
   async put(idempotencyKey: string, txHash: string): Promise<string> {
@@ -79,6 +113,7 @@ export class MemoryBroadcastStore implements BroadcastStore {
 
   reset(): void {
     this.map.clear();
+    this.signed.clear();
     for (const list of this.waiters.values()) {
       for (const wake of list) wake();
     }
@@ -118,7 +153,8 @@ const DEFAULT_PENDING_MAX_WAITS = 200; // ~10s at 50ms
  * Postgres-backed journal for multi-replica / crash-safe outbound crypto sends.
  *
  * claim uses INSERT … ON CONFLICT DO NOTHING so exactly one replica gets `mine`.
- * Concurrent claimers poll until the winner `put`s a real hash (or stall).
+ * Concurrent claimers poll until a signed raw appears (`resume`) or a hash lands
+ * (`done`). Crash after putSigned resumes the identical signed payload.
  */
 export class PostgresBroadcastStore implements BroadcastStore {
   constructor(
@@ -148,13 +184,51 @@ export class PostgresBroadcastStore implements BroadcastStore {
     const maxWaits = this.opts.maxWaits ?? DEFAULT_PENDING_MAX_WAITS;
     for (let i = 0; i < maxWaits; i++) {
       const rows = (await this.sql`
-        SELECT tx_hash FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
-      `) as ReadonlyArray<{ tx_hash: string }>;
-      const v = rows[0]?.tx_hash;
-      if (v && v !== BROADCAST_PENDING) return { kind: 'done', txHash: v };
+        SELECT tx_hash, signed_raw FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+      `) as ReadonlyArray<{ tx_hash: string; signed_raw: string | null }>;
+      const row = rows[0];
+      if (!row) {
+        await new Promise((r) => setTimeout(r, pollMs));
+        continue;
+      }
+      if (row.tx_hash && row.tx_hash !== BROADCAST_PENDING) {
+        return { kind: 'done', txHash: row.tx_hash };
+      }
+      if (row.signed_raw) {
+        return { kind: 'resume', signedRaw: row.signed_raw };
+      }
       await new Promise((r) => setTimeout(r, pollMs));
     }
     throw new Error(`broadcast claim for ${idempotencyKey} stalled while pending`);
+  }
+
+  async putSigned(idempotencyKey: string, signedRaw: string): Promise<void> {
+    if (!signedRaw || signedRaw === BROADCAST_PENDING) {
+      throw new Error('signedRaw must be a non-empty signed transaction');
+    }
+    const updated = (await this.sql`
+      UPDATE pay.crypto_broadcasts
+      SET signed_raw = ${signedRaw}, updated_at = now()
+      WHERE idempotency_key = ${idempotencyKey}
+        AND tx_hash = ${BROADCAST_PENDING}
+        AND (signed_raw IS NULL OR signed_raw = ${signedRaw})
+      RETURNING idempotency_key
+    `) as ReadonlyArray<{ idempotency_key: string }>;
+    if (updated.length > 0) return;
+
+    const existing = (await this.sql`
+      SELECT tx_hash, signed_raw FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+    `) as ReadonlyArray<{ tx_hash: string; signed_raw: string | null }>;
+    const row = existing[0];
+    if (!row) {
+      throw new Error(`broadcast putSigned for ${idempotencyKey}: no claim row (call claim first)`);
+    }
+    if (row.tx_hash && row.tx_hash !== BROADCAST_PENDING) return;
+    if (row.signed_raw && row.signed_raw !== signedRaw) {
+      throw new Error(`broadcast putSigned for ${idempotencyKey}: signed payload mismatch`);
+    }
+    if (row.signed_raw === signedRaw) return;
+    throw new Error(`broadcast putSigned for ${idempotencyKey}: could not persist signed raw`);
   }
 
   async put(idempotencyKey: string, txHash: string): Promise<string> {
