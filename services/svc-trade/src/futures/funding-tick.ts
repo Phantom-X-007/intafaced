@@ -296,9 +296,7 @@ export function assertFundingNetsZero(nets: readonly { positionId: string; paid:
   let sum = 0n;
   for (const n of nets) sum += n.paid;
   if (sum !== 0n) {
-    throw new Error(
-      `funding nets must sum to zero (long/short conservation); got sum=${sum} across ${nets.length} position(s)`,
-    );
+    throw new Error(`funding nets must sum to zero (long/short conservation); got sum=${sum} across ${nets.length} position(s)`);
   }
 }
 

@@ -27,13 +27,7 @@ const B = '22222222-2222-4222-8222-222222222222';
 const C = '33333333-3333-4333-8333-333333333333';
 const D = '44444444-4444-4444-8444-444444444444';
 
-function pos(
-  positionId: string,
-  side: 'long' | 'short',
-  size: string,
-  userId: string,
-  entry = '50000',
-): FundingOpenPosition {
+function pos(positionId: string, side: 'long' | 'short', size: string, userId: string, entry = '50000'): FundingOpenPosition {
   return {
     positionId,
     userId,
@@ -103,10 +97,12 @@ describe('D26-P1-T1f — funding nets zero on the real tick path', () => {
     expect(longPaid).toBe(amt('5'));
     expect(shortPaid).toBe(-amt('5'));
     expect(longPaid + shortPaid).toBe(0n);
-    expect(sumFundingNets([
-      { positionId: 'plong', paid: longPaid },
-      { positionId: 'pshort', paid: shortPaid },
-    ])).toBe(0n);
+    expect(
+      sumFundingNets([
+        { positionId: 'plong', paid: longPaid },
+        { positionId: 'pshort', paid: shortPaid },
+      ]),
+    ).toBe(0n);
   });
 
   it('negative rate flips payer; still nets to zero', async () => {
@@ -123,12 +119,7 @@ describe('D26-P1-T1f — funding nets zero on the real tick path', () => {
 
   it('asymmetric multi-position book still conserves (matchable notional)', async () => {
     // L = 3×50k, S = 2×50k → matchable = 2×50k; total transfer = 0.0001 * 100000 = 10
-    const book = [
-      pos('L1', 'long', '2', A),
-      pos('L2', 'long', '1', B),
-      pos('S1', 'short', '1', C),
-      pos('S2', 'short', '1', D),
-    ];
+    const book = [pos('L1', 'long', '2', A), pos('L2', 'long', '1', B), pos('S1', 'short', '1', C), pos('S2', 'short', '1', D)];
     const { result, margins, posts } = await settleTick('0.0001', 'm1:netzero-asym', book);
     expect(result.status).toBe('settled');
     expect(posts.length).toBeGreaterThan(1);
@@ -155,12 +146,7 @@ describe('D26-P1-T1f — funding nets zero on the real tick path', () => {
       marketId: 'm1',
       rate: '0.0001',
       maxAbsRate: FIXTURE_FUNDING_MAX_ABS,
-      positions: [
-        pos('L1', 'long', '3', A),
-        pos('L2', 'long', '1', B),
-        pos('S1', 'short', '2', C),
-        pos('S2', 'short', '2', D),
-      ],
+      positions: [pos('L1', 'long', '3', A), pos('L2', 'long', '1', B), pos('S1', 'short', '2', C), pos('S2', 'short', '2', D)],
     });
     expect(legs.length).toBeGreaterThan(0);
     const nets = netFundingPaid(legs);
@@ -188,11 +174,7 @@ describe('D26-P1-T1f — funding nets zero on the real tick path', () => {
       .filter((p) => p > 0n)
       .reduce((a, p) => a + p, 0n);
     expect(marginPaid).toBe(ledgerTransfer);
-    expect(
-      sumFundingNets(
-        ['L1', 'L2', 'S1', 'S2'].map((id) => ({ positionId: id, paid: margins.paidByPosition(id) })),
-      ),
-    ).toBe(0n);
+    expect(sumFundingNets(['L1', 'L2', 'S1', 'S2'].map((id) => ({ positionId: id, paid: margins.paidByPosition(id) })))).toBe(0n);
   });
 
   it('assertFundingNetsZero refuses a non-conserving net list', () => {
