@@ -88,9 +88,7 @@ function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
   return nowMs - t <= maxAgeMs && nowMs - t >= 0;
 }
 
-function toAllowlistSet(
-  allowlist: ReadonlySet<string> | readonly string[] | undefined,
-): ReadonlySet<string> | null {
+function toAllowlistSet(allowlist: ReadonlySet<string> | readonly string[] | undefined): ReadonlySet<string> | null {
   if (!allowlist) return null;
   const set = allowlist instanceof Set ? allowlist : new Set(allowlist);
   return set.size === 0 ? null : set;
@@ -100,10 +98,7 @@ function toAllowlistSet(
  * A point is usable when it can honestly participate in threshold arithmetic —
  * fresh, complete fields, valid fraction, and above the sample floor.
  */
-export function isUsableApprovalPoint(
-  point: ApprovalRatePoint,
-  options: { nowMs: number; minAttempts: number },
-): boolean {
+export function isUsableApprovalPoint(point: ApprovalRatePoint, options: { nowMs: number; minAttempts: number }): boolean {
   if (!point.railId) return false;
   if (!isFresh(point.asOf, point.maxAgeMs, options.nowMs)) return false;
   if (point.approvalRate == null || point.attempts == null) return false;
@@ -125,9 +120,7 @@ export function missingAllowlistRails(
   const set = allowlist instanceof Set ? allowlist : new Set(allowlist);
   const missing: string[] = [];
   for (const railId of set) {
-    const hasUsable = points.some(
-      (p) => p.railId === railId && isUsableApprovalPoint(p, options),
-    );
+    const hasUsable = points.some((p) => p.railId === railId && isUsableApprovalPoint(p, options));
     if (!hasUsable) missing.push(railId);
   }
   return missing.sort();
