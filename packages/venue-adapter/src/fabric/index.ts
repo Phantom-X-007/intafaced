@@ -15,6 +15,9 @@
  *     wired into routing through `VenueHealth` and nothing else.
  *   · `cross-check.ts` — a median across venues, so a venue that is fresh,
  *     sequenced and simply WRONG is caught by the only thing that can catch it.
+ *   · `payout-grade.ts` — absolute notional floor for a two-sided book. Dust
+ *     levels that would mint a mid are refused at the adapter (`no_depth`), not
+ *     only downstream in svc-trade's mark gate (D26-P1-T8).
  *   · `transport.ts` — the two-interface seam that lets the tests produce the
  *     failures a healthy venue never will.
  *   · `venues/binance-spot.ts` — the first venue, done properly. Public market
@@ -29,6 +32,7 @@ export * from './book-feed.js';
 export * from './rate-limit.js';
 export * from './latency.js';
 export * from './cross-check.js';
+export * from './payout-grade.js';
 export * from './transport.js';
 export * from './venues/binance-spot.js';
 export * from './venues/bybit-spot.js';
