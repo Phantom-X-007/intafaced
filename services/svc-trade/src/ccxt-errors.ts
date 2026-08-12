@@ -98,8 +98,9 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    */
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /**
-   * Production listing of forex/commodity without fiat settlement (D-S-05).
-   * Not a symbol to drop forever if the operator later enables rails — BadRequest.
+   * Production listing/place of forex/commodity refuse-closed at socket.forex-settlement
+   * (D26-P1-T7 — needs D26-P0-05 + fiat settle rails; never invent settlement).
+   * Not a symbol to drop forever if the owner later closes the socket — BadRequest.
    */
   'trade.unsettled_asset_class_listing': { ccxt: 'BadRequest', status: 400 },
   /**
