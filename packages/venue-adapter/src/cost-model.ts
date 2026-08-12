@@ -1,5 +1,5 @@
 import { type Amount, add, mulBps, sub } from '@intafaced/ledger-client';
-import { isGraded, type VenueLatencyGrade } from '@intafaced/venue-contracts';
+import { isGraded, type MarketDataAdapter, type VenueLatencyGrade } from '@intafaced/venue-contracts';
 import { routingWeightFromGrade } from './fabric/latency.js';
 
 /**
@@ -43,6 +43,23 @@ export interface SorCostTerms {
    * Connect latency grade. `null` or ungraded → routing weight 0 (D-S-18).
    */
   readonly latencyGrade: VenueLatencyGrade | null;
+}
+
+export type SorStaticCostTerms = Omit<SorCostTerms, 'latencyGrade'>;
+
+/**
+ * Bind §27's measured adapter grade to §28's routing input.
+ *
+ * Callers supply only costs they actually know; latency cannot be supplied or
+ * estimated through this door. It is read from the concrete adapter traffic.
+ * An adapter without the grading contract returns `null`, which
+ * `scoreSorCost` converts to routing weight zero.
+ */
+export function sorCostTermsFromAdapter(adapter: MarketDataAdapter, costs: SorStaticCostTerms, now: Date = new Date()): SorCostTerms {
+  return {
+    ...costs,
+    latencyGrade: adapter.latencyGrade?.(now) ?? null,
+  };
 }
 
 export type CostModelRefuseReason = 'missing_fee' | 'missing_impact' | 'missing_transfer' | 'unscored_latency' | 'negative_term';
