@@ -16,12 +16,7 @@ import type { CertXpEmitResult } from './xp-publish.js';
 export const CERT_PERK_REFUSE_CODE = 'academy.cert_perk_refuse_closed' as const;
 
 /** Invent / money-shaped intents that academy must never honour on the cert path. */
-export type CertPerkInventKind =
-  | 'cert_to_perk_map'
-  | 'invent_perk_money'
-  | 'invent_fee_discount'
-  | 'invent_ifc_grant'
-  | 'invent_balance';
+export type CertPerkInventKind = 'cert_to_perk_map' | 'invent_perk_money' | 'invent_fee_discount' | 'invent_ifc_grant' | 'invent_balance';
 
 export const CERT_PERK_RESIDUAL =
   'TRK-academy.certs D26-P1-C1 — perks via svc-identity rank only; cert→perk money refuse-closed (no invent)';
@@ -157,8 +152,7 @@ export async function resolveCertPerkOutcome(input: {
       status: 'refuse',
       code: CERT_PERK_REFUSE_CODE,
       reason: 'identity_unreadable',
-      message:
-        'Identity perk table unreadable — refusing to invent cert perks (fail closed; grant + XP still durable)',
+      message: 'Identity perk table unreadable — refusing to invent cert perks (fail closed; grant + XP still durable)',
       academyHoldsPerkMoney: false,
       academyMapsCertToPerk: false,
       residual: CERT_PERK_RESIDUAL,

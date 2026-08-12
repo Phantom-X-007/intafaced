@@ -772,8 +772,7 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
           message: 'Identity perk table unreadable',
           academyHoldsPerkMoney: false as const,
           academyMapsCertToPerk: false as const,
-          residual:
-            'TRK-academy.certs D26-P1-C1 — perks via svc-identity rank only; cert→perk money refuse-closed (no invent)' as const,
+          residual: 'TRK-academy.certs D26-P1-C1 — perks via svc-identity rank only; cert→perk money refuse-closed (no invent)' as const,
         },
       })),
     });

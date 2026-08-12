@@ -111,8 +111,6 @@ describe('academy.certs D26-P1-C1 perk plane — real or refuse; no fake perk mo
     expect(plane.statusLine).toBe(certPerkPlaneStatusLine());
     expect(plane.inventKindsRefuseClosed).toEqual([...listCertPerkInventKinds()]);
     expect(certPerkRefuseExportHeader()).toBe('kind,code');
-    expect(certPerkRefuseExportLine(refuseInventPerkMoney())).toBe(
-      `invent_perk_money,${CERT_PERK_REFUSE_CODE}`,
-    );
+    expect(certPerkRefuseExportLine(refuseInventPerkMoney())).toBe(`invent_perk_money,${CERT_PERK_REFUSE_CODE}`);
   });
 });
