@@ -1415,6 +1415,10 @@ export const FEATURES = [
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
     note:
+      '**D26-P1-O5 (2026-08-12):** fan-out mountain vs §13 channels made explicit in svc-notify — ' +
+      '`channels/mountain-vs-sockets.ts` + `notify.channels`/`/ready` carry `socket` (null for inapp; ' +
+      '`socket.notify-email|push|sms` for OOA). Mountain stays `ready` not `done` while OOA refuse; ' +
+      'no provider invent; Class X credentials remain owner. ' +
       'GHOST OWNER CLEARED 2026-08-09 wave 3: was `wip` @nitro-agent with no open PR when wave started; residual built and merged as #1187 (stuck-pending reap, ' +
       'register/verify rate limits, consent footer). Prior: liquidation fan-out #1116, multi-channel adapters, delivery honesty (accepted≠delivered). ' +
       '**Wave 4 #1504 (2026-08-09)**: closed a declared-but-unwired surface — AlertService.evaluateMarket was complete, tested and had NO CALLER while ' +

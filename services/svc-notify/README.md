@@ -56,6 +56,21 @@ Four channels, one interface (`NotificationChannel`, Doctrine §0.4).
 | `push`  | authenticated POST to a configured URL | `NOTIFY_PUSH_GATEWAY_URL` + `NOTIFY_PUSH_GATEWAY_TOKEN`   |
 | `sms`   | authenticated POST to a configured URL | `NOTIFY_SMS_GATEWAY_URL` + `NOTIFY_SMS_GATEWAY_TOKEN`     |
 
+### Mountain vs §13 sockets (D26-P1-O5)
+
+| Tracker id             | Plane                         | What it means                                                                 |
+| ---------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
+| `ops.notifications`    | **Fan-out mountain**          | Bus → inbox → delivery rows. In-app **delivers**. Status stays `ready`, not `done`, while every out-of-app channel refuses in real deploys. |
+| `socket.notify-email`  | §13 credential socket         | Adapter shipped; refuse `channel.not_configured` until Class X credentials.   |
+| `socket.notify-push`   | §13 credential socket         | Same.                                                                         |
+| `socket.notify-sms`    | §13 credential socket         | Same.                                                                         |
+
+`notify.channels` and `GET /ready` carry `socket` on each channel status: `null`
+for `inapp` (mountain surface), `socket.notify-*` for the three out-of-app
+channels. Machine matrix: `src/channels/mountain-vs-sockets.ts`. Closing a
+socket is owner work — [`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`](../../docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md)
+— never inventing a provider name in code (§0.7).
+
 **A channel with no credentials is registered, not omitted.** It refuses every
 message with `channel.not_configured`, the refusal lands on the delivery row, and
 `GET /ready` and `notify.channels` both name the environment variables that are
@@ -157,7 +172,7 @@ rather than a green tick over silence.
 | `notify.unreadCount`    | `notify:read`  | —                                      | `{ count }`                                                                             |
 | `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                      | `{ marked }`                                                                            |
 | `notify.markAllRead`    | `notify:write` | —                                      | `{ marked }`                                                                            |
-| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env                                                  |
+| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env + §13 `socket` id (null for in-app) |
 | `notify.targets`        | `notify:read`  | —                                      | the caller's registered addresses                                                       |
 | `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`        | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`) |
 | `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                    | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                     |
