@@ -1,8 +1,16 @@
 # Owner decision packet — everything waiting on you, in one sitting
 
-**Written by:** Denon, 2026-08-09. **Tip:** `2f9a7df0`.
-**Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-01 · P0-02 · P0-03**, plus every ruling I have accumulated separately.
-**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). Other items remain open unless noted.
+**Written by:** Denon, 2026-08-09. **Tip at last completeness pass:** `93f6c777` (2026-08-12).  
+**Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-01…18**.  
+**Tip packet family (D26-P0-18 sealed as tracker):**
+
+| Layer         | Path                                                                                           | Role                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| This file     | `docs/OWNER-DECISION-PACKET-2026-08-09.md`                                                     | Human sitting — P0-01…03 + money-path / dark-feed / F10    |
+| Part two      | [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) | Human sitting — P0-04…17 shapes                            |
+| Machine index | [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json)                                 | **SoT for open/sealed/class_x** — every owner decision row |
+
+**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (P0-18):** part two filled + JSON index so open rulings are no longer scattered across side checklists alone.
 
 **One rule I have applied throughout:** where a number is missing, the answer is **not** a placeholder. `services/svc-trade/src/copy/` already does this correctly — it is **refuse-closed** with `COPY_FEE_SHARE_RESIDUAL`, declining the surface and naming the residual rather than inventing a rate. That pattern is the model for item 3 below.
 
