@@ -660,7 +660,10 @@ capabilities:
     law: '25:630'
     plane: F
     phase: 2
-    tracker: [trade.forex]
+    tracker: [trade.forex, socket.forex-settlement]
+    note: >-
+      socket.forex-settlement is the §13 refuse-closed half (D26-P1-T7) until D26-P0-05 settlement asset
+      law + fiat settle rails; trade.forex stays the product row. Never invent settlement asset.
   - id: m.trade.matching
     capability: Matching engine, full depth
     law: '25:631'

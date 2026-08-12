@@ -4,6 +4,7 @@ import { AuthError } from '@intafaced/auth';
 import { formatAmount, parseAmount, InsufficientFundsError, LedgerError } from '@intafaced/ledger-client';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
+import { forexSettlementStatus } from './spot/forex-settlement.js';
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import type { OtcDeskService } from './otc/otc-service.js';
@@ -614,6 +615,15 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
       cancel: scopedProcedure('trade:write', { module: 'trade' })
         .input(z.object({ algoId: z.string().min(1) }))
         .mutation(({ ctx, input }) => guard(async () => presentAlgo(await trade.cancelAlgo(ctx.principal, input.algoId)))),
+    }),
+
+    /**
+     * Forex settlement posture (trade.forex / D26-P1-T7).
+     * Always refuse-closed until D26-P0-05 + fiat settle rails — never invents
+     * settlement asset. §13 socket.forex-settlement.
+     */
+    forex: router({
+      settlementStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => forexSettlementStatus()),
     }),
 
     /**

@@ -33,6 +33,7 @@ import {
 } from './risk.js';
 import { resolveOptionsListing } from './options-listing.js';
 import { checkInsuranceFundedForListing } from '../futures/insurance-listing-gate.js';
+import { assertProductionUnsettledAssetClassListing } from './forex-settlement.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
@@ -435,15 +436,10 @@ export class TradeService {
     const paper = input.paper === true;
     const status = input.status ?? 'active';
     const kind = input.kind ?? 'spot';
-    // D-S-05 / instrument-enum ADR: modelling forex/commodities is honest;
-    // listing them for production trading without fiat settlement is the lie.
-    // paper=true (drills) and non-active status remain allowed.
-    if ((assetClass === 'forex' || assetClass === 'commodity') && status === 'active' && !paper) {
-      throw new TradeError(
-        `${assetClass} cannot be listed for production trading until fiat settlement rails exist — list as paper=true or status pending/halted (model is fine)`,
-        'trade.unsettled_asset_class_listing',
-      );
-    }
+    // D26-P1-T7 / D-S-05: modelling forex/commodities is honest; production
+    // active listing without P0-05 + fiat settle rails is the lie (§13 socket.forex-settlement).
+    // paper=true (drills) and non-active status remain allowed. Never invent settlement.
+    assertProductionUnsettledAssetClassListing({ assetClass, status, paper });
     // DIRECTION:33 — empty insurance fund → no real-money futures list.
     // Target size/schedule stay owner-open; any positive balance passes.
     const insuranceGate = await checkInsuranceFundedForListing({
@@ -506,8 +502,8 @@ export class TradeService {
    * lets a user out of a market the operator has frozen.
    */
   async setMarketStatus(marketId: string, status: Market['status']): Promise<Market> {
-    // Load first: enable-to-active on an empty-fund futures row must refuse
-    // before the UPDATE, same DIRECTION:33 rule as listMarket.
+    // Load first: FX/commodity re-activate must not bypass socket.forex-settlement,
+    // and empty-fund futures enable-to-active must refuse (DIRECTION:33).
     const existing = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
@@ -517,6 +513,11 @@ export class TradeService {
     const current = existing[0];
     if (!current) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
     const currentMarket = toMarket(current);
+    assertProductionUnsettledAssetClassListing({
+      assetClass: current.asset_class,
+      status,
+      paper: currentMarket.paper,
+    });
     const insuranceGate = await checkInsuranceFundedForListing({
       kind: currentMarket.kind,
       status,

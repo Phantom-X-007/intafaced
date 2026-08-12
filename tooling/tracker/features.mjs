@@ -382,13 +382,14 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot', 'pay.rails'],
-    requires: ['services/svc-trade', 'packages/contracts/src/instruments.ts'],
+    requires: ['services/svc-trade/src/spot/forex-settlement.ts', 'packages/contracts/src/instruments.ts'],
     note:
+      'D26-P1-T7 2026-08-12: explicit §13 socket.forex-settlement refuse-closed until D26-P0-05 + fiat settle rails — ' +
+      'forex.settlementStatus + list/place/setMarketStatus(active) share trade.unsettled_asset_class_listing; never invent settlement asset. ' +
       'On OPEN_MONEY allowlist 2026-08-08. **Not "unlisted"** — migration `0001_multi_asset_instruments.sql` seeds six majors active ' +
       '(EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF, USD/CAD) and the public market list publishes them `active: true`. They are **unfundable** ' +
-      '(no live fiat rail settles; only crypto-native + card-sandbox inbound). #1169 refuses NEW production (non-paper) forex/commodity `listMarket` without ' +
-      'fiat settlement rails (`trade.unsettled_asset_class_listing`) — does not de-list the seed rows. What exists: asset_class + schedule; assertMarketOpen; ' +
-      'D-S-05 listing refuse. Full product blocked on owner forex settlement law (D8), not on "no markets listed." Tip re-verified a05eeb48.',
+      '(no live fiat rail settles; only crypto-native + card-sandbox inbound). #1169/#1220 + T7 socket refuse NEW production listing and place. ' +
+      'What exists: asset_class + schedule; assertMarketOpen; D-S-05/T7 listing+place refuse. Full product blocked on P0-05 ADR + rails, not on "no markets listed."',
   }),
   f('trade.algo', 'TWAP / VWAP / POV execution', {
     module: 'trade',
@@ -1865,6 +1866,18 @@ export const FEATURES = [
       '`sandbox` so a missing acquirer cannot read as a working one. card-sandbox is dev/test only: PAY_REGISTER_CARD_SANDBOX defaults off ' +
       'in staging/prod, PAY_CHECKOUT_RAILS is crypto-native alone, and PAY_ALLOW_SANDBOX_RAILS=false makes those environments refuse to ' +
       'boot with a sandbox rail registered. Pointing any rail at real money is Class X.',
+  }),
+  f('socket.forex-settlement', 'Forex/commodity settlement asset law + fiat settle rails', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['pay.rails'],
+    requires: ['services/svc-trade/src/spot/forex-settlement.ts'],
+    note:
+      '§13 — D26-P1-T7 explicit socket (2026-08-12). trade.forex product-complete only after D26-P0-05 (options/forex settlement asset ADR) ' +
+      'AND fiat settle rails posture. Until then: forex.settlementStatus published=false; production active listMarket / setMarketStatus(active) / ' +
+      'place refuse trade.unsettled_asset_class_listing naming this socket. Paper + non-active listing allowed (model). Do NOT invent settlement ' +
+      'asset (stablecoin-margined vs true fiat omnibus — D8; PAY_CRYPTO_ASSETS must not accidentally map EUR→euro stablecoin). No code closes this.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {
