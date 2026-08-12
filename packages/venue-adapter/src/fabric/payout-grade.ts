@@ -1,5 +1,11 @@
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
-import { VenueUnavailableError, type PriceLevel, type VenueBookSnapshot } from '@intafaced/venue-contracts';
+import type { OrderBook } from '@intafaced/exchange-contract';
+import {
+  VenueUnavailableError,
+  type MarketDataAdapter,
+  type PriceLevel,
+  type VenueBookSnapshot,
+} from '@intafaced/venue-contracts';
 
 /**
  * PAYOUT-GRADE BOOKS — the absolute floor the fabric refuses to serve below.
@@ -49,6 +55,34 @@ export interface PayoutGradePolicy {
    */
   readonly minBestLevelNotional?: string;
 }
+
+/** Explicit default for callers (e.g. consolidateBook) that prefer a named policy object. */
+export const DEFAULT_PAYOUT_GRADE_POLICY: PayoutGradePolicy = {
+  minBestLevelNotional: DEFAULT_MIN_BEST_LEVEL_NOTIONAL,
+};
+
+export type PayoutGradeRefuseReason =
+  | 'empty_book'
+  | 'one_sided'
+  | 'thin_bid'
+  | 'thin_ask'
+  | 'malformed_level';
+
+export interface PayoutGradeAccepted {
+  readonly ok: true;
+  readonly bestBidNotional: Amount;
+  readonly bestAskNotional: Amount;
+  readonly minNotional: Amount;
+}
+
+export interface PayoutGradeRefused {
+  readonly ok: false;
+  readonly reason: PayoutGradeRefuseReason;
+  readonly detail: string;
+  readonly minNotional: Amount;
+}
+
+export type PayoutGradeVerdict = PayoutGradeAccepted | PayoutGradeRefused;
 
 /**
  * Quote notional of one level (`price × quantity`), both operands 1e18-scaled.
@@ -117,4 +151,133 @@ export function assertPayoutGradeBook(snapshot: VenueBookSnapshot, policy: Payou
       `best ask notional ${askN}, floor ${formatAmount(floor)} quote. Refusing rather than serving a dust book ` +
       'that could mint a mid (D26-P1-T8 / DEFAULT_MIN_BEST_LEVEL_NOTIONAL).',
   );
+}
+
+/**
+ * Aggregation / LiquiditySource books use wire decimal strings. Empty and
+ * one-sided refuse here — consolidateBook must not merge half a mid.
+ * Adapter `assertPayoutGradeBook` stays looser (absence is a fact).
+ */
+function parseWireLevel(level: readonly [string, string] | undefined): readonly [Amount, Amount] | null {
+  if (!level) return null;
+  const [price, quantity] = level;
+  if (price == null || price.length === 0 || quantity == null || quantity.length === 0) return null;
+  try {
+    return [parseAmount(price), parseAmount(quantity)] as const;
+  } catch {
+    return null;
+  }
+}
+
+function parseScaledLevel(level: PriceLevel | undefined): readonly [Amount, Amount] | null {
+  if (!level) return null;
+  const [price, quantity] = level;
+  if (typeof price !== 'bigint' || typeof quantity !== 'bigint') return null;
+  if (price <= 0n || quantity <= 0n) return null;
+  return [price, quantity] as const;
+}
+
+function verdictFromSides(
+  bid: readonly [Amount, Amount] | null,
+  ask: readonly [Amount, Amount] | null,
+  minNotional: Amount,
+  malformed: boolean,
+): PayoutGradeVerdict {
+  if (malformed) {
+    return { ok: false, reason: 'malformed_level', detail: 'best level is not readable as money', minNotional };
+  }
+  if (bid == null && ask == null) {
+    return { ok: false, reason: 'empty_book', detail: 'no resting bids or asks', minNotional };
+  }
+  if (bid == null || ask == null) {
+    return {
+      ok: false,
+      reason: 'one_sided',
+      detail: bid == null ? 'no quotable best bid' : 'no quotable best ask',
+      minNotional,
+    };
+  }
+  const bidNotional = levelNotional(bid[0], bid[1]);
+  if (bidNotional < minNotional) {
+    return {
+      ok: false,
+      reason: 'thin_bid',
+      detail: `best bid notional below payout-grade floor ${DEFAULT_MIN_BEST_LEVEL_NOTIONAL}`,
+      minNotional,
+    };
+  }
+  const askNotional = levelNotional(ask[0], ask[1]);
+  if (askNotional < minNotional) {
+    return {
+      ok: false,
+      reason: 'thin_ask',
+      detail: `best ask notional below payout-grade floor ${DEFAULT_MIN_BEST_LEVEL_NOTIONAL}`,
+      minNotional,
+    };
+  }
+  return { ok: true, bestBidNotional: bidNotional, bestAskNotional: askNotional, minNotional };
+}
+
+/** Wire OrderBook (decimal strings) — used by consolidateBook. */
+export function assessOrderBookPayoutGrade(
+  book: Pick<OrderBook, 'bids' | 'asks'>,
+  policy: PayoutGradePolicy = DEFAULT_PAYOUT_GRADE_POLICY,
+): PayoutGradeVerdict {
+  const minNotional = minBestLevelNotional(policy);
+  let malformed = false;
+  const bidRaw = book.bids[0];
+  const askRaw = book.asks[0];
+  if (bidRaw !== undefined && parseWireLevel(bidRaw) == null) malformed = true;
+  if (askRaw !== undefined && parseWireLevel(askRaw) == null) malformed = true;
+  return verdictFromSides(parseWireLevel(bidRaw), parseWireLevel(askRaw), minNotional, malformed);
+}
+
+/** Fabric snapshot (scaled bigint levels) — verdict form for wrappers. */
+export function assessVenueBookPayoutGrade(
+  snapshot: Pick<VenueBookSnapshot, 'bids' | 'asks'>,
+  policy: PayoutGradePolicy = DEFAULT_PAYOUT_GRADE_POLICY,
+): PayoutGradeVerdict {
+  const minNotional = minBestLevelNotional(policy);
+  return verdictFromSides(parseScaledLevel(snapshot.bids[0]), parseScaledLevel(snapshot.asks[0]), minNotional, false);
+}
+
+export function isPayoutGradeOrderBook(
+  book: Pick<OrderBook, 'bids' | 'asks'>,
+  policy: PayoutGradePolicy = DEFAULT_PAYOUT_GRADE_POLICY,
+): boolean {
+  return assessOrderBookPayoutGrade(book, policy).ok;
+}
+
+/**
+ * Wrap a MarketDataAdapter so `snapshotBook` refuses non-payout-grade depth
+ * (including empty/one-sided). Prefer `assertPayoutGradeBook` at adapter
+ * boundaries when absence must remain a fact rather than an error.
+ */
+export function withPayoutGradeGate(
+  adapter: MarketDataAdapter,
+  policy: PayoutGradePolicy = DEFAULT_PAYOUT_GRADE_POLICY,
+): MarketDataAdapter {
+  return {
+    get venue() {
+      return adapter.venue;
+    },
+    markets: () => adapter.markets(),
+    snapshotBook: async (symbol, limit) => {
+      const snap = await adapter.snapshotBook(symbol, limit);
+      const verdict = assessVenueBookPayoutGrade(snap, policy);
+      if (!verdict.ok) {
+        throw new VenueUnavailableError(
+          adapter.venue.id,
+          'no_depth',
+          `${adapter.venue.id}:${symbol} book is not payout-grade (${verdict.reason}: ${verdict.detail})`,
+        );
+      }
+      return snap;
+    },
+    streamBook: (symbol) => adapter.streamBook(symbol),
+    streamTrades: adapter.streamTrades?.bind(adapter),
+    fundingRate: adapter.fundingRate?.bind(adapter),
+    borrowRate: adapter.borrowRate?.bind(adapter),
+    latencyGrade: adapter.latencyGrade?.bind(adapter),
+  };
 }

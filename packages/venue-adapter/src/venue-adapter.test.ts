@@ -366,12 +366,34 @@ describe('consolidated book', () => {
   });
 
   it('treats 100.50 and 100.5 as the same level', async () => {
-    const x = venue({ id: 'x', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [['100.50', '1']], asks: [] } });
-    const y = venue({ id: 'y', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [['100.5', '2']], asks: [] } });
+    // Both sides must clear the payout-grade floor (D26-P1-T8); the merge under
+    // test is still only on the bid side.
+    const x = venue({
+      id: 'x',
+      kind: 'external-cex',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: {
+        bids: [['100.50', '2']],
+        asks: [['101', '2']],
+      },
+    });
+    const y = venue({
+      id: 'y',
+      kind: 'external-cex',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: {
+        bids: [['100.5', '2']],
+        asks: [['101', '2']],
+      },
+    });
     const book = await consolidateBook('BTC/USDT', [x, y]);
 
     expect(book.bids).toHaveLength(1);
-    expect(formatAmount(book.bids[0]!.amount)).toBe('3');
+    expect(formatAmount(book.bids[0]!.amount)).toBe('4');
   });
 
   it('excludes venues that fail, and says which', async () => {
@@ -382,6 +404,41 @@ describe('consolidated book', () => {
     expect(book.excluded[0]?.venueId).toBe('broken');
   });
 
+  it('excludes a venue whose book is not payout-grade (D26-P1-T8)', async () => {
+    const dust = venue({
+      id: 'dust',
+      kind: 'external-cex',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: {
+        // 2000 * 1e-18 ≈ 0 notional — below the absolute floor of 100.
+        bids: [['2000', '0.000000000000000001']],
+        asks: [['2001', '0.000000000000000001']],
+      },
+    });
+    const book = await consolidateBook('BTC/USDT', [a, dust]);
+
+    expect(book.venues).toEqual(['venue-a']);
+    expect(book.excluded).toHaveLength(1);
+    expect(book.excluded[0]?.venueId).toBe('dust');
+    expect(book.excluded[0]?.reason).toMatch(/not_payout_grade:thin_/);
+  });
+
+  it('excludes a one-sided book rather than aggregating half a mid', async () => {
+    const oneSide = venue({
+      id: 'one-side',
+      kind: 'external-cex',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: { bids: [['99', '2']], asks: [] },
+    });
+    const book = await consolidateBook('BTC/USDT', [a, oneSide]);
+    expect(book.venues).toEqual(['venue-a']);
+    expect(book.excluded[0]?.reason).toMatch(/not_payout_grade:one_sided/);
+  });
+
   it('reports top of book and spread', async () => {
     const { bid, ask, spread } = topOfBook(await consolidateBook('BTC/USDT', [a, b]));
     expect(formatAmount(bid!.price)).toBe('99');
@@ -390,8 +447,30 @@ describe('consolidated book', () => {
   });
 
   it('detects a crossed book — a real arbitrage, not a bug', async () => {
-    const high = venue({ id: 'high', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [['105', '1']], asks: [] } });
-    const low = venue({ id: 'low', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [], asks: [['100', '1']] } });
+    // Each venue must itself be payout-grade (two-sided + thick). The cross
+    // appears only after consolidation merges their tops.
+    const high = venue({
+      id: 'high',
+      kind: 'external-cex',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: {
+        bids: [['105', '2']],
+        asks: [['106', '2']],
+      },
+    });
+    const low = venue({
+      id: 'low',
+      kind: 'external-cex',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: {
+        bids: [['99', '2']],
+        asks: [['100', '2']],
+      },
+    });
 
     expect(isCrossed(await consolidateBook('BTC/USDT', [high, low]))).toBe(true);
     expect(isCrossed(await consolidateBook('BTC/USDT', [a, b]))).toBe(false);
@@ -412,7 +491,12 @@ describe('sweepCost', () => {
     amount: '1',
     feeBps: 0,
     book: {
-      bids: [],
+      // Bid side present so the book clears the payout-grade gate; asks keep
+      // unit size so the walk/average assertions stay exact.
+      bids: [
+        ['99', '2'],
+        ['98', '2'],
+      ],
       asks: [
         ['100', '1'],
         ['101', '1'],
@@ -440,8 +524,23 @@ describe('sweepCost', () => {
   });
 
   it('handles an empty side', async () => {
-    const book = await consolidateBook('BTC/USDT', [deep]);
-    const result = sweepCost(book, 'sell', amt('1'));
+    // sweepCost itself must not invent depth when a side is empty. Build the
+    // consolidated shape directly — consolidateBook refuses one-sided books.
+    const emptySellSide = {
+      symbol: 'BTC/USDT',
+      bids: [] as const,
+      asks: [
+        {
+          price: amt('100'),
+          amount: amt('1'),
+          sources: [{ venueId: 'deep', amount: amt('1') }],
+        },
+      ],
+      timestamp: new Date(),
+      venues: ['deep'] as const,
+      excluded: [] as const,
+    };
+    const result = sweepCost(emptySellSide, 'sell', amt('1'));
     expect(formatAmount(result.filled)).toBe('0');
   });
 });

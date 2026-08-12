@@ -1,6 +1,11 @@
 import { type Amount, add, parseAmount, formatAmount, mul, ZERO } from '@intafaced/ledger-client';
 import type { OrderBook } from '@intafaced/exchange-contract';
 import { isRoutable, type LiquiditySource } from './source.js';
+import {
+  assessOrderBookPayoutGrade,
+  DEFAULT_PAYOUT_GRADE_POLICY,
+  type PayoutGradePolicy,
+} from './fabric/payout-grade.js';
 
 /**
  * CONSOLIDATED ORDER BOOK.
@@ -8,6 +13,9 @@ import { isRoutable, type LiquiditySource } from './source.js';
  * One depth view assembled from every routable venue, each level tagged with
  * where it actually lives. The user sees a single book; the router sees the
  * attribution. Both are true at once, which is the whole trick.
+ *
+ * D26-P1-T8: a venue whose book is not payout-grade is excluded and reported —
+ * thin depth must not enter the consolidated view that routers and marks read.
  */
 
 export interface ConsolidatedLevel {
@@ -65,10 +73,17 @@ function mergeSide(books: ReadonlyArray<{ venueId: string; book: OrderBook }>, s
 export async function consolidateBook(
   symbol: string,
   sources: readonly LiquiditySource[],
-  options: { depth?: number; now?: Date; maxStalenessMs?: number } = {},
+  options: {
+    depth?: number;
+    now?: Date;
+    maxStalenessMs?: number;
+    /** Absolute best-level floor. Omit → `DEFAULT_PAYOUT_GRADE_POLICY`. */
+    payoutGrade?: PayoutGradePolicy;
+  } = {},
 ): Promise<ConsolidatedBook> {
   const depth = options.depth ?? 50;
   const now = options.now ?? new Date();
+  const payoutGrade = options.payoutGrade ?? DEFAULT_PAYOUT_GRADE_POLICY;
   const excluded: Array<{ venueId: string; reason: string }> = [];
   const usable: Array<{ venueId: string; book: OrderBook }> = [];
 
@@ -77,7 +92,12 @@ export async function consolidateBook(
       if (!isRoutable(source, now, options.maxStalenessMs ?? 5_000)) {
         throw new Error(source.health().healthy ? 'stale' : (source.health().reason ?? 'unhealthy'));
       }
-      return { venueId: source.id, book: await source.orderBook(symbol, depth) };
+      const book = await source.orderBook(symbol, depth);
+      const grade = assessOrderBookPayoutGrade(book, payoutGrade);
+      if (!grade.ok) {
+        throw new Error(`not_payout_grade:${grade.reason}:${grade.detail}`);
+      }
+      return { venueId: source.id, book };
     }),
   );
 

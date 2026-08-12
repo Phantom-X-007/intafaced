@@ -4,11 +4,16 @@ import { VenueUnavailableError, type VenueBookSnapshot } from '@intafaced/venue-
 import {
   DEFAULT_MIN_BEST_LEVEL_NOTIONAL,
   assertPayoutGradeBook,
+  assessOrderBookPayoutGrade,
+  assessVenueBookPayoutGrade,
   bestLevelMeetsPayoutFloor,
   isPayoutGradeBook,
+  isPayoutGradeOrderBook,
   levelNotional,
   minBestLevelNotional,
+  withPayoutGradeGate,
 } from './payout-grade.js';
+import type { MarketDataAdapter, VenueDescriptor } from '@intafaced/venue-contracts';
 
 const SCALE = 10n ** 18n;
 
@@ -123,5 +128,86 @@ describe('assertPayoutGradeBook', () => {
     });
     expect(assertPayoutGradeBook(snap)).toBe(snap);
     expect(() => assertPayoutGradeBook(snap, { minBestLevelNotional: '101' })).toThrow(/not payout-grade/);
+  });
+});
+
+describe('assessOrderBookPayoutGrade — consolidateBook wire books', () => {
+  it('accepts a two-sided book whose best levels clear the floor', () => {
+    const verdict = assessOrderBookPayoutGrade({
+      bids: [['100', '2']],
+      asks: [['101', '2']],
+    });
+    expect(verdict.ok).toBe(true);
+    expect(isPayoutGradeOrderBook({ bids: [['100', '2']], asks: [['101', '2']] })).toBe(true);
+  });
+
+  it('refuses dust levels that would mint a mid', () => {
+    const verdict = assessOrderBookPayoutGrade({
+      bids: [['2000', '0.000000000000000001']],
+      asks: [['2001', '0.000000000000000001']],
+    });
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reason).toMatch(/^thin_/);
+  });
+
+  it('refuses one-sided and empty books (aggregation must not merge half a mid)', () => {
+    expect(assessOrderBookPayoutGrade({ bids: [['100', '2']], asks: [] }).ok).toBe(false);
+    const empty = assessOrderBookPayoutGrade({ bids: [], asks: [] });
+    expect(empty.ok).toBe(false);
+    if (!empty.ok) expect(empty.reason).toBe('empty_book');
+  });
+
+  it('assesses fabric snapshots on scaled bigint levels', () => {
+    const thick: Pick<VenueBookSnapshot, 'bids' | 'asks'> = {
+      bids: [level('100', '2')],
+      asks: [level('101', '2')],
+    };
+    const dust: Pick<VenueBookSnapshot, 'bids' | 'asks'> = {
+      bids: [[1n, 1n]],
+      asks: [[2n, 1n]],
+    };
+    expect(assessVenueBookPayoutGrade(thick).ok).toBe(true);
+    expect(assessVenueBookPayoutGrade(dust).ok).toBe(false);
+  });
+});
+
+describe('withPayoutGradeGate', () => {
+  const venue: VenueDescriptor = {
+    id: 'test-venue',
+    displayName: 'Test',
+    kind: 'external-cex',
+    sequencedDepth: true,
+  };
+
+  function stubAdapter(snap: VenueBookSnapshot): MarketDataAdapter {
+    return {
+      venue,
+      markets: async () => [],
+      snapshotBook: async () => snap,
+      streamBook: async () => ({
+        deltas: (async function* () {})(),
+        close: async () => undefined,
+      }),
+    };
+  }
+
+  it('passes a payout-grade snapshot through', async () => {
+    const snap = snapshot({
+      bids: [level('100', '2')],
+      asks: [level('101', '2')],
+    });
+    const gated = withPayoutGradeGate(stubAdapter({ ...snap, venueId: venue.id }));
+    await expect(gated.snapshotBook('BTC/USDT')).resolves.toMatchObject({ venueId: venue.id });
+  });
+
+  it('refuses a thin snapshot as no_depth — never invents a mid', async () => {
+    const snap = snapshot({
+      bids: [[1n, 1n]],
+      asks: [[2n, 1n]],
+    });
+    const gated = withPayoutGradeGate(stubAdapter({ ...snap, venueId: venue.id }));
+    await expect(gated.snapshotBook('BTC/USDT')).rejects.toSatisfy((err: unknown) => {
+      return err instanceof VenueUnavailableError && err.reason === 'no_depth' && /not payout-grade/.test(err.message);
+    });
   });
 });
