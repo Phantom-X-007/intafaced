@@ -1402,26 +1402,24 @@ export const FEATURES = [
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', {
     module: 'core-ops',
     phase: '5',
-    status: 'wip',
-    owner: 'denon-d26-p1-o1',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['identity.kyc'],
     note:
-      'D26-P1-O1 mechanism seal: packages/config checkAccess + INTAFACED_SCREENING_FAIL_CLOSED refuse when list unset ' +
-      '(denied.screening_unconfigured); honesty-only default OFF. Prior: Wave 10 edge door networkSignal/freeze/queue; #1551; #1184 regionResolved. ' +
-      'Still NOT done (Class X / residual): sanctions list *content* + VPN partner procurement; geo-IP (socket.geo-region-resolution); full case-management UI/DB. ' +
-      'Avoid dual-edit Nitro #1659 svc-edge control-plane.',
+      '**D26-P1-O1 Done-bar sealed 2026-08-12 (#1734):** screening *mechanism* — `INTAFACED_SCREENING_FAIL_CLOSED` → ' +
+      '`denied.screening_unconfigured` when list unset; honesty-only default OFF. List *content* remains Class X (Nitro/counsel). ' +
+      'VPN partner / geo-IP socket / case-management UI residual. Avoid dual-edit Nitro #1659 svc-edge control-plane.',
   }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', {
     module: 'core-ops',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
-      'Stage-1 contracts + ADR. Admin consumer #1032. Wave 3 #1185 lag honesty. **Wave 10 edge**: /admin/status.analytics surfaces dark/unavailable warehouse ' +
-      '(writer URLs refuse; no live cubes without lag probe). **D26-P1-O4 deepen (2026-08-12):** `ANALYTICS_ETL_WATERMARK_AT` + ' +
-      '`resolveEtlWatermark` — absent/present honesty on edge warehouse door; stamp never paints live cubes alone. ' +
-      'Still NOT done: real pg lag probe production pool, cube job callers. Never second balances. Ghost w10-l04-edge cleared.',
+      '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — `ANALYTICS_ETL_WATERMARK_AT` + ' +
+      '`resolveEtlWatermark` absent/present honesty; stamp never paints live cubes alone; writer URLs refuse. ' +
+      'Residual (not invent): production pg lag pool wiring + cube job callers. Never second balances.',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
