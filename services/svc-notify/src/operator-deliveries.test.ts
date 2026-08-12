@@ -47,10 +47,12 @@ describe('operator delivery outcomes (D26-P1-O5)', () => {
     const s = new MemoryDeliveryStore({ now: () => new Date(nowMs) });
     const c1 = await s.claim(n1, 'email', 3);
     expect(c1.claimed).toBe(true);
+    if (!c1.claimed) throw new Error('expected claim');
     await s.settle({ id: c1.id, attempt: 1, status: 'refused', refusalCode: 'channel.not_configured', attempted: false });
     nowMs = Date.parse('2026-08-12T13:00:00.000Z');
     const c2 = await s.claim(n2, 'inapp', 3);
     expect(c2.claimed).toBe(true);
+    if (!c2.claimed) throw new Error('expected claim');
     await s.settle({ id: c2.id, attempt: 1, status: 'accepted', attempted: true });
 
     const recent = await s.listRecent(10);
