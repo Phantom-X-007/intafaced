@@ -26,14 +26,7 @@ import type { EngineOrder, OrderSide, SubmitResult, TimeInForce } from './types.
 const HERE = dirname(fileURLToPath(import.meta.url));
 const A = parseAmount;
 
-function order(spec: {
-  id: string;
-  account: string;
-  side: OrderSide;
-  qty: string;
-  price: string;
-  tif?: TimeInForce;
-}): EngineOrder {
+function order(spec: { id: string; account: string; side: OrderSide; qty: string; price: string; tif?: TimeInForce }): EngineOrder {
   return {
     orderId: spec.id,
     accountId: spec.account,
@@ -67,9 +60,7 @@ function engineSources(): { readonly name: string; readonly text: string }[] {
 
 /** Fill sequence fingerprint independent of which account labels were used. */
 function fillFingerprint(result: SubmitResult): string[] {
-  return result.fills.map(
-    (f) => `${f.makerOrderId}>${f.takerOrderId}@${formatAmount(f.price)}x${formatAmount(f.qty)}`,
-  );
+  return result.fills.map((f) => `${f.makerOrderId}>${f.takerOrderId}@${formatAmount(f.price)}x${formatAmount(f.qty)}`);
 }
 
 describe('D26-P2-06 dual-target one-book · no structural house prefer', () => {
@@ -130,9 +121,7 @@ describe('D26-P2-06 dual-target one-book · no structural house prefer', () => {
     const book = new OrderBook('BTC/USDT');
     seed(book, { id: 'cust-maker', account: 'customer-a', side: 'sell', qty: '1', price: '100' });
 
-    const take = book.submit(
-      order({ id: 'house-taker', account: 'house-mm', side: 'buy', qty: '1', price: '105' }),
-    );
+    const take = book.submit(order({ id: 'house-taker', account: 'house-mm', side: 'buy', qty: '1', price: '105' }));
 
     expect(take.fills).toHaveLength(1);
     expect(take.fills[0]!.makerOrderId).toBe('cust-maker');
