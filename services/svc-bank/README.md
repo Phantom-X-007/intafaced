@@ -447,6 +447,7 @@ pnpm --filter @intafaced/svc-bank test
 | `loans/margin-call-publisher.test.ts` | `intafaced.bank.margin_call.created` publish      |
 | `cards/cards.test.ts`                 | issue / auth / capture / reverse / cashback / JIT |
 | `cards/cards.reachable.test.ts`       | composition-root reachability + scopes            |
+| `cards/cards-auth-product.test.ts`    | D26-P1-B2 auth path / ledger-half public doors    |
 | `ramps/ramps.test.ts`                 | crypto ledger half + fiat refuse                  |
 | `ramps/ramps.reachable.test.ts`       | composition-root reachability                     |
 | `router.mount.test.ts`                | mount boundary / unsigned principal               |
@@ -509,7 +510,7 @@ BANK_CARD_ISSUER=card-sim  # the SIMULATOR — see immediately above
 
 What `card-sim` **does** get you is the ledger half, end to end, over real postings: issue a card, authorise against a real balance, be declined by name when the money is not there, capture, get the remainder back, and be paid cashback out of a pot that was really funded. What it does not get you is a card.
 
-`cards.reachable.test.ts` is the suite that holds this: it enters through `createBankRouter(...).createCaller` over a context built by the real `createEdgeContext` from a **signed** principal — the composition root and the router, never a `CardService` — so if the wiring, the mounting or the scopes regress, it fails rather than the module quietly going unreachable again.
+`cards.reachable.test.ts` and `cards-auth-product.test.ts` (D26-P1-B2) hold this: they enter through `createBankRouter(...).createCaller` over a context built by the real `createEdgeContext` from a **signed** principal — the composition root and the router, never a `CardService` — so if the wiring, the mounting or the scopes regress, they fail rather than the module quietly going unreachable again. The tracker title's "<2s auth decision" is exported as `LIVE_ISSUER_AUTH_DECISION_BUDGET_MS` for the live rail (`socket.live-issuer`); the product suite proves the ledger-half path finishes inside that window while remaining `simulated: true`, and never invents a BIN or a third issuer setting.
 
 **Cashback has a named source.** It is paid from `rewardsEngine(asset)`, funded by `ops.fundCashbackPot` sweeping `houseFees('bank', asset)` — fees the platform really charged. An empty pot refuses by name (`bank.cashback_pot_unfunded`) on a row, and the capture still stands: undoing a purchase the merchant already has, because a marketing promise could not be kept, would be the worse failure.
 
