@@ -1044,8 +1044,13 @@ export const FEATURES = [
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.copy'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered copyIntel.runSession (#1285), dark copy refuse, boot-register. STILL NOT done: live trade.copy leader plane (Class X). Not tracker done until live leaders allowlist.',
+    requires: ['services/svc-agents/src/copy-intel'],
+    note:
+      '**D26-P1-A5 2026-08-12:** tip #1708 audited refuse + residual directory presentation (presentDirectory / leaderId order). ' +
+      'STILL NOT done: live trade.copy leader plane (Class X / Shehzad M4). Not tracker done until live leaders allowlist.',
   }),
   f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
     module: 'academy',
