@@ -93,7 +93,7 @@ const MUTANTS = [
   },
   {
     id: 'perimeter-claim-mint-removed',
-    from: "  establish(\n    'perimeter',",
+    from: "  establish('perimeter',",
     to: '  return (',
     detected: true,
     why: 'summary still consumes claim("perimeter"); removing the mint must go red',
