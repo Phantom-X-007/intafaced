@@ -1043,11 +1043,13 @@ export const FEATURES = [
     requires: [
       'services/svc-bank/src/cards/conversion.ts',
       'services/svc-bank/src/cards/card-service.ts',
+      'services/svc-bank/src/cards/sovereign-card-product.test.ts',
       'services/svc-bank/drizzle/0007_card_jit_conversion.sql',
     ],
     note:
-      '**Custodial half DONE #1174** (2026-08-09): settlement asset ≠ funding asset; rate frozen at auth; refuses invented marks ' +
-      '(bank.mark_*); no second book. On-chain JIT / smart-account funding half remains Shehzad protocol board.',
+      '**Custodial half DONE #1174** (2026-08-09) · **D26-P1-B3 refuse-invent seal** (mounted-router product suite): ' +
+      'settlement asset ≠ funding asset; rate frozen at auth; refuses invented marks (bank.mark_*); no second book; ' +
+      'no invent FX. On-chain JIT / smart-account funding half remains Shehzad protocol board.',
   }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',
