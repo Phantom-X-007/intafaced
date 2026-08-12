@@ -50,4 +50,16 @@ export {
   type SubscriptionServiceOptions,
   type RunReport,
 } from './subscription-service.js';
+export {
+  CARD_MANDATE_CHARGE_SOCKET,
+  MANDATE_PATH_MATRIX,
+  PRECHARGE_NOTIFY_SOCKET,
+  assertChargeTracesToMandate,
+  mandateChargeDisposition,
+  mandateDunningBound,
+  pathOpensMoney,
+  preChargeNotifyGap,
+  type MandateChargeDisposition,
+  type MandatePathRow,
+} from './mandate-product.js';
 export { registerSubscriptionCycleRoutes } from './internal-cycle-routes.js';

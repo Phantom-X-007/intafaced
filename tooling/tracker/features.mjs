@@ -630,13 +630,17 @@ export const FEATURES = [
     // Ghost clear 2026-08-09 W4: schema/schedule/lifecycle/invoice-runner on tip (#1214).
     // W10 L01: mandate.cancel + listExecutions + path allowlist.
     // W11 L02: merchant fleet list (mandate.list / subscription.list); claim released.
-    status: 'ready',
+    // D26-P1-P6 2026-08-12: mandate path law + §13 pre-charge notify socket (not done — card rail + real notify remain).
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
+    requires: ['services/svc-pay/src/subscriptions/mandate-product.ts', 'services/svc-pay/src/subscriptions/mandate-product.test.ts'],
     note:
-      '**W11 L02 2026-08-09:** merchant surface on tip — mandate create/get/list/cancel, subscription create/get/list/listExecutions/cancel, ' +
-      'due runner + capture→execution settled, path allowlist (card_mandate→card refuse; only crypto_invoice opens money). ' +
-      'Crypto = invoice-and-watch only (never invent pull). Claim released (was nitro-agents wip after W10 residual-empty stop). ' +
-      'Residual park (not agent invent): bounded dunning, real pre-charge notify, card mandate rail (pay.mandate_rail_absent). ready not done.',
+      '**D26-P1-P6 WIP 2026-08-12 Denon:** mandate product path law in `subscriptions/mandate-product.ts` — crypto_invoice opens invoice; ' +
+      'card refuses `pay.mandate_rail_absent` → `socket.psp-partners`; charge must trace to active mandate; re-consent refuse in code; ' +
+      'pre-charge notify named §13 `socket.pay-precharge-notify` (invent forbidden; post-payment webhooks only). ' +
+      'Merchant surface already on tip (create/get/list/cancel + listExecutions + due runner). ' +
+      'NOT done: live card charge-against-mandate (acquirer), real pre-charge notify delivery, owner-bounded dunning product beyond MAX_ATTEMPTS_PER_CYCLE stall.',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
@@ -1837,7 +1841,21 @@ export const FEATURES = [
       'capture, void, 3DS/SCA, disputes) at this socket instead of answering plausibly, and `RailMode` carries `absent` distinctly from ' +
       '`sandbox` so a missing acquirer cannot read as a working one. card-sandbox is dev/test only: PAY_REGISTER_CARD_SANDBOX defaults off ' +
       'in staging/prod, PAY_CHECKOUT_RAILS is crypto-native alone, and PAY_ALLOW_SANDBOX_RAILS=false makes those environments refuse to ' +
-      'boot with a sandbox rail registered. Pointing any rail at real money is Class X.',
+      'boot with a sandbox rail registered. Pointing any rail at real money is Class X. ' +
+      'D26-P1-P6: subscription card path refuses `pay.mandate_rail_absent` into this socket — rail port has createMandate/revokeMandate and ' +
+      'no charge-against-mandate operation; do not invent pull in svc-pay subscriptions.',
+  }),
+  f('socket.pay-precharge-notify', 'Pre-charge subscription notify (SPEC §4 before money lands)', {
+    module: 'pay',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['pay.subscriptions', 'ops.notifications'],
+    note:
+      '§13 — SPEC §4 requires every recurring charge notified BEFORE it lands. Today the due runner opens crypto invoices with no ' +
+      'pre-charge hook; merchant webhooks fire on payment events after money-path work. Named in `services/svc-pay/src/subscriptions/mandate-product.ts` ' +
+      '(`PRECHARGE_NOTIFY_SOCKET`) + honest-absent pin `precharge-notify-absent.test.ts`. Closing this needs a real notify/journal delivery path ' +
+      '(svc-notify or merchant webhook upcoming event) that runs before openInvoice — inventing a silent success event is forbidden. ' +
+      'Channel credentials remain `socket.notify-*`.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {
