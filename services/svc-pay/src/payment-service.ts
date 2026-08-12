@@ -15,6 +15,7 @@ import {
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
 import { assertRailMayMoveValue, selectPublicCheckoutRailDetailed, type ValueMovementPolicy } from './rails/posture.js';
+import { merchantKybMoneyGateRefusal } from './merchant-kyb-money-gate.js';
 import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import { settlementLedgerPlan } from './settlement-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
@@ -82,6 +83,11 @@ export type PayErrorCode =
   /** KYB transition refused (wrong status, or stub decide blocked under live-only). */
   | 'pay.kyb_invalid'
   | 'pay.kyb_operator_required'
+  /**
+   * Live acquiring money door — merchant lacks approved KYB (D26-P1-P10 Layer B).
+   * Distinct from scope issuance (Layer A); never invents `pay:*`.
+   */
+  | 'pay.kyb_required'
   | 'pay.payment_not_found'
   | 'pay.profile_not_found'
   | 'pay.link_not_found'
@@ -2510,18 +2516,27 @@ export class PayService {
   }
 
   /**
-   * One gate, one code, every money-moving surface that should refuse a
-   * non-active merchant: createPayment, openCheckout, createPaymentLink,
-   * authorize, capture, settleWindow (post), prepareSettlement (new freeze),
+   * One gate, every money-moving surface that should refuse a non-active
+   * merchant: createPayment, openCheckout, createPaymentLink, authorize,
+   * capture, settleWindow (post), prepareSettlement (new freeze),
    * payoutSettlement. Refund is intentionally not on this list (payer return).
    *
-   * `status` is the operational cut-off (`suspended` / `closed` / `pending`);
-   * `kybStatus` is a separate flag and is deliberately not read here — wiring
-   * KYB into the money gates is its own residual once a real approver exists.
+   * `status` is the operational cut-off (`suspended` / `closed` / `pending`).
+   * Under `live-only`, Layer B also requires approved KYB (`pay.kyb_required`)
+   * — D26-P1-P10. Does not invent `pay:*` scopes (Layer A stays refuse-closed).
    */
   private assertMerchantActive(merchant: MerchantRecord): void {
     if (merchant.status !== 'active') {
       throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
+    }
+    const kybRefuse = merchantKybMoneyGateRefusal({
+      merchantId: merchant.id,
+      status: merchant.status,
+      kybStatus: merchant.kybStatus,
+      valueMovement: this.valueMovement,
+    });
+    if (kybRefuse) {
+      throw new PayError(kybRefuse.message, kybRefuse.code, kybRefuse.detail);
     }
   }
 }

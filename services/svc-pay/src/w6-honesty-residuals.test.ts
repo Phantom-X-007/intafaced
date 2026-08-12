@@ -17,17 +17,19 @@ function stripComments(src: string): string {
 }
 
 describe('W6 honesty residuals', () => {
-  it('assertMerchantActive does not gate on kybStatus (KYB money gate still residual)', () => {
-    // SPEC/harvest: live money must eventually require approved KYB — tip still
-    // refuses only merchant.status. Pin the gate body so a silent kyb read is
-    // deliberate, not accidental.
+  it('assertMerchantActive wires Layer B KYB money gate (D26-P1-P10) without inventing grants', () => {
+    // Live acquiring must require approved KYB via merchantKybMoneyGateRefusal.
+    // Pin the call so a silent remove is deliberate — Layer A grant issuance
+    // stays refuse-closed in @intafaced/auth (never auto-grant here).
     const m = paymentService.match(/private assertMerchantActive\([^)]*\)[^{]*\{([\s\S]*?)\n  \}/);
     expect(m, 'assertMerchantActive missing').toBeTruthy();
     const captured = m?.[1];
     expect(captured, 'assertMerchantActive body missing').toEqual(expect.any(String));
     const body = stripComments(captured as string);
     expect(body).toMatch(/merchant\.status/);
-    expect(body).not.toMatch(/kybStatus|kyb_status|pay\.kyb_required/);
+    expect(body).toMatch(/merchantKybMoneyGateRefusal/);
+    expect(body).toMatch(/kybStatus/);
+    expect(paymentService).not.toMatch(/issueMerchantPayScopes|assertMerchantPayScopeGrantAllowed/);
   });
 
   it('applyWebhook has no dispute.* or voided cases — rail types exist, status never moves', () => {

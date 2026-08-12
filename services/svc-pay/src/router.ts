@@ -1246,6 +1246,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.submerchant_permission_denied':
       case 'pay.rail_not_creditable':
       case 'pay.kyb_operator_required':
+      case 'pay.kyb_required':
         return 'FORBIDDEN' as const;
       case 'pay.kyb_invalid':
         return 'CONFLICT' as const;
