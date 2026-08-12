@@ -8,6 +8,7 @@ import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } fro
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
+import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
 import type { OtcDeskService } from './otc/otc-service.js';
 import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
@@ -473,7 +474,12 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
             statusLine: 'published=0 residual=DIRECTION_§8_refuse_closed',
             residual: deskLaw,
             makerRouting: otcMakerRoutingStatus(),
-            residuals: { deskLaw, makerRouting: OTC_MAKER_ROUTING_RESIDUAL },
+            midFeed: otcMidFeedStatus(),
+            residuals: {
+              deskLaw,
+              makerRouting: OTC_MAKER_ROUTING_RESIDUAL,
+              midFeed: OTC_MID_FEED_RESIDUAL,
+            },
           };
         }
         return otc.deskStatus();

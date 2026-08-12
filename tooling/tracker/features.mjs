@@ -363,7 +363,8 @@ export const FEATURES = [
       'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
       'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
       '2026-08-12 maker-routing seal: deskStatus.makerRouting + planOtcSettle refuse name socket.otc-maker-routing (platform principal settle remains real). ' +
-      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, live socket.otc-mid-feed (boot map goes dark after age), maker-routing recipe close, durable quotes table. ' +
+      '2026-08-12 mid-feed seal: deskStatus.midFeed names socket.otc-mid-feed refuse-closed (boot TRADE_OTC_MIDS map ≠ live observation feed). ' +
+      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, live observation feed close for socket.otc-mid-feed, maker-routing recipe close, durable quotes table. ' +
       'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
@@ -1989,6 +1990,17 @@ export const FEATURES = [
       '§13 — named 2026-08-12 under trade.otc residual. Platform-principal settle is real (marketMakerMakerFill). ' +
       'Maker counterparty settle refuses via planOtcSettle + otc.deskStatus.makerRouting until owner publishes routing recipe + ledger path. ' +
       'Do NOT invent maker book / silent second counterparty. Pins: maker-routing.ts · settle.ts · otc-maker-routing-donebar.test.ts.',
+  }),
+  f('socket.otc-mid-feed', 'Live OTC mid observation feed (refreshes asOf)', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.otc'],
+    requires: ['services/svc-trade/src/otc/mid-feed.ts'],
+    note:
+      '§13 — named under trade.otc residual. createConfigOtcMidSource boot map stamps asOf at process start and age-gates dark — ' +
+      'that is not a live feed. otc.deskStatus.midFeed published=false until an observation source refreshes asOf. ' +
+      'Do NOT invent mids or keep boot memory past maxMidAgeSeconds. Pins: mid-feed.ts · mid-source.ts · otc-mid-feed-donebar.test.ts.',
   }),
   // D26-P1-P5: pay.fraud Done bar ships dispute cases; ledger chargeback posts stay refuse-closed here.
   f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {
