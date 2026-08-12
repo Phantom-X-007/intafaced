@@ -151,9 +151,7 @@ if (!available) {
       expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(0n);
 
       const ops = caller(bank, principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] }));
-      await expect(
-        ops.ops.accrueInterest({ poolId: pool.id, at: '2026-03-02T00:00:00.000Z' }),
-      ).rejects.toMatchObject({
+      await expect(ops.ops.accrueInterest({ poolId: pool.id, at: '2026-03-02T00:00:00.000Z' })).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
         cause: { code: 'bank.pool_underfunded' },
       });
