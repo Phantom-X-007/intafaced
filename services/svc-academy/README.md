@@ -222,7 +222,9 @@ Workbook paper drills consume trade's `paper` market flag. **No prices invented 
 
 ### Two rules that are enforced, not documented
 
-**Everything a drill produces is sealed.** `sealSimulated` is the only constructor for a paper payload, and every wire schema requires the seal as literals — `simulated: true`, `venue: 'paper'`, `realLedger: false`, `withdrawable: false`, plus the disclaimer in full. The run itself carries `simulated: true`, so every projection (board card, both status lines, the CSV export) reads the label from one place rather than remembering to add it. A status line with the label stripped no longer parses; it does not degrade into something readable as live.
+**Everything a drill produces is sealed.** `sealSimulated` is the only constructor for a paper payload, and every wire schema requires the seal as literals — `simulated: true`, `venue: 'paper'`, `realLedger: false`, `withdrawable: false`, `realMoney: false`, plus the disclaimer in full. The run itself carries `simulated: true`, so every projection (board card, both status lines, the CSV export) reads the label from one place rather than remembering to add it. A status line with the label stripped no longer parses; it does not degrade into something readable as live.
+
+**D26-P1-C4 harden — paper never readable as real money.** After the seal, `assertPaperNeverReadableAsRealMoney` deep-scans the outbound payload and refuses (`academy.paper_looks_like_real_money`) any custody-looking key (`availableBalance`, `ledgerTxId`, `holdAmount`, …) or any seal bit flipped to true. Progress / identity / step-bar projections also carry `realMoney: false`; status and export lines require `realMoney=0` to parse.
 
 **Nothing is priced here.** Prices, sizes and the mark are the ones **trade published**, handed in as decimal strings — a JSON number is a 400, not a coercion. A fill with no published price is `academy.paper_price_unavailable`; an open position with no published mark comes back `unrealisedPnl: null, markUnavailable: true`. Neither is filled in with a plausible number.
 

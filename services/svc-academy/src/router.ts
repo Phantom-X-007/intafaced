@@ -35,6 +35,7 @@ import {
   valueSimulatedDrill,
   type PublishedFill,
 } from './paper/simulated-result.js';
+import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
 import { decidePrizeIntent, isPrizeRefuseClosed, prizeRefuseStatusLine, type PrizeIntentKind } from './tournaments/prize-refuse.js';
 import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
@@ -205,12 +206,16 @@ const curriculumItemLocalizedOut = curriculumItemOut.extend({
  * output parser at runtime. The alternative — a `simulated?: boolean` a caller
  * is trusted to set — is the version that ships unlabelled on the day someone
  * adds a field in a hurry.
+ *
+ * `realMoney: false` is the D26-P1-C4 harden — paper flag never readable as
+ * real money even if a client only checks one bit.
  */
 const simulatedSealOut = {
   simulated: z.literal(true),
   venue: z.literal(SIMULATED_VENUE),
   realLedger: z.literal(false),
   withdrawable: z.literal(false),
+  realMoney: z.literal(false),
   disclaimer: z.string().min(1),
 };
 
@@ -252,6 +257,7 @@ const simulatedValuationOut = z.object({
   venue: z.literal(SIMULATED_VENUE),
   realLedger: z.literal(false),
   withdrawable: z.literal(false),
+  realMoney: z.literal(false),
   disclaimer: z.string().min(1),
   fillCount: z.number().int(),
   boughtSize: z.string(),
@@ -477,11 +483,12 @@ function toTrpcError(err: unknown): TRPCError {
 
     case 'academy.paper_price_unavailable':
     case 'academy.paper_result_unlabelled':
+    case 'academy.paper_looks_like_real_money':
       // Neither is the caller's fault and neither may be softened into a
-      // partial answer. "No price was published" and "this figure lost its
-      // simulated label" are both states where the only safe payload is no
-      // payload — a 200 carrying a best guess is the incident this row exists
-      // to prevent.
+      // partial answer. "No price was published", "this figure lost its
+      // simulated label", and "this payload claimed real custody" are all
+      // states where the only safe payload is no payload — a 200 carrying a
+      // best guess is the incident this row exists to prevent.
       return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
 
     case 'academy.stake_unavailable':
@@ -701,15 +708,19 @@ export function createAcademyRouter(academy: AcademyService) {
               steps: result.run.steps.map((step) => ({ id: step.id, instruction: step.instruction })),
             }),
           );
-          return {
+          const wire = {
             ok: true as const,
             simulated: sealed.simulated,
             venue: sealed.venue,
             realLedger: sealed.realLedger,
             withdrawable: sealed.withdrawable,
+            realMoney: sealed.realMoney,
             disclaimer: sealed.disclaimer,
             ...sealed.result,
           };
+          // D26-P1-C4 — second door: no custody-looking key may ride along.
+          assertPaperNeverReadableAsRealMoney(wire);
+          return wire;
         }),
       ),
 
@@ -813,15 +824,19 @@ export function createAcademyRouter(academy: AcademyService) {
               valuation,
             }),
           );
-          return {
+          const wire = {
             ok: true as const,
             simulated: sealed.simulated,
             venue: sealed.venue,
             realLedger: sealed.realLedger,
             withdrawable: sealed.withdrawable,
+            realMoney: sealed.realMoney,
             disclaimer: sealed.disclaimer,
             result: sealed.result,
           };
+          // D26-P1-C4 — second door: valuation may not smuggle custody keys.
+          assertPaperNeverReadableAsRealMoney(wire);
+          return wire;
         }),
       ),
 

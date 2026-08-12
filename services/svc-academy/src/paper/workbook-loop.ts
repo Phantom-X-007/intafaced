@@ -296,6 +296,8 @@ export function listPaperFillRefs(run: DrillRun): readonly PaperFillRef[] {
  * ratio is fixed 4dp decimal string; refused runs report ratio "0.0000".
  */
 export type DrillProgress = {
+  readonly simulated: true;
+  readonly realMoney: false;
   readonly workbookSlug: string;
   readonly status: DrillRun['status'];
   readonly stepCount: number;
@@ -309,6 +311,8 @@ export function drillProgress(run: DrillRun): DrillProgress {
   const completedCount = run.status === 'refused' ? 0 : run.completedStepIds.length;
   const ratio = stepCount === 0 ? '0.0000' : (completedCount / stepCount).toFixed(4);
   return {
+    simulated: true,
+    realMoney: false,
     workbookSlug: run.workbookSlug,
     status: run.status,
     stepCount,
@@ -567,6 +571,8 @@ export function drillCompletionPercentLabel(run: DrillRun): string {
 
 /** L3 — progress snapshot for operator UI. */
 export function drillProgressSnapshot(run: DrillRun): {
+  readonly simulated: true;
+  readonly realMoney: false;
   readonly status: DrillRun['status'];
   readonly total: number;
   readonly completed: number;
@@ -576,6 +582,8 @@ export function drillProgressSnapshot(run: DrillRun): {
   readonly fills: number;
 } {
   return {
+    simulated: true,
+    realMoney: false,
     status: run.status,
     total: totalStepCount(run),
     completed: completedStepCount(run),
@@ -594,11 +602,15 @@ export function drillStepCountsConsistent(run: DrillRun): boolean {
 
 /** L3 — identity snapshot. */
 export function drillIdentitySnapshot(run: DrillRun): {
+  readonly simulated: true;
+  readonly realMoney: false;
   readonly marketId: string;
   readonly symbol: string;
   readonly workbookSlug: string;
 } {
   return {
+    simulated: true,
+    realMoney: false,
     marketId: run.marketId,
     symbol: run.symbol,
     workbookSlug: run.workbookSlug,
@@ -613,12 +625,14 @@ export function isFreshActiveDrill(run: DrillRun): boolean {
 /**
  * L3 — drill board card.
  *
- * `simulated` is first and is a literal `true`. Every other projection in this
- * file is built from this card, so there is no card, bar, status line or export
- * that can be rendered without it.
+ * `simulated` is first and is a literal `true`. `realMoney` is literal `false`
+ * (D26-P1-C4). Every other projection in this file is built from this card, so
+ * there is no card, bar, status line or export that can be rendered without
+ * both bits.
  */
 export function drillBoardCard(run: DrillRun): {
   readonly simulated: true;
+  readonly realMoney: false;
   readonly status: DrillRun['status'];
   readonly workbookSlug: string;
   readonly marketId: string;
@@ -636,6 +650,7 @@ export function drillBoardCard(run: DrillRun): {
   const snap = drillProgressSnapshot(run);
   return {
     simulated: run.simulated,
+    realMoney: false,
     status: snap.status,
     workbookSlug: run.workbookSlug,
     marketId: run.marketId,
@@ -652,15 +667,24 @@ export function drillBoardCard(run: DrillRun): {
   };
 }
 
-/** L3 — step progress bar fields only. */
+/** L3 — step progress bar fields only — still carries the money ban bits. */
 export function drillStepBar(run: DrillRun): {
+  readonly simulated: true;
+  readonly realMoney: false;
   readonly completed: number;
   readonly remaining: number;
   readonly total: number;
   readonly percent: number;
 } {
   const c = drillBoardCard(run);
-  return { completed: c.completed, remaining: c.remaining, total: c.total, percent: c.percent };
+  return {
+    simulated: true,
+    realMoney: false,
+    completed: c.completed,
+    remaining: c.remaining,
+    total: c.total,
+    percent: c.percent,
+  };
 }
 
 /** L3 — true when drill card is refused. */
@@ -805,7 +829,7 @@ export function drillStepsExportHeader(): string {
  * was downloaded from; the label has to outlive it too.
  */
 export function drillStepsExportLabelLine(): string {
-  return '# simulated=1 venue=paper — paper trading drill, no value moved';
+  return '# simulated=1 venue=paper realMoney=0 — paper trading drill, no value moved';
 }
 
 /** L3 — full drill steps export (label, header, completed then remaining). */
@@ -862,13 +886,13 @@ export function drillStepsExportRoundTripOk(run: DrillRun): boolean {
 /**
  * L3 — one-line drill status.
  *
- * Leads with `simulated=1`. A status line is the thing that gets pasted into a
- * ticket, and a pasted line arrives with no surrounding screen to explain it —
- * so the label has to survive the copy, or it was never a label.
+ * Leads with `simulated=1 realMoney=0`. A status line is the thing that gets
+ * pasted into a ticket, and a pasted line arrives with no surrounding screen
+ * to explain it — so the label has to survive the copy, or it was never a label.
  */
 export function drillStatusLine(run: DrillRun): string {
   const c = drillBoardCard(run);
-  return `simulated=1 status=${c.status} done=${c.completed}/${c.total} percent=${c.percent}`;
+  return `simulated=1 realMoney=0 status=${c.status} done=${c.completed}/${c.total} percent=${c.percent}`;
 }
 
 /** L3 — true when drill is fresh (0%). */
@@ -879,7 +903,7 @@ export function drillStatusLineIsFresh(run: DrillRun): boolean {
 /** L3 — detailed drill status. */
 export function drillStatusLineDetailed(run: DrillRun): string {
   const c = drillBoardCard(run);
-  return `simulated=1 status=${c.status} workbook=${c.workbookSlug} market=${c.marketId} done=${c.completed}/${c.total} fills=${c.fills} refused=${c.refused ? '1' : '0'}`;
+  return `simulated=1 realMoney=0 status=${c.status} workbook=${c.workbookSlug} market=${c.marketId} done=${c.completed}/${c.total} fills=${c.fills} refused=${c.refused ? '1' : '0'}`;
 }
 
 /** L3 — token count on detailed drill status. */
@@ -888,22 +912,30 @@ export function drillStatusLineTokenCount(run: DrillRun): number {
 }
 
 /**
- * L3 — parse "simulated=1 status=S done=C/T percent=P". Invalid → null.
+ * L3 — parse "simulated=1 realMoney=0 status=S done=C/T percent=P". Invalid → null.
  *
- * `simulated=1` is REQUIRED by the pattern, not optional. A line without it is
+ * Both `simulated=1` and `realMoney=0` are REQUIRED. A line missing either is
  * not a drill status line this parser will accept — which means a stripped
  * label fails to round-trip rather than being read as a live figure.
  */
 export function parseDrillStatusLine(line: string): {
   readonly simulated: true;
+  readonly realMoney: false;
   readonly status: string;
   readonly completed: number;
   readonly total: number;
   readonly percent: number;
 } | null {
-  const m = line.trim().match(/^simulated=1 status=(\S+) done=(\d+)\/(\d+) percent=(\d+)$/);
+  const m = line.trim().match(/^simulated=1 realMoney=0 status=(\S+) done=(\d+)\/(\d+) percent=(\d+)$/);
   if (!m) return null;
-  return { simulated: true, status: m[1]!, completed: Number(m[2]), total: Number(m[3]), percent: Number(m[4]) };
+  return {
+    simulated: true,
+    realMoney: false,
+    status: m[1]!,
+    completed: Number(m[2]),
+    total: Number(m[3]),
+    percent: Number(m[4]),
+  };
 }
 
 /** L3 — true when status line matches run. */
@@ -917,6 +949,7 @@ export function drillStatusLineMatches(run: DrillRun): boolean {
 /** L3 — parse detailed drill status. Invalid → null. */
 export function parseDrillStatusLineDetailed(line: string): {
   readonly simulated: true;
+  readonly realMoney: false;
   readonly status: string;
   readonly workbook: string;
   readonly market: string;
@@ -925,10 +958,13 @@ export function parseDrillStatusLineDetailed(line: string): {
   readonly fills: number;
   readonly refused: boolean;
 } | null {
-  const m = line.trim().match(/^simulated=1 status=(\S+) workbook=(\S+) market=(\S+) done=(\d+)\/(\d+) fills=(\d+) refused=([01])$/);
+  const m = line
+    .trim()
+    .match(/^simulated=1 realMoney=0 status=(\S+) workbook=(\S+) market=(\S+) done=(\d+)\/(\d+) fills=(\d+) refused=([01])$/);
   if (!m) return null;
   return {
     simulated: true,
+    realMoney: false,
     status: m[1]!,
     workbook: m[2]!,
     market: m[3]!,

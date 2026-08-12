@@ -434,6 +434,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
         paperListPolicy: 'paper markets stay listed with paper:true — exclude-from-list is Nitro product (N3)',
         rateLimit: 'Published RATE_LIMITS in exchange-contract may differ from edge default 300/min — edge enforces; N4 residual',
         neverInvent: 'mids, funding rates, candles, leverage live re-set',
+        openPositionGates: 'caller price 400 · cross margin 400 · ADL disclosure ack required 403 (DIRECTION:34)',
       },
     });
   });
