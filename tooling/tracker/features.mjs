@@ -1403,13 +1403,13 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     status: 'wip',
-    owner: 'w10-l04-edge',
+    owner: 'denon-d26-p1-o1',
     dependsOn: ['identity.kyc'],
     note:
-      'Wave 10 edge door (svc-edge): /admin/status networkSignal (unset≠clear; fail-closed env) + freezeAuthority (only ledger.posting; invent trade/pay freeze refused) + ' +
-      'compliance queue mechanism (partner_cleared refuses without screening partner; honest empty). Builds on #1551 config + #1184 regionResolved. ' +
-      'Still NOT done: Class X sanctions list content + VPN partner procurement; geo-IP resolution (socket.geo-region-resolution); full case-management UI/DB. ' +
-      'Screening list honesty (empty ≠ clean) strong in packages/config.',
+      'D26-P1-O1 mechanism seal: packages/config checkAccess + INTAFACED_SCREENING_FAIL_CLOSED refuse when list unset ' +
+      '(denied.screening_unconfigured); honesty-only default OFF. Prior: Wave 10 edge door networkSignal/freeze/queue; #1551; #1184 regionResolved. ' +
+      'Still NOT done (Class X / residual): sanctions list *content* + VPN partner procurement; geo-IP (socket.geo-region-resolution); full case-management UI/DB. ' +
+      'Avoid dual-edit Nitro #1659 svc-edge control-plane.',
   }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', {
     module: 'core-ops',
