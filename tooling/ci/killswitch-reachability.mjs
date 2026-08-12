@@ -311,9 +311,7 @@ if (!e2e) {
 
   const moneySurface = read('packages', 'config', 'src', 'money-kill-surface.ts');
   if (!moneySurface || !/MONEY_PUBLIC_DOORS/.test(moneySurface)) {
-    failures.push(
-      'packages/config/src/money-kill-surface.ts is missing MONEY_PUBLIC_DOORS — money kill completeness has no catalogue',
-    );
+    failures.push('packages/config/src/money-kill-surface.ts is missing MONEY_PUBLIC_DOORS — money kill completeness has no catalogue');
   }
 
   /**

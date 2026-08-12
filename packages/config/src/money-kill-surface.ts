@@ -240,7 +240,10 @@ export function assertCustodialMoneyKillsComplete(): readonly string[] {
     if (control.kind === 'ledger-freeze' && id !== 'ledger') {
       failures.push(`${id}: only ledger may use ledger-freeze`);
     }
-    if (control.kind === 'not-deployed' && (id === 'trade' || id === 'pay' || id === 'bank' || id === 'p2p' || id === 'token' || id === 'market')) {
+    if (
+      control.kind === 'not-deployed' &&
+      (id === 'trade' || id === 'pay' || id === 'bank' || id === 'p2p' || id === 'token' || id === 'market')
+    ) {
       failures.push(`${id}: live money module must not be classified not-deployed`);
     }
   }

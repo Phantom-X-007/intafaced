@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  MONEY_PUBLIC_DOORS,
-  edgeKillableMoneyModules,
-  moneyKillControlFor,
-  type ModuleId,
-} from '@intafaced/config';
+import { MONEY_PUBLIC_DOORS, edgeKillableMoneyModules, moneyKillControlFor, type ModuleId } from '@intafaced/config';
 import { ENFORCEABLE_MODULES } from './routes.js';
 import { KillSwitchState } from './kill-switch.js';
 
