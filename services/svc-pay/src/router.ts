@@ -17,6 +17,8 @@ import {
   type RailRoutingProfile,
 } from './routing/decide.js';
 import { evaluateFraud } from './fraud/evaluate.js';
+import { defaultFraudReviewQueue, FraudReviewError } from './fraud/review-queue.js';
+import { defaultDisputeCaseStore, DisputeCaseError } from './fraud/dispute-case.js';
 import { PAY_PUBLIC_API_BASE } from './plugins/reference-client.js';
 
 /**
@@ -822,8 +824,9 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
     }),
 
     /**
-     * pay.fraud — scoring mechanism only (SPEC §3). Moves no value.
-     * Ledger reverse-money recipes stay unwired (Class X park). Declines always explain.
+     * pay.fraud — scoring + review queue + dispute **case** mechanism (D26-P1-P5).
+     * Moves no ledger value. Chargeback recipes stay unwired (owner Class M park).
+     * List content (IPs/devices/sanctions) remains Class X.
      */
     fraud: router({
       evaluate: publicProcedure
@@ -894,6 +897,213 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             outcome: decision.outcome,
             reasons: decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
             skippedDisabled: [...decision.skippedDisabled],
+          };
+        }),
+
+      enqueueReview: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            id: z.string().min(1),
+            merchantId: z.string().min(1),
+            amount: amountSchema,
+            assetId: assetIdSchema,
+            paymentId: z.string().uuid().nullable().optional(),
+            // Re-evaluate from the same inputs so the queue never accepts a forged review.
+            recentPaymentCount: z.number().int().min(0).optional(),
+            recentVolume: amountSchema.optional(),
+            baselineAmount: amountSchema.nullable().optional(),
+            thresholds: z
+              .object({
+                maxPaymentsInWindow: z.number().int().min(0).optional(),
+                maxVolumeInWindow: amountSchema.optional(),
+                amountAnomalyMultiplier: z.number().positive().optional(),
+                velocityCountAction: z.enum(['review', 'decline']).optional(),
+                velocityVolumeAction: z.enum(['review', 'decline']).optional(),
+                amountAnomalyAction: z.enum(['review', 'decline']).optional(),
+              })
+              .optional(),
+            blocklists: z
+              .object({
+                ips: z.array(z.string()).optional(),
+                devices: z.array(z.string()).optional(),
+              })
+              .optional(),
+            enabled: z
+              .object({
+                velocity_count: z.boolean().optional(),
+                velocity_volume: z.boolean().optional(),
+                amount_anomaly: z.boolean().optional(),
+                blocklist_ip: z.boolean().optional(),
+                blocklist_device: z.boolean().optional(),
+              })
+              .optional(),
+          }),
+        )
+        .mutation(({ input }) => {
+          try {
+            const decision = evaluateFraud({
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              recentPaymentCount: input.recentPaymentCount,
+              recentVolume: input.recentVolume,
+              baselineAmount: input.baselineAmount,
+              thresholds: input.thresholds,
+              blocklists: input.blocklists,
+              enabled: input.enabled,
+            });
+            const c = defaultFraudReviewQueue.enqueue({
+              id: input.id,
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              paymentId: input.paymentId ?? null,
+              decision,
+            });
+            return {
+              id: c.id,
+              status: c.status,
+              merchantId: c.merchantId,
+              paymentId: c.paymentId,
+              reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+            };
+          } catch (e) {
+            if (e instanceof FraudReviewError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      listOpenReviews: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().min(1).optional() }).optional())
+        .query(({ input }) =>
+          defaultFraudReviewQueue.listOpen(input?.merchantId).map((c) => ({
+            id: c.id,
+            merchantId: c.merchantId,
+            paymentId: c.paymentId,
+            amount: c.amount,
+            assetId: c.assetId,
+            status: c.status,
+            createdAt: c.createdAt,
+            reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+          })),
+        ),
+
+      resolveReview: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(
+          z.object({
+            id: z.string().min(1),
+            outcome: z.enum(['allow', 'decline']),
+            note: z.string().max(500).nullable().optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) => {
+          try {
+            const c = defaultFraudReviewQueue.resolve({
+              id: input.id,
+              outcome: input.outcome,
+              actorId: ctx.principal.userId,
+              note: input.note,
+            });
+            return {
+              id: c.id,
+              status: c.status,
+              resolvedBy: c.resolvedBy,
+              resolvedAt: c.resolvedAt,
+            };
+          } catch (e) {
+            if (e instanceof FraudReviewError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      /**
+       * Dispute case surface — status machine only. Does not call chargeback recipes.
+       */
+      openDispute: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(
+          z.object({
+            disputeId: z.string().min(1),
+            paymentId: z.string().uuid(),
+            merchantId: z.string().uuid(),
+            amount: amountSchema,
+            assetId: assetIdSchema,
+            reasonCode: z.string().max(64).nullable().optional(),
+            markPaymentDisputed: z.boolean().optional(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            let marked = false;
+            if (input.markPaymentDisputed) {
+              await pay.markDisputed(input.paymentId, {
+                disputeId: input.disputeId,
+                reasonCode: input.reasonCode ?? null,
+              });
+              marked = true;
+            }
+            const c = defaultDisputeCaseStore.open({
+              disputeId: input.disputeId,
+              paymentId: input.paymentId,
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              reasonCode: input.reasonCode,
+              paymentMarkedDisputed: marked,
+            });
+            return {
+              disputeId: c.disputeId,
+              status: c.status,
+              ledgerWire: c.ledgerWire,
+              paymentMarkedDisputed: c.paymentMarkedDisputed,
+            };
+          } catch (e) {
+            if (e instanceof DisputeCaseError || e instanceof PayError) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${'code' in e ? e.code : 'pay.error'}: ${e.message}`,
+                cause: e,
+              });
+            }
+            throw e;
+          }
+        }),
+
+      contestDispute: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .mutation(({ input }) => {
+          try {
+            const c = defaultDisputeCaseStore.contest(input.disputeId);
+            return { disputeId: c.disputeId, status: c.status, ledgerWire: c.ledgerWire };
+          } catch (e) {
+            if (e instanceof DisputeCaseError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      getDispute: scopedProcedure('pay:read', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .query(({ input }) => {
+          const c = defaultDisputeCaseStore.get(input.disputeId);
+          if (!c) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: `pay.dispute_not_found: ${input.disputeId}` });
+          }
+          return {
+            disputeId: c.disputeId,
+            paymentId: c.paymentId,
+            merchantId: c.merchantId,
+            amount: c.amount,
+            assetId: c.assetId,
+            reasonCode: c.reasonCode,
+            status: c.status,
+            ledgerWire: c.ledgerWire,
+            openedAt: c.openedAt,
+            closedAt: c.closedAt,
           };
         }),
     }),
