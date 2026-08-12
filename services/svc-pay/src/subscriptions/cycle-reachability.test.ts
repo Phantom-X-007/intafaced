@@ -121,31 +121,34 @@ async function mountTrpc(subs: Partial<Record<keyof SubscriptionService, unknown
   return app;
 }
 
+type WireBody = {
+  result?: { data?: any };
+  error?: { message?: string };
+};
+
 /** POST a tRPC mutation the way a client does, and hand back the parsed body. */
 async function post(
   app: Awaited<ReturnType<typeof mountTrpc>>,
   path: string,
-  input: unknown,
+  input: Record<string, unknown>,
   headers: Record<string, string> = signedHeaders(),
-) {
+): Promise<{ statusCode: number; body: WireBody }> {
   const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
-  // Wire shape is asserted per-test; keep the parse untyped so optional
-  // result/error arms do not invent a "never" that test-typecheck rejects.
-  return { statusCode: res.statusCode, body: res.json() as Record<string, any> };
+  return { statusCode: res.statusCode, body: res.json() as WireBody };
 }
 
 async function get(
   app: Awaited<ReturnType<typeof mountTrpc>>,
   path: string,
-  input: unknown,
+  input: Record<string, unknown>,
   headers: Record<string, string> = signedHeaders(),
-) {
+): Promise<{ statusCode: number; body: WireBody }> {
   const res = await app.inject({
     method: 'GET',
     url: `/trpc/${path}?input=${encodeURIComponent(JSON.stringify(input))}`,
     headers,
   });
-  return { statusCode: res.statusCode, body: res.json() as Record<string, any> };
+  return { statusCode: res.statusCode, body: res.json() as WireBody };
 }
 
 // ── The merchant surface, over HTTP ─────────────────────────────────────────
@@ -162,10 +165,10 @@ describe('the subscription cycle surface is mounted and reachable', () => {
     expect(statusCode).toBe(200);
     // The service really ran — not a router that merely type-checks.
     expect(pauseSubscription).toHaveBeenCalledWith(SUB);
-    expect(body.result.data.status).toBe('paused');
+    expect(body.result!.data.status).toBe('paused');
     // And the REASON crossed the wire, which is what keeps a pause
     // distinguishable from an outage on the merchant's own screen.
-    expect(body.result.data.stallReason).toBe('operator_pause');
+    expect(body.result!.data.stallReason).toBe('operator_pause');
     await app.close();
   });
 
@@ -185,9 +188,9 @@ describe('the subscription cycle surface is mounted and reachable', () => {
 
     expect(statusCode).toBe(200);
     expect(resumeSubscription).toHaveBeenCalledWith(SUB);
-    expect(body.result.data.projectedEnd).toBe(projectedEnd.toISOString());
+    expect(body.result!.data.projectedEnd).toBe(projectedEnd.toISOString());
     // The frame moved, and the merchant can see that it did.
-    expect(body.result.data.subscription.anchorOccurrence).toBe(4);
+    expect(body.result!.data.subscription.anchorOccurrence).toBe(4);
     await app.close();
   });
 
@@ -205,7 +208,7 @@ describe('the subscription cycle surface is mounted and reachable', () => {
     const { statusCode, body } = await post(app, 'subscription.resume', { subscriptionId: SUB });
 
     expect(statusCode).toBe(409);
-    expect(body.error.message).toMatch(/pay\.subscription_resume_exceeds_mandate/);
+    expect(body.error!.message).toMatch(/pay\.subscription_resume_exceeds_mandate/);
     await app.close();
   });
 
@@ -218,7 +221,7 @@ describe('the subscription cycle surface is mounted and reachable', () => {
     const { statusCode, body } = await post(app, 'subscription.pause', { subscriptionId: SUB });
 
     expect(statusCode).toBe(403);
-    expect(body.error.message).toMatch(/pay\.subscription_fee_unpublished/);
+    expect(body.error!.message).toMatch(/pay\.subscription_fee_unpublished/);
     await app.close();
   });
 
@@ -243,11 +246,14 @@ describe('the subscription cycle surface is mounted and reachable', () => {
 
     expect(statusCode).toBe(200);
     expect(listCycles).toHaveBeenCalledWith(SUB);
-    const [cycle] = body.result.data.cycles as unknown as Array<Record<string, unknown>>;
+    const cycles = body.result?.data?.cycles as Array<Record<string, unknown>> | undefined;
+    expect(cycles).toBeDefined();
+    expect(cycles).toHaveLength(1);
+    const cycle = cycles![0]!;
     // A decimal string, not a scaled bigint rendered as digits.
-    expect(cycle!.amount).toBe('10');
-    expect(cycle!.idempotencyKey).toBe(`pay.subscription:${SUB}:0`);
-    expect(cycle!.attemptCount).toBe(2);
+    expect(cycle.amount).toBe('10');
+    expect(cycle.idempotencyKey).toBe(`pay.subscription:${SUB}:0`);
+    expect(cycle.attemptCount).toBe(2);
     await app.close();
   });
 
@@ -383,8 +389,9 @@ describe('the cycle runner route is mounted and reachable', () => {
 
     expect(res.statusCode).toBe(200);
     expect(runDueSubscriptions).toHaveBeenCalledWith({ limit: 5 });
-    const [[passed]] = runDueSubscriptions.mock.calls as unknown as Array<[Record<string, unknown>]>;
-    expect(passed).not.toHaveProperty('now');
+    const firstCall = runDueSubscriptions.mock.calls[0] as [Record<string, unknown>] | undefined;
+    expect(firstCall).toBeDefined();
+    expect(firstCall![0]).not.toHaveProperty('now');
     await app.close();
   });
 
@@ -427,10 +434,13 @@ describe('the cycle runner route is mounted and reachable', () => {
 
     expect(res.statusCode).toBe(200);
     expect(listCycles).toHaveBeenCalledWith(SUB);
-    const [cycle] = res.json().cycles as Array<Record<string, unknown>>;
-    expect(cycle!.amount).toBe('10');
-    expect(cycle!.idempotencyKey).toBe(`pay.subscription:${SUB}:3`);
-    expect(cycle!.exhausted).toBe(true);
+    const cycles = (res.json() as { cycles?: Array<Record<string, unknown>> }).cycles;
+    expect(cycles).toBeDefined();
+    expect(cycles).toHaveLength(1);
+    const cycle = cycles![0]!;
+    expect(cycle.amount).toBe('10');
+    expect(cycle.idempotencyKey).toBe(`pay.subscription:${SUB}:3`);
+    expect(cycle.exhausted).toBe(true);
     await app.close();
   });
 
