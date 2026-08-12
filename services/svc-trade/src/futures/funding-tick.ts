@@ -249,7 +249,12 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
   // acted as an opt-out from the margin move: a wire that forgot the dep settled
   // funding in the ledger and left every position's margin untouched, with no
   // error anywhere. `margins` is required, so this always runs.
-  await deps.margins.applyFundingNets(netFundingPaid(legs), quote.periodId);
+  //
+  // D26-P1-T1f / MVP-6: long/short funding is a pure transfer. Refuse before
+  // margin apply if nets do not conserve (sum ≠ 0) — never mint or burn.
+  const nets = netFundingPaid(legs);
+  assertFundingNetsZero(nets);
+  await deps.margins.applyFundingNets(nets, quote.periodId);
 
   await deps.periods.markSettled(quote.periodId, {
     legCount: legs.length,
@@ -280,6 +285,28 @@ export function netFundingPaid(legs: readonly FundingLeg[]): { positionId: strin
     byId.set(leg.payeePositionId, (byId.get(leg.payeePositionId) ?? 0n) - leg.amount);
   }
   return [...byId.entries()].map(([positionId, paid]) => ({ positionId, paid }));
+}
+
+/**
+ * D26-P1-T1f done bar: funding is a zero-sum transfer between longs and shorts.
+ * Sum of per-position nets MUST be 0 — otherwise the tick would mint or burn
+ * collateral. Called on the real tick path before margin apply.
+ */
+export function assertFundingNetsZero(nets: readonly { positionId: string; paid: Amount }[]): void {
+  let sum = 0n;
+  for (const n of nets) sum += n.paid;
+  if (sum !== 0n) {
+    throw new Error(
+      `funding nets must sum to zero (long/short conservation); got sum=${sum} across ${nets.length} position(s)`,
+    );
+  }
+}
+
+/** Sum of paid nets — 0n when the book conserves (MVP-6). */
+export function sumFundingNets(nets: readonly { positionId: string; paid: Amount }[]): Amount {
+  let sum = 0n;
+  for (const n of nets) sum += n.paid;
+  return sum;
 }
 
 /** In-memory period store for unit tests and single-process dev. */
