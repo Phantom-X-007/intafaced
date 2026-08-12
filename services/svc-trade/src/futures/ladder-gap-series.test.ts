@@ -18,12 +18,9 @@
  *
  * WHAT IT DOES NOT PROVE, stated so nobody reads more into a green test than is
  * there: item 4 says the FUND'S BALANCE moves. This asserts the insurance LEG of
- * the posted recipe is exactly the shortfall. Proving the balance moved is a
- * ledger-side integration test against a real `insurance:<asset>` account, and
- * `futuresRealizeLoss` currently sinks the whole realised loss into
- * `houseFees('trade', …)` — the ADR's payout-bound work and its account choice are
- * `DIRECTION` §8 item 6, reserved to the owner. So: the ENGINE hands the fund
- * exactly the shortfall, and what the fund then is remains an owner decision.
+ * the posted recipe is exactly the shortfall. The balance-move proof is
+ * `insurance-shortfall-balance.test.ts` (D26-P1-T1d) against MemoryLedger —
+ * recipe unit alone cannot catch a tick that skips the post.
  */
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt, type AccountRef, type Amount, type Balance, type PostRequest } from '@intafaced/ledger-client';
