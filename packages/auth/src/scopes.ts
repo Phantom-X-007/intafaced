@@ -302,6 +302,11 @@ export const WITHHELD_FROM_SESSION: Readonly<Record<Exclude<Scope, SessionScope>
   // user-money router in svc-pay. `pay:*` is acquiring: third-party card money
   // moving through a merchant we onboarded. Granted by merchant onboarding, not
   // by holding an account.
+  //
+  // Grant mechanism shape (D26-P0-08): ADR
+  // docs/adr/2026-08-12-pay-write-kyb-grant-mechanism-shape.md + refuse stub
+  // `assertMerchantPayScopeGrantAllowed`. DIRECTION §8 item 4 — never invent
+  // the grantor or KYB threshold; D26-P1-P10 implements after owner seal.
   'pay:read': 'Merchant acquiring surface — granted by merchant onboarding',
   'pay:write': 'Merchant acquiring surface — granted by merchant onboarding',
   'pay:refund': 'Merchant acquiring surface — refunds another party’s payment',
