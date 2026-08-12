@@ -336,6 +336,19 @@ The service checks these; the database enforces them regardless.
 
 ---
 
+## Copy kill / unfollow guarantee (D26-P1-T3)
+
+`copy.killFeeShare` and `copy.unfollow` are unilateral controls and remain reachable while the owner fee-share rates are blank. Every mirror plan, fee-share settlement, kill, and unfollow is serialized per follow:
+
+- an already-started mirror or settlement finishes before kill/unfollow is acknowledged;
+- after `killFeeShare` is acknowledged, a new fill cannot pay leader fee-share;
+- after `unfollow` is acknowledged, a new mirror or settlement cannot use the deleted envelope;
+- production SQL pins the advisory lock and guarded queries to one database connection, so the guarantee holds across service processes without exhausting the connection pool.
+
+The public tRPC proof is `src/copy/router-mount.test.ts`. It blocks an in-flight ledger post/mirror claim, races the public kill/unfollow mutations against it, and proves the control waits before closing every later attempt. No §8 rate is supplied by production defaults; blank rates still refuse closed.
+
+---
+
 ## Not in this PR
 
 `trade.spot` only. §5.2 also specifies tables and behaviour that belong to other tracker features:
