@@ -32,6 +32,7 @@ import {
   requireSupportedType,
 } from './risk.js';
 import { resolveOptionsListing } from './options-listing.js';
+import { checkInsuranceFundedForListing } from '../futures/insurance-listing-gate.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
@@ -247,7 +248,9 @@ export interface ListMarketInput {
    * acts: "modelling an instrument is always honest; listing one you cannot settle
    * never is" (`2026-08-04-instrument-enum-authority.md`). A futures row created
    * here is quotable and readable and takes no order at all unless
-   * `TRADE_FUTURES_ENABLED` is on.
+   * `TRADE_FUTURES_ENABLED` is on. Real-money active futures also require a
+   * non-empty insurance fund for the quote asset (DIRECTION:33) — empty →
+   * `trade.insurance_fund_empty`; paper/pending remain allowed.
    *
    * `options` is refused until settlement fixing is configured
    * (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European contract terms
@@ -427,6 +430,18 @@ export class TradeService {
         'trade.unsettled_asset_class_listing',
       );
     }
+    // DIRECTION:33 — empty insurance fund → no real-money futures list.
+    // Target size/schedule stay owner-open; any positive balance passes.
+    const insuranceGate = await checkInsuranceFundedForListing({
+      kind,
+      status,
+      paper,
+      quoteAsset: input.quoteAsset,
+      balance: (ref) => this.ledger.balance(ref),
+    });
+    if (!insuranceGate.ok) {
+      throw new TradeError(insuranceGate.reason, insuranceGate.code);
+    }
     // trade.options honest thin: refuse kind=options until D7 fixing is configured;
     // require complete European terms so half-listed options cannot exist.
     // No IV surface, no pricing model, no invented oracle numbers.
@@ -476,6 +491,27 @@ export class TradeService {
    * lets a user out of a market the operator has frozen.
    */
   async setMarketStatus(marketId: string, status: Market['status']): Promise<Market> {
+    // Load first: enable-to-active on an empty-fund futures row must refuse
+    // before the UPDATE, same DIRECTION:33 rule as listMarket.
+    const existing = await this.sql<MarketRow[]>`
+      SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
+             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+             asset_class, schedule, paper
+        FROM trade.markets WHERE id = ${marketId}
+    `;
+    const current = existing[0];
+    if (!current) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
+    const currentMarket = toMarket(current);
+    const insuranceGate = await checkInsuranceFundedForListing({
+      kind: currentMarket.kind,
+      status,
+      paper: currentMarket.paper,
+      quoteAsset: currentMarket.quoteAsset,
+      balance: (ref) => this.ledger.balance(ref),
+    });
+    if (!insuranceGate.ok) {
+      throw new TradeError(insuranceGate.reason, insuranceGate.code);
+    }
     const rows = await this.sql<MarketRow[]>`
       UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,

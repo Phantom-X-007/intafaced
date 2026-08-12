@@ -111,6 +111,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Options half-list (missing strike/type/expiry) or terms on non-options kind.
    */
   'trade.options_terms_incomplete': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Real-money futures list/enable refused: insurance fund empty (DIRECTION:33).
+   * BadRequest — operator must capitalise the fund; not a symbol to drop forever.
+   */
+  'trade.insurance_fund_empty': { ccxt: 'BadRequest', status: 400 },
   /** Operator kill-switch across the whole spot plane — venue-wide, retryable. */
   'trade.spot_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },

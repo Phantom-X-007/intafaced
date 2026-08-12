@@ -1059,6 +1059,105 @@ if (!available) {
     });
 
     /**
+     * DIRECTION:33 / D26-P0-17 — empty insurance fund → no real-money futures list.
+     * Capitalisation size stays owner-open; this only proves refuse-closed when empty
+     * and allow when any positive balance exists (via real topup recipe).
+     */
+    it('refuses active real-money futures listing when the insurance fund is empty', async () => {
+      await expect(
+        trade.listMarket({
+          symbol: 'BTC/USDT-PERP',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'futures',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 0,
+          takerBps: 0,
+        }),
+      ).rejects.toMatchObject({ code: 'trade.insurance_fund_empty' });
+
+      // paper + pending remain honest model paths without capitalisation
+      const paper = await trade.listMarket({
+        symbol: 'BTC/USDT-PERP-PAPER',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'futures',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        paper: true,
+      });
+      expect(paper.kind).toBe('futures');
+      expect(paper.paper).toBe(true);
+
+      const pending = await trade.listMarket({
+        symbol: 'BTC/USDT-PERP-PENDING',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'futures',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        status: 'pending',
+      });
+      expect(pending.status).toBe('pending');
+
+      // Enable-to-active must refuse the same way — listing as pending then
+      // flipping status cannot bypass DIRECTION:33.
+      await expect(trade.setMarketStatus(pending.id, 'active')).rejects.toMatchObject({
+        code: 'trade.insurance_fund_empty',
+      });
+    });
+
+    it('lists active futures once the insurance fund holds a positive balance', async () => {
+      const seedUser = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const seed = amt('1');
+      const pos = 'ins-list-seed';
+      await ledger.post(recipes.deposit({ userId: seedUser, assetId: 'USDT', amount: seed, rail: 'test', railRef: 'ins-list-dep' }));
+      await ledger.post(recipes.futuresMarginLock({ positionId: pos, userId: seedUser, assetId: 'USDT', amount: seed }));
+      await ledger.post(
+        recipes.futuresRealizeLoss({
+          positionId: pos,
+          userId: seedUser,
+          assetId: 'USDT',
+          fromMargin: seed,
+          fromInsurance: 0n,
+          lossId: pos,
+        }),
+      );
+      await ledger.post(recipes.futuresInsuranceTopup({ topupId: pos, assetId: 'USDT', amount: seed }));
+
+      const listed = await trade.listMarket({
+        symbol: 'ETH/USDT-PERP',
+        baseAsset: 'ETH',
+        quoteAsset: 'USDT',
+        kind: 'futures',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+      });
+      expect(listed.kind).toBe('futures');
+      expect(listed.status).toBe('active');
+      expect(listed.paper).toBe(false);
+    });
+
+    /**
      * trade.options honest thin (D7 still owner).
      *
      * Default service has empty TRADE_OPTIONS_SETTLEMENT_FIXING → refuse any
