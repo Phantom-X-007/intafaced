@@ -103,6 +103,12 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    */
   'trade.unsettled_asset_class_listing': { ccxt: 'BadRequest', status: 400 },
   /**
+   * Options listing refused: D26-P0-05 settlement asset law unset (SOCKET §13).
+   * BadRequest — operator publishes ADR then stamps TRADE_OPTIONS_SETTLEMENT_ASSET_LAW;
+   * not a symbol to drop. Never invent live set / settlement asset / refuse matrix.
+   */
+  'trade.options_settlement_law_unset': { ccxt: 'BadRequest', status: 400 },
+  /**
    * Options listing refused: D7 settlement fixing not configured.
    * BadRequest — operator sets TRADE_OPTIONS_SETTLEMENT_FIXING; not a symbol to drop.
    */

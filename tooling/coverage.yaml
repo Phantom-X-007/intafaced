@@ -1851,6 +1851,14 @@ tracker_extra:
       reserves sockets for rails that must be filled from outside; it does not carry this one, and
       the blocker is explicitly a decision rather than code — svc-dex can read three kinds of venue
       and no ADR or spec names which one the platform quotes.
+  - id: socket.options-settlement-asset-law
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Options / forex settlement asset law (D26-P0-05). Named 2026-08-12 with D26-P1-T6: svc-trade
+      refuses kind=options listing while TRADE_OPTIONS_SETTLEMENT_ASSET_LAW is empty rather than
+      inventing live set, settlement asset, or refuse matrix. §13 reserves owner-gated sockets;
+      the ADR content is the owner decision, not craft — §13 does not list this seam by name.
   - id: socket.dex-fee-source
     basis: law-extension
     extends: 13

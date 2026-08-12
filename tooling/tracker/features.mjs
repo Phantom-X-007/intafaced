@@ -340,11 +340,13 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.futures'],
+    requires: ['services/svc-trade/src/spot/options-listing.ts'],
     note:
-      'Honest thin slice (not done): listMarket refuses kind=options while TRADE_OPTIONS_SETTLEMENT_FIXING is empty ' +
-      '(trade.options_fixing_unconfigured); complete European terms required when set; DB CHECK markets_options_terms_ck ' +
-      'blocks half-listed option rows. No IV surface, no pricing model, no invent D7 source/window/payor. Orders still ' +
-      'refused by assertTradable (trade.market_kind_unsupported). Real product remains blocked on D7 settlement fixing law.',
+      'D26-P1-T6 2026-08-12: refuse-closed until D26-P0-05 — listMarket throws trade.options_settlement_law_unset while ' +
+      'TRADE_OPTIONS_SETTLEMENT_ASSET_LAW empty (SOCKET §13 socket.options-settlement-asset-law). Fixing alone must not unlock. ' +
+      'After P0-05 stamp: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; DB CHECK markets_options_terms_ck. ' +
+      'No IV surface, no invent live set / settlement asset / refuse matrix / D7 source/window/payor. Orders still refused by ' +
+      'assertTradable (trade.market_kind_unsupported). Product-complete only after P0-05 ADR.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
@@ -1775,6 +1777,19 @@ export const FEATURES = [
       'S-K7 ADR accepted 2026-08-08 (docs/adr/2026-08-08-inheritance-never-platform-guardian.md): platform never a guardian. ' +
       'S-L2 contract code deliberately NOT started until an heir/time-lock design matches that ADR without a platform key. ' +
       'Stays socket — honest.',
+  }),
+
+  f('socket.options-settlement-asset-law', 'Options / forex settlement asset law (D26-P0-05 ADR)', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.options'],
+    requires: ['services/svc-trade/src/spot/options-listing.ts'],
+    note:
+      '§13 — D26-P0-05 owns the ADR for live instrument set, settlement asset, and refuse matrix. Named 2026-08-12 (D26-P1-T6): ' +
+      'svc-trade listMarket(kind=options) refuses with trade.options_settlement_law_unset while TRADE_OPTIONS_SETTLEMENT_ASSET_LAW ' +
+      'is empty; the stamp is opaque and never parsed for assets or matrix rows. Inventing settlement law here would close a ' +
+      'ready row with a lie. Forex share of P0-05 is sibling D26-P1-T7. Closing this socket requires the owner ADR, not craft.',
   }),
 
   // ── §13 · DELIBERATELY NOT IN v1 ─────────────────────────────────────────

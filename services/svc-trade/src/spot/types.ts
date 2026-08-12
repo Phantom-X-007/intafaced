@@ -201,6 +201,12 @@ export type TradeErrorCode =
    */
   | 'trade.unsettled_asset_class_listing'
   /**
+   * Options listing refused because D26-P0-05 settlement asset law is unset.
+   * `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` empty → refuse (SOCKET §13
+   * `socket.options-settlement-asset-law`). Never invent live set / asset / matrix.
+   */
+  | 'trade.options_settlement_law_unset'
+  /**
    * Options listing refused because settlement fixing is not configured (D7).
    * `TRADE_OPTIONS_SETTLEMENT_FIXING` empty → refuse. Distinct from terms.
    */
