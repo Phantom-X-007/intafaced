@@ -11,12 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { createKybPspRouter } from './kyb-router.js';
-import {
-  assertNoThirdPartyMoneyLibrary,
-  FORBIDDEN_THIRD_PARTY_MONEY_LIBS,
-  PspModeError,
-  type PspModeService,
-} from './psp-mode.js';
+import { assertNoThirdPartyMoneyLibrary, FORBIDDEN_THIRD_PARTY_MONEY_LIBS, PspModeError, type PspModeService } from './psp-mode.js';
 import { KybError, type KybService } from './kyb-service.js';
 
 const authConfig = {
@@ -166,10 +161,7 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
-    const names = new Set([
-      ...Object.keys(pkg.dependencies ?? {}),
-      ...Object.keys(pkg.devDependencies ?? {}),
-    ]);
+    const names = new Set([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.devDependencies ?? {})]);
     for (const forbidden of FORBIDDEN_THIRD_PARTY_MONEY_LIBS) {
       expect(names.has(forbidden)).toBe(false);
     }

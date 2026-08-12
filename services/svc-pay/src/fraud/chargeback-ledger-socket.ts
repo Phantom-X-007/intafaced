@@ -26,10 +26,7 @@ export interface ChargebackLedgerRefuse {
 }
 
 /** Always refuses. Mechanism records the dispute; money stays unwired. */
-export function refuseChargebackLedgerPost(input: {
-  readonly disputeId: string;
-  readonly paymentId: string;
-}): ChargebackLedgerRefuse {
+export function refuseChargebackLedgerPost(input: { readonly disputeId: string; readonly paymentId: string }): ChargebackLedgerRefuse {
   return {
     code: CHARGEBACK_LEDGER_REFUSE_CODE,
     socket: CHARGEBACK_LEDGER_SOCKET_ID,

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CHARGEBACK_LEDGER_REFUSE_CODE,
-  CHARGEBACK_LEDGER_SOCKET_ID,
-  refuseChargebackLedgerPost,
-} from './chargeback-ledger-socket.js';
+import { CHARGEBACK_LEDGER_REFUSE_CODE, CHARGEBACK_LEDGER_SOCKET_ID, refuseChargebackLedgerPost } from './chargeback-ledger-socket.js';
 
 describe('chargeback ledger §13 socket (D26-P1-P5)', () => {
   it('refuses every post with a named socket id and code', () => {
