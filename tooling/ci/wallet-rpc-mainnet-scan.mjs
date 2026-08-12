@@ -3354,10 +3354,7 @@ function runRuleProbes() {
     classParts.push(`${cls.id} ${hit.fired}f/${hit.silent}s`);
   }
 
-  establish(
-    'perimeter',
-    `continuous refuse held for mainnet/sign/width (${classParts.join(', ')})`,
-  );
+  establish('perimeter', `continuous refuse held for mainnet/sign/width (${classParts.join(', ')})`);
 
   return (
     `${executed} rule probe(s) executed across ${rules.size} rule id(s) — ${fired} fired as required and ` +

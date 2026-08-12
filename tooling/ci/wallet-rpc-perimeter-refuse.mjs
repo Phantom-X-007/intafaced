@@ -143,8 +143,7 @@ function assertClassProbeHalvesInSource() {
     const fireFalse = (region.match(/fires:\s*false/g) ?? []).length;
     if (fireTrue < 1 || fireFalse < 1) {
       problems.push(
-        `[${c.id}] needs ≥1 fires:true and ≥1 fires:false in its probe region ` +
-          `(found ${fireTrue} true / ${fireFalse} false)`,
+        `[${c.id}] needs ≥1 fires:true and ≥1 fires:false in its probe region ` + `(found ${fireTrue} true / ${fireFalse} false)`,
       );
     }
   }
