@@ -389,9 +389,7 @@ export class MemoryDeliveryStore implements DeliveryStore {
   async listRecent(limit: number): Promise<DeliveryRecord[]> {
     const cap = Math.max(0, Math.min(Math.floor(limit), 500));
     if (cap === 0) return [];
-    return [...this.byId.values()]
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id))
-      .slice(0, cap);
+    return [...this.byId.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id)).slice(0, cap);
   }
 
   async reapExhausted(maxAttempts: number, opts: ReapExhaustedOptions = {}): Promise<number> {
