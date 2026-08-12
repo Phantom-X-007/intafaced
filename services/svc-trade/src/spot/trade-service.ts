@@ -110,11 +110,20 @@ export interface TradeServiceOptions {
    */
   futuresEnabled?: boolean;
   /**
+   * Opaque D26-P0-05 settlement-asset-law stamp
+   * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW`).
+   *
+   * EMPTY BY DEFAULT. Presence only — never parsed for live set, settlement
+   * asset, or refuse matrix (SOCKET §13 `socket.options-settlement-asset-law`).
+   * Empty → listMarket refuses kind=options with `trade.options_settlement_law_unset`.
+   */
+  optionsSettlementAssetLaw?: string;
+  /**
    * Opaque D7 settlement-fixing config (`TRADE_OPTIONS_SETTLEMENT_FIXING`).
    *
    * EMPTY BY DEFAULT. Presence is the only signal — never parsed for source,
    * window, or payor account (those are owner law). Empty → listMarket refuses
-   * kind=options with `trade.options_fixing_unconfigured`.
+   * kind=options with `trade.options_fixing_unconfigured` (after P0-05 is set).
    */
   optionsSettlementFixing?: string;
   /**
@@ -252,10 +261,12 @@ export interface ListMarketInput {
    * non-empty insurance fund for the quote asset (DIRECTION:33) — empty →
    * `trade.insurance_fund_empty`; paper/pending remain allowed.
    *
-   * `options` is refused until settlement fixing is configured
-   * (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European contract terms
-   * are supplied — half-listed options cannot exist (service + DB CHECK). Even
-   * when listed, `assertTradable` still refuses options orders by kind (no engine).
+   * `options` is refused until D26-P0-05 settlement asset law is stamped
+   * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` / SOCKET §13) AND settlement fixing is
+   * configured (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European
+   * contract terms are supplied — half-listed options cannot exist (service + DB
+   * CHECK). Even when listed, `assertTradable` still refuses options orders by
+   * kind (no engine). Never invent live set / settlement asset / refuse matrix.
    */
   kind?: MarketKind;
   /** Required when kind=options: call or put. */
@@ -271,7 +282,9 @@ export interface ListMarketInput {
 export class TradeService {
   private readonly spotEnabled: boolean;
   private readonly futuresEnabled: boolean;
-  /** Opaque D7 fixing stamp; empty refuses options listing. */
+  /** Opaque P0-05 ADR stamp; empty refuses options listing (SOCKET §13). */
+  private readonly optionsSettlementAssetLaw: string;
+  /** Opaque D7 fixing stamp; empty refuses options listing (after P0-05). */
   private readonly optionsSettlementFixing: string;
   private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
@@ -298,7 +311,8 @@ export class TradeService {
     // `?? false`, and the asymmetry with the line above is the whole point: a
     // deploy that forgets to mention futures does not get futures.
     this.futuresEnabled = options.futuresEnabled ?? false;
-    // Empty default — D7 unset means refuse options listing, never invent a fixing.
+    // Empty defaults — P0-05 / D7 unset means refuse options listing, never invent law.
+    this.optionsSettlementAssetLaw = options.optionsSettlementAssetLaw ?? '';
     this.optionsSettlementFixing = options.optionsSettlementFixing ?? '';
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
@@ -442,11 +456,12 @@ export class TradeService {
     if (!insuranceGate.ok) {
       throw new TradeError(insuranceGate.reason, insuranceGate.code);
     }
-    // trade.options honest thin: refuse kind=options until D7 fixing is configured;
-    // require complete European terms so half-listed options cannot exist.
-    // No IV surface, no pricing model, no invented oracle numbers.
+    // trade.options: refuse kind=options until P0-05 law + D7 fixing; require
+    // complete European terms so half-listed options cannot exist.
+    // No IV surface, no pricing model, no invented settlement asset / matrix.
     const optionTerms = resolveOptionsListing({
       kind,
+      settlementAssetLawConfigured: this.optionsSettlementAssetLaw,
       settlementFixingConfigured: this.optionsSettlementFixing,
       optionType: input.optionType,
       optionStyle: input.optionStyle,

@@ -116,8 +116,11 @@ describe('market status', () => {
   });
 
   /**
-   * Options has no engine, no collateral model and no flag. It is refused by KIND,
-   * and the futures flag must not be mistaken for a general non-spot switch.
+   * Options has no engine, no collateral model and no flag. It is refused by KIND
+   * (`trade.market_kind_unsupported`) even after listing. Listing itself is
+   * refuse-closed until D26-P0-05 (SOCKET §13 `socket.options-settlement-asset-law`)
+   * — see `options-listing.ts`. The futures flag must not be mistaken for a
+   * general non-spot switch.
    */
   it('refuses an options market on both settings of the futures flag', () => {
     for (const futuresEnabled of [false, true]) {
