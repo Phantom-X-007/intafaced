@@ -64,6 +64,8 @@ Most agent procedures are **pure**: they answer "what would this agent say" with
 
 All five are mutations, and all five report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
 
+`merchant.watch` / `merchant.runSession` never invent approval rates. A non-empty `railAllowlist` is a configured watch set: any listed rail without a usable metric returns `unavailable` with `reason: incomplete_coverage` and `missingRailIds` — not a silent partial `ok`. Dark pay plane and null/stale/zero-sample fixtures still refuse or skip without inventing greens.
+
 None of them calls the engine — a rank is arithmetic, and an answer is an echo of tool output — so each opens no usage window and settles to `0`. That zero is reported as a zero. A synthetic charge so a run "looks metered" would be a fabricated cost, which is the same class of lie as a fabricated price.
 
 `navigator.runSession` sends **every** ask to `runtime.act`, including ones a caller-supplied tier matrix wrongly granted. The runtime decides, not the caller and not the run: `trade.order` is not on `navigatorAgentGuardrail()`, so `act` refuses it and its executor is never reached. An ask that produced no fact comes back in `unanswered` with the reason and who refused it — the answer gets shorter, never padded. When nothing at all was reachable the run refuses outright rather than shipping an empty finding list dressed as a result.

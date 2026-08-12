@@ -220,6 +220,25 @@ describe('merchant.watch metered session run', () => {
     expect(result.metering.billedAmount).toBe('0');
   });
 
+  it('D26-P1-A4: allowlist missing a rail → incomplete_coverage after the metered read', async () => {
+    const fake = new FakeRuntime();
+    const result = await runMerchantWatchSession({
+      ...baseInput(fake),
+      points: [point('card-a')],
+      railAllowlist: ['card-a', 'card-b'],
+    });
+
+    expect(result).toMatchObject({
+      status: 'unavailable',
+      reason: 'incomplete_coverage',
+      userMessageKey: 'agents.merchant.unavailable',
+      missingRailIds: ['card-b'],
+    });
+    expect(fake.openCalls).toBe(1);
+    expect(fake.settleCalls).toBe(1);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
   it('is empty — not a session — when nothing was asked for', async () => {
     const fake = new FakeRuntime();
     const result = await runMerchantWatchSession({ ...baseInput(fake), points: [] });

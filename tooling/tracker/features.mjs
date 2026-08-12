@@ -1013,10 +1013,9 @@ export const FEATURES = [
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
-    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway'],
-    note: '**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment.',
+    requires: ['services/svc-agents/src/navigator'],
+    note: '**D26-P1-A1 #1696 landed 2026-08-12:** requester-scoped tool calls + runtime guardrails + dark-refuse zero billing. Owner cleared after merge so peer agent mountains are not fenced by module=`agents`. STILL NOT done: live trade/identity allowlisted tool inputs (Class X). Not tracker done until live grounded env.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
@@ -1033,8 +1032,11 @@ export const FEATURES = [
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'pay.routing'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered merchant.runSession (#1284), dark pay refuse invent rates, boot-register. STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane.',
+    requires: ['services/svc-agents/src/merchant'],
+    note: '**D26-P1-A4 2026-08-12:** allowlist coverage fails closed when configured rails lack usable metrics (`incomplete_coverage` + missingRailIds) — no silent partial ok / invent rates. Stage-1 metered watch + dark pay refuse remain. STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane.',
   }),
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',

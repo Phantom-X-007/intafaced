@@ -2,10 +2,13 @@
  * Merchant agent Stage-1 — approval-rate watch on fixtures only.
  *
  * Spec: docs/ops/trk/agents.merchant.md Stage 1.
+ * Done bar (D26-P1-A4): approval-rate watch honest when data missing.
  *
  * Rules:
  *   · Input is caller-supplied fixture series — never invents approval rates.
  *   · Missing/null rates refuse, not zero-filled into a green "100%".
+ *   · Non-empty railAllowlist requires a usable metric for EVERY listed rail —
+ *     silent partial `ok` over a configured set invents completeness.
  *   · Threshold breach → structured alert only; no rail change, no ledger.
  *   · pay.routing product law remains residual (Class M / owner) — Stage-1
  *     does not invent routing selection.
@@ -57,7 +60,12 @@ export type WatchEmpty = {
 export type WatchUnavailable = {
   readonly status: 'unavailable';
   readonly userMessageKey: 'agents.merchant.unavailable';
-  readonly reason: 'stale' | 'no_metrics' | 'pay_plane_dark';
+  readonly reason: 'stale' | 'no_metrics' | 'pay_plane_dark' | 'incomplete_coverage';
+  /**
+   * Allowlisted rails that had no usable metric. Present when reason is
+   * `incomplete_coverage` — never invent a rate to fill these gaps.
+   */
+  readonly missingRailIds?: readonly string[];
 };
 
 export type WatchResult = WatchOk | WatchEmpty | WatchUnavailable;
@@ -78,6 +86,51 @@ function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
   const t = Date.parse(asOf);
   if (!Number.isFinite(t)) return false;
   return nowMs - t <= maxAgeMs && nowMs - t >= 0;
+}
+
+function toAllowlistSet(
+  allowlist: ReadonlySet<string> | readonly string[] | undefined,
+): ReadonlySet<string> | null {
+  if (!allowlist) return null;
+  const set = allowlist instanceof Set ? allowlist : new Set(allowlist);
+  return set.size === 0 ? null : set;
+}
+
+/**
+ * A point is usable when it can honestly participate in threshold arithmetic —
+ * fresh, complete fields, valid fraction, and above the sample floor.
+ */
+export function isUsableApprovalPoint(
+  point: ApprovalRatePoint,
+  options: { nowMs: number; minAttempts: number },
+): boolean {
+  if (!point.railId) return false;
+  if (!isFresh(point.asOf, point.maxAgeMs, options.nowMs)) return false;
+  if (point.approvalRate == null || point.attempts == null) return false;
+  if (!Number.isInteger(point.attempts) || point.attempts < 0) return false;
+  if (point.attempts < options.minAttempts) return false;
+  return parseRate(point.approvalRate) != null;
+}
+
+/**
+ * When a non-empty allowlist is configured, every listed rail must have at
+ * least one usable metric. Missing configured rails are not silently dropped
+ * into a partial green board.
+ */
+export function missingAllowlistRails(
+  points: readonly ApprovalRatePoint[],
+  allowlist: ReadonlySet<string> | readonly string[],
+  options: { nowMs: number; minAttempts: number },
+): readonly string[] {
+  const set = allowlist instanceof Set ? allowlist : new Set(allowlist);
+  const missing: string[] = [];
+  for (const railId of set) {
+    const hasUsable = points.some(
+      (p) => p.railId === railId && isUsableApprovalPoint(p, options),
+    );
+    if (!hasUsable) missing.push(railId);
+  }
+  return missing.sort();
 }
 
 /**
@@ -107,6 +160,10 @@ export function filterRailsByAllowlist(
  * Sample floor (ops honesty): attempts must be ≥ 1. A rate on zero attempts is
  * not a metric — alerting on it invents a rail failure from empty data. Callers
  * may raise the floor with `minAttempts` (default 1).
+ *
+ * Allowlist coverage (D26-P1-A4): a non-empty `railAllowlist` is a configured
+ * watch set. Any listed rail without a usable metric → `incomplete_coverage`
+ * (not a silent partial `ok`).
  */
 export function watchApprovalFixtures(
   points: readonly ApprovalRatePoint[],
@@ -139,6 +196,19 @@ export function watchApprovalFixtures(
   // Floor is at least 1 — zero attempts is never a usable sample.
   const minAttempts =
     options.minAttempts === undefined ? 1 : Number.isInteger(options.minAttempts) && options.minAttempts >= 1 ? options.minAttempts : 1;
+
+  const allowlist = toAllowlistSet(options.railAllowlist);
+  if (allowlist) {
+    const missingRailIds = missingAllowlistRails(points, allowlist, { nowMs, minAttempts });
+    if (missingRailIds.length > 0) {
+      return {
+        status: 'unavailable',
+        userMessageKey: 'agents.merchant.unavailable',
+        reason: 'incomplete_coverage',
+        missingRailIds,
+      };
+    }
+  }
 
   const { kept: scoped, skippedNotAllowed } = filterRailsByAllowlist(points, options.railAllowlist);
 

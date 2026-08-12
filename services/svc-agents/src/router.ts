@@ -2573,7 +2573,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             z.object({
               status: z.literal('unavailable'),
               userMessageKey: z.literal('agents.merchant.unavailable'),
-              reason: z.enum(['stale', 'no_metrics', 'pay_plane_dark']),
+              reason: z.enum(['stale', 'no_metrics', 'pay_plane_dark', 'incomplete_coverage']),
+              missingRailIds: z.array(z.string()).optional(),
             }),
           ]),
         )
@@ -2594,6 +2595,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               skippedIncomplete: result.skippedIncomplete,
               skippedLowSample: result.skippedLowSample,
               alerts: result.alerts.map((a) => ({ ...a })),
+            };
+          }
+          if (result.status === 'unavailable') {
+            return {
+              status: 'unavailable' as const,
+              userMessageKey: result.userMessageKey,
+              reason: result.reason,
+              ...(result.missingRailIds === undefined ? {} : { missingRailIds: [...result.missingRailIds] }),
             };
           }
           return result;
@@ -2659,7 +2668,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             z.object({
               status: z.literal('unavailable'),
               userMessageKey: z.literal('agents.merchant.unavailable'),
-              reason: z.enum(['stale', 'no_metrics', 'pay_plane_dark']),
+              reason: z.enum(['stale', 'no_metrics', 'pay_plane_dark', 'incomplete_coverage']),
+              missingRailIds: z.array(z.string()).optional(),
               metering: runMeteringOutput,
             }),
             z.object({
@@ -2722,6 +2732,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 status: 'unavailable' as const,
                 userMessageKey: result.userMessageKey,
                 reason: result.reason,
+                ...(result.missingRailIds === undefined ? {} : { missingRailIds: [...result.missingRailIds] }),
                 metering,
               };
             }

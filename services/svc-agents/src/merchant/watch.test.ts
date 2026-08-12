@@ -113,4 +113,54 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
     expect(r.skippedLowSample).toBe(1);
     expect(r.alerts.map((a) => a.railId)).toEqual(['solid']);
   });
+
+  it('D26-P1-A4: allowlist with a missing rail refuses — never silent partial ok', () => {
+    const r = watchApprovalFixtures([pt({ railId: 'card-a', approvalRate: '0.99' })], {
+      now: NOW,
+      railAllowlist: ['card-a', 'card-b'],
+      threshold: '0.85',
+    });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'incomplete_coverage',
+      missingRailIds: ['card-b'],
+    });
+  });
+
+  it('D26-P1-A4: allowlisted null rate is incomplete coverage — not a green skip', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'card-a', approvalRate: '0.99' }), pt({ railId: 'card-b', approvalRate: null, attempts: null })],
+      { now: NOW, railAllowlist: ['card-a', 'card-b'], threshold: '0.85' },
+    );
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'incomplete_coverage',
+      missingRailIds: ['card-b'],
+    });
+  });
+
+  it('D26-P1-A4: allowlisted zero-sample is incomplete coverage — not invent alert or ok', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'card-a', approvalRate: '0.99' }), pt({ railId: 'card-b', approvalRate: '0.00', attempts: 0 })],
+      { now: NOW, railAllowlist: ['card-a', 'card-b'], threshold: '0.85' },
+    );
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'incomplete_coverage',
+      missingRailIds: ['card-b'],
+    });
+  });
+
+  it('D26-P1-A4: full allowlist coverage still alerts on breach', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'card-a', approvalRate: '0.70', attempts: 200 }), pt({ railId: 'card-b', approvalRate: '0.99' })],
+      { now: NOW, railAllowlist: ['card-a', 'card-b'], threshold: '0.85' },
+    );
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.alerts.map((a) => a.railId)).toEqual(['card-a']);
+  });
 });

@@ -93,7 +93,9 @@ export type MerchantRunEmpty = {
 export type MerchantRunUnavailable = {
   readonly status: 'unavailable';
   readonly userMessageKey: 'agents.merchant.unavailable';
-  readonly reason: 'stale' | 'no_metrics' | 'pay_plane_dark';
+  readonly reason: 'stale' | 'no_metrics' | 'pay_plane_dark' | 'incomplete_coverage';
+  /** Present when reason is `incomplete_coverage` — configured rails with no usable metric. */
+  readonly missingRailIds?: readonly string[];
   readonly metering: MerchantRunMetering;
 };
 
@@ -251,6 +253,7 @@ export async function runMerchantWatchSession(input: MerchantRunInput): Promise<
       status: 'unavailable',
       userMessageKey: watched.userMessageKey,
       reason: watched.reason,
+      ...(watched.missingRailIds === undefined ? {} : { missingRailIds: watched.missingRailIds }),
       metering,
     };
   } finally {
