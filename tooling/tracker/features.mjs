@@ -707,12 +707,14 @@ export const FEATURES = [
     requires: [
       'services/svc-pay/src/plugins/reference-client.ts',
       'services/svc-pay/src/plugins/webhook-vectors.ts',
+      'services/svc-pay/src/plugins/plugins-done-bar.test.ts',
       'docs/pay/PLUGINS-REFERENCE-PATH-2026-08-10.md',
     ],
     note:
       '**D26-P1-P8 2026-08-12:** Done bar = one real plugin path (TS reference client) + §13 PHP CMS socket. ' +
       'Client pins create/get/authorize/capture/refund + webhook-endpoints/deliveries; https-only register; ' +
-      'frozen HMAC vectors; no Woo/Magento/OpenCart PHP in monorepo CI. Law §13 socket opened. ' +
+      'frozen HMAC vectors; public-door lifecycle Done-bar (`plugins-done-bar.test.ts`) + sendPluginRequest E2E; ' +
+      'no Woo/Magento/OpenCart PHP in monorepo CI. Law §13 socket opened. ' +
       'Was reclaimed 2026-08-04 M1; wave-13 #1633 banked install/auth; this closes the mountain.',
   }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', {
