@@ -1089,14 +1089,32 @@ export function createP2pRouter(
         .mutation(async ({ ctx, input }) =>
           guard(async () => {
             assertModerator(ctx.principal, moderatorUserIds);
-            return toTradeOut(
-              await p2p.resolveDispute({
+            const trade = await p2p.resolveDispute({
+              tradeId: input.tradeId,
+              moderatorId: ctx.principal.userId,
+              resolution: input.resolution,
+              ...(input.notes ? { notes: input.notes } : {}),
+            });
+
+            /**
+             * D26-P1-I2 / D-S-08: a moderated loss must pull the merchant badge.
+             * Escrow already moved in `resolveDispute`; this only revises
+             * standing so API keys and offer ceilings stop vouching for the loser.
+             * release → seller lost; refund → buyer lost (same attribution as reputation).
+             */
+            if (merchants) {
+              const loserId = input.resolution === 'release' ? trade.sellerId : trade.buyerId;
+              const dispute = await p2p.getDispute(input.tradeId);
+              await merchants.suspendIfStandingBrokenByDisputeLaw({
+                userId: loserId,
                 tradeId: input.tradeId,
-                moderatorId: ctx.principal.userId,
-                resolution: input.resolution,
-                ...(input.notes ? { notes: input.notes } : {}),
-              }),
-            );
+                disputeId: dispute.id,
+                actorId: ctx.principal.userId,
+                actorScope: ctx.principal.scopes.includes('admin:compliance') ? 'admin:compliance' : 'p2p:read',
+              });
+            }
+
+            return toTradeOut(trade);
           }),
         ),
     }),
