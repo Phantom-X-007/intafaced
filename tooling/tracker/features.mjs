@@ -1442,9 +1442,9 @@ export const FEATURES = [
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
     note:
-      '**D26-P1-O5 (2026-08-12):** fan-out mountain vs §13 channels made explicit in svc-notify — ' +
-      '`channels/mountain-vs-sockets.ts` + `notify.channels`/`/ready` carry `socket` (null for inapp; ' +
-      '`socket.notify-email|push|sms` for OOA). Mountain stays `ready` not `done` while OOA refuse; ' +
+      '**D26-P1-O5 deepen (2026-08-12):** `notify.operatorDeliveries` (`admin:read`) — newest-first ' +
+      'cross-user delivery outcomes; `accepted`≠end-device delivered. Prior #1701: fan-out mountain vs §13 ' +
+      'channels explicit (`mountain-vs-sockets.ts`). Mountain stays `ready` not `done` while OOA refuse; ' +
       'no provider invent; Class X credentials remain owner. ' +
       'GHOST OWNER CLEARED 2026-08-09 wave 3: was `wip` @nitro-agent with no open PR when wave started; residual built and merged as #1187 (stuck-pending reap, ' +
       'register/verify rate limits, consent footer). Prior: liquidation fan-out #1116, multi-channel adapters, delivery honesty (accepted≠delivered). ' +
@@ -1459,7 +1459,7 @@ export const FEATURES = [
       '**MUST NOT flip to done:** out-of-app channels refuse channel.not_configured until Class X gateway credentials (owner). In-app DELIVERS. ' +
       'email/push/sms transports are wired and proven against a real HTTP server (gateway-wire.test.ts counts at the server) but cannot deliver without ' +
       'owner-provisioned credentials — wired to refuse, never to pretend. ' +
-      'Residual: operator delivery outcomes view (admin-scope product law), more event consumers (optional). ' +
+      'Residual: more event consumers (optional); Class X gateway credentials. ' +
       '(Multi-replica rate-limit N× already closed by migration 0005 + PostgresTargetRateLimiter.)',
   }),
   f('v22.alerts', 'Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31)', {

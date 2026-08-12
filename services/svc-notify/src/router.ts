@@ -57,6 +57,13 @@ const deliveryOutput = z.object({
   refusalCode: z.string().nullable(),
 });
 
+/** Operator view includes notification id so ops can correlate without user scope. */
+const operatorDeliveryOutput = deliveryOutput.extend({
+  id: z.string().uuid(),
+  notificationId: z.string().uuid(),
+  updatedAt: z.string(),
+});
+
 const targetOutput = z.object({
   channel: outOfAppChannelSchema,
   address: z.string(),
@@ -115,6 +122,15 @@ function deliveryToWire(d: DeliveryRecord) {
     attemptedAt: d.attemptedAt?.toISOString() ?? null,
     acceptedAt: d.acceptedAt?.toISOString() ?? null,
     refusalCode: d.refusalCode,
+  };
+}
+
+function operatorDeliveryToWire(d: DeliveryRecord) {
+  return {
+    id: d.id,
+    notificationId: d.notificationId,
+    ...deliveryToWire(d),
+    updatedAt: d.updatedAt.toISOString(),
   };
 }
 
@@ -344,6 +360,17 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         .input(z.object({ notificationId: z.string().uuid() }))
         .output(z.array(deliveryOutput))
         .query(async ({ ctx, input }) => (await notify.deliveriesFor(ctx.principal.userId, input.notificationId)).map(deliveryToWire)),
+
+      /**
+       * Operator delivery-outcomes view (D26-P1-O5 residual after #1701).
+       *
+       * Cross-user newest-first. `admin:read` only — never `notify:read`, which
+       * is self-scoped. `accepted` ≠ end-device delivered (mountain honesty).
+       */
+      operatorDeliveries: scopedProcedure('admin:read', { module: 'notify' })
+        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .output(z.array(operatorDeliveryOutput))
+        .query(async ({ input }) => (await notify.operatorDeliveryOutcomes(input?.limit ?? 50)).map(operatorDeliveryToWire)),
 
       /** Out-of-app mute prefs. Critical severity never respects mute (dispatch law). */
       mutePrefs: scopedProcedure('notify:read', { module: 'notify' })
