@@ -171,12 +171,8 @@ describe('marketPurchase', () => {
 
 describe('marketListingFee (§8.7 · §13 unwired)', () => {
   it('refuses blank listingId / non-positive amount (no invent free fee post)', () => {
-    expect(() =>
-      marketListingFee({ listingId: '  ', vendorUserId: VENDOR, assetId: 'USDT', amount: amt('1') }),
-    ).toThrow(InvalidEntryError);
-    expect(() =>
-      marketListingFee({ listingId: 'l1', vendorUserId: VENDOR, assetId: 'USDT', amount: 0n }),
-    ).toThrow(InvalidEntryError);
+    expect(() => marketListingFee({ listingId: '  ', vendorUserId: VENDOR, assetId: 'USDT', amount: amt('1') })).toThrow(InvalidEntryError);
+    expect(() => marketListingFee({ listingId: 'l1', vendorUserId: VENDOR, assetId: 'USDT', amount: 0n })).toThrow(InvalidEntryError);
   });
 
   it('posts vendor → houseFees(market) once under listingId', async () => {
