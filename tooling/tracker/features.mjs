@@ -1288,6 +1288,8 @@ export const FEATURES = [
       'Crash re-drive settles from claim snapshot (not live env bps). Over-capacity after unstake: oldest-first ' +
       'entitledListingRefs; excess refuse market.listing_over_capacity. Concurrent createListing cannot oversell ' +
       'slots (claimSlot FOR UPDATE + orphan rollback). Catalogue registration order (ASC) — ranking DIRECTION §8 owner. ' +
+      'D26-P1-M1 Class M residual SEALED 2026-08-12: compose LEDGER_URL→svc-ledger (no localhost invent); ' +
+      'public-door PRECONDITION_FAILED + empty catalogue proofs; ledger listing/premium recipes coord #1761. ' +
       'RESIDUAL / PARK: C3 subscriptions (period/past-due/cancel/access law — Nitro); commission bps value (Nitro env); ' +
       'ranking/featured. Purchase of subscription refuse market.subscription_not_built; public catalogue hides them.',
   }),

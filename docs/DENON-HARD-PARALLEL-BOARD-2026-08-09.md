@@ -181,10 +181,10 @@ Nitro asked for **double or triple** mass. **Right is not a count target.** Righ
 
 ### 5.5 Market
 
-| ID            | Tracker           | Done bar                                                                      |
-| ------------- | ----------------- | ----------------------------------------------------------------------------- |
-| **D26-P1-M1** | `market.commerce` | Product-complete after agent Class M residual clears; refuse blank commission |
-| **D26-P1-M2** | `market.vendors`  | Lifecycle under stake/commission law                                          |
+| ID            | Tracker           | Done bar                                                                                                                                                                                                                                                       |
+| ------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D26-P1-M1** | `market.commerce` | ~~Product-complete after agent Class M residual clears; refuse blank commission~~ **SEALED 2026-08-12** — compose `LEDGER_URL`→svc-ledger; public-door PRECONDITION_FAILED + empty catalogue; rate magnitude still Nitro unset; ledger fee recipes coord #1761 |
+| **D26-P1-M2** | `market.vendors`  | Lifecycle under stake/commission law — service doors **#1714**; ledger listing/premium recipes **#1761**                                                                                                                                                       |
 
 ### 5.6 Agents fleet (ready free · metering invent risk)
 

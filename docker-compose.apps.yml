@@ -689,13 +689,9 @@ services:
       # connection refused that gets recorded as "account unread".
       svc-identity: { condition: service_healthy }
 
-  # Vendor lifecycle Stage 1 — apply, then vet (§8.7 `market.vendors`).
-  #
-  # No LEDGER_URL and no *internal-secret, and both absences are the design:
-  # this mountain moves no value (purchases and house commission are
-  # `market.commerce`), and Stage 1 calls no other service. TOKEN_URL arrives
-  # with Stage 2, when stake-gated slots need `token.stakeOf` — adding it now
-  # would be a boot dependency that can fail in exchange for no capability.
+  # Vendor lifecycle + market.commerce (§8.7). Vendor half holds no balances;
+  # commerce posts `marketPurchase` to svc-ledger when the owner configures a
+  # house commission rate. TOKEN_URL is the stake-gated slot callee.
   #
   # No `ports:`. This is an S2S service reached only through svc-edge, which is
   # what makes `/api/market` kill-switchable from the operator control plane; a
@@ -719,6 +715,14 @@ services:
       HTTP_PORT: '4018'
       DATABASE_URL: postgres://svc_market:svc_market@postgres:5432/intafaced
       TOKEN_URL: http://svc-token:4003
+      # Class M money door (D26-P1-M1). Without this, env.ts defaults to
+      # localhost:4001 which is unreachable inside the compose network — purchase
+      # would invent a broken settle path instead of posting marketPurchase.
+      LEDGER_URL: http://svc-ledger:4001
+      # MARKET_HOUSE_COMMISSION_BPS deliberately UNSET — refuse-closed
+      # (market.commission_not_configured). Never invent a platform rate here;
+      # owner sets the magnitude when ready to sell. Explicit 0 is allowed only
+      # as an owner free-commission decision via env override.
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4018']
     healthcheck: *healthcheck
@@ -728,6 +732,10 @@ services:
       # every slot claim with market.stake_unavailable rather than oversell —
       # correct, but pointlessly noisy on a cold start.
       svc-token:
+        condition: service_healthy
+      # Purchase posts recipes.marketPurchase; order ledger healthy so the first
+      # settle after `up` does not race a cold ledger boot (D26-P1-M1).
+      svc-ledger:
         condition: service_healthy
 
   # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
