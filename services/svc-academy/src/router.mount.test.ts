@@ -166,6 +166,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'freezeSnapshot',
         'tournamentPrizePlane',
         'tournamentPrizeIntent',
+        'tournamentPrizeStart',
         'setStanding',
         'bulkSetStandings',
         'endSession',

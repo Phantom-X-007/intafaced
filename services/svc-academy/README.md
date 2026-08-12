@@ -14,7 +14,7 @@
 | Full DERIV//DESK library (20 playbooks + 3 workbooks)                         | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented. |
 | Cert → **perk** surfacing                                                     | A cert earns XP and stops there. Rank and perks are svc-identity's SoT (§4.1); a perk read here would be a second opinion on somebody else's table.                                                                               |
 | Ambassador **IFC pay / revenue share** (programme + residencies Stage-1 ship) | **Money.** Appoint/freeze/badge and residency apply/decide are real. Pay planes refuse-closed until owner rates + ledger recipes.                                                                                                 |
-| Tournament **IFC prize pools** (ladder Stage-1 ships)                         | Seasons + standings + lifecycle edges are real. Prize fund/payout always refuse-closed — no invent amounts. Class M recipes are a separate PR.                                                                                    |
+| Tournament **IFC prize pools** (ladder Stage-1 ships)                         | Seasons + standings + lifecycle edges are real. Blank/unset pools typed-refuse `academy.prize_pool_unset` (cannot start). Prize fund/payout refuse-closed — no invent IFC. Class M recipes are a separate PR.                     |
 
 ---
 
