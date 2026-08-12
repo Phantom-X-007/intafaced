@@ -28,9 +28,9 @@ import { createSubMerchantRouter } from './submerchant-router.js';
 import { createSubscriptionRouter } from './subscription-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { registerPublicPayRest } from './public-rest.js';
-import { SubscriptionService } from './subscriptions/index.js';
+import { SubscriptionService, registerSubscriptionCycleRoutes } from './subscriptions/index.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, mergeRouters, verifyServiceHeaders } from '@intafaced/contracts';
+import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -192,9 +192,33 @@ const subscriptions = new SubscriptionService(
         subscriptionId: input.subscriptionId,
         occurrence: String(input.occurrence),
         customerId: input.customerId,
+        /*
+         * The BUSINESS key for the period, carried onto the payment so an
+         * operator reconciling a suspected double charge can see which PERIOD a
+         * payment belongs to without joining anything. Derived from
+         * (subscription, occurrence) and from nothing else — that is the
+         * difference between a retry that charges once and the shape that
+         * drained a pot here.
+         */
+        subscriptionCycleKey: input.idempotencyKey,
       },
     });
     return { paymentId: payment.id };
+  },
+  {
+    /*
+     * EVERY RATE IS OWNER-ONLY, and the cycle has to refuse EARLIER than
+     * settlement does.
+     *
+     * `PAY_DEFAULT_FEE_BPS` is unset by default on purpose (see `env.ts`), and a
+     * merchant may carry no `pricing.feeBps` of its own. `prepareSettlement`
+     * already refuses to settle at an unknown price rather than settling at zero
+     * — "revenue that is not merely lost but invisible". A subscription must
+     * refuse to OPEN the charge, because by settlement time the customer has
+     * already paid and the refusal has arrived too late to be honest.
+     */
+    defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
+    resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
   },
 );
 
@@ -340,20 +364,21 @@ app.get('/ready', async () => ({
 await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
 
 /**
- * Subscription due-runner (SPEC §4). External cron, not setInterval.
+ * Subscription charge cycle (SPEC §4). External cron, not setInterval.
+ *
+ * The handler used to be inline here. It moved into
+ * `subscriptions/internal-cycle-routes.ts` so a test can reach it over HTTP:
+ * `reachability` is a doctrine gate, and a route defined in the file that also
+ * reads env, opens the pool and calls `listen()` is not reachable from a suite.
+ * The mount is this line; there is no second copy of the handler.
  *
  * Crypto path opens a payment/invoice (never pull). Service credentials required
- * so an unauthenticated caller cannot fan-out invoices.
+ * so an unauthenticated caller cannot fan out invoices to every customer on the
+ * platform.
  */
-function requireService(req: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;
-}
-
-app.post('/internal/jobs/run-due-subscriptions', async (req, reply) => {
-  if (!requireService(req)) {
-    return reply.code(401).send({ error: 'service credentials required', code: 'pay.unauthenticated' });
-  }
-  return subscriptions.runDueSubscriptions();
+registerSubscriptionCycleRoutes(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  subscriptions,
 });
 
 /**

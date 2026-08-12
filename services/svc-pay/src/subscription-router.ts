@@ -46,6 +46,43 @@ const subscriptionView = z.object({
   cancelledAt: z.string().datetime({ offset: true }).nullable(),
   path: z.string(),
   createdAt: z.string().datetime({ offset: true }),
+  /**
+   * The schedule frame. On the wire because a merchant looking at a resumed
+   * subscription needs to see that its due times moved — a `nextRunAt` alone
+   * cannot tell them whether the schedule re-spaced or is about to burst.
+   */
+  anchorAt: z.string().datetime({ offset: true }).nullable(),
+  anchorOccurrence: z.number().int().nonnegative(),
+  pausedAt: z.string().datetime({ offset: true }).nullable(),
+  resumedAt: z.string().datetime({ offset: true }).nullable(),
+  stalledAt: z.string().datetime({ offset: true }).nullable(),
+  /**
+   * WHY it stopped advancing, and the whole point of it being a separate field:
+   * an operator pause and a runner outage have identical mechanics and
+   * completely different explanations
+   * (`adr/2026-08-08-twap-overdue-slice-disposition.md`), and arrears is a third
+   * thing again. A single `paused` word owes the merchant an answer it does not
+   * have.
+   */
+  stallReason: z.enum(['operator_pause', 'runner_outage', 'arrears', 'fee_unpublished', 'window_exhausted']).nullable(),
+});
+
+/** One recorded period. The journal, not a status word. */
+const cycleView = z.object({
+  occurrence: z.number().int().nonnegative(),
+  amount: amountSchema,
+  status: z.enum(['pending', 'invoiced', 'settled', 'rejected', 'skipped']),
+  /**
+   * The business idempotency key of the PERIOD. Exposed deliberately: "was this
+   * period charged twice" is answerable by reading two keys, and a key that
+   * changed between attempts is visible rather than inferred.
+   */
+  idempotencyKey: z.string().nullable(),
+  attemptCount: z.number().int().positive(),
+  rejectionCode: z.string().nullable(),
+  paymentId: z.string().uuid().nullable(),
+  exhausted: z.boolean(),
+  settledAt: z.string().datetime({ offset: true }).nullable(),
 });
 
 const executionView = z.object({
@@ -91,6 +128,28 @@ function toSubOut(s: Awaited<ReturnType<SubscriptionService['getSubscription']>>
     cancelledAt: s.cancelledAt === null ? null : s.cancelledAt.toISOString(),
     path: s.path,
     createdAt: s.createdAt.toISOString(),
+    anchorAt: s.anchorAt === null ? null : s.anchorAt.toISOString(),
+    anchorOccurrence: s.anchorOccurrence,
+    pausedAt: s.pausedAt === null ? null : s.pausedAt.toISOString(),
+    resumedAt: s.resumedAt === null ? null : s.resumedAt.toISOString(),
+    stalledAt: s.stalledAt === null ? null : s.stalledAt.toISOString(),
+    stallReason: s.stallReason,
+  };
+}
+
+function toCycleOut(c: Awaited<ReturnType<SubscriptionService['listCycles']>>[number]) {
+  return {
+    occurrence: c.occurrence,
+    // `formatAmount`, not `String()`: an `Amount` is a scaled bigint and
+    // `String()` renders 10 USDT as "10000000000000000000".
+    amount: formatAmount(c.amount),
+    status: c.status,
+    idempotencyKey: c.idempotencyKey,
+    attemptCount: c.attemptCount,
+    rejectionCode: c.rejectionCode,
+    paymentId: c.paymentId,
+    exhausted: c.exhaustedAt !== null,
+    settledAt: c.settledAt === null ? null : c.settledAt.toISOString(),
   };
 }
 
@@ -124,7 +183,22 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.mandate_inactive':
       case 'pay.subscription_inactive':
       case 'pay.subscription_reconsent_required':
+      /*
+       * CONFLICT, not BAD_REQUEST. The request is well-formed and the caller may
+       * legitimately have wanted it; what refuses is the state of the mandate.
+       * A resume that will not fit inside the authorised window and a charge
+       * above the ceiling are both "your mandate does not allow this", which a
+       * merchant resolves by re-consenting, not by fixing their payload.
+       */
+      case 'pay.subscription_resume_exceeds_mandate':
+      case 'pay.subscription_exceeds_mandate':
         return 'CONFLICT' as const;
+      /*
+       * The merchant cannot fix an unpublished platform fee rate, so this is not
+       * their bad request. It is refuse-closed until an owner publishes a rate.
+       */
+      case 'pay.subscription_fee_unpublished':
+        return 'FORBIDDEN' as const;
       default:
         return 'BAD_REQUEST' as const;
     }
@@ -323,6 +397,66 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
             await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
             const sub = await subscriptions.cancelSubscription(input.subscriptionId);
             return toSubOut(sub);
+          }),
+        ),
+
+      /**
+       * Pause — stop charging, and record that a person did it.
+       *
+       * The recorded reason is what keeps this distinguishable from a runner
+       * outage later, which the TWAP ADR requires: identical mechanics,
+       * completely different explanations.
+       */
+      pause: scopedProcedure('pay:write', { module: 'pay' })
+        .input(z.object({ subscriptionId: z.string().uuid() }))
+        .output(subscriptionView)
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const existing = await subscriptions.getSubscription(input.subscriptionId);
+            await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
+            return toSubOut(await subscriptions.pauseSubscription(input.subscriptionId));
+          }),
+        ),
+
+      /**
+       * Resume — and the schedule does not compress.
+       *
+       * `projectedEnd` is returned rather than left to be assumed, because
+       * re-spacing genuinely changes when the subscription ends and
+       * `adr/2026-08-08-twap-overdue-slice-disposition.md` requires a resume to
+       * report its NEW projected end: *"A trader who paused for lunch needs to
+       * know their order now runs into the close."* The merchant equivalent is
+       * knowing that a month's pause moved the final period a month later.
+       *
+       * `null` means the mandate is open-ended, so there is no end to project.
+       * A resume that would run past a bounded mandate's window is REFUSED
+       * (`pay.subscription_resume_exceeds_mandate`), not quietly trimmed.
+       */
+      resume: scopedProcedure('pay:write', { module: 'pay' })
+        .input(z.object({ subscriptionId: z.string().uuid() }))
+        .output(z.object({ subscription: subscriptionView, projectedEnd: z.string().datetime({ offset: true }).nullable() }))
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const existing = await subscriptions.getSubscription(input.subscriptionId);
+            await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
+            const { subscription, projectedEnd } = await subscriptions.resumeSubscription(input.subscriptionId);
+            return { subscription: toSubOut(subscription), projectedEnd: projectedEnd === null ? null : projectedEnd.toISOString() };
+          }),
+        ),
+
+      /**
+       * The period journal. Read-only, and the honest answer to "did you charge
+       * me twice" — two periods carry two keys, one period retried carries one.
+       */
+      cycles: scopedProcedure('pay:read', { module: 'pay' })
+        .input(z.object({ subscriptionId: z.string().uuid() }))
+        .output(z.object({ subscriptionId: z.string().uuid(), cycles: z.array(cycleView) }))
+        .query(({ ctx, input }) =>
+          wrap(async () => {
+            const existing = await subscriptions.getSubscription(input.subscriptionId);
+            await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
+            const cycles = await subscriptions.listCycles(input.subscriptionId);
+            return { subscriptionId: input.subscriptionId, cycles: cycles.map(toCycleOut) };
           }),
         ),
     }),
