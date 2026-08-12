@@ -22,7 +22,7 @@ describe('chargeback ledger wire — honest absent (D26-P1-P5)', () => {
 
   it('router dispute procedures exist but never name ledger chargeback recipes', () => {
     const src = readFileSync(join(here, 'router.ts'), 'utf8');
-    expect(src).toMatch(/openDispute|contestDispute|getDispute/);
+    expect(src).toMatch(/openDispute|contestDispute|acceptDispute|markDisputeWon|markDisputeLost|getDispute/);
     expect(src).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall|recipes\.chargeback/);
   });
 

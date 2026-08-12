@@ -1086,6 +1086,52 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           }
         }),
 
+      /**
+       * Terminal dispute outcomes — case mechanism only. Never posts ledger
+       * chargeback recipes (owner Class M park / chargeback-unwired pin).
+       */
+      acceptDispute: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .mutation(({ input }) => {
+          try {
+            const c = defaultDisputeCaseStore.accept(input.disputeId);
+            return { disputeId: c.disputeId, status: c.status, ledgerWire: c.ledgerWire };
+          } catch (e) {
+            if (e instanceof DisputeCaseError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      markDisputeWon: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .mutation(({ input }) => {
+          try {
+            const c = defaultDisputeCaseStore.markWon(input.disputeId);
+            return { disputeId: c.disputeId, status: c.status, ledgerWire: c.ledgerWire };
+          } catch (e) {
+            if (e instanceof DisputeCaseError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      markDisputeLost: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .mutation(({ input }) => {
+          try {
+            const c = defaultDisputeCaseStore.markLost(input.disputeId);
+            return { disputeId: c.disputeId, status: c.status, ledgerWire: c.ledgerWire };
+          } catch (e) {
+            if (e instanceof DisputeCaseError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
       getDispute: scopedProcedure('pay:read', { module: 'pay' })
         .input(z.object({ disputeId: z.string().min(1) }))
         .query(({ input }) => {
