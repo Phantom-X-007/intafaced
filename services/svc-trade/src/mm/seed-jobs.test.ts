@@ -8,8 +8,7 @@ import { loadMmSeedLastRun, parseMmSeedMids, parseMmSeedTargets, saveMmSeedLastR
 import { MM_MATCHING_ACCOUNT_ID, type SeedTradableMarket } from './seed-market.js';
 
 /** Active spot catalog row — same gate inputs placeOrder uses. */
-const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT',
-  assetClass: 'crypto', kind: 'spot', status: 'active' };
+const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT', assetClass: 'crypto', kind: 'spot', status: 'active' };
 const marketForActive = (): SeedTradableMarket => ACTIVE_SPOT;
 
 class JobStubMatching implements Pick<MatchingClient, 'submit' | 'depth' | 'cancel'> {

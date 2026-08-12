@@ -23,8 +23,7 @@ import {
 import { startMmSeedJobs } from './seed-jobs.js';
 import { MM_MATCHING_ACCOUNT_ID, seedMarket, type SeededOrderRecord, type SeedTradableMarket } from './seed-market.js';
 
-const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT',
-  assetClass: 'crypto', kind: 'spot', status: 'active' };
+const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT', assetClass: 'crypto', kind: 'spot', status: 'active' };
 
 class HonestyStubMatching implements Pick<MatchingClient, 'submit' | 'depth' | 'cancel'> {
   readonly submitted: EngineSubmitRequest[] = [];
