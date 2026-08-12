@@ -227,10 +227,8 @@ export type EtlWatermarkResolution = {
   readonly envKey: typeof ANALYTICS_ETL_WATERMARK_AT_ENV;
 };
 
-const ETL_ABSENT_NOTE =
-  'ETL watermark: ABSENT — cannot claim "ran and found nothing" vs "never ran". No fake cubes.';
-const ETL_PRESENT_NOTE =
-  'ETL watermark: PRESENT (operator-stamped). Does not imply live cubes — lag probe still required.';
+const ETL_ABSENT_NOTE = 'ETL watermark: ABSENT — cannot claim "ran and found nothing" vs "never ran". No fake cubes.';
+const ETL_PRESENT_NOTE = 'ETL watermark: PRESENT (operator-stamped). Does not imply live cubes — lag probe still required.';
 
 /**
  * Resolve ETL watermark from env. Fail-closed: junk timestamps are absent.
