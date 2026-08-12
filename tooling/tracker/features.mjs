@@ -581,28 +581,37 @@ export const FEATURES = [
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
     requires: [
       'services/svc-pay/src/kyb-service.ts',
       'services/svc-pay/src/psp-mode.ts',
       'services/svc-pay/drizzle/0013_pay_merchant_kyb_history.sql',
+      'services/svc-pay/src/psp-done-bar.test.ts',
     ],
     note:
-      '**D26-P1-P1 2026-08-12** — digital KYB live operator path (`kyb.decide` under admin:compliance) + append-only KYB/pricing ' +
-      'histories; PSP mode enable refuses missing feeBps (no invent fees); boot seal refuses Hyperswitch/Stripe/etc in svc-pay deps ' +
-      '(D-S-10). Path-disjoint from settlement (#1694) and fraud (#1657). Residual: kybStatus money-gate is pay.gateway; card ' +
-      'acquiring stays socket.psp-partners. Lane feat/pay-psp-product.',
+      '**DONE 2026-08-12 (D26-P1-P1):** PSP path without third-party money library (D-S-10 boot seal) + merchant ' +
+      'durability — digital KYB live operator path (`kyb.submit`/`kyb.decide`) + append-only KYB/pricing histories; ' +
+      'PSP mode enable refuses missing feeBps (no invent fees). Public-door proof: `psp-done-bar.test.ts` (#1720 tip + Done-bar closeout). ' +
+      'Residual: kybStatus money-gate is pay.gateway; card acquiring stays socket.psp-partners.',
   }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
-    // D26-P1-P2 claim 2026-08-12: #1741 feat/pay-payfac-or-p10 — REST permissions + honest partial.
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.psp'],
-    note: '**D26-P1-P2 WIP #1741 (2026-08-12)** — REST /v1/submerchant-permissions/* + shared surface→area map + named §13 sockets (settling partner, split-fee recipes). Honest partial, not full underwriting. **Sub-merchant tree landed #1135 (2026-08-08)** — merchants.parent_merchant_id (NULL = top of its own tree, nothing backfilled) plus settling_party, and pay.merchant_permission_events as an append-only journal behind a trigger. Authorization is two checks that are not the same check, both at the procedure boundary: a STRUCTURAL ancestor-or-self scope that cannot be widened, and an AREA check over descendants only; the acting node is resolved from the principal and is deliberately not on the wire. Moves no value. **The "14 permission areas" in this title has never existed anywhere** — it is one string copied between this file, coverage.yaml and the build doc; ELEVEN areas shipped, each naming a surface svc-pay actually has, and area is text not an enum so a twelfth costs one line. Fixing the number is an OWNER decision. Also found: payfac was never actually blocked by pay.psp — merchant.create has accepted mode payfac since migration 0000 and it changed nothing. STILL NOT done: the nine areas naming gateway procedures are not yet enforced there — router.ts still authorizes with a single assertMerchantOwnership userId comparison, and wiring it touches the money paths. Ghost owner cleared 2026-08-09 (merged #1135, no open PR).',
+    requires: [
+      'services/svc-pay/src/payfac-permissions.ts',
+      'services/svc-pay/src/public-rest.payfac-permissions.test.ts',
+      'docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md',
+    ],
+    note:
+      '**DONE 2026-08-12 (D26-P1-P2):** Honest partial + §13 — REST /v1/submerchant-permissions/* + shared surface→area map ' +
+      '(#1741) · trees + area fence on money paths · named sockets `socket.payfac-settling-party-partner` + ' +
+      '`socket.payfac-split-fee-recipes`. Title "14 areas" is historical; eleven shipped. Public-door: ' +
+      '`public-rest.payfac-permissions.test.ts`. Not full underwriting / invent fee splits.',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
