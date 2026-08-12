@@ -40,12 +40,7 @@ import {
 } from '../accounts.js';
 
 export type { EscrowDisputeRuling } from './escrow-dispute-law.js';
-export {
-  NATURAL_PERSON_ID,
-  isNaturalPersonId,
-  assertEscrowDisputeRuling,
-  assertEscrowRefundResolution,
-} from './escrow-dispute-law.js';
+export { NATURAL_PERSON_ID, isNaturalPersonId, assertEscrowDisputeRuling, assertEscrowRefundResolution } from './escrow-dispute-law.js';
 
 /**
  * LEDGER RECIPES (§4.2).

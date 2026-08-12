@@ -4,11 +4,7 @@ import { parseAmount, formatAmount } from '../money.js';
 import { houseFees, tradeEscrowAccount, userAvailable } from '../accounts.js';
 import { InvalidEntryError } from '../types.js';
 import { recipes } from './index.js';
-import {
-  assertEscrowDisputeRuling,
-  assertEscrowRefundResolution,
-  isNaturalPersonId,
-} from './escrow-dispute-law.js';
+import { assertEscrowDisputeRuling, assertEscrowRefundResolution, isNaturalPersonId } from './escrow-dispute-law.js';
 
 const SELLER = '11111111-1111-1111-1111-111111111111';
 const BUYER = '22222222-2222-2222-2222-222222222222';
@@ -41,9 +37,7 @@ describe('escrow dispute law (ADR D-S-08) — recipe layer', () => {
   it('happy-path escrowRelease / escrowRefund omit ruling and still post', async () => {
     const ledger = new MemoryLedger();
     await fund(ledger, SELLER, 'USDT', '100');
-    await ledger.post(
-      recipes.escrowLock({ tradeId: 't-happy', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('100') }),
-    );
+    await ledger.post(recipes.escrowLock({ tradeId: 't-happy', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('100') }));
     await ledger.post(
       recipes.escrowRelease({
         tradeId: 't-happy',
@@ -57,9 +51,7 @@ describe('escrow dispute law (ADR D-S-08) — recipe layer', () => {
     expect(formatAmount((await ledger.balance(userAvailable(BUYER, 'USDT'))).amount)).toBe('100');
 
     await fund(ledger, SELLER, 'USDT', '50');
-    await ledger.post(
-      recipes.escrowLock({ tradeId: 't-cancel', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('50') }),
-    );
+    await ledger.post(recipes.escrowLock({ tradeId: 't-cancel', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('50') }));
     await ledger.post(
       recipes.escrowRefund({
         tradeId: 't-cancel',
@@ -76,9 +68,7 @@ describe('escrow dispute law (ADR D-S-08) — recipe layer', () => {
   it('moderated release posts with ruling meta and moves value once', async () => {
     const ledger = new MemoryLedger();
     await fund(ledger, SELLER, 'USDT', '100');
-    await ledger.post(
-      recipes.escrowLock({ tradeId: 't-mod-rel', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('100') }),
-    );
+    await ledger.post(recipes.escrowLock({ tradeId: 't-mod-rel', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('100') }));
 
     const req = recipes.escrowRelease({
       tradeId: 't-mod-rel',
@@ -107,9 +97,7 @@ describe('escrow dispute law (ADR D-S-08) — recipe layer', () => {
   it('moderated refund posts with ruling meta back to seller', async () => {
     const ledger = new MemoryLedger();
     await fund(ledger, SELLER, 'USDT', '100');
-    await ledger.post(
-      recipes.escrowLock({ tradeId: 't-mod-ref', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('100') }),
-    );
+    await ledger.post(recipes.escrowLock({ tradeId: 't-mod-ref', sellerId: SELLER, buyerId: BUYER, assetId: 'USDT', amount: amt('100') }));
 
     const req = recipes.escrowRefund({
       tradeId: 't-mod-ref',
