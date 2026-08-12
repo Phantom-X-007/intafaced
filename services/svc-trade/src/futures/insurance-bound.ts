@@ -23,8 +23,10 @@
  * account's balance is the ceiling, and a shortfall larger than that balance
  * refuses / parks instead of overdrawing.
  *
- * It is NOT the fund's target size, share of fees, capitalisation schedule, or
- * listing gate — those are owner product law (D4 / DIRECTION insurance fund).
+ * It is NOT the fund's target size, share of fees, or capitalisation schedule —
+ * those stay owner product law (D4). The DIRECTION:33 listing gate lives in
+ * `insurance-listing-gate.ts` and reuses `recipeInsuranceAccount` from here so
+ * list refuse and shortfall refuse name the same pot.
  * The account itself is already fixed by the ledger recipe
  * (`insuranceFund` / `house:insurance-fund:available`); this file ASKS the
  * recipe rather than re-stating the pot, so a future recipe change cannot leave

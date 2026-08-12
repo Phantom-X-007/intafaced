@@ -210,6 +210,12 @@ export type TradeErrorCode =
    * on a non-options kind. Schema CHECK `markets_options_terms_ck` is the same rule.
    */
   | 'trade.options_terms_incomplete'
+  /**
+   * Real-money futures list/enable refused because the insurance fund for the
+   * quote asset is empty (DIRECTION:33). Distinct from `trade.insurance_underfunded`
+   * (shortfall cover on an open position). Does not encode a target size.
+   */
+  | 'trade.insurance_fund_empty'
   | 'trade.hold_uncovered'
   | 'trade.convert_disabled'
   | 'trade.convert_no_liquidity'
