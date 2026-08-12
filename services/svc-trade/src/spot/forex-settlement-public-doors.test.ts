@@ -25,7 +25,7 @@ import { fakeMarket } from '../public-rest.js';
 import { fakeOrder, registerPrivateRest, type PrivateRestDeps } from '../private-rest.js';
 import { assertSettlementRails, assertTradable } from './risk.js';
 import { FOREX_SETTLEMENT_REFUSE_CODE, FOREX_SETTLEMENT_SOCKET, assertProductionUnsettledAssetClassListing } from './forex-settlement.js';
-import { TradeError, type Market } from './types.js';
+import { TradeError, type Market, type OrderType } from './types.js';
 import type { PlaceOrderInput } from './trade-service.js';
 import type { TradeService } from './trade-service.js';
 
@@ -160,18 +160,23 @@ function realSettlementPlaceOrder(opts: {
   marketBySymbol: (symbol: string) => Promise<Market | null>;
 }): (principal: Principal, input: PlaceOrderInput) => Promise<ReturnType<typeof fakeOrder>> {
   return async (_principal, input) => {
-    const market = await opts.marketBySymbol(input.symbol);
+    const symbol = input.symbol;
+    if (!symbol) {
+      throw new TradeError('market symbol required', 'trade.market_not_found');
+    }
+    const market = await opts.marketBySymbol(symbol);
     if (!market) {
-      throw new TradeError(`market ${input.symbol} not found`, 'trade.market_not_found');
+      throw new TradeError(`market ${symbol} not found`, 'trade.market_not_found');
     }
     assertTradable(market);
     assertSettlementRails(market);
     // Session open assumed mid-week so the settlement refuse is what we prove.
+    const orderType = input.type as OrderType;
     return fakeOrder({
       marketId: market.id,
       clientOrderId: input.clientOrderId ?? null,
       side: input.side,
-      type: input.type,
+      type: orderType,
       qty: input.qty,
       price: input.price ?? null,
     });
