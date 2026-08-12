@@ -1041,10 +1041,7 @@ export class SubscriptionService {
               path: sub.path,
             });
             if (notify.notified !== false || notify.status !== 'absent') {
-              throw new PayError(
-                'Pre-charge notify invent refused — socket.pay-precharge-notify is absent',
-                'pay.subscription_invalid',
-              );
+              throw new PayError('Pre-charge notify invent refused — socket.pay-precharge-notify is absent', 'pay.subscription_invalid');
             }
 
             const opened = await this.openInvoice({
