@@ -67,6 +67,23 @@ describe('CopyService', () => {
     ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
+  it('published empty allowlist serves none — still refuse-closed (D26-P0-15)', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: { published: true, allowedRegions: [] },
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
+  });
+
   it('follow → mirror plan within envelope; cap exceed refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new CopyService(new MemoryLedger(), {

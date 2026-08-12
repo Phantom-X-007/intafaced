@@ -4,6 +4,10 @@
  * `leader_share_bps` and the served-jurisdiction list are DIRECTION §8 —
  * never defaulted. Blank / unpublished → refuse-closed.
  *
+ * Jurisdiction seal (D26-P0-15):
+ * `docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md` — no invent geo
+ * list; owner publishes `TRADE_COPY_JURISDICTION_LAW` or follow stays closed.
+ *
  * Spec formula (no P&L): leader earnings = share of protocol trading fee
  * on follower fill notional. Follower pays the same fee as solo trading.
  */

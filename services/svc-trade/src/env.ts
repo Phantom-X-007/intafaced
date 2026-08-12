@@ -340,10 +340,13 @@ const schema = serviceEnvSchema
       TRADE_COPY_FEE_SHARE_LAW: z.string().default(''),
 
       /**
-       * Copy jurisdiction allowlist (trade.copy / D-S-03). JSON or empty.
+       * Copy jurisdiction allowlist (trade.copy / D-S-03 / D26-P0-15).
        *
-       * Empty (default) = unpublished → follow refuses. Never invent geo list.
-       * Published shape: {"published":true,"allowedRegions":["SG","…"]}
+       * Empty (default) = unpublished → follow refuses. Never invent geo list
+       * (adr/2026-08-12-copy-jurisdiction-refuse-closed.md). Owner publishes
+       * codes via deploy config only.
+       * Published shape: {"published":true,"allowedRegions":["…"]}
+       * Published empty array = serve none (still fail closed).
        */
       TRADE_COPY_JURISDICTION_LAW: z.string().default(''),
 

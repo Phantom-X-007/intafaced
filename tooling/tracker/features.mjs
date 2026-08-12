@@ -371,7 +371,8 @@ export const FEATURES = [
       'W13 L10 2026-08-10: settle fillId claim (no re-bump period on redelivery) + drizzle 0022 copy_settled_fee_shares; listMyFollows + planMirror mounted. ' +
       'W10 L02 product mount: follow/killFeeShare/unfollow/settleFeeShare/deskStatus + TRADE_COPY_* env (blank refuse) + 0021 mirrored_fills. ' +
       'Stage #1009 + money seals #1191/#1199/#1386. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      'Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: owner rates (Nitro §8); session-key caps (protocol); auto-mirror place into spot — plan only.',
+      'D26-P0-15 SEALED 2026-08-12: jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW (adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo list. ' +
+      'Blank §8 leader_share_bps still refuse-closed (P0-02). Residual: owner rates + eventual region table; session-key caps (protocol); auto-mirror place into spot — plan only.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',

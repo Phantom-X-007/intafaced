@@ -59,6 +59,13 @@ describe('parseCopyJurisdictionLawJson', () => {
   it('refuses invent — missing allowedRegions', () => {
     expect(() => parseCopyJurisdictionLawJson(JSON.stringify({ published: true }))).toThrow(CopyError);
   });
+
+  it('published empty allowlist is valid (serve none — not invent)', () => {
+    expect(parseCopyJurisdictionLawJson(JSON.stringify({ published: true, allowedRegions: [] }))).toEqual({
+      published: true,
+      allowedRegions: [],
+    });
+  });
 });
 
 describe('requirePublished*', () => {
