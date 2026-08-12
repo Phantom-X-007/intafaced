@@ -518,8 +518,7 @@ section .lead {
   min-height: 260px;
   padding: 1rem;
   position: relative;
-  background:
-    linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--lime) 4%, transparent) 100%),
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--lime) 4%, transparent) 100%),
     repeating-linear-gradient(0deg, transparent, transparent 31px, var(--line) 32px),
     repeating-linear-gradient(90deg, transparent, transparent 39px, color-mix(in srgb, var(--line) 70%, transparent) 40px);
 }
