@@ -1008,25 +1008,22 @@ export const FEATURES = [
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',
     phase: '5',
-    status: 'wip',
-    owner: 'Phantom-X-007',
+    status: 'done',
     dependsOn: ['pay.rails'],
     requires: [
       'services/svc-bank/src/ramps/ramp-service.ts',
       'services/svc-bank/src/ramps/rails.ts',
       'services/svc-bank/src/ramps/pay-fiat-adapter.ts',
+      'services/svc-bank/src/ramps/ramps-fiat-product.test.ts',
     ],
     note:
-      '**D26-P1-B4 WIP feat/bank-ramps-fiat-pay-adapters** — fiat via PayFiatRampPort (svc-pay RailAdapter plane); ' +
-      'empty/sandbox/absent refuse bank.fiat_ramp_socket; live adapter uses ledger-client recipes only (no second book). ' +
-      'No APY/BIN invent. Avoids bank.auto-invest/business path fences (requires narrowed to their dirs). ' +
-      '**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF DONE #997** (claim TRK-bank.ramps status:merged). ' +
-      'OWNER CLEARED 2026-08-08 (axis C1 absorbs #1128 closeout): stale `owner: cursor-swarm-bank` fenced ALL of services/svc-bank ' +
-      'via claim-check path map and parked money-critical #1102. Same release standard as #1122. ' +
-      'CRYPTO LEG — ledger surface on main: ramps.programme|onramps|offramps|offramp + ops creditOnramp; value only via ' +
-      'ledger-client deposit/withdrawHold/withdrawSettle against rail bank-crypto-ledger. BANK_RAMP_MODE=none|crypto-ledger, default none; ' +
-      'simulated: true always; fiat refuses bank.fiat_ramp_socket → socket.psp-partners until a live pay RailAdapter is injected. ' +
-      'No earn APY / card BIN invented. Live chain confirm/send remains svc-pay + Class X.',
+      '**D26-P1-B4 COMPLETE #1773** — Fiat on/off via PayFiatRampPort (svc-pay RailAdapter plane) on public doors ' +
+      '(ops.creditOnramp + ramps.offramp); empty/sandbox/absent refuse bank.fiat_ramp_socket before any row; live adapter ' +
+      'books only via ledger-client deposit/withdrawHold/withdrawSettle against the pay rail id (no second book, no bank-local PSP). ' +
+      'Programme surfaces fiatVia: svc-pay.RailAdapter. simulated: true always. No APY/BIN invent. ' +
+      'auto-invest/business claim fences narrowed to their dirs (owners unchanged). ' +
+      '**SPLIT 2026-08-04 ADR** · CRYPTO LEDGER HALF #997. Commercial partner / money-transmission remains socket.psp-partners + Class X. ' +
+      'Live chain confirm/send remains svc-pay + Class X.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
     module: 'agents',

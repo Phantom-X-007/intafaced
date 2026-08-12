@@ -8,6 +8,7 @@
 | Owner        | Phantom-X-007 (Denon agent)                                                                 |
 | Paths        | `services/svc-bank/src/ramps/**` · LIVE-LANES · features.mjs                                |
 | Do not touch | `bank.auto-invest` · `bank.business` · invent APY/card BIN · `packages/ledger-client` edits |
-| Note         | Fiat via PayFiatRampPort (svc-pay RailAdapter plane); crypto half unchanged (#997)          |
+| Note         | COMPLETE: public-door fiat on/off via PayFiatRampPort; ledger-only; crypto half #997        |
 
 Claimed 2026-08-12. Crash recovery of prior WIP on `feat/bank-ramps-fiat-honesty`.
+Fattened 2026-08-12: `ramps-fiat-product.test.ts` seals mounted-router E2E (empty/sandbox refuse + live pay rail money path).
