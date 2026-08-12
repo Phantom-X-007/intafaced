@@ -608,9 +608,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 z.object({
                   published: z.literal(true),
                   p0_11: z.literal('sealed'),
-                  allowedInputs: z
-                    .array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding']))
-                    .max(20),
+                  allowedInputs: z.array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding'])).max(20),
                   rankingRecipeId: z.literal('abs_change_x_log_volume'),
                 }),
               ])
@@ -645,12 +643,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum([
-                'signal_inputs_law_blank',
-                'inputs_empty',
-                'ranking_recipe_unknown',
-                'required_inputs_missing',
-              ]),
+              reason: z.enum(['signal_inputs_law_blank', 'inputs_empty', 'ranking_recipe_unknown', 'required_inputs_missing']),
               userMessageKey: z.literal('agents.scanner.signal_inputs_closed'),
               residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL),
             }),
@@ -937,9 +930,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 z.object({
                   published: z.literal(true),
                   p0_11: z.literal('sealed'),
-                  allowedInputs: z
-                    .array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding']))
-                    .max(20),
+                  allowedInputs: z.array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding'])).max(20),
                   rankingRecipeId: z.literal('abs_change_x_log_volume'),
                 }),
               ])
@@ -1003,11 +994,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 'ranking_recipe_unknown',
                 'required_inputs_missing',
               ]),
-              userMessageKey: z.enum([
-                'agents.scanner.unavailable',
-                'agents.scanner.tier_closed',
-                'agents.scanner.signal_inputs_closed',
-              ]),
+              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed', 'agents.scanner.signal_inputs_closed']),
               residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL).optional(),
             }),
           ]),
@@ -1083,9 +1070,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 z.object({
                   published: z.literal(true),
                   p0_11: z.literal('sealed'),
-                  allowedInputs: z
-                    .array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding']))
-                    .max(20),
+                  allowedInputs: z.array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding'])).max(20),
                   rankingRecipeId: z.literal('abs_change_x_log_volume'),
                 }),
               ])
@@ -1155,11 +1140,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 'ranking_recipe_unknown',
                 'required_inputs_missing',
               ]),
-              userMessageKey: z.enum([
-                'agents.scanner.unavailable',
-                'agents.scanner.tier_closed',
-                'agents.scanner.signal_inputs_closed',
-              ]),
+              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed', 'agents.scanner.signal_inputs_closed']),
               residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL).optional(),
               tickersRefusedByTool: z.number().int(),
               tickersRefusedByGuardrail: z.number().int(),

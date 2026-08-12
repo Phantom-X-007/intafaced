@@ -51,11 +51,7 @@ export const SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW: Extract<ScannerSignalInputsLaw,
 };
 
 /** Inputs the Stage-1 recipe actually reads — must all be on the sealed allowlist. */
-export const ABS_CHANGE_X_LOG_VOLUME_REQUIRED_INPUTS: readonly ScannerSignalInputKind[] = [
-  'last',
-  'volume24h',
-  'change24hBps',
-];
+export const ABS_CHANGE_X_LOG_VOLUME_REQUIRED_INPUTS: readonly ScannerSignalInputKind[] = ['last', 'volume24h', 'change24hBps'];
 
 export type ScannerSignalInputsGateOk = {
   readonly status: 'ok';
@@ -64,10 +60,7 @@ export type ScannerSignalInputsGateOk = {
 };
 
 export type ScannerSignalInputsGateRefuseReason =
-  | 'signal_inputs_law_blank'
-  | 'inputs_empty'
-  | 'ranking_recipe_unknown'
-  | 'required_inputs_missing';
+  'signal_inputs_law_blank' | 'inputs_empty' | 'ranking_recipe_unknown' | 'required_inputs_missing';
 
 export type ScannerSignalInputsGateRefuse = {
   readonly status: 'refuse';
@@ -84,9 +77,7 @@ export type ScannerSignalInputsGateResult = ScannerSignalInputsGateOk | ScannerS
  * Blank / unpublished / empty allowlist / unknown recipe / missing required
  * inputs for the named recipe → refuse-closed (no invent rankings).
  */
-export function scannerSignalInputsGate(
-  law: ScannerSignalInputsLaw | null | undefined,
-): ScannerSignalInputsGateResult {
+export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | undefined): ScannerSignalInputsGateResult {
   if (!law || law.published !== true || law.p0_11 !== 'sealed') {
     return {
       status: 'refuse',
@@ -137,9 +128,7 @@ export function scannerSignalInputsGate(
   };
 }
 
-export function isScannerSignalInputsGateOk(
-  result: ScannerSignalInputsGateResult,
-): result is ScannerSignalInputsGateOk {
+export function isScannerSignalInputsGateOk(result: ScannerSignalInputsGateResult): result is ScannerSignalInputsGateOk {
   return result.status === 'ok';
 }
 

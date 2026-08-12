@@ -4,10 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
 import { SCANNER_DATA_TOOLS } from './guardrail.js';
-import {
-  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
-  SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
-} from './signal-inputs-law.js';
+import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL, SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW } from './signal-inputs-law.js';
 
 const SECRET = 'an-agents-scanner-stage2-mount-test-edge-secret';
 const USER = '11111111-1111-4111-8111-111111111111';

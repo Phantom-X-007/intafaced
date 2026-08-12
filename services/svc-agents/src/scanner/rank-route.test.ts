@@ -3,10 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
-import {
-  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
-  SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
-} from './signal-inputs-law.js';
+import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL, SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW } from './signal-inputs-law.js';
 
 /**
  * Stage-1 scanner is reachable from the tRPC surface with caller fixtures.

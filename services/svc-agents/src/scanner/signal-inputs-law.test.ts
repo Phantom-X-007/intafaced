@@ -89,9 +89,7 @@ describe('scannerSignalInputsGate (D26-P0-11 / D26-P1-A3)', () => {
       rankingRecipeId: 'abs_change_x_log_volume',
     });
     expect(scannerSignalInputsGateBoardCard(r).ok).toBe(true);
-    expect(scannerSignalInputsGateStatusLine(r)).toBe(
-      'ok=1 board=D26-P0-11 recipe=abs_change_x_log_volume inputs=3',
-    );
+    expect(scannerSignalInputsGateStatusLine(r)).toBe('ok=1 board=D26-P0-11 recipe=abs_change_x_log_volume inputs=3');
   });
 
   it('residual string names D26-P0-11 and invent ban (high-signal ops grep)', () => {

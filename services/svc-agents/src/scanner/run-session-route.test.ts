@@ -128,15 +128,13 @@ describe('scanner.runSession route', () => {
   });
 
   it('is empty when no tickers were supplied', async () => {
-    const result = await createAgentsRouter(stubDeps())
-      .createCaller(signed())
-      .scanner.runSession({
-        plane: 'live',
-        userTier: 'free',
-        law,
-        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
-        tickers: [],
-      });
+    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).scanner.runSession({
+      plane: 'live',
+      userTier: 'free',
+      law,
+      signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+      tickers: [],
+    });
 
     expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
     expect(result.metering.billedAmount).toBe('0');

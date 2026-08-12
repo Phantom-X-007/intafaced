@@ -85,12 +85,7 @@ export type ScannerRunMetering = {
 };
 
 export type ScannerRunRefuseReason =
-  | 'market_plane_dark'
-  | 'tier_law_blank'
-  | 'tier_not_granted'
-  | 'depth_invalid'
-  | 'no_live_tickers'
-  | ScannerSignalInputsGateRefuseReason;
+  'market_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'depth_invalid' | 'no_live_tickers' | ScannerSignalInputsGateRefuseReason;
 
 export type ScannerRunOk = {
   readonly status: 'ok';
@@ -113,10 +108,7 @@ export type ScannerRunOk = {
 export type ScannerRunRefuse = {
   readonly status: 'refuse';
   readonly reason: ScannerRunRefuseReason;
-  readonly userMessageKey:
-    | 'agents.scanner.unavailable'
-    | 'agents.scanner.tier_closed'
-    | 'agents.scanner.signal_inputs_closed';
+  readonly userMessageKey: 'agents.scanner.unavailable' | 'agents.scanner.tier_closed' | 'agents.scanner.signal_inputs_closed';
   readonly residual?: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
   readonly tickersRefusedByTool: number;
   readonly tickersRefusedByGuardrail: number;

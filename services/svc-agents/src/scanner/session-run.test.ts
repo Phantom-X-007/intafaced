@@ -6,10 +6,7 @@ import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { scannerAgentGuardrail, SCANNER_DATA_TOOLS } from './guardrail.js';
 import { runScannerRankSession, SCANNER_AGENT_ID, SCANNER_TICKER_TOOL } from './session-run.js';
-import {
-  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
-  SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
-} from './signal-inputs-law.js';
+import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL, SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW } from './signal-inputs-law.js';
 
 /**
  * The metered `scanner.rank` run.
