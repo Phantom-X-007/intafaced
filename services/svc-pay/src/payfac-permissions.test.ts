@@ -36,10 +36,7 @@ describe('D26-P1-P2 payfac permissions map', () => {
   });
 
   it('honest §13 sockets are named (settling partner + fee splits) — not inventable here', () => {
-    expect(PAYFAC_PERMISSION_SOCKETS.map((s) => s.id)).toEqual([
-      'socket.payfac-settling-party-partner',
-      'socket.payfac-split-fee-recipes',
-    ]);
+    expect(PAYFAC_PERMISSION_SOCKETS.map((s) => s.id)).toEqual(['socket.payfac-settling-party-partner', 'socket.payfac-split-fee-recipes']);
     for (const s of PAYFAC_PERMISSION_SOCKETS) {
       expect(s.residual.length).toBeGreaterThan(40);
     }
@@ -70,9 +67,9 @@ describe('D26-P1-P2 payfac permissions map', () => {
 
 describe('resolveActorMerchantId — principal only', () => {
   it('refuses when the principal has no merchant node', async () => {
-    await expect(
-      resolveActorMerchantId({ getMerchantByUserId: async () => null }, 'user-1'),
-    ).rejects.toMatchObject({ code: 'pay.submerchant_not_onboarded' });
+    await expect(resolveActorMerchantId({ getMerchantByUserId: async () => null }, 'user-1')).rejects.toMatchObject({
+      code: 'pay.submerchant_not_onboarded',
+    });
   });
 
   it('refuses a missing principal', async () => {

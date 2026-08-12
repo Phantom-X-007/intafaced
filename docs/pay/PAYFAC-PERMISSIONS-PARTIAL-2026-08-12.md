@@ -14,10 +14,10 @@
 
 ## Honest §13 / owner residuals (not inventable here)
 
-| Socket id                                 | Why code stops                                                          |
-| ----------------------------------------- | ----------------------------------------------------------------------- |
-| `socket.payfac-settling-party-partner`    | Non-`self` settling party = acquiring; see `socket.psp-partners`        |
-| `socket.payfac-split-fee-recipes`         | Platform vs sub-merchant fee splits need DIRECTION §8 owner fee table |
+| Socket id                              | Why code stops                                                        |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| `socket.payfac-settling-party-partner` | Non-`self` settling party = acquiring; see `socket.psp-partners`      |
+| `socket.payfac-split-fee-recipes`      | Platform vs sub-merchant fee splits need DIRECTION §8 owner fee table |
 
 Default onboarding grants remain **visibility only** (`merchant.profile`, `submerchant`). Money areas require an explicit grant + reason.
 

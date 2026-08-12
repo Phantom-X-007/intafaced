@@ -5,12 +5,7 @@ import { requireScope, type Principal, type Scope } from '@intafaced/auth';
 import { createEdgeContext, type EdgeRequest } from '@intafaced/contracts';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
-import {
-  areaForSurface,
-  isPayfacPermissionPort,
-  resolveActorMerchantId,
-  type PayfacPermissionPort,
-} from './payfac-permissions.js';
+import { areaForSurface, isPayfacPermissionPort, resolveActorMerchantId, type PayfacPermissionPort } from './payfac-permissions.js';
 import { PERMISSION_AREAS, SubMerchantError, type PermissionArea } from './submerchants.js';
 import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merchant-webhooks.js';
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
@@ -1165,19 +1160,12 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           response: { 200: { type: 'array', items: eventSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
         },
       },
-      async (
-        req: FastifyRequest<{ Querystring: { subjectMerchantId: string; limit?: number } }>,
-        reply,
-      ) => {
+      async (req: FastifyRequest<{ Querystring: { subjectMerchantId: string; limit?: number } }>, reply) => {
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
           const actorMerchantId = await resolveActorMerchantId(deps.pay, principal.userId);
-          const rows = await permissions.permissionHistory(
-            actorMerchantId,
-            req.query.subjectMerchantId,
-            req.query.limit ?? 50,
-          );
+          const rows = await permissions.permissionHistory(actorMerchantId, req.query.subjectMerchantId, req.query.limit ?? 50);
           return reply.send(
             rows.map((r) => ({
               id: r.id,
@@ -1295,7 +1283,6 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
     );
   }
-
 }
 
 /** Identical field-for-field to the tRPC `toPaymentOut` — see the header. */
