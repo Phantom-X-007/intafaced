@@ -64,6 +64,7 @@ COPY packages/config/package.json            packages/config/
 COPY packages/contracts/package.json         packages/contracts/
 COPY packages/db/package.json                packages/db/
 COPY packages/events/package.json            packages/events/
+COPY packages/execution-arb/package.json     packages/execution-arb/
 COPY packages/exchange-contract/package.json packages/exchange-contract/
 COPY packages/i18n/package.json              packages/i18n/
 COPY packages/ledger-client/package.json     packages/ledger-client/
