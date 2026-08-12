@@ -126,12 +126,30 @@ describe('navigator Stage-2 data tools', () => {
       plane: 'live',
       tierLaw: publishedAll,
       userTier: 'free',
+      requesterUserId: 'u1',
       session: { sessionId: 's1', userId: 'u1', status: 'open' },
     });
     expect(r).toEqual({
       status: 'ok',
       tool: 'identity.session.read',
       session: { sessionId: 's1', userId: 'u1', status: 'open' },
+    });
+  });
+
+  it('refuses an identity session owned by another user', () => {
+    const r = invokeNavigatorDataTool({
+      tool: 'identity.session.read',
+      plane: 'live',
+      tierLaw: publishedAll,
+      userTier: 'free',
+      requesterUserId: 'requester',
+      session: { sessionId: 's1', userId: 'another-user', status: 'open' },
+    });
+    expect(r).toEqual({
+      status: 'refuse',
+      tool: 'identity.session.read',
+      reason: 'subject_mismatch',
+      userMessageKey: 'agents.navigator.unavailable',
     });
   });
 
