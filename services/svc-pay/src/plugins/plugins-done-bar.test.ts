@@ -196,7 +196,8 @@ describe('D26-P1-P8 pay.plugins Done bar — reference client public doors', () 
   });
 
   it('frozen capture vector verifies; tamper refuses — store plugin cannot invent signatures', () => {
-    const v = frozenWebhookVectors().find((x) => x.name.includes('captured') || x.rawBody.includes('captured')) ?? frozenWebhookVectors()[0]!;
+    const v =
+      frozenWebhookVectors().find((x) => x.name.includes('captured') || x.rawBody.includes('captured')) ?? frozenWebhookVectors()[0]!;
     const now = new Date(Number(v.timestampSeconds) * 1000);
     expect(
       verifyMerchantWebhook({
