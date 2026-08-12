@@ -208,6 +208,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.cashback_pot_unfunded':
       case 'bank.no_ramp_rail':
       case 'bank.fiat_ramp_socket':
+      case 'bank.earn_rate_unset':
       case 'bank.auto_invest_rate_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
 

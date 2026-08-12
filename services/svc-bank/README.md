@@ -78,12 +78,12 @@ The occurrences that were written off are in the **response**, not merely in the
 
 ### `earn`
 
-| Procedure        | Scope        | Purpose                                |
-| ---------------- | ------------ | -------------------------------------- |
-| `earn.pools`     | `bank:read`  | Open flexible and fixed pools          |
-| `earn.deposit`   | `bank:write` | Open a position                        |
-| `earn.withdraw`  | `bank:write` | Close a position; fixed terms enforced |
-| `earn.positions` | `bank:read`  | The user's open positions              |
+| Procedure        | Scope        | Purpose                                                                                |
+| ---------------- | ------------ | -------------------------------------------------------------------------------------- |
+| `earn.pools`     | `bank:read`  | Open flexible and fixed pools; refuses `bank.earn_rate_unset` when none are configured |
+| `earn.deposit`   | `bank:write` | Open a position                                                                        |
+| `earn.withdraw`  | `bank:write` | Close a position; fixed terms enforced                                                 |
+| `earn.positions` | `bank:read`  | The user's open positions                                                              |
 
 ### `loans` — **built.** Collateralised borrow over the ledger (§8.1)
 
@@ -333,7 +333,9 @@ Holding a database transaction open across the ledger call is a deliberate cost:
 
 **Earn deposit: ledger first, then the row** — same as svc-token's `stake`, same reason. The reverse order would let a position exist with nothing behind it: a position we would pay interest on that nobody funded.
 
-**Interest: claim the day, post, record.** If the reserve cannot cover the day, **nothing moves** and the claim rolls back so the day is re-runnable the moment the pool is funded. That is the loud failure §8.1 needs — a pool that cannot pay its advertised rate is an operator problem today, not a shortfall discovered at maturity.
+**Interest: claim the UTC day, post, record.** `YYYY-MM-DD` UTC is both the idempotency day and the eligibility boundary. A position must be open before `00:00:00.000Z` for that day; a scheduler running late cannot pay a full day to a position opened after midnight. If the reserve cannot cover the day, **nothing moves** and the claim rolls back so the day is re-runnable the moment the pool is funded. That is the loud failure §8.1 needs — a pool that cannot pay its advertised rate is an operator problem today, not a shortfall discovered at maturity.
+
+**No configured pool means no configured rate, not zero yield.** `earn.pools` and the all-pools accrual door refuse `bank.earn_rate_unset` instead of returning an empty success that makes an unconfigured deployment look live. Individual pool operations still resolve the named pool and use only its stored operator-set APR; svc-bank has no default APR and invents none.
 
 **Interest is paid to `available`, never added to the principal.** Compounding would mean writing a new principal figure every day, and a money column that changes daily is a running total wearing a different name.
 
@@ -524,11 +526,10 @@ What `card-sim` **does** get you is the ledger half, end to end, over real posti
 
 Code for loans, cards (ledger half), ramps (crypto half), and standing-order pause/resume is **on main**. What is not agent-finishable:
 
-| Residual                                    | Why it is not craft                                                                                                                                                                                          |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Fiat partner** (`socket.psp-partners`)    | Bank/PSP + money-transmission permission — commercial + regulatory                                                                                                                                           |
-| **Live card issuer** (`socket.live-issuer`) | Card-scheme sponsor + issuing BIN — licence; Class X to point at real money                                                                                                                                  |
-| **Earn day-boundary product call**          | Accrual date is `YYYY-MM-DD` **UTC** today (`accrualDate` in earn interest). Whether that is the product rule users should see (timezone, market day, cutoff) is a product decision, not a missing procedure |
+| Residual                                    | Why it is not craft                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| **Fiat partner** (`socket.psp-partners`)    | Bank/PSP + money-transmission permission — commercial + regulatory          |
+| **Live card issuer** (`socket.live-issuer`) | Card-scheme sponsor + issuing BIN — licence; Class X to point at real money |
 
 `bank.sovereign-card` remains a separate tracker feature (product surface beyond the ledger half) and is **not** claimed done by this service's card simulator.
 
