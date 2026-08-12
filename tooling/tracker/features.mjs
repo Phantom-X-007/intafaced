@@ -369,15 +369,21 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
-    requires: ['services/svc-trade/src/copy'],
+    requires: [
+      'services/svc-trade/src/copy',
+      'services/svc-trade/src/copy/auto-mirror-place.ts',
+      'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts',
+    ],
     note:
-      'D26-P1-T3 deepen 2026-08-12: deskStatus.sovereign + P0-02/P0-15 residual cites; kill/unfollow real (#1692); ' +
-      'jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW (adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo. ' +
-      'W13 L10: settle fillId claim + 0022 copy_settled_fee_shares; listMyFollows + planMirror. W10 L02 product mount + 0021 mirrored_fills. ' +
-      'Stage #1009 + money seals #1191/#1199/#1386. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      'Residual: owner rates (P0-02) + eventual region table (P0-15 content); session-key caps (protocol); auto-mirror place into spot — plan only.',
+      'CLAIM 2026-08-12 Denon agent (feat/copy-trading-deepen-2026-08-12): SOCKET §13 `socket.copy-auto-mirror-place` — ' +
+      'placeMirror refuse-closed after planMirror; never invent spot fills. ' +
+      'Prior: deskStatus.sovereign + P0-02/P0-15 residual cites; kill/unfollow real (#1692); ' +
+      'jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW — never invent geo. ' +
+      'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
+      'Still open: owner rates (P0-02) + region table (P0-15 content); session-key caps (protocol); closing the place socket with a real follower wire.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
@@ -1973,6 +1979,17 @@ export const FEATURES = [
       '(`refuseChargebackLedgerPost` → pay.chargeback_ledger_unwired) so the Done bar is mechanism + honest socket, not a silent book ' +
       'entry or an unwired stub string. Closing = owner sign-off then wire dispute open to post; inventing split legs or shortfall ' +
       'policy is forbidden. Blocklist / scheme list content remains Class X.',
+  }),
+  f('socket.copy-auto-mirror-place', 'Copy auto-mirror place into spot after planMirror', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.copy', 'trade.spot'],
+    requires: ['services/svc-trade/src/copy/auto-mirror-place.ts', 'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts'],
+    note:
+      '§13 — D26-P1-T3 (2026-08-12). planMirror + exposure claim are real; placing the plan as a follower spot order is not wired. ' +
+      'copy.placeMirror / deskStatus.autoMirrorPlace refuse-closed naming this socket — never invent fills or silently drop plans. ' +
+      'Closing needs a durable follower place path (session-key / principal wire), not a fake order id.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {
