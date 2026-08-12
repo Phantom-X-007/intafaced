@@ -16,6 +16,7 @@ import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequ
 import type { RailRegistry } from './rails/registry.js';
 import { assertRailMayMoveValue, selectPublicCheckoutRailDetailed, type ValueMovementPolicy } from './rails/posture.js';
 import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
+import { settlementLedgerPlan } from './settlement-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 
 /**
@@ -2362,19 +2363,21 @@ export class PayService {
         // — it would find the original hold, move nothing, and then try to
         // settle out of a hold that is no longer there. It advances only on
         // refusal, so a crash-and-resume reuses its key and stays idempotent.
-        const withdrawal = {
-          userId: merchant.userId,
+        const ledgerPlan = settlementLedgerPlan({
+          settlementId: settlement.id,
+          payoutAttempt: settlement.payoutAttempts,
+          merchantUserId: merchant.userId,
           assetId: settlement.assetId,
           amount: settlement.net,
-          rail: adapter.id,
-          withdrawalId: `${settlement.id}:${settlement.payoutAttempts}`,
-        };
+          railId: adapter.id,
+          destinationKind: input.destination.kind,
+        });
 
         // G4: suspension must not open a NEW drain. But if withdrawHold already
         // posted (crash between hold and rail/settle), money sits in the purpose
         // hold — resume must finish via the same idempotent key. Refusing with
         // merchant_inactive here strands the hold forever.
-        const openHold = (await this.ledger.balance(withdrawalHoldAccount(withdrawal.userId, withdrawal.assetId, withdrawal.withdrawalId)))
+        const openHold = (await this.ledger.balance(withdrawalHoldAccount(merchant.userId, settlement.assetId, ledgerPlan.withdrawalId)))
           .amount;
         if (openHold <= 0n) {
           // Money is about to leave available for a bank or a chain. A suspended
@@ -2386,7 +2389,7 @@ export class PayService {
         // Ledger first: outbound. The merchant's net leaves `available` and
         // waits in `hold` while the rail works. Idempotent on withdrawalId when
         // we are finishing an already-open hold after a crash.
-        await this.ledger.post(recipes.withdrawHold(withdrawal));
+        await this.ledger.post(ledgerPlan.hold);
 
         const result = await withRailSpan(adapter.id, 'payout', async () =>
           adapter.payout({
@@ -2400,7 +2403,7 @@ export class PayService {
         );
 
         if (!result.ok) {
-          await this.ledger.post(recipes.withdrawReverse(withdrawal));
+          await this.ledger.post(ledgerPlan.reverse);
           await this.sql`
             UPDATE pay.settlements
                SET status = 'failed', payout_attempts = payout_attempts + 1, updated_at = now()
@@ -2412,7 +2415,7 @@ export class PayService {
           });
         }
 
-        await this.ledger.post(recipes.withdrawSettle(withdrawal));
+        await this.ledger.post(ledgerPlan.settle);
         await this.sql`
           UPDATE pay.settlements
              SET status = 'paid_out', payout_method = ${adapter.id}, payout_ref = ${result.railRef}, updated_at = now()

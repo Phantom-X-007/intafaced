@@ -236,6 +236,14 @@ Every value movement is a recipe. This service holds no balance of any kind (Doc
 
 The three `withdraw*` recipes serve **both** outbound paths — a merchant payout keyed on `<settlementId>:<attempt>`, and a user withdrawal keyed on `<withdrawalId>:<attempt>`. Same shape, same reasoning, one set of recipes.
 
+For D26-P1-P4, `settlement-ledger.ts` makes that constraint executable: both
+`bank` and `crypto` settlement destinations produce only the existing
+`withdrawHold` → `withdrawSettle` / `withdrawReverse` requests. Rail adapters
+own the destination difference; svc-pay does not assemble entries or invent a
+bank-specific book. `bank-payout` remains `absent` and refuses before the hold
+until the Class X sponsor-bank socket exists, while configured `crypto-native`
+can complete the same recipe plan against a real chain.
+
 **`merchantClearing(merchantId, assetId)`** is a new account constructor: a `module`-owned account per merchant, per asset. It answers "a payment was captured but not settled — whose funds are those?" as a balance rather than an investigation. `sum(merchantClearing(m))` is exactly what svc-pay owes merchant `m` right now, readable from the ledger without touching a single svc-pay table — which is what makes reconciliation between the two meaningful.
 
 ### Idempotency keys — all business keys, never random

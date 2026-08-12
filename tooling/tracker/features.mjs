@@ -611,8 +611,11 @@ export const FEATURES = [
   f('pay.settlement', 'Dual settlement — bank or crypto', {
     module: 'pay',
     phase: '3',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.rails'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: ['services/svc-pay/src/settlement-ledger.ts', 'services/svc-pay/src/settlement-ledger.test.ts'],
+    note: '**D26-P1-P4 completed 2026-08-12** — bank and crypto payout paths compose only ledger-client withdraw hold/settle/reverse recipes. Configured crypto completes against the chain adapter; bank remains honestly absent and refuses before any recipe posts until its Class X commercial socket exists. Integration proof pins both outcomes and ledger reconciliation.',
   }),
   f('pay.fraud', 'Risk scoring, chargebacks, decline recovery', {
     module: 'pay',
