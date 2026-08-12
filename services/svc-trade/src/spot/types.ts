@@ -196,8 +196,9 @@ export type TradeErrorCode =
    */
   | 'trade.fee_exceeds_fill'
   /**
-   * Forex/commodity production listing without fiat settlement rails (D-S-05).
-   * Model/paper listings remain legal; this is the production-list lie.
+   * Forex/commodity production listing or place without settlement law
+   * (D26-P1-T7 / §13 `socket.forex-settlement` — needs D26-P0-05 + fiat rails).
+   * Model/paper listings remain legal; this is the production-list / hold-path lie.
    */
   | 'trade.unsettled_asset_class_listing'
   /**
