@@ -1221,16 +1221,12 @@ describe('affiliates.accrue / accrueDryRun under rate authority (D26-P1-O2)', ()
   });
 
   it('treeStatus surfaces rate authority without inventing commission percentages', async () => {
-    const unpublished = mounted({ law: undefined }).router.createCaller(
-      await ctx(['admin:read'], { userId: OPERATOR }),
-    );
+    const unpublished = mounted({ law: undefined }).router.createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
     const dark = await unpublished.affiliates.treeStatus();
     expect(dark.rateAuthorityPublished).toBe(false);
     expect(dark.rateAuthorityStatusLine).toBe('authority=0 published=0 tiers=0');
 
-    const published = mounted({ law: publishedLaw }).router.createCaller(
-      await ctx(['admin:read'], { userId: OPERATOR }),
-    );
+    const published = mounted({ law: publishedLaw }).router.createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
     const lit = await published.affiliates.treeStatus();
     expect(lit.rateAuthorityPublished).toBe(true);
     expect(lit.rateAuthorityStatusLine).toBe('authority=1 published=1 tiers=1');

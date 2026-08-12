@@ -47,9 +47,7 @@ export type AccrueTreeUnderAuthorityResult = {
  * Durable: owner-published law only — refuse `affiliate.accrual.rates_unset`.
  * Dry-run: may use simulationTiers; otherwise same refuse when law unpublished.
  */
-export function accrueTreeUnderRateAuthority(
-  input: AccrueTreeUnderAuthorityInput,
-): AccrueTreeUnderAuthorityResult {
+export function accrueTreeUnderRateAuthority(input: AccrueTreeUnderAuthorityInput): AccrueTreeUnderAuthorityResult {
   if (input.mode === 'durable' && input.simulationTiers && input.simulationTiers.length > 0) {
     // Closing the invent hole: request tiers must not land in durable store.
     // Payout already refuses non-owner rates; this stops dirty claims at write.

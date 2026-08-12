@@ -29,10 +29,7 @@ import {
   type AccrualTierLaw,
   UNPUBLISHED_ACCRUAL_TIER_LAW,
 } from './affiliates/commission-rate-law.js';
-import {
-  accrueTreeUnderRateAuthority,
-  accrualTreeAuthorityStatusLine,
-} from './affiliates/accrual-tree-authority.js';
+import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  accrueTreeUnderRateAuthority,
-  accrualTreeAuthorityStatusLine,
-} from './accrual-tree-authority.js';
+import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './accrual-tree-authority.js';
 import { AccrualRateRefuseError, UNPUBLISHED_ACCRUAL_TIER_LAW } from './commission-rate-law.js';
 import type { FeeEvent } from './commission.js';
 
