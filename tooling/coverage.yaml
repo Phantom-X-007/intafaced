@@ -650,11 +650,12 @@ capabilities:
     law: '25:629'
     plane: B
     phase: 2 / 5P
-    tracker: [trade.copy, agents.copy-intel]
+    tracker: [trade.copy, agents.copy-intel, socket.copy-auto-mirror-place]
     note: >-
       Audit §B2 — the law line and the row both still say "profit share", which
       SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md:95 forbids in v1. Reported for the owner's pen; the
-      law is not edited from here.
+      law is not edited from here. socket.copy-auto-mirror-place is the §13 refuse-closed place half
+      after planMirror (D26-P1-T3) — never invent follower fills.
   - id: m.trade.forex
     capability: Forex pairs
     law: '25:630'

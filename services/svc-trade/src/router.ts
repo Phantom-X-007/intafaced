@@ -8,6 +8,7 @@ import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } fro
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import type { OtcDeskService } from './otc/otc-service.js';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import type { CopyService } from './copy/copy-service.js';
 
@@ -210,6 +211,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_jurisdiction_blank':
       case 'trade.copy_law_blank':
       case 'trade.copy_settle_refused':
+      case 'trade.copy_auto_mirror_place_socket':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
@@ -676,7 +678,9 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
             residuals: {
               rates: COPY_FEE_SHARE_RESIDUAL,
               jurisdiction: COPY_JURISDICTION_RESIDUAL,
+              autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
             },
+            autoMirrorPlace: autoMirrorPlaceStatus(),
           };
         }
         return copy.deskStatus();
@@ -758,6 +762,30 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               throw new CopyError('Follow not found', 'trade.copy_not_following');
             }
             return copy.planMirrorForFollow(ctx.principal, input);
+          }),
+        ),
+
+      /**
+       * Place a planned mirror into spot — SOCKET §13 refuse-closed until the
+       * follower place wire lands. planMirror is real; inventing a fill is not.
+       */
+      placeMirror: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            followId: z.string().min(1).max(64),
+            fillId: z.string().min(1).max(120),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError(
+                `Auto-mirror place into spot is refuse-closed (${autoMirrorPlaceStatus().socket})`,
+                'trade.copy_auto_mirror_place_socket',
+                COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+              );
+            }
+            return copy.placeMirrorForFollow(ctx.principal, input);
           }),
         ),
 

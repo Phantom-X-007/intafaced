@@ -15,6 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, CopyError } from './errors.js';
 import {
   copyLawResidual,
@@ -105,8 +106,38 @@ export class CopyService {
       residuals: {
         rates: feeSharePublished ? null : COPY_FEE_SHARE_RESIDUAL,
         jurisdiction: jurisdictionPublished ? null : COPY_JURISDICTION_RESIDUAL,
+        autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
       },
+      /** SOCKET §13 — planMirror is real; place into spot stays refuse-closed. */
+      autoMirrorPlace: autoMirrorPlaceStatus(),
     };
+  }
+
+  /**
+   * Place a planned mirror as a spot order — SOCKET §13 refuse until the
+   * follower place wire exists. Never invents a fill from a plan.
+   */
+  async placeMirrorForFollow(principal: Principal, input: { followId: string; fillId: string }) {
+    const follow = await this.store.getFollow(input.followId);
+    if (!follow) {
+      throw new CopyError('Follow not found', 'trade.copy_not_following');
+    }
+    if (follow.followerId !== principal.userId) {
+      throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+    }
+    const prior = await this.store.getMirroredFill(follow.followId, input.fillId.trim());
+    if (!prior) {
+      throw new CopyError(
+        'No durable mirror plan for this fillId — planMirror first; place still refuse-closed',
+        'trade.copy_auto_mirror_place_socket',
+        COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+      );
+    }
+    throw new CopyError(
+      `Auto-mirror place into spot is refuse-closed (${autoMirrorPlaceStatus().socket}) — planMirror claimed fill ${prior.fillId}; never invent a spot fill`,
+      'trade.copy_auto_mirror_place_socket',
+      COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+    );
   }
 
   /**

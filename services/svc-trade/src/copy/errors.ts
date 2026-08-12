@@ -20,7 +20,8 @@ export type CopyErrorCode =
   | 'trade.copy_fee_share_killed'
   | 'trade.copy_pnl_fee_forbidden'
   | 'trade.copy_ranking_forbidden'
-  | 'trade.copy_settle_refused';
+  | 'trade.copy_settle_refused'
+  | 'trade.copy_auto_mirror_place_socket';
 
 export class CopyError extends Error {
   constructor(
