@@ -285,6 +285,9 @@ if (!e2e) {
     // D26-P2-10 — every money module killable from the same surface, proven.
     ['money modules — same kill surface (D26-P2-10)', 'that every live money module is armed from /admin/kill-switches'],
     ['REFUSES each money module sample door once killed', 'that pay/bank/p2p/token/market/trade refuse under kill'],
+    // Deepen: residual doors (convert/withdraw/loans/agents) — not just first-pass samples.
+    ['/api/trade/trpc/convert.execute', 'that convert is proved under the shared kill surface'],
+    ['/api/agents/trpc/run.complete', 'that agents metering is killable from the same surface'],
   ];
   for (const [needle, what] of required) {
     if (!e2e.includes(needle)) {
@@ -302,6 +305,8 @@ if (!e2e) {
     for (const [needle, what] of [
       ['MONEY_PUBLIC_DOORS', 'that the unit suite walks the config money-door catalogue'],
       ['refuses every named money commitment when that module is killed', 'that every catalogue door refuses under kill'],
+      ['covers remaining money routes after prior land', 'that residual money doors stay covered after #1683'],
+      ['MONEY_KILL_RESIDUAL_DOOR_IDS', 'that the residual door id list is asserted'],
     ]) {
       if (!moneyUnit.includes(needle)) {
         failures.push(`money-routes.kill-switch.test.ts no longer asserts ${what} ("${needle}" not found)`);
@@ -312,6 +317,18 @@ if (!e2e) {
   const moneySurface = read('packages', 'config', 'src', 'money-kill-surface.ts');
   if (!moneySurface || !/MONEY_PUBLIC_DOORS/.test(moneySurface)) {
     failures.push('packages/config/src/money-kill-surface.ts is missing MONEY_PUBLIC_DOORS — money kill completeness has no catalogue');
+  } else {
+    for (const [needle, what] of [
+      ['MONEY_KILL_RESIDUAL_DOOR_IDS', 'that residual money door ids are named'],
+      ['assertMoneyKillResidualsPresent', 'that residual completeness is machine-checked'],
+      ['trade.convert.execute', 'that convert is in the money kill catalogue'],
+      ['pay.withdrawal.create', 'that withdrawal is in the money kill catalogue'],
+      ['agents.run.complete', 'that agents metering is in the money kill catalogue'],
+    ]) {
+      if (!moneySurface.includes(needle)) {
+        failures.push(`money-kill-surface.ts no longer covers ${what} ("${needle}" not found)`);
+      }
+    }
   }
 
   /**

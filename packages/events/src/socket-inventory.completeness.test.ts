@@ -208,6 +208,9 @@ describe('D26-P2-05 executed MemoryEventBus behaviour', () => {
 });
 
 describe('D26-P2-05 event-wiring gate concordance (executed)', () => {
+  // Vitest's default 5s test budget is below CI contention for this spawn —
+  // spawnSync already allows 120s; the it() budget must match or the gate is
+  // killed mid-run (false red, not a concordance failure).
   it('spawns event-wiring and matches Class A/B/C counts from the inventory', () => {
     const gate = join(repoRoot, 'tooling', 'ci', 'event-wiring.mjs');
     expect(existsSync(gate), `missing gate at ${gate}`).toBe(true);
@@ -234,5 +237,5 @@ describe('D26-P2-05 event-wiring gate concordance (executed)', () => {
 
     expect(stdout).toMatch(/crewMemberCreated/);
     expect(stdout).toMatch(/Class B/i);
-  });
+  }, 120_000);
 });
