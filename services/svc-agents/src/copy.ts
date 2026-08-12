@@ -48,7 +48,6 @@ export const COPY_KEYS = [
   'agents.scanner.empty',
   'agents.scanner.unavailable',
   'agents.scanner.tier_closed',
-  'agents.scanner.signal_inputs_closed',
   'agents.merchant.empty',
   'agents.merchant.unavailable',
   'agents.copy_intel.empty',
@@ -106,8 +105,6 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.scanner.unavailable': 'Market signals are unavailable right now — quotes are missing or too old to trust.',
   'agents.scanner.tier_closed':
     'This Sovereign Intelligence scanner action is closed until product tier rules are published — nothing was invented or ranked.',
-  'agents.scanner.signal_inputs_closed':
-    'Market Scanner rankings are closed until signal-input rules are sealed (D26-P0-11) — nothing was invented or ranked.',
   'agents.merchant.empty': 'No approval-rate samples were provided to watch.',
   'agents.merchant.unavailable': 'Approval-rate metrics are unavailable right now — samples are missing or too old to trust.',
   'agents.copy_intel.empty': 'No leader performance samples were provided.',

@@ -16,7 +16,7 @@ describe('scannerSignalInputsGate (D26-P0-11 / D26-P1-A3)', () => {
       expect(r).toEqual({
         status: 'refuse',
         reason: 'signal_inputs_law_blank',
-        userMessageKey: 'agents.scanner.signal_inputs_closed',
+        userMessageKey: 'agents.scanner.tier_closed',
         residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
         boardId: P0_11_BOARD_ID,
       });
@@ -55,7 +55,7 @@ describe('scannerSignalInputsGate (D26-P0-11 / D26-P1-A3)', () => {
     expect(r).toMatchObject({
       status: 'refuse',
       reason: 'inputs_empty',
-      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      userMessageKey: 'agents.scanner.tier_closed',
       boardId: P0_11_BOARD_ID,
     });
   });

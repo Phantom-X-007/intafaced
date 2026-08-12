@@ -32,7 +32,8 @@ export type ScannerSignalInputsLaw =
       readonly published: true;
       /** Explicit seal marker — mirrors the board id so greps stay honest. */
       readonly p0_11: 'sealed';
-      readonly allowedInputs: readonly ScannerSignalInputKind[];
+      /** Mutable array shape so tRPC/zod input types accept sealed fixtures. */
+      readonly allowedInputs: ScannerSignalInputKind[];
       readonly rankingRecipeId: ScannerRankingRecipeId;
     };
 
@@ -46,7 +47,7 @@ export const UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW: ScannerSignalInputsLaw = { p
 export const SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW: Extract<ScannerSignalInputsLaw, { published: true }> = {
   published: true,
   p0_11: 'sealed',
-  allowedInputs: ['last', 'volume24h', 'change24hBps'],
+  allowedInputs: ['last', 'volume24h', 'change24hBps'] as ScannerSignalInputKind[],
   rankingRecipeId: 'abs_change_x_log_volume',
 };
 
@@ -65,7 +66,7 @@ export type ScannerSignalInputsGateRefuseReason =
 export type ScannerSignalInputsGateRefuse = {
   readonly status: 'refuse';
   readonly reason: ScannerSignalInputsGateRefuseReason;
-  readonly userMessageKey: 'agents.scanner.signal_inputs_closed';
+  readonly userMessageKey: 'agents.scanner.tier_closed';
   readonly residual: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
   readonly boardId: typeof P0_11_BOARD_ID;
 };
@@ -82,7 +83,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
     return {
       status: 'refuse',
       reason: 'signal_inputs_law_blank',
-      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      userMessageKey: 'agents.scanner.tier_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
       boardId: P0_11_BOARD_ID,
     };
@@ -92,7 +93,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
     return {
       status: 'refuse',
       reason: 'inputs_empty',
-      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      userMessageKey: 'agents.scanner.tier_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
       boardId: P0_11_BOARD_ID,
     };
@@ -102,7 +103,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
     return {
       status: 'refuse',
       reason: 'ranking_recipe_unknown',
-      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      userMessageKey: 'agents.scanner.tier_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
       boardId: P0_11_BOARD_ID,
     };
@@ -114,7 +115,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
       return {
         status: 'refuse',
         reason: 'required_inputs_missing',
-        userMessageKey: 'agents.scanner.signal_inputs_closed',
+        userMessageKey: 'agents.scanner.tier_closed',
         residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
         boardId: P0_11_BOARD_ID,
       };

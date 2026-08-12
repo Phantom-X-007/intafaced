@@ -36,7 +36,7 @@ describe('rankLiveFromTickers (Stage-2)', () => {
     expect(r).toEqual({
       status: 'refuse',
       reason: 'signal_inputs_law_blank',
-      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      userMessageKey: 'agents.scanner.tier_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
     });
   });
