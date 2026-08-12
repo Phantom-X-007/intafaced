@@ -9,6 +9,13 @@ import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.j
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
 import type { PermissionArea } from './submerchants.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
+import {
+  REFERENCE_RAIL_ROUTING_PROFILES,
+  selectSmartCheckoutRail,
+  SmartRoutingNoRailError,
+  toRoutingDecisionRecord,
+  type RailRoutingProfile,
+} from './routing/decide.js';
 import { evaluateFraud } from './fraud/evaluate.js';
 import { PAY_PUBLIC_API_BASE } from './plugins/reference-client.js';
 
@@ -689,9 +696,9 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
     }),
 
     /**
-     * pay.routing — smart-routing input honesty (SPEC §5 / DIRECTION §8).
-     * When a profile requires geo/method/risk, blank data refuses rather than
-     * inventing approval rates or default bands. Moves no value.
+     * pay.routing — smart geo/method/risk selection (SPEC §5 / DIRECTION §8).
+     * Blank required dims refuse; no invent approval rates / cost weights.
+     * Moves no value — returns a decision record only.
      */
     routing: router({
       assertInputs: publicProcedure
@@ -719,6 +726,92 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             if (e instanceof RoutingInputError) {
               throw new TRPCError({
                 code: 'BAD_REQUEST',
+                message: `${e.code}: ${e.message}`,
+                cause: e,
+              });
+            }
+            throw e;
+          }
+        }),
+
+      /**
+       * Product door: select a rail from geo + method + risk + operator profiles.
+       * Preference list is operator-supplied (never a payer-named rail).
+       * Omitting `profiles` uses REFERENCE_RAIL_ROUTING_PROFILES for the v1 rails.
+       */
+      select: publicProcedure
+        .input(
+          z.object({
+            geoCountry: z.string().nullable().optional(),
+            method: z.string().nullable().optional(),
+            riskBand: z.string().nullable().optional(),
+            preference: z.array(z.string().min(1)).min(1),
+            policy: z.enum(['live-only', 'allow-sandbox']).default('allow-sandbox'),
+            profiles: z
+              .array(
+                z.object({
+                  railId: z.string().min(1),
+                  methods: z.array(z.string()).optional(),
+                  countries: z.array(z.string()).optional(),
+                  riskBands: z.array(z.string()).optional(),
+                }),
+              )
+              .optional(),
+          }),
+        )
+        .output(
+          z.object({
+            chosenRailId: z.string(),
+            inputs: z.object({
+              geoCountry: z.string(),
+              method: z.string(),
+              riskBand: z.string(),
+            }),
+            considered: z.array(
+              z.object({
+                railId: z.string(),
+                outcome: z.enum(['chosen', 'skipped']),
+                reason: z.string().optional(),
+              }),
+            ),
+            decision: z.record(z.unknown()),
+          }),
+        )
+        .query(({ input }) => {
+          try {
+            const profiles: readonly RailRoutingProfile[] = input.profiles ?? REFERENCE_RAIL_ROUTING_PROFILES;
+            const decision = selectSmartCheckoutRail({
+              inputs: {
+                geoCountry: input.geoCountry,
+                method: input.method,
+                riskBand: input.riskBand,
+              },
+              preference: input.preference,
+              profiles,
+              rails,
+              policy: input.policy,
+            });
+            return {
+              chosenRailId: decision.chosenRailId,
+              inputs: decision.inputs,
+              considered: decision.considered.map((e) =>
+                e.outcome === 'chosen'
+                  ? { railId: e.railId, outcome: e.outcome as 'chosen' }
+                  : { railId: e.railId, outcome: e.outcome as 'skipped', reason: e.reason },
+              ),
+              decision: toRoutingDecisionRecord(decision),
+            };
+          } catch (e) {
+            if (e instanceof RoutingInputError) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${e.code}: ${e.message}`,
+                cause: e,
+              });
+            }
+            if (e instanceof SmartRoutingNoRailError) {
+              throw new TRPCError({
+                code: 'PRECONDITION_FAILED',
                 message: `${e.code}: ${e.message}`,
                 cause: e,
               });
