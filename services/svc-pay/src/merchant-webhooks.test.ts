@@ -65,7 +65,7 @@ afterEach(async () => {
   server = undefined;
 });
 
-describe('merchant webhook signing (ADR §2.4)', () => {
+describe('merchant webhook signing (ADR Â§2.4)', () => {
   it('signs raw body + timestamp the same way inbound rails verify', () => {
     const body = JSON.stringify({ id: 'evt', type: 'payment.captured' });
     const ts = '1723000000';
@@ -217,14 +217,16 @@ describe('MerchantWebhookService', () => {
 
   it('claimDue leases due rows so a second claim cannot double-POST', async () => {
     const store = new MemoryMerchantWebhookStore();
-    const svc = new MerchantWebhookService(store);
+    const now = new Date('2026-08-12T12:00:00.000Z');
+    // Freeze service clock — enqueue stamps nextAttemptAt from now(); claimDue
+    // compares against the same frozen instant (wall-clock drift would leave first=[]).
+    const svc = new MerchantWebhookService(store, { now: () => now });
     await svc.registerEndpoint(MERCHANT, 'https://merchant.example/hooks');
     await svc.enqueue({ type: 'payment.captured', payment: payment() });
     // enqueue stamps nextAttemptAt via wall clock; pin it so claimDue's
     // frozen `now` is never behind that stamp (same pattern as processDue tests).
     for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
 
-    const now = new Date('2026-08-12T12:00:00.000Z');
     const first = await store.claimDue(25, now);
     expect(first).toHaveLength(1);
     expect(first[0]!.nextAttemptAt.getTime()).toBe(now.getTime() + WEBHOOK_CLAIM_LEASE_MS);
