@@ -15,7 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { CopyError } from './errors.js';
+import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, CopyError } from './errors.js';
 import {
   copyLawResidual,
   copyLawStatusLine,
@@ -81,12 +81,31 @@ export class CopyService {
     this.store = options.store ?? new MemoryCopyFollowStore();
   }
 
+  /**
+   * Desk honesty for D26-P1-T3: sovereign shape is always on; rates /
+   * jurisdiction stay refuse-closed until owner publishes P0-02 / P0-15.
+   */
   deskStatus() {
+    const feeSharePublished = this.feeShareLaw.published === true;
+    const jurisdictionPublished = this.jurisdictionLaw.published === true;
     return {
-      feeSharePublished: this.feeShareLaw.published === true,
-      jurisdictionPublished: this.jurisdictionLaw.published === true,
+      /** SPEC-SOVEREIGN §2–§4 — never invent pooling, P&L fees, or ranking. */
+      sovereign: {
+        shape: 'sovereign' as const,
+        custody: false,
+        feeModel: 'protocol_fee_share' as const,
+        pnlFeeForbidden: true,
+        rankingForbidden: true,
+        killUnfollowReal: true,
+      },
+      feeSharePublished,
+      jurisdictionPublished,
       statusLine: copyLawStatusLine(this.feeShareLaw, this.jurisdictionLaw),
       residual: copyLawResidual(this.feeShareLaw, this.jurisdictionLaw),
+      residuals: {
+        rates: feeSharePublished ? null : COPY_FEE_SHARE_RESIDUAL,
+        jurisdiction: jurisdictionPublished ? null : COPY_JURISDICTION_RESIDUAL,
+      },
     };
   }
 
@@ -327,8 +346,9 @@ export class CopyService {
       if (law.published !== true) {
         // attributeCopyFeeShare already throws on blank; this is defensive for types.
         throw new CopyError(
-          'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+          'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 / D26-P0-02 leader_share_bps',
           'trade.copy_fee_share_blank',
+          COPY_FEE_SHARE_RESIDUAL,
         );
       }
       const cap = parseAmount(law.earningsCapPerFollower);

@@ -7,7 +7,7 @@ import { TradeError, type FillRecord, type Market, type OrderRecord } from './sp
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import type { OtcDeskService } from './otc/otc-service.js';
-import { CopyError } from './copy/errors.js';
+import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import type { CopyService } from './copy/copy-service.js';
 
 /**
@@ -627,10 +627,22 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!copy) {
           return {
+            sovereign: {
+              shape: 'sovereign' as const,
+              custody: false,
+              feeModel: 'protocol_fee_share' as const,
+              pnlFeeForbidden: true,
+              rankingForbidden: true,
+              killUnfollowReal: true,
+            },
             feeSharePublished: false,
             jurisdictionPublished: false,
-            statusLine: 'feeShare=0 residual=DIRECTION_§8_leader_share_bps jurisdiction=0 residual=DIRECTION_§8_jurisdiction',
-            residual: 'DIRECTION §8 leader_share_bps and jurisdiction list are owner-only — refuse-closed',
+            statusLine: 'feeShare=0 residual=D26-P0-02_leader_share_bps jurisdiction=0 residual=D26-P0-15_jurisdiction',
+            residual: COPY_LAW_RESIDUAL,
+            residuals: {
+              rates: COPY_FEE_SHARE_RESIDUAL,
+              jurisdiction: COPY_JURISDICTION_RESIDUAL,
+            },
           };
         }
         return copy.deskStatus();
@@ -651,8 +663,9 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           guard(async () => {
             if (!copy) {
               throw new CopyError(
-                'Copy is refuse-closed until owner publishes DIRECTION §8 served-jurisdiction list',
+                'Copy is refuse-closed until owner publishes DIRECTION §8 / D26-P0-15 served-jurisdiction list',
                 'trade.copy_jurisdiction_blank',
+                COPY_JURISDICTION_RESIDUAL,
               );
             }
             return copy.follow(ctx.principal, input);
@@ -733,8 +746,9 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           guard(async () => {
             if (!copy) {
               throw new CopyError(
-                'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+                'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 / D26-P0-02 leader_share_bps',
                 'trade.copy_fee_share_blank',
+                COPY_FEE_SHARE_RESIDUAL,
               );
             }
             return copy.settleFeeShare(ctx.principal, input);

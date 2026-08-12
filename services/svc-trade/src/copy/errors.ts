@@ -33,10 +33,12 @@ export class CopyError extends Error {
   }
 }
 
-/** Stable residual — DIRECTION §8 leader_share_bps + served jurisdiction list. */
-export const COPY_FEE_SHARE_RESIDUAL = 'DIRECTION §8 leader_share_bps is owner-only — refuse-closed (never invent fee-share rates)';
+/** Stable residual — DIRECTION §8 / D26-P0-02 leader_share_bps (never invent rates). */
+export const COPY_FEE_SHARE_RESIDUAL =
+  'DIRECTION §8 / D26-P0-02 leader_share_bps is owner-only — refuse-closed (never invent fee-share rates)';
 
+/** Stable residual — DIRECTION §8 / D26-P0-15 served-jurisdiction list (never invent geo). */
 export const COPY_JURISDICTION_RESIDUAL =
-  'DIRECTION §8 served-jurisdiction list is owner-only — refuse-closed (never invent geo allowlist)';
+  'DIRECTION §8 / D26-P0-15 served-jurisdiction list is owner-only — refuse-closed (never invent geo allowlist)';
 
-export const COPY_LAW_RESIDUAL = 'DIRECTION §8 leader_share_bps and jurisdiction list are owner-only — refuse-closed';
+export const COPY_LAW_RESIDUAL = 'DIRECTION §8 / D26-P0-02 leader_share_bps and D26-P0-15 jurisdiction list are owner-only — refuse-closed';
