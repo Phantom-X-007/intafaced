@@ -301,8 +301,10 @@ otherwise.
 
 - **Idempotency:** `market.purchase:<purchaseId>` (client-supplied).
 - **Commission:** `MARKET_HOUSE_COMMISSION_BPS` — **no default**. Unset refuses
-  `market.commission_not_configured` before any row or post. `0` is an explicit
-  free rate, not silence.
+  `market.commission_not_configured` on **createListing** and **purchase**
+  before any row, slot claim, or post; **public catalogue returns []** so the
+  shopfront never advertises unsellable stock. `0` is an explicit free rate,
+  not silence (D26-P1-M2 — lifecycle under stake/commission law; no invent rates).
 - **Rounding:** floor on commission (customer favour); buyer pays exactly the
   listed price (vendor net + house = price).
 - **Eligibility:** catalogue and purchase re-check `listingEligibility` plus a

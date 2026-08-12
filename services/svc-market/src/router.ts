@@ -359,7 +359,8 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
 
     /**
      * Whether this deployment has a house commission rate. Blank config is the
-     * refuse-closed default — purchases will not invent a rate.
+     * refuse-closed default — createListing, public catalogue, and purchase
+     * will not invent a rate (D26-P1-M2).
      */
     commerceProgramme: publicProcedure
       .output(z.object({ commissionBps: z.number().int().nullable(), commissionConfigured: z.boolean() }))
@@ -385,6 +386,7 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       .mutation(async ({ ctx, input }) => {
         requireCommerce(commerce);
         try {
+          // Blank MARKET_HOUSE_COMMISSION_BPS refuses before insert/slot claim.
           return await commerce.createListing({ userId: ctx.principal!.userId, ...input });
         } catch (err) {
           mapError(err);
@@ -410,7 +412,7 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         return commerce.myListings(ctx.principal!.userId);
       }),
 
-    /** Public catalogue — only listings whose vendor is currently listed. */
+    /** Public catalogue — empty when commission blank; else listed vendors only. */
     listings: publicProcedure
       .input(z.object({ limit: z.number().int().positive().max(50).optional() }).optional())
       .output(z.array(listingOut))

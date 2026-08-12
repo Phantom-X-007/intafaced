@@ -25,7 +25,8 @@ registerProcessHooks(
  * one-time purchase with house commission (§8.7).
  *
  * Balances live in svc-ledger only. Commission bps is owner-gated: unset env
- * refuses every purchase rather than inventing a rate.
+ * refuses createListing + purchase and empties the public catalogue rather
+ * than inventing a rate (D26-P1-M2).
  */
 
 const sql = postgres(env.DATABASE_URL, {
