@@ -142,7 +142,7 @@ Nitro asked for **double or triple** mass. **Right is not a count target.** Righ
 | **D26-P1-T6**  | `trade.options`                                               | Only after P0-05; else explicit socket                                                                                                                 |
 | **D26-P1-T7**  | `trade.forex`                                                 | Only after P0-05 + fiat settle rails posture                                                                                                           |
 | **D26-P1-T8**  | `venue.aggregation`                                           | Adapters refuse when book not payout-grade                                                                                                             |
-| **D26-P1-T9**  | **Multi-asset instruments resume** (DIRECTION §2)             | Additive model; closed-venue refuse; spot suite unchanged                                                                                              |
+| **D26-P1-T9**  | **Multi-asset instruments resume** (DIRECTION §2)             | Additive model; closed-venue refuse; spot suite unchanged — **SHIPPING** `feat/trade-multi-asset-t9` (enum authority + refuse codes; see `docs/ops/claims/D26-P1-T9.md`) |
 | **D26-P1-T10** | **Seed/mm honesty backend** (coordinate Nitro `trade.mm-bot`) | Seeded flagged; not in user volume; killable; no manufactured crosses                                                                                  |
 
 ### 5.2 Pay (business barely started)

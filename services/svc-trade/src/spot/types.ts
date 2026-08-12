@@ -166,6 +166,15 @@ export type TradeErrorCode =
   // halted the listing and the caller should stop asking, this one means the
   // venue is between sessions and the same order will be fine on Monday.
   | 'trade.market_closed'
+  /**
+   * Schedule key present on the row but absent from `TRADING_SCHEDULES`
+   * (D-S-05 / D26-P1-T9). Misconfiguration — not a session boundary.
+   */
+  | 'trade.unknown_schedule'
+  /**
+   * `asset_class` outside `ASSET_CLASSES` (D-S-05). Refusal names the permitted set.
+   */
+  | 'trade.unknown_asset_class'
   | 'trade.market_kind_unsupported'
   | 'trade.order_type_unsupported'
   | 'trade.invalid_qty'
