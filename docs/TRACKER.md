@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**60 of 148 shipped (41%)** · 10 in progress · 26 ready to claim · 52 blocked · 33 deliberate §13 sockets
+**60 of 148 shipped (41%)** · 10 in progress · 26 ready to claim · 52 blocked · 34 deliberate §13 sockets
 
 | | meaning |
 |---|---|
