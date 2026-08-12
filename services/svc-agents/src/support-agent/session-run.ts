@@ -565,9 +565,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     // Account-state was asked and missing/invent — refuse invent. A KB cite with
     // complete:false would still read like the desk checked the account.
     const accountAsked = asked.includes('identity.account.read');
-    const accountMissing = unanswered.some(
-      (u) => u.tool === 'identity.account.read' && ACCOUNT_STATE_MISSING_REASONS.has(u.reason),
-    );
+    const accountMissing = unanswered.some((u) => u.tool === 'identity.account.read' && ACCOUNT_STATE_MISSING_REASONS.has(u.reason));
     if (accountAsked && accountMissing) {
       return {
         status: 'refuse',

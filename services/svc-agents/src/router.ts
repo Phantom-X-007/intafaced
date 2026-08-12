@@ -2237,13 +2237,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum([
-                'desk_plane_dark',
-                'tier_law_blank',
-                'tier_not_granted',
-                'no_grounded_read',
-                'account_state_missing',
-              ]),
+              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read', 'account_state_missing']),
               userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               unanswered: z.array(supportUnansweredOutput),
               metering: runMeteringOutput,
