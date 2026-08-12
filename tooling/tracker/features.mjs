@@ -193,7 +193,10 @@ export const FEATURES = [
     phase: '1',
     status: 'done',
     requires: ['services/svc-identity'],
-    note: 'Base keys on main. **Reclaimed 2026-08-04** from Shehzad M5 — Nitro agents own remaining money-routing graph (no cross-leak). Class M. Do not invent money routing.',
+    note:
+      'Base keys on main. **D26-P1-I1 / D-S-11 sealed 2026-08-12** — ownership doors (assertOwned + assertTransferDoor), ' +
+      'cross-leak ban via ledger subAccountTransfer only, trade S2S ownership gate, live-partition cap (IDENTITY_MAX_SUB_ACCOUNTS), ' +
+      'no per-sub-account tier/jurisdiction. Class M. Do not invent money routing / KYC vault.',
   }),
   f('identity.kyc', 'KYC tiers wired to JURISDICTION_MATRIX', {
     module: 'identity',

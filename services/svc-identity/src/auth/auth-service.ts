@@ -70,16 +70,21 @@ export class AuthError extends Error {
        */
       | 'auth.domain_not_allowed'
       /**
-       * Transfer door: a sub-account id was missing or empty.
+       * Ownership / transfer door: a sub-account id was missing or empty.
        * SPEC-SUBACCOUNTS §2 — never default to primary.
        */
       | 'auth.sub_account_required'
-      /** Transfer door: caller does not own the named partition. */
+      /** Ownership / transfer door: caller does not own the named partition. */
       | 'auth.sub_account_denied'
-      /** Transfer door: partition is soft-revoked. */
+      /** Ownership / transfer door: partition is soft-revoked. */
       | 'auth.sub_account_revoked'
       /** Transfer door: from and to name the same partition. */
       | 'auth.sub_account_same'
+      /**
+       * Create refused — live partitions already at the owner-published max
+       * (SPEC-SUBACCOUNTS §4 / §8). Unbounded books are an abuse surface.
+       */
+      | 'auth.sub_account_limit'
       /**
        * TOTP encrypt-at-rest key missing/invalid. Enrol refuses rather than
        * writing base32 plaintext to users.totp_secret (IDENTITY_TOTP_SECRET_KEY).
@@ -177,6 +182,9 @@ const DEFAULT_WEBAUTHN: WebAuthnConfig = {
   origin: 'http://localhost:3000',
 };
 
+/** Conservative live-partition cap until owner publishes IDENTITY_MAX_SUB_ACCOUNTS. */
+export const DEFAULT_MAX_SUB_ACCOUNTS = 25;
+
 export class AuthService {
   /**
    * Pending TOTP enrolment (secret_hash + recovery hashes) until confirm (ID-P1-1).
@@ -189,6 +197,13 @@ export class AuthService {
   private readonly webauthn: WebAuthnConfig;
   /** 32-byte AES key for totp_secret at rest; null if IDENTITY_TOTP_SECRET_KEY unset/invalid. */
   private readonly totpSecretKey: Buffer | null;
+
+  /**
+   * Owner-published live sub-account cap (SPEC-SUBACCOUNTS §4 / §8).
+   * Counts non-revoked rows only. Default keeps abuse bounded without inventing
+   * a product-tier ladder — ops override via IDENTITY_MAX_SUB_ACCOUNTS.
+   */
+  private readonly maxSubAccounts: number;
 
   constructor(
     private readonly sql: Sql,
@@ -203,6 +218,7 @@ export class AuthService {
     totpSecretKeyMaterial?: string,
     challenges?: ChallengeStorePort,
     pendingTotp?: PendingTotpEnrolmentStore,
+    maxSubAccounts: number = DEFAULT_MAX_SUB_ACCOUNTS,
   ) {
     this.webauthn = webauthn;
     this.totpSecretKey = parseTotpSecretKey(totpSecretKeyMaterial);
@@ -210,6 +226,7 @@ export class AuthService {
     // Tests may pass ChallengeStore (in-memory) when they do not need durability.
     this.challenges = challenges ?? new SqlChallengeStore(sql, webauthn.challengeTtlMs);
     this.pendingTotp = pendingTotp ?? new SqlPendingTotpEnrolmentStore(sql);
+    this.maxSubAccounts = Number.isFinite(maxSubAccounts) && maxSubAccounts >= 1 ? Math.floor(maxSubAccounts) : DEFAULT_MAX_SUB_ACCOUNTS;
   }
 
   /**
@@ -1360,12 +1377,35 @@ export class AuthService {
     if (users[0].status !== 'active') {
       throw new AuthError(`Account is ${users[0].status}`, 'auth.account_frozen');
     }
-    const rows = await this.sql<Array<{ id: string }>>`
-      INSERT INTO sub_accounts (parent_user_id, label, purpose)
-      VALUES (${userId}, ${label}, ${purpose ?? null})
-      RETURNING id
-    `;
-    return rows[0]!;
+
+    // Bound live partitions (SPEC-SUBACCOUNTS §4). Revoked rows do not count —
+    // retirement frees a slot; freeze-cascade revokes without inventing a second cap.
+    return transaction(this.sql, async (tx) => {
+      // Serialize creates under one identity (user row lock) so two pods cannot
+      // both read count=N-1 and insert past the owner-published max.
+      const locked = await tx<Array<{ id: string }>>`
+        SELECT id FROM users WHERE id = ${userId} LIMIT 1 FOR UPDATE
+      `;
+      if (!locked[0]) throw new AuthError('User not found', 'auth.not_found');
+
+      const live = await tx<Array<{ n: string }>>`
+        SELECT count(*)::text AS n FROM sub_accounts
+         WHERE parent_user_id = ${userId} AND revoked = false
+      `;
+      const count = Number(live[0]?.n ?? '0');
+      if (count >= this.maxSubAccounts) {
+        throw new AuthError(
+          `Sub-account limit reached (${this.maxSubAccounts}). Retire a live partition or raise IDENTITY_MAX_SUB_ACCOUNTS.`,
+          'auth.sub_account_limit',
+        );
+      }
+      const rows = await tx<Array<{ id: string }>>`
+        INSERT INTO sub_accounts (parent_user_id, label, purpose)
+        VALUES (${userId}, ${label}, ${purpose ?? null})
+        RETURNING id
+      `;
+      return rows[0]!;
+    });
   }
 
   async listSubAccounts(
@@ -1428,18 +1468,48 @@ export class AuthService {
   }
 
   /**
+   * OWNERSHIP-AT-THE-DOOR for one sub-account (SPEC-SUBACCOUNTS §2).
+   *
+   * Money / trade ops that name a partition must call this (or the S2S snapshot
+   * + the same checks) before acting. A valid scope says *what*; this says
+   * *whose row*. Fail-closed:
+   *   - missing / empty id → refuse (never invent primary)
+   *   - unknown id → denied (same answer as foreign — no existence oracle)
+   *   - parent_user_id ≠ caller → denied
+   *   - revoked → revoked
+   *
+   * Does not post to the ledger. Identity holds no balances.
+   */
+  async assertSubAccountOwned(userId: string, subAccountId: string | null | undefined): Promise<{ id: string; parentUserId: string }> {
+    const id = typeof subAccountId === 'string' ? subAccountId.trim() : '';
+    if (!id) {
+      throw new AuthError(
+        'Sub-account id is required — a missing id is a refusal, never a default to primary',
+        'auth.sub_account_required',
+      );
+    }
+
+    const row = await this.getSubAccountOwnership(id);
+    // Unknown and foreign both refuse as denied — do not confirm which.
+    if (!row || row.parentUserId !== userId) {
+      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
+    }
+    if (row.revoked) {
+      throw new AuthError('Sub-account is revoked', 'auth.sub_account_revoked');
+    }
+
+    return { id: row.id, parentUserId: row.parentUserId };
+  }
+
+  /**
    * OWNERSHIP-AT-THE-DOOR for a sub-account transfer (SPEC-SUBACCOUNTS §1–§2).
    *
    * The ledger recipe (`recipes.subAccountTransfer`) is pure and does not know
    * who owns which partition. Every money service that posts that recipe MUST
    * call this first — a valid scope is not ownership of a specific row.
    *
-   * Fail-closed rules:
-   *   - missing / empty from or to → refuse (never invent primary)
-   *   - same id twice → refuse
-   *   - unknown id → denied (same answer as foreign — no existence oracle)
-   *   - parent_user_id ≠ caller → denied
-   *   - either side revoked → revoked
+   * Composes {@link assertSubAccountOwned} on both legs so the single-row gate
+   * and the transfer gate cannot drift. Same-id refuses before the second look-up.
    *
    * Does not post to the ledger. Identity holds no balances.
    */
@@ -1461,20 +1531,8 @@ export class AuthService {
       throw new AuthError('A transfer needs two different sub-accounts', 'auth.sub_account_same');
     }
 
-    const from = await this.getSubAccountOwnership(fromId);
-    const to = await this.getSubAccountOwnership(toId);
-
-    // Unknown and foreign both refuse as denied — do not confirm which.
-    if (!from || from.parentUserId !== userId) {
-      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
-    }
-    if (!to || to.parentUserId !== userId) {
-      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
-    }
-    if (from.revoked || to.revoked) {
-      throw new AuthError('Sub-account is revoked', 'auth.sub_account_revoked');
-    }
-
+    const from = await this.assertSubAccountOwned(userId, fromId);
+    const to = await this.assertSubAccountOwned(userId, toId);
     return { fromId: from.id, toId: to.id };
   }
 

@@ -837,6 +837,48 @@ if (!available) {
       await expect(auth.getSubAccountOwnership('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
     });
 
+    describe('assertSubAccountOwned — single-row ownership at the door', () => {
+      it('accepts a live partition the caller owns', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'bot');
+        await expect(auth.assertSubAccountOwned(owner.userId, a.id)).resolves.toEqual({
+          id: a.id,
+          parentUserId: owner.userId,
+        });
+      });
+
+      it('refuses a missing id — never defaults to primary', async () => {
+        const owner = await register();
+        await expect(auth.assertSubAccountOwned(owner.userId, null)).rejects.toMatchObject({
+          code: 'auth.sub_account_required',
+        });
+        await expect(auth.assertSubAccountOwned(owner.userId, '')).rejects.toMatchObject({
+          code: 'auth.sub_account_required',
+        });
+      });
+
+      it('refuses foreign and missing with the same denied code', async () => {
+        const owner = await register();
+        const other = await register();
+        const theirs = await auth.createSubAccount(other.userId, 'theirs');
+        await expect(auth.assertSubAccountOwned(owner.userId, theirs.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_denied',
+        });
+        await expect(auth.assertSubAccountOwned(owner.userId, '00000000-0000-4000-8000-000000000099')).rejects.toMatchObject({
+          code: 'auth.sub_account_denied',
+        });
+      });
+
+      it('refuses a revoked partition', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'dead');
+        await auth.revokeSubAccount(owner.userId, a.id);
+        await expect(auth.assertSubAccountOwned(owner.userId, a.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_revoked',
+        });
+      });
+    });
+
     describe('assertSubAccountTransferDoor — ownership at the door', () => {
       it('accepts two live partitions the caller owns', async () => {
         const owner = await register();
@@ -895,6 +937,28 @@ if (!available) {
         await expect(auth.assertSubAccountTransferDoor(owner.userId, a.id, b.id)).rejects.toMatchObject({
           code: 'auth.sub_account_revoked',
         });
+      });
+    });
+
+    it('refuses create past the owner-published live-partition max', async () => {
+      const capped = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial, undefined, undefined, 2);
+      const handle = unique();
+      const owner = await capped.register({
+        handle,
+        email: `${handle}@example.com`,
+        password: 'correct horse battery staple',
+      });
+      await capped.createSubAccount(owner.userId, 'a');
+      await capped.createSubAccount(owner.userId, 'b');
+      await expect(capped.createSubAccount(owner.userId, 'c')).rejects.toMatchObject({
+        code: 'auth.sub_account_limit',
+      });
+      // Revoke frees a slot — the bound is live partitions, not historical rows.
+      const listed = await capped.listSubAccounts(owner.userId);
+      const first = listed.find((r) => !r.revoked)!;
+      await capped.revokeSubAccount(owner.userId, first.id);
+      await expect(capped.createSubAccount(owner.userId, 'reuse-slot')).resolves.toMatchObject({
+        id: expect.any(String),
       });
     });
   });

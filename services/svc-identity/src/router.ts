@@ -170,6 +170,7 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     case 'auth.sub_account_denied':
     case 'auth.sub_account_revoked':
+    case 'auth.sub_account_limit':
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     case 'auth.totp_key_missing':
       // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
@@ -1079,7 +1080,29 @@ export function createIdentityRouter(
         })),
 
       /**
-       * Transfer ownership door (SPEC-SUBACCOUNTS residual).
+       * Single-row ownership door (SPEC-SUBACCOUNTS §2 / D26-P1-I1).
+       *
+       * Pure assert — does not move value. Trade and other money surfaces that
+       * name one partition call this (or the S2S ownership snapshot with the
+       * same checks) before acting. Missing id refuses; never defaults to primary.
+       */
+      assertOwned: scopedProcedure('identity:write')
+        .input(
+          z.object({
+            subAccountId: z.string().uuid().optional().nullable(),
+          }),
+        )
+        .output(z.object({ id: z.string().uuid(), parentUserId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            return await auth.assertSubAccountOwned(ctx.principal.userId, input.subAccountId);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Transfer ownership door (SPEC-SUBACCOUNTS §1–§2 / D26-P1-I1).
        *
        * Pure assert — does not move value. Money services call this (or the
        * AuthService method) before posting `recipes.subAccountTransfer`. A
