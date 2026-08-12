@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DisputeCaseError, MemoryDisputeCaseStore } from './dispute-case.js';
+import { CHARGEBACK_LEDGER_SOCKET_ID, DisputeCaseError, MemoryDisputeCaseStore } from './dispute-case.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('D26-P1-P5 chargeback dispute case mechanism', () => {
-  it('opens a case keyed by disputeId (not payment id) and stays ledger-unwired', () => {
+  it('opens a case keyed by disputeId (not payment id) and refuse-closes ledger via named socket', () => {
     const store = new MemoryDisputeCaseStore();
     const a = store.open({
       disputeId: 'dsp-1',
@@ -19,7 +19,9 @@ describe('D26-P1-P5 chargeback dispute case mechanism', () => {
       paymentMarkedDisputed: true,
     });
     expect(a.status).toBe('open');
-    expect(a.ledgerWire).toBe('unwired');
+    expect(a.ledgerWire).toBe('refused');
+    expect(a.ledgerRefuse.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
+    expect(a.ledgerRefuse.code).toBe('pay.chargeback_ledger_unwired');
     expect(a.paymentMarkedDisputed).toBe(true);
     // Second presentment is a different disputeId.
     const b = store.open({
@@ -46,7 +48,8 @@ describe('D26-P1-P5 chargeback dispute case mechanism', () => {
     const won = store.markWon('dsp-w');
     expect(won.status).toBe('won');
     expect(won.closedAt).toBeTruthy();
-    expect(won.ledgerWire).toBe('unwired');
+    expect(won.ledgerWire).toBe('refused');
+    expect(won.ledgerRefuse.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
   });
 
   it('refuses invalid transitions and blank dispute ids', () => {

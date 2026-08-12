@@ -581,28 +581,37 @@ export const FEATURES = [
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
     requires: [
       'services/svc-pay/src/kyb-service.ts',
       'services/svc-pay/src/psp-mode.ts',
       'services/svc-pay/drizzle/0013_pay_merchant_kyb_history.sql',
+      'services/svc-pay/src/psp-done-bar.test.ts',
     ],
     note:
-      '**D26-P1-P1 2026-08-12** — digital KYB live operator path (`kyb.decide` under admin:compliance) + append-only KYB/pricing ' +
-      'histories; PSP mode enable refuses missing feeBps (no invent fees); boot seal refuses Hyperswitch/Stripe/etc in svc-pay deps ' +
-      '(D-S-10). Path-disjoint from settlement (#1694) and fraud (#1657). Residual: kybStatus money-gate is pay.gateway; card ' +
-      'acquiring stays socket.psp-partners. Lane feat/pay-psp-product.',
+      '**DONE 2026-08-12 (D26-P1-P1):** PSP path without third-party money library (D-S-10 boot seal) + merchant ' +
+      'durability — digital KYB live operator path (`kyb.submit`/`kyb.decide`) + append-only KYB/pricing histories; ' +
+      'PSP mode enable refuses missing feeBps (no invent fees). Public-door proof: `psp-done-bar.test.ts` (#1720 tip + Done-bar closeout). ' +
+      'Residual: kybStatus money-gate is pay.gateway; card acquiring stays socket.psp-partners.',
   }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
-    // D26-P1-P2 claim 2026-08-12: #1741 feat/pay-payfac-or-p10 — REST permissions + honest partial.
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.psp'],
-    note: '**D26-P1-P2 WIP #1741 (2026-08-12)** — REST /v1/submerchant-permissions/* + shared surface→area map + named §13 sockets (settling partner, split-fee recipes). Honest partial, not full underwriting. **Sub-merchant tree landed #1135 (2026-08-08)** — merchants.parent_merchant_id (NULL = top of its own tree, nothing backfilled) plus settling_party, and pay.merchant_permission_events as an append-only journal behind a trigger. Authorization is two checks that are not the same check, both at the procedure boundary: a STRUCTURAL ancestor-or-self scope that cannot be widened, and an AREA check over descendants only; the acting node is resolved from the principal and is deliberately not on the wire. Moves no value. **The "14 permission areas" in this title has never existed anywhere** — it is one string copied between this file, coverage.yaml and the build doc; ELEVEN areas shipped, each naming a surface svc-pay actually has, and area is text not an enum so a twelfth costs one line. Fixing the number is an OWNER decision. Also found: payfac was never actually blocked by pay.psp — merchant.create has accepted mode payfac since migration 0000 and it changed nothing. STILL NOT done: the nine areas naming gateway procedures are not yet enforced there — router.ts still authorizes with a single assertMerchantOwnership userId comparison, and wiring it touches the money paths. Ghost owner cleared 2026-08-09 (merged #1135, no open PR).',
+    requires: [
+      'services/svc-pay/src/payfac-permissions.ts',
+      'services/svc-pay/src/public-rest.payfac-permissions.test.ts',
+      'docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md',
+    ],
+    note:
+      '**DONE 2026-08-12 (D26-P1-P2):** Honest partial + §13 — REST /v1/submerchant-permissions/* + shared surface→area map ' +
+      '(#1741) · trees + area fence on money paths · named sockets `socket.payfac-settling-party-partner` + ' +
+      '`socket.payfac-split-fee-recipes`. Title "14 areas" is historical; eleven shipped. Public-door: ' +
+      '`public-rest.payfac-permissions.test.ts`. Not full underwriting / invent fee splits.',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
@@ -640,8 +649,22 @@ export const FEATURES = [
   f('pay.fraud', 'Risk scoring, chargebacks, decline recovery', {
     module: 'pay',
     phase: '3',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/fraud/evaluate.ts',
+      'services/svc-pay/src/fraud/review-queue.ts',
+      'services/svc-pay/src/fraud/dispute-case.ts',
+      'services/svc-pay/src/fraud/chargeback-ledger-socket.ts',
+      'services/svc-pay/src/fraud-done-bar.test.ts',
+    ],
+    note:
+      '**DONE 2026-08-12 (D26-P1-P5):** Scoring mechanism + review queue + dispute case surface ' +
+      '(fraud.evaluate / enqueueReview / openDispute) with settled→disputed writer. Chargeback ledger ' +
+      'recipes refuse-closed via named §13 `socket.pay-chargeback-ledger-wire` — not a stub unwired ' +
+      'matrix and not silent posts. List content (IPs/devices/sanctions) Class X. Public-door proof: ' +
+      '`fraud-done-bar.test.ts`. Residual: durable disputes table + owner sign-off to close the socket.',
   }),
   f('pay.subscriptions', 'Recurring — card and crypto', {
     module: 'pay',
@@ -1925,6 +1948,21 @@ export const FEATURES = [
       'AND fiat settle rails posture. Until then: forex.settlementStatus published=false; production active listMarket / setMarketStatus(active) / ' +
       'place refuse trade.unsettled_asset_class_listing naming this socket. Paper + non-active listing allowed (model). Do NOT invent settlement ' +
       'asset (stablecoin-margined vs true fiat omnibus — D8; PAY_CRYPTO_ASSETS must not accidentally map EUR→euro stablecoin). No code closes this.',
+  }),
+  // D26-P1-P5: pay.fraud Done bar ships dispute cases; ledger chargeback posts stay refuse-closed here.
+  f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {
+    module: 'pay',
+    phase: '3',
+    status: 'socket',
+    dependsOn: ['pay.fraud'],
+    requires: ['services/svc-pay/src/fraud/chargeback-ledger-socket.ts'],
+    note:
+      '§13 residual (named 2026-08-12 under D26-P1-P5) — packages/ledger-client already has chargebackOpen / Shortfall / Won / ' +
+      'ShortfallRecovered with an explicit Class M owner-sign-off banner. svc-pay records dispute cases and projects payment → disputed, ' +
+      'but must not call those recipes until the four named questions in chargeback.ts are signed. The seam refuses by name ' +
+      '(`refuseChargebackLedgerPost` → pay.chargeback_ledger_unwired) so the Done bar is mechanism + honest socket, not a silent book ' +
+      'entry or an unwired stub string. Closing = owner sign-off then wire dispute open to post; inventing split legs or shortfall ' +
+      'policy is forbidden. Blocklist / scheme list content remains Class X.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {

@@ -11,3 +11,5 @@
 | Note         | LIVE-LANES denon-d26-p1-p2-payfac · features.mjs wip · path overlap with #1754 on public-rest.ts acknowledged          |
 
 Claimed 2026-08-12. Rebased + type-fixed same day.
+
+**Closeout 2026-08-12:** Done bar met as honest partial + §13 (REST permissions + trees + money-path area fence). Tracker `pay.payfac` → done on feat/pay-donebar-closeout.

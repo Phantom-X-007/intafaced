@@ -1932,6 +1932,17 @@ tracker_extra:
       of the smart account, §34:829 specs guardian M-of-N as a premium product, and §38:854 adds a
       guardian-recovery DoD test. A tracker row overrode two law sections with no ADR — audit §B5 row 2.
       Recorded here so the contradiction is visible rather than buried in a note; the owner's pen resolves it.
+  - id: socket.pay-chargeback-ledger-wire
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Chargeback ledger recipes exist in packages/ledger-client (chargebackOpen / Shortfall / Won /
+      ShortfallRecovered) with an explicit Class M owner-sign-off banner. svc-pay records dispute cases
+      and projects payment → disputed (D26-P1-P5 mechanism) but must not call those recipes until the
+      four named questions in chargeback.ts are signed. Closing this socket = wire dispute open to
+      post; inventing split legs or shortfall policy is forbidden. Blocklist / sanctions list content
+      remains Class X and is out of scope. Named §13 residual row in features.mjs — not a stale
+      tracker_extra pointing at a missing id.
 
 # ── §11 DROP PHASES ──────────────────────────────────────────────────────────
 # §25:740 — "any Vol. I feature without a green DoD at its phase gate blocks the

@@ -825,8 +825,8 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
 
     /**
      * pay.fraud — scoring + review queue + dispute **case** mechanism (D26-P1-P5).
-     * Moves no ledger value. Chargeback recipes stay unwired (owner Class M park).
-     * List content (IPs/devices/sanctions) remains Class X.
+     * Moves no ledger value. Chargeback recipes refuse-closed via
+     * `socket.pay-chargeback-ledger-wire` (named §13). List content Class X.
      */
     fraud: router({
       evaluate: publicProcedure
@@ -1058,6 +1058,8 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
               disputeId: c.disputeId,
               status: c.status,
               ledgerWire: c.ledgerWire,
+              ledgerRefuseCode: c.ledgerRefuse.code,
+              ledgerSocket: c.ledgerRefuse.socket,
               paymentMarkedDisputed: c.paymentMarkedDisputed,
             };
           } catch (e) {
@@ -1077,7 +1079,13 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ input }) => {
           try {
             const c = defaultDisputeCaseStore.contest(input.disputeId);
-            return { disputeId: c.disputeId, status: c.status, ledgerWire: c.ledgerWire };
+            return {
+              disputeId: c.disputeId,
+              status: c.status,
+              ledgerWire: c.ledgerWire,
+              ledgerRefuseCode: c.ledgerRefuse.code,
+              ledgerSocket: c.ledgerRefuse.socket,
+            };
           } catch (e) {
             if (e instanceof DisputeCaseError) {
               throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
@@ -1102,6 +1110,8 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             reasonCode: c.reasonCode,
             status: c.status,
             ledgerWire: c.ledgerWire,
+            ledgerRefuseCode: c.ledgerRefuse.code,
+            ledgerSocket: c.ledgerRefuse.socket,
             openedAt: c.openedAt,
             closedAt: c.closedAt,
           };
