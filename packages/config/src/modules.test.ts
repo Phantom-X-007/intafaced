@@ -110,6 +110,20 @@ describe('custody-scan derives its service list from the registry, faithfully', 
       /found no Protocol Plane module[\s\S]{0,600}process\.exit\(1\)/,
     );
   });
+
+  /**
+   * D26-P2-08 — custody-scan must open the Java runtime risk surface, not only
+   * Protocol Plane TS/Sol. The dual-book ratchet stays in vendor-java-money-scan;
+   * this asserts the named gate still walks Java (money-plane src/main + jars).
+   */
+  it('walks the vendor Java runtime risk surface (D26-P2-08)', () => {
+    const source = readFileSync(scanPath, 'utf8');
+
+    expect(source, 'D26-P2-08 check id missing').toContain('java-runtime-risk-surface');
+    expect(source, 'runtime risk module list missing').toContain('RUNTIME_RISK_MODULES');
+    expect(source, 'must fail closed on empty Java walk').toContain('scanned 0 Java files on the runtime risk surface');
+    expect(source, 'must open committed classpath jars').toContain('java-runtime-jar');
+  });
 });
 
 /**
