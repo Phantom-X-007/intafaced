@@ -160,6 +160,12 @@ export interface PositionServiceDeps {
    */
   maxLeverage?: Amount;
   now?: () => Date;
+  /**
+   * DIRECTION:34 — ADL disclosure gate. When set (production), `open()` refuses
+   * until the trader has ack'd in-product disclosure. Omitted in hermetic unit
+   * tests that are not proving the public door; public-door + index always wire it.
+   */
+  assertAdlDisclosureAcked?: (userId: string) => Promise<void>;
 }
 
 /** Why a position is frozen waiting for a mark — futures-namespaced refuse codes. */
@@ -378,6 +384,14 @@ export class PositionService {
      */
     if (this.deps.profitSource == null) {
       throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 503);
+    }
+
+    /**
+     * DIRECTION:34 — disclosure before open. Wired in production via
+     * `assertAdlDisclosureAcked`; missing ack is a named 403, not a silent open.
+     */
+    if (this.deps.assertAdlDisclosureAcked) {
+      await this.deps.assertAdlDisclosureAcked(input.userId);
     }
 
     /**
