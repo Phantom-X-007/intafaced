@@ -529,6 +529,7 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
     expect(result.venue).toBe('paper');
     expect(result.realLedger).toBe(false);
     expect(result.withdrawable).toBe(false);
+    expect(result.realMoney).toBe(false);
     expect(result.disclaimer).toMatch(/no value moved/i);
   });
 });
@@ -588,14 +589,18 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
     expect(result.venue).toBe('paper');
     expect(result.realLedger).toBe(false);
     expect(result.withdrawable).toBe(false);
+    expect(result.realMoney).toBe(false);
     expect(result.disclaimer).toMatch(/withdrawable/i);
 
     // Belt and braces: no key anywhere in the payload claims a real book.
     const flat = JSON.stringify(result);
     expect(flat).toContain('"simulated":true');
     expect(flat).toContain('"withdrawable":false');
+    expect(flat).toContain('"realMoney":false');
     expect(flat).not.toContain('ledgerTxId');
     expect(flat).not.toContain('idempotencyKey');
+    expect(flat).not.toContain('availableBalance');
+    expect(flat).not.toContain('holdAmount');
   });
 
   it('REFUSES a live market — a result is never produced off a real book', async () => {
