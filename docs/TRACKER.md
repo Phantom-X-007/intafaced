@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**58 of 148 shipped (39%)** · 5 in progress · 32 ready to claim · 53 blocked · 32 deliberate §13 sockets
+**58 of 148 shipped (39%)** · 6 in progress · 31 ready to claim · 53 blocked · 32 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -26,7 +26,6 @@ pnpm wt feat/<the-thing>
 | Feature | Module | Phase | id |
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
-| Perps: isolated margin, funding, partial-liquidation ladder | `trade` | 2 | `trade.futures` |
 | OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, fee-share (not profit-share) | `trade` | 2 | `trade.copy` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
@@ -79,6 +78,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 |---|---|---|
 | PII isolation — KYC documents in a separate encrypted store (§10) | **ZenYoda3** | `identity` |
 | Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) | **ZenYoda3** | `core-ops` |
+| Perps: isolated margin, funding, partial-liquidation ladder | **Phantom-X-007** | `trade` |
 | Multi-tier affiliate / IB trees, payout automation | **agent:w13-l04** | `core-ops` |
 | Screening queues, geo-block, VPN/Tor detection | **w10-l04-edge** | `core-ops` |
 | Warehouse — read replica + cube layer | **w10-l04-edge** | `core-ops` |
@@ -133,7 +133,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining._ | F |  | `trade.convert` |
-| 🟢 | Perps: isolated margin, funding, partial-liquidation ladder <br/>_CLAIM RELEASED 2026-08-09 (ghost @nitro-agent cleared — LANE-STOP-TRADE-W3 + W4 A0; no open futures PR held the path). Isolated margin ONLY. Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, #1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery). Still ready not done: leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, insurance fund ACCOUNT/policy owner-reserved, Denon ladder numbers (D3), N1 profit-source capitalisation. Never invent mid/funding._ | F |  | `trade.futures` |
+| 🔨 | Perps: isolated margin, funding, partial-liquidation ladder <br/>_WIP 2026-08-12 Denon D26-P1-T1b (#1678 feat/futures-margin-call-observable): durable margin-call transport + private REST observe door. Isolated margin ONLY. Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, #1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), #1672 T1a mark law, #1670 insurance list gate. Still not umbrella-done: T1c–T1g, leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, Denon ladder numbers (D3), N1 profit-source capitalisation. Never invent mid/funding/grace duration._ | F |  | `trade.futures` |
 | ⛔ | European options, cash-settled, full collateral in v1 <br/>_Honest thin slice (not done): listMarket refuses kind=options while TRADE_OPTIONS_SETTLEMENT_FIXING is empty (trade.options_fixing_unconfigured); complete European terms required when set; DB CHECK markets_options_terms_ck blocks half-listed option rows. No IV surface, no pricing model, no invent D7 source/window/payor. Orders still refused by assertTradable (trade.market_kind_unsupported). Real product remains blocked on D7 settlement fixing law._ | F | `trade.futures` | `trade.options` |
 | 🟢 | OTC RFQ desk, staked-tier gate <br/>_Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. Residual OWNER: §8 spreads/stake, socket.otc-mid-feed max-age (do not invent), maker-routing settle, durable quotes table. copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0)._ | F |  | `trade.otc` |
 | 🟢 | Copy trading, audited leaders, fee-share (not profit-share) <br/>_W13 L10 2026-08-10: settle fillId claim (no re-bump period on redelivery) + drizzle 0022 copy_settled_fee_shares; listMyFollows + planMirror mounted. W10 L02 product mount: follow/killFeeShare/unfollow/settleFeeShare/deskStatus + TRADE_COPY_* env (blank refuse) + 0021 mirrored_fills. Stage #1009 + money seals #1191/#1199/#1386. Product is **fee-share** only; P&L profit-share banned (§95). Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: owner rates (Nitro §8); session-key caps (protocol); auto-mirror place into spot — plan only._ | B |  | `trade.copy` |
