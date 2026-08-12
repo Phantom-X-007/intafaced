@@ -13,10 +13,19 @@
  * Stage-3 extends import status:
  *   5. Workbook bodies must not paint fake market prices as live quotes
  *   6. Operator stage status (pipeline / catalog / polish) for honest residual
+ *
+ * D26-P1-C5 (substance):
+ *   7. Lesson-substance checklist — refuse char-count theater that clears the
+ *      depth floor by repeating filler. Spine report names theater slugs.
  */
 
 import type { CurriculumItem, CurriculumKind, CurriculumPath } from './catalog.js';
-import { CURRICULUM_MIN_BODY_CHARS, CURRICULUM_PATHS, listCurriculum } from './catalog.js';
+import {
+  CURRICULUM_MIN_BODY_CHARS,
+  CURRICULUM_PATHS,
+  getCurriculumItem,
+  listCurriculum,
+} from './catalog.js';
 import { curriculumDeepLinksVerified } from './deep-links.js';
 import { curriculumI18nStrategyHonest } from './i18n-strategy.js';
 
@@ -90,11 +99,93 @@ export function workbookLiveQuoteChecklist(
 }
 
 /**
+ * Lesson-substance checklist (D26-P1-C5).
+ *
+ * The depth floor (`CURRICULUM_MIN_BODY_CHARS`) stops three-bullet stubs. It does
+ * not stop a body that repeats one sentence until the character count clears —
+ * that is char-count theater, and it used to pass `brandChecklist`. This gate
+ * refuses padding and requires a teachable shape: sectioned markdown, lexical
+ * variety, and at least one pedagogical signal (worked example, mistakes,
+ * drill, self-check, etc.).
+ *
+ * Passing proves an import is not theater. It does not grade writing quality.
+ */
+export function lessonSubstanceChecklist(body: string): ImportValidationIssue[] {
+  const issues: ImportValidationIssue[] = [];
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return [{ field: 'body', code: 'invalid', message: 'Body required for substance check' }];
+  }
+
+  const h2 = trimmed.match(/^## .+$/gm) ?? [];
+  if (h2.length < 2) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: 'Body needs ≥2 ## sections (mechanics / mistakes / drills) — a padded wall is not a lesson',
+    });
+  }
+
+  const words = trimmed
+    .toLowerCase()
+    .split(/[^a-z0-9']+/)
+    .filter((w) => w.length > 0);
+  const unique = new Set(words);
+  const uniqueRatio = words.length === 0 ? 0 : unique.size / words.length;
+  // Real spine lessons sit well above these floors; repeated filler collapses both.
+  if (unique.size < 90) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: `Body lexicon too thin (${unique.size} unique words < 90) — char-count padding is not lesson substance`,
+    });
+  } else if (uniqueRatio < 0.28) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: `Body unique-word ratio ${uniqueRatio.toFixed(2)} < 0.28 — refuses repeated filler theater`,
+    });
+  }
+
+  const longLines = trimmed
+    .split(/\n+/)
+    .map((line) => line.trim().toLowerCase())
+    .filter((line) => line.length >= 48 && !line.startsWith('#'));
+  const lineCounts = new Map<string, number>();
+  for (const line of longLines) {
+    lineCounts.set(line, (lineCounts.get(line) ?? 0) + 1);
+  }
+  let maxLineRep = 0;
+  for (const n of lineCounts.values()) maxLineRep = Math.max(maxLineRep, n);
+  if (maxLineRep >= 4) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: 'Body repeats the same long line ≥4 times — char-count theater refused',
+    });
+  }
+
+  const teachingSignal =
+    /\b(worked example|illustrative arithmetic|common mistakes|before you move on|check yourself|what this is not|drill\s+\d|paper only|invalidation|position size)\b/i;
+  if (!teachingSignal.test(trimmed)) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message:
+        'Body lacks a teaching signal (worked example / mistakes / drill / self-check) — length alone is not substance',
+    });
+  }
+
+  return issues;
+}
+
+/**
  * Brand-scan checklist for import bodies (§0.7).
  *
  * Does NOT list forbidden vendor strings in source (brand scanner would trip on
  * the test/file). Checks structural honesty only; full brand scan remains
- * `pnpm scan:brand` / DoD gate.
+ * `pnpm scan:brand` / DoD gate. After the depth floor, D26-P1-C5 substance runs
+ * so a padded 900-character wall cannot re-enter.
  */
 export function brandChecklist(
   record: Pick<CurriculumImportRecord, 'title' | 'summary' | 'body'> & { kind?: CurriculumKind },
@@ -136,6 +227,9 @@ export function brandChecklist(
       code: 'invalid',
       message: `Body must clear depth floor (≥${CURRICULUM_MIN_BODY_CHARS} chars) — the old 40-char import bar let stubs re-enter`,
     });
+  } else {
+    // Depth cleared — now refuse char-count theater that only looked deep.
+    issues.push(...lessonSubstanceChecklist(record.body));
   }
   if (record.kind === 'workbook') {
     issues.push(...workbookLiveQuoteChecklist({ kind: 'workbook', title: record.title, summary: record.summary, body: record.body }));
@@ -366,6 +460,41 @@ export function importRejectedAtMost(summary: ImportBatchSummary, n: number): bo
 }
 
 /**
+ * Spine substance inventory (D26-P1-C5).
+ *
+ * Runs the same import substance gate against every catalog body so a padded
+ * wall cannot hide behind title counts. Names theater slugs rather than
+ * asserting silence.
+ */
+export type CurriculumSubstanceReport = {
+  readonly total: number;
+  readonly substanceOk: number;
+  readonly theater: number;
+  readonly theaterSlugs: string[];
+  /** True only when every spine body clears lessonSubstanceChecklist. */
+  readonly substanceBarMet: boolean;
+};
+
+export function curriculumSubstanceReport(): CurriculumSubstanceReport {
+  const all = listCurriculum();
+  const failing: string[] = [];
+  for (const summary of all) {
+    const item = getCurriculumItem(summary.slug);
+    if (!item || lessonSubstanceChecklist(item.body).length > 0) {
+      failing.push(summary.slug);
+    }
+  }
+  failing.sort();
+  return {
+    total: all.length,
+    substanceOk: all.length - failing.length,
+    theater: failing.length,
+    theaterSlugs: failing,
+    substanceBarMet: failing.length === 0,
+  };
+}
+
+/**
  * Stage-3 operator status for the import/catalog/polish DoD.
  * Honest flags only — does not invent licensed library content.
  */
@@ -384,12 +513,19 @@ export type CurriculumImportStageStatus = {
     readonly i18nStrategyHonest: boolean;
     readonly ready: boolean;
   };
+  /**
+   * D26-P1-C5 — import bar met with real lesson substance (not char-count theater).
+   * Independent of title counts: a 20+3 spine of padded walls fails this.
+   */
+  readonly substanceBarMet: boolean;
+  readonly theaterSlugs: string[];
 };
 
 export function curriculumImportStageStatus(): CurriculumImportStageStatus {
   const inv = curriculumInventory();
   const deepLinksVerified = curriculumDeepLinksVerified();
   const i18nStrategyHonest = curriculumI18nStrategyHonest();
+  const substance = curriculumSubstanceReport();
   return {
     contentSource: inv.contentSource,
     titlePromiseMet: inv.titlePromiseMet,
@@ -402,6 +538,8 @@ export function curriculumImportStageStatus(): CurriculumImportStageStatus {
       i18nStrategyHonest,
       ready: deepLinksVerified && i18nStrategyHonest,
     },
+    substanceBarMet: substance.substanceBarMet,
+    theaterSlugs: substance.theaterSlugs,
   };
 }
 
@@ -414,5 +552,7 @@ export function curriculumImportStageStatusLine(): string {
     `residualPb=${s.residualPlaybooks}`,
     `residualWb=${s.residualWorkbooks}`,
     `stage3=${s.stage3Polish.ready ? '1' : '0'}`,
+    `substance=${s.substanceBarMet ? '1' : '0'}`,
+    `theater=${s.theaterSlugs.length}`,
   ].join(' ');
 }

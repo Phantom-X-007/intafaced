@@ -235,6 +235,8 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
     const status = await caller.curriculumImportStatus();
     expect(status.stage3Polish.ready).toBe(true);
     expect(status.titlePromiseMet).toBe(true);
+    expect(status.substanceBarMet).toBe(true);
+    expect(status.theaterSlugs).toEqual([]);
     const localized = await caller.curriculumItemLocalized({ slug: 'foundations-risk-first', locale: 'fr' });
     expect(localized.fellBack).toBe(true);
     expect(localized.locale).toBe('en');

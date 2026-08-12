@@ -1097,6 +1097,15 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies'],
+    // D26-P1-C5 2026-08-12: import substance bar (not char-count theater) on
+    // feat/academy-curriculum-c5 — title counts already met via platform-native
+    // spine; licensed DERIV//DESK dump still residual / Class X.
+    status: 'wip',
+    owner: 'Phantom-X-007',
+    note:
+      'D26-P1-C5 wip @Phantom-X-007: import pipeline refuses char-count theater; ' +
+      'substanceBarMet on spine (20 playbooks + 3 workbooks platform-native). ' +
+      'NOT tracker done: licensed DERIV//DESK library import remains Class X / product assets.',
   }),
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',
