@@ -120,7 +120,13 @@ const appConfigs = walk(VENDOR, (name, p) => name === 'ApplicationConfig.java');
 const failures = [];
 
 for (const marker of REQUIRED_CONFIG_MARKERS) {
-  const match = appConfigs.find((p) => marker.pathIncludes.every((seg) => p.includes(seg)));
+  // Normalize to `/` so markers like `00_framework/exchange/` still match on
+  // Windows (walk joins with `\`). Trailing-slash form is load-bearing: it must
+  // not also match `exchange-api`.
+  const match = appConfigs.find((p) => {
+    const posix = p.split(/[/\\]/).join('/');
+    return marker.pathIncludes.every((seg) => posix.includes(seg));
+  });
   if (!match) {
     failures.push(`no ApplicationConfig.java found for ${marker.id}`);
     continue;
