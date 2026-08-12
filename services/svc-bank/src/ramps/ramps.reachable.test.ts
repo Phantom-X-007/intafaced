@@ -91,6 +91,7 @@ if (!available) {
         displayName: NO_RAMP_PROGRAMME.displayName,
         cryptoRail: null,
         fiatLeg: 'socket.psp-partners',
+        fiatVia: 'svc-pay.RailAdapter',
       });
     });
   });
@@ -115,6 +116,7 @@ if (!available) {
       const programme = await user.ramps.programme();
       expect(programme.simulated).toBe(true);
       expect(programme.fiatLeg).toBe('socket.psp-partners');
+      expect(programme.fiatVia).toBe('svc-pay.RailAdapter');
       expect(programme.cryptoRail).toBeTruthy();
 
       const credited = await ops.ops.creditOnramp({

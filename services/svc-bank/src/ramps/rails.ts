@@ -14,10 +14,10 @@ import { BankError } from '../errors.js';
  *   withdraw recipes into the book). No third-party signature is required for
  *   that arithmetic.
  *
- *   FIAT LEG — `socket.psp-partners`. A bank/PSP partner and money-transmission
- *   permission are a commercial relationship. No amount of engineering time
- *   produces either. Refusing by name is the only honest thing this module can
- *   do for fiat.
+ *   FIAT LEG — `socket.psp-partners` commercially. Code path is svc-pay's
+ *   `RailAdapter` plane via `PayFiatRampPort` (D26-P1-B4) — never a bank-local
+ *   PSP client. Empty/sandbox/absent refuse by socket name; a live pay rail may
+ *   use the same ledger-client recipes (no second book).
  *
  * The setting below selects the CRYPTO ledger half only. There is no value that
  * turns on a fiat rail, and there is no value that claims a live chain send —
@@ -38,8 +38,8 @@ export interface RampProgramme {
   /**
    * TRUE MEANS NO LIVE RAMP EXISTS.
    *
-   * Always true today. A live rail cannot be selected here: crypto live send /
-   * confirm is svc-pay + Class X; fiat is `socket.psp-partners`.
+   * Always true today on this surface. Crypto live send/confirm is svc-pay +
+   * Class X; fiat live is Class X on the pay RailAdapter (not inventable here).
    */
   readonly simulated: boolean;
   /** Human label. Never a PSP or partner brand (§0.7). */
@@ -48,6 +48,11 @@ export interface RampProgramme {
   readonly cryptoRail: string | null;
   /** Always names the fiat socket — never "coming soon". */
   readonly fiatLeg: 'socket.psp-partners';
+  /**
+   * Where fiat value would enter once a partner exists — svc-pay RailAdapter
+   * plane via `PayFiatRampPort`. Never a bank-local PSP client.
+   */
+  readonly fiatVia: 'svc-pay.RailAdapter';
 }
 
 export const RAMP_SETTINGS = ['none', 'crypto-ledger'] as const;
@@ -62,14 +67,16 @@ export const NO_RAMP_PROGRAMME: RampProgramme = {
   displayName: 'No bank ramp programme',
   cryptoRail: null,
   fiatLeg: 'socket.psp-partners',
+  fiatVia: 'svc-pay.RailAdapter',
 };
 
 export const CRYPTO_LEDGER_PROGRAMME: RampProgramme = {
   id: 'crypto-ledger',
   simulated: true,
-  displayName: 'Crypto ledger half (no chain broadcast; fiat is a socket)',
+  displayName: 'Crypto ledger half (no chain broadcast; fiat via pay adapters / socket)',
   cryptoRail: BANK_CRYPTO_LEDGER_RAIL,
   fiatLeg: 'socket.psp-partners',
+  fiatVia: 'svc-pay.RailAdapter',
 };
 
 /**
@@ -101,12 +108,14 @@ export function assertCryptoRamp(programme: RampProgramme): string {
 }
 
 /**
- * Fiat is §13 forever on this surface. The caller's kind is wrong, not their
- * amount — refuse by the socket name so nobody invents a PSP path in-process.
+ * Fiat without a live pay RailAdapter. Prefer `resolvePayFiatRailId` so the
+ * refusal names what was considered; this helper stays for call sites that
+ * have already decided the port cannot host the leg.
  */
 export function refuseFiatRamp(): never {
   throw new BankError(
-    'Fiat on/off ramp is socket.psp-partners — a bank/PSP partner and money-transmission permission, not code. The crypto ledger half does not claim this function.',
+    'Fiat on/off ramp is socket.psp-partners — a bank/PSP partner and money-transmission permission, not inventable code. ' +
+      'Reuse a live svc-pay RailAdapter via PayFiatRampPort; do not invent APY, card BIN, or a bank-local PSP.',
     'bank.fiat_ramp_socket',
   );
 }

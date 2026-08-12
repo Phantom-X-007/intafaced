@@ -1009,17 +1009,22 @@ export const FEATURES = [
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',
     phase: '5',
-    status: 'ready',
+    status: 'done',
     dependsOn: ['pay.rails'],
-    requires: ['services/svc-bank/src/ramps/ramp-service.ts', 'services/svc-bank/src/ramps/rails.ts'],
+    requires: [
+      'services/svc-bank/src/ramps/ramp-service.ts',
+      'services/svc-bank/src/ramps/rails.ts',
+      'services/svc-bank/src/ramps/pay-fiat-adapter.ts',
+      'services/svc-bank/src/ramps/ramps-fiat-product.test.ts',
+    ],
     note:
-      '**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF DONE #997** (claim TRK-bank.ramps status:merged). ' +
-      'OWNER CLEARED 2026-08-08 (axis C1 absorbs #1128 closeout): stale `owner: cursor-swarm-bank` fenced ALL of services/svc-bank ' +
-      'via claim-check path map and parked money-critical #1102. Same release standard as #1122. ' +
-      'CRYPTO LEG — ledger surface on main: ramps.programme|onramps|offramps|offramp + ops creditOnramp; value only via ' +
-      'ledger-client deposit/withdrawHold/withdrawSettle against rail bank-crypto-ledger. BANK_RAMP_MODE=none|crypto-ledger, default none; ' +
-      'simulated: true always; fiat refuses bank.fiat_ramp_socket → socket.psp-partners. No earn APY / card BIN invented. ' +
-      'FIAT LEG — socket.psp-partners, not this row. Live chain confirm/send remains svc-pay + Class X.',
+      '**D26-P1-B4 COMPLETE #1773** — Fiat on/off via PayFiatRampPort (svc-pay RailAdapter plane) on public doors ' +
+      '(ops.creditOnramp + ramps.offramp); empty/sandbox/absent refuse bank.fiat_ramp_socket before any row; live adapter ' +
+      'books only via ledger-client deposit/withdrawHold/withdrawSettle against the pay rail id (no second book, no bank-local PSP). ' +
+      'Programme surfaces fiatVia: svc-pay.RailAdapter. simulated: true always. No APY/BIN invent. ' +
+      'auto-invest/business claim fences narrowed to their dirs (owners unchanged). ' +
+      '**SPLIT 2026-08-04 ADR** · CRYPTO LEDGER HALF #997. Commercial partner / money-transmission remains socket.psp-partners + Class X. ' +
+      'Live chain confirm/send remains svc-pay + Class X.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
     module: 'agents',
@@ -1529,12 +1534,15 @@ export const FEATURES = [
     status: 'wip',
     owner: 'nitro-w10-l08',
     dependsOn: ['bank.accounts', 'bank.cards', 'bank.earn', 'trade.convert', 'protocol.smart-accounts'],
-    requires: ['services/svc-bank'],
+    // Path-narrowed 2026-08-12 (D26-P1-B4): was `services/svc-bank` and fenced ALL bank mountains
+    // including ramps/cards/earn. Owner + wip unchanged — only the claim-check fence matches the real dir.
+    requires: ['services/svc-bank/src/auto-invest'],
     note:
       'Law §31:805 F-plane PARTIAL (W10 L08): threshold_sweep → earn via earnDeposit on main path; ' +
       'createDca refuses bank.auto_invest_rate_unset without ConvertPort (no invent §8); ops.runAutoInvest + AUTO_INVEST_ENABLED. ' +
       'Still open: card round-ups (capture hook), ConvertPort→trade.convert wire, P-plane session-key allowance (protocol.smart-accounts / Shehzad). ' +
-      '§0.6: rules hold no balance. Residual law: gap-closed 2026-08-08 note on both planes still stands for Done.',
+      '§0.6: rules hold no balance. Residual law: gap-closed 2026-08-08 note on both planes still stands for Done. ' +
+      'Fence: requires narrowed to src/auto-invest so path-disjoint bank.ramps/cards work is not HUMAN-CLAIMED.',
   }),
   f('bank.business', 'svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31)', {
     module: 'bank',
@@ -1542,9 +1550,14 @@ export const FEATURES = [
     plane: 'F',
     status: 'wip',
     owner: 'nitro-w13-l03',
-    requires: ['services/svc-bank'],
+    // Path-narrowed 2026-08-12 (D26-P1-B4): was `services/svc-bank` (same over-fence as auto-invest).
+    requires: ['services/svc-bank/src/business'],
     dependsOn: ['bank.accounts', 'bank.cards', 'pay.gateway'],
-    note: 'W13 L03 DEEPEN: over-threshold propose places purposed ledger hold (business-approval:<id>); approve settles hold→dest; reject/cancel releases. Still partial — KYB/payroll/invoicing/expense cards residual or §13. Prior W10 L08: dual-control roles. Law §31:811, gap-closed 2026-08-08 — payroll atomicity DoD and KYB Lane B still block full Done. Blocked on pay.gateway for invoicing; no invent payroll without law.',
+    note:
+      'W13 L03 DEEPEN: over-threshold propose places purposed ledger hold (business-approval:<id>); approve settles hold→dest; ' +
+      'reject/cancel releases. Still partial — KYB/payroll/invoicing/expense cards residual or §13. Prior W10 L08: dual-control roles. ' +
+      'Law §31:811, gap-closed 2026-08-08 — payroll atomicity DoD and KYB Lane B still block full Done. Blocked on pay.gateway for invoicing; ' +
+      'no invent payroll without law. Fence: requires narrowed to src/business so path-disjoint bank.ramps work is not HUMAN-CLAIMED.',
   }),
   f('tax.engine', 'svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31)', {
     module: 'tax',

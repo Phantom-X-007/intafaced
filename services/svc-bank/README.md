@@ -148,7 +148,7 @@ KYB / payroll / invoicing / expense cards remain residual or §13 — not invent
 
 Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-recipient payroll atomicity, dedicated org principal — not invented here.
 
-### `ramps` — **crypto ledger half. Fiat is a socket.**
+### `ramps` — **crypto ledger half. Fiat via pay adapters (socket until live).**
 
 | Procedure         | Scope        | Purpose                                                                |
 | ----------------- | ------------ | ---------------------------------------------------------------------- |
@@ -157,7 +157,7 @@ Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-r
 | `ramps.offramps`  | `bank:read`  | The user's off-ramps. Every row carries `simulated`                    |
 | `ramps.offramp`   | `bank:write` | Hold then settle to `bank-crypto-ledger`. Does **not** broadcast       |
 
-`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat always refuses `bank.fiat_ramp_socket` → `socket.psp-partners`.
+`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat resolves a live svc-pay RailAdapter via `PayFiatRampPort` (D26-P1-B4) or refuses `bank.fiat_ramp_socket` → `socket.psp-partners`. Empty/sandbox/absent pay rails never launder into a bank fiat ramp. No second book — value still moves only through ledger-client deposit/withdraw recipes.
 
 ```bash
 BANK_RAMP_MODE=none            # default — every ramp money path refuses bank.no_ramp_rail
@@ -518,7 +518,7 @@ What `card-sim` **does** get you is the ledger half, end to end, over real posti
 ## Sockets (§13)
 
 - **`socket.live-issuer`** — a card programme needs a **card-scheme sponsor and an issuing BIN**. That is a licence and a commercial relationship, not code: no amount of engineering time produces one, which is precisely the §13 test. `CardIssuerAdapter` is written against the shape a live issuer would implement, and the only implementation in the tree is `cardSim()`, which says on every surface that it is a simulator. Pointing working code at real money is additionally Class X.
-- **`socket.psp-partners`** — fiat on/off ramp needs a **bank/PSP partner and money-transmission permission**. Same §13 test. `bank.ramps` crypto ledger half does not claim this function; fiat refuses `bank.fiat_ramp_socket` by name.
+- **`socket.psp-partners`** — fiat on/off ramp needs a **bank/PSP partner and money-transmission permission**. Same §13 test. Code path is `PayFiatRampPort` (svc-pay `RailAdapter` plane): empty/sandbox/absent refuse `bank.fiat_ramp_socket` before any row; a live injected rail books only via ledger-client recipes against that pay rail id (no second book). Commercial partner + Class X remain the socket.
 - **`ledger.history`** — spend analytics needs a transaction-history read that svc-ledger does not expose yet. Declaring it is a `packages/contracts` + svc-ledger PR that must land first (§1). `createLedgerHistory()` is written against the shape and **fails loudly** rather than returning an empty answer: a spend view that silently reports zero is worse than one that is unavailable, because the user cannot tell "you spent nothing" from "we could not ask".
 - **Chunked interest keys** — one accrual is one ledger transaction per (pool, day). When a pool outgrows a single transaction the key gains a deterministic chunk index, `bank.interest:<poolId>:<date>:<chunk>`, which keeps the same property per chunk. The shape was chosen so that change is additive.
 
@@ -533,11 +533,11 @@ Code for loans, cards (ledger half), ramps (crypto half), and standing-order pau
 
 `bank.sovereign-card` remains a separate tracker feature (product surface beyond the ledger half) and is **not** claimed done by this service's card simulator.
 
-## Ramps: crypto ledger half vs fiat socket
+## Ramps: crypto ledger half vs fiat via pay adapters
 
-| Half       | Missing in the WORLD                                    | Verdict                                            |
-| ---------- | ------------------------------------------------------- | -------------------------------------------------- |
-| **Crypto** | Nothing for the ledger half. Chain confirm/send is pay. | **Built** as ledger sandbox (`bank-crypto-ledger`) |
-| **Fiat**   | A bank/PSP partner and money-transmission permission    | **§13 forever.** Lands on `socket.psp-partners`    |
+| Half       | Missing in the WORLD                                    | Verdict                                                              |
+| ---------- | ------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Crypto** | Nothing for the ledger half. Chain confirm/send is pay. | **Built** as ledger sandbox (`bank-crypto-ledger`)                   |
+| **Fiat**   | A bank/PSP partner and money-transmission permission    | **Code path Done (D26-P1-B4)** via `PayFiatRampPort`; partner is §13 |
 
-`BANK_RAMP_MODE=crypto-ledger` books deposits/withdrawals against rail `bank-crypto-ledger` — deliberately distinct from svc-pay's `crypto-native` boundary so an operator credit here cannot desync pay's chain reconciliation. `simulated: true` is never omitted. Live broadcast and inbound confirmation stay in svc-pay; Class X is pointing working code at real money.
+`BANK_RAMP_MODE=crypto-ledger` books deposits/withdrawals against rail `bank-crypto-ledger` — deliberately distinct from svc-pay's `crypto-native` boundary so an operator credit here cannot desync pay's chain reconciliation. `simulated: true` is never omitted. Fiat on/off with a live pay adapter uses the same ledger-client recipes against the pay rail id; `ramps-fiat-product.test.ts` enters through the mounted router. Live broadcast and inbound confirmation stay in svc-pay; Class X is pointing working code at real money.
