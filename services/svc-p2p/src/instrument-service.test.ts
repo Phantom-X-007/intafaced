@@ -15,7 +15,7 @@ import { createP2pRouter } from './router.js';
 import { P2pErasure } from './erasure.js';
 
 /**
- * PAYMENT INSTRUMENTS — disclosure, refusal, and the record of both.
+ * PAYMENT INSTRUMENTS â€” disclosure, refusal, and the record of both.
  *
  * Postgres is real, because every property this file asserts is enforced in
  * SQL: the reveal is one statement that cannot read without logging, the log is
@@ -30,7 +30,7 @@ import { P2pErasure } from './erasure.js';
  *
  * The standing device is a CANARY: the seller's account details contain a
  * string that appears nowhere else in the system. "It does not leak" is then a
- * mechanical question — call everything, scan every response.
+ * mechanical question â€” call everything, scan every response.
  */
 
 const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
@@ -70,7 +70,7 @@ const P2P_MIGRATION_LOCK = 8_140_702;
  * This file was written with its own two-line `reachable()`, copied from the
  * sibling suite before that suite was fixed. The private version swallowed
  * every error and returned `false` regardless of `CI` or `REQUIRE_POSTGRES=1`,
- * so on CI — where an unreachable database is meant to be a hard failure — this
+ * so on CI â€” where an unreachable database is meant to be a hard failure â€” this
  * suite would have skipped in silence and been counted as a pass. That matters
  * more here than in most places: what this file asserts is that account numbers
  * do not leak, and a silent skip is indistinguishable from a green run that
@@ -84,7 +84,7 @@ const P2P_MIGRATION_LOCK = 8_140_702;
 const available = await postgresAvailable(URL);
 
 if (!available) {
-  describe.skip('svc-p2p payment instruments (Postgres unavailable — start docker compose)', () => {
+  describe.skip('svc-p2p payment instruments (Postgres unavailable â€” start docker compose)', () => {
     it('skipped', () => undefined);
   });
 } else {
@@ -97,7 +97,7 @@ if (!available) {
   // Owns its database, or does not run.
   await assertTestDatabase(sql, 'svc-p2p');
 
-  // Same advisory lock as the escrow suite — see the note there.
+  // Same advisory lock as the escrow suite â€” see the note there.
   await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(${P2P_MIGRATION_LOCK})`;
     await tx.unsafe(migration);
@@ -228,7 +228,7 @@ if (!available) {
     await sql.end({ timeout: 5 });
   });
 
-  // ── The registry: we do not invent a market's requirements ─────────────────
+  // â”€â”€ The registry: we do not invent a market's requirements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('the method registry', () => {
     it('ships empty, so an unregistered market refuses rather than guesses', async () => {
@@ -237,7 +237,7 @@ if (!available) {
 
       // The honest failure. The alternative is a seeded guess at what this
       // market needs, which produces an instrument that looks complete and
-      // cannot be paid — discovered by a buyer, after escrow is locked.
+      // cannot be paid â€” discovered by a buyer, after escrow is locked.
       await expect(sellerInstrument()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
     });
 
@@ -306,14 +306,14 @@ if (!available) {
     });
   });
 
-  // ── A trade cannot open with nowhere to pay ───────────────────────────────
+  // â”€â”€ A trade cannot open with nowhere to pay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('taking an offer', () => {
     it('refuses before any lock when the seller has nowhere to be paid', async () => {
       await fund(SELLER, '1000');
       // A USD destination exists; a GBP sell cannot list the method at all now
       // (board honesty). The residual take path is: create with a live destination,
-      // remove it, then take — still refuse before any lock.
+      // remove it, then take â€” still refuse before any lock.
       await sellerInstrument({ fiatCurrency: 'USD' });
       await expect(
         p2p.createOffer({
@@ -356,7 +356,7 @@ if (!available) {
       expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
       expect(await sql`SELECT trade_id FROM p2p.trade_payment_instruments`).toHaveLength(0);
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
-      // Off the board once the destination is gone — strangers cannot probe it.
+      // Off the board once the destination is gone â€” strangers cannot probe it.
       await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
     });
 
@@ -378,7 +378,7 @@ if (!available) {
      * which is exactly why nothing caught this: storage normalises the id, the
      * offer stores whatever the maker typed, the taker echoes the offer back,
      * and the lookup compared the two with `=`. A maker who capitalised
-     * anything produced an offer nobody could take — and the message the seller
+     * anything produced an offer nobody could take â€” and the message the seller
      * got was that they had no destination, while holding one.
      *
      * Driven through `takeOffer`, not `attachToTrade`, because the bug needed
@@ -390,7 +390,7 @@ if (!available) {
       await fund(SELLER, '1000');
       await registerMethod({ methodId: 'Bank_Transfer' });
 
-      // Stored lowercase — `createInstrument` normalises, as every write does.
+      // Stored lowercase â€” `createInstrument` normalises, as every write does.
       const created = await instruments.createInstrument({
         ownerId: SELLER,
         methodId: 'BANK_TRANSFER',
@@ -401,7 +401,7 @@ if (!available) {
       });
       expect(created.methodId).toBe('bank_transfer');
 
-      // Stored verbatim — an offer's `methods` are the maker's own strings.
+      // Stored verbatim â€” an offer's `methods` are the maker's own strings.
       const offer = await p2p.createOffer({
         makerId: SELLER,
         side: 'sell',
@@ -427,7 +427,7 @@ if (!available) {
       // The frozen snapshot carries the normalised id, not the maker's spelling.
       expect(rows[0]!.method_id).toBe('bank_transfer');
 
-      // And the buyer really can pay it — the whole point of not refusing.
+      // And the buyer really can pay it â€” the whole point of not refusing.
       await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
         details: { account_reference: CANARY },
       });
@@ -501,15 +501,15 @@ if (!available) {
     });
   });
 
-  // ── THE ORACLE ────────────────────────────────────────────────────────────
+  // â”€â”€ THE ORACLE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * `trades.take` WAS A FREE, UNLOGGED, SELF-DESCRIBING PROBE.
    *
    * `attachToTrade` threw with the method id and the currency echoed back, and
    * the router returned `err.message` verbatim as a `BAD_REQUEST`. The throw is
-   * inside the reserve transaction, so the probe rolled back cleanly — no trade
-   * row, no inventory decrement, no escrow, no cost — and `logDenied` was not
+   * inside the reserve transaction, so the probe rolled back cleanly â€” no trade
+   * row, no inventory decrement, no escrow, no cost â€” and `logDenied` was not
    * called on that path, so it wrote no access-log row. With
    * `instruments.methods.list` supplying the candidate ids, that is a complete
    * confirm/deny for "does seller S hold an instrument for method M in currency
@@ -521,7 +521,7 @@ if (!available) {
   describe('the take oracle', () => {
     /**
      * An offer that lists `methodId`, from a seller funded and ready.
-     * Sell create requires a live destination for each listed method — pass
+     * Sell create requires a live destination for each listed method â€” pass
      * `withInstrument: false` only after one was created and then removed
      * (legacy residual / mid-life removal).
      */
@@ -579,9 +579,9 @@ if (!available) {
     /**
      * THE PROOF.
      *
-     * Two takes that fail for two entirely different reasons — one because the
+     * Two takes that fail for two entirely different reasons â€” one because the
      * seller holds no destination for the method, one because the offer does
-     * not accept it — and nothing a caller can see tells them apart.
+     * not accept it â€” and nothing a caller can see tells them apart.
      */
     it('refuses "no such instrument" and "offer does not accept it" identically', async () => {
       await registerMethod();
@@ -615,7 +615,7 @@ if (!available) {
     });
 
     it('costs the prober nothing to attempt and everything to hide', async () => {
-      // The rollback that made the probe free is still there — refusing before
+      // The rollback that made the probe free is still there â€” refusing before
       // any lock is correct and is not what changed. What changed is that the
       // attempt is now on the seller's own access log.
       await registerMethod();
@@ -626,12 +626,12 @@ if (!available) {
       await expect(refusalShape(offer.id, 'other-rail')).resolves.toMatchObject({ code: 'BAD_REQUEST' });
 
       expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
-      // Off the board (no live destination) — remaining inventory still in DB via raw.
+      // Off the board (no live destination) â€” remaining inventory still in DB via raw.
       await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
 
       // THE LOG ROW SURVIVED THE ROLLBACK. Not written on the reserve
-      // transaction — a log row written inside the transaction the throw aborts
+      // transaction â€” a log row written inside the transaction the throw aborts
       // would vanish with it, which is precisely what "unlogged" meant. Nor
       // written while that transaction is still open and holding a pool
       // connection, which was #805's own defect: it is queued by `refuseTake`
@@ -693,7 +693,7 @@ if (!available) {
     });
   });
 
-  // ── THE HEADLINE: who can see it, and when ────────────────────────────────
+  // â”€â”€ THE HEADLINE: who can see it, and when â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('disclosure', () => {
     it('shows the buyer the destination while the escrow is held', async () => {
@@ -705,7 +705,7 @@ if (!available) {
       expect(view.methodId).toBe(METHOD);
       expect(view.fiatCurrency).toBe('USD');
 
-      // And still after the buyer says they have paid — the seller has not
+      // And still after the buyer says they have paid â€” the seller has not
       // confirmed yet and the buyer may need to quote the account in a dispute.
       await p2p.markFiatSent(trade.id, BUYER);
       await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
@@ -726,7 +726,7 @@ if (!available) {
       const { trade } = await liveTrade();
 
       // FORBIDDEN would confirm that a trade with this id exists and that its
-      // seller has an account on file — the first half of what the caller was
+      // seller has an account on file â€” the first half of what the caller was
       // trying to learn.
       await expect(callerFor(STRANGER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toMatchObject({
         code: 'NOT_FOUND',
@@ -780,7 +780,7 @@ if (!available) {
       await p2p.markFiatSent(trade.id, BUYER);
       await p2p.openDispute({ tradeId: trade.id, openedBy: BUYER, reason: 'paid, not released' });
 
-      // §A2: a disputed release needs a human, and both sides see the same
+      // Â§A2: a disputed release needs a human, and both sides see the same
       // evidence. A human asked to rule on "I paid" / "nothing arrived" without
       // seeing the account the payment was meant to reach is being asked to
       // guess.
@@ -793,7 +793,7 @@ if (!available) {
     });
   });
 
-  // ── THE LEAK SWEEP ────────────────────────────────────────────────────────
+  // â”€â”€ THE LEAK SWEEP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('no leak through any other path', () => {
     /**
@@ -801,7 +801,7 @@ if (!available) {
      * of a live trade, with every successful response scanned for the canary.
      *
      * The map is exhaustive by construction: a procedure the router exposes and
-     * this map does not name fails the test. That is the point — the risk this
+     * this map does not name fails the test. That is the point â€” the risk this
      * guards is not the endpoints that exist today, it is the next list
      * endpoint someone adds that happens to select the whole row.
      */
@@ -840,13 +840,13 @@ if (!available) {
         // instrument: `appendEvidence` returns only the caller's OWN evidence
         // envelopes, and `list` serialises dispute rows, which hold no
         // instrument id and never join the instrument tables. Both are probed
-        // as a stranger anyway — the assertion is on what comes back, not on
+        // as a stranger anyway â€” the assertion is on what comes back, not on
         // the reasoning.
         'disputes.appendEvidence': { tradeId: trade.id, evidence: ['probing'] },
         'disputes.list': {},
         'disputes.get': { tradeId: trade.id },
         'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
-        // Operator-only late settlement queue — no instrument fields; stranger refuses.
+        // Operator-only late settlement queue â€” no instrument fields; stranger refuses.
         'ops.lateSettlements': {},
         'reputation.get': { userId: SELLER },
         'instruments.methods.list': {},
@@ -863,7 +863,7 @@ if (!available) {
         'instruments.update': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id, label: 'mine now' },
         'instruments.remove': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
         'instruments.reveal': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
-        // Considered, and this is the interesting pair. Both are self-only —
+        // Considered, and this is the interesting pair. Both are self-only â€”
         // neither takes a `userId`, so a stranger calling them gets their own
         // (empty) record and never the seller's. `data.export` DOES carry
         // instruments, and carries HEADERS only: the values stay behind
@@ -872,20 +872,20 @@ if (!available) {
         // scan of what `data.export` actually returned.
         'data.export': undefined,
         'data.erase': undefined,
-        // Considered. The merchant programme holds MEMBERSHIP — a status, the
+        // Considered. The merchant programme holds MEMBERSHIP â€” a status, the
         // reputation numbers that justified an application, and who decided
         // what and why. It joins no instrument table and carries no account
         // details, by construction: `merchant-service.ts` selects from
         // `p2p_merchants` and `p2p_merchant_events` only.
         //
-        // `apiAccess`, `me` and `submitApplication` are self-only — none takes
+        // `apiAccess`, `me` and `submitApplication` are self-only â€” none takes
         // a userId, so a stranger reaches their own standing only. `apiAccess`
         // returns literals plus that status and never joins instrument tables.
         // `decide` and `history` need `admin:compliance`, which a stranger does
         // not hold. Probed anyway: the assertion is on what comes back.
         'merchants.apiAccess': undefined,
         'merchants.me': undefined,
-        // Offer-ceiling posture only — decimal strings / null from env policy.
+        // Offer-ceiling posture only â€” decimal strings / null from env policy.
         // Never joins instrument tables (merchant-limits.ts pure functions).
         'merchants.offerLimits': undefined,
         'merchants.myOfferCeiling': undefined,
@@ -899,7 +899,7 @@ if (!available) {
       const unmapped = paths.filter((p) => !(p in inputs));
       // A new procedure has to be considered here before it can ship. Adding it
       // to the map is the act of deciding it cannot leak an instrument.
-      expect(unmapped, 'new router procedure — add it to the leak sweep').toEqual([]);
+      expect(unmapped, 'new router procedure â€” add it to the leak sweep').toEqual([]);
 
       const stranger = callerFor(STRANGER) as unknown as Record<string, unknown>;
       const responses: unknown[] = [];
@@ -921,12 +921,12 @@ if (!available) {
       expect(succeeded).not.toContain('trades.paymentInstrument');
     });
 
-    it('never returns the account details through the counterparty’s ordinary reads', async () => {
+    it('never returns the account details through the counterpartyâ€™s ordinary reads', async () => {
       await sellerInstrument();
       const { offer, trade } = await liveTrade();
       const buyer = callerFor(BUYER);
 
-      // The buyer IS entitled to the details — through `trades.paymentInstrument`
+      // The buyer IS entitled to the details â€” through `trades.paymentInstrument`
       // and nowhere else, so that a disclosure is always a deliberate, logged
       // act rather than a side effect of rendering a screen.
       const ordinary = [
@@ -945,7 +945,7 @@ if (!available) {
       });
     });
 
-    it('never returns the values on the owner’s own list', async () => {
+    it('never returns the values on the ownerâ€™s own list', async () => {
       await sellerInstrument();
       const list = await callerFor(SELLER).instruments.list({});
       expect(list).toHaveLength(1);
@@ -963,7 +963,7 @@ if (!available) {
       const published = bus.emitted('p2pOfferCreated').concat(bus.emitted('p2pEscrowLocked') as never);
       expect(JSON.stringify(published)).not.toContain(CANARY);
 
-      // The offer carries method IDS — what a maker accepts — and never a
+      // The offer carries method IDS â€” what a maker accepts â€” and never a
       // destination. That distinction is the whole reason a public board is
       // safe to publish.
       const board = await callerFor(STRANGER).offers.list({});
@@ -973,7 +973,7 @@ if (!available) {
     });
   });
 
-  // ── Sell board honesty: no method without a live destination ─────────────
+  // â”€â”€ Sell board honesty: no method without a live destination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('a sell offer only advertises methods the maker can be paid on', () => {
     it('refuses create when the maker lists a method with no active destination', async () => {
@@ -1017,7 +1017,7 @@ if (!available) {
     });
 
     it('does not force buy offers to hold destinations at create', async () => {
-      // Maker is the buyer; seller is the eventual taker — unknown at post time.
+      // Maker is the buyer; seller is the eventual taker â€” unknown at post time.
       await expect(
         p2p.createOffer({
           makerId: BUYER,
@@ -1050,7 +1050,7 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'p2p.offer_method_no_destination' });
 
-      // After both destinations exist, both list; remove one → board shows one.
+      // After both destinations exist, both list; remove one â†’ board shows one.
       await instruments.createInstrument({
         ownerId: SELLER,
         methodId: 'other-rail',
@@ -1079,7 +1079,7 @@ if (!available) {
     });
   });
 
-  // ── Removal and editing, against a trade that is already running ──────────
+  // â”€â”€ Removal and editing, against a trade that is already running â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('an in-flight trade', () => {
     it('keeps working after the owner removes the instrument', async () => {
@@ -1119,14 +1119,14 @@ if (!available) {
       const view = await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
       expect(view.details).toEqual({ account_reference: CANARY, holder_name: 'A Seller' });
 
-      // The owner's own copy did change — the edit was legitimate, it just does
+      // The owner's own copy did change â€” the edit was legitimate, it just does
       // not reach backwards.
       const own = await callerFor(SELLER).instruments.reveal({ instrumentId: created.id });
       expect(own.details).toEqual({ account_reference: 'SWITCHED-ACCOUNT', holder_name: 'A Seller' });
     });
   });
 
-  // ── The access log ────────────────────────────────────────────────────────
+  // â”€â”€ The access log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('the access log', () => {
     it('records who saw whose details, on which trade', async () => {
@@ -1141,7 +1141,7 @@ if (!available) {
       expect(log[0]!.at).toBeInstanceOf(Date);
     });
 
-    it('records the owner’s own reads too', async () => {
+    it('records the ownerâ€™s own reads too', async () => {
       const created = await sellerInstrument();
       await callerFor(SELLER).instruments.reveal({ instrumentId: created.id });
 
@@ -1172,7 +1172,7 @@ if (!available) {
       );
     });
 
-    it('is the owner’s to read, and shows them a look they did not expect', async () => {
+    it('is the ownerâ€™s to read, and shows them a look they did not expect', async () => {
       await sellerInstrument();
       const { trade } = await liveTrade();
       await expect(callerFor(STRANGER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toThrow();
@@ -1185,7 +1185,7 @@ if (!available) {
       expect(await callerFor(STRANGER).instruments.accessLog({})).toEqual([]);
     });
 
-    it('cannot be edited or deleted, even behind the service’s back', async () => {
+    it('cannot be edited or deleted, even behind the serviceâ€™s back', async () => {
       await sellerInstrument();
       const { trade } = await liveTrade();
       await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
@@ -1216,7 +1216,7 @@ if (!available) {
     });
   });
 
-  // ── Retention ─────────────────────────────────────────────────────────────
+  // â”€â”€ Retention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('retention', () => {
     it('wipes the details off a closed trade past the window and keeps the fingerprint', async () => {
@@ -1226,7 +1226,7 @@ if (!available) {
       await p2p.confirmFiatReceived(trade.id, SELLER);
 
       const short = new InstrumentService(sql, { retentionDays: 30 });
-      // Nothing is due yet — a purge that ran early would destroy evidence an
+      // Nothing is due yet â€” a purge that ran early would destroy evidence an
       // open appeal still needs.
       expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 0 });
 
@@ -1260,8 +1260,8 @@ if (!available) {
      * "REMOVE MY BANK ACCOUNT" HAS TO MEAN THE ACCOUNT IS GONE.
      *
      * Removal used to set the status and nothing else. Nothing else nulled the
-     * details either — the snapshot purge only touches
-     * `trade_payment_instruments` — so the account number stayed in the row
+     * details either â€” the snapshot purge only touches
+     * `trade_payment_instruments` â€” so the account number stayed in the row
      * indefinitely, in a state where `revealOwn` (which filters `active`) would
      * not let the owner so much as look at what was still held.
      *
@@ -1272,7 +1272,7 @@ if (!available) {
     it('wipes the account details when the owner removes the instrument, and keeps the fingerprint', async () => {
       const created = await sellerInstrument();
 
-      // THE EXPORT, and it must exist BEFORE the removal — this is the moment
+      // THE EXPORT, and it must exist BEFORE the removal â€” this is the moment
       // the owner can still get their own data out. `reveal` is the export, and
       // it is logged like every other read.
       const exported = await callerFor(SELLER).instruments.reveal({ instrumentId: created.id });
@@ -1301,7 +1301,7 @@ if (!available) {
       expect(header).toMatchObject({ id: created.id, status: 'removed', methodId: METHOD });
     });
 
-    it('will not let a removed instrument hold details, even behind the service’s back', async () => {
+    it('will not let a removed instrument hold details, even behind the serviceâ€™s back', async () => {
       const created = await sellerInstrument();
       await callerFor(SELLER).instruments.remove({ instrumentId: created.id });
 
@@ -1326,7 +1326,7 @@ if (!available) {
       await callerFor(SELLER).instruments.remove({ instrumentId: created.id });
 
       // There is nothing left to disclose, and the refusal is the same
-      // NOT_FOUND every other refusal collapses to — a removed instrument must
+      // NOT_FOUND every other refusal collapses to â€” a removed instrument must
       // not be distinguishable from one that never existed.
       await expect(callerFor(SELLER).instruments.reveal({ instrumentId: created.id })).rejects.toMatchObject({
         code: 'NOT_FOUND',
@@ -1349,7 +1349,7 @@ if (!available) {
     });
   });
 
-  // ── Ownership ─────────────────────────────────────────────────────────────
+  // â”€â”€ Ownership â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   describe('ownership', () => {
     it('refuses every owner operation to someone who is not the owner', async () => {
@@ -1373,7 +1373,7 @@ if (!available) {
       const created = await sellerInstrument();
       await expect(callerFor(STRANGER).instruments.reveal({ instrumentId: created.id })).rejects.toThrow();
 
-      // Nothing resolved, so nothing is attributed to the owner — but the
+      // Nothing resolved, so nothing is attributed to the owner â€” but the
       // attempt itself is on the record, under the viewer who made it.
       expect(await instruments.accessLogFor(SELLER)).toEqual([]);
       const attempts = await sql<Array<{ viewer_id: string; outcome: string; deny_reason: string }>>`
@@ -1383,26 +1383,26 @@ if (!available) {
     });
   });
 
-  // ── A row that did not come through the API ────────────────────────────────
+  // â”€â”€ A row that did not come through the API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * THE DOOR IS NOT THE CONTROL.
    *
    * `registerMethodSchema` is the only writer with `admin:compliance` in front
-   * of it, and it validates. Everything else that can reach the column —
+   * of it, and it validates. Everything else that can reach the column â€”
    * a migration, a data-fix script, a psql session, some future writer in this
-   * same service — validated nothing, and `toSchema` cast the row straight to
+   * same service â€” validated nothing, and `toSchema` cast the row straight to
    * `FieldSpec[]`. "Only a trusted operator can get here" is a statement about
    * who is holding the door; it stops being true the first time a scope widens
    * or a migration writes the row directly, and it was never something the code
    * enforced.
    *
-   * These tests write rows with RAW SQL — deliberately bypassing every line of
-   * TypeScript in this service — and assert that both halves hold:
+   * These tests write rows with RAW SQL â€” deliberately bypassing every line of
+   * TypeScript in this service â€” and assert that both halves hold:
    *
-   *   · the DATABASE refuses a structurally bad field list at write time,
+   *   Â· the DATABASE refuses a structurally bad field list at write time,
    *     whoever is writing;
-   *   · the SERVICE refuses a field list it cannot run at read time, because
+   *   Â· the SERVICE refuses a field list it cannot run at read time, because
    *     "is this pattern safe to execute" is not a question SQL can answer.
    */
   describe('a schema row inserted behind the API', () => {
@@ -1458,8 +1458,8 @@ if (!available) {
     /**
      * The half SQL cannot cover.
      *
-     * `(?=…)` is a perfectly well-formed string of 12 characters, so the column
-     * constraint has no grounds to refuse it — deciding whether a pattern is one
+     * `(?=â€¦)` is a perfectly well-formed string of 12 characters, so the column
+     * constraint has no grounds to refuse it â€” deciding whether a pattern is one
      * this service can run in linear time means running this service's parser.
      * That is why the re-validation on READ exists as well, and this is the test
      * that would go green again if `toSchema` went back to casting the row.
@@ -1467,7 +1467,7 @@ if (!available) {
     it('is refused by the service on read when the pattern is one we cannot run', async () => {
       await rawInsertSchema([{ key: 'acct', label: 'Account', pattern: '(?=[0-9]{4})[0-9]+' }]);
 
-      // It really is in the table — the database had no reason to object.
+      // It really is in the table â€” the database had no reason to object.
       const stored = await sql`SELECT fields FROM p2p.payment_method_schemas WHERE method_id = 'raw-method'`;
       expect(stored).toHaveLength(1);
 
@@ -1497,7 +1497,7 @@ if (!available) {
 
     it('lets a legitimate hand-written row through untouched', async () => {
       // Fail-closed must not mean fail-always. A row an operator could have
-      // registered through the API reads back exactly as written — including a
+      // registered through the API reads back exactly as written â€” including a
       // pattern with an escaped dollar sign, the one that used to explode.
       await rawInsertSchema([
         { key: 'amount', label: 'Amount', required: true, pattern: '\\d+\\$' },
