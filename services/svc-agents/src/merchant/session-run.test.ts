@@ -224,10 +224,7 @@ describe('merchant.watch metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runMerchantWatchSession({
       ...baseInput(fake),
-      points: [
-        point('card-visa', { approvalRate: '0.70' }),
-        point('card-mc', { approvalRate: null, attempts: null }),
-      ],
+      points: [point('card-visa', { approvalRate: '0.70' }), point('card-mc', { approvalRate: null, attempts: null })],
     });
 
     expect(result).toMatchObject({

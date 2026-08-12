@@ -47,10 +47,7 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
 
   it('D26-P1-A4: mixed missing + usable rates refuse — no partial ok board', () => {
     const r = watchApprovalFixtures(
-      [
-        pt({ railId: 'card-a', approvalRate: '0.70', attempts: 200 }),
-        pt({ railId: 'card-b', approvalRate: null, attempts: null }),
-      ],
+      [pt({ railId: 'card-a', approvalRate: '0.70', attempts: 200 }), pt({ railId: 'card-b', approvalRate: null, attempts: null })],
       { now: NOW, threshold: '0.85' },
     );
     expect(r).toEqual({
