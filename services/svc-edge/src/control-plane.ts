@@ -15,19 +15,21 @@ const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review',
 /**
  * Parse disposition body for the compliance queue. Unknown status refuses closed.
  */
-export function parseComplianceDisposition(body: {
-  status?: string;
-  actor?: string;
-  reason?: string;
-  partnerRef?: string;
-}): ComplianceQueueDispositionRequest {
+export function parseComplianceDisposition(
+  body: {
+    status?: string;
+    reason?: string;
+    partnerRef?: string;
+  },
+  authenticatedActor: string,
+): ComplianceQueueDispositionRequest {
   const status = body.status?.trim();
   if (status === 'pending') return { status: 'pending' };
   if (status === 'cleared') {
-    return { status: 'cleared', by: 'operator', actor: body.actor ?? '' };
+    return { status: 'cleared', by: 'operator', actor: authenticatedActor };
   }
   if (status === 'rejected') {
-    return { status: 'rejected', by: 'operator', actor: body.actor ?? '', reason: body.reason ?? '' };
+    return { status: 'rejected', by: 'operator', actor: authenticatedActor, reason: body.reason ?? '' };
   }
   if (status === 'partner_cleared') {
     return { status: 'partner_cleared', partnerRef: body.partnerRef ?? '' };
@@ -374,7 +376,6 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
     const body = (req.body ?? {}) as {
       itemId?: string;
       status?: string;
-      actor?: string;
       reason?: string;
       partnerRef?: string;
     };
@@ -385,7 +386,10 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
 
     let request;
     try {
-      request = parseComplianceDisposition(body);
+      // Attribution comes from the verified token. A caller-supplied `actor`
+      // field is deliberately ignored so one operator cannot forge another's
+      // identity into the case audit trail.
+      request = parseComplianceDisposition(body, auth.principal.userId);
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message, code: 'edge.invalid_compliance_disposition' });
     }
