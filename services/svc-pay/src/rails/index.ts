@@ -14,6 +14,7 @@ export * from './crypto-native.js';
 export * from './card-sandbox.js';
 export * from './bank-payout.js';
 export * from './broadcast-store.js';
+export * from './durable-broadcast.js';
 export * from './evm-assets.js';
 export * from './evm-chain.js';
 export * from './chain-watcher.js';

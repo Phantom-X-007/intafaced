@@ -16,6 +16,7 @@ import {
 import { mnemonicToAccount, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import type { Amount } from '@intafaced/ledger-client';
 import type { BroadcastStore } from './broadcast-store.js';
+import { runDurableBroadcast } from './durable-broadcast.js';
 import { ERC20_TRANSFER_TOPIC, fromChainUnits, requireAsset, toChainUnits, type EvmAsset } from './evm-assets.js';
 import type { ChainSendRequest, ConfirmedTransfer, CryptoChainPort } from './chain-port.js';
 
@@ -162,41 +163,47 @@ export class EvmLiveChain implements CryptoChainPort {
   }
 
   async send(request: ChainSendRequest): Promise<{ txHash: string }> {
-    // Class M ordering: shape-check BEFORE claim → broadcast → journal hash → wait.
-    // isAddress after claim left a permanent __pending__ poison on a bad `to`.
-    // Journaling BEFORE waitForTransactionReceipt means a crash while waiting
-    // for inclusion still returns the same hash on retry instead of a second send.
+    // Class M / DIRECTION §3.1: shape-check BEFORE claim → sign → putSigned →
+    // sendRaw → put hash → wait. isAddress after claim left a permanent
+    // __pending__ poison on a bad `to`. Signed bytes land before any broadcast
+    // RPC so crash-resume rebroadcasts the identical payload (not a second spend).
     if (!isAddress(request.to)) {
       throw new Error(`Outbound destination is not an address: ${request.to}`);
     }
-    const claimed = await this.broadcasts.claim(request.idempotencyKey);
-    if (claimed.kind === 'done') return { txHash: claimed.txHash };
     const asset = requireAsset(this.assets, request.assetId);
     const units = toChainUnits(request.amount, asset.decimals);
     if (units <= 0n) throw new Error('Outbound amount must be positive');
 
-    let hash: Hex;
-    if (asset.kind === 'native') {
-      hash = await this.wallet.sendTransaction({
-        account: this.hotAccount,
-        to: getAddress(request.to),
-        value: units,
-        chain: this.wallet.chain,
-      });
-    } else {
-      hash = await this.wallet.sendTransaction({
-        account: this.hotAccount,
-        to: asset.address,
-        data: encodeFunctionData({
-          abi: ERC20_TRANSFER_ABI,
-          functionName: 'transfer',
-          args: [getAddress(request.to), units],
-        }),
-        chain: this.wallet.chain,
-      });
-    }
+    const to = getAddress(request.to);
+    const stored = await runDurableBroadcast({
+      store: this.broadcasts,
+      idempotencyKey: request.idempotencyKey,
+      sign: async () => {
+        const chain = this.wallet.chain;
+        if (asset.kind === 'native') {
+          const prepared = await this.wallet.prepareTransactionRequest({
+            account: this.hotAccount,
+            to,
+            value: units,
+            chain,
+          });
+          return this.wallet.signTransaction({ ...prepared, chain });
+        }
+        const prepared = await this.wallet.prepareTransactionRequest({
+          account: this.hotAccount,
+          to: asset.address,
+          data: encodeFunctionData({
+            abi: ERC20_TRANSFER_ABI,
+            functionName: 'transfer',
+            args: [to, units],
+          }),
+          chain,
+        });
+        return this.wallet.signTransaction({ ...prepared, chain });
+      },
+      broadcast: async (signedRaw) => this.public.sendRawTransaction({ serializedTransaction: signedRaw as Hex }),
+    });
 
-    const stored = await this.broadcasts.put(request.idempotencyKey, hash);
     await this.public.waitForTransactionReceipt({ hash: stored as Hex });
     return { txHash: stored };
   }

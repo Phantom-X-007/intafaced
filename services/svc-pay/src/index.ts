@@ -87,7 +87,7 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
  */
 /**
  * Live crypto outbound broadcasts journal in Postgres so multi-replica fleets
- * share claim→put (MemoryBroadcastStore alone is single-process residual).
+ * share claim→putSigned→sendRaw→put (MemoryBroadcastStore alone is single-process).
  * Unconfigured/Memory chain paths ignore the store.
  */
 const broadcasts = new PostgresBroadcastStore(sql);
