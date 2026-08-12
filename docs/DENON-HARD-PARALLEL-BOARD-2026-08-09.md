@@ -171,13 +171,13 @@ Nitro asked for **double or triple** mass. **Right is not a count target.** Righ
 
 ### 5.4 Ops (0/6 run-the-business)
 
-| ID            | Tracker             | Done bar                                                                                                                                                  |
-| ------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **D26-P1-O1** | `ops.compliance`    | Screening **mechanism** sealed; list content Nitro/counsel                                                                                                |
-| **D26-P1-O2** | `ops.affiliates`    | Accrual tree under rate authority                                                                                                                         |
-| **D26-P1-O3** | `ops.support`       | Desk mountain Done vs agent surface split honest                                                                                                          |
-| **D26-P1-O4** | `ops.analytics`     | Warehouse path usable or §13                                                                                                                              |
-| **D26-P1-O5** | `ops.notifications` | Fan-out mountain vs §13 channels explicit — **SEALED** (`mountain-vs-sockets` + `socket` on `notify.channels` / `/ready`; Class X credentials still open) |
+| ID            | Tracker             | Done bar                                                                                                                                                                                                                                                                                                                                   |
+| ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **D26-P1-O1** | `ops.compliance`    | Screening **mechanism** sealed; list content Nitro/counsel                                                                                                                                                                                                                                                                                 |
+| **D26-P1-O2** | `ops.affiliates`    | ~~Accrual tree under rate authority~~ **SEALED 2026-08-12** — durable accrue under owner `IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; payout stays existing ledger recipes; `treeStatus` exposes authority published flag (no rate invent) |
+| **D26-P1-O3** | `ops.support`       | Desk mountain Done vs agent surface split honest                                                                                                                                                                                                                                                                                           |
+| **D26-P1-O4** | `ops.analytics`     | Warehouse path usable or §13                                                                                                                                                                                                                                                                                                               |
+| **D26-P1-O5** | `ops.notifications` | Fan-out mountain vs §13 channels explicit — **SEALED** (`mountain-vs-sockets` + `socket` on `notify.channels` / `/ready`; Class X credentials still open)                                                                                                                                                                                  |
 
 ### 5.5 Market
 
