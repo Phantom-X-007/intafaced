@@ -226,8 +226,7 @@ export function quoteExternalMm(input: QuoteExternalMmInput): QuoteExternalMmRes
     return {
       ok: false,
       reason: 'internal_venue',
-      detail:
-        'D26-P0-01 external-only — internal house MM (seeding/quoting our own books) remains blocked until a later owner ruling',
+      detail: 'D26-P0-01 external-only — internal house MM (seeding/quoting our own books) remains blocked until a later owner ruling',
     };
   }
 

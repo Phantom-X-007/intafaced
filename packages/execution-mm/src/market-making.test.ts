@@ -99,9 +99,7 @@ describe('evaluateMmKillSwitches', () => {
   });
 
   it('trips volatility_breach when realized exceeds owner max', () => {
-    const r = evaluateMmKillSwitches(
-      clearKill({ volatility: { realizedVolBps: 500, maxVolBps: 200 } }),
-    );
+    const r = evaluateMmKillSwitches(clearKill({ volatility: { realizedVolBps: 500, maxVolBps: 200 } }));
     expect(r.killed).toBe(true);
     if (r.killed) expect(r.reasons).toContain('volatility_breach');
   });
@@ -113,9 +111,7 @@ describe('evaluateMmKillSwitches', () => {
   });
 
   it('trips inventory_breach outside owner bands', () => {
-    const r = evaluateMmKillSwitches(
-      clearKill({ inventory: { position: amt('25'), minPosition: amt('-10'), maxPosition: amt('10') } }),
-    );
+    const r = evaluateMmKillSwitches(clearKill({ inventory: { position: amt('25'), minPosition: amt('-10'), maxPosition: amt('10') } }));
     expect(r.killed).toBe(true);
     if (r.killed) expect(r.reasons).toContain('inventory_breach');
   });
@@ -167,9 +163,7 @@ describe('quoteExternalMm — D26-P1-X5', () => {
   });
 
   it('refuses insufficient book depth', () => {
-    const result = quoteExternalMm(
-      baseQuote({ book: { bidSize: amt('0.5'), askSize: amt('1') }, quoteSize: amt('1') }),
-    );
+    const result = quoteExternalMm(baseQuote({ book: { bidSize: amt('0.5'), askSize: amt('1') }, quoteSize: amt('1') }));
     expect(result).toMatchObject({ ok: false, reason: 'insufficient_book' });
   });
 
