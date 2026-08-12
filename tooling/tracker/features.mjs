@@ -1342,9 +1342,12 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     status: 'wip',
-    owner: 'agent:w13-l04',
+    owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
+      'D26-P1-O2 SEALED 2026-08-12: accrual tree under rate authority — durable `affiliates.accrue` uses owner-published ' +
+      '`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; ' +
+      'dry-run may simulate; payout still existing ledger recipes only (no invent commissions). Mountain stays wip/ready-not-done until owner rates + producer wire. ' +
       'Wave 13 L04 honesty: mixed sourceModule on one fee event refuses `affiliate.payout.mixed_source_module` (no multi-pool debit); treeStatus frozenCount = freezes on tree participants only (not global freeze ledger). ' +
       'Wave 10 #L05 / #1589 source_module on accruals (fee-pool provenance for payout sweep) — land before producer wire. ' +
       'Rate invent FIXED #1133 (2026-08-08): blank / unpublished accrual tiers refuse-closed; DEFAULT_ACCRUAL_TIERS gone. ' +

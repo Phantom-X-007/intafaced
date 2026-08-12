@@ -1097,6 +1097,121 @@ describe('affiliates.payout on the mount', () => {
   });
 });
 
+// ── D26-P1-O2 accrual tree under rate authority on the mount ─────────────────
+
+describe('affiliates.accrue / accrueDryRun under rate authority (D26-P1-O2)', () => {
+  const PAYER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const BENE0 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const FEE = 'fee-evt-o2-mount';
+
+  const publishedLaw = {
+    published: true as const,
+    tiers: [{ hop: 0, rate: '0.10' }],
+  };
+
+  function mounted(opts: { law?: typeof publishedLaw | undefined } = {}) {
+    const parent = new Map<string, string>([[PAYER, BENE0]]);
+    const referral = {
+      loadParentMap: async () => parent,
+      attribute: async () => ({ ok: true }),
+      getReferrer: async () => null,
+      listDownline: async () => [],
+      treeBoard: async () => ({ edges: 1, roots: 1, maxDepth: 1, frozenCount: 0 }),
+      members: async () => [],
+    } as unknown as import('./affiliates/referral-service.js').ReferralService;
+    const freeze = {
+      frozenIds: async () => new Set<string>(),
+      list: async () => [],
+      freeze: async () => {
+        throw new Error('unused');
+      },
+      unfreeze: async () => {
+        throw new Error('unused');
+      },
+    } as unknown as import('./affiliates/freeze-service.js').FreezeService;
+    const store = new MemoryAccrualStore();
+    const r = createIdentityRouter(stub.auth, stub.rank, {
+      registrationOpen: true,
+      referral,
+      freeze,
+      accruals: store,
+      accrualTierLaw: opts.law,
+    });
+    return { store, router: r };
+  }
+
+  it('accrue + accrueDryRun are mounted', async () => {
+    const { router: r } = mounted();
+    expect(Object.keys(r._def.procedures)).toContain('affiliates.accrue');
+    expect(Object.keys(r._def.procedures)).toContain('affiliates.accrueDryRun');
+  });
+
+  it('accrueDryRun with unpublished law and no tiers refuses rates_unset', async () => {
+    const { router: r } = mounted({ law: undefined });
+    const api = r.createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const err = await api.affiliates
+      .accrueDryRun({ feeEventId: FEE, userId: PAYER, feeAmount: '100', asset: 'USDT' })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect((err as { cause?: { code?: string } }).cause?.code).toBe('affiliate.accrual.rates_unset');
+    expect(String((err as { message?: string }).message)).toContain('DIRECTION §8');
+  });
+
+  it('durable accrue with per-call tiers invent_refused — store stays empty', async () => {
+    const { store, router: r } = mounted({ law: publishedLaw });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+    const err = await api.affiliates
+      .accrue({
+        feeEventId: FEE,
+        userId: PAYER,
+        feeAmount: '100',
+        asset: 'USDT',
+        tiers: [{ hop: 0, rate: '0.99' }],
+      })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect((err as { cause?: { code?: string } }).cause?.code).toBe('affiliate.accrual.invent_refused');
+    expect(await store.listByFeeEvent(FEE)).toEqual([]);
+  });
+
+  it('durable accrue under published law walks the tree and persists decimal rows', async () => {
+    const { store, router: r } = mounted({ law: publishedLaw });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+    const out = await api.affiliates.accrue({
+      feeEventId: FEE,
+      userId: PAYER,
+      feeAmount: '100',
+      asset: 'USDT',
+      sourceModule: 'trade',
+    });
+    expect(out.inserted).toBe(1);
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]).toMatchObject({
+      beneficiaryId: BENE0,
+      rate: '0.10',
+      commissionAmount: '10',
+      sourceModule: 'trade',
+    });
+    const stored = await store.listByFeeEvent(FEE);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.commissionAmount).toBe('10');
+  });
+
+  it('dry-run simulation tiers allowed when law unpublished (not durable invent)', async () => {
+    const { router: r } = mounted({ law: undefined });
+    const api = r.createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const out = await api.affiliates.accrueDryRun({
+      feeEventId: FEE,
+      userId: PAYER,
+      feeAmount: '50',
+      asset: 'USDT',
+      tiers: [{ hop: 0, rate: '0.20' }],
+    });
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]!.commissionAmount).toBe('10');
+  });
+});
+
 // ── §10 KYC document vault on the tRPC boundary ──────────────────────────────
 
 describe('kyc document procedures — meta only, no free cross-user bytes', () => {

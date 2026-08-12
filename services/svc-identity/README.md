@@ -42,7 +42,7 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `affiliates.myReferrer` / `myAncestors` / `myAccruals` | `identity:read`           | Self-only tree + durable accruals                                                                         |
 | `affiliates.freeze` / `unfreeze` / `freezes`           | `admin:write` / `read`    | Freeze ledger honesty (no pay)                                                                            |
 | `affiliates.treeStatus` / `node` / `members`           | `admin:read`              | Admin tree structure + roster                                                                             |
-| `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Commission rows; **no ledger**; rates refuse-closed without owner law; optional `sourceModule` (fee pool) |
+| `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Accrual tree under rate authority (D26-P1-O2); **no ledger**; durable accrue = owner-published tiers only (per-call invent refused); dry-run may simulate; optional `sourceModule` (fee pool) |
 | `affiliates.payout`                                    | `admin:write`             | Pays when §8 rates + ledger wired; refuse-closed otherwise; sweeps row `sourceModule` fee pool            |
 
 HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active) · S2S sub-account ownership on internal HTTP.
@@ -106,6 +106,8 @@ Modules may still call `rank.awardXp` directly — it is a `serviceProcedure` on
 **This service holds no balances of its own.** Sub-account revoke still soft-disables only — never posts, never sweeps (same rule as bank space archive). `sub_accounts.id` is what the ledger's `subaccount` owner type keys on.
 
 **Affiliate payout is the one ledger write path.** When `LEDGER_URL` is set and the owner has published fee-share tiers (`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON`), `affiliates.payout` posts through existing ledger recipes (`sweepFeesToRewards` → `rewardPay`). No recipe is invented here. Without published rates or without a ledger client the procedure refuse-closes and moves nothing.
+
+**D26-P1-O2 accrual authority:** durable `affiliates.accrue` walks the referral tree only under owner-published law — unset → `affiliate.accrual.rates_unset`; per-call tiers → `affiliate.accrual.invent_refused`. Dry-run may simulate tiers. No second money book.
 
 ---
 
