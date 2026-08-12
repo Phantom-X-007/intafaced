@@ -573,4 +573,77 @@ describe('support.reply metered session run', () => {
     // cleanup hit on the way out.
     await expect(runSupportReplySession({ ...baseInput(fake), asks: [kbAsk()] })).rejects.toThrow('tool exploded');
   });
+
+  // ── D26-P1-A2 — stoppable + no invent balance ─────────────────────────────
+
+  it('stops for free when aborted before a session opens', async () => {
+    const fake = new FakeRuntime();
+    const signal = AbortSignal.abort();
+    const result = await runSupportReplySession({ ...baseInput(fake), asks: [kbAsk()], signal });
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'aborted',
+      userMessageKey: 'agents.support.stopped',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result.metering.sessionId).toBeNull();
+  });
+
+  it('stops mid-loop, settles what ran, and does not invent a feeCharge', async () => {
+    const fake = new FakeRuntime();
+    const controller = new AbortController();
+    let calls = 0;
+    const originalAct = fake.act.bind(fake);
+    fake.act = async (input) => {
+      calls += 1;
+      const out = await originalAct(input);
+      // Abort after the first tool so the second ask is never reached.
+      controller.abort();
+      return out;
+    };
+
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      asks: [kbAsk(), accountAsk()],
+      signal: controller.signal,
+    });
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'aborted',
+      userMessageKey: 'agents.support.stopped',
+    });
+    expect(calls).toBe(1);
+    expect(fake.executed).toEqual([SUPPORT_KB_TOOL]);
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result.metering.sessionClosed).toBe(true);
+  });
+
+  it('refuses when account-state was asked and carried an invent balance field', async () => {
+    const fake = new FakeRuntime();
+    const hostileAccount = {
+      tool: 'identity.account.read',
+      account: { userId: USER, status: 'active' as const, kycTier: 'tier2', balance: '999.00' },
+    };
+
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      asks: [kbAsk(), hostileAccount],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'account_state_missing',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(result.status === 'refuse' && result.unanswered.some((u) => u.reason === 'balance_field_forbidden')).toBe(true);
+    // KB may have been read, but the run must not ship an `ok` that pretends account-state was clean.
+    expect(result).not.toMatchObject({ status: 'ok' });
+    expect(fake.settleCalls).toBe(1);
+    expect(result.metering.billedAmount).toBe('0');
+  });
 });
