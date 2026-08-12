@@ -19,7 +19,7 @@ import type { TradeService } from '../spot/trade-service.js';
 import { OtcDeskService } from './otc-service.js';
 import { FixedOtcStake } from './stake-source.js';
 import { UNPUBLISHED_OTC_DESK_LAW, type OtcDeskLaw } from './desk-law.js';
-import { createConfigOtcMidSource } from './mid-source.js';
+import { createConfigOtcMidSource, createObservedOtcMidSource } from './mid-source.js';
 import { planOtcSettle, postOtcSettle } from './settle.js';
 import { otcSettleIdsFor } from '../spot/ids.js';
 
@@ -59,10 +59,9 @@ import { otcSettleIdsFor } from '../spot/ids.js';
  * been made. Nothing here is evidence of a spread, a tier threshold, or a
  * decision to act as principal.
  *
- * It also does not claim the mid is fresh. `socket.otc-mid-feed` is open: the
- * config mid source carries no observation time, so no staleness gate is
- * reachable and `TRADE_OTC_MIDS` must stay empty in production. That is a
- * recorded socket with an owner-gated max-age, not something this suite closes.
+ * Mid freshness uses an observed source tied to the desk clock (not a boot
+ * stamp from module load). `socket.otc-mid-feed` stays open in production —
+ * `TRADE_OTC_MIDS` must stay empty until a live feed refreshes `asOf`.
  */
 
 const SECRET = 'a-trade-otc-mount-reachability-edge-secret-long';
@@ -80,10 +79,11 @@ const PUBLISHED: OtcDeskLaw = {
   minStake: parseAmount('500'),
   counterparty: 'platform',
   quoteTtlMs: 60_000,
+  maxMidAgeSeconds: 60,
 };
 
-/** Stands in for `TRADE_OTC_MIDS`. `SOL/USDT` is deliberately absent. */
-const MIDS = createConfigOtcMidSource('BTC/USDT:200');
+/** Pair map only — `asOf` is bound to the desk clock inside `buildDesk`. */
+const MID_RAW = 'BTC/USDT:200';
 
 /**
  * A ledger that remembers what was asked of it.
@@ -138,7 +138,7 @@ interface Desk {
 async function buildDesk(
   opts: {
     law?: OtcDeskLaw;
-    mids?: ReturnType<typeof createConfigOtcMidSource>;
+    mids?: ReturnType<typeof createConfigOtcMidSource> | ReturnType<typeof createObservedOtcMidSource>;
     stake?: string;
     mount?: boolean;
   } = {},
@@ -151,7 +151,10 @@ async function buildDesk(
       ? undefined
       : new OtcDeskService(ledger, new FixedOtcStake(parseAmount(opts.stake ?? '1000')), {
           law: opts.law ?? UNPUBLISHED_OTC_DESK_LAW,
-          midSource: opts.mids ?? MIDS,
+          // Observed mid tied to desk `now` — a boot-stamped config mid from
+          // module load sits in the future vs the fixture clock and trips the
+          // age gate (`ageSeconds < -30`).
+          midSource: opts.mids ?? createObservedOtcMidSource(MID_RAW, () => now),
           now: () => now,
         });
 
