@@ -148,7 +148,7 @@ KYB / payroll / invoicing / expense cards remain residual or §13 — not invent
 
 Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-recipient payroll atomicity, dedicated org principal — not invented here.
 
-### `ramps` — **crypto ledger half. Fiat is a socket.**
+### `ramps` — **crypto ledger half. Fiat via pay adapters (socket until live).**
 
 | Procedure         | Scope        | Purpose                                                                |
 | ----------------- | ------------ | ---------------------------------------------------------------------- |
@@ -157,7 +157,7 @@ Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-r
 | `ramps.offramps`  | `bank:read`  | The user's off-ramps. Every row carries `simulated`                    |
 | `ramps.offramp`   | `bank:write` | Hold then settle to `bank-crypto-ledger`. Does **not** broadcast       |
 
-`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat always refuses `bank.fiat_ramp_socket` → `socket.psp-partners`.
+`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat resolves a live svc-pay RailAdapter via `PayFiatRampPort` (D26-P1-B4) or refuses `bank.fiat_ramp_socket` → `socket.psp-partners`. Empty/sandbox/absent pay rails never launder into a bank fiat ramp. No second book — value still moves only through ledger-client deposit/withdraw recipes.
 
 ```bash
 BANK_RAMP_MODE=none            # default — every ramp money path refuses bank.no_ramp_rail

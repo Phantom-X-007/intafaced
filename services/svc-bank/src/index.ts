@@ -195,6 +195,7 @@ app.get('/ready', async () => ({
     displayName: rampProgramme.displayName,
     cryptoRail: rampProgramme.cryptoRail,
     fiatLeg: rampProgramme.fiatLeg,
+    fiatVia: rampProgramme.fiatVia,
   },
 }));
 
@@ -386,6 +387,7 @@ app.log.info(
     rampProgramme: rampProgramme.id,
     rampProgrammeSimulated: rampProgramme.simulated,
     rampFiatLeg: rampProgramme.fiatLeg,
+    rampFiatVia: rampProgramme.fiatVia,
   },
   'svc-bank ready',
 );
