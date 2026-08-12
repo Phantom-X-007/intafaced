@@ -220,6 +220,9 @@ describe('MerchantWebhookService', () => {
     const svc = new MerchantWebhookService(store);
     await svc.registerEndpoint(MERCHANT, 'https://merchant.example/hooks');
     await svc.enqueue({ type: 'payment.captured', payment: payment() });
+    // enqueue stamps nextAttemptAt via wall clock; pin it so claimDue's
+    // frozen `now` is never behind that stamp (same pattern as processDue tests).
+    for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
 
     const now = new Date('2026-08-12T12:00:00.000Z');
     const first = await store.claimDue(25, now);
