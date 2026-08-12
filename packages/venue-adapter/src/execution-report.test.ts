@@ -75,10 +75,7 @@ describe('buildExecutionReport — §28 shortfall + venue attribution', () => {
   it('keeps rejected venue attribution separate from filled legs', async () => {
     const plan = await planRoute(
       { symbol: 'BTC/USDT', side: 'buy', amount: parseAmount('1') },
-      [
-        venue({ id: 'dead', price: '29000', amount: '1', healthy: false }),
-        venue({ id: 'live', price: '30000', amount: '1' }),
-      ],
+      [venue({ id: 'dead', price: '29000', amount: '1', healthy: false }), venue({ id: 'live', price: '30000', amount: '1' })],
       { now: new Date('2026-08-12T00:00:00.000Z') },
     );
     const report = buildExecutionReport(plan);
