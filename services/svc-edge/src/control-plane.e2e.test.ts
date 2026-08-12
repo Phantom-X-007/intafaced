@@ -732,7 +732,8 @@ describe('money modules — same kill surface (D26-P2-10)', () => {
 
   const SAMPLE_DOOR: Record<(typeof MONEY_MODULES)[number], string> = {
     trade: '/api/trade/trpc/convert.execute',
-    pay: '/api/pay/trpc/withdrawal.create',
+    // Public REST commit path (not only tRPC) — same /api/pay prefix kill.
+    pay: '/api/pay/v1/payments',
     bank: '/api/bank/trpc/loans.open',
     p2p: '/api/p2p/trpc/disputes.open',
     token: '/api/token/trpc/unstake',

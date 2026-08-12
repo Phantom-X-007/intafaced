@@ -65,12 +65,14 @@ describe('D26-P2-10 money routes — kill-switch completeness', () => {
     const payKilled = new KillSwitchState();
     payKilled.set('pay', true, OPERATOR, WHY);
     expect(payKilled.decide('/api/pay/trpc/checkout.open', 'POST').refused).toBe(true);
+    expect(payKilled.decide('/api/pay/v1/payments', 'POST').refused).toBe(true);
     expect(payKilled.decide('/api/v1/orders', 'POST').refused).toBe(false);
 
     const tradeKilled = new KillSwitchState();
     tradeKilled.set('trade', true, OPERATOR, WHY);
     expect(tradeKilled.decide('/api/v1/orders', 'POST').refused).toBe(true);
     expect(tradeKilled.decide('/api/pay/trpc/checkout.open', 'POST').refused).toBe(false);
+    expect(tradeKilled.decide('/api/pay/v1/payments', 'POST').refused).toBe(false);
   });
 
   it('still lets trade cancels out while money creates refuse (asymmetry)', () => {
