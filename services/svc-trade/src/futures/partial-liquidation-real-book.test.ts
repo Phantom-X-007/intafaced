@@ -248,6 +248,20 @@ function baseDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
       throw new Error('unused');
     },
     getOpenMarginCall: async () => null,
+    getAdlDisclosure: async () => ({
+      version: 'DIRECTION-2026-07-31:34',
+      copy: 'stub',
+      acknowledged: false,
+      acknowledgedAt: null,
+    }),
+    ackAdlDisclosure: async () => ({
+      version: 'DIRECTION-2026-07-31:34',
+      copy: 'stub',
+      acknowledged: true,
+      acknowledgedAt: new Date(0).toISOString(),
+    }),
+    listAdlDisclosureEvents: async () => [],
+
     ...overrides,
   };
 }
