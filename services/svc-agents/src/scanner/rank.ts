@@ -2,8 +2,11 @@
  * Market Scanner Stage-1 — rank on fixtures only.
  *
  * Spec: docs/ops/trk/agents.scanner.md Stage 1.
+ * Honesty: D26-P1-A3 / D26-P0-11 — ranked signals only after signal-inputs
+ * law is sealed; else refuse (never invent ranking / market alpha).
  *
  * Rules:
+ *   · P0-11 signal-inputs law must be sealed before any score is computed.
  *   · Input is caller-supplied fixture rows — never invented mid-function.
  *   · Missing/null quotes are refused, not filled with 0 or "placeholder" prices.
  *   · Stale rows (asOf older than maxAgeMs vs `now`) are dropped; if nothing
@@ -11,6 +14,13 @@
  *   · Score is a relative rank key (string decimal), not a balance or quote.
  *   · No model call, no ledger, no auto-trade.
  */
+
+import {
+  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  scannerSignalInputsGate,
+  type ScannerSignalInputsGateRefuseReason,
+  type ScannerSignalInputsLaw,
+} from './signal-inputs-law.js';
 
 export type MarketFixture = {
   readonly marketId: string;
@@ -53,7 +63,15 @@ export type RankUnavailable = {
   readonly reason: 'stale' | 'no_quotes' | 'market_plane_dark';
 };
 
-export type RankResult = RankOk | RankEmpty | RankUnavailable;
+/** D26-P1-A3 — P0-11 not sealed (or sealed incompletely). No ranked signals. */
+export type RankRefuse = {
+  readonly status: 'refuse';
+  readonly reason: ScannerSignalInputsGateRefuseReason;
+  readonly userMessageKey: 'agents.scanner.signal_inputs_closed';
+  readonly residual: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
+};
+
+export type RankResult = RankOk | RankEmpty | RankUnavailable | RankRefuse;
 
 /** Stage-2: live market data plane. Dark → refuse invent signals. */
 export type MarketPlaneState = 'live' | 'dark';
@@ -94,6 +112,9 @@ export function filterFixturesByAllowlist(
 /**
  * Rank fixture markets by |changeBps| × log1p(volume) when both present and fresh.
  * Incomplete rows are skipped; never zero-filled.
+ *
+ * Requires sealed D26-P0-11 signal-inputs law (recipe `abs_change_x_log_volume`).
+ * Blank / unpublished law → typed refuse — never invent rankings.
  */
 export function rankFixtures(
   fixtures: readonly MarketFixture[],
@@ -103,8 +124,23 @@ export function rankFixtures(
     marketPlane?: MarketPlaneState;
     /** Stage-2: only rank these market ids when provided and non-empty. */
     marketAllowlist?: ReadonlySet<string> | readonly string[];
+    /**
+     * D26-P0-11 signal-inputs law. Default / blank → refuse-closed.
+     * Pass a sealed law only after the owner publishes what may rank.
+     */
+    signalInputsLaw?: ScannerSignalInputsLaw | null;
   } = {},
 ): RankResult {
+  const inputsGate = scannerSignalInputsGate(options.signalInputsLaw);
+  if (inputsGate.status === 'refuse') {
+    return {
+      status: 'refuse',
+      reason: inputsGate.reason,
+      userMessageKey: inputsGate.userMessageKey,
+      residual: inputsGate.residual,
+    };
+  }
+
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
   const limit = options.limit ?? 20;

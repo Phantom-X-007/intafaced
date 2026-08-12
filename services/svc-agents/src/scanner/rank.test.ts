@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { rankFixtures, type MarketFixture } from './rank.js';
+import {
+  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+} from './signal-inputs-law.js';
 
 const NOW = new Date('2026-08-04T12:00:00.000Z');
 
@@ -14,9 +18,35 @@ function row(partial: Partial<MarketFixture> & Pick<MarketFixture, 'marketId'>):
   };
 }
 
+/** Sealed P0-11 — only path that may return ranked signals (D26-P1-A3). */
+function sealedOpts(extra: Parameters<typeof rankFixtures>[1] = {}) {
+  return { now: NOW, signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW, ...extra };
+}
+
 describe('scanner rankFixtures (Stage-1 fixtures)', () => {
+  it('D26-P1-A3: blank P0-11 → refuse ranked signals (no invent alpha)', () => {
+    const r = rankFixtures([row({ marketId: 'BTC-USD' })], { now: NOW });
+    expect(r).toEqual({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
+  });
+
+  it('D26-P1-A3: unpublished law → refuse even with complete fixtures', () => {
+    const r = rankFixtures([row({ marketId: 'BTC-USD' })], {
+      now: NOW,
+      signalInputsLaw: { published: false },
+    });
+    expect(r.status).toBe('refuse');
+    if (r.status !== 'refuse') return;
+    expect(r.reason).toBe('signal_inputs_law_blank');
+    expect(r.residual).toContain('D26-P0-11');
+  });
+
   it('returns empty when the fixture list is empty — no invented markets', () => {
-    const r = rankFixtures([], { now: NOW });
+    const r = rankFixtures([], sealedOpts());
     expect(r).toEqual({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
   });
 
@@ -27,7 +57,7 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
         row({ marketId: 'ETH-USD', change24hBps: -200, volume24h: '5000' }),
         row({ marketId: 'SOL-USD', change24hBps: 50, volume24h: '200' }),
       ],
-      { now: NOW },
+      sealedOpts(),
     );
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
@@ -39,7 +69,7 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
   it('skips incomplete quotes — never zero-fills last/volume', () => {
     const r = rankFixtures(
       [row({ marketId: 'BTC-USD' }), row({ marketId: 'GHOST-USD', last: null, volume24h: null, change24hBps: null })],
-      { now: NOW },
+      sealedOpts(),
     );
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
@@ -57,7 +87,7 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
           maxAgeMs: 60_000,
         }),
       ],
-      { now: NOW },
+      sealedOpts(),
     );
     expect(r).toEqual({
       status: 'unavailable',
@@ -67,7 +97,7 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
   });
 
   it('refuses with unavailable/no_quotes when all rows lack quotes', () => {
-    const r = rankFixtures([row({ marketId: 'A', last: null }), row({ marketId: 'B', volume24h: null })], { now: NOW });
+    const r = rankFixtures([row({ marketId: 'A', last: null }), row({ marketId: 'B', volume24h: null })], sealedOpts());
     expect(r.status).toBe('unavailable');
     if (r.status !== 'unavailable') return;
     expect(r.reason).toBe('no_quotes');
@@ -75,12 +105,12 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
   });
 
   it('does not invent a signal list when only invalid decimals arrive', () => {
-    const r = rankFixtures([row({ marketId: 'X', last: 'not-a-number', volume24h: '1e999' })], { now: NOW });
+    const r = rankFixtures([row({ marketId: 'X', last: 'not-a-number', volume24h: '1e999' })], sealedOpts());
     expect(r.status).toBe('unavailable');
   });
 
   it('Stage-2: market plane dark → refuse invent signals', () => {
-    const r = rankFixtures([row({ marketId: 'BTC-USD' })], { now: NOW, marketPlane: 'dark' });
+    const r = rankFixtures([row({ marketId: 'BTC-USD' })], sealedOpts({ marketPlane: 'dark' }));
     expect(r).toEqual({
       status: 'unavailable',
       userMessageKey: 'agents.scanner.unavailable',
@@ -95,7 +125,7 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
         row({ marketId: 'ETH-USD', change24hBps: 200 }),
         row({ marketId: 'SOL-USD', change24hBps: 50 }),
       ],
-      { now: NOW, marketAllowlist: ['ETH-USD'] },
+      sealedOpts({ marketAllowlist: ['ETH-USD'] }),
     );
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
@@ -104,7 +134,7 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
   });
 
   it('Stage-2 L3: allowlist with no matches → empty not invent', () => {
-    const r = rankFixtures([row({ marketId: 'BTC-USD' })], { now: NOW, marketAllowlist: ['NOPE-USD'] });
+    const r = rankFixtures([row({ marketId: 'BTC-USD' })], sealedOpts({ marketAllowlist: ['NOPE-USD'] }));
     expect(r).toEqual({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
   });
 });

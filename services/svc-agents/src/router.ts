@@ -12,6 +12,7 @@ import { scannerAgentGuardrail } from './scanner/guardrail.js';
 import { invokeScannerDataTool } from './scanner/data-tools.js';
 import { scannerTierGate } from './scanner/tier-gate.js';
 import { runScannerRankSession } from './scanner/session-run.js';
+import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './scanner/signal-inputs-law.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
@@ -578,7 +579,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      *
      * Spec: docs/ops/trk/agents.scanner.md. Never invents prices or market rows:
      * caller hands allowlisted fixtures / tool rows. Dark plane + blank tier law
-     * refuse-closed. No ledger, no order placement.
+     * + unsealed D26-P0-11 signal-inputs law refuse-closed. No ledger, no order placement.
      */
     scanner: router({
       rankFixtures: scopedProcedure('agents:read', { module: 'agents' })
@@ -600,6 +601,21 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             marketPlane: z.enum(['live', 'dark']).optional(),
             marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
             now: z.string().datetime().optional(),
+            /** D26-P0-11. Blank / omitted → refuse ranked signals (D26-P1-A3). */
+            signalInputsLaw: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  p0_11: z.literal('sealed'),
+                  allowedInputs: z
+                    .array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding']))
+                    .max(20),
+                  rankingRecipeId: z.literal('abs_change_x_log_volume'),
+                }),
+              ])
+              .nullable()
+              .optional(),
           }),
         )
         .output(
@@ -627,6 +643,17 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               userMessageKey: z.literal('agents.scanner.unavailable'),
               reason: z.enum(['stale', 'no_quotes', 'market_plane_dark']),
             }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum([
+                'signal_inputs_law_blank',
+                'inputs_empty',
+                'ranking_recipe_unknown',
+                'required_inputs_missing',
+              ]),
+              userMessageKey: z.literal('agents.scanner.signal_inputs_closed'),
+              residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL),
+            }),
           ]),
         )
         .query(({ input }) => {
@@ -635,6 +662,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.marketPlane === undefined ? {} : { marketPlane: input.marketPlane }),
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            signalInputsLaw: input.signalInputsLaw ?? null,
           });
           // Strip readonly for the wire shape (zod output is mutable arrays).
           if (result.status === 'ok') {
@@ -879,7 +907,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
 
       /**
        * Stage-2 rank via allowlisted ticker tools + tier depth.
-       * Blank law / dark plane / all tickers refused → typed refuse (no invent).
+       * Blank P0-11 / blank law / dark plane / all tickers refused → typed refuse (no invent).
        */
       rankLive: scopedProcedure('agents:read', { module: 'agents' })
         .input(
@@ -899,6 +927,20 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                       }),
                     )
                     .default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            signalInputsLaw: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  p0_11: z.literal('sealed'),
+                  allowedInputs: z
+                    .array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding']))
+                    .max(20),
+                  rankingRecipeId: z.literal('abs_change_x_log_volume'),
                 }),
               ])
               .nullable()
@@ -950,8 +992,23 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['tier_law_blank', 'tier_not_granted', 'depth_invalid', 'market_plane_dark', 'no_live_tickers']),
-              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
+              reason: z.enum([
+                'tier_law_blank',
+                'tier_not_granted',
+                'depth_invalid',
+                'market_plane_dark',
+                'no_live_tickers',
+                'signal_inputs_law_blank',
+                'inputs_empty',
+                'ranking_recipe_unknown',
+                'required_inputs_missing',
+              ]),
+              userMessageKey: z.enum([
+                'agents.scanner.unavailable',
+                'agents.scanner.tier_closed',
+                'agents.scanner.signal_inputs_closed',
+              ]),
+              residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL).optional(),
             }),
           ]),
         )
@@ -961,6 +1018,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             tierLaw: input.law ?? null,
             userTier: input.userTier,
             tickers: input.tickers,
+            signalInputsLaw: input.signalInputsLaw ?? null,
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
           });
@@ -1019,6 +1077,20 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               ])
               .nullable()
               .optional(),
+            signalInputsLaw: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  p0_11: z.literal('sealed'),
+                  allowedInputs: z
+                    .array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding']))
+                    .max(20),
+                  rankingRecipeId: z.literal('abs_change_x_log_volume'),
+                }),
+              ])
+              .nullable()
+              .optional(),
             // Capped well under the guardrail's per-session action budget: one
             // ticker is one audited tool call.
             tickers: z
@@ -1072,8 +1144,23 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['tier_law_blank', 'tier_not_granted', 'depth_invalid', 'market_plane_dark', 'no_live_tickers']),
-              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
+              reason: z.enum([
+                'tier_law_blank',
+                'tier_not_granted',
+                'depth_invalid',
+                'market_plane_dark',
+                'no_live_tickers',
+                'signal_inputs_law_blank',
+                'inputs_empty',
+                'ranking_recipe_unknown',
+                'required_inputs_missing',
+              ]),
+              userMessageKey: z.enum([
+                'agents.scanner.unavailable',
+                'agents.scanner.tier_closed',
+                'agents.scanner.signal_inputs_closed',
+              ]),
+              residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL).optional(),
               tickersRefusedByTool: z.number().int(),
               tickersRefusedByGuardrail: z.number().int(),
               metering: runMeteringOutput,
@@ -1088,6 +1175,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               feeAssetId,
               plane: input.plane,
               tierLaw: input.law ?? null,
+              signalInputsLaw: input.signalInputsLaw ?? null,
               userTier: input.userTier,
               tickers: input.tickers,
               ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
@@ -1133,6 +1221,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 status: 'refuse' as const,
                 reason: result.reason,
                 userMessageKey: result.userMessageKey,
+                ...(result.residual === undefined ? {} : { residual: result.residual }),
                 tickersRefusedByTool: result.tickersRefusedByTool,
                 tickersRefusedByGuardrail: result.tickersRefusedByGuardrail,
                 metering,

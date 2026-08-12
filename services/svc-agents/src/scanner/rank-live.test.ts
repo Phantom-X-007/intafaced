@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { TickerFixture } from './data-tools.js';
 import { SCANNER_DATA_TOOLS } from './guardrail.js';
 import { rankLiveFromTickers } from './rank-live.js';
+import {
+  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+} from './signal-inputs-law.js';
 
 const NOW = new Date('2026-08-07T12:00:00.000Z');
 
@@ -24,10 +28,27 @@ function ticker(partial: Partial<TickerFixture> & Pick<TickerFixture, 'marketId'
 }
 
 describe('rankLiveFromTickers (Stage-2)', () => {
+  it('D26-P1-A3: blank P0-11 refuses before tier / dark checks', () => {
+    const r = rankLiveFromTickers({
+      plane: 'live',
+      tierLaw: law,
+      userTier: 'free',
+      now: NOW,
+      tickers: [ticker({ marketId: 'BTC-USD' })],
+    });
+    expect(r).toEqual({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
+  });
+
   it('ranks accepted tickers and caps by tier maxSignals', () => {
     const r = rankLiveFromTickers({
       plane: 'live',
       tierLaw: law,
+      signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
       userTier: 'free',
       now: NOW,
       tickers: [
@@ -49,6 +70,7 @@ describe('rankLiveFromTickers (Stage-2)', () => {
     const r = rankLiveFromTickers({
       plane: 'dark',
       tierLaw: law,
+      signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
       userTier: 'free',
       now: NOW,
       tickers: [ticker({ marketId: 'BTC-USD' })],
@@ -64,6 +86,7 @@ describe('rankLiveFromTickers (Stage-2)', () => {
     const r = rankLiveFromTickers({
       plane: 'live',
       tierLaw: null,
+      signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
       userTier: 'free',
       now: NOW,
       tickers: [ticker({ marketId: 'BTC-USD' })],
@@ -79,6 +102,7 @@ describe('rankLiveFromTickers (Stage-2)', () => {
     const r = rankLiveFromTickers({
       plane: 'live',
       tierLaw: law,
+      signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
       userTier: 'free',
       now: NOW,
       tickers: [
@@ -101,6 +125,7 @@ describe('rankLiveFromTickers (Stage-2)', () => {
     const r = rankLiveFromTickers({
       plane: 'live',
       tierLaw: law,
+      signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
       userTier: 'free',
       now: NOW,
       tickers: [],

@@ -6,6 +6,10 @@ import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { scannerAgentGuardrail, SCANNER_DATA_TOOLS } from './guardrail.js';
 import { runScannerRankSession, SCANNER_AGENT_ID, SCANNER_TICKER_TOOL } from './session-run.js';
+import {
+  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+} from './signal-inputs-law.js';
 
 /**
  * The metered `scanner.rank` run.
@@ -159,6 +163,7 @@ function baseInput(fake: FakeRuntime) {
     feeAssetId: 'IFC',
     plane: 'live' as const,
     tierLaw: law,
+    signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
     userTier: 'free',
     now: NOW,
   };
@@ -240,6 +245,25 @@ describe('scanner.rank metered session run', () => {
       userMessageKey: 'agents.scanner.unavailable',
     });
     // Nothing opened means nothing to bill for the platform's own darkness.
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('D26-P1-A3: refuses blank P0-11 signal-inputs law before opening a session', async () => {
+    const fake = new FakeRuntime();
+    const result = await runScannerRankSession({
+      ...baseInput(fake),
+      signalInputsLaw: null,
+      tickers: [ticker('btc-usdt')],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
     expect(fake.openCalls).toBe(0);
     expect(result.metering.sessionId).toBeNull();
     expect(result.metering.billedAmount).toBe('0');

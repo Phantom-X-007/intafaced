@@ -23,10 +23,11 @@
  *
  * ── Why the cheap refusals happen BEFORE the session opens ───────────────────
  *
- * A dark market plane and an unpublished tier matrix are known before any tool
- * is touched. Opening a metered session to discover them would bill a user for
- * the platform's own unreadiness, and would leave an audit trail implying the
- * scanner tried. It did not try — it refused, and it refused for free.
+ * An unsealed D26-P0-11 signal-inputs law, a dark market plane, and an
+ * unpublished tier matrix are known before any tool is touched. Opening a
+ * metered session to discover them would bill a user for the platform's own
+ * unreadiness, and would leave an audit trail implying the scanner tried. It
+ * did not try — it refused, and it refused for free.
  *
  * ── Why a run that ranks fixtures bills zero, honestly ───────────────────────
  *
@@ -43,6 +44,12 @@ import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import { invokeScannerDataTool, type TickerFixture } from './data-tools.js';
 import { rankFixtures, type MarketPlaneState, type RankedSignal } from './rank.js';
+import {
+  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  scannerSignalInputsGate,
+  type ScannerSignalInputsGateRefuseReason,
+  type ScannerSignalInputsLaw,
+} from './signal-inputs-law.js';
 import { scannerTierGate, type ScannerTierLaw } from './tier-gate.js';
 
 /** The agent id the scanner guardrail is registered under. */
@@ -77,7 +84,13 @@ export type ScannerRunMetering = {
   readonly settlements: readonly ScannerRunSettlement[];
 };
 
-export type ScannerRunRefuseReason = 'market_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'depth_invalid' | 'no_live_tickers';
+export type ScannerRunRefuseReason =
+  | 'market_plane_dark'
+  | 'tier_law_blank'
+  | 'tier_not_granted'
+  | 'depth_invalid'
+  | 'no_live_tickers'
+  | ScannerSignalInputsGateRefuseReason;
 
 export type ScannerRunOk = {
   readonly status: 'ok';
@@ -100,7 +113,11 @@ export type ScannerRunOk = {
 export type ScannerRunRefuse = {
   readonly status: 'refuse';
   readonly reason: ScannerRunRefuseReason;
-  readonly userMessageKey: 'agents.scanner.unavailable' | 'agents.scanner.tier_closed';
+  readonly userMessageKey:
+    | 'agents.scanner.unavailable'
+    | 'agents.scanner.tier_closed'
+    | 'agents.scanner.signal_inputs_closed';
+  readonly residual?: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
   readonly tickersRefusedByTool: number;
   readonly tickersRefusedByGuardrail: number;
   readonly metering: ScannerRunMetering;
@@ -160,6 +177,8 @@ export type ScannerRunInput = {
   /** Asset the fleet meters in. Supplied by the caller; this module holds no rate. */
   readonly feeAssetId: string;
   readonly plane: MarketPlaneState;
+  /** D26-P0-11 signal-inputs law. Blank → refuse ranked signals before any session. */
+  readonly signalInputsLaw?: ScannerSignalInputsLaw | null;
   /** Product-law tier matrix. Blank → refuse-closed, before any session opens. */
   readonly tierLaw?: ScannerTierLaw | null;
   readonly userTier: string;
@@ -182,6 +201,20 @@ export async function runScannerRankSession(input: ScannerRunInput): Promise<Sca
   const now = input.now ?? new Date();
 
   // ── Free refusals, before a session exists ────────────────────────────────
+  // D26-P1-A3: no ranked signals until P0-11 seals what may rank.
+  const inputsGate = scannerSignalInputsGate(input.signalInputsLaw);
+  if (inputsGate.status === 'refuse') {
+    return {
+      status: 'refuse',
+      reason: inputsGate.reason,
+      userMessageKey: inputsGate.userMessageKey,
+      residual: inputsGate.residual,
+      tickersRefusedByTool: 0,
+      tickersRefusedByGuardrail: 0,
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
   if (input.plane === 'dark') {
     return {
       status: 'refuse',
@@ -294,8 +327,22 @@ export async function runScannerRankSession(input: ScannerRunInput): Promise<Sca
       now,
       limit: tier.maxSignals,
       marketPlane: input.plane,
+      signalInputsLaw: input.signalInputsLaw,
       ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
     });
+
+    if (ranked.status === 'refuse') {
+      metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
+      return {
+        status: 'refuse',
+        reason: ranked.reason,
+        userMessageKey: ranked.userMessageKey,
+        residual: ranked.residual,
+        tickersRefusedByTool,
+        tickersRefusedByGuardrail,
+        metering,
+      };
+    }
 
     metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
 

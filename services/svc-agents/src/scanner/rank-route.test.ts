@@ -3,10 +3,15 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
+import {
+  SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+} from './signal-inputs-law.js';
 
 /**
  * Stage-1 scanner is reachable from the tRPC surface with caller fixtures.
- * Does not invent markets; empty fixtures → empty; dark plane → unavailable.
+ * Does not invent markets; empty fixtures → empty; dark plane → unavailable;
+ * blank P0-11 → refuse (D26-P1-A3).
  */
 
 const SECRET = 'an-agents-scanner-mount-test-edge-secret-long';
@@ -48,12 +53,38 @@ function stubDeps(): AgentsRouterDeps {
 }
 
 describe('scanner.rankFixtures route (Stage-1)', () => {
-  it('ranks complete fresh fixtures', async () => {
+  it('D26-P1-A3: blank P0-11 refuses ranked signals on the wire', async () => {
     const now = '2026-08-07T12:00:00.000Z';
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
       .scanner.rankFixtures({
         now,
+        fixtures: [
+          {
+            marketId: 'btc-usdt',
+            last: '100',
+            volume24h: '1000',
+            change24hBps: 50,
+            asOf: now,
+            maxAgeMs: 60_000,
+          },
+        ],
+      });
+    expect(result).toEqual({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.signal_inputs_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
+  });
+
+  it('ranks complete fresh fixtures when P0-11 is sealed', async () => {
+    const now = '2026-08-07T12:00:00.000Z';
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .scanner.rankFixtures({
+        now,
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
         fixtures: [
           {
             marketId: 'btc-usdt',
@@ -80,7 +111,9 @@ describe('scanner.rankFixtures route (Stage-1)', () => {
   });
 
   it('empty fixtures → empty (never invent signals)', async () => {
-    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).scanner.rankFixtures({ fixtures: [] });
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .scanner.rankFixtures({ fixtures: [], signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW });
     expect(result).toEqual({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
   });
 
@@ -89,6 +122,7 @@ describe('scanner.rankFixtures route (Stage-1)', () => {
       .createCaller(signed())
       .scanner.rankFixtures({
         marketPlane: 'dark',
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
         fixtures: [
           {
             marketId: 'btc-usdt',
