@@ -7,6 +7,7 @@ import { TradeError, type FillRecord, type Market, type OrderRecord } from './sp
 import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } from './spot/forex-settlement.js';
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
+import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
 import type { OtcDeskService } from './otc/otc-service.js';
 import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
@@ -466,10 +467,14 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
     otc: router({
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!otc) {
+          const deskLaw =
+            'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed';
           return {
             published: false,
             statusLine: 'published=0 residual=DIRECTION_§8_refuse_closed',
-            residual: 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed',
+            residual: deskLaw,
+            makerRouting: otcMakerRoutingStatus(),
+            residuals: { deskLaw, makerRouting: OTC_MAKER_ROUTING_RESIDUAL },
           };
         }
         return otc.deskStatus();
