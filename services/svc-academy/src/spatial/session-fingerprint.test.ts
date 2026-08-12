@@ -48,5 +48,13 @@ describe('session sceneFingerprint honesty (read token)', () => {
       expectedFingerprint: fingerprintFromStoredScene(stored),
     });
     expect(ok.ok).toBe(true);
+
+    // D26-P1-C6: omit after non-empty is conflict, not last-write-wins
+    const omit = decideHostSceneWrite({
+      current: d.scene,
+      next: { ...next, stage: { width: 40, height: 40 } },
+    });
+    expect(omit.ok).toBe(false);
+    if (!omit.ok) expect(omit.reason).toBe('conflict');
   });
 });

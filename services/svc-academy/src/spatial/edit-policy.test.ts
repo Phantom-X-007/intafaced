@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { emptyScene } from './scene.js';
-import { decideHostSceneWrite, isHostSceneWriteConflict, isHostSceneWriteOk, sceneFingerprint } from './edit-policy.js';
+import {
+  decideHostSceneWrite,
+  isHostSceneWriteConflict,
+  isHostSceneWriteOk,
+  sceneFingerprint,
+  sceneRequiresHostFingerprint,
+} from './edit-policy.js';
 
 describe('spatial concurrent host edit policy', () => {
   it('accepts first write without expectedFingerprint', () => {
     const current = emptyScene();
+    expect(sceneRequiresHostFingerprint(current)).toBe(false);
     const next = {
       version: 1 as const,
       stage: { width: 800, height: 600 },
@@ -24,6 +31,7 @@ describe('spatial concurrent host edit policy', () => {
       stage: { width: 100, height: 100 },
       avatars: [{ id: 'a1', participantId: 'seat-1', position: { x: 1, y: 1 } }],
     };
+    expect(sceneRequiresHostFingerprint(current)).toBe(true);
     const fp = sceneFingerprint(current);
     const next = {
       ...current,
@@ -32,6 +40,38 @@ describe('spatial concurrent host edit policy', () => {
     const r = decideHostSceneWrite({ current, next, expectedFingerprint: fp });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.scene.avatars![0]!.position).toEqual({ x: 50, y: 50 });
+  });
+
+  it('refuses omit fingerprint when current scene is non-empty (D26-P1-C6)', () => {
+    const current = {
+      version: 1 as const,
+      stage: { width: 100, height: 100 },
+      avatars: [{ id: 'a1', participantId: 'seat-1', position: { x: 1, y: 1 } }],
+    };
+    const r = decideHostSceneWrite({
+      current,
+      next: {
+        ...current,
+        avatars: [{ id: 'a1', participantId: 'seat-1', position: { x: 9, y: 9 } }],
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(isHostSceneWriteConflict(r)).toBe(true);
+    if (!r.ok) {
+      expect(r.reason).toBe('conflict');
+      expect(r.message).toContain('fingerprint required');
+    }
+  });
+
+  it('refuses omit fingerprint when only props make scene non-empty', () => {
+    const current = {
+      version: 1 as const,
+      props: [{ id: 'p1', kind: 'desk', position: { x: 0, y: 0 } }],
+    };
+    expect(sceneRequiresHostFingerprint(current)).toBe(true);
+    const r = decideHostSceneWrite({ current, next: { version: 1 } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('conflict');
   });
 
   it('refuses stale fingerprint (concurrent host tab)', () => {
