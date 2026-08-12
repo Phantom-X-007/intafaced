@@ -17,13 +17,7 @@ import { houseFees, insuranceFund, marketMaker, railBoundary, userAvailable } fr
 import { MemoryLedger } from '../memory-ledger.js';
 import { formatAmount, parseAmount as amt } from '../money.js';
 import { recipes, type RecipeName } from './index.js';
-import {
-  RECIPE_MATRIX,
-  buildRecipeMatrixInventory,
-  countByKind,
-  liveRecipeKeys,
-  socketRecipeKeys,
-} from './live-path-inventory.js';
+import { RECIPE_MATRIX, buildRecipeMatrixInventory, countByKind, liveRecipeKeys, socketRecipeKeys } from './live-path-inventory.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(here, '..', '..');
@@ -122,9 +116,7 @@ describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
       const abs = join(repoRoot, row.proof);
       expect(existsSync(abs), `${name} proof missing: ${row.proof}`).toBe(true);
       const body = readFileSync(abs, 'utf8');
-      expect(body, `${name} proof does not reference recipes.${name}`).toMatch(
-        new RegExp(`\\brecipes\\.${name}\\b`),
-      );
+      expect(body, `${name} proof does not reference recipes.${name}`).toMatch(new RegExp(`\\brecipes\\.${name}\\b`));
     }
   });
 
@@ -160,21 +152,15 @@ describe('D26-P2-11 executed MemoryLedger for §13 socket recipes', () => {
   });
 
   it('futuresMarginAdd conserves (socket — no top-up door)', async () => {
-    await ledger.post(
-      recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('200'), rail: 'test', railRef: 'd26-add' }),
-    );
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('200'), rail: 'test', railRef: 'd26-add' }));
     await ledger.post(recipes.futuresMarginLock({ positionId: 'pos-1', userId: USER, assetId: 'USDT', amount: amt('100') }));
-    await ledger.post(
-      recipes.futuresMarginAdd({ positionId: 'pos-1', userId: USER, assetId: 'USDT', amount: amt('50'), sequence: 1 }),
-    );
+    await ledger.post(recipes.futuresMarginAdd({ positionId: 'pos-1', userId: USER, assetId: 'USDT', amount: amt('50'), sequence: 1 }));
     expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('50');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
   it('futuresInsuranceTopup conserves (socket — no admin top-up door)', async () => {
-    await ledger.post(
-      recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('80'), rail: 'test', railRef: 'd26-ins' }),
-    );
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('80'), rail: 'test', railRef: 'd26-ins' }));
     await ledger.post(
       recipes.feeCharge({
         chargeId: 'd26-fee',
@@ -203,9 +189,7 @@ describe('D26-P2-11 executed MemoryLedger for §13 socket recipes', () => {
       }),
     );
     // Seed insurance so shortfall has a pot (same pattern as chargeback.test.ts).
-    await ledger.post(
-      recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('40'), rail: 'test', railRef: 'd26-cb-ins' }),
-    );
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('40'), rail: 'test', railRef: 'd26-cb-ins' }));
     await ledger.post(
       recipes.feeCharge({
         chargeId: 'd26-cb-fee',

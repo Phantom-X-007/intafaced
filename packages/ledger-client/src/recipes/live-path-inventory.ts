@@ -93,14 +93,12 @@ export const RECIPE_MATRIX = {
   chargebackWon: {
     kind: 'socket',
     socket: '§13',
-    reason:
-      '§13 — pay.rails ADR 2026-08-04 / chargeback.ts: won recovery unwired with the open path; no dispute writer on tip.',
+    reason: '§13 — pay.rails ADR 2026-08-04 / chargeback.ts: won recovery unwired with the open path; no dispute writer on tip.',
   },
   chargebackShortfallRecovered: {
     kind: 'socket',
     socket: '§13',
-    reason:
-      '§13 — pay.rails ADR 2026-08-04 / chargeback.ts: insurance recovery unwired with the shortfall path; no dispute writer on tip.',
+    reason: '§13 — pay.rails ADR 2026-08-04 / chargeback.ts: insurance recovery unwired with the shortfall path; no dispute writer on tip.',
   },
   stake: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
   unstake: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
