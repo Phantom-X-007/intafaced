@@ -1,23 +1,24 @@
 /**
- * MANDATE PRODUCT PATHS (D26-P1-P6 / SPEC §4).
+ * MANDATE PRODUCT LAW (D26-P1-P6 / SPEC §4 / board Done bar).
  *
- * The merchant surface already stores mandates and runs the cycle. This module
- * is the product law those call sites share so card and crypto stay honest:
+ * Merchant surface, due runner, and Done-bar suites share this module so card
+ * and crypto cannot drift into invented rails or invented "notified" events:
  *
  *  - crypto_invoice → open an invoice (never invent an on-chain pull)
- *  - card / card_mandate → refuse `pay.mandate_rail_absent` (rail port has
- *    createMandate/revokeMandate and no charge-against-mandate operation)
- *  - pre-charge notify → named §13 gap (`socket.pay-precharge-notify`); never
- *    invent a "notified" event before money-path work
+ *  - card / card_mandate → refuse `pay.mandate_rail_absent` (`socket.psp-partners`)
+ *  - pre-charge notify → named §13 gap (`socket.pay-precharge-notify`); fire
+ *    acknowledges the gap before openInvoice; `notified` is never true here
+ *  - dunning → MAX_ATTEMPTS_PER_CYCLE then named stall (`arrears`), reachable
+ *    from the fire path (not a docs-only bound)
  *
- * SPEC Done bar for mandates: mandate exists, charge traces to it, cancel is
- * immediate, price change without re-consent is refused in code. Board Done bar
- * also requires notify gaps honest — that is the socket below, not a stub hook.
+ * SPEC Done bar: mandate exists, charge traces to it, cancel is immediate,
+ * price/terms change without re-consent is refused in code.
+ * Board Done bar: mandates product-complete; notify gaps honest.
  */
 
 import type { Amount } from '@intafaced/ledger-client';
 import { PayError } from '../payment-service.js';
-import { MAX_ATTEMPTS_PER_CYCLE } from './charge-cycle.js';
+import { MAX_ATTEMPTS_PER_CYCLE, type StallReason } from './charge-cycle.js';
 
 /** Paths that may be stored. Anything else is refuse-closed (no silent crypto). */
 export const SUBSCRIPTION_PATHS = ['crypto_invoice', 'card'] as const;
@@ -47,8 +48,12 @@ export const PRECHARGE_NOTIFY_SOCKET = 'socket.pay-precharge-notify' as const;
  */
 export const CARD_MANDATE_CHARGE_SOCKET = 'socket.psp-partners' as const;
 
+/** Stall reason when bounded dunning spends every attempt on a period. */
+export const DUNNING_STALL_REASON: StallReason = 'arrears';
+
 export type MandateChargeDisposition =
-  { kind: 'open_crypto_invoice' } | { kind: 'refuse'; code: 'pay.mandate_rail_absent'; socket: typeof CARD_MANDATE_CHARGE_SOCKET };
+  | { kind: 'open_crypto_invoice' }
+  | { kind: 'refuse'; code: 'pay.mandate_rail_absent'; socket: typeof CARD_MANDATE_CHARGE_SOCKET };
 
 export interface MandatePathRow {
   path: SubscriptionPath;
@@ -56,6 +61,8 @@ export interface MandatePathRow {
   charge: MandateChargeDisposition['kind'];
   /** Human-readable posture — never "done" for absent rails. */
   posture: string;
+  /** Whether this path may open a payment today. */
+  opensMoney: boolean;
 }
 
 /** Product matrix for subscription fire — both halves named, neither invented. */
@@ -63,25 +70,58 @@ export const MANDATE_PATH_MATRIX: readonly MandatePathRow[] = [
   {
     path: 'crypto_invoice',
     charge: 'open_crypto_invoice',
+    opensMoney: true,
     posture: 'invoice-and-watch — opens a payment; customer pays; capture settles the period',
   },
   {
     path: 'card',
     charge: 'refuse',
+    opensMoney: false,
     posture: `absent charge-against-mandate — refuse pay.mandate_rail_absent until ${CARD_MANDATE_CHARGE_SOCKET}`,
   },
 ] as const;
 
-/** Pre-charge notify is not wired. Merchants get post-payment webhooks only. */
-export function preChargeNotifyGap(): {
+export type PreChargeNotifyGap = {
   status: 'absent';
   socket: typeof PRECHARGE_NOTIFY_SOCKET;
   inventForbidden: true;
-} {
+  /** Merchants must never read this as a successful pre-charge delivery. */
+  notified: false;
+  merchantReadable:
+    'Pre-charge notify is not delivered. Post-payment webhooks may fire after money-path work. Closing needs socket.pay-precharge-notify.';
+};
+
+/** Pre-charge notify is not wired. Merchants get post-payment webhooks only. */
+export function preChargeNotifyGap(): PreChargeNotifyGap {
   return {
     status: 'absent',
     socket: PRECHARGE_NOTIFY_SOCKET,
     inventForbidden: true,
+    notified: false,
+    merchantReadable:
+      'Pre-charge notify is not delivered. Post-payment webhooks may fire after money-path work. Closing needs socket.pay-precharge-notify.',
+  };
+}
+
+/**
+ * Fire-path acknowledge — call BEFORE openInvoice.
+ *
+ * Returns the honest gap. Never invents `notified: true`. Does not call
+ * merchant webhooks, svc-notify, or enqueue. Wiring a real delivery path later
+ * replaces this body; inventing a silent success here is forbidden.
+ */
+export function acknowledgePreChargeNotifyBeforeCharge(input: {
+  subscriptionId: string;
+  occurrence: number;
+  path: string;
+}): PreChargeNotifyGap & { subscriptionId: string; occurrence: number; path: SubscriptionPath } {
+  const path = normaliseSubscriptionPath(input.path);
+  const gap = preChargeNotifyGap();
+  return {
+    ...gap,
+    subscriptionId: input.subscriptionId,
+    occurrence: input.occurrence,
+    path,
   };
 }
 
@@ -132,11 +172,63 @@ export function assertChargeTracesToMandate(input: {
 }
 
 /** Bounded dunning — same operational bound as the cycle engine. Not invent rates. */
-export function mandateDunningBound(): { maxAttemptsPerCycle: number; then: 'stall_named' } {
-  return { maxAttemptsPerCycle: MAX_ATTEMPTS_PER_CYCLE, then: 'stall_named' };
+export function mandateDunningBound(): {
+  maxAttemptsPerCycle: number;
+  then: 'stall_named';
+  stallReason: 'arrears';
+} {
+  return {
+    maxAttemptsPerCycle: MAX_ATTEMPTS_PER_CYCLE,
+    then: 'stall_named',
+    stallReason: 'arrears',
+  };
+}
+
+/** True when attemptCount has spent the product bound (fire path + planner). */
+export function dunningAttemptsExhausted(attemptCount: number): boolean {
+  return attemptCount >= MAX_ATTEMPTS_PER_CYCLE;
 }
 
 /** True when a path may open money today without an acquirer socket. */
 export function pathOpensMoney(path: string): boolean {
   return mandateChargeDisposition(path).kind === 'open_crypto_invoice';
+}
+
+/**
+ * Merchant / Ready surface — product posture in one object.
+ *
+ * Crypto mandate lifecycle is product-complete on tip (invoice-and-watch).
+ * Card charge-against-mandate and pre-charge delivery remain named sockets.
+ * `notified` is always false here so Ready cannot be read as "customers were told".
+ */
+export function subscriptionsProductPosture(): {
+  mountain: 'pay.subscriptions';
+  boardDoneBar: 'Mandates product-complete; notify gaps honest';
+  paths: readonly MandatePathRow[];
+  crypto: { status: 'product_complete'; charge: 'open_crypto_invoice'; model: 'invoice-and-watch' };
+  card: {
+    status: 'refuse_closed';
+    code: 'pay.mandate_rail_absent';
+    socket: typeof CARD_MANDATE_CHARGE_SOCKET;
+  };
+  dunning: ReturnType<typeof mandateDunningBound>;
+  preChargeNotify: PreChargeNotifyGap;
+  cancel: { immediacy: 'immediate'; retentionDelayForbidden: true };
+  reconsent: { priceOrCeilingChange: 'refuse'; code: 'pay.subscription_reconsent_required' };
+} {
+  return {
+    mountain: 'pay.subscriptions',
+    boardDoneBar: 'Mandates product-complete; notify gaps honest',
+    paths: MANDATE_PATH_MATRIX,
+    crypto: { status: 'product_complete', charge: 'open_crypto_invoice', model: 'invoice-and-watch' },
+    card: {
+      status: 'refuse_closed',
+      code: 'pay.mandate_rail_absent',
+      socket: CARD_MANDATE_CHARGE_SOCKET,
+    },
+    dunning: mandateDunningBound(),
+    preChargeNotify: preChargeNotifyGap(),
+    cancel: { immediacy: 'immediate', retentionDelayForbidden: true },
+    reconsent: { priceOrCeilingChange: 'refuse', code: 'pay.subscription_reconsent_required' },
+  };
 }

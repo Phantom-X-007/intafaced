@@ -648,17 +648,24 @@ export const FEATURES = [
     // Ghost clear 2026-08-09 W4: schema/schedule/lifecycle/invoice-runner on tip (#1214).
     // W10 L01: mandate.cancel + listExecutions + path allowlist.
     // W11 L02: merchant fleet list (mandate.list / subscription.list); claim released.
-    // D26-P1-P6 2026-08-12: mandate path law + §13 pre-charge notify socket (not done — card rail + real notify remain).
-    status: 'wip',
+    // D26-P1-P6 Done bar: Mandates product-complete; notify gaps honest.
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
-    requires: ['services/svc-pay/src/subscriptions/mandate-product.ts', 'services/svc-pay/src/subscriptions/mandate-product.test.ts'],
+    requires: [
+      'services/svc-pay/src/subscriptions/mandate-product.ts',
+      'services/svc-pay/src/subscriptions/mandate-product.test.ts',
+      'services/svc-pay/src/subscriptions/subscriptions-done-bar.test.ts',
+    ],
     note:
-      '**D26-P1-P6 WIP 2026-08-12 Denon:** mandate product path law in `subscriptions/mandate-product.ts` — crypto_invoice opens invoice; ' +
-      'card refuses `pay.mandate_rail_absent` → `socket.psp-partners`; charge must trace to active mandate; re-consent refuse in code; ' +
-      'pre-charge notify named §13 `socket.pay-precharge-notify` (invent forbidden; post-payment webhooks only). ' +
-      'Merchant surface already on tip (create/get/list/cancel + listExecutions + due runner). ' +
-      'NOT done: live card charge-against-mandate (acquirer), real pre-charge notify delivery, owner-bounded dunning product beyond MAX_ATTEMPTS_PER_CYCLE stall.',
+      '**DONE 2026-08-12 (D26-P1-P6):** Mandates product-complete; notify gaps honest. Crypto invoice-and-watch E2E ' +
+      '(create mandate → subscription → due runner → invoice → capture settles execution → cancel immediate) via ' +
+      '`subscriptions-done-bar.test.ts` + merchant doors. Fire path uses `mandateChargeDisposition` matrix; charge traces ' +
+      'to active mandate; re-consent refuse `mandate.proposeTerms` → `pay.subscription_reconsent_required`; card refuses ' +
+      '`pay.mandate_rail_absent` → `socket.psp-partners` (no invent pull). Bounded dunning = MAX_ATTEMPTS_PER_CYCLE then ' +
+      'named `arrears` stall (reachable from fire). Pre-charge notify sealed §13 `socket.pay-precharge-notify` — fire ' +
+      'acknowledges gap with `notified:false` before openInvoice; Ready door `subscription.productReady` never reports notified. ' +
+      'Parked sockets (not this mountain): live card charge-against-mandate (`socket.psp-partners`), real pre-charge delivery.',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
@@ -1893,11 +1900,11 @@ export const FEATURES = [
     status: 'socket',
     dependsOn: ['pay.subscriptions', 'ops.notifications'],
     note:
-      '§13 — SPEC §4 requires every recurring charge notified BEFORE it lands. Today the due runner opens crypto invoices with no ' +
-      'pre-charge hook; merchant webhooks fire on payment events after money-path work. Named in `services/svc-pay/src/subscriptions/mandate-product.ts` ' +
-      '(`PRECHARGE_NOTIFY_SOCKET`) + honest-absent pin `precharge-notify-absent.test.ts`. Closing this needs a real notify/journal delivery path ' +
-      '(svc-notify or merchant webhook upcoming event) that runs before openInvoice — inventing a silent success event is forbidden. ' +
-      'Channel credentials remain `socket.notify-*`.',
+      '§13 — SPEC §4 requires every recurring charge notified BEFORE it lands. D26-P1-P6 sealed the gap honestly: fire path calls ' +
+      '`acknowledgePreChargeNotifyBeforeCharge` with `notified:false` before openInvoice; merchant Ready `subscription.productReady` ' +
+      'exposes the same socket so "notified" cannot be read as true. Closing still needs a real notify/journal delivery path ' +
+      '(svc-notify or merchant webhook upcoming event) — inventing a silent success event remains forbidden. ' +
+      'Channel credentials remain `socket.notify-*`. Pins: mandate-product.ts · precharge-notify-absent.test.ts · subscriptions-done-bar.test.ts.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {

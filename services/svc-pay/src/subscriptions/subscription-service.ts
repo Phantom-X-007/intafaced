@@ -20,6 +20,7 @@ import {
   type StallReason,
 } from './charge-cycle.js';
 import {
+  acknowledgePreChargeNotifyBeforeCharge,
   assertChargeTracesToMandate,
   mandateChargeDisposition,
   normaliseSubscriptionPath,
@@ -1029,6 +1030,23 @@ export class SubscriptionService {
             paymentId = prior[0]?.payment_id ?? null;
           }
           if (!paymentId) {
+            /*
+             * SPEC §4 pre-charge notify — acknowledge the §13 gap BEFORE money
+             * work. `notified` stays false; inventing delivery is forbidden.
+             * Ready/merchant posture reads the same socket.
+             */
+            const notify = acknowledgePreChargeNotifyBeforeCharge({
+              subscriptionId: sub.id,
+              occurrence,
+              path: sub.path,
+            });
+            if (notify.notified !== false || notify.status !== 'absent') {
+              throw new PayError(
+                'Pre-charge notify invent refused — socket.pay-precharge-notify is absent',
+                'pay.subscription_invalid',
+              );
+            }
+
             const opened = await this.openInvoice({
               merchantId: sub.merchantId,
               customerId: sub.customerId,
