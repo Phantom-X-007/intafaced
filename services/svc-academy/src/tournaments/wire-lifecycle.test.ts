@@ -8,9 +8,12 @@ import { transitionSeason } from './season-lifecycle.js';
 import { TournamentError, type SeasonRecord } from './ladder.js';
 import {
   decidePrizeIntent,
+  decidePrizePoolStart,
+  isPrizePoolUnsetRefuse,
   isPrizeRefuseClosed,
   prizeRefuseStatusLine,
   assertNoPrizeAttachment,
+  PRIZE_POOL_UNSET_CODE,
   type PrizeIntentKind,
 } from './prize-refuse.js';
 
@@ -76,6 +79,15 @@ describe('tournament prize plane honesty (blank prizes refuse)', () => {
   });
 
   it('status line is greppable and invent-free', () => {
-    expect(prizeRefuseStatusLine()).toBe('prizes=refuse_closed code=academy.prize_refuse_closed ledger=0');
+    expect(prizeRefuseStatusLine()).toBe(
+      'prizes=refuse_closed code=academy.prize_refuse_closed unset=academy.prize_pool_unset ledger=0 inventIfc=0',
+    );
+  });
+
+  it('blank prize pool cannot start — typed unset refuse (D26-P1-C3)', () => {
+    const d = decidePrizePoolStart(null);
+    expect(isPrizePoolUnsetRefuse(d)).toBe(true);
+    expect(d.code).toBe(PRIZE_POOL_UNSET_CODE);
+    expect(d.inventedIfc).toBe(false);
   });
 });

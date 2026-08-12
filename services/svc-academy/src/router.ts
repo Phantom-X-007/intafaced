@@ -10,6 +10,15 @@ import {
   refuseAmbassadorRevenueShare,
 } from './ambassadors/ifc-pay.js';
 import {
+  PrizePoolRefuseError,
+  assertMayStartPrizeSeason,
+  decidePrizeIntent,
+  decidePrizePoolStart,
+  isPrizeRefuseClosed,
+  prizeRefuseStatusLine,
+  type PrizeIntentKind,
+} from './tournaments/prize-refuse.js';
+import {
   curriculumDepthReport,
   curriculumStudyGuide,
   getCurriculumItem,
@@ -37,7 +46,6 @@ import {
 } from './paper/simulated-result.js';
 import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
-import { decidePrizeIntent, isPrizeRefuseClosed, prizeRefuseStatusLine, type PrizeIntentKind } from './tournaments/prize-refuse.js';
 import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
 
 /**
@@ -413,6 +421,14 @@ const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room,
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof AmbassadorPayRefuseError) {
     // PRECONDITION_FAILED: operator asked for pay before owner rates + ledger recipe exist.
+    return new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: err.message,
+      cause: err,
+    });
+  }
+  if (err instanceof PrizePoolRefuseError) {
+    // PRECONDITION_FAILED: blank pool cannot start; amount present still Class M refuse (no invent IFC).
     return new TRPCError({
       code: 'PRECONDITION_FAILED',
       message: err.message,
@@ -1229,6 +1245,7 @@ export function createAcademyRouter(academy: AcademyService) {
      * Class N/M honesty — IFC prize pools refuse-closed on the wire.
      * Pure helpers already refuse; this mounts them so operators never see a
      * success path that invents pool amounts. No amount fields on the output.
+     * D26-P1-C3: unset start refuse is greppable on statusLine / blankStart.
      */
     tournamentPrizePlane: scopedProcedure('admin:read', { module: 'academy' })
       .output(
@@ -1236,7 +1253,13 @@ export function createAcademyRouter(academy: AcademyService) {
           prizesEnabled: z.literal(false),
           ledgerRecipeReady: z.literal(false),
           academyHoldsPrizeBalance: z.literal(false),
+          inventIfc: z.literal(false),
           statusLine: z.string(),
+          blankStart: z.object({
+            status: z.literal('refuse'),
+            code: z.literal('academy.prize_pool_unset'),
+            reason: z.literal('unset'),
+          }),
           intents: z.array(
             z.object({
               kind: z.enum(['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance']),
@@ -1256,16 +1279,26 @@ export function createAcademyRouter(academy: AcademyService) {
           }
           return { kind: d.kind, status: 'refuse' as const, code: d.code };
         });
+        const blankStart = decidePrizePoolStart(null);
+        if (blankStart.code !== 'academy.prize_pool_unset' || blankStart.reason !== 'unset') {
+          throw new AcademyError('Blank prize start must stay prize_pool_unset', 'academy.season_invalid');
+        }
         return {
           prizesEnabled: false as const,
           ledgerRecipeReady: false as const,
           academyHoldsPrizeBalance: false as const,
+          inventIfc: false as const,
           statusLine: prizeRefuseStatusLine(),
+          blankStart: {
+            status: 'refuse' as const,
+            code: 'academy.prize_pool_unset' as const,
+            reason: 'unset' as const,
+          },
           intents,
         };
       }),
 
-    /** Operator attempt to fund/pay/escrow — always PRECONDITION_FAILED, never invents amounts. */
+    /** Operator attempt to fund/pay/escrow — always refuse, never invents amounts. */
     tournamentPrizeIntent: scopedProcedure('admin:write', { module: 'academy' })
       .input(z.object({ kind: z.enum(['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance']) }))
       .output(
@@ -1290,6 +1323,31 @@ export function createAcademyRouter(academy: AcademyService) {
           academyHoldsPrizeBalance: false as const,
           ledgerRecipeReady: false as const,
         };
+      }),
+
+    /**
+     * D26-P1-C3 — start a prize-bearing season.
+     * Blank / unset pool → PRECONDITION_FAILED `academy.prize_pool_unset`.
+     * Amount present without Class M recipes → still refuse (no invent IFC).
+     * Never returns ok / never invents pool amounts on the wire.
+     */
+    tournamentPrizeStart: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          seasonId: z.string().uuid().optional(),
+          /** Owner pool amount (decimal string). Blank / omitted → unset refuse. */
+          prizePool: z
+            .union([z.string(), z.object({ amount: z.string().optional().nullable() }).passthrough()])
+            .optional()
+            .nullable(),
+        }),
+      )
+      .mutation(({ input }) => {
+        try {
+          assertMayStartPrizeSeason(input.prizePool);
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     setStanding: scopedProcedure('admin:write', { module: 'academy' })
