@@ -97,7 +97,11 @@ export type SupportDataToolRefuseReason =
   | 'not_ticket_owner'
   | 'account_owner_mismatch'
   /** Runtime payload carried a money field — refuse invent, do not strip-and-lie. */
-  | 'balance_field_forbidden';
+  | 'balance_field_forbidden'
+  /** ops.support / identity grounding said plane dark — do not invent account state. */
+  | 'account_plane_dark'
+  /** Grounding was never attempted — not the same as a clean active account. */
+  | 'account_not_attempted';
 
 /**
  * Money-shaped keys that must never appear on an account projection fixture.

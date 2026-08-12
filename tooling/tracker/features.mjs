@@ -1039,7 +1039,7 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
     requires: ['services/svc-agents/src/support-agent'],
-    note: '**D26-P1-A2 2026-08-12:** Denon backend product pass in progress — stoppable runSession, refuse invent balance fields, refuse when account-state asked+missing; existing KB/case-file grounding held. Live ops.support KB plane remains Class X; do not mark done until grounded production environment. No packages/i18n.',
+    note: '**D26-P1-A2 2026-08-12:** Denon backend product pass in progress — stoppable runSession; contracts KB catalog + accountGrounding resolve; refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. Live ops.support production env still Class X; do not mark tracker done until grounded production environment. No packages/i18n.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',

@@ -77,6 +77,7 @@
  * a fabricated answer.
  */
 
+import type { SupportAccountGrounding, SupportKbArticle } from '@intafaced/contracts';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import type { CopyKey } from '../copy.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
@@ -86,10 +87,12 @@ import {
   type AccountProjectionFixture,
   type KbArticleFixture,
   type SupportDataToolOk,
+  type SupportDataToolRefuse,
   type SupportDataToolResult,
   type TicketFixture,
 } from './data-tools.js';
 import type { SupportDeskPlane } from './grounded.js';
+import { resolveSupportAskFixtures } from './grounding-resolve.js';
 import { supportTierGate, type SupportTierLaw } from './tier-gate.js';
 
 /** The agent id the support guardrail is registered under. */
@@ -109,8 +112,12 @@ export const SUPPORT_KB_TOOL = 'support.kb.search';
 export type SupportAsk = {
   readonly tool: string;
   readonly articles?: readonly KbArticleFixture[] | null;
+  /** When set with run `kbCatalog`, resolve articles from the published catalog. */
+  readonly kbQuery?: string | null;
   readonly ticket?: TicketFixture | null;
   readonly account?: AccountProjectionFixture | null;
+  /** Contract grounding from ops.support — unread/plane-dark refuses invent. */
+  readonly accountGrounding?: SupportAccountGrounding | null;
 };
 
 /** Who said no. `guardrail` is the runtime; `tool` is the data tool itself. */
@@ -168,6 +175,8 @@ const ACCOUNT_STATE_MISSING_REASONS = new Set([
   'incomplete_account',
   'balance_field_forbidden',
   'account_owner_mismatch',
+  'account_plane_dark',
+  'account_not_attempted',
 ]);
 
 export type SupportRunOk = {
@@ -352,6 +361,11 @@ export type SupportRunInput = {
    * continue unread asks.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Published ops.support KB catalog. Used when an ask carries `kbQuery`.
+   * Absent catalog + kbQuery → empty hits (escalate), never invented articles.
+   */
+  readonly kbCatalog?: readonly SupportKbArticle[] | null;
 };
 
 /**
@@ -499,17 +513,32 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
           tool,
           // Reached only after the guardrail has allowed the call. An undeclared
           // tool — including every money one — never gets this far.
-          execute: async () =>
-            invokeSupportDataTool({
+          execute: async () => {
+            const resolved = resolveSupportAskFixtures({
+              ask,
+              requesterUserId: input.userId,
+              kbCatalog: input.kbCatalog ?? null,
+            });
+            if (resolved.status === 'refuse') {
+              const refuse: SupportDataToolRefuse = {
+                status: 'refuse',
+                tool,
+                reason: resolved.reason,
+                userMessageKey: 'agents.support.unavailable',
+              };
+              return refuse;
+            }
+            return invokeSupportDataTool({
               tool,
               plane: input.plane,
               requesterUserId: input.userId,
               tierLaw: input.tierLaw ?? null,
               userTier: input.userTier,
-              articles: ask.articles ?? null,
-              ticket: ask.ticket ?? null,
-              account: ask.account ?? null,
-            }),
+              articles: resolved.articles,
+              ticket: resolved.ticket,
+              account: resolved.account,
+            });
+          },
         });
         toolResult = act.result as SupportDataToolResult;
       } catch (err) {
