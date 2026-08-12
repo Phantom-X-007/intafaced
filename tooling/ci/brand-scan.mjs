@@ -481,14 +481,7 @@ function findVendorShellProjectRoots(dir, out = [], depth = 0) {
   }
   for (const name of entries) {
     // Do not use SKIP_DIRS here — it contains `vendor` for the repo-wide walk.
-    if (
-      name === 'node_modules' ||
-      name === '.git' ||
-      name === 'dist' ||
-      name === 'target' ||
-      name === 'build' ||
-      name === '.docker-data'
-    ) {
+    if (name === 'node_modules' || name === '.git' || name === 'dist' || name === 'target' || name === 'build' || name === '.docker-data') {
       continue;
     }
     const full = join(dir, name);
@@ -513,18 +506,7 @@ function collectVendorProductFiles() {
   if (!existsSync(vendorRoot)) return [];
 
   const files = new Set();
-  const shellSkip = new Set([
-    'node_modules',
-    '.git',
-    'dist',
-    '.next',
-    '.turbo',
-    'coverage',
-    'drizzle',
-    '.docker-data',
-    'target',
-    'build',
-  ]);
+  const shellSkip = new Set(['node_modules', '.git', 'dist', '.next', '.turbo', 'coverage', 'drizzle', '.docker-data', 'target', 'build']);
 
   function* walkScoped(dir) {
     if (!existsSync(dir)) return;
