@@ -1006,8 +1006,13 @@ export const FEATURES = [
     phase: '5',
     status: 'done',
     dependsOn: ['bank.accounts'],
-    requires: ['services/svc-bank/src/cards/card-service.ts', 'services/svc-bank/src/cards/issuer.ts'],
+    requires: [
+      'services/svc-bank/src/cards/card-service.ts',
+      'services/svc-bank/src/cards/issuer.ts',
+      'services/svc-bank/src/cards/cards-auth-product.test.ts',
+    ],
     note:
+      '**D26-P1-B2 public-door proof 2026-08-12 (#1765):** `cards-auth-product.test.ts` — auth path via mounted router + ledger half reachable; live-issuer latency stays socket.live-issuer. ' +
       '**SPLIT 2026-08-06** per docs/adr/2026-08-04-bank-vertical-law.md correction 3. This row is the LEDGER HALF, which is what the ' +
       'title names (CardIssuerAdapter + card-sim). The LIVE RAIL half is **socket.live-issuer** and is not counted here. ' +
       '**Reclaimed 2026-08-04** M6 — Nitro agents thin. Class M. ' +
