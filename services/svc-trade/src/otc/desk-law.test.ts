@@ -22,6 +22,7 @@ describe('parseOtcDeskLawJson', () => {
         minStake: '1000',
         counterparty: 'platform',
         quoteTtlMs: 15_000,
+        maxMidAgeSeconds: 120,
       }),
     );
     expect(law.published).toBe(true);
@@ -30,11 +31,22 @@ describe('parseOtcDeskLawJson', () => {
       expect(law.minStake).toBe(parseAmount('1000'));
       expect(law.counterparty).toBe('platform');
       expect(law.quoteTtlMs).toBe(15_000);
+      expect(law.maxMidAgeSeconds).toBe(120);
     }
   });
 
   it('refuses invent — missing spreadBps', () => {
-    expect(() => parseOtcDeskLawJson(JSON.stringify({ published: true, minStake: '1', counterparty: 'platform' }))).toThrow(OtcError);
+    expect(() =>
+      parseOtcDeskLawJson(JSON.stringify({ published: true, minStake: '1', counterparty: 'platform', maxMidAgeSeconds: 60 })),
+    ).toThrow(OtcError);
+  });
+
+  it('refuses invent — missing maxMidAgeSeconds', () => {
+    expect(() =>
+      parseOtcDeskLawJson(
+        JSON.stringify({ published: true, spreadBps: 25, minStake: '1', counterparty: 'platform', quoteTtlMs: 15_000 }),
+      ),
+    ).toThrow(OtcError);
   });
 });
 

@@ -4,7 +4,7 @@ import { OtcDeskService } from './otc-service.js';
 import { FixedOtcStake } from './stake-source.js';
 import { UNPUBLISHED_OTC_DESK_LAW, type OtcDeskLaw } from './desk-law.js';
 import { OtcError } from './errors.js';
-import { createConfigOtcMidSource } from './mid-source.js';
+import { createConfigOtcMidSource, createObservedOtcMidSource } from './mid-source.js';
 
 const USER = '00000000-0000-4000-8000-000000000001';
 /** Minimal principal — avoid pulling auth/contracts into this suite's graph. */
@@ -16,10 +16,13 @@ const published: OtcDeskLaw = {
   minStake: parseAmount('500'),
   counterparty: 'platform',
   quoteTtlMs: 60_000,
+  maxMidAgeSeconds: 60,
 };
 
-/** An ops-published desk mid, standing in for TRADE_OTC_MIDS. */
-const mids = createConfigOtcMidSource('BTC/USDT:200');
+/** Fresh observed mid — standing in for a live TRADE_OTC_MIDS / feed. */
+function freshMids(now: () => Date) {
+  return createObservedOtcMidSource('BTC/USDT:200', now);
+}
 
 describe('OtcDeskService', () => {
   it('deskStatus refuse-closed when law blank', () => {
@@ -32,9 +35,10 @@ describe('OtcDeskService', () => {
   });
 
   it('quote refuses when desk law blank — never invents spread', async () => {
+    let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('9999')), {
       law: UNPUBLISHED_OTC_DESK_LAW,
-      midSource: mids,
+      midSource: freshMids(() => now),
     });
     await expect(svc.quote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' })).rejects.toMatchObject({
       code: 'trade.otc_desk_law_blank',
@@ -42,9 +46,10 @@ describe('OtcDeskService', () => {
   });
 
   it('quote refuses stake gate when below owner min', async () => {
+    let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('100')), {
       law: published,
-      midSource: mids,
+      midSource: freshMids(() => now),
     });
     await expect(svc.quote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' })).rejects.toMatchObject({
       code: 'trade.otc_stake_gate',
@@ -59,7 +64,7 @@ describe('OtcDeskService', () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new OtcDeskService(ledger, new FixedOtcStake(parseAmount('1000')), {
       law: published,
-      midSource: mids,
+      midSource: freshMids(() => now),
       now: () => now,
     });
 
@@ -88,7 +93,7 @@ describe('OtcDeskService', () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('1000')), {
       law: published,
-      midSource: mids,
+      midSource: freshMids(() => now),
       now: () => now,
     });
     const quote = await svc.quote(principal, { side: 'sell', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' });
@@ -114,11 +119,30 @@ describe('OtcDeskService', () => {
     });
 
     // A pair the ops map does not name refuses too — an empty entry is not zero.
+    let now = new Date('2026-08-07T12:00:00.000Z');
     const partial = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('1000')), {
       law: published,
-      midSource: mids,
+      midSource: freshMids(() => now),
+      now: () => now,
     });
     await expect(partial.quote(principal, { side: 'buy', baseAsset: 'SOL', quoteAsset: 'USDT', qty: '1' })).rejects.toMatchObject({
+      code: 'trade.otc_no_reference_price',
+    });
+  });
+
+  /**
+   * Stale mid is refuse-closed (TRADE-PROMISE F4 / D26-P1-T2 fail-closed quote).
+   * Boot-stamped config mids go dark after owner maxMidAgeSeconds.
+   */
+  it('refuses when mid asOf is older than owner maxMidAgeSeconds', async () => {
+    const boot = new Date('2026-08-07T12:00:00.000Z');
+    const now = new Date('2026-08-07T12:02:00.000Z'); // 120s > 60s law
+    const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('1000')), {
+      law: published,
+      midSource: createConfigOtcMidSource('BTC/USDT:200', boot),
+      now: () => now,
+    });
+    await expect(svc.quote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' })).rejects.toMatchObject({
       code: 'trade.otc_no_reference_price',
     });
   });
@@ -135,9 +159,11 @@ describe('OtcDeskService', () => {
     await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: parseAmount('10'), seedId: 'otc-btc-2' }));
     await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: parseAmount('10000'), rail: 'test', railRef: 'otc-u2' }));
 
+    let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new OtcDeskService(ledger, new FixedOtcStake(parseAmount('1000')), {
       law: published,
-      midSource: mids,
+      midSource: freshMids(() => now),
+      now: () => now,
     });
 
     const quote = await svc.quote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' });

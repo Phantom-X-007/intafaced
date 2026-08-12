@@ -13,25 +13,53 @@ const published: OtcDeskLaw = {
   minStake: parseAmount('100'),
   counterparty: 'platform',
   quoteTtlMs: 30_000,
+  maxMidAgeSeconds: 60,
 };
+
+const publishedMaker: OtcDeskLaw = {
+  ...published,
+  counterparty: 'maker',
+};
+
+function boundBuy() {
+  const q = buildOtcQuote({
+    quoteId: 'q1',
+    userId: USER,
+    side: 'buy',
+    baseAsset: 'BTC',
+    quoteAsset: 'USDT',
+    qty: parseAmount('1'),
+    midPrice: parseAmount('100'),
+    spreadBps: 100,
+    counterparty: 'platform',
+    counterpartyId: 'platform:otc-desk',
+    now: new Date('2026-08-07T10:00:00.000Z'),
+    quoteTtlMs: 30_000,
+  });
+  return acceptOtcQuote({ quote: q, now: new Date('2026-08-07T10:00:01.000Z') });
+}
+
+function boundSell() {
+  const q = buildOtcQuote({
+    quoteId: 'q-sell',
+    userId: USER,
+    side: 'sell',
+    baseAsset: 'BTC',
+    quoteAsset: 'USDT',
+    qty: parseAmount('1'),
+    midPrice: parseAmount('100'),
+    spreadBps: 100,
+    counterparty: 'platform',
+    counterpartyId: 'platform:otc-desk',
+    now: new Date('2026-08-07T10:00:00.000Z'),
+    quoteTtlMs: 30_000,
+  });
+  return acceptOtcQuote({ quote: q, now: new Date('2026-08-07T10:00:01.000Z') });
+}
 
 describe('planOtcSettle / postOtcSettle', () => {
   it('refuses when desk law blank — no ledger posts planned', () => {
-    const q = buildOtcQuote({
-      quoteId: 'q1',
-      userId: USER,
-      side: 'buy',
-      baseAsset: 'BTC',
-      quoteAsset: 'USDT',
-      qty: parseAmount('1'),
-      midPrice: parseAmount('100'),
-      spreadBps: 100,
-      counterparty: 'platform',
-      counterpartyId: 'platform:otc-desk',
-      now: new Date('2026-08-07T10:00:00.000Z'),
-      quoteTtlMs: 30_000,
-    });
-    const bound = acceptOtcQuote({ quote: q, now: new Date('2026-08-07T10:00:01.000Z') });
+    const bound = boundBuy();
     expect(() =>
       planOtcSettle({
         law: UNPUBLISHED_OTC_DESK_LAW,
@@ -43,26 +71,25 @@ describe('planOtcSettle / postOtcSettle', () => {
     ).toThrow(OtcError);
   });
 
+  it('refuses maker-routed settle until owner publishes routing recipe', () => {
+    const bound = boundBuy();
+    expect(() =>
+      planOtcSettle({
+        law: publishedMaker,
+        bound: { ...bound, counterparty: 'maker' },
+        takerOrderId: 't1',
+        makerOrderId: 'm1',
+        fillId: 'f1',
+      }),
+    ).toThrowError(/Maker-routed OTC settle/);
+  });
+
   it('posts hold + mm hold + fill via ledger-client only at bound quoted notional', async () => {
     const ledger = new MemoryLedger();
     await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: parseAmount('10'), seedId: 'otc-btc' }));
     await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: parseAmount('1000'), rail: 'test', railRef: 'otc-fund' }));
 
-    const q = buildOtcQuote({
-      quoteId: 'q1',
-      userId: USER,
-      side: 'buy',
-      baseAsset: 'BTC',
-      quoteAsset: 'USDT',
-      qty: parseAmount('1'),
-      midPrice: parseAmount('100'),
-      spreadBps: 100,
-      counterparty: 'platform',
-      counterpartyId: 'platform:otc-desk',
-      now: new Date('2026-08-07T10:00:00.000Z'),
-      quoteTtlMs: 30_000,
-    });
-    const bound = acceptOtcQuote({ quote: q, now: new Date('2026-08-07T10:00:01.000Z') });
+    const bound = boundBuy();
     expect(formatAmount(bound.fillNotional)).toBe('101');
 
     const plan = planOtcSettle({
@@ -81,6 +108,56 @@ describe('planOtcSettle / postOtcSettle', () => {
 
     expect(formatAmount((await ledger.balance(userAvailable(USER, 'BTC'))).amount)).toBe('1');
     expect(formatAmount((await ledger.balance(marketMaker('USDT'))).amount)).toBe('101');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('sell-side settle moves base from taker and quote from house via recipes only', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'USDT', amount: parseAmount('1000'), seedId: 'otc-usdt' }));
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'BTC', amount: parseAmount('2'), rail: 'test', railRef: 'otc-btc-u' }));
+
+    const bound = boundSell();
+    // Sell at mid 100 / 100bps → taker receives mid*(1-spread) = 99 USDT
+    expect(formatAmount(bound.fillNotional)).toBe('99');
+
+    const plan = planOtcSettle({
+      law: published,
+      bound,
+      takerOrderId: 'taker-otc-sell',
+      makerOrderId: 'maker-otc-sell',
+      fillId: 'fill-otc-sell',
+    });
+
+    await postOtcSettle(ledger, plan);
+
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'BTC'))).amount)).toBe('1');
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('99');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  /**
+   * House inventory shortfall must refuse BEFORE the customer hold posts.
+   * mmHold is first on purpose — see settle.ts header.
+   */
+  it('inventory shortfall refuses with customer USDT untouched', async () => {
+    const ledger = new MemoryLedger();
+    // No BTC seed for the house — buy settle needs mmHold(BTC) first.
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: parseAmount('1000'), rail: 'test', railRef: 'otc-fund-short' }));
+
+    const before = formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount);
+    expect(before).toBe('1000');
+
+    const bound = boundBuy();
+    const plan = planOtcSettle({
+      law: published,
+      bound,
+      takerOrderId: 'taker-short',
+      makerOrderId: 'maker-short',
+      fillId: 'fill-short',
+    });
+
+    await expect(postOtcSettle(ledger, plan)).rejects.toBeTruthy();
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('1000');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 });

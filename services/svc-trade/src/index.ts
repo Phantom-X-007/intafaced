@@ -107,9 +107,9 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
-// trade.otc — D-S-02 Stage. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
-// Empty TRADE_OTC_MIDS → the desk can source no price and refuses every quote,
-// which is the correct posture: a dark feed is a refusal, not a fallback.
+// trade.otc — D-S-02 / D26-P1-T2. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
+// Empty TRADE_OTC_MIDS → the desk can source no price and refuses every quote.
+// Boot-stamped mids carry asOf; published maxMidAgeSeconds makes them go dark.
 const otcDeskLaw = parseOtcDeskLawJson(env.TRADE_OTC_DESK_LAW);
 const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET);
 const otcMids = createConfigOtcMidSource(env.TRADE_OTC_MIDS);
