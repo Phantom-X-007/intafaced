@@ -363,7 +363,7 @@ describe('support.reply metered session run', () => {
 
   // ── Honesty: never fabricate what a tool could not return ─────────────────
 
-  it('drops a read the data tool refuses instead of filling it in', async () => {
+  it('refuses when account-state was asked and missing — no invent from KB alone', async () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
@@ -374,16 +374,71 @@ describe('support.reply metered session run', () => {
       ],
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') return;
-    expect(result.answered).toBe(1);
-    expect(result.complete).toBe(false);
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'account_state_missing',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'refuse') return;
     expect(result.unanswered.map((u) => [u.refusedBy, u.reason])).toEqual([
       ['tool', 'missing_fixture'],
       ['tool', 'account_owner_mismatch'],
     ]);
-    // The only facts carried are the ones a tool actually returned.
+    // KB hit is not enough to invent account state — refuse, settle, no silent fee.
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
+  it('stops mid-run on abort without running remaining tools or inventing a feeCharge', async () => {
+    const fake = new FakeRuntime();
+    const ac = new AbortController();
+    ac.abort();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      signal: ac.signal,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'aborted',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'stopped') return;
+    expect(fake.openCalls).toBe(0);
+    expect(fake.executed).toEqual([]);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result.metering.sessionId).toBeNull();
+  });
+
+  it('stops after a partial ask list and still settles the open session', async () => {
+    const fake = new FakeRuntime();
+    const ac = new AbortController();
+    // Abort after the first tool would have been scheduled: pre-abort the signal
+    // once openSession has been called by wrapping act.
+    const originalAct = fake.act.bind(fake);
+    let calls = 0;
+    fake.act = async (input) => {
+      calls += 1;
+      if (calls === 1) ac.abort();
+      return originalAct(input);
+    };
+
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      signal: ac.signal,
+      asks: [kbAsk(), accountAsk(), ticketAsk()],
+    });
+
+    expect(result.status).toBe('stopped');
+    if (result.status !== 'stopped') return;
+    // First ask ran; later asks did not.
+    expect(fake.executed).toEqual([SUPPORT_KB_TOOL]);
     expect(result.findings).toHaveLength(1);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
   });
 
   it('refuses the whole run when NO data source was reachable — no invented answer', async () => {

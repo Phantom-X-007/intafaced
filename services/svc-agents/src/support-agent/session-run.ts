@@ -152,9 +152,23 @@ export type SupportRunMetering = {
   readonly settlements: readonly SupportRunSettlement[];
 };
 
-export type SupportRunRefuseReason = 'desk_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'no_grounded_read';
+export type SupportRunRefuseReason =
+  | 'desk_plane_dark'
+  | 'tier_law_blank'
+  | 'tier_not_granted'
+  | 'no_grounded_read'
+  /** Account read was asked and missing/incomplete/invent — do not answer as if it existed. */
+  | 'account_state_missing';
 
 export type SupportRunEscalateReason = 'kb_no_hit' | 'money_request' | 'desk_refused';
+
+/** Reasons an account-state ask counts as "missing" for grounding honesty. */
+const ACCOUNT_STATE_MISSING_REASONS = new Set([
+  'missing_fixture',
+  'incomplete_account',
+  'balance_field_forbidden',
+  'account_owner_mismatch',
+]);
 
 export type SupportRunOk = {
   readonly status: 'ok';
@@ -263,7 +277,24 @@ export type SupportRunEmpty = {
   readonly metering: SupportRunMetering;
 };
 
-export type SupportRunResult = SupportRunOk | SupportRunEscalate | SupportRunRefuse | SupportRunEmpty;
+/**
+ * Caller aborted mid-run. Remaining tools did not execute; session still
+ * settles/closes so there is no silent leftover feeCharge.
+ */
+export type SupportRunStopped = {
+  readonly status: 'stopped';
+  readonly reason: 'aborted';
+  /**
+   * Reuses `unavailable` so this ship stays off `packages/i18n` (FE fence).
+   * Distinguisher is `status: 'stopped'` + `reason: 'aborted'`, not a new key.
+   */
+  readonly userMessageKey: 'agents.support.unavailable';
+  readonly findings: readonly SupportDataToolOk[];
+  readonly unanswered: readonly SupportUnanswered[];
+  readonly metering: SupportRunMetering;
+};
+
+export type SupportRunResult = SupportRunOk | SupportRunEscalate | SupportRunRefuse | SupportRunEmpty | SupportRunStopped;
 
 function unmetered(assetId: string): SupportRunMetering {
   return { sessionId: null, billedAmount: '0', assetId, sessionClosed: false, settlements: [] };
@@ -315,6 +346,12 @@ export type SupportRunInput = {
    * no money tool and cannot acquire one by being asked nicely.
    */
   readonly moneyRequest?: boolean;
+  /**
+   * Optional abort — tool calls are stoppable. When aborted, the run settles
+   * and closes what it opened; it does not invent a feeCharge and does not
+   * continue unread asks.
+   */
+  readonly signal?: AbortSignal;
 };
 
 /**
@@ -334,6 +371,17 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
   // before any tool is touched. Opening a metered session to discover them would
   // bill a user for the platform's own unreadiness, and would leave an audit
   // trail implying the desk tried. It did not try — it stopped, for free.
+  if (input.signal?.aborted) {
+    return {
+      status: 'stopped',
+      reason: 'aborted',
+      userMessageKey: 'agents.support.unavailable',
+      findings: [],
+      unanswered: [],
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
   if (input.plane === 'dark') {
     return {
       status: 'refuse',
@@ -429,6 +477,19 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     let kb: { readonly by: 'guardrail' } | { readonly by: 'tool'; readonly result: SupportDataToolResult } | null = null;
 
     for (const ask of input.asks) {
+      // Tool calls are stoppable: abort mid-loop, settle what ran, no silent fee.
+      if (input.signal?.aborted) {
+        metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
+        return {
+          status: 'stopped',
+          reason: 'aborted',
+          userMessageKey: 'agents.support.unavailable',
+          findings,
+          unanswered,
+          metering,
+        };
+      }
+
       const tool = ask.tool.trim();
       let toolResult: SupportDataToolResult;
 
@@ -495,6 +556,22 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
       return {
         status: 'refuse',
         reason: 'no_grounded_read',
+        userMessageKey: 'agents.support.unavailable',
+        unanswered,
+        metering,
+      };
+    }
+
+    // Account-state was asked and missing/invent — refuse invent. A KB cite with
+    // complete:false would still read like the desk checked the account.
+    const accountAsked = asked.includes('identity.account.read');
+    const accountMissing = unanswered.some(
+      (u) => u.tool === 'identity.account.read' && ACCOUNT_STATE_MISSING_REASONS.has(u.reason),
+    );
+    if (accountAsked && accountMissing) {
+      return {
+        status: 'refuse',
+        reason: 'account_state_missing',
         userMessageKey: 'agents.support.unavailable',
         unanswered,
         metering,
