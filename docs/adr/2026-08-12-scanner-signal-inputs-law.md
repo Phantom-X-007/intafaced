@@ -46,12 +46,12 @@ Agents **must not** invent additional kinds (`sentiment`, `social`, `ai_score`, 
 
 ## Sealed v1 ranking recipe
 
-| Field               | Value                                                                 |
-| ------------------- | --------------------------------------------------------------------- |
-| `rankingRecipeId`   | `abs_change_x_log_volume`                                             |
-| Required inputs     | `last`, `volume24h`, `change24hBps` (all three on the allowlist)      |
-| Score (relative)    | `abs(change24hBps) × log1p(volume24h)` as a **relative rank key**     |
-| Score is not money  | Decimal-string score is ordering only — never a balance, quote, or PnL |
+| Field              | Value                                                                  |
+| ------------------ | ---------------------------------------------------------------------- |
+| `rankingRecipeId`  | `abs_change_x_log_volume`                                              |
+| Required inputs    | `last`, `volume24h`, `change24hBps` (all three on the allowlist)       |
+| Score (relative)   | `abs(change24hBps) × log1p(volume24h)` as a **relative rank key**      |
+| Score is not money | Decimal-string score is ordering only — never a balance, quote, or PnL |
 
 This is the recipe the Stage-1 fixture ranker already implements. Sealing it here makes that the **only** production ranking recipe until a later owner ADR names another `rankingRecipeId`.
 
@@ -62,14 +62,14 @@ This is the recipe the Stage-1 fixture ranker already implements. Sealing it her
 
 ## Refuse matrix (fail closed)
 
-| Situation                                         | Correct answer                                                                 |
-| ------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Law unpublished / blank / not `p0_11: sealed`     | **Refuse** ranked path (`signal_inputs_law_blank`) — no invent rankings        |
-| Sealed allowlist empty                            | **Refuse** (`inputs_empty`)                                                    |
-| Unknown `rankingRecipeId`                         | **Refuse** (`ranking_recipe_unknown`) — do not guess a formula                 |
+| Situation                                           | Correct answer                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Law unpublished / blank / not `p0_11: sealed`       | **Refuse** ranked path (`signal_inputs_law_blank`) — no invent rankings      |
+| Sealed allowlist empty                              | **Refuse** (`inputs_empty`)                                                  |
+| Unknown `rankingRecipeId`                           | **Refuse** (`ranking_recipe_unknown`) — do not guess a formula               |
 | Sealed recipe missing a required input on allowlist | **Refuse** (`required_inputs_missing`)                                       |
-| Per-row required field null / unparseable / stale | **Omit that row**; if none remain → typed empty / unavailable — never invent |
-| Market plane dark / no live path                  | Existing unavailable / dark refuse — still no invent                           |
+| Per-row required field null / unparseable / stale   | **Omit that row**; if none remain → typed empty / unavailable — never invent |
+| Market plane dark / no live path                    | Existing unavailable / dark refuse — still no invent                         |
 
 Wire copy key for the law-level refuse: `agents.scanner.signal_inputs_closed` (brand-safe; no vendor names).
 
