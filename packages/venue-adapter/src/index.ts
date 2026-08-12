@@ -11,6 +11,7 @@ export * from './source.js';
 export * from './router.js';
 export * from './cost-model.js';
 export * from './consolidated-book.js';
+export * from './payout-grade.js';
 
 /**
  * The §27 CONNECT fabric — WS-first sequenced books, per-venue rate governing,
