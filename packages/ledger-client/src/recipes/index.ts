@@ -16,6 +16,12 @@ import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfall
 import { subAccountTransfer } from './sub-accounts.js';
 import { marketListingFee, marketPremiumPlacement, marketPurchase } from './market.js';
 import {
+  assertEscrowDisputeRuling,
+  assertEscrowRefundResolution,
+  disputeRulingMeta,
+  type EscrowDisputeRuling,
+} from './escrow-dispute-law.js';
+import {
   burnAccount,
   houseFees,
   merchantClearing,
@@ -32,6 +38,9 @@ import {
   tokenStakeAccount,
   withdrawalHoldAccount,
 } from '../accounts.js';
+
+export type { EscrowDisputeRuling } from './escrow-dispute-law.js';
+export { NATURAL_PERSON_ID, isNaturalPersonId, assertEscrowDisputeRuling, assertEscrowRefundResolution } from './escrow-dispute-law.js';
 
 /**
  * LEDGER RECIPES (§4.2).
@@ -622,7 +631,14 @@ export interface EscrowInput {
   amount: Amount;
 }
 
-/** Seller's crypto moves into escrow the moment the taker accepts. */
+/**
+ * Seller's crypto moves into escrow the moment the taker accepts — the hold.
+ *
+ * Under dispute law (ADR 2026-08-04) this pot stays put through `disputed` and
+ * through escalate-and-hold: the timer never posts a release/refund. Disposition
+ * is `escrowRelease` / `escrowRefund` only after a human ruling (optional
+ * `ruling` on those recipes enforces natural-person attribution on the wire).
+ */
 export function escrowLock(input: EscrowInput): PostRequest {
   requirePositive('escrow amount', input.amount);
   return {
@@ -637,9 +653,18 @@ export function escrowLock(input: EscrowInput): PostRequest {
   };
 }
 
-/** Seller confirms fiat received — escrow releases to the buyer. */
-export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostRequest {
+/**
+ * Seller confirms fiat received — escrow releases to the buyer.
+ *
+ * Optional `ruling` (ADR D-S-08): when the caller marks this post as a
+ * moderated dispute disposition, `rulingBy` must be a natural-person UUID.
+ * Happy-path seller confirm omits `ruling` and is unchanged. Idempotency key
+ * stays `p2p.escrow.release:<tradeId>` so svc-p2p can adopt attribution without
+ * a key migration.
+ */
+export function escrowRelease(input: EscrowInput & { feeBps?: number; ruling?: EscrowDisputeRuling }): PostRequest {
   requirePositive('escrow amount', input.amount);
+  assertEscrowDisputeRuling(input.ruling, 'escrowRelease');
   const feeBps = input.feeBps ?? 0;
   // Same class as tradeFill: an unbound feeBps at 10000 gives the buyer nothing;
   // above that the buyer leg goes negative and is refused four layers down with a
@@ -655,11 +680,12 @@ export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostReq
     throw new InvalidEntryError('Fee exceeds escrow value — check fee bps configuration');
   }
 
+  const rulingMeta = disputeRulingMeta(input.ruling);
   return {
     idempotencyKey: `p2p.escrow.release:${input.tradeId}`,
     module: 'p2p',
     reason: 'p2p.escrow.release',
-    meta: { tradeId: input.tradeId, feeBps },
+    meta: { tradeId: input.tradeId, feeBps, ...rulingMeta },
     entries: [
       credit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
       debit(userAvailable(input.buyerId, input.assetId), toBuyer),
@@ -668,14 +694,24 @@ export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostReq
   };
 }
 
-/** Cancelled or resolved in the seller's favour — escrow returns untouched. */
-export function escrowRefund(input: EscrowInput & { resolution?: string }): PostRequest {
+/**
+ * Cancelled or resolved in the seller's favour — escrow returns untouched.
+ *
+ * Machine disposition strings (`system:p2p-backstop`, `timeout`, …) are refused
+ * on `resolution`. Moderated dispute refunds pass `ruling` with a natural-person
+ * `rulingBy` (same allowlist as `escrowRelease`).
+ */
+export function escrowRefund(input: EscrowInput & { resolution?: string; ruling?: EscrowDisputeRuling }): PostRequest {
   requirePositive('escrow amount', input.amount);
+  assertEscrowRefundResolution(input.resolution, 'escrowRefund');
+  assertEscrowDisputeRuling(input.ruling, 'escrowRefund');
+  const resolution = input.resolution ?? 'cancelled';
+  const rulingMeta = disputeRulingMeta(input.ruling);
   return {
     idempotencyKey: `p2p.escrow.refund:${input.tradeId}`,
     module: 'p2p',
     reason: 'p2p.escrow.refund',
-    meta: { tradeId: input.tradeId, resolution: input.resolution ?? 'cancelled' },
+    meta: { tradeId: input.tradeId, resolution, ...rulingMeta },
     entries: [
       credit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
       debit(userAvailable(input.sellerId, input.assetId), input.amount),
