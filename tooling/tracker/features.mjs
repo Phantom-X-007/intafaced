@@ -679,10 +679,9 @@ export const FEATURES = [
       'docs/pay/PLUGINS-REFERENCE-PATH-2026-08-10.md',
     ],
     note:
-      '**D26-P1-P8 2026-08-12:** Done bar = one real plugin path (TS reference client) + §13 PHP CMS socket. ' +
+      '**DONE 2026-08-12 (D26-P1-P8):** One real plugin path (TS reference client) + §13 PHP CMS socket. ' +
       'Client pins create/get/authorize/capture/refund + webhook-endpoints/deliveries; https-only register; ' +
-      'frozen HMAC vectors; no Woo/Magento/OpenCart PHP in monorepo CI. Law §13 socket opened. ' +
-      'Was reclaimed 2026-08-04 M1; wave-13 #1633 banked install/auth; this closes the mountain.',
+      'frozen HMAC vectors; public-door sendPluginRequest E2E; no Woo/Magento/OpenCart PHP in monorepo CI.',
   }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', {
     module: 'pay',
