@@ -136,18 +136,14 @@ const SKIP_DIRS = new Set([
   // would go unscanned if it were ever parked under a `vendor/` directory.
   // Don't do that.
   //
-  // 2026-08-03: that paragraph was describing a hole while calling it a
-  // trade-off. The vendored Vue shell became the SOLE product surface, so the
-  // one tree this scan never opens is now the only one whose copy a user reads,
-  // and the file count printed at the bottom has never included a single file
-  // of it. Deleting this entry is still the wrong fix — measured, it takes the
-  // repo-wide result from 0 findings to 59, of which 51 are build tooling,
-  // compose bind-mount paths and the upstream's own attribution documents — and
-  // it would not even work, because EXTENSIONS below has no `.vue` and the
-  // shell is 70 single-file components. `tooling/ci/shell-brand-scan.mjs`
-  // covers it instead: the same FORBIDDEN list, PARSED OUT OF THIS FILE so the
-  // two cannot drift, plus `.vue`, against a frozen baseline that can only
-  // shrink. The Java trees stay skipped, for the reason above.
+  // 2026-08-03 / D26-P2-14: deleting this entry is still the wrong fix —
+  // measured, a blind walk of `vendor/` takes the repo-wide result from 0
+  // findings to thousands, almost all load-bearing Java package/groupId lines
+  // that are not user-facing copy. The product surfaces inside vendor ARE
+  // scanned: see `collectVendorProductFiles()` below (Vue shell roots + Java
+  // `src/main/resources`). `tooling/ci/shell-brand-scan.mjs` remains the
+  // relaxed-boundary ratchet over the same Vue tree so welded identifiers
+  // cannot hide behind `\b`.
   'vendor',
 
   // Tool and package caches. Not our source, not in git, not in CI — but they
@@ -377,10 +373,38 @@ const ALLOWLIST = [
     reason:
       'internal board backlog; must name exact shell paths an agent may touch or territory is unenforceable. Not shipped to users. Remove once vendor dir is renamed.',
   },
+  // D26-P2-14 — vendor product-surface allowlist. Prefer deleting the name in
+  // the tree; these rows exist only where the hit is upstream attribution that
+  // is not shipped to customers and must not force a FE craft edit under the
+  // nitro-frontend-all lane.
+  {
+    path: join('vendor', 'upstream-exchange', '04_Web_Admin', 'README.md'),
+    reason:
+      'upstream admin console attribution README; not the served product surface and not shipped to customers. Remove once the title is rebranded.',
+  },
 ];
 
 /** Only these extensions can carry shipped copy. */
-const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.json', '.md', '.mdx', '.html', '.css', '.yaml', '.yml'];
+const EXTENSIONS = [
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.json',
+  '.md',
+  '.mdx',
+  '.html',
+  '.css',
+  '.yaml',
+  '.yml',
+  // D26-P2-14: Vue SFCs are the product shell's user-facing markup.
+  '.vue',
+  // Java resource catalogues / templates that can surface in API/HTML responses.
+  '.properties',
+  '.ftl',
+  '.xml',
+];
 
 function isAllowlisted(relPath) {
   if (isInternalPastePath(relPath)) return true;
@@ -406,6 +430,19 @@ function selfTest() {
   assert(isInternalPastePath('docs/START-HERE.md') === false, 'ordinary docs not paste');
   assert(isInternalPastePath('docs/paste-extra/nope.md') === false, 'paste-extra is not paste-wN');
 
+  // D26-P2-14: vendor product surfaces must be discoverable when the tree exists.
+  const vendorRoot = join(ROOT, 'vendor');
+  if (existsSync(vendorRoot)) {
+    const shells = findVendorShellProjectRoots(vendorRoot);
+    assert(shells.length >= 1, 'vendor tree present but no Vue shell project root discovered');
+    const productFiles = collectVendorProductFiles();
+    assert(productFiles.length > 0, 'vendor product-surface walk returned 0 files');
+    assert(
+      productFiles.some((f) => f.endsWith('.vue')),
+      'vendor product-surface walk must include at least one .vue file',
+    );
+  }
+
   if (fails.length) {
     console.error('brand-scan --self-test FAIL:');
     for (const f of fails) console.error(`  · ${f}`);
@@ -413,11 +450,159 @@ function selfTest() {
   }
   console.log('brand-scan --self-test OK');
   console.log('  fixture paste-wN / PASTE-BUILD-WAVE-N / docs/paste/** allowed; product surfaces not');
+  console.log('  vendor shell + Java resources discoverable when vendor/ is present');
   process.exit(0);
 }
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isDirectRun && process.argv.includes('--self-test')) selfTest();
+
+/**
+ * Vue shell project roots under `vendor/` — discovered, never hard-coded as a
+ * single upstream path, so a directory rename does not blind this gate.
+ *
+ * A root is any directory holding a Vue entry pair: `App.vue`/`app.vue` beside
+ * `main.js`. The scanned unit is the PROJECT root (parent of that directory),
+ * matching `shell-brand-scan.mjs`, so package.json / README / config stay in
+ * scope with the SFCs.
+ */
+function findVendorShellProjectRoots(dir, out = [], depth = 0) {
+  if (depth > 6 || !existsSync(dir)) return out;
+  let entries;
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return out;
+  }
+  const names = new Set(entries.map((n) => n.toLowerCase()));
+  if (names.has('app.vue') && names.has('main.js')) {
+    out.push(resolve(dir, '..'));
+    return out;
+  }
+  for (const name of entries) {
+    // Do not use SKIP_DIRS here — it contains `vendor` for the repo-wide walk.
+    if (
+      name === 'node_modules' ||
+      name === '.git' ||
+      name === 'dist' ||
+      name === 'target' ||
+      name === 'build' ||
+      name === '.docker-data'
+    ) {
+      continue;
+    }
+    const full = join(dir, name);
+    try {
+      if (statSync(full).isDirectory()) {
+        if (isSeparateCheckout(full)) continue;
+        findVendorShellProjectRoots(full, out, depth + 1);
+      }
+    } catch {
+      /* unreadable */
+    }
+  }
+  return out;
+}
+
+/**
+ * Files inside vendor that can reach a user without walking every Java
+ * package line: Vue shell project trees + `src/main/resources` catalogues.
+ */
+function collectVendorProductFiles() {
+  const vendorRoot = join(ROOT, 'vendor');
+  if (!existsSync(vendorRoot)) return [];
+
+  const files = new Set();
+  const shellSkip = new Set([
+    'node_modules',
+    '.git',
+    'dist',
+    '.next',
+    '.turbo',
+    'coverage',
+    'drizzle',
+    '.docker-data',
+    'target',
+    'build',
+  ]);
+
+  function* walkScoped(dir) {
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      if (shellSkip.has(name)) continue;
+      const full = join(dir, name);
+      let stats;
+      try {
+        stats = statSync(full);
+      } catch {
+        continue;
+      }
+      if (stats.isDirectory()) {
+        if (isSeparateCheckout(full)) continue;
+        yield* walkScoped(full);
+      } else if (EXTENSIONS.some((ext) => name.endsWith(ext))) {
+        yield full;
+      }
+    }
+  }
+
+  for (const projectRoot of new Set(findVendorShellProjectRoots(vendorRoot))) {
+    for (const file of walkScoped(projectRoot)) files.add(file);
+  }
+
+  /**
+   * Java `src/main/resources` copy surfaces only.
+   *
+   * `application*.properties` / Spring wiring XML under vendor carry load-bearing
+   * DB names, SMS signs and module prefixes — renaming them is a Java rebrand
+   * mountain, not a gate-allowlist dump. This walk still opens every message
+   * catalogue and template so a partner name cannot hide in response copy.
+   */
+  const JAVA_COPY_EXT = new Set(['.ftl', '.html', '.htm', '.md', '.mdx', '.json', '.yml', '.yaml', '.txt']);
+  function isJavaCopyResource(name) {
+    const lower = name.toLowerCase();
+    if (/^application(\-.+)?\.properties$/.test(lower)) return false;
+    if (/^bootstrap(\-.+)?\.(properties|ya?ml)$/.test(lower)) return false;
+    if (/^logback/.test(lower)) return false;
+    if (lower.endsWith('.properties')) return true; // messages_*.properties etc.
+    const dot = lower.lastIndexOf('.');
+    if (dot < 0) return false;
+    return JAVA_COPY_EXT.has(lower.slice(dot));
+  }
+
+  function walkJavaResources(dir, depth = 0) {
+    if (depth > 10 || !existsSync(dir)) return;
+    let entries;
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of entries) {
+      if (shellSkip.has(name)) continue;
+      const full = join(dir, name);
+      let stats;
+      try {
+        stats = statSync(full);
+      } catch {
+        continue;
+      }
+      if (stats.isDirectory()) {
+        if (isSeparateCheckout(full)) continue;
+        if (name === 'resources' && dir.replace(/\\/g, '/').endsWith('src/main')) {
+          for (const file of walkScoped(full)) {
+            if (isJavaCopyResource(file.split(/[\\/]/).pop())) files.add(file);
+          }
+          continue;
+        }
+        walkJavaResources(full, depth + 1);
+      }
+    }
+  }
+  walkJavaResources(vendorRoot);
+
+  return [...files];
+}
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -433,13 +618,18 @@ function* walk(dir) {
 
 const violations = [];
 let scanned = 0;
+let vendorProductScanned = 0;
 
-for (const file of walk(ROOT)) {
-  const rel = relative(ROOT, file);
-  if (isAllowlisted(rel)) continue;
+const seen = new Set();
+function scanFile(file) {
+  const abs = resolve(file);
+  if (seen.has(abs)) return;
+  seen.add(abs);
+  const rel = relative(ROOT, abs);
+  if (isAllowlisted(rel)) return;
 
   scanned++;
-  const content = readFileSync(file, 'utf8');
+  const content = readFileSync(abs, 'utf8');
   const lines = content.split('\n');
 
   for (const { pattern, reason } of FORBIDDEN) {
@@ -451,6 +641,15 @@ for (const file of walk(ROOT)) {
       }
     });
   }
+}
+
+for (const file of walk(ROOT)) scanFile(file);
+
+const vendorProductFiles = collectVendorProductFiles();
+for (const file of vendorProductFiles) {
+  const before = scanned;
+  scanFile(file);
+  if (scanned > before) vendorProductScanned++;
 }
 
 if (violations.length > 0) {
@@ -483,14 +682,19 @@ if (scanned === 0) {
   process.exit(1);
 }
 
+// D26-P2-14: when vendor/ is present, the product-surface INCLUDE walk must
+// actually open files. A green tick that only covers services/docs while the
+// sole UI lives under vendor/ is the hole this gate closed once already.
+if (existsSync(join(ROOT, 'vendor')) && vendorProductScanned === 0) {
+  console.error('\n✖ BRAND SCAN FAILED — vendor/ is present but 0 vendor product-surface files were read.');
+  console.error('  Vue shell roots + Java src/main/resources must be in scope (D26-P2-14).');
+  console.error('  Check collectVendorProductFiles() / findVendorShellProjectRoots() — discovery is blind.\n');
+  process.exit(1);
+}
+
 // The count is qualified on purpose, and on the SAME line, because `gates.mjs`
 // prints only the last non-empty line as a gate's summary — a caveat on a second
 // line is a caveat nobody reads in CI.
-//
-// `vendor` is in SKIP_DIRS, so this number has never included one file of the
-// product shell, and an unqualified "clean" over a repo whose only user-facing
-// surface is skipped reads as a far larger claim than this scan can make. That
-// wording is what let the hole survive: the line was true and sounded total.
 console.log(
-  `✓ brand-scan clean — ${scanned} files, 0 forbidden names (Doctrine §0.7) · vendored trees excluded, product surface covered by shell-brand-scan`,
+  `✓ brand-scan clean — ${scanned} files (incl. ${vendorProductScanned} vendor product-surface), 0 forbidden names (Doctrine §0.7)`,
 );
