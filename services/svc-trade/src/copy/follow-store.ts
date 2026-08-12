@@ -88,6 +88,13 @@ export type RunFeeShareSettleOnceResult =
   | { readonly status: 'claimed'; readonly record: StoredSettledFeeShare };
 
 export interface CopyFollowStore {
+  /**
+   * Linearize every action for one follow across processes.
+   *
+   * Kill/unfollow acknowledgements wait for an already-started mirror/settle;
+   * after acknowledgement, no later action can pass a stale follow snapshot.
+   */
+  runFollowExclusive<T>(followId: string, run: (lockedStore: CopyFollowStore) => Promise<T>): Promise<T>;
   saveFollow(follow: CopyFollow, exposure?: Amount): Promise<void>;
   getFollow(followId: string): Promise<CopyFollow | null>;
   deleteFollow(followId: string): Promise<void>;
@@ -192,6 +199,10 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   /** Keyed `${followId}\0${fillId}` — one fee-share settle per follower fill. */
   private readonly settled = new Map<string, StoredSettledFeeShare>();
   private readonly exclusive = createExclusiveQueue();
+
+  async runFollowExclusive<T>(followId: string, run: (lockedStore: CopyFollowStore) => Promise<T>): Promise<T> {
+    return this.exclusive(`follow:${followId}`, () => run(this));
+  }
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
     this.follows.set(follow.followId, follow);
@@ -410,7 +421,53 @@ function rowToMirrored(row: MirroredFillRow): StoredMirrorPlan {
  * Migration: drizzle/0021_copy_mirrored_fills.sql. Unit tests use Memory.
  */
 export class SqlCopyFollowStore implements CopyFollowStore {
-  constructor(private readonly sql: Sql) {}
+  constructor(
+    private readonly sql: Sql,
+    private readonly lockedFollowId?: string,
+  ) {}
+
+  private async withAdvisoryLock<T>(key: string, run: () => Promise<T>): Promise<T> {
+    // Session locks must be acquired and released on the SAME physical
+    // connection. `sql.reserve()` pins one; issuing lock/unlock through the pool
+    // can unlock a different session and silently leave the first lock behind.
+    const connection = await this.sql.reserve();
+    let locked = false;
+    try {
+      await connection`SELECT pg_advisory_lock(hashtext(${key}))`;
+      locked = true;
+      return await run();
+    } finally {
+      try {
+        if (locked) {
+          await connection`SELECT pg_advisory_unlock(hashtext(${key}))`;
+        }
+      } finally {
+        connection.release();
+      }
+    }
+  }
+
+  async runFollowExclusive<T>(followId: string, run: (lockedStore: CopyFollowStore) => Promise<T>): Promise<T> {
+    const connection = await this.sql.reserve();
+    const lockKey = `copy-follow:${followId}`;
+    let locked = false;
+    try {
+      await connection`SELECT pg_advisory_lock(hashtext(${lockKey}))`;
+      locked = true;
+      // Every guarded query uses the same pinned connection. Holding a session
+      // lock on one pool connection while querying through another can exhaust
+      // the pool when many follows settle concurrently.
+      return await run(new SqlCopyFollowStore(connection, followId));
+    } finally {
+      try {
+        if (locked) {
+          await connection`SELECT pg_advisory_unlock(hashtext(${lockKey}))`;
+        }
+      } finally {
+        connection.release();
+      }
+    }
+  }
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
     const markets = JSON.stringify([...follow.envelope.permittedMarkets]);
@@ -690,11 +747,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     fillId: string,
     run: () => Promise<StoredSettledFeeShare>,
   ): Promise<RunFeeShareSettleOnceResult> {
-    // Session advisory lock serialises concurrent redeliveries of the same fill
-    // across processes (mirrors Memory exclusive). Lock key is stable text hash.
-    const lockKey = `copy-settle:${followId}:${fillId}`;
-    await this.sql`SELECT pg_advisory_lock(hashtext(${lockKey}))`;
-    try {
+    const settleOnce = async () => {
       const existing = await this.getSettledFeeShare(followId, fillId);
       if (existing) {
         return { status: 'duplicate' as const, record: existing };
@@ -725,9 +778,13 @@ export class SqlCopyFollowStore implements CopyFollowStore {
       // re-read wins. In practice the advisory lock prevents this path.
       const saved = (await this.getSettledFeeShare(followId, fillId)) ?? record;
       return { status: 'claimed' as const, record: saved };
-    } finally {
-      await this.sql`SELECT pg_advisory_unlock(hashtext(${lockKey}))`;
+    };
+    // CopyService holds the stronger per-follow lock for the whole money path.
+    // Avoid reserving a second pool connection while that lock is held.
+    if (this.lockedFollowId === followId) {
+      return settleOnce();
     }
+    return this.withAdvisoryLock(`copy-settle:${followId}:${fillId}`, settleOnce);
   }
 }
 
