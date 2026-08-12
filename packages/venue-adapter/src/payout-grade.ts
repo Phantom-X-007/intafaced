@@ -46,12 +46,7 @@ export const DEFAULT_PAYOUT_GRADE_POLICY: PayoutGradePolicy = {
   minBestLevelNotional: DEFAULT_MIN_BEST_LEVEL_NOTIONAL,
 };
 
-export type PayoutGradeRefuseReason =
-  | 'empty_book'
-  | 'one_sided'
-  | 'thin_bid'
-  | 'thin_ask'
-  | 'malformed_level';
+export type PayoutGradeRefuseReason = 'empty_book' | 'one_sided' | 'thin_bid' | 'thin_ask' | 'malformed_level';
 
 export interface PayoutGradeAccepted {
   readonly ok: true;

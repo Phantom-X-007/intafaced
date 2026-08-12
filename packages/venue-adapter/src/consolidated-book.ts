@@ -1,11 +1,7 @@
 import { type Amount, add, parseAmount, formatAmount, mul, ZERO } from '@intafaced/ledger-client';
 import type { OrderBook } from '@intafaced/exchange-contract';
 import { isRoutable, type LiquiditySource } from './source.js';
-import {
-  assessOrderBookPayoutGrade,
-  DEFAULT_PAYOUT_GRADE_POLICY,
-  type PayoutGradePolicy,
-} from './payout-grade.js';
+import { assessOrderBookPayoutGrade, DEFAULT_PAYOUT_GRADE_POLICY, type PayoutGradePolicy } from './payout-grade.js';
 
 /**
  * CONSOLIDATED ORDER BOOK.
