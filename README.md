@@ -10,13 +10,13 @@
 
 <!-- tracker:start -->
 
-`█████████░░░░░░░░░░░` **43%** — 64 of 148 features shipped
+`█████████░░░░░░░░░░░` **44%** — 65 of 148 features shipped
 
-Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 8/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 14/55 · **5P** 1/4
+Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 8/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 15/55 · **5P** 1/4
 
 **In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007)
 
-**🟢 27 ready to claim** — nothing blocks these:
+**🟢 26 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.copy` — Copy trading, audited leaders, fee-share (not profit-share)
@@ -26,7 +26,7 @@ Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 8/18 · **3P** 9/13 ·
 - `trade.mm-bot` — Internal market-maker seeding books at launch
 - `venue.aggregation` — External venue adapters via CCXT (cross-venue)
 - `web.terminal` — Pro terminal — depth, charts, hotkeys, sub-accounts
-- …and 19 more
+- …and 18 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
