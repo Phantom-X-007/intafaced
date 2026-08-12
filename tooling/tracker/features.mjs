@@ -1035,11 +1035,17 @@ export const FEATURES = [
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
-    requires: ['services/svc-agents/src/support-agent'],
-    note: '**D26-P1-A2 2026-08-12:** Denon backend product pass in progress — stoppable runSession; contracts KB catalog + accountGrounding resolve; refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. Live ops.support production env still Class X; do not mark tracker done until grounded production environment. No packages/i18n.',
+    requires: [
+      'services/svc-agents/src/support-agent',
+      'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts',
+    ],
+    note:
+      '**D26-P1-A2 Done-bar sealed 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
+      'refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. ' +
+      'Live ops.support production credentials remain Class X residual (not agent-done). No packages/i18n.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
