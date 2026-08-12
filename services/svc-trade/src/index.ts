@@ -285,7 +285,7 @@ const mmSeedJobs = startMmSeedJobs({
   marketFor: async (marketId) => {
     const m = await trade.marketById(marketId);
     if (!m) return null;
-    return { symbol: m.symbol, kind: m.kind, status: m.status };
+    return { symbol: m.symbol, kind: m.kind, status: m.status, assetClass: m.assetClass };
   },
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
   config: {

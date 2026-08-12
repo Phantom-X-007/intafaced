@@ -27,18 +27,21 @@ async function fundMm(ledger: MemoryLedger, asset: string, amount: string, seedI
 /** Active spot — the only market users can trade by default. */
 const ACTIVE_SPOT: SeedTradableMarket = {
   symbol: 'BTC/USDT',
+  assetClass: 'crypto',
   kind: 'spot',
   status: 'active',
 };
 
 const HALTED_SPOT: SeedTradableMarket = {
   symbol: 'BTC/USDT',
+  assetClass: 'crypto',
   kind: 'spot',
   status: 'halted',
 };
 
 const ACTIVE_FUTURES: SeedTradableMarket = {
   symbol: 'BTC/USDT-PERP',
+  assetClass: 'crypto',
   kind: 'futures',
   status: 'active',
 };
