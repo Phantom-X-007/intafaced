@@ -1920,6 +1920,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'incomplete_account',
                   'not_ticket_owner',
                   'account_owner_mismatch',
+                  'balance_field_forbidden',
                 ]),
                 userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               }),
@@ -2155,15 +2156,23 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               metering: runMeteringOutput,
             }),
             z.object({
+              status: z.literal('stopped'),
+              reason: z.literal('aborted'),
+              userMessageKey: z.literal('agents.support.stopped'),
+              findings: z.array(supportFindingOutput),
+              unanswered: z.array(supportUnansweredOutput),
+              metering: runMeteringOutput,
+            }),
+            z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read']),
+              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read', 'account_state_missing']),
               userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               unanswered: z.array(supportUnansweredOutput),
               metering: runMeteringOutput,
             }),
           ]),
         )
-        .mutation(({ ctx, input }) =>
+        .mutation(({ ctx, input, signal }) =>
           guard(async () => {
             const result = await runSupportReplySession({
               runtime,
@@ -2173,6 +2182,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               tierLaw: input.law ?? null,
               userTier: input.userTier,
               ...(input.moneyRequest === undefined ? {} : { moneyRequest: input.moneyRequest }),
+              ...(signal === undefined ? {} : { signal }),
               asks: input.asks.map((ask) => ({
                 tool: ask.tool,
                 articles: ask.articles ?? null,
@@ -2220,6 +2230,17 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 ? { status: 'ok' as const, tool: 'support.kb.search' as const, articles: f.articles.map((a) => ({ ...a })) }
                 : f,
             );
+
+            if (result.status === 'stopped') {
+              return {
+                status: 'stopped' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                findings,
+                unanswered,
+                metering,
+              };
+            }
 
             if (result.status === 'escalate') {
               const cf = result.caseFile;

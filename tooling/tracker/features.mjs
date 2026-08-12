@@ -1024,8 +1024,10 @@ export const FEATURES = [
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession, boot-register, money denylist. STILL NOT done: live ops.support KB plane in production env. Not tracker done until grounded env.',
+    note: '**D26-P1-A2 2026-08-12:** Denon backend product pass in progress — KB + account-state grounded runSession, AbortSignal stoppable mid-loop (settle/close, no silent feeCharge), invent-balance refuse (`balance_field_forbidden` / `account_state_missing`). Live ops.support KB plane remains Class X; do not mark done until grounded production environment.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',

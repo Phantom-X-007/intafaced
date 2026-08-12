@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SUPPORT_MONEY_TOOLS } from './guardrail.js';
 import {
+  accountProjectionHasInventMoney,
   invokeSupportDataTool,
   isSupportDataToolOk,
   supportAnswerOrEscalate,
@@ -135,6 +136,17 @@ describe('support Stage-2 account.read — status only, never a balance', () => 
   it('refuses a missing or half-filled projection', () => {
     expect(read({ account: null })).toMatchObject({ reason: 'missing_fixture' });
     expect(read({ account: { ...account, kycTier: '' } })).toMatchObject({ reason: 'incomplete_account' });
+  });
+
+  it('refuses invent balance fields instead of stripping them into a clean projection', () => {
+    const hostile = { ...account, balance: '100.00' } as typeof account & { balance: string };
+    expect(read({ account: hostile })).toMatchObject({
+      status: 'refuse',
+      reason: 'balance_field_forbidden',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(accountProjectionHasInventMoney(hostile)).toBe(true);
+    expect(accountProjectionHasInventMoney(account)).toBe(false);
   });
 });
 
