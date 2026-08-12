@@ -256,6 +256,13 @@ export const ENFORCED = {
       'refuses via its stale-entry ratchet rather than a zero-file branch: with no tree, every tolerated-offender path ' +
       'is stale. Correct outcome, adjacent mechanism — recorded so nobody reads this row as a dedicated empty-scan guard.',
   },
+  'money-skip-honesty': {
+    kind: 'guard',
+    must: /MONEY SKIP HONESTY FAILED/,
+    note:
+      'D26-P2-13 seal: with money roots absent it refuses "no money-path roots"; with roots empty of the inventoried ' +
+      'files it refuses via the stale-row ratchet. Either way it cannot print clean over nothing.',
+  },
   'compose-secret-parity': {
     kind: 'uncaught',
     must: /ENOENT[\s\S]*env\.ts/,

@@ -348,6 +348,17 @@ export const GATES = [
       'remain on the register because they still skip invisibly — see the entries for what actually holds each.',
   },
   {
+    id: 'money-skip-honesty',
+    script: 'tooling/ci/money-skip-honesty-scan.mjs',
+    doctrine: '§14 / D26-P2-13',
+    why:
+      'skip-honesty forbids new private probes repo-wide; money still needed a sealed inventory so a new ' +
+      'conditional skip (or hard it.skip) under ledger/trade/pay/bank/p2p/matching/token/market/ws cannot ' +
+      'grow silently and look like coverage. tooling/ci/money-skip-inventory.mjs is the register — every ' +
+      'money-path skip is listed with a kind, or deleted. The list ratchets both ways. One private-probe ' +
+      'debt remains (svc-pay evm-chain.live); it stays coupled to unreported-suites PRIVATE_PROBE.',
+  },
+  {
     id: 'compose-secret-parity',
     script: 'tooling/ci/compose-secret-parity.mjs',
     doctrine: '§14',
@@ -441,6 +452,8 @@ export const NOT_GATES = {
     'a reporter, not a gate: it prints which infrastructure-backed suites actually executed. It never fails a clean run — it exits 2 for "incomplete but permitted", which verify reports without failing. Run by verify.mjs after the test step.',
   'unreported-suites.mjs':
     'data, not a scan — the register of suites that still skip invisibly, each with the specific reason it was left and what lifts it. It exports two lists and runs nothing. Both skip-honesty-scan.mjs and infra-verdict.mjs import it; the scan fails if an entry goes stale, so it cannot rot into blanket cover.',
+  'money-skip-inventory.mjs':
+    'data, not a scan — D26-P2-13 register of every money-path test file that may skip, each with kind + why. money-skip-honesty-scan.mjs imports it and fails if the list grows or goes stale; private-probe rows stay coupled to unreported-suites PRIVATE_PROBE.',
   'assert-test-db-env.mjs':
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
   'dependency-audit.mjs':
