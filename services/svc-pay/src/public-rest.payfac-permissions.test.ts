@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PayError, type PayService } from './payment-service.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { PERMISSION_AREAS, SubMerchantError } from './submerchants.js';
+import type { MerchantAreaFence } from './merchant-ownership.js';
 import type { PayfacPermissionPort } from './payfac-permissions.js';
 
 /**
@@ -104,7 +105,7 @@ afterEach(async () => {
   app = undefined;
 });
 
-async function build(trees: PayfacPermissionPort | null) {
+async function build(trees: MerchantAreaFence | PayfacPermissionPort | null) {
   const instance = Fastify({ logger: false });
   await registerPublicPayRest(instance, {
     edgeSecret: SECRET,

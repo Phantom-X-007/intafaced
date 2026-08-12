@@ -82,10 +82,11 @@ export interface PayfacPermissionPort extends MerchantAreaFence {
   permissionHistory(actorMerchantId: string, subjectMerchantId: string, limit?: number): Promise<PermissionEventRecord[]>;
 }
 
-export function isPayfacPermissionPort(value: MerchantAreaFence | null | undefined): value is PayfacPermissionPort {
-  if (!value) return false;
+export function isPayfacPermissionPort(value: unknown): value is PayfacPermissionPort {
+  if (!value || typeof value !== 'object') return false;
   const v = value as PayfacPermissionPort;
   return (
+    typeof v.assertHolds === 'function' &&
     typeof v.grantPermission === 'function' &&
     typeof v.revokePermission === 'function' &&
     typeof v.listPermissions === 'function' &&
