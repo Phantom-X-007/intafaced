@@ -307,6 +307,8 @@ describe('public REST routes', () => {
     expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'refuse')).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'setLeverage' && a.httpStatus === 501)).toBe(true);
     expect(body.routes.some((r) => r.name === 'openPosition')).toBe(true);
+    expect(body.routes.some((r) => r.name === 'fetchAdlDisclosure')).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);
     await app.close();
   });
 
