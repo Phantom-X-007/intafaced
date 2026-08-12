@@ -440,9 +440,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       refuseArms: Array<{ id: string; httpStatus: number }>;
     };
     expect(body.routes.some((r) => r.name === 'fetchAdlDisclosure')).toBe(true);
-    expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('adlDisclosureRequired'))).toBe(
-      true,
-    );
+    expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('adlDisclosureRequired'))).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'crossMarginOnOpen' && a.httpStatus === 400)).toBe(true);
     await app.close();
