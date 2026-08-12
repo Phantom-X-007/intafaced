@@ -58,12 +58,12 @@ Four channels, one interface (`NotificationChannel`, Doctrine §0.4).
 
 ### Mountain vs §13 sockets (D26-P1-O5)
 
-| Tracker id             | Plane                         | What it means                                                                 |
-| ---------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
-| `ops.notifications`    | **Fan-out mountain**          | Bus → inbox → delivery rows. In-app **delivers**. Status stays `ready`, not `done`, while every out-of-app channel refuses in real deploys. |
-| `socket.notify-email`  | §13 credential socket         | Adapter shipped; refuse `channel.not_configured` until Class X credentials.   |
-| `socket.notify-push`   | §13 credential socket         | Same.                                                                         |
-| `socket.notify-sms`    | §13 credential socket         | Same.                                                                         |
+| Tracker id            | Plane                 | What it means                                                                                                                               |
+| --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops.notifications`   | **Fan-out mountain**  | Bus → inbox → delivery rows. In-app **delivers**. Status stays `ready`, not `done`, while every out-of-app channel refuses in real deploys. |
+| `socket.notify-email` | §13 credential socket | Adapter shipped; refuse `channel.not_configured` until Class X credentials.                                                                 |
+| `socket.notify-push`  | §13 credential socket | Same.                                                                                                                                       |
+| `socket.notify-sms`   | §13 credential socket | Same.                                                                                                                                       |
 
 `notify.channels` and `GET /ready` carry `socket` on each channel status: `null`
 for `inapp` (mountain surface), `socket.notify-*` for the three out-of-app
@@ -172,7 +172,7 @@ rather than a green tick over silence.
 | `notify.unreadCount`    | `notify:read`  | —                                      | `{ count }`                                                                             |
 | `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                      | `{ marked }`                                                                            |
 | `notify.markAllRead`    | `notify:write` | —                                      | `{ marked }`                                                                            |
-| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env + §13 `socket` id (null for in-app) |
+| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env + §13 `socket` id (null for in-app)              |
 | `notify.targets`        | `notify:read`  | —                                      | the caller's registered addresses                                                       |
 | `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`        | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`) |
 | `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                    | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                     |

@@ -23,11 +23,7 @@ import {
 describe('D26-P1-O5 mountain vs §13 channel sockets', () => {
   it('names the fan-out mountain and three credential sockets', () => {
     expect(FANOUT_MOUNTAIN_ID).toBe('ops.notifications');
-    expect(NOTIFY_CHANNEL_SOCKET_IDS).toEqual([
-      'socket.notify-email',
-      'socket.notify-push',
-      'socket.notify-sms',
-    ]);
+    expect(NOTIFY_CHANNEL_SOCKET_IDS).toEqual(['socket.notify-email', 'socket.notify-push', 'socket.notify-sms']);
     expect(channelSocketMatrixComplete()).toBe(true);
   });
 
@@ -64,9 +60,7 @@ describe('D26-P1-O5 mountain vs §13 channel sockets', () => {
     expect(card.matrixComplete).toBe(true);
     expect(card.inappHasNoSocket).toBe(true);
     expect(mountainVsSocketsStatusLineMatches()).toBe(true);
-    expect(parseMountainVsSocketsStatusLine(mountainVsSocketsStatusLine())?.mountain).toBe(
-      'ops.notifications',
-    );
+    expect(parseMountainVsSocketsStatusLine(mountainVsSocketsStatusLine())?.mountain).toBe('ops.notifications');
     expect(parseMountainVsSocketsStatusLine('nope')).toBeNull();
     expect(mountainVsSocketsExportText().startsWith(mountainVsSocketsExportHeader())).toBe(true);
     expect(mountainVsSocketsExportLines()).toEqual([

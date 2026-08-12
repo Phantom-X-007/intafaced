@@ -19,11 +19,7 @@ import { OUT_OF_APP_CHANNELS, type ChannelId, type OutOfAppChannel } from './cha
 export const FANOUT_MOUNTAIN_ID = 'ops.notifications' as const;
 
 /** §13 socket tracker ids — one per out-of-app channel. */
-export const NOTIFY_CHANNEL_SOCKET_IDS = [
-  'socket.notify-email',
-  'socket.notify-push',
-  'socket.notify-sms',
-] as const;
+export const NOTIFY_CHANNEL_SOCKET_IDS = ['socket.notify-email', 'socket.notify-push', 'socket.notify-sms'] as const;
 
 export type NotifyChannelSocketId = (typeof NOTIFY_CHANNEL_SOCKET_IDS)[number];
 
@@ -118,11 +114,7 @@ export function parseMountainVsSocketsStatusLine(line: string): {
   readonly matrix: boolean;
   readonly inappHasSocket: boolean;
 } | null {
-  const m = line
-    .trim()
-    .match(
-      /^mountain=([a-z0-9.]+) sockets=(\d+) outOfApp=(\d+) gaps=(\d+) matrix=([01]) inappSocket=([01])$/,
-    );
+  const m = line.trim().match(/^mountain=([a-z0-9.]+) sockets=(\d+) outOfApp=(\d+) gaps=(\d+) matrix=([01]) inappSocket=([01])$/);
   if (!m) return null;
   return {
     mountain: m[1]!,
@@ -153,10 +145,7 @@ export function mountainVsSocketsExportHeader(): string {
 }
 
 export function mountainVsSocketsExportLines(): readonly string[] {
-  return [
-    'inapp,mountain,',
-    ...OUT_OF_APP_CHANNELS.map((id) => `${id},socket,${CHANNEL_TO_SOCKET[id]}`),
-  ];
+  return ['inapp,mountain,', ...OUT_OF_APP_CHANNELS.map((id) => `${id},socket,${CHANNEL_TO_SOCKET[id]}`)];
 }
 
 export function mountainVsSocketsExportText(): string {
