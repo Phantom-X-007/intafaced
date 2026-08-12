@@ -36,6 +36,7 @@ import type { EngineSubmitResult, MatchingClient } from '../spot/matching-client
 import { mmSeedOrderIdFor } from '../spot/ids.js';
 import { assertTradable } from '../spot/risk.js';
 import { TradeError, type Market } from '../spot/types.js';
+import { classifySeedSubmitResult, MM_SEED_ORDER_SEEDED, seedSubmitShape } from './seed-honesty.js';
 import { planSeedQuotes, type SeedLevelIntent, type SeedPlanInput } from './seed-planner.js';
 
 /** Matching STP account for house market-maker — distinct from user ids. */
@@ -74,9 +75,35 @@ export interface SeedMarketDeps {
   futuresEnabled?: boolean;
   /** Override order id generation (tests). */
   orderIdFor?: (intent: SeedLevelIntent, index: number) => string;
+  /**
+   * Durable SD-2 flag: persist resting seed orders as `seeded: true` so public
+   * volume / tape can exclude them before any fill (trade.mm-bot coordinate).
+   * Optional — fill-time stub still sets seeded when this port is absent.
+   */
+  recordSeededOrder?: (row: SeededOrderRecord) => Promise<void>;
 }
 
-export type SeedPlacementStatus = 'resting' | 'rejected' | 'hold_failed' | 'submit_indeterminate' | 'released_after_reject';
+/** Bookkeeping row for a resting house MM seed order (SD-2). */
+export interface SeededOrderRecord {
+  orderId: string;
+  marketId: string;
+  side: 'buy' | 'sell';
+  price: string;
+  qty: string;
+  holdAsset: string;
+  holdAmount: string;
+  /** Always true — seed liquidity is never user volume (SD-2/SD-3). */
+  seeded: true;
+}
+
+export type SeedPlacementStatus =
+  | 'resting'
+  | 'rejected'
+  | 'hold_failed'
+  | 'submit_indeterminate'
+  | 'released_after_reject'
+  /** Engine returned fills on a PO seed submit — SD-5 refuse. */
+  | 'manufactured_cross';
 
 export interface SeedPlacement {
   orderId: string;
@@ -84,6 +111,8 @@ export interface SeedPlacement {
   holdAsset: string;
   holdAmount: string;
   status: SeedPlacementStatus;
+  /** SD-2: every seed placement is flagged seeded (API/placement claim). */
+  seeded: true;
   rejectCode?: string;
   rejectMessage?: string;
 }
@@ -170,21 +199,23 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
         holdAsset: hold.assetId,
         holdAmount: formatAmount(hold.amount),
         status: 'hold_failed',
+        seeded: MM_SEED_ORDER_SEEDED,
       });
       continue;
     }
 
     let result: EngineSubmitResult;
     try {
-      result = await deps.matching.submit(spec.marketId, {
-        orderId,
-        accountId: MM_MATCHING_ACCOUNT_ID,
-        type: 'limit',
-        side: intent.side,
-        qty: intent.qty,
-        price: intent.price,
-        tif: 'PO', // post-only: rest or reject — never take (house fill residual)
-      });
+      result = await deps.matching.submit(
+        spec.marketId,
+        seedSubmitShape({
+          orderId,
+          accountId: MM_MATCHING_ACCOUNT_ID,
+          side: intent.side,
+          qty: intent.qty,
+          price: intent.price,
+        }),
+      );
     } catch {
       // Indeterminate: engine may hold the order. Keep MM hold; cancel path later.
       placements.push({
@@ -193,11 +224,13 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
         holdAsset: hold.assetId,
         holdAmount: formatAmount(hold.amount),
         status: 'submit_indeterminate',
+        seeded: MM_SEED_ORDER_SEEDED,
       });
       continue;
     }
 
-    if (!result.accepted || result.rejected) {
+    const honesty = classifySeedSubmitResult(result);
+    if (!honesty.ok) {
       try {
         await deps.ledger.post(
           recipes.marketMakerOrderHoldRelease({
@@ -211,9 +244,10 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
           intent,
           holdAsset: hold.assetId,
           holdAmount: formatAmount(hold.amount),
-          status: 'released_after_reject',
-          rejectCode: result.rejected?.code,
-          rejectMessage: result.rejected?.message,
+          status: honesty.kind === 'manufactured_cross' ? 'manufactured_cross' : 'released_after_reject',
+          seeded: MM_SEED_ORDER_SEEDED,
+          rejectCode: result.rejected?.code ?? honesty.reason,
+          rejectMessage: result.rejected?.message ?? honesty.reason,
         });
       } catch {
         placements.push({
@@ -221,12 +255,31 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
           intent,
           holdAsset: hold.assetId,
           holdAmount: formatAmount(hold.amount),
-          status: 'rejected',
-          rejectCode: result.rejected?.code,
-          rejectMessage: result.rejected?.message,
+          status: honesty.kind === 'manufactured_cross' ? 'manufactured_cross' : 'rejected',
+          seeded: MM_SEED_ORDER_SEEDED,
+          rejectCode: result.rejected?.code ?? honesty.reason,
+          rejectMessage: result.rejected?.message ?? honesty.reason,
         });
       }
       continue;
+    }
+
+    if (deps.recordSeededOrder) {
+      try {
+        await deps.recordSeededOrder({
+          orderId,
+          marketId: spec.marketId,
+          side: intent.side,
+          price: intent.price,
+          qty: intent.qty,
+          holdAsset: hold.assetId,
+          holdAmount: formatAmount(hold.amount),
+          seeded: MM_SEED_ORDER_SEEDED,
+        });
+      } catch {
+        // Hold is live on the book; keep resting status — fill stub still sets
+        // seeded on first match. Recorder failure must not invent a cancel.
+      }
     }
 
     placements.push({
@@ -234,8 +287,8 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
       intent,
       holdAsset: hold.assetId,
       holdAmount: formatAmount(hold.amount),
-      status: result.resting ? 'resting' : 'rejected',
-      rejectCode: result.resting ? undefined : 'no_resting',
+      status: 'resting',
+      seeded: MM_SEED_ORDER_SEEDED,
     });
   }
 
