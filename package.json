@@ -55,6 +55,8 @@
     "scan:compose-secrets": "node tooling/ci/compose-secret-parity.mjs",
     "scan:vendor-shell": "node tooling/ci/vendor-shell-scan.mjs",
     "scan:vendor-java-money": "node tooling/ci/vendor-java-money-scan.mjs",
+    "scan:vendor-java-jar-truth": "node tooling/ci/vendor-java-jar-truth.mjs",
+    "vendor-java:rebuild": "node tooling/scripts/vendor-java-rebuild.mjs",
     "scan:dual-book-door": "node tooling/ci/dual-book-door-scan.mjs",
     "scan:test-db": "node tooling/ci/test-db-scan.mjs",
     "scan:skip-honesty": "node tooling/ci/skip-honesty-scan.mjs",

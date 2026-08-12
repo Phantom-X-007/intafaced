@@ -120,12 +120,12 @@ const appConfigs = walk(VENDOR, (name, p) => name === 'ApplicationConfig.java');
 const failures = [];
 
 for (const marker of REQUIRED_CONFIG_MARKERS) {
-  // Normalize to `/` so markers like `00_framework/exchange/` still match on
-  // Windows (walk joins with `\`). Trailing-slash form is load-bearing: it must
-  // not also match `exchange-api`.
+  // Normalize separators — CI is Linux (`/`) but Windows agents see `\`, and the
+  // exchange marker deliberately keys on `00_framework/exchange/` so it cannot
+  // collide with `exchange-api`. A backslash path made that marker invisible.
   const match = appConfigs.find((p) => {
-    const posix = p.split(/[/\\]/).join('/');
-    return marker.pathIncludes.every((seg) => posix.includes(seg));
+    const norm = p.replace(/\\/g, '/');
+    return marker.pathIncludes.every((seg) => norm.includes(seg));
   });
   if (!match) {
     failures.push(`no ApplicationConfig.java found for ${marker.id}`);
@@ -134,7 +134,7 @@ for (const marker of REQUIRED_CONFIG_MARKERS) {
   const text = stripComments(readFileSync(match, 'utf8'));
   if (!REGISTRATION.test(text)) {
     failures.push(
-      `${relative(ROOT, match)} does not REGISTER DualBookMoneyDoorInterceptor ` +
+      `${relative(ROOT, match).replace(/\\/g, '/')} does not REGISTER DualBookMoneyDoorInterceptor ` +
         `(need registry.addInterceptor(new DualBookMoneyDoorInterceptor()).addPathPatterns("/**"))`,
     );
   }

@@ -217,6 +217,11 @@ export const ENFORCED = {
     must: /vendor\/ tree missing — cannot prove dual-book mutators banned/,
     note: 'phrases the refusal as an inability to PROVE, which is the correct epistemics.',
   },
+  'vendor-java-jar-truth': {
+    kind: 'guard',
+    must: /vendor\/ tree missing — cannot prove Grade D empty or jar posture/,
+    note: 'D26-P2-07 sibling of vendor-java-money: without vendor/ it cannot prove Grade D empty or jar truth.',
+  },
   'dual-book-door': {
     kind: 'guard',
     must: /vendor\/ tree missing — dual-book door cannot be verified/,

@@ -81,9 +81,9 @@ Debits were never done through a mutator. They were done as `setBalance(x.subtra
 
 In order. Each step is independently landable.
 
-1. **Delete the ten Grade D sites.** They are reward mints with no ledger equivalent built, so there is nothing to redirect them to. Deleting the mint and keeping the surrounding workflow is the honest move; a `= null` short-circuit is a booby trap for the next author.
-2. **Resolve the compile question.** If `core` does not build, nothing downstream is real.
-3. **A reproducible build.** A source scan that cannot be tied to the artifact is a claim about a file, not a system. Until a jar can be built from scanned source in CI, the runtime posture is unverified — say so rather than implying otherwise.
+1. **Delete the ten Grade D sites.** They are reward mints with no ledger equivalent built, so there is nothing to redirect them to. Deleting the mint and keeping the surrounding workflow is the honest move; a `= null` short-circuit is a booby trap for the next author. **Done (D26-P2-07):** sites deleted; `vendor-java-money-scan` Grade D band empty + ratchet; `vendor-java-jar-truth` bans the `Reward*Setting = null` re-arm shapes.
+2. **Resolve the compile question.** If `core` does not build, nothing downstream is real. **Done:** `vendor-compile.yml` compiles `core` under the pinned JDK 8 / Maven 3.8 image (advisory).
+3. **A reproducible build.** A source scan that cannot be tied to the artifact is a claim about a file, not a system. Until a jar can be built from scanned source in CI, the runtime posture is unverified — say so rather than implying otherwise. **Path real (D26-P2-07):** `pnpm vendor-java:rebuild` (`tooling/scripts/vendor-java-rebuild.mjs`) + `vendor-compile.yml` `package-compose-jars` job; `vendor-java-jar-truth` refuses overclaims and stale jars. Absent jars remain the honest "runtime UNVERIFIED" state — not a green safety tick.
 4. **Move the Grade C twelve off the door.** A door on a module with no compose service is not a control. Either give `admin` the same service-level throw the mutators have, or delete the sites.
 5. **Implement the queue.** Thirty-six sites currently throw. Each `Queue:` target is a real recipe; a throw is a holding position, not an outcome.
 
