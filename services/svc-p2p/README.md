@@ -419,7 +419,7 @@ It deliberately does **not** stop release, refund, dispute resolution, or either
 
 **Not encrypted at rest** — §13 socket, see the payment-instruments section above. KMS envelope encryption is Class X.
 
-**Also parked (not agent free craft):** `p2p:moderate` who / scope mint · auto-ruling (law forbids; escalate-and-hold) · rank fee discount / `p2pLimitMultiplier` apply (identity + product) · chat product (`chat_thread_id` column only) · floating mark-price wire (contracts first) · apps/admin dispute console (outside wall) · outbox (events plane).
+**Also parked (not agent free craft):** `p2p:moderate` who / scope mint · auto-ruling (law forbids; escalate-and-hold) · rank fee discount / `p2pLimitMultiplier` apply (identity + product) · chat product (`chat_thread_id` column only) · floating mark-price wire (contracts first) · apps/admin dispute console (outside wall) · outbox (events plane). Engine side (queue, evidence, backlog, open-origin honesty, ruling notes on the wire, escalate-and-hold) is product code in this service — not refuse theater.
 
 ---
 

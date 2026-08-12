@@ -40,6 +40,7 @@ const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
 const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
+const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
 
 const SELLER = '11111111-1111-4111-8111-111111111111';
 const BUYER = '22222222-2222-4222-8222-222222222222';
@@ -104,6 +105,7 @@ if (!available) {
     await tx.unsafe(fieldGuardMigration);
     await tx.unsafe(disputeRulingMigration);
     await tx.unsafe(lateSettleErrorMigration);
+    await tx.unsafe(disputeOpenOriginMigration);
   });
 
   const instruments = new InstrumentService(sql);

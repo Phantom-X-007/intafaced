@@ -350,6 +350,12 @@ export interface DisputeRecord {
   id: string;
   tradeId: string;
   openedBy: string;
+  /**
+   * `party` — a natural person called `disputes.open`.
+   * `timeout` — the fiat_sent clock opened it; `openedBy` is the party of
+   * interest (buyer who marked fiat sent), not a filing attribution.
+   */
+  openedVia: 'party' | 'timeout';
   reason: string;
   evidence: readonly EvidenceEntry[];
   moderatorId: string | null;
@@ -414,6 +420,7 @@ interface DisputeRow {
   id: string;
   trade_id: string;
   opened_by: string;
+  opened_via: 'party' | 'timeout';
   reason: string;
   evidence: unknown;
   moderator_id: string | null;
@@ -1307,9 +1314,9 @@ export class P2pService {
         const opening = envelopesFor(supplied, input.openedBy, now, 0);
 
         const rows = await tx<DisputeRow[]>`
-          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, reason, evidence, status, deadline_at, opened_at)
+          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, opened_via, reason, evidence, status, deadline_at, opened_at)
           VALUES (
-            ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${input.reason ?? ''},
+            ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${origin}, ${input.reason ?? ''},
             ${tx.json(opening as never)}, 'open', ${deadlineAt}, ${now}
           )
           ON CONFLICT (trade_id) DO NOTHING
@@ -2433,6 +2440,9 @@ function toDispute(row: DisputeRow): DisputeRecord {
     id: row.id,
     tradeId: row.trade_id,
     openedBy: row.opened_by,
+    // Pre-0006 rows defaulted to 'party' in the column; treat any unexpected
+    // value as party rather than inventing a third origin on the wire.
+    openedVia: row.opened_via === 'timeout' ? 'timeout' : 'party',
     reason: row.reason,
     evidence: normaliseEvidence(row.evidence),
     moderatorId: row.moderator_id,
