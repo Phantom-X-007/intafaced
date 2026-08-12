@@ -484,8 +484,7 @@ registerPrivateRest(app, {
     if (!row || row.userId !== principal.userId) return null;
     return presentMarginCallWire(row);
   },
-  getAdlDisclosure: async (principal) =>
-    presentAdlDisclosureWire(await adlDisclosureAcks.getAck(principal.userId, ADL_DISCLOSURE_VERSION)),
+  getAdlDisclosure: async (principal) => presentAdlDisclosureWire(await adlDisclosureAcks.getAck(principal.userId, ADL_DISCLOSURE_VERSION)),
   ackAdlDisclosure: async (principal) => {
     const row = await adlDisclosureAcks.recordAck(principal.userId, ADL_DISCLOSURE_VERSION, new Date());
     return presentAdlDisclosureWire(row);
