@@ -110,8 +110,9 @@ export function filterRailsByAllowlist(
  *
  * D26-P1-A4 (missing-data honesty): any scoped rail with null/invalid
  * approvalRate or attempts refuses the whole watch (`unavailable` /
- * `no_metrics`). A partial `ok` board that silently skips holes would invent
- * completeness. Out-of-allowlist skips are not missing metrics.
+ * `no_metrics`). Any scoped rail that is stale likewise refuses (`stale`) —
+ * a partial `ok` board that silently skips holes invents completeness.
+ * Out-of-allowlist skips and below-floor samples are not missing metrics.
  */
 export function watchApprovalFixtures(
   points: readonly ApprovalRatePoint[],
@@ -201,13 +202,15 @@ export function watchApprovalFixtures(
   if (realIncomplete > 0) {
     return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
   }
+  // Same honesty for freshness holes: mixed stale + fresh must not look like
+  // a complete watch of the scoped set.
+  if (skippedStale > 0) {
+    return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'stale' };
+  }
 
   const usable = scoped.length - skippedStale - realIncomplete - skippedLowSample;
   if (usable === 0 && alerts.length === 0) {
-    if (skippedStale > 0 && skippedLowSample === 0) {
-      return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'stale' };
-    }
-    if (skippedStale > 0 || skippedLowSample > 0) {
+    if (skippedLowSample > 0) {
       return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
     }
     return { status: 'empty', userMessageKey: 'agents.merchant.empty' };
