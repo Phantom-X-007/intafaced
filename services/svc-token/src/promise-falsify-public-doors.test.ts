@@ -240,18 +240,25 @@ if (!available) {
   });
 
   describe('D26-P2-01g public doors — buyback crash windows', () => {
-    const JULY = {
-      from: '2026-07-01T00:00:00.000Z',
-      to: '2026-08-01T00:00:00.000Z',
-    };
+    /** Unique half-open window per test — avoids GiST races with sibling files. */
+    function uniqueWindow(tag: string): { from: string; to: string } {
+      let h = 0;
+      for (let i = 0; i < tag.length; i += 1) h = (h * 33 + tag.charCodeAt(i)) >>> 0;
+      const day = (h % 300) + 1;
+      const from = new Date(Date.UTC(2030, 0, 1, 0, 0, 0) + day * 86_400_000);
+      const to = new Date(from.getTime() + 7 * 86_400_000);
+      return { from: from.toISOString(), to: to.toISOString() };
+    }
 
     it('recordBuyback refuses a NEW run id over an identical window — burn does not double', async () => {
       await fundRewards('4000', 'w-door-identical');
       const ops = adminCaller();
+      const window = uniqueWindow('identical');
+      const firstId = randomUUID();
 
       const first = await ops.recordBuyback({
-        runId: randomUUID(),
-        revenueWindow: JULY,
+        runId: firstId,
+        revenueWindow: window,
         revenueTotal: { IFC: '1000' },
         tokensBought: '1000',
       });
@@ -262,7 +269,7 @@ if (!available) {
       await expect(
         ops.recordBuyback({
           runId: randomUUID(),
-          revenueWindow: JULY,
+          revenueWindow: window,
           revenueTotal: { IFC: '1000' },
           tokensBought: '1000',
         }),
@@ -274,7 +281,7 @@ if (!available) {
       // THE POINT — read the burn account, not only the exception name.
       expect(amt((await ops.burnedSupply()).burned)).toBe(burnedAfterFirst);
       expect(amt((await ops.burnedSupply()).burned)).not.toBe(burnedAfterFirst * 2n);
-      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
+      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${firstId}`).toHaveLength(1);
       expect(bus.emitted('buybackExecuted')).toHaveLength(1);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
@@ -282,10 +289,17 @@ if (!available) {
     it('recordBuyback refuses a nested overlapping window without inventing a second burn', async () => {
       await fundRewards('4000', 'w-door-nested');
       const ops = adminCaller();
+      const outer = uniqueWindow('nested');
+      const outerFrom = new Date(outer.from);
+      const nested = {
+        from: new Date(outerFrom.getTime() + 2 * 86_400_000).toISOString(),
+        to: new Date(outerFrom.getTime() + 4 * 86_400_000).toISOString(),
+      };
+      const firstId = randomUUID();
 
       await ops.recordBuyback({
-        runId: randomUUID(),
-        revenueWindow: JULY,
+        runId: firstId,
+        revenueWindow: outer,
         revenueTotal: { IFC: '1000' },
         tokensBought: '1000',
       });
@@ -294,10 +308,7 @@ if (!available) {
       await expect(
         ops.recordBuyback({
           runId: randomUUID(),
-          revenueWindow: {
-            from: '2026-07-10T00:00:00.000Z',
-            to: '2026-07-20T00:00:00.000Z',
-          },
+          revenueWindow: nested,
           revenueTotal: { IFC: '1000' },
           tokensBought: '1000',
         }),
@@ -307,15 +318,12 @@ if (!available) {
       });
 
       expect(amt((await ops.burnedSupply()).burned)).toBe(burnedAfterFirst);
-      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
+      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${firstId}`).toHaveLength(1);
     });
 
     it('recordBuyback refuses tokensBought=0 before claiming the window — later real burn stays free', async () => {
       const ops = adminCaller();
-      const window = {
-        from: '2026-10-01T00:00:00.000Z',
-        to: '2026-10-08T00:00:00.000Z',
-      };
+      const window = uniqueWindow('zero');
 
       await expect(
         ops.recordBuyback({
@@ -329,18 +337,26 @@ if (!available) {
         cause: { code: 'token.buyback_revenue_invalid' },
       });
 
-      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(
+        await sql`
+          SELECT id FROM token.buyback_runs
+           WHERE revenue_window_from = ${new Date(window.from)}
+             AND revenue_window_to = ${new Date(window.to)}
+        `,
+      ).toHaveLength(0);
       expect(amt((await ops.burnedSupply()).burned)).toBe(0n);
 
       await fundRewards('500', 'w-door-zero-then-real');
+      const realId = randomUUID();
       const real = await ops.recordBuyback({
-        runId: randomUUID(),
+        runId: realId,
         revenueWindow: window,
         revenueTotal: { IFC: '500' },
         tokensBought: '500',
       });
       expect(amt(real.burned) + amt(real.toRewards)).toBe(amt('500'));
       expect(amt((await ops.burnedSupply()).burned)).toBe(amt(real.burned));
+      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${realId}`).toHaveLength(1);
     });
 
     it('recordBuyback refuses a non-ordered window at the door — service never claims', async () => {
@@ -365,17 +381,24 @@ if (!available) {
 
     it('recordBuyback refuses invented negative revenueTotal before any claim row', async () => {
       const ops = adminCaller();
+      const window = uniqueWindow('negative-revenue');
 
       await expect(
         ops.recordBuyback({
           runId: randomUUID(),
-          revenueWindow: JULY,
+          revenueWindow: window,
           revenueTotal: { IFC: '-999' },
           tokensBought: '100',
         }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
-      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(
+        await sql`
+          SELECT id FROM token.buyback_runs
+           WHERE revenue_window_from = ${new Date(window.from)}
+             AND revenue_window_to = ${new Date(window.to)}
+        `,
+      ).toHaveLength(0);
       expect(amt((await ops.burnedSupply()).burned)).toBe(0n);
     });
   });
