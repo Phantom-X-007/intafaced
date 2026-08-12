@@ -221,6 +221,9 @@ importers:
       '@intafaced/config':
         specifier: workspace:*
         version: link:../config
+      '@intafaced/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@intafaced/safe-regex':
         specifier: workspace:^
         version: link:../safe-regex

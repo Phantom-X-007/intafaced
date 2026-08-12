@@ -1,5 +1,6 @@
-import { isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES } from '@intafaced/contracts';
+import { isScheduleOpen, nextScheduleTransition } from '@intafaced/contracts';
 import { formatAmount, mul, mulBps, type Amount } from '@intafaced/ledger-client';
+import { assertKnownAssetClass, requireTradingSchedule } from './instrument-enums.js';
 import { TradeError, type Market, type OrderSide, type OrderType } from './types.js';
 
 /**
@@ -90,6 +91,8 @@ export interface TradableOptions {
  * collateral model, and nothing to gate.
  */
 export function assertTradable(market: Market, options: TradableOptions = {}): void {
+  // Enum authority first (D-S-05 / D26-P1-T9) — see instrument-enums.ts.
+  assertKnownAssetClass(market);
   if (market.kind === 'futures') {
     if (options.futuresEnabled !== true) {
       throw new TradeError(
@@ -107,6 +110,15 @@ export function assertTradable(market: Market, options: TradableOptions = {}): v
     throw new TradeError(`${market.symbol} is ${market.status}, not accepting orders`, 'trade.market_not_tradable');
   }
 }
+
+/**
+ * Unknown `asset_class` refuses with the permitted set named.
+ *
+ * Rows arrive as a bare cast of the Postgres enum (`rows.ts`). A migration that
+ * widens the DB enum without updating `ASSET_CLASSES` must not fund an order
+ * under a class the instrument model has never defined.
+ */
+export { assertKnownAssetClass } from './instrument-enums.js';
 
 /**
  * SPOT-SHAPED SURFACES REFUSE NON-SPOT BY NAME, NOT BY OMISSION.
@@ -157,18 +169,9 @@ export { assertSettlementRails } from './forex-settlement.js';
  * every interesting case here IS a boundary.
  */
 export function assertMarketOpen(market: Market, at: Date): void {
-  const schedule = TRADING_SCHEDULES[market.schedule];
-
-  // An unrecognised schedule is refused, not ignored. This is the fail-safe
-  // direction: a market whose hours we cannot evaluate must not accept orders,
-  // and reading `.kind` off an undefined lookup would throw a TypeError that
-  // surfaces as a 500 rather than as a refusal the caller can act on.
-  if (!schedule) {
-    throw new TradeError(
-      `${market.symbol} has an unknown trading schedule (${String(market.schedule)}) — refusing orders`,
-      'trade.market_closed',
-    );
-  }
+  // Unknown key → trade.unknown_schedule (instrument-enums). Session shut →
+  // trade.market_closed. Distinct codes so bots do not retry Monday on drift.
+  const schedule = requireTradingSchedule(market);
 
   if (isScheduleOpen(schedule, at)) return;
 
