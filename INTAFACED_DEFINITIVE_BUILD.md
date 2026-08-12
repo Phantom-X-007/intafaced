@@ -473,7 +473,7 @@ Everything ships dark behind flags; the drop sequence is configuration, not depl
 - VR lobby client (scene state ready)
 - MPC custody for DEX wallets
 
-Nothing here blocks launch; everything here has a socket waiting.
+Nothing here blocks launch; everything here has a socket waiting (incl. first-party Woo/Magento/OpenCart PHP packages — consume svc-pay/src/plugins reference client + webhook vectors; PHP CMS is out-of-monorepo CI).
 
 ## 14 · DEFINITION OF DONE (per module — "never half done", enforced)
 1. All schema migrations reversible and applied in CI
@@ -687,7 +687,7 @@ Plane: **F** = Fiat (custodial/compliant) · **P** = Protocol (non-custodial/zer
 | Revenue analytics + export | B | svc-pay + indexer | 3 |
 | Payment links + hosted checkout | B | both lanes §24 | 3/3P |
 | Merchant crypto acceptance for any user | P | merchant contracts §24 Lane A — **zero KYB** | 3P |
-| Commerce plugins (Woo/Magento/OpenCart) | B | plugin pkgs | 3 |
+| Commerce plugins (Woo/Magento/OpenCart) | B | svc-pay plugins reference client (+ §13 PHP CMS socket) | 3 |
 
 ### MARKET (§XII)
 | All 8 vendor categories (bots, DeFi, compliance, payment ext., security/custody, data, advisory, partner integrations) | B | svc-market listings taxonomy | 5 |

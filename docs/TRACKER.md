@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**71 of 148 shipped (48%)** · 10 in progress · 26 ready to claim · 41 blocked · 38 deliberate §13 sockets
+**72 of 148 shipped (49%)** · 10 in progress · 26 ready to claim · 40 blocked · 38 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -158,7 +158,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔌 | Maker-routed OTC settle (external maker ledger path) <br/>_§13 — named 2026-08-12 under trade.otc residual. Platform-principal settle is real (marketMakerMakerFill). Maker counterparty settle refuses via planOtcSettle + otc.deskStatus.makerRouting until owner publishes routing recipe + ledger path. Do NOT invent maker book / silent second counterparty. Pins: maker-routing.ts · settle.ts · otc-maker-routing-donebar.test.ts._ | F |  | `socket.otc-maker-routing` |
 | 🔌 | Copy auto-mirror place into spot after planMirror <br/>_§13 — D26-P1-T3 (2026-08-12). planMirror + exposure claim are real; placing the plan as a follower spot order is not wired. copy.placeMirror / deskStatus.autoMirrorPlace refuse-closed naming this socket — never invent fills or silently drop plans. Closing needs a durable follower place path (session-key / principal wire), not a fake order id._ | F |  | `socket.copy-auto-mirror-place` |
 
-### Phase 3 — Pay + P2P (12/18)
+### Phase 3 — Pay + P2P (13/18)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -171,7 +171,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Dual settlement — bank or crypto <br/>_**D26-P1-P4 completed 2026-08-12** — bank and crypto payout paths compose only ledger-client withdraw hold/settle/reverse recipes. Configured crypto completes against the chain adapter; bank remains honestly absent and refuses before any recipe posts until its Class X commercial socket exists. Integration proof pins both outcomes and ledger reconciliation._ | F |  | `pay.settlement` |
 | ✅ | Risk scoring, chargebacks, decline recovery <br/>_**DONE 2026-08-12 (D26-P1-P5):** Scoring mechanism + review queue + dispute case surface (fraud.evaluate / enqueueReview / openDispute) with settled→disputed writer. Chargeback ledger recipes refuse-closed via named §13 `socket.pay-chargeback-ledger-wire` — not a stub unwired matrix and not silent posts. List content (IPs/devices/sanctions) Class X. Public-door proof: `fraud-done-bar.test.ts`. Residual: durable disputes table + owner sign-off to close the socket._ | F |  | `pay.fraud` |
 | ✅ | Recurring — card and crypto <br/>_**DONE 2026-08-12 (D26-P1-P6):** Mandates product-complete; notify gaps honest. Crypto invoice-and-watch E2E (create mandate → subscription → due runner → invoice → capture settles execution → cancel immediate) via `subscriptions-done-bar.test.ts` + merchant doors. Fire path uses `mandateChargeDisposition` matrix; charge traces to active mandate; re-consent refuse `mandate.proposeTerms` → `pay.subscription_reconsent_required`; card refuses `pay.mandate_rail_absent` → `socket.psp-partners` (no invent pull). Bounded dunning = MAX_ATTEMPTS_PER_CYCLE then named `arrears` stall (reachable from fire). Pre-charge notify sealed §13 `socket.pay-precharge-notify` — fire acknowledges gap with `notified:false` before openInvoice; Ready door `subscription.productReady` never reports notified. Parked sockets (not this mountain): live card charge-against-mandate (`socket.psp-partners`), real pre-charge delivery._ | F |  | `pay.subscriptions` |
-| ⛔ | Woo / Magento / OpenCart plugins <br/>_**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M._ | F | `pay.gateway` | `pay.plugins` |
+| ✅ | Woo / Magento / OpenCart plugins <br/>_**D26-P1-P8 2026-08-12:** Done bar = one real plugin path (TS reference client) + §13 PHP CMS socket. Client pins create/get/authorize/capture/refund + webhook-endpoints/deliveries; https-only register; frozen HMAC vectors; public-door lifecycle Done-bar (`plugins-done-bar.test.ts`) + sendPluginRequest E2E; no Woo/Magento/OpenCart PHP in monorepo CI. Law §13 socket opened. Was reclaimed 2026-08-04 M1; wave-13 #1633 banked install/auth; this closes the mountain._ | F |  | `pay.plugins` |
 | ✅ | Public REST + webhooks + sandbox (§9) <br/>_**DONE 2026-08-12 (D26-P1-P7):** Surface + webhooks + sandbox. REST /v1 + OpenAPI + idempotency (#988/#994) · signed outbound webhooks with retry/disable/dashboard (#1006) · durable claimDue now truly FOR UPDATE SKIP LOCKED + lease · POST …/webhook-endpoints/:id/enable re-activates · payment `mode: sandbox|live` from rail posture · sandbox-key routing (#1014) · money path (#1507/#1624) · edge BASE (#1181) · quickstart (#1024) · Done-bar suite `public-api-done-bar.test.ts`. Parked (not this mountain): pay:* prod grant mint / KYB money-gate (DIRECTION §8) · live acquirer Class X `socket.psp-partners` · dispute/chargeback wire._ | B |  | `pay.public-api` |
 | ✅ | Offers, maker/taker, 100+ fiat currencies <br/>_svc-p2p on main; self-mounts /trpc with an edge-verified principal_ | F |  | `p2p.offers` |
 | ✅ | Ledger escrow — lock, release, refund <br/>_Escrow flows in svc-p2p; not a separate service_ | F |  | `p2p.escrow` |
