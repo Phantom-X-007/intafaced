@@ -21,7 +21,7 @@ import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
-import { presentLeaderDirectory } from './copy-intel/directory.js';
+import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/directory.js';
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
@@ -2348,18 +2348,25 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
           });
           if (result.status === 'ok') {
+            // Directory presentation (D26-P1-A5 residual): leaderId order on the wire —
+            // pure buildLeaderStats keeps fixture order; this door never echoes a PnL rank.
+            const ordered = sortDirectoryByLeaderId(result.stats);
+            const byLeader = new Map(result.audit.map((a) => [a.leaderId, a] as const));
             return {
               status: 'ok' as const,
               skippedIncomplete: result.skippedIncomplete,
-              stats: result.stats.map((s) => ({ ...s })),
-              audit: result.audit.map((a) => ({
-                id: a.id,
-                writtenAt: a.writtenAt,
-                source: a.source,
-                leaderId: a.leaderId,
-                stat: { ...a.stat },
-                provenance: { ...a.provenance },
-              })),
+              stats: ordered.map((s) => ({ ...s })),
+              audit: ordered
+                .map((s) => byLeader.get(s.leaderId))
+                .filter((a): a is NonNullable<typeof a> => a !== undefined)
+                .map((a) => ({
+                  id: a.id,
+                  writtenAt: a.writtenAt,
+                  source: a.source,
+                  leaderId: a.leaderId,
+                  stat: { ...a.stat },
+                  provenance: { ...a.provenance },
+                })),
               presentation: {
                 kind: 'directory' as const,
                 rankedByReturns: false as const,
@@ -2572,21 +2579,26 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
 
             if (result.status === 'ok') {
+              const ordered = sortDirectoryByLeaderId(result.stats);
+              const byLeader = new Map(result.audit.map((a) => [a.leaderId, a] as const));
               return {
                 status: 'ok' as const,
                 skippedIncomplete: result.skippedIncomplete,
                 fixturesAccepted: result.fixturesAccepted,
                 fixturesRefusedByGuardrail: result.fixturesRefusedByGuardrail,
                 writesRefusedByGuardrail: result.writesRefusedByGuardrail,
-                stats: result.stats.map((s) => ({ ...s })),
-                audit: result.audit.map((a) => ({
-                  id: a.id,
-                  writtenAt: a.writtenAt,
-                  source: a.source,
-                  leaderId: a.leaderId,
-                  stat: { ...a.stat },
-                  provenance: { ...a.provenance },
-                })),
+                stats: ordered.map((s) => ({ ...s })),
+                audit: ordered
+                  .map((s) => byLeader.get(s.leaderId))
+                  .filter((a): a is NonNullable<typeof a> => a !== undefined)
+                  .map((a) => ({
+                    id: a.id,
+                    writtenAt: a.writtenAt,
+                    source: a.source,
+                    leaderId: a.leaderId,
+                    stat: { ...a.stat },
+                    provenance: { ...a.provenance },
+                  })),
                 presentation: {
                   kind: 'directory' as const,
                   rankedByReturns: false as const,
