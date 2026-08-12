@@ -56,7 +56,7 @@ Scanner is a **high invent surface**. Any implementation that “fills” empty 
 
 ### Stage 1 — pure ranker (no UI)
 
-- [ ] Product law names signal inputs (e.g. 24h volume rank, spread, funding) — Denon direction if ambiguous
+- [x] Product law names signal inputs — **D26-P0-11 sealed** [`docs/adr/2026-08-12-scanner-signal-inputs-law.md`](../../adr/2026-08-12-scanner-signal-inputs-law.md) (`last` / `volume24h` / `change24hBps` · recipe `abs_change_x_log_volume`; refuse when missing)
 - [ ] Signal DTO in contracts + pure `rankSignals(inputs, tier)` with fixture tests
 - [ ] Empty / stale feed → omit or typed refuse codes, never invent
 
