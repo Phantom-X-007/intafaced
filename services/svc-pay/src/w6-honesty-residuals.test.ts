@@ -32,17 +32,18 @@ describe('W6 honesty residuals', () => {
     expect(paymentService).not.toMatch(/issueMerchantPayScopes|assertMerchantPayScopeGrantAllowed/);
   });
 
-  it('applyWebhook has no dispute.* or voided cases — rail types exist, status never moves', () => {
-    // RailEventType names dispute/voided; applyWebhook must not silently pretend
-    // they transition money status until Nitro Class M / residual ship.
+  it('applyWebhook dispute.opened is case-only — voided still absent; ledger recipes uncalled', () => {
+    // D26-P1-P5: dispute.* cases write dispute records + may mark disputed status.
+    // They must not call ledger chargeback recipes (owner Class M park).
     expect(railAdapter).toMatch(/dispute\.|'voided'|\"voided\"/);
     const apply = paymentService.match(/async applyWebhook\([\s\S]*?\n  \}/);
     expect(apply, 'applyWebhook missing').toBeTruthy();
     const applySrc = apply?.[0];
     expect(applySrc, 'applyWebhook source missing').toEqual(expect.any(String));
     const body = stripComments(applySrc as string);
-    expect(body).not.toMatch(/case\s+['\"]dispute\./);
+    expect(body).toMatch(/case\s+['\"]dispute\.opened['\"]/);
     expect(body).not.toMatch(/case\s+['\"]voided['\"]/);
+    expect(body).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall/);
     // Still records unsolicited refunds without auto-moving money.
     expect(body).toMatch(/case\s+['\"]refunded['\"]/);
   });

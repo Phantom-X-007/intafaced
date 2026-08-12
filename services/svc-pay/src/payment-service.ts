@@ -19,6 +19,7 @@ import { merchantKybMoneyGateRefusal } from './merchant-kyb-money-gate.js';
 import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import { settlementLedgerPlan } from './settlement-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
+import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
 
 /**
  * svc-pay — THE PAYMENTS CORE (§6.1).
@@ -1868,6 +1869,42 @@ export class PayService {
         // rail is confirming, both need a human decision — acting on either
         // automatically would move money on a rail's say-so alone.
         break;
+      case 'dispute.opened': {
+        // D26-P1-P5: case mechanism + settled→disputed writer. Ledger chargeback
+        // recipes stay unwired (owner sign-off) — we record the case only.
+        const disputeId = event.disputeId?.trim();
+        if (disputeId) {
+          let marked = false;
+          if (payment.status === 'settled') {
+            await this.markDisputed(payment.id, { disputeId, reasonCode: event.reasonCode ?? null });
+            marked = true;
+          }
+          const amount = event.amount === undefined ? formatAmount(parseAmount(payment.amount)) : formatAmount(event.amount);
+          defaultDisputeCaseStore.open({
+            disputeId,
+            paymentId: payment.id,
+            merchantId: payment.merchant_id,
+            amount,
+            assetId: event.assetId ?? payment.currency,
+            reasonCode: event.reasonCode ?? null,
+            paymentMarkedDisputed: marked,
+          });
+          applied = true;
+        }
+        break;
+      }
+      case 'dispute.won':
+      case 'dispute.lost':
+      case 'dispute.closed': {
+        const disputeId = event.disputeId?.trim();
+        if (disputeId && defaultDisputeCaseStore.get(disputeId)) {
+          if (event.type === 'dispute.won') defaultDisputeCaseStore.markWon(disputeId);
+          else if (event.type === 'dispute.lost') defaultDisputeCaseStore.markLost(disputeId);
+          else defaultDisputeCaseStore.accept(disputeId);
+          applied = true;
+        }
+        break;
+      }
     }
 
     // The dedupe marker, written last. `ON CONFLICT DO NOTHING` because two
@@ -1914,6 +1951,30 @@ export class PayService {
       { isolation: 'read committed', maxAttempts: 5 },
     );
     if (view) this.notifyPaymentEvent('payment.failed', view);
+  }
+
+  /**
+   * D26-P1-P5 — make `settled → disputed` reachable.
+   *
+   * Status transition only. Does **not** post ledger chargeback recipes
+   * (owner sign-off residual). Callers must open a dispute case.
+   */
+  async markDisputed(paymentId: string, meta: { disputeId: string; reasonCode?: string | null }): Promise<PaymentView> {
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const row = await lockPayment(tx, paymentId);
+        assertTransition(row, 'disputed');
+        await appendEvent(tx, row.id, 'disputed', {
+          disputeId: meta.disputeId,
+          reasonCode: meta.reasonCode ?? null,
+          ledgerWire: 'unwired',
+        });
+        await tx`UPDATE pay.payments SET status = 'disputed', updated_at = now() WHERE id = ${row.id}`;
+        return this.view(tx, { ...row, status: 'disputed' });
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
   }
 
   // ── Settlement (§6.1) ──────────────────────────────────────────────────────
