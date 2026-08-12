@@ -1030,8 +1030,10 @@ export const FEATURES = [
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.spot'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession (#1114), dark refuse unbilled, boot-register (#1336), i18n parity (#1337). STILL NOT done: allowlisted live spot tickers (Class X). Not tracker done until live data path.',
+    note: '**D26-P1-A3 2026-08-12:** Ranked signals refuse until D26-P0-11 signal-inputs law sealed (`signal_inputs_law_blank`). Stage-1/2 rank paths + metered runSession gated. STILL NOT done: owner seal of P0-11 inputs; live spot tickers (Class X). Not tracker done until sealed law + live data path.',
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',

@@ -4,6 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
 import { SCANNER_DATA_TOOLS } from './guardrail.js';
+import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL, SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW } from './signal-inputs-law.js';
 
 const SECRET = 'an-agents-scanner-stage2-mount-test-edge-secret';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -96,12 +97,37 @@ describe('scanner Stage-2 routes', () => {
   });
 
   it('rankLive caps by tier depth and refuses invent on dark plane', async () => {
+    const blankP011 = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .scanner.rankLive({
+        plane: 'live',
+        userTier: 'free',
+        law,
+        tickers: [
+          {
+            marketId: 'btc-usdt',
+            last: '100',
+            volume24h: '1000',
+            change24hBps: 50,
+            asOf: '2026-08-07T12:00:00.000Z',
+            maxAgeMs: 60_000,
+          },
+        ],
+      });
+    expect(blankP011).toEqual({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.tier_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
+
     const dark = await createAgentsRouter(stubDeps())
       .createCaller(signed())
       .scanner.rankLive({
         plane: 'dark',
         userTier: 'free',
         law,
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
         tickers: [
           {
             marketId: 'btc-usdt',
@@ -128,6 +154,7 @@ describe('scanner Stage-2 routes', () => {
           published: true,
           matrix: { free: { maxSignals: 1, tools: [...SCANNER_DATA_TOOLS] } },
         },
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
         now: '2026-08-07T12:00:00.000Z',
         tickers: [
           {

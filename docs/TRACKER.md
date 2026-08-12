@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**59 of 148 shipped (40%)** · 8 in progress · 28 ready to claim · 53 blocked · 32 deliberate §13 sockets
+**59 of 148 shipped (40%)** · 9 in progress · 27 ready to claim · 53 blocked · 32 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -41,7 +41,6 @@ pnpm wt feat/<the-thing>
 | P2P merchant programme — badges, limits, API | `p2p` | 3 | `p2p.merchants` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | Fiat on/off ramp reusing svc-pay adapters | `bank` | 5 | `bank.ramps` |
-| Market Scanner — ranked signals by tier | `agents` | 5 | `agents.scanner` |
 | 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
 | DERIV//DESK library import — 20 playbooks + 3 workbooks | `academy` | 5 | `academy.curriculum` |
 | Residencies, IFC pay, revenue share | `academy` | 5 | `academy.ambassadors` |
@@ -78,6 +77,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Perps: isolated margin, funding, partial-liquidation ladder | **Phantom-X-007** | `trade` |
 | OTC RFQ desk, staked-tier gate | **Phantom-X-007** | `trade` |
 | Navigator — tool-calling inside user guardrails | **Phantom-X-007** | `agents` |
+| Market Scanner — ranked signals by tier | **Phantom-X-007** | `agents` |
 | Multi-tier affiliate / IB trees, payout automation | **agent:w13-l04** | `core-ops` |
 | Screening queues, geo-block, VPN/Tor detection | **w10-l04-edge** | `core-ops` |
 | Warehouse — read replica + cube layer | **w10-l04-edge** | `core-ops` |
@@ -233,7 +233,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies_ | F |  | `agents.gateway` |
 | 🔨 | Navigator — tool-calling inside user guardrails <br/>_**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment._ | F |  | `agents.navigator` |
 | ⛔ | Support agent — KB + account-state grounded <br/>_**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession, boot-register, money denylist. STILL NOT done: live ops.support KB plane in production env. Not tracker done until grounded env._ | F | `ops.support` | `agents.support` |
-| 🟢 | Market Scanner — ranked signals by tier <br/>_**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession (#1114), dark refuse unbilled, boot-register (#1336), i18n parity (#1337). STILL NOT done: allowlisted live spot tickers (Class X). Not tracker done until live data path._ | F |  | `agents.scanner` |
+| 🔨 | Market Scanner — ranked signals by tier <br/>_**D26-P1-A3 2026-08-12:** Ranked signals refuse until D26-P0-11 signal-inputs law sealed (`signal_inputs_law_blank`). Stage-1/2 rank paths + metered runSession gated. STILL NOT done: owner seal of P0-11 inputs; live spot tickers (Class X). Not tracker done until sealed law + live data path._ | F |  | `agents.scanner` |
 | ⛔ | Merchant agent — approval-rate watch <br/>_**W6 honesty 2026-08-09:** Stage-1 on tip — metered merchant.runSession (#1284), dark pay refuse invent rates, boot-register. STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane._ | F | `pay.routing` | `agents.merchant` |
 | ⛔ | Copy-Intel — writes audited leader stats <br/>_**W6 honesty 2026-08-09:** Stage-1 on tip — metered copyIntel.runSession (#1285), dark copy refuse, boot-register. STILL NOT done: live trade.copy leader plane (Class X). Not tracker done until live leaders allowlist._ | F | `trade.copy` | `agents.copy-intel` |
 | ✅ | Live lobbies, LiveKit SFU, capacity tiers <br/>_svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here._ | F |  | `academy.lobbies` |
