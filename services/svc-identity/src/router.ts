@@ -25,10 +25,14 @@ import type { FreezeService } from './affiliates/freeze-service.js';
 import { CommissionError } from './affiliates/commission.js';
 import {
   AccrualRateRefuseError,
+  accrualTierLawIsPublished,
   type AccrualTierLaw,
   UNPUBLISHED_ACCRUAL_TIER_LAW,
 } from './affiliates/commission-rate-law.js';
-import { accrueTreeUnderRateAuthority } from './affiliates/accrual-tree-authority.js';
+import {
+  accrueTreeUnderRateAuthority,
+  accrualTreeAuthorityStatusLine,
+} from './affiliates/accrual-tree-authority.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
@@ -1310,8 +1314,8 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Stage admin read — multi-tier tree board (structure + freeze count).
-       * No rates, no payout amounts.
+       * Stage admin read — multi-tier tree board (structure + freeze count) plus
+       * D26-P1-O2 rate-authority honesty. Never invents commission % into the board.
        */
       treeStatus: scopedProcedure('admin:read')
         .output(
@@ -1322,6 +1326,10 @@ export function createIdentityRouter(
             frozenCount: z.number().int().nonnegative(),
             maxDepthCap: z.number().int().positive(),
             statusLine: z.string(),
+            /** Owner published IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON (no invent). */
+            rateAuthorityPublished: z.boolean(),
+            /** Ops board line — published flag + tier count only, never rate values. */
+            rateAuthorityStatusLine: z.string(),
           }),
         )
         .query(async () => {
@@ -1331,6 +1339,8 @@ export function createIdentityRouter(
             return {
               ...board,
               statusLine: affiliateTreeStatusLine(board),
+              rateAuthorityPublished: accrualTierLawIsPublished(accrualTierLaw),
+              rateAuthorityStatusLine: accrualTreeAuthorityStatusLine(accrualTierLaw),
             };
           } catch (err) {
             throw toTrpcError(err);

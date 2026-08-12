@@ -41,7 +41,7 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 | `affiliates.attribute`                                 | `identity:write`          | Referral edge; cycle/self/depth refused                                                                   |
 | `affiliates.myReferrer` / `myAncestors` / `myAccruals` | `identity:read`           | Self-only tree + durable accruals                                                                         |
 | `affiliates.freeze` / `unfreeze` / `freezes`           | `admin:write` / `read`    | Freeze ledger honesty (no pay)                                                                            |
-| `affiliates.treeStatus` / `node` / `members`           | `admin:read`              | Admin tree structure + roster                                                                             |
+| `affiliates.treeStatus` / `node` / `members`           | `admin:read`              | Admin tree structure + roster; `treeStatus` adds rate-authority published flag (no rate invent)           |
 | `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Accrual tree under rate authority (D26-P1-O2); **no ledger**; durable accrue = owner-published tiers only (per-call invent refused); dry-run may simulate; optional `sourceModule` (fee pool) |
 | `affiliates.payout`                                    | `admin:write`             | Pays when §8 rates + ledger wired; refuse-closed otherwise; sweeps row `sourceModule` fee pool            |
 

@@ -786,6 +786,9 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
     expect(board.frozenCount).toBe(1);
     expect(board.statusLine).toContain('edges=2');
     expect(board.statusLine).toContain('frozen=1');
+    // D26-P1-O2 deepen: tip Stage tree + rate authority honesty (no invent %)
+    expect(board.rateAuthorityPublished).toBe(false);
+    expect(board.rateAuthorityStatusLine).toBe('authority=0 published=0 tiers=0');
   });
 
   it('node returns place-in-tree for admin:read', async () => {
@@ -1116,7 +1119,13 @@ describe('affiliates.accrue / accrueDryRun under rate authority (D26-P1-O2)', ()
       attribute: async () => ({ ok: true }),
       getReferrer: async () => null,
       listDownline: async () => [],
-      treeBoard: async () => ({ edges: 1, roots: 1, maxDepth: 1, frozenCount: 0 }),
+      treeBoard: async () => ({
+        edges: 1,
+        referrers: 1,
+        maxDepth: 1,
+        frozenCount: 0,
+        maxDepthCap: 5,
+      }),
       members: async () => [],
     } as unknown as import('./affiliates/referral-service.js').ReferralService;
     const freeze = {
@@ -1209,6 +1218,24 @@ describe('affiliates.accrue / accrueDryRun under rate authority (D26-P1-O2)', ()
     });
     expect(out.rows).toHaveLength(1);
     expect(out.rows[0]!.commissionAmount).toBe('10');
+  });
+
+  it('treeStatus surfaces rate authority without inventing commission percentages', async () => {
+    const unpublished = mounted({ law: undefined }).router.createCaller(
+      await ctx(['admin:read'], { userId: OPERATOR }),
+    );
+    const dark = await unpublished.affiliates.treeStatus();
+    expect(dark.rateAuthorityPublished).toBe(false);
+    expect(dark.rateAuthorityStatusLine).toBe('authority=0 published=0 tiers=0');
+
+    const published = mounted({ law: publishedLaw }).router.createCaller(
+      await ctx(['admin:read'], { userId: OPERATOR }),
+    );
+    const lit = await published.affiliates.treeStatus();
+    expect(lit.rateAuthorityPublished).toBe(true);
+    expect(lit.rateAuthorityStatusLine).toBe('authority=1 published=1 tiers=1');
+    // Never leak the owner rate string into the ops board.
+    expect(lit.rateAuthorityStatusLine).not.toContain('0.10');
   });
 });
 
