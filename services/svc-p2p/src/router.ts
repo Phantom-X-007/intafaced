@@ -1110,9 +1110,7 @@ export function createP2pRouter(
                 tradeId: input.tradeId,
                 disputeId: dispute.id,
                 actorId: ctx.principal.userId,
-                actorScope: ctx.principal.scopes.includes('admin:compliance')
-                  ? 'admin:compliance'
-                  : 'p2p:read',
+                actorScope: ctx.principal.scopes.includes('admin:compliance') ? 'admin:compliance' : 'p2p:read',
               });
             }
 

@@ -513,9 +513,7 @@ describe('svc-p2p mount — the moderator queue', () => {
       .createCaller(ctx)
       .disputes.resolve({ tradeId: dispute.tradeId, resolution: 'release' });
 
-    expect(suspended).toEqual([
-      { userId: SELLER, tradeId: dispute.tradeId, disputeId: dispute.id, actorId: MOD },
-    ]);
+    expect(suspended).toEqual([{ userId: SELLER, tradeId: dispute.tradeId, disputeId: dispute.id, actorId: MOD }]);
   });
 
   it('attributes a refund loss to the buyer for merchant suspension', async () => {

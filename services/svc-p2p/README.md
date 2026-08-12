@@ -88,45 +88,45 @@ tRPC (`src/router.ts`). Money crosses the boundary as **decimal strings**, in an
 
 Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the scope _and_ runs the jurisdiction matrix (§7). P2P is custodial on the Fiat Plane, so §22 puts it behind tiered verification — and that follows from `module: 'p2p'`, not from a check written in this service.
 
-| Procedure                        | Scope                    | Purpose                                                                    |
-| -------------------------------- | ------------------------ | -------------------------------------------------------------------------- |
-| `fiat.list`                      | public                   | The enabled currency registry, straight from `packages/config`             |
-| `offers.create`                  | `p2p:write`              | Publish an offer, fixed or floating price                                  |
-| `offers.list`                    | `p2p:read`               | The board — active offers with liquidity left to take                      |
-| `offers.get` / `offers.close`    | `p2p:read` / `p2p:write` | Closing withdraws remaining liquidity; open trades continue                |
-| `offers.pause` / `offers.resume` | `p2p:write`              | Hide / restore remaining liquidity without cancelling open trades          |
-| `trades.take`                    | `p2p:write`              | **→ `escrowLock`.** Bounds, liquidity **and destination** before any lock  |
-| `trades.markFiatSent`            | `p2p:write`              | Buyer only                                                                 |
-| `trades.confirmReceived`         | `p2p:write`              | Seller only. **→ `escrowRelease`**                                         |
-| `trades.cancel`                  | `p2p:write`              | **→ `escrowRefund`**, in full                                              |
-| `trades.get` / `trades.list`     | `p2p:read`               | Never carry a payment instrument — see below                               |
-| `trades.paymentInstrument`       | `p2p:read`               | **Where to send the money.** Party-or-moderator, live escrow only, logged  |
-| `disputes.open`                  | `p2p:write`              | Either party. Discloses `ifNobodyRules` + `moderationReachable`            |
-| `disputes.appendEvidence`        | `p2p:write`              | Either party, while open. **Append-only** — no edit, no remove             |
-| `disputes.get`                   | `p2p:read`               | Party sees their own evidence; moderator sees all of it                    |
-| `disputes.list`                  | `p2p:read` + moderator   | **The queue** — allowlisted id or `admin:compliance`; else honest refuse   |
-| `disputes.resolve`               | `p2p:read` + moderator   | **Moderator only** — release or refund; empty allowlist → unreachable      |
-| `reputation.get`                 | `p2p:read`               | Completion rate, average release time, disputes lost, badges               |
-| `instruments.methods.list`       | `p2p:read`               | What each method needs, per country. About methods, never about people     |
-| `instruments.methods.register`   | `admin:compliance`       | **Operator only** — declare a market's field requirements                  |
-| `instruments.methods.setEnabled` | `admin:compliance`       | Stop accepting new instruments for a method/country                        |
-| `instruments.create`             | `p2p:write`              | Register a destination                                                     |
-| `instruments.update`             | `p2p:write`              | Edit. Does not reach a trade already holding a snapshot                    |
-| `instruments.remove`             | `p2p:write`              | A state change, never a DELETE                                             |
-| `instruments.list`               | `p2p:read`               | The caller's own — **headers only, no field values, ever**                 |
-| `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read           |
-| `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                           |
-| `merchants.me`                   | `p2p:read`               | Caller's merchant standing + history headers (Stage 1–2 programme)         |
+| Procedure                        | Scope                    | Purpose                                                                                                            |
+| -------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `fiat.list`                      | public                   | The enabled currency registry, straight from `packages/config`                                                     |
+| `offers.create`                  | `p2p:write`              | Publish an offer, fixed or floating price                                                                          |
+| `offers.list`                    | `p2p:read`               | The board — active offers with liquidity left to take                                                              |
+| `offers.get` / `offers.close`    | `p2p:read` / `p2p:write` | Closing withdraws remaining liquidity; open trades continue                                                        |
+| `offers.pause` / `offers.resume` | `p2p:write`              | Hide / restore remaining liquidity without cancelling open trades                                                  |
+| `trades.take`                    | `p2p:write`              | **→ `escrowLock`.** Bounds, liquidity **and destination** before any lock                                          |
+| `trades.markFiatSent`            | `p2p:write`              | Buyer only                                                                                                         |
+| `trades.confirmReceived`         | `p2p:write`              | Seller only. **→ `escrowRelease`**                                                                                 |
+| `trades.cancel`                  | `p2p:write`              | **→ `escrowRefund`**, in full                                                                                      |
+| `trades.get` / `trades.list`     | `p2p:read`               | Never carry a payment instrument — see below                                                                       |
+| `trades.paymentInstrument`       | `p2p:read`               | **Where to send the money.** Party-or-moderator, live escrow only, logged                                          |
+| `disputes.open`                  | `p2p:write`              | Either party. Discloses `ifNobodyRules` + `moderationReachable`                                                    |
+| `disputes.appendEvidence`        | `p2p:write`              | Either party, while open. **Append-only** — no edit, no remove                                                     |
+| `disputes.get`                   | `p2p:read`               | Party sees their own evidence; moderator sees all of it                                                            |
+| `disputes.list`                  | `p2p:read` + moderator   | **The queue** — allowlisted id or `admin:compliance`; else honest refuse                                           |
+| `disputes.resolve`               | `p2p:read` + moderator   | **Moderator only** — release or refund; empty allowlist → unreachable                                              |
+| `reputation.get`                 | `p2p:read`               | Completion rate, average release time, disputes lost, badges                                                       |
+| `instruments.methods.list`       | `p2p:read`               | What each method needs, per country. About methods, never about people                                             |
+| `instruments.methods.register`   | `admin:compliance`       | **Operator only** — declare a market's field requirements                                                          |
+| `instruments.methods.setEnabled` | `admin:compliance`       | Stop accepting new instruments for a method/country                                                                |
+| `instruments.create`             | `p2p:write`              | Register a destination                                                                                             |
+| `instruments.update`             | `p2p:write`              | Edit. Does not reach a trade already holding a snapshot                                                            |
+| `instruments.remove`             | `p2p:write`              | A state change, never a DELETE                                                                                     |
+| `instruments.list`               | `p2p:read`               | The caller's own — **headers only, no field values, ever**                                                         |
+| `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read                                                   |
+| `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                                                                   |
+| `merchants.me`                   | `p2p:read`               | Caller's merchant standing + history headers (Stage 1–2 programme)                                                 |
 | `merchants.apiAccess`            | `p2p:read`               | Current standing → API eligibility; names shared identity/edge planes; `disputeResolution: interactive_human_only` |
-| `merchants.offerLimits`          | `p2p:read`               | Deployment ceilings (`standardMax` / `merchantMax` or null = unlimited)    |
-| `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing; null = unlimited)      |
-| `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                |
-| `merchants.withdraw`             | `p2p:write`              | Withdraw a pending application                                             |
-| `merchants.decide`               | `admin:compliance`       | Operator transition to approved / rejected / suspended                     |
-| `merchants.history`              | `admin:compliance`       | Audit trail of standing changes                                            |
-| `ops.lateSettlements`            | `admin:compliance`       | Committed decisions with no ledger stamp yet (+ durable last settle error) |
-| `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                  |
-| `data.erase`                     | `p2p:write`              | §0.9 — self-only. Refuses while escrow is live; names what it retained     |
+| `merchants.offerLimits`          | `p2p:read`               | Deployment ceilings (`standardMax` / `merchantMax` or null = unlimited)                                            |
+| `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing; null = unlimited)                                              |
+| `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                                                        |
+| `merchants.withdraw`             | `p2p:write`              | Withdraw a pending application                                                                                     |
+| `merchants.decide`               | `admin:compliance`       | Operator transition to approved / rejected / suspended                                                             |
+| `merchants.history`              | `admin:compliance`       | Audit trail of standing changes                                                                                    |
+| `ops.lateSettlements`            | `admin:compliance`       | Committed decisions with no ledger stamp yet (+ durable last settle error)                                         |
+| `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                                                          |
+| `data.erase`                     | `p2p:write`              | §0.9 — self-only. Refuses while escrow is live; names what it retained                                             |
 
 HTTP (`src/index.ts`):
 
