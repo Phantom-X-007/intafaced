@@ -207,6 +207,58 @@ export const ANALYTICS_REPLICA_URL_ENV = {
 } as const;
 
 /**
+ * ETL watermark honesty (ops.analytics / D26-P1-O4 residual).
+ *
+ * Operator-stamped ISO-8601 instant of the last successful warehouse ETL run.
+ * Unset / blank / unparseable → `absent` — never invent "ran and found nothing"
+ * vs "never ran". Presence of a watermark does NOT paint live cubes; lag probe
+ * rules still gate `mayLabelLive`.
+ */
+export const ANALYTICS_ETL_WATERMARK_AT_ENV = 'ANALYTICS_ETL_WATERMARK_AT' as const;
+
+export type EtlWatermarkState = 'absent' | 'present';
+
+export type EtlWatermarkResolution = {
+  readonly state: EtlWatermarkState;
+  /** ISO-8601 when `state === 'present'`; otherwise null. */
+  readonly at: string | null;
+  readonly note: string;
+  /** Env key name only — never a secret. */
+  readonly envKey: typeof ANALYTICS_ETL_WATERMARK_AT_ENV;
+};
+
+const ETL_ABSENT_NOTE =
+  'ETL watermark: ABSENT — cannot claim "ran and found nothing" vs "never ran". No fake cubes.';
+const ETL_PRESENT_NOTE =
+  'ETL watermark: PRESENT (operator-stamped). Does not imply live cubes — lag probe still required.';
+
+/**
+ * Resolve ETL watermark from env. Fail-closed: junk timestamps are absent.
+ */
+export function resolveEtlWatermark(env: Record<string, string | undefined> = process.env): EtlWatermarkResolution {
+  const raw = env[ANALYTICS_ETL_WATERMARK_AT_ENV];
+  if (raw === undefined || raw.trim() === '') {
+    return { state: 'absent', at: null, note: ETL_ABSENT_NOTE, envKey: ANALYTICS_ETL_WATERMARK_AT_ENV };
+  }
+  const trimmed = raw.trim();
+  const ms = Date.parse(trimmed);
+  if (!Number.isFinite(ms)) {
+    return {
+      state: 'absent',
+      at: null,
+      note: `ETL watermark: ABSENT — ${ANALYTICS_ETL_WATERMARK_AT_ENV} is not a parseable ISO-8601 instant. No fake cubes.`,
+      envKey: ANALYTICS_ETL_WATERMARK_AT_ENV,
+    };
+  }
+  return {
+    state: 'present',
+    at: new Date(ms).toISOString(),
+    note: ETL_PRESENT_NOTE,
+    envKey: ANALYTICS_ETL_WATERMARK_AT_ENV,
+  };
+}
+
+/**
  * SQL for lag on a hot-standby: seconds since last replayed WAL.
  * NULL when the connection is not in recovery (not a standby) — treat as unknown.
  * Callers inject a query runner; contracts never open a DB pool.
