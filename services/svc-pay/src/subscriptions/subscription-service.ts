@@ -432,6 +432,61 @@ export class SubscriptionService {
     return toSub(row);
   }
 
+  /** Merchant fleet list — mandates (ops truth). Read-only. */
+  async listMandates(merchantId: string, options: { status?: MandateStatus; limit?: number } = {}): Promise<MandateRecord[]> {
+    await this.requireMerchant(merchantId);
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const rows = options.status
+      ? await this.sql<MandateRow[]>`
+          SELECT id, merchant_id, customer_id, asset_id, amount::text, ceiling::text,
+                 cadence, starts_at, ends_at, rail_adapter, rail_mandate_ref,
+                 status, cancelled_at, created_at
+            FROM pay.subscription_mandates
+           WHERE merchant_id = ${merchantId} AND status = ${options.status}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<MandateRow[]>`
+          SELECT id, merchant_id, customer_id, asset_id, amount::text, ceiling::text,
+                 cadence, starts_at, ends_at, rail_adapter, rail_mandate_ref,
+                 status, cancelled_at, created_at
+            FROM pay.subscription_mandates
+           WHERE merchant_id = ${merchantId}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    return rows.map(toMandate);
+  }
+
+  /** Merchant fleet list — subscriptions (ops truth). Read-only. */
+  async listSubscriptions(
+    merchantId: string,
+    options: { status?: SubscriptionStatus; limit?: number } = {},
+  ): Promise<SubscriptionRecord[]> {
+    await this.requireMerchant(merchantId);
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const rows = options.status
+      ? await this.sql<SubRow[]>`
+          SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
+                 cancelled_at, path, created_at, anchor_at, anchor_occurrence,
+                 paused_at, resumed_at, stalled_at, stall_reason
+            FROM pay.subscriptions
+           WHERE merchant_id = ${merchantId} AND status = ${options.status}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<SubRow[]>`
+          SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
+                 cancelled_at, path, created_at, anchor_at, anchor_occurrence,
+                 paused_at, resumed_at, stalled_at, stall_reason
+            FROM pay.subscriptions
+           WHERE merchant_id = ${merchantId}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    return rows.map(toSub);
+  }
+
   /** Every recorded period of one subscription, oldest first. */
   async listCycles(subscriptionId: string): Promise<CycleRecord[]> {
     const rows = await this.sql<CycleRow[]>`
