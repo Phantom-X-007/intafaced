@@ -88,12 +88,7 @@ export function parseOtcDeskLawJson(raw: string | null | undefined): OtcDeskLaw 
   // No default — inventing a staleness window is inventing when the desk may
   // still move money. Owner must name the number, or the law is unpublished.
   const maxMidAgeSeconds = obj.maxMidAgeSeconds;
-  if (
-    typeof maxMidAgeSeconds !== 'number' ||
-    !Number.isInteger(maxMidAgeSeconds) ||
-    maxMidAgeSeconds < 1 ||
-    maxMidAgeSeconds > 86_400
-  ) {
+  if (typeof maxMidAgeSeconds !== 'number' || !Number.isInteger(maxMidAgeSeconds) || maxMidAgeSeconds < 1 || maxMidAgeSeconds > 86_400) {
     throw new OtcError(
       'TRADE_OTC_DESK_LAW.maxMidAgeSeconds must be an integer 1..86400 — refuse rather than invent mid freshness',
       'trade.otc_desk_law_blank',

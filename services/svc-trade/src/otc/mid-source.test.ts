@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  createConfigOtcMidSource,
-  createObservedOtcMidSource,
-  NO_OTC_MIDS,
-  otcPairKey,
-} from './mid-source.js';
+import { createConfigOtcMidSource, createObservedOtcMidSource, NO_OTC_MIDS, otcPairKey } from './mid-source.js';
 
 describe('otc mid-source', () => {
   it('pair key is upper-cased BASE/QUOTE, matching trade.markets.symbol', () => {

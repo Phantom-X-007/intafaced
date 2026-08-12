@@ -43,9 +43,7 @@ describe('parseOtcDeskLawJson', () => {
 
   it('refuses invent — missing maxMidAgeSeconds', () => {
     expect(() =>
-      parseOtcDeskLawJson(
-        JSON.stringify({ published: true, spreadBps: 25, minStake: '1', counterparty: 'platform', quoteTtlMs: 15_000 }),
-      ),
+      parseOtcDeskLawJson(JSON.stringify({ published: true, spreadBps: 25, minStake: '1', counterparty: 'platform', quoteTtlMs: 15_000 })),
     ).toThrow(OtcError);
   });
 });

@@ -101,10 +101,7 @@ export function parseOtcMids(raw: string | null | undefined): Map<string, string
  * (`createObservedOtcMidSource` or a venue-chained source). The max-age number
  * itself is owner law on the desk (DIRECTION §8), never a default here.
  */
-export function createConfigOtcMidSource(
-  raw: string | null | undefined,
-  bootAsOf: Date = new Date(),
-): OtcMidSource {
+export function createConfigOtcMidSource(raw: string | null | undefined, bootAsOf: Date = new Date()): OtcMidSource {
   const mids = parseOtcMids(raw);
   return (pairKey) => {
     const mid = mids.get(pairKey);
@@ -117,10 +114,7 @@ export function createConfigOtcMidSource(
  * Observed mid map — `asOf` comes from the caller (feed clock), not read time.
  * Used by tests and by any live adapter that already has an observation time.
  */
-export function createObservedOtcMidSource(
-  raw: string | null | undefined,
-  asOf: () => Date,
-): OtcMidSource {
+export function createObservedOtcMidSource(raw: string | null | undefined, asOf: () => Date): OtcMidSource {
   const mids = parseOtcMids(raw);
   return (pairKey) => {
     const mid = mids.get(pairKey);

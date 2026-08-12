@@ -142,7 +142,9 @@ describe('planOtcSettle / postOtcSettle', () => {
   it('inventory shortfall refuses with customer USDT untouched', async () => {
     const ledger = new MemoryLedger();
     // No BTC seed for the house — buy settle needs mmHold(BTC) first.
-    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: parseAmount('1000'), rail: 'test', railRef: 'otc-fund-short' }));
+    await ledger.post(
+      recipes.deposit({ userId: USER, assetId: 'USDT', amount: parseAmount('1000'), rail: 'test', railRef: 'otc-fund-short' }),
+    );
 
     const before = formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount);
     expect(before).toBe('1000');
