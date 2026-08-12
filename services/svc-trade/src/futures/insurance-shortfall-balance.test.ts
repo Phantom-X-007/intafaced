@@ -141,9 +141,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
     await seedPositionMargin(ledger, row.positionId, '10');
     await seedInsurance(ledger, '50', 'ins-shortfall-1');
     expect(formatAmount(await fundBalance(ledger))).toBe('50');
-    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER, ASSET, row.positionId))).amount)).toBe(
-      '10',
-    );
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER, ASSET, row.positionId))).amount)).toBe('10');
 
     // Bound and recipe name the same pot — regression if either drifts.
     expect(recipeInsuranceAccount(ASSET)).toEqual(insuranceFund(ASSET));
@@ -177,9 +175,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
     // not "at least the shortfall", not a meta field on a recording stub.
     expect(formatAmount(before - after)).toBe(formatAmount(shortfall));
     expect(formatAmount(after)).toBe('40');
-    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER, ASSET, row.positionId))).amount)).toBe(
-      '0',
-    );
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER, ASSET, row.positionId))).amount)).toBe('0');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
@@ -266,9 +262,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
     expect(result.items[0]!.outcome).toBe('skipped_insurance_underfunded');
     expect(closed).toHaveLength(0);
     expect(await fundBalance(ledger)).toBe(before);
-    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER, ASSET, row.positionId))).amount)).toBe(
-      '10',
-    );
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(USER, ASSET, row.positionId))).amount)).toBe('10');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
