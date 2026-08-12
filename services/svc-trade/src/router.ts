@@ -474,13 +474,26 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
 
       quote: scopedProcedure('trade:read', { module: 'trade' })
         .input(
-          z.object({
-            side: orderSideSchema,
-            baseAsset: z.string().min(1).max(32),
-            quoteAsset: z.string().min(1).max(32),
-            qty: decimal,
-            makerId: z.string().min(1).max(120).optional(),
-          }),
+          /**
+           * `.strict()`, and it is the money guard rather than tidiness.
+           *
+           * zod strips unknown keys by default, so a body carrying `midPrice`
+           * was accepted and silently discarded. That is the posture #1097
+           * fixed the *reading* of but not the *shape* of: a client sending a
+           * price got a 200 and a quote priced off something else, which is
+           * indistinguishable from the desk having honoured it. On the one
+           * surface where the customer naming the price was a live exploit,
+           * an unknown field is refused and named instead of ignored.
+           */
+          z
+            .object({
+              side: orderSideSchema,
+              baseAsset: z.string().min(1).max(32),
+              quoteAsset: z.string().min(1).max(32),
+              qty: decimal,
+              makerId: z.string().min(1).max(120).optional(),
+            })
+            .strict(),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
@@ -499,10 +512,17 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
 
       accept: scopedProcedure('trade:write', { module: 'trade' })
         .input(
-          z.object({
-            quoteId: z.string().uuid(),
-            assertedPrice: decimal.optional(),
-          }),
+          /**
+           * `assertedPrice` is the one price the customer may send, and it can
+           * only ever cause a REFUSAL: it must equal the quoted price or the
+           * accept is rejected as last look. It is never the price that fills.
+           */
+          z
+            .object({
+              quoteId: z.string().uuid(),
+              assertedPrice: decimal.optional(),
+            })
+            .strict(),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
@@ -515,7 +535,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         ),
 
       settle: scopedProcedure('trade:write', { module: 'trade' })
-        .input(z.object({ quoteId: z.string().uuid() }))
+        .input(z.object({ quoteId: z.string().uuid() }).strict())
         .mutation(({ ctx, input }) =>
           guard(async () => {
             if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
