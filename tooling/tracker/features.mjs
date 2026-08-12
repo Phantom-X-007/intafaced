@@ -1113,13 +1113,13 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'token.staking'],
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
-    requires: ['services/svc-academy'],
+    requires: ['services/svc-academy/src/ambassadors/ifc-pay-rate-law.ts', 'services/svc-academy/src/ambassadors/ifc-pay.ts'],
     note:
-      'D26-P1-C2 2026-08-12: IFC pay / residencies under rate authority (refuse invent; dry-run quote when owner law published). ' +
-      'Settlement Class M until ledger recipe. Stage-1 programme + Stage-2 residency desk remain. ' +
-      'Not tracker done until residencies seasons + real pay/share (or product-cut) match title.',
+      '**D26-P1-C2 Done-bar sealed 2026-08-12 (#1725):** residencies / IFC pay under rate authority — owner-published ' +
+      'JSON law only; refuse invent rates; dry-run quote when authority present; accepted-residency gate. ' +
+      'SOCKET residual: live settlement Class M until ledger recipe (no recipes in ambassadors); seasons product residual.',
   }),
   f('academy.tournaments', 'Seasonal ladders, IFC prize pools', {
     module: 'academy',
