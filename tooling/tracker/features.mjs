@@ -576,8 +576,19 @@ export const FEATURES = [
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
     phase: '3',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/kyb-service.ts',
+      'services/svc-pay/src/psp-mode.ts',
+      'services/svc-pay/drizzle/0013_pay_merchant_kyb_history.sql',
+    ],
+    note:
+      '**D26-P1-P1 2026-08-12** — digital KYB live operator path (`kyb.decide` under admin:compliance) + append-only KYB/pricing ' +
+      'histories; PSP mode enable refuses missing feeBps (no invent fees); boot seal refuses Hyperswitch/Stripe/etc in svc-pay deps ' +
+      '(D-S-10). Path-disjoint from settlement (#1694) and fraud (#1657). Residual: kybStatus money-gate is pay.gateway; card ' +
+      'acquiring stays socket.psp-partners. Lane feat/pay-psp-product.',
   }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
