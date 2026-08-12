@@ -20,12 +20,7 @@
  */
 
 import type { CurriculumItem, CurriculumKind, CurriculumPath } from './catalog.js';
-import {
-  CURRICULUM_MIN_BODY_CHARS,
-  CURRICULUM_PATHS,
-  getCurriculumItem,
-  listCurriculum,
-} from './catalog.js';
+import { CURRICULUM_MIN_BODY_CHARS, CURRICULUM_PATHS, getCurriculumItem, listCurriculum } from './catalog.js';
 import { curriculumDeepLinksVerified } from './deep-links.js';
 import { curriculumI18nStrategyHonest } from './i18n-strategy.js';
 
@@ -171,8 +166,7 @@ export function lessonSubstanceChecklist(body: string): ImportValidationIssue[] 
     issues.push({
       field: 'body',
       code: 'invalid',
-      message:
-        'Body lacks a teaching signal (worked example / mistakes / drill / self-check) — length alone is not substance',
+      message: 'Body lacks a teaching signal (worked example / mistakes / drill / self-check) — length alone is not substance',
     });
   }
 
