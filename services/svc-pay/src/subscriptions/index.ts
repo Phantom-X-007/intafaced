@@ -52,14 +52,19 @@ export {
 } from './subscription-service.js';
 export {
   CARD_MANDATE_CHARGE_SOCKET,
+  DUNNING_STALL_REASON,
   MANDATE_PATH_MATRIX,
   PRECHARGE_NOTIFY_SOCKET,
+  acknowledgePreChargeNotifyBeforeCharge,
   assertChargeTracesToMandate,
+  dunningAttemptsExhausted,
   mandateChargeDisposition,
   mandateDunningBound,
   pathOpensMoney,
   preChargeNotifyGap,
+  subscriptionsProductPosture,
   type MandateChargeDisposition,
   type MandatePathRow,
+  type PreChargeNotifyGap,
 } from './mandate-product.js';
 export { registerSubscriptionCycleRoutes } from './internal-cycle-routes.js';

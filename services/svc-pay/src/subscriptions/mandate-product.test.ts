@@ -4,25 +4,29 @@ import { PayError } from '../payment-service.js';
 import { MAX_ATTEMPTS_PER_CYCLE } from './charge-cycle.js';
 import {
   CARD_MANDATE_CHARGE_SOCKET,
+  DUNNING_STALL_REASON,
   MANDATE_PATH_MATRIX,
   PRECHARGE_NOTIFY_SOCKET,
+  acknowledgePreChargeNotifyBeforeCharge,
   assertChargeTracesToMandate,
+  dunningAttemptsExhausted,
   mandateChargeDisposition,
   mandateDunningBound,
   normaliseSubscriptionPath,
   pathOpensMoney,
   preChargeNotifyGap,
+  subscriptionsProductPosture,
 } from './mandate-product.js';
 import { assertMandateTermsUnchanged } from './subscription-service.js';
 
 /**
  * D26-P1-P6 — mandate product paths + notify honesty (no invent).
- * Lifecycle pins that must stay true for the Done bar to deepen without
- * stamping done while card rail / pre-charge notify remain sockets.
+ * Lifecycle pins that must stay true for the Done bar.
  */
 describe('mandate product paths (card + crypto honest)', () => {
   it('matrix names both paths and only crypto opens money', () => {
     expect(MANDATE_PATH_MATRIX.map((r) => r.path)).toEqual(['crypto_invoice', 'card']);
+    expect(MANDATE_PATH_MATRIX.every((r) => r.opensMoney === (r.charge === 'open_crypto_invoice'))).toBe(true);
     expect(pathOpensMoney('crypto_invoice')).toBe(true);
     expect(pathOpensMoney('card')).toBe(false);
     expect(pathOpensMoney('card_mandate')).toBe(false);
@@ -109,7 +113,10 @@ describe('mandate lifecycle law (SPEC §4 Done bar pieces)', () => {
     expect(mandateDunningBound()).toEqual({
       maxAttemptsPerCycle: MAX_ATTEMPTS_PER_CYCLE,
       then: 'stall_named',
+      stallReason: DUNNING_STALL_REASON,
     });
+    expect(dunningAttemptsExhausted(MAX_ATTEMPTS_PER_CYCLE - 1)).toBe(false);
+    expect(dunningAttemptsExhausted(MAX_ATTEMPTS_PER_CYCLE)).toBe(true);
     expect(MAX_ATTEMPTS_PER_CYCLE).toBeGreaterThan(0);
     expect(MAX_ATTEMPTS_PER_CYCLE).toBeLessThanOrEqual(5);
   });
@@ -121,7 +128,19 @@ describe('pre-charge notify — refuse invent (§13 gap)', () => {
     expect(gap.status).toBe('absent');
     expect(gap.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
     expect(gap.inventForbidden).toBe(true);
+    expect(gap.notified).toBe(false);
     expect(PRECHARGE_NOTIFY_SOCKET).toBe('socket.pay-precharge-notify');
+  });
+
+  it('fire-path acknowledge never reports notified true', () => {
+    const ack = acknowledgePreChargeNotifyBeforeCharge({
+      subscriptionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      occurrence: 0,
+      path: 'crypto_invoice',
+    });
+    expect(ack.notified).toBe(false);
+    expect(ack.status).toBe('absent');
+    expect(ack.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
   });
 
   it('does not expose a notifyBeforeCharge or invoice_upcoming invent helper', async () => {
@@ -130,5 +149,19 @@ describe('pre-charge notify — refuse invent (§13 gap)', () => {
     expect(keys).not.toContain('notifyBeforeCharge');
     expect(keys).not.toContain('invoiceUpcoming');
     expect(keys).not.toContain('preChargeNotify');
+  });
+});
+
+describe('subscriptionsProductPosture — Ready honesty', () => {
+  it('crypto complete + card refuse + notify absent in one merchant-readable object', () => {
+    const p = subscriptionsProductPosture();
+    expect(p.mountain).toBe('pay.subscriptions');
+    expect(p.crypto.status).toBe('product_complete');
+    expect(p.card.code).toBe('pay.mandate_rail_absent');
+    expect(p.preChargeNotify.notified).toBe(false);
+    expect(p.preChargeNotify.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
+    expect(p.cancel.immediacy).toBe('immediate');
+    expect(p.reconsent.code).toBe('pay.subscription_reconsent_required');
+    expect(p.dunning.stallReason).toBe('arrears');
   });
 });
