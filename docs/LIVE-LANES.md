@@ -1,4 +1,4 @@
-﻿# LIVE LANES â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ multi-agent claims
+# LIVE LANES â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ multi-agent claims
 
 **Rule:** No code edits until your lane is on this board (or `docs/ops/claims/<id>.md`). First claimer wins.  
 **Law:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) â”œÃ©â”¬â•– [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md)  
@@ -68,6 +68,7 @@
 - **2026-08-12 Denon D26-P1-M2:** claim denon-d26-p1-m2-ledger â€” marketListingFee + marketPremiumPlacement Â§13 recipes; registry/matrix â†’ **55** (46 live + 9 sockets) on tip after #1745.
 - **2026-08-12 Denon D26-P2-11:** claim d26-p2-11-recipe-matrix â€” ledger-client live-path inventory (46 live + 7 Â§13 sockets at land); **LANDED #1745**; path-disjoint from #1690 promise-falsify-ledger.
 - **2026-08-12 Denon D26-P1-T6:** claim `denon-d26-p1-t6-options` LIVE â€” options refuse-closed until P0-05 (`socket.options-settlement-asset-law`); no invent settlement asset/matrix.
+- **2026-08-12 Denon D26-P1-P1:** lane `denon-d26-p1-p1-pay-psp` LIVE (#1720) — digital KYB operator path + KYB/pricing durability + no third-party money-lib seal; path-disjoint from settlement (#1694) and fraud (#1657).
 - **2026-08-12 Denon D26-P2-01f:** claim `denon-d26-p2-01f-p2p-doors` Î“Ã‡Ã¶ svc-p2p promise-falsify public doors (escrow/dispute/fee); deepens after #1697 merchants.
 - **2026-08-12 Denon D26-P1-T1e rebase:** lane `denon-d26-p1-t1e-gap` LIVE (#1689) â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ mark/liq honesty on gapping depth series (MVP-5) via `mark-gap-series-honesty.test.ts`; rebased onto tip after #1685 ADL; keep tip T1c/T1d/T4 lanes.
 - **2026-08-12 Denon D26-P1-T1d:** lane `denon-d26-p1-t1d-insure` LIVE â”œÃ³Î“Ã©Â¼Î“Ã‡Â¥ insurance fund balance moves exactly by shortfall (MVP-4) via MemoryLedger + existing recipes; T1b marked LANDED #1678. Soft-overlap docs/tracker with open T1c #1681; no dual-edit of `partial-liquidation-real-book.test.ts`.
