@@ -16,6 +16,7 @@ import { registerPrivateRest } from './private-rest.js';
 import { PositionService } from './futures/position-service.js';
 import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
+import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
@@ -455,6 +456,11 @@ registerPrivateRest(app, {
       clientOpenId: input.clientOpenId,
     }),
   closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
+  getOpenMarginCall: async (principal, positionId) => {
+    const row = await futuresJobs.marginCalls.getOpenForPosition(positionId);
+    if (!row || row.userId !== principal.userId) return null;
+    return presentMarginCallWire(row);
+  },
 });
 
 await app.register(fastifyTRPCPlugin, {

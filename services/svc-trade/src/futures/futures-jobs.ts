@@ -28,6 +28,7 @@ import {
 } from './tick-stores.js';
 import type { FuturesLadderPolicy } from './maintenance-ladder.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
+import { durableMarginCallNotifier, sqlMarginCallStore, type MarginCallStore } from './margin-call-transport.js';
 
 export interface FuturesJobsConfig {
   /** Master kill — false = host created but no intervals started. */
@@ -98,6 +99,11 @@ export interface FuturesJobsHandle {
    * place — there was no port there to read from.
    */
   marks: MarkSource;
+  /**
+   * Durable margin-call store — same instance the liquidation tick notifies
+   * into, so private REST can observe a delivered call end-to-end.
+   */
+  marginCalls: MarginCallStore;
   stop(): void;
 }
 
@@ -122,6 +128,14 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
 
   const markPrice = async (marketId: string, at?: Date) => marks.markPrice({ marketId, at: at ?? (deps.now ? deps.now() : new Date()) });
 
+  /**
+   * Margin-call transport is assembled even when jobs are OFF so the REST
+   * observe door and a later manual tick share one store. Delivery does not
+   * invent grace (D3).
+   */
+  const marginCalls = sqlMarginCallStore(deps.sql);
+  const notifyMarginCall = durableMarginCallNotifier(marginCalls);
+
   if (!deps.config.enabled) {
     return {
       host,
@@ -129,6 +143,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       getPublishedRate,
       markPrice,
       marks,
+      marginCalls,
       stop: () => host.stopAll(),
     };
   }
@@ -178,6 +193,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       ladder,
       ledger: deps.ledger,
       now: deps.now,
+      notifyMarginCall,
     });
   });
 
@@ -205,6 +221,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     getPublishedRate,
     markPrice,
     marks,
+    marginCalls,
     stop: () => host.stopAll(),
   };
 }
