@@ -188,6 +188,8 @@ export type BankErrorCode =
    *
    * A bank/PSP partner and money-transmission permission are a commercial
    * relationship. Refusing by this code is the whole fiat half of the ADR split.
+   * Refusal text names the svc-pay adapter wire (`bank-payout` offramp; null
+   * onramp) so nobody invents a bank-local second fiat book (D26-P1-B4).
    */
   | 'bank.fiat_ramp_socket'
   | 'bank.ramp_invalid_amount'

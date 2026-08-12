@@ -1807,6 +1807,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
    * `simulated` is never omitted: this surface does not broadcast to a chain and
    * never claims a live PSP. Live confirmation stays in svc-pay; Class X is a
    * human decision to point working code at real money.
+   *
+   * `fiatPayAdapters` names which svc-pay RailAdapter ids fiat would reuse when
+   * the socket closes — bank does not invent a second fiat book (D26-P1-B4).
    */
   const rampProgrammeOutput = z.object({
     id: z.string(),
@@ -1814,6 +1817,10 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     displayName: z.string(),
     cryptoRail: z.string().nullable(),
     fiatLeg: z.literal('socket.psp-partners'),
+    fiatPayAdapters: z.object({
+      onramp: z.null(),
+      offramp: z.literal('bank-payout'),
+    }),
   });
 
   const onrampOutput = z.object({

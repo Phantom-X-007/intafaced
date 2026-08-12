@@ -995,7 +995,11 @@ export const FEATURES = [
     phase: '5',
     status: 'ready',
     dependsOn: ['pay.rails'],
-    requires: ['services/svc-bank/src/ramps/ramp-service.ts', 'services/svc-bank/src/ramps/rails.ts'],
+    requires: [
+      'services/svc-bank/src/ramps/ramp-service.ts',
+      'services/svc-bank/src/ramps/rails.ts',
+      'services/svc-bank/src/ramps/pay-adapter-wire.ts',
+    ],
     note:
       '**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF DONE #997** (claim TRK-bank.ramps status:merged). ' +
       'OWNER CLEARED 2026-08-08 (axis C1 absorbs #1128 closeout): stale `owner: cursor-swarm-bank` fenced ALL of services/svc-bank ' +
@@ -1003,7 +1007,8 @@ export const FEATURES = [
       'CRYPTO LEG — ledger surface on main: ramps.programme|onramps|offramps|offramp + ops creditOnramp; value only via ' +
       'ledger-client deposit/withdrawHold/withdrawSettle against rail bank-crypto-ledger. BANK_RAMP_MODE=none|crypto-ledger, default none; ' +
       'simulated: true always; fiat refuses bank.fiat_ramp_socket → socket.psp-partners. No earn APY / card BIN invented. ' +
-      'FIAT LEG — socket.psp-partners, not this row. Live chain confirm/send remains svc-pay + Class X.',
+      'FIAT LEG — socket.psp-partners; D26-P1-B4 deepen: programme.fiatPayAdapters wires offramp→svc-pay `bank-payout` (absent), ' +
+      'onramp→null until pay registers fiat-inbound — no second book in bank. Live chain confirm/send remains svc-pay + Class X.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
     module: 'agents',

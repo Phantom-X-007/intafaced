@@ -1,4 +1,5 @@
 import { BankError } from '../errors.js';
+import { FIAT_OFFRAMP_PAY_ADAPTER_ID, FIAT_PAY_ADAPTER_WIRE, FIAT_RAMP_SOCKET, type FiatPayAdapterWire } from './pay-adapter-wire.js';
 
 /**
  * THE RAMP RAIL PORT (§8.1 `bank.ramps` / D-S-09) — and the line this file draws.
@@ -17,7 +18,8 @@ import { BankError } from '../errors.js';
  *   FIAT LEG — `socket.psp-partners`. A bank/PSP partner and money-transmission
  *   permission are a commercial relationship. No amount of engineering time
  *   produces either. Refusing by name is the only honest thing this module can
- *   do for fiat.
+ *   do for fiat. When the socket closes, fiat on/off reuses **svc-pay**
+ *   RailAdapter ids (`fiatPayAdapters`) — bank does not grow a second book.
  *
  * The setting below selects the CRYPTO ledger half only. There is no value that
  * turns on a fiat rail, and there is no value that claims a live chain send —
@@ -47,7 +49,12 @@ export interface RampProgramme {
   /** Ledger rail string used on deposit/withdraw recipes, or null when none. */
   readonly cryptoRail: string | null;
   /** Always names the fiat socket — never "coming soon". */
-  readonly fiatLeg: 'socket.psp-partners';
+  readonly fiatLeg: typeof FIAT_RAMP_SOCKET;
+  /**
+   * Which svc-pay adapter ids fiat would reuse when the socket closes.
+   * Never a bank-local fiat rail. See `pay-adapter-wire.ts`.
+   */
+  readonly fiatPayAdapters: FiatPayAdapterWire;
 }
 
 export const RAMP_SETTINGS = ['none', 'crypto-ledger'] as const;
@@ -61,7 +68,8 @@ export const NO_RAMP_PROGRAMME: RampProgramme = {
   simulated: true,
   displayName: 'No bank ramp programme',
   cryptoRail: null,
-  fiatLeg: 'socket.psp-partners',
+  fiatLeg: FIAT_RAMP_SOCKET,
+  fiatPayAdapters: FIAT_PAY_ADAPTER_WIRE,
 };
 
 export const CRYPTO_LEDGER_PROGRAMME: RampProgramme = {
@@ -69,7 +77,8 @@ export const CRYPTO_LEDGER_PROGRAMME: RampProgramme = {
   simulated: true,
   displayName: 'Crypto ledger half (no chain broadcast; fiat is a socket)',
   cryptoRail: BANK_CRYPTO_LEDGER_RAIL,
-  fiatLeg: 'socket.psp-partners',
+  fiatLeg: FIAT_RAMP_SOCKET,
+  fiatPayAdapters: FIAT_PAY_ADAPTER_WIRE,
 };
 
 /**
@@ -103,10 +112,22 @@ export function assertCryptoRamp(programme: RampProgramme): string {
 /**
  * Fiat is §13 forever on this surface. The caller's kind is wrong, not their
  * amount — refuse by the socket name so nobody invents a PSP path in-process.
+ *
+ * The message names the pay-adapter wire so operators know fiat would reuse
+ * svc-pay (`bank-payout` offramp; no inbound adapter yet) — not a bank-local
+ * second book, APY, or card BIN.
  */
-export function refuseFiatRamp(): never {
+export function refuseFiatRamp(direction: 'onramp' | 'offramp' = 'onramp'): never {
+  const wire = FIAT_PAY_ADAPTER_WIRE;
+  const adapterClause =
+    direction === 'offramp'
+      ? `Offramp reuses svc-pay adapter "${wire.offramp}" (absent until sponsor bank).`
+      : 'Onramp has no registered svc-pay fiat-inbound adapter yet — socket until pay grows one.';
   throw new BankError(
-    'Fiat on/off ramp is socket.psp-partners — a bank/PSP partner and money-transmission permission, not code. The crypto ledger half does not claim this function.',
+    `Fiat on/off ramp is ${FIAT_RAMP_SOCKET} — a bank/PSP partner and money-transmission permission, not code. ` +
+      `${adapterClause} Bank does not hold a second fiat book.`,
     'bank.fiat_ramp_socket',
   );
 }
+
+export { FIAT_OFFRAMP_PAY_ADAPTER_ID, FIAT_PAY_ADAPTER_WIRE, FIAT_RAMP_SOCKET, type FiatPayAdapterWire };

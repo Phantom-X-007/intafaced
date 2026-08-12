@@ -91,6 +91,7 @@ if (!available) {
         displayName: NO_RAMP_PROGRAMME.displayName,
         cryptoRail: null,
         fiatLeg: 'socket.psp-partners',
+        fiatPayAdapters: { onramp: null, offramp: 'bank-payout' },
       });
     });
   });
@@ -115,6 +116,7 @@ if (!available) {
       const programme = await user.ramps.programme();
       expect(programme.simulated).toBe(true);
       expect(programme.fiatLeg).toBe('socket.psp-partners');
+      expect(programme.fiatPayAdapters).toEqual({ onramp: null, offramp: 'bank-payout' });
       expect(programme.cryptoRail).toBeTruthy();
 
       const credited = await ops.ops.creditOnramp({

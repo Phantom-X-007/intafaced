@@ -56,7 +56,9 @@ import { assertCryptoRamp, refuseFiatRamp, type RampProgramme, NO_RAMP_PROGRAMME
  * WHAT IS NOT HERE
  * ═════════════════════════════════════════════════════════════════════════════
  *
- *   · FIAT. `socket.psp-partners` — refuse `bank.fiat_ramp_socket`.
+ *   · FIAT. `socket.psp-partners` — refuse `bank.fiat_ramp_socket`. When the
+ *     socket closes, fiat reuses svc-pay adapter ids (`fiatPayAdapters` on the
+ *     programme) — bank does not invent a second fiat book, APY, or card BIN.
  *   · CHAIN BROADCAST / CONFIRMATION. Live crypto send and inbound watcher are
  *     svc-pay. Settle here means value left OUR book to `bank-crypto-ledger`.
  *   · EARN APY, CARD BIN, or any commercial rate invention.
@@ -190,7 +192,7 @@ export class RampService {
     railRef: string;
     creditedBy: string;
   }): Promise<OnrampRecord> {
-    if (input.kind === 'fiat') refuseFiatRamp();
+    if (input.kind === 'fiat') refuseFiatRamp('onramp');
     if (input.amount <= 0n) {
       throw new BankError('On-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
@@ -244,7 +246,7 @@ export class RampService {
     destinationRef: string;
     clientRef: string;
   }): Promise<OfframpRecord> {
-    if (input.kind === 'fiat') refuseFiatRamp();
+    if (input.kind === 'fiat') refuseFiatRamp('offramp');
     if (input.amount <= 0n) {
       throw new BankError('Off-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }

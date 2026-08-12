@@ -187,7 +187,8 @@ app.get('/ready', async () => ({
    *
    * `simulated` is never false here. Fiat is always named as the socket. An
    * operator asking "can this process move fiat / broadcast crypto" should not
-   * have to read an env file to learn the answer is no.
+   * have to read an env file to learn the answer is no. `fiatPayAdapters` names
+   * the svc-pay wire (no second book in bank).
    */
   rampProgramme: {
     id: rampProgramme.id,
@@ -195,6 +196,7 @@ app.get('/ready', async () => ({
     displayName: rampProgramme.displayName,
     cryptoRail: rampProgramme.cryptoRail,
     fiatLeg: rampProgramme.fiatLeg,
+    fiatPayAdapters: rampProgramme.fiatPayAdapters,
   },
 }));
 
@@ -386,6 +388,8 @@ app.log.info(
     rampProgramme: rampProgramme.id,
     rampProgrammeSimulated: rampProgramme.simulated,
     rampFiatLeg: rampProgramme.fiatLeg,
+    rampFiatOfframpPayAdapter: rampProgramme.fiatPayAdapters.offramp,
+    rampFiatOnrampPayAdapter: rampProgramme.fiatPayAdapters.onramp,
   },
   'svc-bank ready',
 );

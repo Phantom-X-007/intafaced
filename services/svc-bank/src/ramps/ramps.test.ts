@@ -8,14 +8,24 @@ import { MemoryLedger, formatAmount, parseAmount as amt, railBoundary, userAvail
 import { createBankServices, type BankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { BankError } from '../errors.js';
-import { BANK_CRYPTO_LEDGER_RAIL, CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgrammeFor } from './rails.js';
+import {
+  BANK_CRYPTO_LEDGER_RAIL,
+  CRYPTO_LEDGER_PROGRAMME,
+  FIAT_OFFRAMP_PAY_ADAPTER_ID,
+  FIAT_PAY_ADAPTER_WIRE,
+  NO_RAMP_PROGRAMME,
+  RAMP_SETTINGS,
+  rampProgrammeFor,
+} from './rails.js';
 import { RampService } from './ramp-service.js';
 
 /**
- * bank.ramps — CRYPTO LEDGER half (D-S-09 / ADR 2026-08-04).
+ * bank.ramps — CRYPTO LEDGER half (D-S-09 / ADR 2026-08-04) + fiat pay-adapter
+ * wire honesty (D26-P1-B4).
  *
- * Proves money paths, named refusals, and that fiat is a socket — not a missing
- * module. Does not claim a live chain or a PSP.
+ * Proves money paths, named refusals, and that fiat is a socket wired to
+ * svc-pay adapter ids — not a missing module and not a second bank book.
+ * Does not claim a live chain or a PSP. Never invents APY or card BIN.
  */
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
@@ -46,6 +56,17 @@ describe('choosing a ramp programme is a closed decision with a refusing default
     expect(p.simulated).toBe(true);
     expect(p.cryptoRail).toBe(BANK_CRYPTO_LEDGER_RAIL);
     expect(p.fiatLeg).toBe('socket.psp-partners');
+  });
+
+  it('fiat wire names svc-pay bank-payout for offramp and null onramp (no second book)', () => {
+    for (const setting of RAMP_SETTINGS) {
+      const p = rampProgrammeFor(setting);
+      expect(p.fiatPayAdapters).toEqual(FIAT_PAY_ADAPTER_WIRE);
+      expect(p.fiatPayAdapters.offramp).toBe(FIAT_OFFRAMP_PAY_ADAPTER_ID);
+      expect(p.fiatPayAdapters.onramp).toBeNull();
+      // Crypto ledger rail stays distinct from pay's bank-payout — no collapse.
+      expect(p.cryptoRail).not.toBe(FIAT_OFFRAMP_PAY_ADAPTER_ID);
+    }
   });
 });
 
@@ -113,7 +134,10 @@ if (!available) {
           railRef: 'ach-1',
           creditedBy: OPERATOR,
         }),
-      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      ).rejects.toMatchObject({
+        code: 'bank.fiat_ramp_socket',
+        message: expect.stringMatching(/no registered svc-pay fiat-inbound|second fiat book/i),
+      });
 
       const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
       expect(count[0]!.n).toBe(0);
@@ -128,7 +152,13 @@ if (!available) {
           destinationRef: 'IBAN',
           clientRef: 'fiat-1',
         }),
-      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      ).rejects.toMatchObject({
+        code: 'bank.fiat_ramp_socket',
+        message: expect.stringMatching(/bank-payout/),
+      });
+
+      const offCount = await sql`SELECT count(*)::int AS n FROM bank.ramp_offramps`;
+      expect(offCount[0]!.n).toBe(0);
     });
 
     it('refuses a blank or whitespace asset before any row or ledger post', async () => {

@@ -182,7 +182,17 @@ export {
   type CardConversionPolicy,
   type ConversionQuote,
 } from './cards/conversion.js';
-export { rampProgrammeFor, BANK_CRYPTO_LEDGER_RAIL, RAMP_SETTINGS, type RampProgramme, type RampSetting } from './ramps/rails.js';
+export {
+  rampProgrammeFor,
+  BANK_CRYPTO_LEDGER_RAIL,
+  RAMP_SETTINGS,
+  FIAT_OFFRAMP_PAY_ADAPTER_ID,
+  FIAT_PAY_ADAPTER_WIRE,
+  FIAT_RAMP_SOCKET,
+  type RampProgramme,
+  type RampSetting,
+  type FiatPayAdapterWire,
+} from './ramps/rails.js';
 export { type OnrampRecord, type OfframpRecord, type RampKind, type RampServiceOptions } from './ramps/ramp-service.js';
 export { categorise, SPEND_CATEGORIES, type SpendCategory, type SpendSummary } from './analytics/spend.js';
 export { memoryLedgerHistory, type LedgerHistory, type LedgerEntryRecord } from './analytics/ledger-history.js';
