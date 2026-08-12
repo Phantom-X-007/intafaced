@@ -362,7 +362,8 @@ export const FEATURES = [
       'WIP 2026-08-12 Denon D26-P1-T2 (feat/trade-otc-rfq-settle): RFQ→stake→fail-closed quote (mid asOf + owner maxMidAgeSeconds)→ledger settle. ' +
       'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
       'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
-      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, live socket.otc-mid-feed (boot map goes dark after age), maker-routing settle, durable quotes table. ' +
+      '2026-08-12 maker-routing seal: deskStatus.makerRouting + planOtcSettle refuse name socket.otc-maker-routing (platform principal settle remains real). ' +
+      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, live socket.otc-mid-feed (boot map goes dark after age), maker-routing recipe close, durable quotes table. ' +
       'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
@@ -1964,6 +1965,17 @@ export const FEATURES = [
       'AND fiat settle rails posture. Until then: forex.settlementStatus published=false; production active listMarket / setMarketStatus(active) / ' +
       'place refuse trade.unsettled_asset_class_listing naming this socket. Paper + non-active listing allowed (model). Do NOT invent settlement ' +
       'asset (stablecoin-margined vs true fiat omnibus — D8; PAY_CRYPTO_ASSETS must not accidentally map EUR→euro stablecoin). No code closes this.',
+  }),
+  f('socket.otc-maker-routing', 'Maker-routed OTC settle (external maker ledger path)', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.otc'],
+    requires: ['services/svc-trade/src/otc/maker-routing.ts'],
+    note:
+      '§13 — named 2026-08-12 under trade.otc residual. Platform-principal settle is real (marketMakerMakerFill). ' +
+      'Maker counterparty settle refuses via planOtcSettle + otc.deskStatus.makerRouting until owner publishes routing recipe + ledger path. ' +
+      'Do NOT invent maker book / silent second counterparty. Pins: maker-routing.ts · settle.ts · otc-maker-routing-donebar.test.ts.',
   }),
   // D26-P1-P5: pay.fraud Done bar ships dispute cases; ledger chargeback posts stay refuse-closed here.
   f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {

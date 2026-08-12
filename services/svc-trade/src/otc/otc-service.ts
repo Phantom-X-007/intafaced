@@ -13,6 +13,7 @@ import type { Principal } from '@intafaced/auth';
 import { otcSettleIdsFor } from '../spot/ids.js';
 import { otcDeskLawStatusLine, requirePublishedOtcDeskLaw, type OtcDeskLaw, UNPUBLISHED_OTC_DESK_LAW } from './desk-law.js';
 import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
+import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './maker-routing.js';
 import { NO_OTC_MIDS, normalizeOtcAsset, otcPairKey, type OtcMidSource } from './mid-source.js';
 import {
   acceptOtcQuote,
@@ -61,6 +62,12 @@ export class OtcDeskService {
       published: this.law.published === true,
       statusLine: otcDeskLawStatusLine(this.law),
       residual: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
+      /** SOCKET §13 — platform settle real; maker route refuse-closed. */
+      makerRouting: otcMakerRoutingStatus(),
+      residuals: {
+        deskLaw: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
+        makerRouting: OTC_MAKER_ROUTING_RESIDUAL,
+      },
     };
   }
 

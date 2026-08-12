@@ -8,7 +8,8 @@
 
 import { recipes, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
 import { requirePublishedOtcDeskLaw, type OtcDeskLaw } from './desk-law.js';
-import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
+import { OtcError } from './errors.js';
+import { OTC_MAKER_ROUTING_RESIDUAL, OTC_MAKER_ROUTING_SOCKET } from './maker-routing.js';
 import type { BoundOtcFill } from './rfq.js';
 
 export interface OtcSettlePlan {
@@ -34,9 +35,9 @@ export function planOtcSettle(input: {
 
   if (input.bound.counterparty !== 'platform') {
     throw new OtcError(
-      'Maker-routed OTC settle is refuse-closed until owner publishes maker routing + ledger recipe',
+      `Maker-routed OTC settle is refuse-closed (${OTC_MAKER_ROUTING_SOCKET}) — never invent a maker ledger path`,
       'trade.otc_settle_refused',
-      OTC_DESK_LAW_RESIDUAL,
+      OTC_MAKER_ROUTING_RESIDUAL,
     );
   }
 

@@ -32,6 +32,8 @@ describe('OtcDeskService', () => {
     const s = svc.deskStatus();
     expect(s.published).toBe(false);
     expect(s.residual).toContain('DIRECTION §8');
+    expect(s.makerRouting.socket).toBe('socket.otc-maker-routing');
+    expect(s.makerRouting.published).toBe(false);
   });
 
   it('quote refuses when desk law blank — never invents spread', async () => {
