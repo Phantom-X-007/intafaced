@@ -282,18 +282,14 @@ describe('D26-P2-01a public doors — futures refuse invent rates / access', () 
 
   it('POST /api/v1/orders maps futures_disabled to NotSupported (no invent access)', async () => {
     const placeOrder = vi.fn(async () => {
-      throw new TradeError(
-        'BTC/USDT-PERP: futures orders are disabled (TRADE_FUTURES_ENABLED=false)',
-        'trade.futures_disabled',
-      );
+      throw new TradeError('BTC/USDT-PERP: futures orders are disabled (TRADE_FUTURES_ENABLED=false)', 'trade.futures_disabled');
     });
     const app = Fastify({ logger: false });
     registerPrivateRest(
       app,
       privateDeps({
         placeOrder,
-        marketBySymbol: async (s) =>
-          s === 'BTC/USDT-PERP' ? fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }) : null,
+        marketBySymbol: async (s) => (s === 'BTC/USDT-PERP' ? fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }) : null),
       }),
     );
     await app.ready();
@@ -328,10 +324,7 @@ describe('D26-P2-01a public doors — futures refuse invent rates / access', () 
 describe('D26-P2-01a public doors — convert refuse invent mids / depth', () => {
   it('convert.quote refuses insufficient depth over the wire (no invent avg)', async () => {
     const convertQuote = vi.fn(async () => {
-      throw new TradeError(
-        'insufficient book depth to convert 1 BTC — only 0 available',
-        'trade.convert_insufficient_depth',
-      );
+      throw new TradeError('insufficient book depth to convert 1 BTC — only 0 available', 'trade.convert_insufficient_depth');
     });
     const { app } = await mountTrpc({ trade: { convertQuote } });
 
