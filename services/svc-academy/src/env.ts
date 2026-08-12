@@ -80,6 +80,20 @@ const schema = serviceEnvSchema
         .union([z.boolean(), z.string()])
         .default(true)
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(String(v).toLowerCase()))),
+
+      /**
+       * Owner-published ambassador IFC pay rate authority (D26-P1-C2).
+       * Blank → unpublished / refuse-closed. Never invent session credits.
+       * Shape: {"published":true,"sessionCredit":"10.00000000","asset":"IFC","period":"session"}
+       */
+      ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON: z.string().optional().default(''),
+
+      /**
+       * Owner-published ambassador revenue-share rate authority (D26-P1-C2).
+       * Blank → unpublished / refuse-closed. Never invent fee %.
+       * Shape: {"published":true,"shareOfFeeBps":500,"feeBasis":"lobby_host_fees"}
+       */
+      ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON: z.string().optional().default(''),
     }),
   );
 
