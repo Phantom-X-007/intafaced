@@ -125,25 +125,25 @@ Nitro asked for **double or triple** mass. **Right is not a count target.** Righ
 
 ### 5.1 Trade (Class M · highest invent risk)
 
-| ID             | Tracker / obligation                                          | Done bar (product-complete)                                           |
-| -------------- | ------------------------------------------------------------- | --------------------------------------------------------------------- |
-| **D26-P1-T1**  | `trade.futures` umbrella                                      | All T1a–T1g green **or** honest residual named — never partial Done   |
-| **D26-P1-T1a** | Futures mark from oracle (DIRECTION MVP-1)                    | Mark never caller-supplied; not last-trade; public-door proof         |
-| **D26-P1-T1b** | Margin call observable (MVP-2)                                | Call fires, delivered, observable end-to-end                          |
-| **D26-P1-T1c** | Partial liquidation vs real book (MVP-3)                      | Min close restores maintenance; ledger recipe only                    |
-| **D26-P1-T1d** | Insurance fund shortfall (MVP-4)                              | Fund balance moves exactly by shortfall                               |
-| **D26-P1-T1e** | Gap price series proof (MVP-5)                                | Proven on **gapping** series, not smooth ramp                         |
-| **D26-P1-T1f** | Funding accrues + nets zero (MVP-6)                           | Long/short net zero proven                                            |
-| **D26-P1-T1g** | ADL last resort + in-product disclosure                       | No silent ADL; disclosure before open                                 |
-| **D26-P1-T2**  | `trade.otc`                                                   | RFQ → stake gate → fail-closed quote → ledger settle                  |
-| **D26-P1-T3**  | `trade.copy`                                                  | Sovereign shape; rates refuse until P0-02/15; kill/unfollow real      |
-| **D26-P1-T4**  | `trade.algo`                                                  | TWAP product path: children, pause, overdue slice, no fake fills      |
-| **D26-P1-T5**  | `trade.ccxt-api`                                              | Bot-ready capability matrix + refuse — not “route exists”             |
-| **D26-P1-T6**  | `trade.options`                                               | Only after P0-05; else explicit socket                                |
-| **D26-P1-T7**  | `trade.forex`                                                 | Only after P0-05 + fiat settle rails posture                          |
-| **D26-P1-T8**  | `venue.aggregation`                                           | Adapters refuse when book not payout-grade                            |
-| **D26-P1-T9**  | **Multi-asset instruments resume** (DIRECTION §2)             | Additive model; closed-venue refuse; spot suite unchanged             |
-| **D26-P1-T10** | **Seed/mm honesty backend** (coordinate Nitro `trade.mm-bot`) | Seeded flagged; not in user volume; killable; no manufactured crosses |
+| ID             | Tracker / obligation                                          | Done bar (product-complete)                                                                                                                            |
+| -------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **D26-P1-T1**  | `trade.futures` umbrella                                      | All T1a–T1g green **or** honest residual named — never partial Done                                                                                    |
+| **D26-P1-T1a** | Futures mark from oracle (DIRECTION MVP-1)                    | Mark never caller-supplied; not last-trade; public-door proof                                                                                          |
+| **D26-P1-T1b** | Margin call observable (MVP-2)                                | Call fires, delivered, observable end-to-end                                                                                                           |
+| **D26-P1-T1c** | Partial liquidation vs real book (MVP-3)                      | Min close restores maintenance; ledger recipe only — **proof** `partial-liquidation-real-book.test.ts` (EngineDepth → tick → restore + GET /positions) |
+| **D26-P1-T1d** | Insurance fund shortfall (MVP-4)                              | Fund balance moves exactly by shortfall                                                                                                                |
+| **D26-P1-T1e** | Gap price series proof (MVP-5)                                | Proven on **gapping** series, not smooth ramp                                                                                                          |
+| **D26-P1-T1f** | Funding accrues + nets zero (MVP-6)                           | Long/short net zero proven                                                                                                                             |
+| **D26-P1-T1g** | ADL last resort + in-product disclosure                       | No silent ADL; disclosure before open                                                                                                                  |
+| **D26-P1-T2**  | `trade.otc`                                                   | RFQ → stake gate → fail-closed quote → ledger settle                                                                                                   |
+| **D26-P1-T3**  | `trade.copy`                                                  | Sovereign shape; rates refuse until P0-02/15; kill/unfollow real                                                                                       |
+| **D26-P1-T4**  | `trade.algo`                                                  | TWAP product path: children, pause, overdue slice, no fake fills                                                                                       |
+| **D26-P1-T5**  | `trade.ccxt-api`                                              | Bot-ready capability matrix + refuse — not “route exists”                                                                                              |
+| **D26-P1-T6**  | `trade.options`                                               | Only after P0-05; else explicit socket                                                                                                                 |
+| **D26-P1-T7**  | `trade.forex`                                                 | Only after P0-05 + fiat settle rails posture                                                                                                           |
+| **D26-P1-T8**  | `venue.aggregation`                                           | Adapters refuse when book not payout-grade                                                                                                             |
+| **D26-P1-T9**  | **Multi-asset instruments resume** (DIRECTION §2)             | Additive model; closed-venue refuse; spot suite unchanged                                                                                              |
+| **D26-P1-T10** | **Seed/mm honesty backend** (coordinate Nitro `trade.mm-bot`) | Seeded flagged; not in user volume; killable; no manufactured crosses                                                                                  |
 
 ### 5.2 Pay (business barely started)
 
