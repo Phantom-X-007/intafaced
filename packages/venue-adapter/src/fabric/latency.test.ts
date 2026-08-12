@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import { type MarketDataAdapter, VenueUnavailableError } from '@intafaced/venue-contracts';
-import { healthFromGrade, isGraded, LatencyGradeRegistry, UNMEASURED_LATENCY_MS, VenueLatencyGrader } from './latency.js';
+import {
+  healthFromGrade,
+  isGraded,
+  LatencyGradeRegistry,
+  routingWeightFromGrade,
+  UNMEASURED_LATENCY_MS,
+  VenueLatencyGrader,
+} from './latency.js';
 import { isRoutable, type LiquiditySource, type VenueHealth } from '../source.js';
 import { planRoute } from '../router.js';
 import type { HttpPort, HttpResponse } from './transport.js';
@@ -220,6 +227,38 @@ describe('VenueLatencyGrader', () => {
   });
 });
 
+describe('routingWeightFromGrade — D26-P1-X2 score feed', () => {
+  it('an unscored adapter gets ZERO routing weight — not a default, not a low score', () => {
+    const grade = new VenueLatencyGrader('never-called').grade(T0);
+
+    expect(isGraded(grade)).toBe(false);
+    expect(grade.grade).toBeNull();
+    // The public door. If this ever returns non-zero for null, an execution
+    // consumer can treat "unmeasured" as eligible and D-S-18 is broken.
+    expect(routingWeightFromGrade(grade)).toBe(0);
+  });
+
+  it('a graded adapter gets positive eligibility weight (letter scaling is §28)', () => {
+    const grader = new VenueLatencyGrader('v');
+    feed(grader, 20, 40);
+    const grade = grader.grade(at(100));
+
+    expect(isGraded(grade)).toBe(true);
+    expect(routingWeightFromGrade(grade)).toBe(1);
+  });
+
+  it('is reachable through MarketDataAdapter.latencyGrade — the type consumers hold', () => {
+    const adapters: MarketDataAdapter[] = [new BinanceSpotMarketData(), new BybitSpotMarketData()];
+
+    for (const adapter of adapters) {
+      const grade = adapter.latencyGrade!(T0);
+      // Fresh adapters have measured nothing. Weight must be zero through the
+      // contract surface, not only when the caller already holds a grader.
+      expect(routingWeightFromGrade(grade)).toBe(0);
+    }
+  });
+});
+
 describe('healthFromGrade — the whole wiring into routing', () => {
   it('an F on real evidence marks the venue unhealthy, with the reason attached', () => {
     const grader = new VenueLatencyGrader('v');
@@ -240,10 +279,12 @@ describe('healthFromGrade — the whole wiring into routing', () => {
   });
 
   it('an unmeasured venue IS excluded — ungraded is not permission to route', () => {
-    const health = healthFromGrade(new VenueLatencyGrader('v').grade(T0), T0);
+    const grade = new VenueLatencyGrader('v').grade(T0);
+    const health = healthFromGrade(grade, T0);
 
     // The asymmetry: we do not claim the venue is slow, and we still decline to
     // route to it. D-S-18: "an unscored adapter must not receive routing weight."
+    expect(routingWeightFromGrade(grade)).toBe(0);
     expect(health.healthy).toBe(false);
     expect(health.reason).toContain('ungraded');
     // And it does not masquerade as a bad measurement either.
@@ -276,6 +317,81 @@ describe('healthFromGrade — the whole wiring into routing', () => {
     };
 
     expect(isRoutable(source, at(100))).toBe(false);
+  });
+});
+
+describe('planRoute — unscored adapter receives ZERO routed amount (D26-P1-X2)', () => {
+  function source(id: string, health: VenueHealth, price: string): LiquiditySource {
+    return {
+      id,
+      kind: 'external-cex',
+      capabilities: ['quote'],
+      health: () => health,
+      markets: async () => [],
+      quote: async (req) => ({
+        venueId: id,
+        symbol: req.symbol,
+        side: req.side,
+        amount: parseAmount('1'),
+        price: parseAmount(price),
+        feeBps: 10,
+        expiresAt: at(60_000),
+      }),
+      orderBook: async () => ({}) as never,
+      submit: async () => ({}) as never,
+    };
+  }
+
+  it('does not route to an unscored venue even when its quote is cheaper', async () => {
+    // Load-bearing proof: latency only breaks equal-price ties. If weight-zero
+    // were treated as healthy (or ignored), a null-grade venue with a better
+    // price would WIN the route. That is exactly "routing on null grade".
+    const scored = new VenueLatencyGrader('scored');
+    feed(scored, 20, 40);
+    const unscored = new VenueLatencyGrader('unscored');
+
+    const scoredGrade = scored.grade(at(100));
+    const unscoredGrade = unscored.grade(at(100));
+
+    expect(routingWeightFromGrade(unscoredGrade)).toBe(0);
+    expect(routingWeightFromGrade(scoredGrade)).toBe(1);
+
+    const scoredHealth = healthFromGrade(scoredGrade, at(100));
+    const unscoredHealth = healthFromGrade(unscoredGrade, at(100));
+
+    const plan = await planRoute(
+      { symbol: 'BTC/USDT', side: 'buy', amount: parseAmount('1') },
+      [
+        // Cheaper, but unscored — must not appear in legs.
+        source('unscored', unscoredHealth, '29000'),
+        source('scored', scoredHealth, '30000'),
+      ],
+      { now: at(100) },
+    );
+
+    expect(plan.legs.map((leg) => leg.venueId)).toEqual(['scored']);
+    expect(plan.legs.reduce((sum, leg) => sum + leg.amount, 0n)).toBe(parseAmount('1'));
+    expect(plan.rejected).toEqual(expect.arrayContaining([expect.objectContaining({ venueId: 'unscored', reason: 'unhealthy' })]));
+    // Zero routing weight → zero fill. Not a partial, not a tie-break loss.
+    expect(plan.legs.find((leg) => leg.venueId === 'unscored')).toBeUndefined();
+  });
+
+  it('routes nothing at all when every adapter is unscored', async () => {
+    const a = healthFromGrade(new VenueLatencyGrader('a').grade(T0), T0);
+    const b = healthFromGrade(new VenueLatencyGrader('b').grade(T0), T0);
+
+    expect(routingWeightFromGrade(new VenueLatencyGrader('a').grade(T0))).toBe(0);
+
+    const plan = await planRoute(
+      { symbol: 'BTC/USDT', side: 'buy', amount: parseAmount('1') },
+      [source('a', a, '30000'), source('b', b, '29900')],
+      { now: T0 },
+    );
+
+    expect(plan.legs).toEqual([]);
+    expect(plan.routedAmount).toBe(0n);
+    expect(plan.unfilledAmount).toBe(parseAmount('1'));
+    expect(plan.rejected.every((r) => r.reason === 'unhealthy')).toBe(true);
   });
 });
 
