@@ -5,9 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { signPayload } from '../rails/webhook-signature.js';
 import {
   assertDecimalAmount,
+  assertHttpsWebhookUrl,
+  buildAuthorizePaymentRequest,
+  buildCapturePaymentRequest,
   buildCreatePaymentRequest,
   buildGetPaymentRequest,
+  buildListWebhookDeliveriesRequest,
+  buildListWebhookEndpointsRequest,
   buildRefundRequest,
+  buildRegisterWebhookEndpointRequest,
   PAY_PUBLIC_API_BASE,
   signMerchantWebhook,
   verifyMerchantWebhook,
@@ -15,16 +21,15 @@ import {
 import { FROZEN_CAPTURED_BODY, frozenWebhookVectors, MERCHANT_WEBHOOK_HEADERS } from './webhook-vectors.js';
 
 /**
- * Unit card — pay.plugins · wave 13 L02
+ * Unit card — pay.plugins · D26-P1-P8
  *
- * 1. Promise: harvest/closeout — not three CMS plugins; TS reference client +
- *    frozen webhook vectors; tests fail when API contract breaks.
- * 2. Reachable break on tip: zero plugin path under svc-pay/src/plugins.
- * 3. Done bar: one real integration path (TS client) + vectors matching core signer.
- * 4. Class N.
- * 5. Paths: services/svc-pay/src/plugins/** (+ docs/pay decision, not quickstart).
- * 6. RED first.
- * 7. Collision: clear of Denon #1625 quickstart / public-rest / payment-service.
+ * 1. Promise: one real plugin path (TS reference client) or §13 for PHP CMS.
+ * 2. Reachable break: store install lacked webhook-endpoint + authorize/capture builders.
+ * 3. Done bar: payment lifecycle + webhook register/list/verify pins on public REST.
+ * 4. Class N (no money movement in this client).
+ * 5. Paths: services/svc-pay/src/plugins/** (+ docs/pay + §13 law).
+ * 6. RED first: https refuse, missing idempotency, numeric amount.
+ * 7. Collision: clear of settlement-ledger / payment-service (#1694 landed).
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +72,43 @@ describe('pay.plugins — TypeScript reference client', () => {
     const refund = buildRefundRequest(clientOpts, 'pay_abc', { amount: '1', refundId: 'r1' }, 'refund-key-1');
     expect(refund.path).toBe('/api/pay/v1/payments/pay_abc/refund');
     expect(refund.headers['idempotency-key']).toBe('refund-key-1');
+  });
+
+  it('authorize and capture money POSTs require Idempotency-Key and pin paths', () => {
+    expect(() => buildAuthorizePaymentRequest(clientOpts, 'pay_abc', '  ')).toThrow(/Idempotency-Key/);
+    expect(() => buildCapturePaymentRequest(clientOpts, 'pay_abc', '')).toThrow(/Idempotency-Key/);
+
+    const auth = buildAuthorizePaymentRequest(clientOpts, 'pay_abc', 'auth-1');
+    expect(auth.path).toBe('/api/pay/v1/payments/pay_abc/authorize');
+    expect(auth.method).toBe('POST');
+    expect(auth.headers['idempotency-key']).toBe('auth-1');
+    expect(auth.body).toBe('{}');
+
+    const cap = buildCapturePaymentRequest(clientOpts, 'pay_abc', 'cap-1');
+    expect(cap.path).toBe('/api/pay/v1/payments/pay_abc/capture');
+    expect(cap.headers['idempotency-key']).toBe('cap-1');
+  });
+
+  it('registers webhook endpoints over https only and lists deliveries', () => {
+    expect(() => buildRegisterWebhookEndpointRequest(clientOpts, { merchantId: 'm1', url: 'http://merchant.example/hooks' })).toThrow(
+      /https/,
+    );
+    expect(() => assertHttpsWebhookUrl('not-a-url')).toThrow(/valid https URL/);
+
+    const reg = buildRegisterWebhookEndpointRequest(clientOpts, {
+      merchantId: 'm1',
+      url: 'https://merchant.example/hooks/pay',
+    });
+    expect(reg.method).toBe('POST');
+    expect(reg.path).toBe('/api/pay/v1/webhook-endpoints');
+    expect(reg.headers.authorization).toBe('Bearer ifc_test_fixture_not_live');
+    expect(JSON.parse(reg.body!).url).toBe('https://merchant.example/hooks/pay');
+
+    const list = buildListWebhookEndpointsRequest(clientOpts, 'm1');
+    expect(list.path).toBe('/api/pay/v1/webhook-endpoints?merchantId=m1');
+
+    const deliveries = buildListWebhookDeliveriesRequest(clientOpts, 'm1', 'failed');
+    expect(deliveries.path).toBe('/api/pay/v1/webhook-deliveries?merchantId=m1&status=failed');
   });
 
   it('frozen webhook vectors match the core rail signPayload', () => {
