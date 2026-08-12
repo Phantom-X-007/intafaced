@@ -1401,11 +1401,13 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     status: 'wip',
-    owner: 'w10-l04-edge',
+    owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
       'Stage-1 contracts + ADR. Admin consumer #1032. Wave 3 #1185 lag honesty. **Wave 10 edge**: /admin/status.analytics surfaces dark/unavailable warehouse ' +
-      '(writer URLs refuse; no live cubes without lag probe). Still NOT done: real pg lag probe production pool, ETL watermark, cube job callers. Never second balances.',
+      '(writer URLs refuse; no live cubes without lag probe). **D26-P1-O4 deepen (2026-08-12):** `ANALYTICS_ETL_WATERMARK_AT` + ' +
+      '`resolveEtlWatermark` — absent/present honesty on edge warehouse door; stamp never paints live cubes alone. ' +
+      'Still NOT done: real pg lag probe production pool, cube job callers. Never second balances. Ghost w10-l04-edge cleared.',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',

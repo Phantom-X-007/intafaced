@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ANALYTICS_ETL_WATERMARK_AT_ENV,
   ANALYTICS_REPLICA_LAG_SQL,
   ANALYTICS_REPLICA_URL_ENV,
   LAG_MEASUREMENT_MAX_AGE_SECONDS,
@@ -11,6 +12,7 @@ import {
   parseConfiguredLagSeconds,
   queryWarehouseSurface,
   resolveEffectiveWarehouseLag,
+  resolveEtlWatermark,
   resolveWarehouseReplicaConfig,
   validateAnalyticsReplicaEndpoint,
   warehouseSurfaceStatusLine,
@@ -313,6 +315,19 @@ describe('resolveWarehouseReplicaConfig — URLs + role + probe', () => {
     expect(parseConfiguredLagSeconds('12')).toBe(12);
     expect(parseConfiguredLagSeconds('')).toBeNull();
     expect(parseConfiguredLagSeconds('nope')).toBeNull();
+  });
+});
+
+describe('resolveEtlWatermark — D26-P1-O4 honesty', () => {
+  it('unset / blank / junk → absent', () => {
+    expect(resolveEtlWatermark({}).state).toBe('absent');
+    expect(resolveEtlWatermark({ [ANALYTICS_ETL_WATERMARK_AT_ENV]: '  ' }).state).toBe('absent');
+    expect(resolveEtlWatermark({ [ANALYTICS_ETL_WATERMARK_AT_ENV]: 'tomorrow' }).state).toBe('absent');
+  });
+
+  it('valid ISO → present with normalised at', () => {
+    const r = resolveEtlWatermark({ [ANALYTICS_ETL_WATERMARK_AT_ENV]: '2026-08-12T10:00:00.000Z' });
+    expect(r).toMatchObject({ state: 'present', at: '2026-08-12T10:00:00.000Z' });
   });
 });
 

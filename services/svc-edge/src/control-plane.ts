@@ -308,6 +308,8 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         mayLabelLive: ops.analytics.surface.mayLabelLive,
         statusLine: ops.analytics.statusLine,
         etlWatermark: ops.analytics.etlWatermark,
+        etlWatermarkAt: ops.analytics.etlWatermarkAt,
+        etlNote: ops.analytics.etlNote,
       },
     };
   });
@@ -408,7 +410,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
 
   /**
    * Analytics warehouse door — dark/unavailable honesty, never live cubes
-   * without lag probe. ETL watermark is always `absent` on this edge.
+   * without lag probe. ETL watermark is operator-stamped or honestly absent.
    */
   app.get('/admin/analytics/warehouse', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
@@ -421,6 +423,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       mayLabelLive: a.surface.mayLabelLive,
       statusLine: a.statusLine,
       etlWatermark: a.etlWatermark,
+      etlWatermarkAt: a.etlWatermarkAt,
       etlNote: a.etlNote,
       surface: a.surface,
     };

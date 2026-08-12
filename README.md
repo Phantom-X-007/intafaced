@@ -14,7 +14,7 @@
 
 Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 7/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 11/55 · **5P** 1/4
 
-**In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007) · Screening queues, geo-block, VPN/Tor detection (w10-l04-edge) · Warehouse — read replica + cube layer (w10-l04-edge)
+**In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007) · Screening queues, geo-block, VPN/Tor detection (w10-l04-edge) · Warehouse — read replica + cube layer (Phantom-X-007)
 
 **🟢 26 ready to claim** — nothing blocks these:
 
