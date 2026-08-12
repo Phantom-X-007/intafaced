@@ -50,8 +50,7 @@ export type PrizeStartDecision = {
 
 const MESSAGE = 'IFC prize pools are refuse-closed — no invent pools, no academy balances, Class M ledger recipes only';
 
-const UNSET_MESSAGE =
-  'IFC prize pool is unset — blank pool cannot start; refuse-closed (no invent IFC amounts)';
+const UNSET_MESSAGE = 'IFC prize pool is unset — blank pool cannot start; refuse-closed (no invent IFC amounts)';
 
 /** Stable residual for unset start gate (ops / audit grep). */
 export const PRIZE_POOL_UNSET_RESIDUAL =
