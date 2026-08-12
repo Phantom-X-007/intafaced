@@ -738,9 +738,7 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
 
   it('routing.select refuses missing geo/method/risk on the public door', async () => {
     const api = await caller([]);
-    const err = await api.routing
-      .select({ preference: ['card-sandbox'], method: 'card', riskBand: 'low' })
-      .catch((e: unknown) => e);
+    const err = await api.routing.select({ preference: ['card-sandbox'], method: 'card', riskBand: 'low' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('BAD_REQUEST');
     expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_input_missing/);
   });
