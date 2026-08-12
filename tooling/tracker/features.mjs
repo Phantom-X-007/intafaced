@@ -1405,6 +1405,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['identity.kyc'],
+    requires: ['packages/config/src/screening.ts', 'packages/config/src/jurisdiction.ts'],
     note:
       '**D26-P1-O1 Done-bar sealed 2026-08-12 (#1734):** screening *mechanism* — `INTAFACED_SCREENING_FAIL_CLOSED` → ' +
       '`denied.screening_unconfigured` when list unset; honesty-only default OFF. List *content* remains Class X (Nitro/counsel). ' +
@@ -1416,6 +1417,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
+    requires: ['packages/contracts/src/ops-analytics-warehouse.ts', 'services/svc-edge/src/compliance-honesty.ts'],
     note:
       '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — `ANALYTICS_ETL_WATERMARK_AT` + ' +
       '`resolveEtlWatermark` absent/present honesty; stamp never paints live cubes alone; writer URLs refuse. ' +
