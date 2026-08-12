@@ -282,11 +282,38 @@ if (!e2e) {
     ['edge.kill_switch_undecidable', 'that an errored switch check behaves as engaged'],
     ['admin:treasury', 'that the money-plane freeze needs its own authority'],
     ['previous:', 'that the audit trail records the prior state'],
+    // D26-P2-10 — every money module killable from the same surface, proven.
+    ['money modules — same kill surface (D26-P2-10)', 'that every live money module is armed from /admin/kill-switches'],
+    ['REFUSES each money module sample door once killed', 'that pay/bank/p2p/token/market/trade refuse under kill'],
   ];
   for (const [needle, what] of required) {
     if (!e2e.includes(needle)) {
       failures.push(`control-plane.e2e.test.ts no longer asserts ${what} ("${needle}" not found)`);
     }
+  }
+
+  // Named unit matrix over MONEY_PUBLIC_DOORS — structural twin of the e2e suite.
+  const moneyUnit = read('services', 'svc-edge', 'src', 'money-routes.kill-switch.test.ts');
+  if (!moneyUnit) {
+    failures.push(
+      'services/svc-edge/src/money-routes.kill-switch.test.ts is missing — D26-P2-10 money-route kill matrix has no unit proof',
+    );
+  } else {
+    for (const [needle, what] of [
+      ['MONEY_PUBLIC_DOORS', 'that the unit suite walks the config money-door catalogue'],
+      ['refuses every named money commitment when that module is killed', 'that every catalogue door refuses under kill'],
+    ]) {
+      if (!moneyUnit.includes(needle)) {
+        failures.push(`money-routes.kill-switch.test.ts no longer asserts ${what} ("${needle}" not found)`);
+      }
+    }
+  }
+
+  const moneySurface = read('packages', 'config', 'src', 'money-kill-surface.ts');
+  if (!moneySurface || !/MONEY_PUBLIC_DOORS/.test(moneySurface)) {
+    failures.push(
+      'packages/config/src/money-kill-surface.ts is missing MONEY_PUBLIC_DOORS — money kill completeness has no catalogue',
+    );
   }
 
   /**
