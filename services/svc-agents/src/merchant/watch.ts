@@ -107,6 +107,11 @@ export function filterRailsByAllowlist(
  * Sample floor (ops honesty): attempts must be ≥ 1. A rate on zero attempts is
  * not a metric — alerting on it invents a rail failure from empty data. Callers
  * may raise the floor with `minAttempts` (default 1).
+ *
+ * D26-P1-A4 (missing-data honesty): any scoped rail with null/invalid
+ * approvalRate or attempts refuses the whole watch (`unavailable` /
+ * `no_metrics`). A partial `ok` board that silently skips holes would invent
+ * completeness. Out-of-allowlist skips are not missing metrics.
  */
 export function watchApprovalFixtures(
   points: readonly ApprovalRatePoint[],
@@ -190,12 +195,19 @@ export function watchApprovalFixtures(
     }
   }
 
-  const usable = scoped.length - skippedStale - (skippedIncomplete - skippedNotAllowed) - skippedLowSample;
+  const realIncomplete = skippedIncomplete - skippedNotAllowed;
+  // D26-P1-A4: refuse when any kept rail lacks usable rate/attempts — never
+  // return ok/alerts over a board with holes (that invents a complete watch).
+  if (realIncomplete > 0) {
+    return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
+  }
+
+  const usable = scoped.length - skippedStale - realIncomplete - skippedLowSample;
   if (usable === 0 && alerts.length === 0) {
-    if (skippedStale > 0 && skippedIncomplete === skippedNotAllowed && skippedLowSample === 0) {
+    if (skippedStale > 0 && skippedLowSample === 0) {
       return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'stale' };
     }
-    if (skippedIncomplete > skippedNotAllowed || skippedStale > 0 || skippedLowSample > 0) {
+    if (skippedStale > 0 || skippedLowSample > 0) {
       return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'no_metrics' };
     }
     return { status: 'empty', userMessageKey: 'agents.merchant.empty' };
