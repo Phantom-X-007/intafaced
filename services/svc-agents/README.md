@@ -60,7 +60,9 @@ Most agent procedures are **pure**: they answer "what would this agent say" with
 | `navigator.runSession` | `agents:execute` | plane, tier law, tier, `asks[]`  | grounded findings, **unanswered asks**, what it cost   |
 | `support.runSession`   | `agents:execute` | plane, tier law, tier, `asks[]`  | cited article keys, **escalation**, gaps, what it cost |
 | `merchant.runSession`  | `agents:execute` | plane, tier law, approval points | approval-rate watch + what the run cost                |
-| `copyIntel.runSession` | `agents:execute` | plane, tier law, leader fixtures | audited leader stats + what the run cost               |
+| `copyIntel.runSession` | `agents:execute` | plane, leader fixtures           | audited write path + **directory** presentation + cost |
+
+Copy-Intel also exposes pure reads (no session): `copyIntel.buildStats` (fixtures → audited stats in **leaderId directory order**) and `copyIntel.presentDirectory` (search/filter directory, or typed refuse of returns-rank / marketing-board modes — SPEC-SOVEREIGN §4 / D26-P1-A5). Ok outputs never sort by PnL, win rate, or returns.
 
 All five are mutations, and all five report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
 

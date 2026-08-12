@@ -21,6 +21,7 @@ import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
+import { presentLeaderDirectory } from './copy-intel/directory.js';
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
@@ -2260,6 +2261,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
     /**
      * Copy-Intel Stage-1 — audited leader stats from caller fixtures only.
      * trade.copy is on tip; live leader plane is residual — dark refuses invent.
+     * SPEC-SOVEREIGN §4: ok output is a directory (leaderId order), never a
+     * returns-ranked marketing board (D26-P1-A5).
      * Spec: docs/ops/trk/agents.copy-intel.md Stage 1.
      */
     copyIntel: router({
@@ -2321,6 +2324,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 }),
               ),
               skippedIncomplete: z.number().int(),
+              presentation: z.object({
+                kind: z.literal('directory'),
+                rankedByReturns: z.literal(false),
+                sortKey: z.literal('leaderId'),
+              }),
             }),
             z.object({
               status: z.literal('empty'),
@@ -2352,6 +2360,89 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 stat: { ...a.stat },
                 provenance: { ...a.provenance },
               })),
+              presentation: {
+                kind: 'directory' as const,
+                rankedByReturns: false as const,
+                sortKey: 'leaderId' as const,
+              },
+            };
+          }
+          return result;
+        }),
+
+      /**
+       * Present audited stats as a searchable directory.
+       * Returns-rank / marketing-board modes refuse (SPEC-SOVEREIGN §4).
+       */
+      presentDirectory: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            stats: z
+              .array(
+                z.object({
+                  leaderId: z.string().min(1).max(64),
+                  realisedPnl: z.string(),
+                  closedTrades: z.number().int(),
+                  winRate: z.string(),
+                  windowStart: z.string().min(1),
+                  windowEnd: z.string().min(1),
+                }),
+              )
+              .max(500),
+            mode: z.string().max(64).optional(),
+            sortBy: z.string().max(64).optional(),
+            leaderFilter: z.array(z.string().min(1).max(64)).max(500).optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              skippedFiltered: z.number().int(),
+              presentation: z.object({
+                kind: z.literal('directory'),
+                rankedByReturns: z.literal(false),
+                sortKey: z.literal('leaderId'),
+                leaders: z.array(
+                  z.object({
+                    leaderId: z.string(),
+                    realisedPnl: z.string(),
+                    closedTrades: z.number().int(),
+                    winRate: z.string(),
+                    windowStart: z.string(),
+                    windowEnd: z.string(),
+                  }),
+                ),
+              }),
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.copy_intel.empty'),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['returns_ranked_board', 'marketing_board']),
+              userMessageKey: z.literal('agents.copy_intel.unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = presentLeaderDirectory({
+            stats: input.stats,
+            ...(input.mode === undefined ? {} : { mode: input.mode }),
+            ...(input.sortBy === undefined ? {} : { sortBy: input.sortBy }),
+            ...(input.leaderFilter === undefined ? {} : { leaderFilter: input.leaderFilter }),
+          });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              skippedFiltered: result.skippedFiltered,
+              presentation: {
+                kind: 'directory' as const,
+                rankedByReturns: false as const,
+                sortKey: 'leaderId' as const,
+                leaders: result.presentation.leaders.map((l) => ({ ...l })),
+              },
             };
           }
           return result;
@@ -2364,6 +2455,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
        * same builder through `openSession → act → settle → closeSession` so
        * every leader read is guardrail-checked and audited. Dark copy plane
        * refuses before any session opens (unbilled). Never invents fee share.
+       * Ok presentation is always a directory — never returns-ranked.
        */
       runSession: scopedProcedure('agents:execute', { module: 'agents' })
         .input(
@@ -2426,6 +2518,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               fixturesAccepted: z.number().int(),
               fixturesRefusedByGuardrail: z.number().int(),
               writesRefusedByGuardrail: z.number().int(),
+              presentation: z.object({
+                kind: z.literal('directory'),
+                rankedByReturns: z.literal(false),
+                sortKey: z.literal('leaderId'),
+              }),
               metering: runMeteringOutput,
             }),
             z.object({
@@ -2490,6 +2587,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   stat: { ...a.stat },
                   provenance: { ...a.provenance },
                 })),
+                presentation: {
+                  kind: 'directory' as const,
+                  rankedByReturns: false as const,
+                  sortKey: 'leaderId' as const,
+                },
                 metering,
               };
             }

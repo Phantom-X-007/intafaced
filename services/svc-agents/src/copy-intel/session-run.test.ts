@@ -152,6 +152,12 @@ describe('copy_intel.stats metered session run', () => {
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
     expect(result.stats).toHaveLength(2);
+    expect(result.presentation).toEqual({
+      kind: 'directory',
+      rankedByReturns: false,
+      sortKey: 'leaderId',
+    });
+    expect(result.stats.map((s) => s.leaderId)).toEqual(['leader-a', 'leader-b']);
     expect(result.fixturesAccepted).toBe(2);
     expect(result.writesRefusedByGuardrail).toBe(0);
     // read ×2 then audited write ×2 — write path is the mountain promise
@@ -165,6 +171,18 @@ describe('copy_intel.stats metered session run', () => {
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
     expect(result.metering.sessionClosed).toBe(true);
+  });
+
+  it('never returns PnL-desc order even when fixtures arrive that way', async () => {
+    const fake = new FakeRuntime();
+    const result = await runCopyIntelStatsSession({
+      ...baseInput(fake),
+      fixtures: [fixture('zulu', { realisedPnl: '999.0', winningTrades: 9 }), fixture('alpha', { realisedPnl: '-1.0', winningTrades: 1 })],
+    });
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.stats.map((s) => s.leaderId)).toEqual(['alpha', 'zulu']);
+    expect(result.presentation.rankedByReturns).toBe(false);
   });
 
   it('bills zero for a run that never called the engine — no invent fee share charge', async () => {

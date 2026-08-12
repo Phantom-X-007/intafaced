@@ -1016,10 +1016,12 @@ export const FEATURES = [
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
-    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway'],
-    note: '**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment.',
+    requires: ['services/svc-agents/src/navigator'],
+    note:
+      '**D26-P1-A1 landed #1696 (2026-08-12):** requester-scoped identity.session.read + dark-refuse zero billing. ' +
+      'Owner cleared so sibling agent mountains are not whole-svc locked. ' +
+      'STILL NOT done: live trade/identity allowlisted inputs (Class X). Not tracker done until grounded production env.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
@@ -1042,8 +1044,16 @@ export const FEATURES = [
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.copy'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered copyIntel.runSession (#1285), dark copy refuse, boot-register. STILL NOT done: live trade.copy leader plane (Class X). Not tracker done until live leaders allowlist.',
+    requires: ['services/svc-agents/src/copy-intel'],
+    note:
+      '**D26-P1-A5 WIP 2026-08-12:** audited stats + directory presentation — leaderId order only; ' +
+      'returns-rank / marketing-board modes refuse (SPEC-SOVEREIGN §4). Metered copyIntel.runSession ' +
+      'on tip (#1285). requires narrowed to src/copy-intel (no whole-svc lock). ' +
+      'STILL NOT done: live trade.copy leader plane (Class X / Shehzad M4). ' +
+      'Not tracker done until live leaders allowlist.',
   }),
   f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
     module: 'academy',

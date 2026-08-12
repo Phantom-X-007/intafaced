@@ -14,9 +14,9 @@
 
 Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 6/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 11/55 · **5P** 1/4
 
-**In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (agent:w13-l04) · Screening queues, geo-block, VPN/Tor detection (w10-l04-edge) · Warehouse — read replica + cube layer (w10-l04-edge)
+**In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (agent:w13-l04) · Screening queues, geo-block, VPN/Tor detection (w10-l04-edge) · Warehouse — read replica + cube layer (w10-l04-edge)
 
-**🟢 28 ready to claim** — nothing blocks these:
+**🟢 29 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.copy` — Copy trading, audited leaders, fee-share (not profit-share)
@@ -26,7 +26,7 @@ Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 6/18 · **3P** 9/13 ·
 - `trade.mm-bot` — Internal market-maker seeding books at launch
 - `venue.aggregation` — External venue adapters via CCXT (cross-venue)
 - `web.terminal` — Pro terminal — depth, charts, hotkeys, sub-accounts
-- …and 20 more
+- …and 21 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
