@@ -21,6 +21,7 @@ import { requireCredentials, type VenueCredentials } from '@intafaced/venue-cont
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamPort } from '../transport.js';
 import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
 import { VenueLatencyGrader } from '../latency.js';
+import { assertPayoutGradeBook } from '../payout-grade.js';
 import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
 
 /**
@@ -176,7 +177,9 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
       unknown
     >;
 
-    return {
+    // D26-P1-T8: a dust / one-sided / empty book is not liquidity. Refuse here
+    // so every consumer inherits the gate — mark path catch → null mid, never invent.
+    return assertPayoutGradeBook({
       venueId: VENUE.id,
       symbol,
       bids: readLevels(body.bids, 'bids', VENUE.id),
@@ -186,7 +189,7 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
       // Our clock at the moment the read finished. A venue that has silently
       // stopped updating still returns a plausible timestamp of its own.
       observedAt: new Date(this.#clock()),
-    };
+    });
   }
 
   /**

@@ -230,21 +230,46 @@ describe('BybitSpotMarketData.snapshotBook — public data, no credentials', () 
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('refusals — never a book we cannot stand behind', () => {
-  it('EMPTY book: reports it empty, and does not invent a level', async () => {
+  it('EMPTY book: refused as no_depth (not payout-grade), never served as liquidity', async () => {
     const http = new FakeHttp().queue(orderbook(7, { b: [], a: [] }));
-    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
-    expect(snapshot.bids).toEqual([]);
-    expect(snapshot.asks).toEqual([]);
-    // Still a real, sequenced read of a real market. "No liquidity" is a fact,
-    // not an error, and the caller is the one that must refuse to price it.
-    expect(snapshot.sequence).toBe(7);
+    const md = adapter(http, new FakeStream());
+    try {
+      await md.snapshotBook('BTC/USDT');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('no_depth');
+      expect((error as VenueUnavailableError).message).toContain('not payout-grade');
+    }
   });
 
-  it('ONE-SIDED book: keeps the side that exists and leaves the other empty', async () => {
+  it('ONE-SIDED book: refused — a mid needs both sides payout-grade', async () => {
     const http = new FakeHttp().queue(orderbook(8, { a: [] }));
-    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
-    expect(snapshot.bids).toHaveLength(2);
-    expect(snapshot.asks).toEqual([]);
+    try {
+      await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('no_depth');
+      expect((error as VenueUnavailableError).message).toContain('not payout-grade');
+    }
+  });
+
+  it('DUST book: two femto-cent levels refuse rather than mint a mid of 2000', async () => {
+    const http = new FakeHttp().queue(
+      orderbook(10, {
+        b: [['1000.00', '0.000000000000000001']],
+        a: [['3000.00', '0.000000000000000001']],
+      }),
+    );
+    try {
+      await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('no_depth');
+      expect((error as VenueUnavailableError).message).toContain('D26-P1-T8');
+    }
   });
 
   it('UNKNOWN market id: a non-zero retCode is refused as not_ready, never as an empty book', async () => {

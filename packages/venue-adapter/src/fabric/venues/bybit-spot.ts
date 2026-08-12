@@ -18,6 +18,7 @@ import {
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamHandle, type StreamPort } from '../transport.js';
 import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
 import { VenueLatencyGrader } from '../latency.js';
+import { assertPayoutGradeBook } from '../payout-grade.js';
 import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
 
 /**
@@ -294,7 +295,9 @@ export class BybitSpotMarketData implements MarketDataAdapter {
       unknown
     >;
 
-    return {
+    // D26-P1-T8: same absolute payout-grade floor as Binance — refuse thin books
+    // at the adapter, do not leave the gate to each consumer.
+    return assertPayoutGradeBook({
       venueId: VENUE.id,
       symbol,
       bids: readLevels(result.b, 'bids', VENUE.id),
@@ -308,7 +311,7 @@ export class BybitSpotMarketData implements MarketDataAdapter {
       // own, and a venue that has silently stopped updating still returns a
       // plausible timestamp of its own.
       observedAt: new Date(this.#clock()),
-    };
+    });
   }
 
   /**

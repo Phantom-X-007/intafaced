@@ -1,6 +1,7 @@
 import type { BookTop, MarketDataAdapter, PriceLevel } from '@intafaced/venue-contracts';
 import { SequencedBookTracker, type DesyncEvent, type TrackerOptions } from './sequenced-book.js';
 import { VenueLatencyGrader } from './latency.js';
+import { isPayoutGradeTop } from './payout-grade.js';
 
 /**
  * THE MAINTAINED BOOK — subscribe, buffer, snapshot, and resnapshot on a gap.
@@ -108,7 +109,13 @@ export class MaintainedBook {
   }
 
   top(): BookTop | null {
-    return this.servable ? this.tracker.top() : null;
+    if (!this.servable) return null;
+    const top = this.tracker.top();
+    // D26-P1-T8: a live book can thin after the seeding snapshot. Serving a
+    // dust top as liquidity would re-open the size-blind mid at the stream
+    // boundary — withhold rather than quote.
+    if (top == null || !isPayoutGradeTop(top)) return null;
+    return top;
   }
 
   levels(side: 'bids' | 'asks'): PriceLevel[] {

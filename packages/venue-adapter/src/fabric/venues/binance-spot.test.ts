@@ -147,6 +147,30 @@ describe('BinanceSpotMarketData — public data, no credentials', () => {
     expect(http.requests[0]).toBe('https://rest.test/api/v3/depth?symbol=BTCUSDT&limit=100');
   });
 
+  it('REFUSES a dust / empty / one-sided book as no_depth (D26-P1-T8 payout-grade)', async () => {
+    const dust = {
+      lastUpdateId: 1,
+      bids: [['1000.00', '0.000000000000000001']],
+      asks: [['3000.00', '0.000000000000000001']],
+    };
+    await expect(adapter(new FakeHttp().queue(dust), new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(
+      /not payout-grade/,
+    );
+    await expect(
+      adapter(new FakeHttp().queue({ lastUpdateId: 2, bids: [], asks: [] }), new FakeStream()).snapshotBook('BTC/USDT'),
+    ).rejects.toThrow(VenueUnavailableError);
+    try {
+      await adapter(
+        new FakeHttp().queue({ lastUpdateId: 3, bids: [['30000.00', '2.00']], asks: [] }),
+        new FakeStream(),
+      ).snapshotBook('BTC/USDT');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('no_depth');
+    }
+  });
+
   it('caps the depth limit rather than spending weight on a request the venue will reject', async () => {
     const http = new FakeHttp().queue(depthSnapshot(1));
     await adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 999_999);
