@@ -1038,10 +1038,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
-    requires: [
-      'services/svc-agents/src/support-agent',
-      'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts',
-    ],
+    requires: ['services/svc-agents/src/support-agent', 'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts'],
     note:
       '**D26-P1-A2 Done-bar sealed 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
       'refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. ' +
