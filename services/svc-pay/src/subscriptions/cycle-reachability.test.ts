@@ -129,7 +129,9 @@ async function post(
   headers: Record<string, string> = signedHeaders(),
 ) {
   const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
-  return { statusCode: res.statusCode, body: res.json() as Record<string, never> };
+  // Wire shape is asserted per-test; keep the parse untyped so optional
+  // result/error arms do not invent a "never" that test-typecheck rejects.
+  return { statusCode: res.statusCode, body: res.json() as Record<string, any> };
 }
 
 async function get(
@@ -143,7 +145,7 @@ async function get(
     url: `/trpc/${path}?input=${encodeURIComponent(JSON.stringify(input))}`,
     headers,
   });
-  return { statusCode: res.statusCode, body: res.json() as Record<string, never> };
+  return { statusCode: res.statusCode, body: res.json() as Record<string, any> };
 }
 
 // ── The merchant surface, over HTTP ─────────────────────────────────────────
