@@ -640,8 +640,22 @@ export const FEATURES = [
   f('pay.fraud', 'Risk scoring, chargebacks, decline recovery', {
     module: 'pay',
     phase: '3',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/fraud/evaluate.ts',
+      'services/svc-pay/src/fraud/review-queue.ts',
+      'services/svc-pay/src/fraud/dispute-case.ts',
+      'services/svc-pay/src/fraud/chargeback-ledger-socket.ts',
+      'services/svc-pay/src/fraud-done-bar.test.ts',
+    ],
+    note:
+      '**DONE 2026-08-12 (D26-P1-P5):** Scoring mechanism + review queue + dispute case surface ' +
+      '(fraud.evaluate / enqueueReview / openDispute) with settled→disputed writer. Chargeback ledger ' +
+      'recipes refuse-closed via named §13 `socket.pay-chargeback-ledger-wire` — not a stub unwired ' +
+      'matrix and not silent posts. List content (IPs/devices/sanctions) Class X. Public-door proof: ' +
+      '`fraud-done-bar.test.ts`. Residual: durable disputes table + owner sign-off to close the socket.',
   }),
   f('pay.subscriptions', 'Recurring — card and crypto', {
     module: 'pay',
@@ -1925,6 +1939,21 @@ export const FEATURES = [
       'AND fiat settle rails posture. Until then: forex.settlementStatus published=false; production active listMarket / setMarketStatus(active) / ' +
       'place refuse trade.unsettled_asset_class_listing naming this socket. Paper + non-active listing allowed (model). Do NOT invent settlement ' +
       'asset (stablecoin-margined vs true fiat omnibus — D8; PAY_CRYPTO_ASSETS must not accidentally map EUR→euro stablecoin). No code closes this.',
+  }),
+  // D26-P1-P5: pay.fraud Done bar ships dispute cases; ledger chargeback posts stay refuse-closed here.
+  f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {
+    module: 'pay',
+    phase: '3',
+    status: 'socket',
+    dependsOn: ['pay.fraud'],
+    requires: ['services/svc-pay/src/fraud/chargeback-ledger-socket.ts'],
+    note:
+      '§13 residual (named 2026-08-12 under D26-P1-P5) — packages/ledger-client already has chargebackOpen / Shortfall / Won / ' +
+      'ShortfallRecovered with an explicit Class M owner-sign-off banner. svc-pay records dispute cases and projects payment → disputed, ' +
+      'but must not call those recipes until the four named questions in chargeback.ts are signed. The seam refuses by name ' +
+      '(`refuseChargebackLedgerPost` → pay.chargeback_ledger_unwired) so the Done bar is mechanism + honest socket, not a silent book ' +
+      'entry or an unwired stub string. Closing = owner sign-off then wire dispute open to post; inventing split legs or shortfall ' +
+      'policy is forbidden. Blocklist / scheme list content remains Class X.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {

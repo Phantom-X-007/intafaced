@@ -1871,7 +1871,7 @@ export class PayService {
         break;
       case 'dispute.opened': {
         // D26-P1-P5: case mechanism + settled→disputed writer. Ledger chargeback
-        // recipes stay unwired (owner sign-off) — we record the case only.
+        // recipes refuse-closed via socket.pay-chargeback-ledger-wire — case only.
         const disputeId = event.disputeId?.trim();
         if (disputeId) {
           let marked = false;
@@ -1956,8 +1956,8 @@ export class PayService {
   /**
    * D26-P1-P5 — make `settled → disputed` reachable.
    *
-   * Status transition only. Does **not** post ledger chargeback recipes
-   * (owner sign-off residual). Callers must open a dispute case.
+   * Status transition only. Does **not** post ledger chargeback recipes —
+   * refuse-closed via `socket.pay-chargeback-ledger-wire`. Callers open a case.
    */
   async markDisputed(paymentId: string, meta: { disputeId: string; reasonCode?: string | null }): Promise<PaymentView> {
     return transaction(
@@ -1968,7 +1968,8 @@ export class PayService {
         await appendEvent(tx, row.id, 'disputed', {
           disputeId: meta.disputeId,
           reasonCode: meta.reasonCode ?? null,
-          ledgerWire: 'unwired',
+          ledgerWire: 'refused',
+          ledgerSocket: 'socket.pay-chargeback-ledger-wire',
         });
         await tx`UPDATE pay.payments SET status = 'disputed', updated_at = now() WHERE id = ${row.id}`;
         return this.view(tx, { ...row, status: 'disputed' });
