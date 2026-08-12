@@ -638,10 +638,11 @@ capabilities:
     law: '25:627'
     plane: F
     phase: 2
-    tracker: [trade.otc, socket.otc-maker-routing]
+    tracker: [trade.otc, socket.otc-maker-routing, socket.otc-mid-feed]
     note: >-
       socket.otc-maker-routing is the §13 refuse-closed half for external-maker settle; platform
-      principal settle stays on trade.otc. Never invent a maker ledger path.
+      principal settle stays on trade.otc. socket.otc-mid-feed is the live observation-feed half —
+      boot TRADE_OTC_MIDS map is not that socket closed. Never invent a maker ledger path or mids.
   - id: m.trade.convert
     capability: Convert one-tap
     law: '25:628'
