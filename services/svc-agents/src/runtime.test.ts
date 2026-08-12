@@ -533,6 +533,31 @@ if (!available) {
       expect(stillOpen).toContain(call.windowId!);
     });
 
+    it('metering-off settleSession also refuses feeCharge for leftover windows', async () => {
+      // D26-P1-A6: admin/session.close settleSession must inherit the same gate.
+      const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
+      const session = await on.openSession({ userId: USER_A, agentId: 'probe' });
+      const call = await on.think({
+        sessionId: session.id,
+        requestId: 'r-then-off-session',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      expect(call.windowId).not.toBeNull();
+
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const results = await off.settleSession(session.id);
+      expect(results.length).toBeGreaterThan(0);
+      for (const r of results) {
+        expect(r.settled).toBe(false);
+        expect(r.amount).toBe(0n);
+        expect(r.chargeTxId).toBeNull();
+      }
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      expect(await meter.openWindows(session.id)).toContain(call.windowId!);
+    });
+
     it('keeps each user’s meter to themselves', async () => {
       const a = await open(USER_A);
       const b = await open(USER_B);
