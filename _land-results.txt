@@ -1,0 +1,7 @@
+20:24:01 poll=43 API_ERR The remote server returned an error: (403) Forbidden.
+20:25:01 poll=44 API_ERR The remote server returned an error: (403) Forbidden.
+20:26:01 poll=45 API_ERR The remote server returned an error: (403) Forbidden.
+20:26:21 RESULT_1724=timeout
+20:26:22 warn pr lookup 1717
+20:26:22 ==== REBASE #1717 feat/trade-forex-socket-refuse ====
+20:26:23 ALREADY_ON_TIP
