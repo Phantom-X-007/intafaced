@@ -231,10 +231,7 @@ describe('D26-P2-03 public doors — TIF / identity / kill-switch', () => {
     await submit(app, limitBody(maker, 'acct-mm', 'sell', '2', '100'));
     const before = (await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` })).json();
 
-    const res = await submit(
-      app,
-      limitBody('44444444-4444-4444-8444-444444444444', 'acct-tk', 'buy', '1', '100', 'PO'),
-    );
+    const res = await submit(app, limitBody('44444444-4444-4444-8444-444444444444', 'acct-tk', 'buy', '1', '100', 'PO'));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       accepted: false,
