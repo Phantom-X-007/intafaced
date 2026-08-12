@@ -1,0 +1,13 @@
+# Claim — D26-P1-P2 pay.payfac permissions
+
+| Field        | Value                                                                                                                  |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| ID           | D26-P1-P2                                                                                                              |
+| Tracker      | pay.payfac                                                                                                             |
+| Branch       | eat/pay-payfac-or-p10                                                                                                  |
+| Owner        | Phantom-X-007 (Denon agent)                                                                                            |
+| Paths        | services/svc-pay/src/payfac-permissions.* · public-rest.ts · tests · docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md |
+| Do not touch | #1754 public-api dual-edit risk · #1718 routing · #1720 PSP/KYB/index.ts · #1724 plugins · settlement · fraud/*        |
+| Note         | LIVE-LANES denon-d26-p1-p2-payfac · features.mjs wip · path overlap with #1754 on public-rest.ts acknowledged          |
+
+Claimed 2026-08-12. Rebased + type-fixed same day.
