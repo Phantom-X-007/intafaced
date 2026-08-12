@@ -10,7 +10,7 @@ import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merch
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
 import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
-import { resolveMerchantRail } from './sandbox-key-routing.js';
+import { isSandboxRailId, resolveMerchantRail } from './sandbox-key-routing.js';
 
 /**
  * `pay.public-api` — the merchant REST surface.
@@ -137,7 +137,7 @@ const errorSchema = {
 
 const paymentSchema = {
   type: 'object',
-  required: ['id', 'merchantId', 'amount', 'assetId', 'status', 'capturedAmount', 'refundedAmount', 'createdAt'],
+  required: ['id', 'merchantId', 'amount', 'assetId', 'status', 'mode', 'capturedAmount', 'refundedAmount', 'createdAt'],
   properties: {
     id: { type: 'string', format: 'uuid' },
     merchantId: { type: 'string', format: 'uuid' },
@@ -148,6 +148,11 @@ const paymentSchema = {
     railAdapter: { type: 'string', nullable: true },
     railRef: { type: 'string', nullable: true },
     status: { type: 'string', enum: [...PAYMENT_STATUSES] },
+    mode: {
+      type: 'string',
+      enum: ['live', 'sandbox'],
+      description: 'Rail posture of this payment (ADR §2.5). `sandbox` when the rail is a sandbox simulation; never silent live.',
+    },
     capturedAmount: { type: 'string', description: 'Decimal string.' },
     refundedAmount: { type: 'string', description: 'Decimal string.' },
     createdAt: { type: 'string', format: 'date-time' },
@@ -347,6 +352,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           '',
           '**Sandbox keys** (mode=sandbox / `key_env=sandbox`): createPayment always uses the sandbox rail',
           '(`card-sandbox`). A **live** key that names a sandbox rail is refused (`pay.sandbox_rail_refused`).',
+          'Every payment response includes `mode: "sandbox" | "live"` from the rail posture — never silent.',
           'There is no parallel sandbox deployment — same API, rail posture only.',
           '',
           '**Idempotency-Key** is required on every mutating POST. A repeated key with the same body returns',
@@ -950,6 +956,45 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
     );
 
+    app.post(
+      `${BASE}/webhook-endpoints/:id/enable`,
+      {
+        schema: {
+          tags: ['webhooks'],
+          summary: 'Re-enable a disabled webhook endpoint',
+          description:
+            'After consecutive failures disable an endpoint (ADR §2.4), fix the receiver and call this. Resets the failure counter.',
+          params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+          querystring: {
+            type: 'object',
+            required: ['merchantId'],
+            properties: { merchantId: { type: 'string', format: 'uuid' } },
+          },
+          response: { 200: endpointSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (req: FastifyRequest<{ Params: { id: string }; Querystring: { merchantId: string } }>, reply) => {
+        const principal = principalOf(req, reply, 'pay:write');
+        if (!principal) return reply;
+        try {
+          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
+          const enabled = await webhooks.enableEndpoint(req.query.merchantId, req.params.id);
+          return reply.send({
+            id: enabled.id,
+            merchantId: enabled.merchantId,
+            url: enabled.url,
+            status: enabled.status,
+            disabledReason: enabled.disabledReason,
+            consecutiveFailures: enabled.consecutiveFailures,
+            createdAt: enabled.createdAt.toISOString(),
+            updatedAt: enabled.updatedAt.toISOString(),
+          });
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
     app.get(
       `${BASE}/webhook-deliveries`,
       {
@@ -1008,7 +1053,10 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
   }
 }
 
-/** Identical field-for-field to the tRPC `toPaymentOut` — see the header. */
+/**
+ * REST payment body. Same money fields as tRPC `toPaymentOut`, plus `mode`
+ * (sandbox honesty — ADR §2.5) derived from the rail id, never invented.
+ */
 function toPaymentBody(view: {
   id: string;
   merchantId: string;
@@ -1023,6 +1071,7 @@ function toPaymentBody(view: {
   refundedAmount: Amount;
   createdAt: Date;
 }) {
+  const mode: 'live' | 'sandbox' = view.railAdapter && isSandboxRailId(view.railAdapter) ? 'sandbox' : 'live';
   return {
     id: view.id,
     merchantId: view.merchantId,
@@ -1033,6 +1082,7 @@ function toPaymentBody(view: {
     railAdapter: view.railAdapter,
     railRef: view.railRef,
     status: view.status,
+    mode,
     capturedAmount: formatAmount(view.capturedAmount),
     refundedAmount: formatAmount(view.refundedAmount),
     createdAt: view.createdAt.toISOString(),
