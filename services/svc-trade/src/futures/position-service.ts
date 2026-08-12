@@ -297,7 +297,7 @@ export class PositionService {
     const entry = acceptableForEntry(got.mark, at, this.markPolicy);
     if (!entry.ok) {
       throw new FuturesError(
-        entry.code === 'trade.mark_missing' ? (entry.reason ?? got.detail) : `Refusing to value this position — ${entry.reason}`,
+        entry.code === 'trade.mark_missing' ? (entry.reason ?? 'mark missing') : `Refusing to value this position — ${entry.reason}`,
         entry.code ?? 'trade.mark_unusable',
         503,
       );
