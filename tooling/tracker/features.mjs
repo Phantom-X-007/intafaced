@@ -373,10 +373,11 @@ export const FEATURES = [
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/copy'],
     note:
-      'W13 L10 2026-08-10: settle fillId claim (no re-bump period on redelivery) + drizzle 0022 copy_settled_fee_shares; listMyFollows + planMirror mounted. ' +
-      'W10 L02 product mount: follow/killFeeShare/unfollow/settleFeeShare/deskStatus + TRADE_COPY_* env (blank refuse) + 0021 mirrored_fills. ' +
+      'D26-P1-T3 deepen 2026-08-12: deskStatus.sovereign + P0-02/P0-15 residual cites; kill/unfollow real (#1692); ' +
+      'jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW (adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo. ' +
+      'W13 L10: settle fillId claim + 0022 copy_settled_fee_shares; listMyFollows + planMirror. W10 L02 product mount + 0021 mirrored_fills. ' +
       'Stage #1009 + money seals #1191/#1199/#1386. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      'Blank §8 leader_share_bps + jurisdiction refuse-closed (never invent). Residual: owner rates (Nitro §8); session-key caps (protocol); auto-mirror place into spot — plan only.',
+      'Residual: owner rates (P0-02) + eventual region table (P0-15 content); session-key caps (protocol); auto-mirror place into spot — plan only.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
