@@ -1108,6 +1108,13 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies'],
+    status: 'done',
+    owner: 'Phantom-X-007',
+    requires: ['services/svc-academy/src/curriculum/import-pipeline.ts', 'services/svc-academy/src/curriculum/import-pipeline.test.ts'],
+    note:
+      '**D26-P1-C5 Done-bar sealed 2026-08-12 (#1738):** import substance bar (not char-count theater); ' +
+      '`lessonSubstanceChecklist` + `substanceBarMet` on spine (20 playbooks + 3 workbooks platform-native). ' +
+      'Licensed DERIV//DESK dump assets remain Class X residual (not agent invent).',
   }),
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',

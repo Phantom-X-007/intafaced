@@ -205,6 +205,9 @@ const curriculumImportStatusOut = z.object({
     i18nStrategyHonest: z.boolean(),
     ready: z.boolean(),
   }),
+  /** D26-P1-C5 — real lesson substance, not char-count theater. */
+  substanceBarMet: z.boolean(),
+  theaterSlugs: z.array(z.string()),
 });
 
 const curriculumItemLocalizedOut = curriculumItemOut.extend({
