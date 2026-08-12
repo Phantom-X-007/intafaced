@@ -288,12 +288,14 @@ describe('D26-P2-01d public doors — determinism edges', () => {
    * journal replay; this pins the public door as a deterministic input path.
    */
   it('two door-fed engines produce byte-identical serialize() and matching payloads', async () => {
+    type RestingDoor = { marketId: string; orders: Array<{ orderId: string; remaining: string }> };
+
     async function drive(): Promise<{
       serialize: string;
       submitBodies: unknown[];
       cancelBodies: unknown[];
       depth: unknown;
-      resting: unknown;
+      resting: RestingDoor;
     }> {
       const engine = buildEngine();
       const app = await mount(engine);
@@ -317,7 +319,11 @@ describe('D26-P2-01d public doors — determinism edges', () => {
       );
 
       const depth = (await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` })).json();
-      const resting = (await orders(app, MARKET)).json();
+      const restingBody = (await orders(app, MARKET)).json();
+      // Narrow the door payload before returning so callers can read `.orders`
+      // without treating the whole response as `unknown` (test-typecheck).
+      expect(restingBody).toMatchObject({ marketId: MARKET, orders: expect.any(Array) });
+      const resting = restingBody as RestingDoor;
       const serialize = engine.serialize();
       await app.close();
       return { serialize, submitBodies, cancelBodies, depth, resting };
