@@ -7,6 +7,7 @@
 export * from './subject.js';
 export * from './envelope.js';
 export * from './catalog.js';
+export * from './socket-inventory.js';
 export * from './bus.js';
 export * from './memory-bus.js';
 export {
