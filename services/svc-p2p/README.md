@@ -117,6 +117,7 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read           |
 | `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                           |
 | `merchants.me`                   | `p2p:read`               | Caller's merchant standing + history headers (Stage 1–2 programme)         |
+| `merchants.apiAccess`            | `p2p:read`               | Current standing → API eligibility; names shared identity/edge planes      |
 | `merchants.offerLimits`          | `p2p:read`               | Deployment ceilings (`standardMax` / `merchantMax` or null = unlimited)    |
 | `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing; null = unlimited)      |
 | `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                |
@@ -412,7 +413,7 @@ It deliberately does **not** stop release, refund, dispute resolution, or either
 
 ## Out of scope / residual parks (do not invent)
 
-**Merchants (built Stage 1–2; policy still open).** The programme tables, apply/approve/suspend transitions, badge surface, offer-ceiling **mechanism**, and honest limit API (`merchants.offerLimits` · `merchants.myOfferCeiling` · health `offerLimitsConfigured`) ship in this service. Default policy is **no numeric ceiling** until an operator sets `P2P_OFFER_MAX_*` — inventing magnitudes here is product law, not craft residual. Stage-3 erase/pseudonymise of settled trades is owner-gated.
+**Merchants (built Stage 1–3; numeric policy still open).** The programme tables, apply/approve/suspend transitions, badge surface, offer-ceiling **mechanism**, honest limit API (`merchants.offerLimits` · `merchants.myOfferCeiling` · health `offerLimitsConfigured`), and programme-gated API access ship in this service. Identity remains the only named-key/scopes/revocation plane and the edge remains the only request-throttle plane; svc-p2p stores neither keys nor a second quota book. Every identity-issued P2P key request re-reads current standing, so only `approved` may proceed and suspension removes access immediately. Interactive sessions retain ordinary P2P access. API keys can never list, inspect as moderator, or resolve disputes: D-S-08 requires an interactive human session regardless of scopes. Default limit policy is **no numeric ceiling** until an operator sets `P2P_OFFER_MAX_*` — inventing magnitudes here is product law, not craft residual. Stage-3 erase/pseudonymise of settled trades is owner-gated.
 
 **The method registry is empty and stays empty until an operator fills it.** That is not a gap in the mechanism — it is where the mechanism ends and researched, jurisdictional content begins. Nobody can register a payment destination in a market until `instruments.methods.register` has been called for it, and any attempt to save that as engineering work by seeding a guess would produce destinations that validate and cannot be paid.
 
@@ -460,6 +461,8 @@ The money paths run against real Postgres with the ledger's in-memory reference 
 - two disputes on one trade → rejected
 - a non-party cancelling, or a buyer cancelling after declaring payment → rejected
 - kill-switch on → new takes blocked, settlement unaffected
+- API key with P2P scope but no approved merchant standing → refused before P2P service work; approval enables it and suspension removes it on the next call
+- API key belonging to an allowlisted moderator, or carrying `admin:compliance` → never treated as the human required to rule on a dispute
 - a full mixed run across every branch → every trade terminal, every terminal trade settled, `escrowIntegrity()` and `reconcile()` clean, total value conserved to the unit
 
 **Payment-instrument disclosure covered:**

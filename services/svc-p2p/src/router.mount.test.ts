@@ -4,6 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createP2pRouter } from './router.js';
 import type { P2pService } from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
+import type { MerchantStatus } from './merchant-programme.js';
 
 /**
  * THE MOUNT BOUNDARY, for svc-p2p (docs/decisions/mount-boundary.md).
@@ -101,6 +102,22 @@ function stubInstruments(overrides: Partial<Record<string, unknown>> = {}) {
 
 const routerFor = (p2p: P2pService, instruments: InstrumentService = stubInstruments()) => createP2pRouter(p2p, instruments);
 
+function merchantStub(status: MerchantStatus | null) {
+  return {
+    get: async (userId: string) =>
+      status === null
+        ? null
+        : {
+            userId,
+            status,
+            appliedCompletionRate: 1,
+            appliedTradesTotal: 100,
+            appliedAt: new Date('2026-01-01T00:00:00.000Z'),
+            decidedAt: new Date('2026-01-02T00:00:00.000Z'),
+          },
+  };
+}
+
 describe('svc-p2p mount — authorisation', () => {
   it('refuses an anonymous caller on a scoped procedure, and reads nothing', async () => {
     // Shaped like the ledger's: it does not assert on a message, it asserts the
@@ -173,6 +190,83 @@ describe('svc-p2p mount — authorisation', () => {
     await expect(
       caller.instruments.methods.register({ methodId: 'anything', country: 'DE', label: 'x', fields: [{}] }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe('svc-p2p mount — merchant API access', () => {
+  it('refuses P2P API-key traffic until the key owner is an approved merchant', async () => {
+    let reads = 0;
+    const p2p = stubP2p({
+      listOffers: async () => {
+        reads++;
+        return [];
+      },
+    });
+    const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+
+    await expect(
+      createP2pRouter(p2p, stubInstruments(), undefined, {}, merchantStub('applied') as never)
+        .createCaller(ctx)
+        .offers.list({}),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: expect.stringMatching(/approved merchant/i),
+    });
+    expect(reads).toBe(0);
+  });
+
+  it('allows an approved merchant to use an identity-issued P2P API key', async () => {
+    const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub('approved') as never).createCaller(ctx);
+
+    await expect(caller.offers.list({})).resolves.toEqual([]);
+  });
+
+  it('removes API access immediately when merchant standing is suspended', async () => {
+    let status: MerchantStatus = 'approved';
+    const merchants = {
+      get: async (userId: string) => ({
+        userId,
+        status,
+        appliedCompletionRate: 1,
+        appliedTradesTotal: 100,
+        appliedAt: new Date('2026-01-01T00:00:00.000Z'),
+        decidedAt: new Date('2026-01-02T00:00:00.000Z'),
+      }),
+    };
+    const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(ctx);
+
+    await expect(caller.offers.list({})).resolves.toEqual([]);
+    status = 'suspended';
+    await expect(caller.offers.list({})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('does not turn ordinary interactive P2P access into merchant-only access', async () => {
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub(null) as never).createCaller(ctx);
+
+    await expect(caller.offers.list({})).resolves.toEqual([]);
+  });
+
+  it('reports API eligibility from the same current standing that enforces it', async () => {
+    const keyCtx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+    const sessionCtx = signed(principal({ scopes: ['p2p:read'] }));
+    const router = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub('approved') as never);
+
+    await expect(router.createCaller(keyCtx).merchants.apiAccess()).resolves.toEqual({
+      eligible: true,
+      credential: 'api_key',
+      merchantStatus: 'approved',
+      keyPlane: 'identity',
+      rateLimitPlane: 'edge',
+      disputeResolution: 'interactive_human_only',
+    });
+    await expect(router.createCaller(sessionCtx).merchants.apiAccess()).resolves.toMatchObject({
+      eligible: true,
+      credential: 'session',
+      merchantStatus: 'approved',
+    });
   });
 });
 
