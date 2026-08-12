@@ -1,0 +1,90 @@
+/**
+ * D26-P1-A5 — audited leader stats may be written; returns-ranked marketing
+ * boards are forbidden (SPEC-SOVEREIGN §4 / trade.copy mirror).
+ *
+ * Scope: copy-intel presentation only. Never invents PnL; never sorts by
+ * realisedPnl / winRate / "returns" for a marketing leaderboard.
+ */
+
+import { AgentError } from '../errors.js';
+import type { IntelOk, IntelResult, LeaderStat } from './stats.js';
+
+/** Rank keys that would produce a returns-ranked marketing board. */
+export const FORBIDDEN_RETURNS_RANK_KEYS = ['realisedPnl', 'winRate', 'returns', 'pnl', 'performance', 'profit', 'roi'] as const;
+
+export type ForbiddenReturnsRankKey = (typeof FORBIDDEN_RETURNS_RANK_KEYS)[number];
+
+/** Safe presentation orders — never performance-ranked. */
+export type AuditedStatsOrder = 'input' | 'leaderId';
+
+export function isForbiddenReturnsRankKey(rankBy: string): rankBy is ForbiddenReturnsRankKey {
+  return (FORBIDDEN_RETURNS_RANK_KEYS as readonly string[]).includes(rankBy);
+}
+
+/**
+ * Explicit refuse — mirrors `trade.copy` `rankLeadersByReturns`.
+ * Machine code stays `agents.refused`; user copy stays unavailable (no marketing pitch).
+ */
+export function refuseReturnsRankedMarketingBoard(rankBy = 'returns'): never {
+  throw new AgentError(
+    `Returns-ranked marketing board refused (rankBy=${rankBy}) — D26-P1-A5 / SPEC-SOVEREIGN §4; audited stats only, never sort by PnL or win rate`,
+    'agents.refused',
+    'agents.copy_intel.unavailable',
+    { reason: 'returns_ranked_board_forbidden', rankBy },
+  );
+}
+
+/** Named mountain surface — same refuse as trade.copy ranking ban. */
+export function rankLeadersByReturns(): never {
+  return refuseReturnsRankedMarketingBoard('returns');
+}
+
+/**
+ * Present audited stats without a marketing board.
+ * `rankBy` in the forbidden set → hard refuse.
+ * Otherwise returns ok stats in input order or stable leaderId order.
+ */
+export function presentAuditedLeaderStats(
+  result: IntelResult,
+  options: { readonly order?: AuditedStatsOrder; readonly rankBy?: string } = {},
+): IntelResult {
+  if (options.rankBy !== undefined && isForbiddenReturnsRankKey(options.rankBy)) {
+    return refuseReturnsRankedMarketingBoard(options.rankBy);
+  }
+  if (result.status !== 'ok') return result;
+
+  const order: AuditedStatsOrder = options.order ?? 'input';
+  if (order === 'input') return result;
+
+  const stats = [...result.stats].sort((a, b) => (a.leaderId < b.leaderId ? -1 : a.leaderId > b.leaderId ? 1 : 0));
+  const byId = new Map(result.audit.map((a) => [a.leaderId, a]));
+  const audit = stats.map((s) => byId.get(s.leaderId)!).filter(Boolean);
+  return { ...result, stats, audit };
+}
+
+/** True when stats order matches input order (not returns-ranked). */
+export function auditedStatsPreserveInputOrder(stats: readonly LeaderStat[], inputLeaderIds: readonly string[]): boolean {
+  const present = inputLeaderIds.filter((id) => stats.some((s) => s.leaderId === id));
+  if (present.length !== stats.length) return false;
+  return stats.every((s, i) => s.leaderId === present[i]);
+}
+
+/** True when a sequence is strictly descending by realised PnL (marketing rank smell). */
+export function isReturnsDescending(stats: readonly LeaderStat[]): boolean {
+  if (stats.length < 2) return false;
+  for (let i = 1; i < stats.length; i += 1) {
+    const prev = Number(stats[i - 1]!.realisedPnl);
+    const cur = Number(stats[i]!.realisedPnl);
+    if (!(Number.isFinite(prev) && Number.isFinite(cur) && prev > cur)) return false;
+  }
+  return true;
+}
+
+/** Ok board: audited write count only — never a ranked marketing strip. */
+export function auditedWriteBoardCard(result: IntelOk): {
+  readonly status: 'ok';
+  readonly auditedWrites: number;
+  readonly ranking: 'forbidden';
+} {
+  return { status: 'ok', auditedWrites: result.audit.length, ranking: 'forbidden' };
+}
