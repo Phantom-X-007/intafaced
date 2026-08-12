@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, BASE_PERKS } from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
 import { createAcademyRouter } from './router.js';
 import { certXpPlaneStatus, NullCertXpPublisher } from './certs/xp-publish.js';
+import { certPerkPlaneStatus } from './certs/perk-plane.js';
 import type { AcademyService } from './academy-service.js';
 
 /**
@@ -107,6 +108,7 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
     // The real plane over the real null publisher — a hand-written literal here
     // would pass while the shape drifted underneath it.
     certXpPlane: vi.fn(() => certXpPlaneStatus(new NullCertXpPublisher())),
+    certPerkPlane: vi.fn(() => certPerkPlaneStatus()),
     ...overrides,
   } as unknown as AcademyService;
 }
@@ -158,6 +160,8 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'myCerts',
         'certProgress',
         'certXpPlane',
+        'certPerkPlane',
+        'certPerkIntent',
         'seasons',
         'season',
         'standings',
@@ -738,12 +742,21 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
         alreadyGranted: false,
         grant: { userId: USER, certId: 'foundations-v1', grantedAt: new Date(), idempotencyKey: `cert:${USER}:foundations-v1` },
         xp: { emitted: true as const, idempotencyKey: `academy.cert:cert:${USER}:foundations-v1`, xpDelta: 100 },
+        perks: {
+          status: 'real' as const,
+          path: 'identity_rank' as const,
+          sot: 'svc-identity' as const,
+          academyHoldsPerkMoney: false as const,
+          academyMapsCertToPerk: false as const,
+          perks: BASE_PERKS,
+        },
       })),
     });
 
     const result = await createAcademyRouter(academy).createCaller(signed()).grantCert({ certId: 'foundations-v1' });
 
     expect(result.xp).toEqual({ emitted: true, idempotencyKey: `academy.cert:cert:${USER}:foundations-v1`, xpDelta: 100 });
+    expect(result.perks.status).toBe('real');
   });
 
   it('grantCert still returns the grant when the award could not be published', async () => {
@@ -752,6 +765,16 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
         alreadyGranted: true,
         grant: { userId: USER, certId: 'foundations-v1', grantedAt: new Date(), idempotencyKey: `cert:${USER}:foundations-v1` },
         xp: { emitted: false as const, reason: 'publisher_unavailable' as const },
+        perks: {
+          status: 'refuse' as const,
+          code: 'academy.cert_perk_refuse_closed' as const,
+          reason: 'identity_unreadable' as const,
+          message: 'Identity perk table unreadable',
+          academyHoldsPerkMoney: false as const,
+          academyMapsCertToPerk: false as const,
+          residual:
+            'TRK-academy.certs D26-P1-C1 — perks via svc-identity rank only; cert→perk money refuse-closed (no invent)' as const,
+        },
       })),
     });
 
@@ -759,6 +782,7 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
 
     expect(result.grant.certId).toBe('foundations-v1');
     expect(result.xp).toEqual({ emitted: false, reason: 'publisher_unavailable' });
+    expect(result.perks.status).toBe('refuse');
   });
 
   it('certXpPlane names svc-identity as the rank writer, never academy', async () => {
@@ -771,6 +795,28 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
   it('certXpPlane is not readable without academy:read', async () => {
     await expect(createAcademyRouter(stubAcademy()).createCaller(anonymous()).certXpPlane()).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('certPerkPlane refuses academy perk money and names identity SoT', async () => {
+    const plane = await caller().certPerkPlane();
+    expect(plane.rankWriter).toBe('svc-identity');
+    expect(plane.academyHoldsPerkMoney).toBe(false);
+    expect(plane.academyMapsCertToPerk).toBe(false);
+    expect(plane.perksEnabledViaIdentity).toBe(true);
+  });
+
+  it('certPerkIntent always refuse-closes invent kinds', async () => {
+    const result = await createAcademyRouter(stubAcademy())
+      .createCaller(signed(principal({ scopes: ['admin:read', 'admin:write', 'academy:read', 'academy:write'] })))
+      .certPerkIntent({ kind: 'invent_perk_money' });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 'refuse',
+      code: 'academy.cert_perk_refuse_closed',
+      kind: 'invent_perk_money',
+      academyHoldsPerkMoney: false,
+      academyMapsCertToPerk: false,
     });
   });
 });

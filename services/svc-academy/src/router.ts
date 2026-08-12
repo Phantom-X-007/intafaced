@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
@@ -46,6 +46,13 @@ import {
 } from './paper/simulated-result.js';
 import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
+import {
+  CERT_PERK_REFUSE_CODE,
+  CERT_PERK_RESIDUAL,
+  decideCertPerkInvent,
+  isCertPerkInventRefuseClosed,
+  type CertPerkInventKind,
+} from './certs/perk-plane.js';
 import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
 
 /**
@@ -394,6 +401,35 @@ const certXpPlaneOut = z.object({
   action: z.literal(CERT_XP_ACTION),
   rankWriter: z.literal('svc-identity'),
   policies: z.array(z.object({ certId: z.string(), xpDelta: z.number().int() })),
+});
+const certPerkInventKind = z.enum(['cert_to_perk_map', 'invent_perk_money', 'invent_fee_discount', 'invent_ifc_grant', 'invent_balance']);
+const certPerkOutcomeOut = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('real'),
+    path: z.literal('identity_rank'),
+    sot: z.literal('svc-identity'),
+    academyHoldsPerkMoney: z.literal(false),
+    academyMapsCertToPerk: z.literal(false),
+    perks: rankPerksSchema,
+  }),
+  z.object({
+    status: z.literal('refuse'),
+    code: z.literal(CERT_PERK_REFUSE_CODE),
+    reason: z.literal('identity_unreadable'),
+    message: z.string(),
+    academyHoldsPerkMoney: z.literal(false),
+    academyMapsCertToPerk: z.literal(false),
+    residual: z.literal(CERT_PERK_RESIDUAL),
+  }),
+]);
+const certPerkPlaneOut = z.object({
+  perksEnabledViaIdentity: z.literal(true),
+  academyMapsCertToPerk: z.literal(false),
+  academyHoldsPerkMoney: z.literal(false),
+  rankWriter: z.literal('svc-identity'),
+  residual: z.literal(CERT_PERK_RESIDUAL),
+  inventKindsRefuseClosed: z.array(certPerkInventKind),
+  statusLine: z.string(),
 });
 const certProgressOut = z.object({
   userId: z.string().uuid(),
@@ -1410,12 +1446,12 @@ export function createAcademyRouter(academy: AcademyService) {
         }),
       ),
 
-    // ── Certifications (progress + grants + XP emit — NO PAY) ─────────────────
+    // ── Certifications (progress + grants + XP emit + perk real/refuse — NO PAY) ─
     //
     // Definitions are code-seeded. Completions and grants are durable. Stage-2
-    // publishes `intafaced.identity.xp.earned` on grant, keyed on the grant, and
-    // stops there: svc-identity is the only writer to rank_state and the only
-    // place a perk is decided (§4.1). Nothing here posts to the ledger.
+    // publishes `intafaced.identity.xp.earned` on grant. D26-P1-C1 then surfaces
+    // real svc-identity perks or refuses invent perk money — never a cert→perk
+    // map or academy perk book (§4.1). Nothing here posts to the ledger.
 
     certDefinitions: scopedProcedure('academy:read', { module: 'academy' })
       .output(z.array(certDefinitionOut))
@@ -1440,7 +1476,8 @@ export function createAcademyRouter(academy: AcademyService) {
       ),
 
     /**
-     * Grant the caller's own certification, and publish the XP it is worth.
+     * Grant the caller's own certification, publish the XP it is worth, and
+     * report real identity perks (or refuse when invent/unreadable).
      *
      * Safe to call twice: the grant is idempotent on (user, cert) and the award
      * carries that same business key, which identity drops on conflict. Calling
@@ -1454,6 +1491,7 @@ export function createAcademyRouter(academy: AcademyService) {
           grant: certGrantOut,
           alreadyGranted: z.boolean(),
           xp: certXpOut,
+          perks: certPerkOutcomeOut,
         }),
       )
       .mutation(({ input, ctx }) =>
@@ -1468,6 +1506,7 @@ export function createAcademyRouter(academy: AcademyService) {
               idempotencyKey: result.grant.idempotencyKey,
             },
             xp: result.xp,
+            perks: result.perks,
           };
         }),
       ),
@@ -1483,6 +1522,50 @@ export function createAcademyRouter(academy: AcademyService) {
       .query(() => {
         const plane = academy.certXpPlane();
         return { ...plane, policies: [...plane.policies] };
+      }),
+
+    /**
+     * D26-P1-C1 perk plane: real perks via identity rank only; invent money refuse-closed.
+     */
+    certPerkPlane: scopedProcedure('academy:read', { module: 'academy' })
+      .output(certPerkPlaneOut)
+      .query(() => {
+        const plane = academy.certPerkPlane();
+        return { ...plane, inventKindsRefuseClosed: [...plane.inventKindsRefuseClosed] };
+      }),
+
+    /**
+     * Operator attempt to invent cert→perk money / map — always refuse, never amounts.
+     */
+    certPerkIntent: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ kind: certPerkInventKind }))
+      .output(
+        z.object({
+          ok: z.literal(false),
+          status: z.literal('refuse'),
+          code: z.literal(CERT_PERK_REFUSE_CODE),
+          kind: certPerkInventKind,
+          message: z.string(),
+          academyHoldsPerkMoney: z.literal(false),
+          academyMapsCertToPerk: z.literal(false),
+          residual: z.literal(CERT_PERK_RESIDUAL),
+        }),
+      )
+      .mutation(({ input }) => {
+        const d = decideCertPerkInvent(input.kind as CertPerkInventKind);
+        if (!isCertPerkInventRefuseClosed(d)) {
+          throw new AcademyError('Cert perk invent plane must stay refuse-closed', 'academy.cert_invalid');
+        }
+        return {
+          ok: false as const,
+          status: 'refuse' as const,
+          code: d.code,
+          kind: d.kind,
+          message: d.message,
+          academyHoldsPerkMoney: false as const,
+          academyMapsCertToPerk: false as const,
+          residual: d.residual,
+        };
       }),
 
     myCerts: scopedProcedure('academy:read', { module: 'academy' })

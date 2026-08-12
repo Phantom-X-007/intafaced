@@ -1082,11 +1082,10 @@ export const FEATURES = [
     status: 'ready',
     owner: null,
     note:
-      'GHOST OWNER CLEARED 2026-08-09 L07 W9 (was wip @nitro-agent). Cert XP emit + grant race honesty + spine seals on tip ' +
-      '(#1117 · #1370 · #1490). NOT tracker done: title promises "→ real perks" and work stops at XP. ' +
-      'svc-identity is SoT for rank + rank_thresholds.perks; a cert→perk map here would be a second opinion and ' +
-      'needs a contracts PR first. Unpriced cert publishes nothing rather than a guessed amount. Academy residual honesty ' +
-      'is free; invent-risk perk product stays multi-svc / Denon-law.',
+      'D26-P1-C1 2026-08-12: grantCert → XP → real identity perks OR refuse invent perk money ' +
+      '(certs/perk-plane.ts · certPerkPlane · certPerkIntent). svc-identity remains SoT; no academy ' +
+      'cert→perk map / perk book. Unpriced cert still publishes nothing. NOT tracker done on full ' +
+      'title until multi-svc cert→perk product law (contracts) — honesty plane is sealed.',
     dependsOn: ['academy.curriculum', 'identity.rank'],
   }),
   f('academy.ambassadors', 'Residencies, IFC pay, revenue share', {
