@@ -160,6 +160,18 @@ export const FEE_REVENUE_PATHS = {
     feeModule: 'market',
     note: 'Listing commission → houseFees(market); blank bps refused upstream.',
   },
+  'market.listing_fee': {
+    kind: 'recipe',
+    recipe: 'marketListingFee',
+    feeModule: 'market',
+    note: 'Vendor listing fee → houseFees(market); §13 unwired in svc-market until owner publishes amounts.',
+  },
+  'market.premium_placement': {
+    kind: 'recipe',
+    recipe: 'marketPremiumPlacement',
+    feeModule: 'market',
+    note: 'Vendor premium placement → houseFees(market); §13 unwired until a writer posts.',
+  },
   'ops.affiliate_payout': {
     kind: 'recipe',
     recipe: 'sweepFeesToRewards',
@@ -204,4 +216,6 @@ export const RECIPES_TOUCHING_HOUSE_FEES = [
   'loanReserveFund',
   'earnPoolFund',
   'marketPurchase',
+  'marketListingFee',
+  'marketPremiumPlacement',
 ] as const satisfies readonly RecipeName[];
