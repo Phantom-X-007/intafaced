@@ -13,7 +13,15 @@ import { subscribeMatchingEvents } from './events.js';
 import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
-import { PositionService } from './futures/position-service.js';
+import { PositionService, FuturesError } from './futures/position-service.js';
+import {
+  ADL_DISCLOSURE_VERSION,
+  assertAdlDisclosureAcked,
+  presentAdlDisclosureWire,
+  sqlAdlDisclosureStore,
+  AdlDisclosureError,
+} from './futures/adl-disclosure.js';
+import { presentAdlActionDisclosureWire, sqlAdlDisclosureEventStore } from './futures/adl-last-resort.js';
 import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { presentMarginCallWire } from './futures/margin-call-transport.js';
@@ -214,11 +222,26 @@ if (profitSource) {
  * Positions price from `futuresJobs.marks` — the same venue-fabric-then-depth
  * port liquidation reads. Constructed after the jobs for that reason: there is
  * no second price path, and no request body anywhere near one.
+ *
+ * DIRECTION:34 — ADL disclosure gate is wired here so open refuses without ack
+ * even if a caller bypasses the REST door.
  */
+const adlDisclosureAcks = sqlAdlDisclosureStore(sql);
+const adlDisclosureEvents = sqlAdlDisclosureEventStore(sql);
 const positions = new PositionService(sql, ledger, {
   marks: futuresJobs.marks,
   profitSource,
   bus,
+  assertAdlDisclosureAcked: async (userId) => {
+    try {
+      await assertAdlDisclosureAcked(adlDisclosureAcks, userId);
+    } catch (err) {
+      if (err instanceof AdlDisclosureError) {
+        throw new FuturesError(err.message, err.code, err.status);
+      }
+      throw err;
+    }
+  },
 });
 
 // Spot candle materialization — default OFF. REST OHLCV still live from fills.
@@ -461,6 +484,16 @@ registerPrivateRest(app, {
     if (!row || row.userId !== principal.userId) return null;
     return presentMarginCallWire(row);
   },
+  getAdlDisclosure: async (principal) =>
+    presentAdlDisclosureWire(await adlDisclosureAcks.getAck(principal.userId, ADL_DISCLOSURE_VERSION)),
+  ackAdlDisclosure: async (principal) => {
+    const row = await adlDisclosureAcks.recordAck(principal.userId, ADL_DISCLOSURE_VERSION, new Date());
+    return presentAdlDisclosureWire(row);
+  },
+  listAdlDisclosureEvents: async (principal) => {
+    const rows = await adlDisclosureEvents.listForUser(principal.userId);
+    return rows.map(presentAdlActionDisclosureWire);
+  },
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -513,6 +546,10 @@ app.log.info(
       'GET /api/v1/account/fees',
       'GET /api/v1/account/balance',
       'GET /api/v1/positions',
+      'GET /api/v1/positions/:id/margin-call',
+      'GET /api/v1/futures/adl-disclosure',
+      'POST /api/v1/futures/adl-disclosure/ack',
+      'GET /api/v1/futures/adl-events',
       'POST /api/v1/positions',
       'DELETE /api/v1/positions/:id',
       'POST /api/v1/positions/leverage',

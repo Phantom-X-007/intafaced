@@ -326,15 +326,15 @@ export const FEATURES = [
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/futures'],
     note:
-      'WIP 2026-08-12 Denon D26-P1-T1d (feat/futures-insurance-shortfall / #1684): bankrupt tick → MemoryLedger insurance balance moves exactly by shortfall ' +
-      '(futuresInsuranceTopup seed + futuresRealizeLoss draw; underfunded parks; margin-only leaves fund untouched). ' +
-      'Also sealed: #1681 T1c partial vs real book; #1679 T1f funding nets zero; #1678 T1b margin-call observe. Isolated margin ONLY. ' +
+      'WIP 2026-08-12 Denon D26-P1-T1g (feat/futures-adl-disclosure / #1685): ADL last-resort refuse-silent + in-product disclosure ack before open (DIRECTION:34). ' +
+      'New adl-disclosure / adl-last-resort modules; no invented D5 thresholds (unset policy refuses). ' +
+      'Also sealed: #1684 T1d insurance shortfall; #1681 T1c partial vs real book; #1679 T1f; #1678 T1b. Isolated margin ONLY. ' +
       'Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). ' +
       'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
       '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), ' +
-      '#1672 T1a mark law, #1670 insurance list gate, #1678 T1b, #1679 T1f, #1681 T1c. ' +
-      'Still not umbrella-done: T1e–T1g, leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, ' +
-      'Denon ladder numbers (D3), N1 profit-source capitalisation. Never invent mid/funding/grace duration / fund capitalisation.',
+      '#1672 T1a mark law, #1670 insurance list gate, #1678 T1b, #1679 T1f, #1681 T1c, #1684 T1d. ' +
+      'Still not umbrella-done: T1e residual + leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, ' +
+      'Denon ladder numbers (D3), N1 profit-source capitalisation. Never invent mid/funding/grace/ADL rates.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
