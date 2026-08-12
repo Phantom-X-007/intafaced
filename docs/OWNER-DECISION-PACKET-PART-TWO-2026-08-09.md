@@ -59,9 +59,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 ## P0-08 · `pay:write` / KYB grant mechanism shape
 
 **Blocks:** merchant surfaces that need a real grant path without inventing who may grant.  
-**Settled around it:** KYB columns / refuse stubs exist; full digital KYB is `pay.psp`.  
-**Question:** who grants `pay:write` / KYB state transitions, with what audit, and what refuses when the grantor is missing?  
-**Recommendation:** shape the **mechanism** (roles, audit, refuse) on tip so implementers do not invent grants; commercial PSP relationships stay Class X / partner sockets.
+**Shape + Layer B wiring:** [`adr/2026-08-12-pay-write-kyb-grant-mechanism-shape.md`](adr/2026-08-12-pay-write-kyb-grant-mechanism-shape.md) · refuse-closed `issueMerchantPayScopes` in `@intafaced/auth` · live money doors gate on approved KYB (`pay.kyb_required`) via D26-P1-P10 — **still no invented grantor**.  
+**Settled around it:** two layers — (A) scope issuance refuse-closed until you publish grant law; (B) KYB money gate separate from dossier transitions. No auto-grant on `kybStatus: approved`. Full digital KYB operator path is `pay.psp`.  
+**Question (A2 — yours only):** who may invoke the grantor; KYB predicate per `pay:read` / `pay:write` / `pay:refund` / `pay:payout`; sandbox temporary grant rules (if any); revocation / suspension ⇒ strip scopes.  
+**Recommendation:** agents must not invent a grantor. Issuance stays refuse-closed until you seal A2; Layer B live KYB money gate may ship without inventing scopes.
 
 ---
 
