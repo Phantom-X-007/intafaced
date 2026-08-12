@@ -60,6 +60,7 @@ export const COPY_KEYS = [
   'agents.support.comment_refused',
   'agents.support.tier_closed',
   'agents.support.escalated',
+  'agents.support.stopped',
 ] as const;
 
 export type CopyKey = (typeof COPY_KEYS)[number];
@@ -119,6 +120,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.support.tier_closed':
     'This Sovereign Intelligence support action is closed until product tier rules are published — nothing was read or answered.',
   'agents.support.escalated': 'This one goes to a person — a support ticket has the answer, and nothing was guessed here.',
+  'agents.support.stopped': 'Support stopped before finishing — nothing further was looked up and nothing silent was charged.',
 };
 
 const KEY_SET: ReadonlySet<string> = new Set(COPY_KEYS);
