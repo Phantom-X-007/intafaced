@@ -4,7 +4,7 @@ import { AuthError } from '@intafaced/auth';
 import { formatAmount, parseAmount, InsufficientFundsError, LedgerError } from '@intafaced/ledger-client';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
-import { forexSettlementStatus } from './spot/forex-settlement.js';
+import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } from './spot/forex-settlement.js';
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import type { OtcDeskService } from './otc/otc-service.js';
@@ -621,9 +621,33 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
      * Forex settlement posture (trade.forex / D26-P1-T7).
      * Always refuse-closed until D26-P0-05 + fiat settle rails — never invents
      * settlement asset. §13 socket.forex-settlement.
+     *
+     * Completeness = honest refuse product on public doors (status + listing
+     * probe + place path), not fundable FX. Do not mark trade.forex done.
      */
     forex: router({
       settlementStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => forexSettlementStatus()),
+
+      /**
+       * Same listing gate as TradeService.listMarket / setMarketStatus(active).
+       * Public-door probe so refuse is not unit-helper-only until an admin
+       * listMarket transport mounts. Production active non-paper forex/
+       * commodity → trade.unsettled_asset_class_listing naming the socket.
+       */
+      assertProductionListing: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            assetClass: z.enum(['crypto', 'commodity', 'forex']),
+            status: z.enum(['active', 'pending', 'halted', 'delisted']),
+            paper: z.boolean(),
+          }),
+        )
+        .mutation(({ input }) =>
+          guard(async () => {
+            assertProductionUnsettledAssetClassListing(input);
+            return { ok: true as const, refused: false as const };
+          }),
+        ),
     }),
 
     /**
