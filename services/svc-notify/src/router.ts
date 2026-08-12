@@ -229,6 +229,12 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * the same person reads both surfaces, and a vaguer answer would send them
        * into the source to find out which key is absent. It names no provider,
        * only our own variable names (§0.7).
+       *
+       * `socket` is the Doctrine §13 tracker id for out-of-app channels
+       * (`socket.notify-email|push|sms`). Null for `inapp` — that is the
+       * fan-out mountain (`ops.notifications`), not a credential socket
+       * (D26-P1-O5). Closing a socket needs Class X credentials; refusing
+       * when unset is the honest state, not a half-built channel.
        */
       channels: scopedProcedure('notify:read', { module: 'notify' })
         .output(
@@ -238,6 +244,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
               available: z.boolean(),
               reason: z.string().nullable(),
               requires: z.array(z.string()),
+              socket: z.string().nullable(),
             }),
           ),
         )
@@ -247,6 +254,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
             available: s.available,
             reason: s.reason,
             requires: [...s.requires],
+            socket: s.socket,
           })),
         ),
 

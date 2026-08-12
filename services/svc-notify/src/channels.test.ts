@@ -172,6 +172,14 @@ describe('channel registry — a channel with no credentials refuses, it does no
     expect(reg.availableChannels()).toEqual(['inapp']);
   });
 
+  it('names §13 sockets on out-of-app channels and leaves in-app on the mountain (D26-P1-O5)', () => {
+    const status = channelsFromEnv(NO_GATEWAYS).status();
+    expect(status.find((s) => s.channel === 'inapp')).toMatchObject({ socket: null });
+    expect(status.find((s) => s.channel === 'email')).toMatchObject({ socket: 'socket.notify-email' });
+    expect(status.find((s) => s.channel === 'push')).toMatchObject({ socket: 'socket.notify-push' });
+    expect(status.find((s) => s.channel === 'sms')).toMatchObject({ socket: 'socket.notify-sms' });
+  });
+
   it('names the environment variables an operator is missing', () => {
     const email = channelsFromEnv(NO_GATEWAYS)
       .status()
