@@ -153,17 +153,14 @@ describe('BinanceSpotMarketData — public data, no credentials', () => {
       bids: [['1000.00', '0.000000000000000001']],
       asks: [['3000.00', '0.000000000000000001']],
     };
-    await expect(adapter(new FakeHttp().queue(dust), new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(
-      /not payout-grade/,
-    );
+    await expect(adapter(new FakeHttp().queue(dust), new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/not payout-grade/);
     await expect(
       adapter(new FakeHttp().queue({ lastUpdateId: 2, bids: [], asks: [] }), new FakeStream()).snapshotBook('BTC/USDT'),
     ).rejects.toThrow(VenueUnavailableError);
     try {
-      await adapter(
-        new FakeHttp().queue({ lastUpdateId: 3, bids: [['30000.00', '2.00']], asks: [] }),
-        new FakeStream(),
-      ).snapshotBook('BTC/USDT');
+      await adapter(new FakeHttp().queue({ lastUpdateId: 3, bids: [['30000.00', '2.00']], asks: [] }), new FakeStream()).snapshotBook(
+        'BTC/USDT',
+      );
       expect.unreachable('should have refused');
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);

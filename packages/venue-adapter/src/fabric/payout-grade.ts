@@ -76,11 +76,7 @@ export function payoutGradeMinNotional(policy: PayoutGradePolicy = DEFAULT_PAYOU
  * Is a single best level thick enough to stand behind a payout-grade quote?
  * `price` and `quantity` are 1e18-scaled bigints.
  */
-export function bestLevelIsPayoutGrade(
-  price: Amount,
-  quantity: Amount,
-  policy: PayoutGradePolicy = DEFAULT_PAYOUT_GRADE_POLICY,
-): boolean {
+export function bestLevelIsPayoutGrade(price: Amount, quantity: Amount, policy: PayoutGradePolicy = DEFAULT_PAYOUT_GRADE_POLICY): boolean {
   if (price <= 0n || quantity <= 0n) return false;
   return (price * quantity) / SCALE >= payoutGradeMinNotional(policy);
 }
@@ -108,9 +104,7 @@ export function isPayoutGradeBook(
 /** Same gate on an already-computed top-of-book (MaintainedBook / cross-check). */
 export function isPayoutGradeTop(top: BookTop, policy: PayoutGradePolicy = DEFAULT_PAYOUT_GRADE_POLICY): boolean {
   if (top.bestBid == null || top.bestAsk == null || top.bestBidQty == null || top.bestAskQty == null) return false;
-  return (
-    bestLevelIsPayoutGrade(top.bestBid, top.bestBidQty, policy) && bestLevelIsPayoutGrade(top.bestAsk, top.bestAskQty, policy)
-  );
+  return bestLevelIsPayoutGrade(top.bestBid, top.bestBidQty, policy) && bestLevelIsPayoutGrade(top.bestAsk, top.bestAskQty, policy);
 }
 
 /**
