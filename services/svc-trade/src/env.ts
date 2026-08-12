@@ -313,7 +313,8 @@ const schema = serviceEnvSchema
        *
        * Empty (default) = unpublished → refuse-closed. Never invent spread bps,
        * min stake, or principal-vs-maker — DIRECTION §8 owner-only.
-       * Published shape: {"published":true,"spreadBps":N,"minStake":"…","counterparty":"platform"|"maker","quoteTtlMs":30000}
+       * Published shape: {"published":true,"spreadBps":N,"minStake":"…","counterparty":"platform"|"maker","quoteTtlMs":30000,"maxMidAgeSeconds":N}
+       * maxMidAgeSeconds is required when published — never invent mid freshness.
        */
       TRADE_OTC_DESK_LAW: z.string().default(''),
 
@@ -321,9 +322,10 @@ const schema = serviceEnvSchema
        * OTC reference mids, ops-published: `BASE/QUOTE:mid,BASE/QUOTE:mid`.
        *
        * Empty (default) = the desk can source no price and every quote refuses
-       * `trade.otc_no_reference_price`. This is the ONLY place an OTC mid comes
-       * from — it is deliberately not a caller input, because a taker who names
-       * the price can name it at 1 and take the house inventory.
+       * `trade.otc_no_reference_price`. Boot-stamped asOf + desk-law
+       * `maxMidAgeSeconds` makes a static map go dark after the owner window.
+       * This is the ONLY place an OTC mid comes from — deliberately not a
+       * caller input.
        */
       TRADE_OTC_MIDS: z.string().default(''),
 

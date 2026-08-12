@@ -99,13 +99,23 @@ export class OtcDeskService {
       throw new OtcError('OTC asset pair is not a usable pair of ledger asset ids', 'trade.otc_no_reference_price');
     }
     const sourced = await this.midSource(pair);
-    if (sourced == null || String(sourced).trim() === '') {
+    if (sourced == null || String(sourced.mid).trim() === '') {
       throw new OtcError(
         `No reference mid for ${pair} — the desk refuses rather than quote off a price it cannot source`,
         'trade.otc_no_reference_price',
       );
     }
-    const midPrice = parseOtcMidPrice(String(sourced));
+    // Age gate: an observation older than owner maxMidAgeSeconds is a memory,
+    // not a price. Clock skew into the future is the same refusal — otherwise
+    // a bad clock defeats staleness. Number comes from published desk law only.
+    const ageSeconds = (this.now().getTime() - sourced.asOf.getTime()) / 1_000;
+    if (ageSeconds > law.maxMidAgeSeconds || ageSeconds < -30) {
+      throw new OtcError(
+        `Reference mid for ${pair} is not fresh (age ${Math.round(ageSeconds)}s, limit ${law.maxMidAgeSeconds}s) — refuse rather than invent`,
+        'trade.otc_no_reference_price',
+      );
+    }
+    const midPrice = parseOtcMidPrice(String(sourced.mid));
 
     let counterpartyId: string;
     if (law.counterparty === 'platform') {

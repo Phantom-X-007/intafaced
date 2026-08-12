@@ -349,13 +349,15 @@ export const FEATURES = [
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'token.staking'],
     requires: ['services/svc-trade/src/otc'],
     note:
+      'WIP 2026-08-12 Denon D26-P1-T2 (feat/trade-otc-rfq-settle): RFQ→stake→fail-closed quote (mid asOf + owner maxMidAgeSeconds)→ledger settle. ' +
       'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
       'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
-      'Residual OWNER: §8 spreads/stake, socket.otc-mid-feed max-age (do not invent), maker-routing settle, durable quotes table. ' +
+      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, live socket.otc-mid-feed (boot map goes dark after age), maker-routing settle, durable quotes table. ' +
       'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
