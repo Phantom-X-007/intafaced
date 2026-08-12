@@ -221,6 +221,16 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     refuseArmIds: refuseIds('callerPriceOnClose'),
     notes: 'Close at current mark; exitPrice/price query fields refused 400',
   },
+  {
+    name: 'fetchPositionMarginCall',
+    method: 'GET',
+    path: '/api/v1/positions/:id/margin-call',
+    auth: 'private',
+    scope: 'trade:read',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'Delivered futures margin call (MVP-2); 404 when none open — never invents',
+  },
 ] as const;
 
 /** Lookup refuse arm by stable id. */

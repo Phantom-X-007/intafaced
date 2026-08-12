@@ -321,16 +321,18 @@ export const FEATURES = [
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/futures'],
     note:
-      'CLAIM RELEASED 2026-08-09 (ghost @nitro-agent cleared — LANE-STOP-TRADE-W3 + W4 A0; no open futures PR held the path). ' +
+      'WIP 2026-08-12 Denon D26-P1-T1b (#1678 feat/futures-margin-call-observable): durable margin-call transport + private REST observe door. ' +
       'Isolated margin ONLY. Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). ' +
       'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
-      '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery). ' +
-      'Still ready not done: leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, insurance fund ACCOUNT/policy owner-reserved, ' +
-      'Denon ladder numbers (D3), N1 profit-source capitalisation. Never invent mid/funding.',
+      '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), ' +
+      '#1672 T1a mark law, #1670 insurance list gate. ' +
+      'Still not umbrella-done: T1c–T1g, leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, ' +
+      'Denon ladder numbers (D3), N1 profit-source capitalisation. Never invent mid/funding/grace duration.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',

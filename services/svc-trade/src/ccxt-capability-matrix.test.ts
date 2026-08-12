@@ -102,6 +102,7 @@ function privateDeps(over: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     closePosition: async () => {
       throw new Error('closePosition should not run when price refused');
     },
+    getOpenMarginCall: async () => null,
     ...over,
   };
 }
