@@ -31,13 +31,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
-import {
-  MemoryLedger,
-  formatAmount,
-  parseAmount as amt,
-  recipes,
-  userAvailable,
-} from '@intafaced/ledger-client';
+import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
 import { registerInternalEmissions } from './internal-emissions.js';
@@ -179,9 +173,7 @@ if (!available) {
   const balanceOf = async (userId: string) => formatAmount((await ledger.balance(userAvailable(userId, 'IFC'))).amount);
   const stakedOf = async (userId: string) => {
     const all = await ledger.balances('user', userId);
-    const total = all
-      .filter((b) => b.account.kind === 'stake' && b.account.assetId === 'IFC')
-      .reduce((acc, b) => acc + b.amount, 0n);
+    const total = all.filter((b) => b.account.kind === 'stake' && b.account.assetId === 'IFC').reduce((acc, b) => acc + b.amount, 0n);
     return formatAmount(total);
   };
 
