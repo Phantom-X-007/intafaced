@@ -21,7 +21,7 @@ import { parseAmount } from '@intafaced/ledger-client';
 import { fakeMarket, registerPublicRest } from '../public-rest.js';
 import { fakeOrder, registerPrivateRest, type PrivateRestDeps } from '../private-rest.js';
 import { assertMarketOpen, assertSettlementRails, assertTradable } from './risk.js';
-import { TradeError, type Market } from './types.js';
+import { TradeError, type Market, type OrderType } from './types.js';
 import type { PlaceOrderInput } from './trade-service.js';
 
 const EDGE_SECRET = 'a-trade-t9-instrument-public-door-edge-secret-32';
@@ -107,18 +107,23 @@ function realRiskPlaceOrder(opts: {
   now: () => Date;
 }): (principal: Principal, input: PlaceOrderInput) => Promise<ReturnType<typeof fakeOrder>> {
   return async (_principal, input) => {
-    const market = await opts.marketBySymbol(input.symbol);
+    const symbol = input.symbol;
+    if (!symbol) {
+      throw new TradeError('market symbol required', 'trade.market_not_found');
+    }
+    const market = await opts.marketBySymbol(symbol);
     if (!market) {
-      throw new TradeError(`market ${input.symbol} not found`, 'trade.market_not_found');
+      throw new TradeError(`market ${symbol} not found`, 'trade.market_not_found');
     }
     assertTradable(market);
     assertSettlementRails(market);
     assertMarketOpen(market, opts.now());
+    const orderType = input.type as OrderType;
     return fakeOrder({
       marketId: market.id,
       clientOrderId: input.clientOrderId ?? null,
       side: input.side,
-      type: input.type,
+      type: orderType,
       qty: input.qty,
       price: input.price ?? null,
     });
