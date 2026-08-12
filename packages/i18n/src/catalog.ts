@@ -241,6 +241,7 @@ export const en = {
   'agents.support.tier_closed':
     'This Sovereign Intelligence support action is closed until product tier rules are published — nothing was read or answered.',
   'agents.support.escalated': 'This one goes to a person — a support ticket has the answer, and nothing was guessed here.',
+  'agents.support.stopped': 'Support stopped before finishing � nothing further was looked up and nothing silent was charged.',
 } as const;
 
 /** The English catalog's exact shape — the thing every other language is measured against. */
