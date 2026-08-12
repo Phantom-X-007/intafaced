@@ -97,7 +97,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Saturday never trades it again.
    */
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
-    /**
+  /**
    * Schedule key not in `TRADING_SCHEDULES` — misconfiguration, not a weekend.
    * BadRequest so bots do not retry Monday expecting the same key to work.
    */
