@@ -26,9 +26,7 @@ export type MerchantPayGrantPathRequest = MerchantPayScopeGrantRequest;
  * Named issuance operation from the ADR. Always refuses until owner A2 seals.
  * Callers must not catch-and-ignore — surface the residual.
  */
-export function issueMerchantPayScopesViaGrantPath(
-  request: MerchantPayGrantPathRequest,
-): { scopes: readonly MerchantPayScope[] } {
+export function issueMerchantPayScopesViaGrantPath(request: MerchantPayGrantPathRequest): { scopes: readonly MerchantPayScope[] } {
   return issueMerchantPayScopes(request);
 }
 

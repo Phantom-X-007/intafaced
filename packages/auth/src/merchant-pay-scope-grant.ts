@@ -92,9 +92,7 @@ export function assertMerchantPayScopeGrantAllowed(request: MerchantPayScopeGran
  * Named issuance operation (ADR A1). Tip: refuse via the gate — never returns
  * scopes. Owner seal later replaces the gate body; this signature stays.
  */
-export function issueMerchantPayScopes(
-  request: MerchantPayScopeGrantRequest,
-): { scopes: readonly MerchantPayScope[] } {
+export function issueMerchantPayScopes(request: MerchantPayScopeGrantRequest): { scopes: readonly MerchantPayScope[] } {
   assertMerchantPayScopeGrantAllowed(request);
 }
 
