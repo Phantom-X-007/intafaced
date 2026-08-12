@@ -49,4 +49,15 @@ describe('request-id replay gate is metering-gated', () => {
     expect(testSrc).toContain('metering-off settle refuses feeCharge for windows left from metering-on');
     expect(testSrc).toContain('metering-off allows the same requestId twice and never invents request_id_replay');
   });
+
+  it('public-door promise-falsify suite pins metering-off never feeCharges (D26-P2-01h)', () => {
+    const doors = readFileSync(join(HERE, 'metering-public-doors-promise-falsify.test.ts'), 'utf8');
+    expect(doors).toContain('D26-P2-01h public doors — metering-off never feeCharges');
+    expect(doors).toContain('usage.settle returns settled:false amount 0 and never calls meter.settle');
+    expect(doors).toContain('run.complete reports cost 0 / metered false and never calls meter.settle');
+    expect(doors).toContain('D26-P2-01h public doors — dark refuse bills zero');
+    const runtimeSrc = readFileSync(join(HERE, 'runtime.test.ts'), 'utf8');
+    expect(runtimeSrc).toContain('D26-P2-01h public doors — real AgentRuntime metering-off');
+    expect(runtimeSrc).toContain('run.complete through createCaller never bills / never feeCharges');
+  });
 });
