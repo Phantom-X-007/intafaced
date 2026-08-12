@@ -25,10 +25,11 @@ export const UNPUBLISHED_ACCRUAL_TIER_LAW: AccrualTierLaw = { published: false }
 export const AFFILIATE_ACCRUAL_RATE_RESIDUAL =
   'DIRECTION §8 fee-share / IB rates are owner-only — refuse-closed at accrual (never invent commission percentages)';
 
-export type AccrualRateRefuseCode = 'affiliate.accrual.rates_unset';
+export type AccrualRateRefuseCode = 'affiliate.accrual.rates_unset' | 'affiliate.accrual.invent_refused';
 
 /**
- * Named refuse when neither the request nor owner-published env supplies tiers.
+ * Named refuse when neither the request nor owner-published env supplies tiers,
+ * or when durable accrue is asked to invent via per-call tiers (D26-P1-O2).
  * Never invent fee-share rates to avoid a refuse.
  */
 export class AccrualRateRefuseError extends Error {
@@ -103,9 +104,12 @@ export function parseAccrualTierLawJson(raw: string | null | undefined): Accrual
  * Resolve tiers for one accrue / dry-run call.
  *
  * Order:
- *   1. Non-empty request tiers (operator-supplied for this call — explicit, not a silent default)
+ *   1. Non-empty request tiers (dry-run simulation only — see accrual-tree-authority.ts;
+ *      durable accrue refuses invent via `affiliate.accrual.invent_refused` before calling here)
  *   2. Owner-published env law
  *   3. Refuse — never invent
+ *
+ * D26-P1-O2: production durable path must not pass requestTiers.
  */
 export function resolveAccrualTiers(input: {
   readonly requestTiers?: readonly TierRate[] | null | undefined;

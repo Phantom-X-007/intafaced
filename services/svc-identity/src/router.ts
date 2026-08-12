@@ -22,14 +22,9 @@ import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
 import type { FreezeService } from './affiliates/freeze-service.js';
-import { accrueCommission, CommissionError, type TierRate } from './affiliates/commission.js';
-import {
-  AccrualRateRefuseError,
-  type AccrualTierLaw,
-  resolveAccrualTiers,
-  UNPUBLISHED_ACCRUAL_TIER_LAW,
-} from './affiliates/commission-rate-law.js';
-import { accrueWithFreezes } from './affiliates/freeze.js';
+import { CommissionError } from './affiliates/commission.js';
+import { AccrualRateRefuseError, type AccrualTierLaw, UNPUBLISHED_ACCRUAL_TIER_LAW } from './affiliates/commission-rate-law.js';
+import { accrueTreeUnderRateAuthority } from './affiliates/accrual-tree-authority.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
@@ -1509,8 +1504,9 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Slice B dry-run: fee event → commission rows using durable tree + freezes.
+       * Slice B dry-run: fee event → commission rows under rate authority (D26-P1-O2).
        * NEVER posts ledger. Zero fee → empty rows. Real payout is affiliates.payout.
+       * Simulation tiers allowed here only; durable accrue refuses invent.
        */
       accrueDryRun: scopedProcedure('admin:read')
         .input(
@@ -1525,6 +1521,7 @@ export function createIdentityRouter(
               .regex(/^[a-z][a-z0-9_-]{0,31}$/)
               .optional(),
             at: z.string().datetime().optional(),
+            /** Dry-run simulation only — never written to durable store. */
             tiers: z
               .array(
                 z.object({
@@ -1559,11 +1556,6 @@ export function createIdentityRouter(
           try {
             const parent = await requireReferral().loadParentMap();
             const frozen = await requireFreeze().frozenIds();
-            // No DEFAULT_ACCRUAL_TIERS — refuse when neither request nor owner law supplies rates.
-            const tiers: readonly TierRate[] = resolveAccrualTiers({
-              requestTiers: input.tiers,
-              law: accrualTierLaw,
-            });
             const fee = {
               feeEventId: input.feeEventId,
               userId: input.userId,
@@ -1572,16 +1564,17 @@ export function createIdentityRouter(
               sourceModule: input.sourceModule,
               at: input.at ? new Date(input.at) : new Date(),
             };
-            const without = accrueCommission({ fee, parent, tiers });
-            const withFreeze = accrueWithFreezes({
+            const out = accrueTreeUnderRateAuthority({
               fee,
               parent,
-              tiers,
+              law: accrualTierLaw,
               frozenBeneficiaryIds: frozen,
+              simulationTiers: input.tiers,
+              mode: 'dryRun',
             });
             return {
-              frozenSkipped: Math.max(0, without.length - withFreeze.length),
-              rows: withFreeze.map((r) => ({
+              frozenSkipped: out.frozenSkipped,
+              rows: out.rows.map((r) => ({
                 feeEventId: r.feeEventId,
                 beneficiaryId: r.beneficiaryId,
                 payerId: r.payerId,
@@ -1600,10 +1593,11 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Slice B persist: same accrual as dry-run, written to durable store.
+       * Slice B persist: accrual tree under owner rate authority (D26-P1-O2).
        * NEVER posts ledger. Idempotent on (feeEventId, beneficiary, hop).
-       * Zero fee → zero rows. Payout remains refuse-closed (Slice C / §8).
-       * Rates: request tiers or owner-published law only — never invent.
+       * Zero fee → zero rows. Payout via ledger recipes only (Slice C).
+       * Rates: owner-published IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON only —
+       * per-call tiers refused (`affiliate.accrual.invent_refused`).
        */
       accrue: scopedProcedure('admin:write')
         .input(
@@ -1618,6 +1612,10 @@ export function createIdentityRouter(
               .regex(/^[a-z][a-z0-9_-]{0,31}$/)
               .optional(),
             at: z.string().datetime().optional(),
+            /**
+             * Forbidden on durable accrue — present only so a caller that still
+             * sends invent tiers gets invent_refused rather than silent ignore.
+             */
             tiers: z
               .array(
                 z.object({
@@ -1654,10 +1652,6 @@ export function createIdentityRouter(
             const parent = await requireReferral().loadParentMap();
             const frozen = await requireFreeze().frozenIds();
             const store = requireAccruals();
-            const tiers: readonly TierRate[] = resolveAccrualTiers({
-              requestTiers: input.tiers,
-              law: accrualTierLaw,
-            });
             const fee = {
               feeEventId: input.feeEventId,
               userId: input.userId,
@@ -1666,18 +1660,19 @@ export function createIdentityRouter(
               sourceModule: input.sourceModule,
               at: input.at ? new Date(input.at) : new Date(),
             };
-            const without = accrueCommission({ fee, parent, tiers });
-            const withFreeze = accrueWithFreezes({
+            const out = accrueTreeUnderRateAuthority({
               fee,
               parent,
-              tiers,
+              law: accrualTierLaw,
               frozenBeneficiaryIds: frozen,
+              simulationTiers: input.tiers,
+              mode: 'durable',
             });
-            const inserted = await store.saveRows(withFreeze);
+            const inserted = await store.saveRows(out.rows);
             const stored = await store.listByFeeEvent(input.feeEventId);
             return {
               inserted,
-              frozenSkipped: Math.max(0, without.length - withFreeze.length),
+              frozenSkipped: out.frozenSkipped,
               rows: stored.map((r) => ({
                 feeEventId: r.feeEventId,
                 beneficiaryId: r.beneficiaryId,
