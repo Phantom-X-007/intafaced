@@ -154,19 +154,20 @@ export const GATES = [
     id: 'brand',
     script: 'tooling/ci/brand-scan.mjs',
     doctrine: '§0.7',
-    why: 'a partner or model-vendor name in user-facing copy',
+    why:
+      'a partner or model-vendor name in user-facing copy. D26-P2-14: also walks discovered vendor Vue shell ' +
+      'project roots (incl. `.vue`) and Java `src/main/resources` — bulk `vendor/` stays skipped so load-bearing ' +
+      'package/groupId lines do not drown the gate; partner names cannot hide in the product shell or Java resource catalogues.',
   },
   {
     id: 'shell-brand',
     script: 'tooling/ci/shell-brand-scan.mjs',
     doctrine: '§0.7',
     why:
-      'the same rule as `brand` above, over the one tree `brand` has never opened. brand-scan carries `vendor` in ' +
-      'SKIP_DIRS, so its "clean — N files" has never counted a single file of the product shell — which is now the ' +
-      'sole product surface, and therefore the surface most likely to show a partner name to a user. It also has no ' +
-      '`.vue` in EXTENSIONS, and the shell is 70 single-file components, so removing the skip would not have covered ' +
-      'it either. Takes its forbidden names by parsing brand-scan.mjs rather than restating them, so the two cannot ' +
-      'drift. Baseline was drained to zero (L11 wave 5) — any new product-surface hit fails until fixed; never re-freeze.',
+      'relaxed-boundary ratchet over the Vue product shell (same FORBIDDEN list parsed from brand-scan.mjs). ' +
+      'brand-scan now includes the shell with `\\b`-anchored patterns (D26-P2-14); this gate still catches names ' +
+      'welded into identifiers where `\\b` cannot see them. Baseline drained to zero (L11 wave 5) — any new ' +
+      'product-surface hit fails until fixed; never re-freeze.',
   },
   {
     id: 'custody',
