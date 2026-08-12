@@ -94,6 +94,7 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-pay/src/user-money-service.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-token ────────────────────────────────────────────────────────────
+  { file: 'services/svc-token/src/promise-falsify-public-doors.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-token/src/token-service.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-trade ────────────────────────────────────────────────────────────
