@@ -120,12 +120,13 @@ open has no client idempotency key — see audit residual).
 
 ### Seed / mm honesty (Spec SD-2…SD-4)
 
-| Rule              | Behavior                                                                       |
-| ----------------- | ------------------------------------------------------------------------------ |
-| **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`)         |
-| **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (kill-switch SD-4) |
-| **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)         |
-| **F8**            | seed↔seed prints never inflate public tape                                     |
+| Rule              | Behavior                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`); MM seed records at rest via `recordSeededOrder` (D26-P1-T10) |
+| **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (wired to `TRADE_MM_SEED_ENABLED`, SD-4)                                 |
+| **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)                                                               |
+| **Cross ban**     | Seed submits are limit `PO`; synchronous engine fills → `manufactured_cross` + hold release (SD-5)                                   |
+| **F8**            | seed↔seed prints never inflate public tape                                                                                           |
 
 ### OHLCV / candles (A-TRADE-SPOT-1 + A-TRADE-SPOT-OPS)
 

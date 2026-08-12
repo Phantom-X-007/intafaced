@@ -30,6 +30,7 @@ import { registerInternalFundingRate } from './futures/internal-funding-rate.js'
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
+import { HOUSE_MM_USER_UUID } from './spot/ids.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
 import { startEngineLedgerReconcileJobs } from './spot/engine-ledger-reconcile-jobs.js';
@@ -102,6 +103,8 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   convertEnabled: env.TRADE_CONVERT_ENABLED,
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
   algoEnabled: env.TRADE_ALGO_ENABLED,
+  // SD-4: same kill as TRADE_MM_SEED_ENABLED — seeded placeOrder path stays OFF by default.
+  seedPlaceEnabled: env.TRADE_MM_SEED_ENABLED,
   subAccounts,
 });
 
@@ -294,6 +297,20 @@ const mmSeedJobs = startMmSeedJobs({
     targets: parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS),
   },
   statePath: env.TRADE_MM_SEED_STATE_PATH,
+  // SD-2: flag resting MM seed orders so public tape excludes them before fill.
+  recordSeededOrder: async (row) => {
+    await sql`
+      INSERT INTO trade.orders (
+        id, user_id, market_id, side, type, price, qty, status, tif,
+        hold_asset, hold_amount, fee_discount_bps, seeded
+      ) VALUES (
+        ${row.orderId}, ${HOUSE_MM_USER_UUID}, ${row.marketId}, ${row.side}, ${'limit'},
+        ${row.price}::numeric, ${row.qty}::numeric, ${'open'}, ${'PO'},
+        ${row.holdAsset}, ${row.holdAmount}::numeric, ${0}, ${true}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+  },
   onError: (name, err) => app.log.error({ err, job: name }, 'mm seed job tick failed'),
   onResult: (marketId, result) => {
     if ('skipped' in result) {

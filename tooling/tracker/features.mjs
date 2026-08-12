@@ -414,7 +414,7 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/mm'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port on main (MM-1/2/3). Still residual: orderFilled event accountId recovery, production mid ops. Not Done — ready with ops kill-switches.',
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port on main (MM-1/2/3). D26-P1-T10 backend honesty: seed-honesty contract (flagged / killable / no manufactured crosses); resting seeds recorded seeded=true; TRADE_MM_SEED_ENABLED kills placeOrder seeded path too. Still residual: orderFilled event accountId recovery, production mid ops. Not Done — ready with ops kill-switches.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
