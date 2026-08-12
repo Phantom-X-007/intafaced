@@ -1013,8 +1013,10 @@ export const FEATURES = [
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered runSession (#1150), boot-register (#1336), money-scope pin (#1339), money-write ungrantable (#1300). STILL NOT done: live trade/identity allowlisted tool inputs (Class X). Not tracker done until live grounded env.',
+    note: '**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',

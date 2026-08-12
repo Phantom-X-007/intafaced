@@ -1438,6 +1438,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'stale',
                   'empty_markets',
                   'incomplete_session',
+                  'subject_mismatch',
                 ]),
                 userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
               }),
@@ -1453,12 +1454,13 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           }),
         )
-        .query(({ input }) => {
+        .query(({ ctx, input }) => {
           const result = invokeNavigatorDataTool({
             tool: input.tool,
             plane: input.plane,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
+            requesterUserId: ctx.principal.userId,
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             quote: input.quote ?? null,
             markets: input.markets ?? null,

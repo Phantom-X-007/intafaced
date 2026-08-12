@@ -111,4 +111,23 @@ describe('navigator Stage-2 routes', () => {
     expect(result.audit.status).toBe('refused');
     expect(result.audit.reason).toBe('tier_law_blank');
   });
+
+  it('invokeDataTool refuses another user identity session and audits the boundary', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .navigator.invokeDataTool({
+        tool: 'identity.session.read',
+        plane: 'live',
+        userTier: 'free',
+        law,
+        session: {
+          sessionId: 'session-other',
+          userId: '99999999-9999-4999-8999-999999999999',
+          status: 'open',
+        },
+        occurredAt: '2026-08-07T12:00:01.000Z',
+      });
+    expect(result.result).toMatchObject({ status: 'refuse', reason: 'subject_mismatch' });
+    expect(result.audit).toMatchObject({ status: 'refused', reason: 'subject_mismatch' });
+  });
 });
