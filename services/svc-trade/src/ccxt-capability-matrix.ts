@@ -11,6 +11,10 @@
  * This matrix is the **implementation inventory** in svc-trade: claim ≡ wire.
  * Tests fail when a matrix row drifts from the mounted route or refuse arm.
  *
+ * Extensions beyond REST_ROUTES (capabilities, position open/close, margin-call,
+ * ADL disclosure doors) are inventoried here so post-MVP futures doors stay
+ * discoverable — not "route exists only in private-rest comments".
+ *
  * Never invents mids/rates. Futures leverage / live re-margin stay refuse.
  */
 
@@ -45,7 +49,7 @@ export type CcxtRefuseArm = {
   readonly routeName: string;
   readonly method: string;
   readonly path: string;
-  readonly httpStatus: 400 | 501;
+  readonly httpStatus: 400 | 403 | 501;
   /**
    * CCXT `code` when wireShape is `ccxt`; for domain refuses, the stable
    * vocabulary class bots should treat as client error (not retried as venue).
@@ -149,6 +153,28 @@ export const CCXT_REFUSE_ARMS: readonly CcxtRefuseArm[] = [
     wireShape: 'domain',
     when: `body carries any of ${CALLER_REFUSED_PRICE_FIELDS.join('|')} — mark path only`,
   },
+  {
+    id: 'crossMarginOnOpen',
+    routeName: 'openPosition',
+    method: 'POST',
+    path: '/api/v1/positions',
+    httpStatus: 400,
+    ccxtCode: 'BadRequest',
+    intafacedCode: 'trade.cross_margin_unsupported',
+    wireShape: 'domain',
+    when: 'body.marginMode is "cross" — isolated only; never coerce to isolated',
+  },
+  {
+    id: 'adlDisclosureRequired',
+    routeName: 'openPosition',
+    method: 'POST',
+    path: '/api/v1/positions',
+    httpStatus: 403,
+    ccxtCode: 'PermissionDenied',
+    intafacedCode: 'trade.adl_disclosure_required',
+    wireShape: 'domain',
+    when: 'futures open without ack of current ADL disclosure version — DIRECTION:34',
+  },
 ] as const;
 
 const refuseIds = (...ids: string[]): readonly string[] => ids;
@@ -172,6 +198,18 @@ function route(name: RestRouteName, kind: CcxtCapabilityKind, refuseArmIds: read
  * extensions that own refuse arms on the private surface.
  */
 export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
+  // ── Public meta (beyond REST_ROUTES — bots discover without probing) ──────
+  {
+    name: 'fetchCapabilities',
+    method: 'GET',
+    path: '/api/v1/capabilities',
+    auth: 'public',
+    scope: null,
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'Serves this matrix + refuseArms JSON — claim ≡ wire for integrators',
+  },
+
   // ── Public (REST_ROUTES) ──────────────────────────────────────────────────
   route('fetchMarkets', 'supported', [], 'List listings; paper + schedule flags on wire'),
   route('fetchTicker', 'supported', [], 'BBO + last from book/tape; never invents 24h stats'),
@@ -200,7 +238,7 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
   route('setLeverage', 'refuse', refuseIds('setLeverage'), 'Mounted 501 NotSupported — never silent success'),
   route('setMarginMode', 'refuse', refuseIds('setMarginMode'), 'Mounted 501 NotSupported — never silent success'),
 
-  // ── Extensions beyond REST_ROUTES (position open/close; refuse caller price)
+  // ── Extensions beyond REST_ROUTES (positions + ADL disclosure doors)
   {
     name: 'openPosition',
     method: 'POST',
@@ -208,8 +246,8 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     auth: 'private',
     scope: 'trade:write',
     kind: 'supported',
-    refuseArmIds: refuseIds('callerPriceOnOpen'),
-    notes: 'Open funded futures position; entry price from mark, never from body',
+    refuseArmIds: refuseIds('callerPriceOnOpen', 'crossMarginOnOpen', 'adlDisclosureRequired'),
+    notes: 'Open funded futures; mark entry only; cross margin + missing ADL ack refuse',
   },
   {
     name: 'closePosition',
@@ -230,6 +268,36 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     kind: 'supported',
     refuseArmIds: [],
     notes: 'Delivered futures margin call (MVP-2); 404 when none open — never invents',
+  },
+  {
+    name: 'fetchAdlDisclosure',
+    method: 'GET',
+    path: '/api/v1/futures/adl-disclosure',
+    auth: 'private',
+    scope: 'trade:read',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'DIRECTION:34 in-product ADL copy + ack state (D26-P1-T1g)',
+  },
+  {
+    name: 'ackAdlDisclosure',
+    method: 'POST',
+    path: '/api/v1/futures/adl-disclosure/ack',
+    auth: 'private',
+    scope: 'trade:write',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'Ack current ADL disclosure version — required before open',
+  },
+  {
+    name: 'fetchAdlDisclosureEvents',
+    method: 'GET',
+    path: '/api/v1/futures/adl-events',
+    auth: 'private',
+    scope: 'trade:read',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'Disclosure-before-action events for this principal — no silent ADL',
   },
 ] as const;
 
