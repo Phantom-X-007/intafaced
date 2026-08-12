@@ -505,9 +505,7 @@ describe('support.reply metered session run', () => {
       userMessageKey: 'agents.support.unavailable',
     });
     if (result.status !== 'refuse') return;
-    expect(result.unanswered.map((u) => [u.tool, u.reason])).toEqual([
-      ['identity.account.read', 'account_plane_dark'],
-    ]);
+    expect(result.unanswered.map((u) => [u.tool, u.reason])).toEqual([['identity.account.read', 'account_plane_dark']]);
     expect(result.metering.billedAmount).toBe('0');
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);

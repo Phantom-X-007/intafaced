@@ -14,12 +14,7 @@
  */
 
 import type { AccountState, SupportAccountGrounding, SupportKbArticle } from '@intafaced/contracts';
-import {
-  accountProjectionHasInventMoney,
-  type AccountProjectionFixture,
-  type KbArticleFixture,
-  type TicketFixture,
-} from './data-tools.js';
+import { accountProjectionHasInventMoney, type AccountProjectionFixture, type KbArticleFixture, type TicketFixture } from './data-tools.js';
 
 /** Map one published KB article into the agent fixture shape (keys only). */
 export function kbArticleFromContract(article: SupportKbArticle): KbArticleFixture {
@@ -35,28 +30,16 @@ export function kbArticleFromContract(article: SupportKbArticle): KbArticleFixtu
  * for an unknown fragment (mirrors svc-support `searchKb`, kept local so the
  * agent does not SQL another service's tables).
  */
-export function searchKbCatalog(
-  query: string,
-  catalog: readonly SupportKbArticle[],
-): readonly KbArticleFixture[] {
+export function searchKbCatalog(query: string, catalog: readonly SupportKbArticle[]): readonly KbArticleFixture[] {
   const q = query.trim().toLowerCase();
   const hits = !q
     ? catalog
-    : catalog.filter(
-        (a) =>
-          a.id.toLowerCase().includes(q) ||
-          a.titleKey.toLowerCase().includes(q) ||
-          a.bodyKey.toLowerCase().includes(q),
-      );
+    : catalog.filter((a) => a.id.toLowerCase().includes(q) || a.titleKey.toLowerCase().includes(q) || a.bodyKey.toLowerCase().includes(q));
   return hits.map(kbArticleFromContract);
 }
 
 export type AccountFromStateRefuseReason =
-  | 'account_plane_dark'
-  | 'account_not_attempted'
-  | 'account_owner_mismatch'
-  | 'balance_field_forbidden'
-  | 'incomplete_account';
+  'account_plane_dark' | 'account_not_attempted' | 'account_owner_mismatch' | 'balance_field_forbidden' | 'incomplete_account';
 
 export type AccountFromGroundingResult =
   | { readonly status: 'ok'; readonly account: AccountProjectionFixture }
@@ -83,10 +66,7 @@ export function accountFromState(state: AccountState, requesterUserId: string): 
  * Project desk `SupportAccountGrounding`. `unread` is a fact — plane dark or
  * not attempted — never treated as a clean active account.
  */
-export function accountFromGrounding(
-  grounding: SupportAccountGrounding,
-  requesterUserId: string,
-): AccountFromGroundingResult {
+export function accountFromGrounding(grounding: SupportAccountGrounding, requesterUserId: string): AccountFromGroundingResult {
   if (grounding.status === 'unread') {
     return {
       status: 'refuse',

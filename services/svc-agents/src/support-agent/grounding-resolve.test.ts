@@ -68,15 +68,14 @@ describe('accountFromGrounding', () => {
   });
 
   it('refuses owner mismatch and invent money keys on state', () => {
-    expect(
-      accountFromState({ userId: OTHER, status: 'active', kycTier: 'basic' }, USER),
-    ).toMatchObject({ status: 'refuse', reason: 'account_owner_mismatch' });
-    expect(
-      accountFromState(
-        { userId: USER, status: 'active', kycTier: 'basic', balance: '99.00' } as never,
-        USER,
-      ),
-    ).toMatchObject({ status: 'refuse', reason: 'balance_field_forbidden' });
+    expect(accountFromState({ userId: OTHER, status: 'active', kycTier: 'basic' }, USER)).toMatchObject({
+      status: 'refuse',
+      reason: 'account_owner_mismatch',
+    });
+    expect(accountFromState({ userId: USER, status: 'active', kycTier: 'basic', balance: '99.00' } as never, USER)).toMatchObject({
+      status: 'refuse',
+      reason: 'balance_field_forbidden',
+    });
   });
 });
 
