@@ -496,6 +496,46 @@ describe('svc-market mount — commerce scopes', () => {
     ).resolves.toEqual({ commissionBps: null, commissionConfigured: false });
   });
 
+  /**
+   * D26-P1-M1 Class M honesty — public doors, not unit-only.
+   * Blank commission must surface as PRECONDITION_FAILED on create + purchase
+   * and empty catalogue; never invent success / free rate at the mount.
+   */
+  it('maps blank-commission createListing refuse to PRECONDITION_FAILED', async () => {
+    const commerce = stubCommerce({ commissionBps: null });
+    commerce.createListing = vi.fn(async () => {
+      throw new MarketError('House commission rate is not configured', 'market.commission_not_configured');
+    });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .createListing({ title: 'Bot', description: 'A bot', offerType: 'one_time', assetId: 'USDT', price: '10' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'House commission rate is not configured' });
+  });
+
+  it('maps blank-commission purchase refuse to PRECONDITION_FAILED', async () => {
+    const commerce = stubCommerce({ commissionBps: null });
+    commerce.purchase = vi.fn(async () => {
+      throw new MarketError('House commission rate is not configured', 'market.commission_not_configured');
+    });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .purchase({ listingId, purchaseId }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(commerce.purchase).toHaveBeenCalled();
+  });
+
+  it('serves empty public catalogue when commerce returns [] for blank commission', async () => {
+    const commerce = stubCommerce({ commissionBps: null });
+    commerce.publicListings = vi.fn(async () => []);
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(anonymous())
+        .listings(),
+    ).resolves.toEqual([]);
+  });
+
   it('maps commerce refuse codes to stable tRPC classes', async () => {
     const cases: Array<{ code: string; trpc: string }> = [
       { code: 'market.commission_not_configured', trpc: 'PRECONDITION_FAILED' },
