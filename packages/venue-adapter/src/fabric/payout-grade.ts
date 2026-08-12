@@ -1,11 +1,6 @@
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import type { OrderBook } from '@intafaced/exchange-contract';
-import {
-  VenueUnavailableError,
-  type MarketDataAdapter,
-  type PriceLevel,
-  type VenueBookSnapshot,
-} from '@intafaced/venue-contracts';
+import { VenueUnavailableError, type MarketDataAdapter, type PriceLevel, type VenueBookSnapshot } from '@intafaced/venue-contracts';
 
 /**
  * PAYOUT-GRADE BOOKS — the absolute floor the fabric refuses to serve below.
@@ -61,12 +56,7 @@ export const DEFAULT_PAYOUT_GRADE_POLICY: PayoutGradePolicy = {
   minBestLevelNotional: DEFAULT_MIN_BEST_LEVEL_NOTIONAL,
 };
 
-export type PayoutGradeRefuseReason =
-  | 'empty_book'
-  | 'one_sided'
-  | 'thin_bid'
-  | 'thin_ask'
-  | 'malformed_level';
+export type PayoutGradeRefuseReason = 'empty_book' | 'one_sided' | 'thin_bid' | 'thin_ask' | 'malformed_level';
 
 export interface PayoutGradeAccepted {
   readonly ok: true;
