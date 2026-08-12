@@ -739,14 +739,17 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
-      'GHOST OWNER CLEARED 2026-08-09 L03 W4: was wip @nitro-agent with stage already on main (#1007). ' +
-      'STAGE SHIPPED: `P2P_MODERATOR_USER_IDS` allowlist; empty → `p2p.moderation_unreachable`; list/evidence/escalate-and-hold; ' +
-      'no machine adjudication. STILL not done (owner/product): apps/admin dispute console; `p2p:moderate` scope mint ' +
-      '(DIRECTION §3). Agents may not invent who moderates or auto-ruling.',
+      'CLAIM 2026-08-12 Denon agent (feat/p2p-disputes-product-complete): deepen engine — `opened_via` party|timeout ' +
+      '(audit P3 honesty); `resolutionNotes` on wire; `disputes.backlog` for allowlisted moderators; ledger release/refund ' +
+      'unchanged via escrow recipes. PRIOR STAGE (#1007): allowlist · empty → `p2p.moderation_unreachable` · list/evidence/' +
+      'escalate-and-hold · natural-person rulings only. SOCKET / not agent-done: apps/admin dispute console (nitro-frontend-all); ' +
+      '`p2p:moderate` scope mint (DIRECTION §3 owner); who moderates = Class X env allowlist (do not invent); chat_thread_id ' +
+      'product; outbox (events plane). Auto-ruling forbidden.',
   }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', {
     module: 'p2p',

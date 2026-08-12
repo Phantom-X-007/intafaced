@@ -112,10 +112,22 @@ const disputeOutput = z.object({
   id: z.string().uuid(),
   tradeId: z.string().uuid(),
   openedBy: z.string(),
+  /**
+   * How the dispute was opened. `timeout` means the fiat_sent clock filed it;
+   * `openedBy` is then the party of interest (buyer), not a claim they pressed
+   * "open dispute". Same honesty class as evidence going write-only.
+   */
+  openedVia: z.enum(['party', 'timeout']),
   reason: z.string(),
   status: z.enum(['open', 'resolved']),
   moderatorId: z.string().nullable(),
   resolution: z.enum(['release', 'refund']).nullable(),
+  /**
+   * Moderator notes on the ruling. Accepted by `disputes.resolve`, stored, and
+   * previously never serialised — the same write-only trap evidence had.
+   * Reviewable afterwards is half of ADR D-S-08's "recorded and reviewable".
+   */
+  resolutionNotes: z.string().nullable(),
   deadlineAt: z.string(),
   openedAt: z.string(),
   resolvedAt: z.string().nullable(),
@@ -1117,6 +1129,32 @@ export function createP2pRouter(
             return toTradeOut(trade);
           }),
         ),
+
+      /**
+       * OPERATOR COUNTS for the queue — open / overdue / escalated / neverSeen.
+       *
+       * `/internal/moderation-backlog` already serves this to service callers.
+       * Without a tRPC surface, an allowlisted moderator with ordinary
+       * `p2p:read` could list rows but not see the SLA shape of the backlog
+       * (the number that grows when nobody is on shift). Same gate as `list`.
+       */
+      backlog: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(
+          z.object({
+            open: z.number().int().nonnegative(),
+            overdue: z.number().int().nonnegative(),
+            escalated: z.number().int().nonnegative(),
+            neverSeen: z.number().int().nonnegative(),
+            moderationReachable: z.boolean(),
+          }),
+        )
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            assertModerator(ctx.principal, moderatorUserIds);
+            const backlog = await p2p.moderationBacklog();
+            return { ...backlog, moderationReachable };
+          }),
+        ),
     }),
 
     /**
@@ -1470,10 +1508,12 @@ function toDisputeOut(d: DisputeRecord, viewerId: string | null): z.infer<typeof
     id: d.id,
     tradeId: d.tradeId,
     openedBy: d.openedBy,
+    openedVia: d.openedVia,
     reason: d.reason,
     status: d.status,
     moderatorId: d.moderatorId,
     resolution: d.resolution,
+    resolutionNotes: d.resolutionNotes,
     deadlineAt: d.deadlineAt.toISOString(),
     openedAt: d.openedAt.toISOString(),
     resolvedAt: d.resolvedAt?.toISOString() ?? null,
