@@ -52,8 +52,7 @@ export const CARD_MANDATE_CHARGE_SOCKET = 'socket.psp-partners' as const;
 export const DUNNING_STALL_REASON: StallReason = 'arrears';
 
 export type MandateChargeDisposition =
-  | { kind: 'open_crypto_invoice' }
-  | { kind: 'refuse'; code: 'pay.mandate_rail_absent'; socket: typeof CARD_MANDATE_CHARGE_SOCKET };
+  { kind: 'open_crypto_invoice' } | { kind: 'refuse'; code: 'pay.mandate_rail_absent'; socket: typeof CARD_MANDATE_CHARGE_SOCKET };
 
 export interface MandatePathRow {
   path: SubscriptionPath;
@@ -87,8 +86,7 @@ export type PreChargeNotifyGap = {
   inventForbidden: true;
   /** Merchants must never read this as a successful pre-charge delivery. */
   notified: false;
-  merchantReadable:
-    'Pre-charge notify is not delivered. Post-payment webhooks may fire after money-path work. Closing needs socket.pay-precharge-notify.';
+  merchantReadable: 'Pre-charge notify is not delivered. Post-payment webhooks may fire after money-path work. Closing needs socket.pay-precharge-notify.';
 };
 
 /** Pre-charge notify is not wired. Merchants get post-payment webhooks only. */

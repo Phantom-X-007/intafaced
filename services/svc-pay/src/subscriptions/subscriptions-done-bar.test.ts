@@ -290,8 +290,7 @@ if (!available) {
       expect(opened).toHaveLength(1);
 
       const cyclesBefore = await get(app, 'subscription.cycles', { subscriptionId: sub.id });
-      const cycleRow = (cyclesBefore.body.result!.data as { cycles: Array<{ status: string; paymentId: string | null }> })
-        .cycles[0]!;
+      const cycleRow = (cyclesBefore.body.result!.data as { cycles: Array<{ status: string; paymentId: string | null }> }).cycles[0]!;
       expect(cycleRow.status).toBe('invoiced');
       expect(cycleRow.paymentId).toBe(opened[0]!.paymentId);
 
