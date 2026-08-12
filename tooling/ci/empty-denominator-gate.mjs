@@ -195,6 +195,13 @@ export const ENFORCED = {
     must: /the unmutated scan does not pass/,
     note: 'checks its control run first, so an unrunnable subject cannot be reported as mutants-all-caught.',
   },
+  'wallet-rpc-perimeter-refuse': {
+    kind: 'guard',
+    must: /unmutated scan does not pass/,
+    note:
+      'D26-P2-09 continuous perimeter suite — control is the real mainnet scan; if the tree (or the scan) is gone the ' +
+      'control fails first, so class/register deletions cannot be reported as caught over an unrunnable subject.',
+  },
   'lang-duplicate-key': {
     kind: 'uncaught',
     must: /ENOENT[\s\S]*en\.js/,

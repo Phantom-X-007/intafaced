@@ -217,8 +217,17 @@ export const GATES = [
       '(24 must fire, -24 must not)", and deleting the occurrence comparison used to exit 0 still printing "none ' +
       'gained a copy" over a tree that had just gained one: both numbers were read off source text, so removing the ' +
       'work left the claim standing. Every summary clause is now minted by the check that establishes it and ' +
-      'reconciled before printing; 10 deletions must each be detected, and a mutant whose anchor has moved fails ' +
+      'reconciled before printing; deletions must each be detected, and a mutant whose anchor has moved fails ' +
       'rather than skips.',
+  },
+  {
+    id: 'wallet-rpc-perimeter-refuse',
+    script: 'tooling/ci/wallet-rpc-perimeter-refuse.mjs',
+    doctrine: '§16 / D26-P2-09',
+    why:
+      'continuous perimeter regression for 01_wallet_rpc — mainnet / sign / width refuse classes must each keep ' +
+      'firing + silent probe halves, and deleting the class register, counters, claim mint, or any class rule ' +
+      'binding must go red. Complements wallet-rpc-mainnet (subject + probes) and its checker-mutation suite.',
   },
   {
     id: 'vendor-shell',
