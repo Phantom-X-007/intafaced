@@ -65,6 +65,12 @@ function subRecord(overrides: Record<string, unknown> = {}) {
     cancelledAt: null,
     path: 'crypto_invoice',
     createdAt: new Date('2026-08-01T00:00:00.000Z'),
+    anchorAt: null,
+    anchorOccurrence: 0,
+    pausedAt: null,
+    resumedAt: null,
+    stalledAt: null,
+    stallReason: null,
     ...overrides,
   };
 }
