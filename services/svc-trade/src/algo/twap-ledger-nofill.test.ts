@@ -226,7 +226,7 @@ describe('D26-P1-T4 ledger — TWAP no invent fills', () => {
     );
     await ledger.post(
       recipes.tradeFill({
-        fillsId: 'fill-twap-1',
+        fillId: 'fill-twap-1',
         takerId: USER,
         makerId: MAKER,
         takerOrderId: childOrderId,
