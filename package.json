@@ -54,6 +54,8 @@
     "scan:compose-secrets": "node tooling/ci/compose-secret-parity.mjs",
     "scan:vendor-shell": "node tooling/ci/vendor-shell-scan.mjs",
     "scan:vendor-java-money": "node tooling/ci/vendor-java-money-scan.mjs",
+    "map:vendor-java-money-plane": "node tooling/scripts/vendor-java-money-plane-map.mjs",
+    "map:vendor-java-money-plane:self-test": "node tooling/scripts/vendor-java-money-plane-map.mjs --self-test",
     "scan:dual-book-door": "node tooling/ci/dual-book-door-scan.mjs",
     "scan:test-db": "node tooling/ci/test-db-scan.mjs",
     "scan:skip-honesty": "node tooling/ci/skip-honesty-scan.mjs",
