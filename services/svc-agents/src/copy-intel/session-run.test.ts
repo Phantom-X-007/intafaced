@@ -218,6 +218,22 @@ describe('copy_intel.stats metered session run', () => {
     expect(result.metering.billedAmount).toBe('0');
   });
 
+  it('D26-P1-A5: refuses returns-ranked board before opening a session', async () => {
+    const fake = new FakeRuntime();
+    await expect(
+      runCopyIntelStatsSession({
+        ...baseInput(fake),
+        fixtures: [fixture('leader-a')],
+        rankBy: 'realisedPnl',
+      }),
+    ).rejects.toMatchObject({
+      code: 'agents.refused',
+      userMessageKey: 'agents.copy_intel.unavailable',
+      userMessageParams: { reason: 'returns_ranked_board_forbidden', rankBy: 'realisedPnl' },
+    });
+    expect(fake.openCalls).toBe(0);
+  });
+
   it('is empty — not a session — when nothing was asked for', async () => {
     const fake = new FakeRuntime();
     const result = await runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [] });
