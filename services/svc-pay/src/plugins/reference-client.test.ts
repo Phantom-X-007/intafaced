@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { signPayload } from '../rails/webhook-signature.js';
 import {
+  absoluteUrl,
   assertDecimalAmount,
   assertHttpsWebhookUrl,
   buildAuthorizePaymentRequest,
@@ -15,6 +16,7 @@ import {
   buildRefundRequest,
   buildRegisterWebhookEndpointRequest,
   PAY_PUBLIC_API_BASE,
+  sendPluginRequest,
   signMerchantWebhook,
   verifyMerchantWebhook,
 } from './reference-client.js';
@@ -172,5 +174,46 @@ describe('pay.plugins — TypeScript reference client', () => {
     expect(src).toMatch(/not Woo\/Magento\/OpenCart PHP/);
     // Real PHP integration markers — not English product names in comments.
     expect(src).not.toMatch(/woocommerce_api|Mage::|class ControllerExtensionPayment/i);
+  });
+
+  it('public-door sendPluginRequest posts create-payment contract to a live HTTP stub', async () => {
+    const { createServer } = await import('node:http');
+    const seen: { method?: string; url?: string; auth?: string; idem?: string; body?: string } = {};
+    const server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        seen.method = req.method;
+        seen.url = req.url;
+        seen.auth = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+        seen.idem = typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined;
+        seen.body = Buffer.concat(chunks).toString('utf8');
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'pay_stub', status: 'created', amount: '1.10' }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') throw new Error('no port');
+    const baseUrl = `http://127.0.0.1:${addr.port}`;
+    try {
+      const req = buildCreatePaymentRequest(
+        { baseUrl, apiKey: 'ifc_test_fixture_not_live' },
+        { merchantId: 'm1', amount: '1.10', assetId: 'USDT', method: 'card' },
+        'order-public-door',
+      );
+      expect(absoluteUrl({ baseUrl, apiKey: 'x' }, req.path)).toBe(`${baseUrl}/api/pay/v1/payments`);
+      const res = await sendPluginRequest({ baseUrl, apiKey: 'ifc_test_fixture_not_live' }, req);
+      expect(res.status).toBe(201);
+      expect(seen.method).toBe('POST');
+      expect(seen.url).toBe('/api/pay/v1/payments');
+      expect(seen.auth).toBe('Bearer ifc_test_fixture_not_live');
+      expect(seen.idem).toBe('order-public-door');
+      const body = JSON.parse(seen.body ?? '{}') as { amount: unknown };
+      expect(typeof body.amount).toBe('string');
+      expect((res.body as { id: string }).id).toBe('pay_stub');
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    }
   });
 });
