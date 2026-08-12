@@ -4,7 +4,7 @@
 **Owner session:** Denon · Grok  
 **Tracker:** `academy.spatial` (backend integrity slice only — not FE canvas title)  
 **Branch:** `feat/academy-spatial-c6`  
-**Status:** LIVE  
+**Status:** LIVE
 
 ## Scope
 
