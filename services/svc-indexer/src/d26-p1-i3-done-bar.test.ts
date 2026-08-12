@@ -18,12 +18,11 @@ const CHAIN_ID = 31_337;
 const EDGE_SECRET = 'a-indexer-d26-p1-i3-edge-secret-long-enough';
 
 class UnreachableChainSource implements ChainSource {
-  readonly kind = 'evm' as const;
   constructor(readonly chainId: number) {}
   async head(): Promise<never> {
     throw new ChainUnavailableError('indexer.chain_unreachable', 'D26-P1-I3 hermetic refuse');
   }
-  async blocks(): Promise<never> {
+  async blockAt(_height: number): Promise<never> {
     throw new ChainUnavailableError('indexer.chain_unreachable', 'D26-P1-I3 hermetic refuse');
   }
 }
