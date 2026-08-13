@@ -34,11 +34,7 @@ export async function hydrateAlgoIfMissing(
  * restart must see the durable schedule; place still refuses without a live
  * grant (SOCKET §13 principal durability).
  */
-export async function hydrateAlgoFromStore(
-  engine: AlgoHydrateTarget,
-  store: TwapParentStore,
-  parentId: string,
-): Promise<void> {
+export async function hydrateAlgoFromStore(engine: AlgoHydrateTarget, store: TwapParentStore, parentId: string): Promise<void> {
   if (engine.get(parentId)) return;
   const loaded = await store.load(parentId);
   if (!loaded) {
