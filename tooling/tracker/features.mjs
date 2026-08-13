@@ -651,8 +651,10 @@ export const FEATURES = [
   f('pay.routing', 'Smart routing — geo, method, risk, approval rate', {
     module: 'pay',
     phase: '3',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.rails'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    note: '**D26-P1-P3 2026-08-13:** Hosted checkout open walks selectSmartCheckoutRail (geo/method/risk). Blank dims → pay.routing_input_missing; no invented approval/cost. Payer cannot name a rail. STILL NOT done: live acquiring / PSP (Class X). Not tracker done until live connectors.',
   }),
   f('pay.settlement', 'Dual settlement — bank or crypto', {
     module: 'pay',

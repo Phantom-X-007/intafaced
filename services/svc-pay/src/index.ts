@@ -167,6 +167,7 @@ const pay = new PayService(sql, ledger, rails, {
   // hosted checkout is reachable by strangers, so it follows the environment.
   publicCheckoutMovement: railPosture.publicCheckoutPolicy,
   checkoutRails: env.PAY_CHECKOUT_RAILS,
+  checkoutRiskBand: env.PAY_CHECKOUT_RISK_BAND,
   checkoutSessionTtlSeconds: env.PAY_CHECKOUT_SESSION_TTL_SECONDS,
   linkDefaultTtlDays: env.PAY_LINK_DEFAULT_TTL_DAYS,
   linkMaxTtlDays: env.PAY_LINK_MAX_TTL_DAYS,

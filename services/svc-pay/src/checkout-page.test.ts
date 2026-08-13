@@ -76,6 +76,7 @@ describe('checkout page rendering', () => {
     expect(html).toContain('USD');
     expect(html).toContain('Acme Widgets');
     expect(html).toContain('Continue to payment');
+    expect(html).toMatch(/name="geoCountry"/);
     // Still no card capture. There is no live acquiring rail, and a form that
     // took a PAN against a mock acquirer would be the most dishonest thing here.
     expect(html.toLowerCase()).not.toContain('card number');
@@ -243,6 +244,7 @@ describe('stateForError', () => {
     // A posture refusal and a suspended merchant land on the same page: telling
     // an anonymous payer which one it is discloses our rail estate.
     expect(stateForError(payErr('pay.checkout_rail_not_live', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.routing_no_rail', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.merchant_inactive', '')).kind).toBe('unavailable');
     // Anything unrecognised is a 500, never a friendlier-looking state — the
     // friendly-looking states are the ones that imply money moved.
@@ -349,12 +351,17 @@ describe('checkout routes', () => {
       method: 'POST',
       url: '/checkout/session',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: 'token=pl_stubbed_token_value',
+      payload: 'token=pl_stubbed_token_value&geoCountry=DE',
     });
 
     expect(res.statusCode).toBe(303);
     expect(res.headers.location).toBe('/checkout/session/cs_session_token_here');
-    expect(received).toEqual({ linkToken: 'pl_stubbed_token_value', amount: undefined, assetId: undefined });
+    expect(received).toEqual({
+      linkToken: 'pl_stubbed_token_value',
+      amount: undefined,
+      assetId: undefined,
+      geoCountry: 'DE',
+    });
     await app.close();
   });
 

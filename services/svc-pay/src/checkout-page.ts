@@ -71,6 +71,8 @@ export type CheckoutPay = {
     linkToken: string;
     amount?: bigint;
     assetId?: string;
+    geoCountry?: string;
+    method?: string;
   }): Promise<{ sessionToken: string; session: CheckoutSessionPageView }>;
   getCheckoutSession(sessionToken: string): Promise<CheckoutSessionPageView>;
 };
@@ -232,7 +234,7 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
   // here rather than a control somebody had to remember to add.
   //
   // The amount field exists ONLY on a variable-amount link. There is no rail
-  // field and no method field, on any link, ever.
+  // field on any link, ever. Country is a routing dim (D26-P1-P3), not a rail name.
   const amountField = fixedAmount
     ? ''
     : `
@@ -249,6 +251,12 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
       </label>`
       }`;
 
+  const geoField = `
+      <label class="field">
+        <span>Country</span>
+        <input name="geoCountry" autocomplete="country" required minlength="2" maxlength="8" placeholder="DE" />
+      </label>`;
+
   const tokenField = link.token ? `<input type="hidden" name="token" value="${escapeHtml(link.token)}" />` : '';
 
   return `
@@ -261,7 +269,7 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
       ${amountLine}
       ${problemLine}
       <form method="POST" action="${escapeHtml(paths.basePath)}/checkout/session" class="pay">
-        ${tokenField}${amountField}
+        ${tokenField}${amountField}${geoField}
         <button type="submit">Continue to payment</button>
       </form>
       <p class="hint">Nothing is charged until you send the payment yourself. This page never asks for card details.</p>
@@ -435,6 +443,7 @@ export function stateForError(err: unknown): CheckoutPageState {
     case 'pay.checkout_rail_not_live':
     case 'pay.rail_not_live':
     case 'pay.merchant_inactive':
+    case 'pay.routing_no_rail':
       return { kind: 'unavailable' };
     default:
       return { kind: 'error' };
@@ -557,9 +566,10 @@ async function registerRoutes(app: FastifyInstance, pay: CheckoutPay, paths: Che
     const amount = parsePayerAmount(body.amount);
     if (amount === null) return showLink(token, reply, 'Enter an amount as a plain number, for example 19.99.');
     const assetId = typeof body.assetId === 'string' && body.assetId.trim() ? body.assetId.trim().slice(0, 16) : undefined;
+    const geoCountry = typeof body.geoCountry === 'string' && body.geoCountry.trim() ? body.geoCountry.trim().slice(0, 8) : undefined;
 
     try {
-      const { sessionToken } = await pay.openCheckoutSession({ linkToken: token, amount, assetId });
+      const { sessionToken } = await pay.openCheckoutSession({ linkToken: token, amount, assetId, geoCountry });
       // 303, so a refresh of the resulting page does not re-POST and open a
       // second session — and a second payment — against the same link.
       return reply
@@ -571,6 +581,9 @@ async function registerRoutes(app: FastifyInstance, pay: CheckoutPay, paths: Che
     } catch (err) {
       if (errorCode(err) === 'pay.checkout_amount_required') {
         return showLink(token, reply, 'This payment link needs you to enter an amount.');
+      }
+      if (errorCode(err) === 'pay.routing_input_missing') {
+        return showLink(token, reply, 'This checkout needs your country. We do not invent one.');
       }
       return send(reply, renderCheckoutPage(stateForError(err), paths));
     }

@@ -1184,7 +1184,13 @@ describe('hosted checkout is public, and safe because of its shape', () => {
     await api.checkout.open({ token: 'pl_a_link_token_value', railAdapter: 'card-sandbox' } as never);
 
     const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
-    expect(call.args[0]).toEqual({ linkToken: 'pl_a_link_token_value', amount: undefined, assetId: undefined });
+    expect(call.args[0]).toEqual({
+      linkToken: 'pl_a_link_token_value',
+      amount: undefined,
+      assetId: undefined,
+      geoCountry: undefined,
+      method: undefined,
+    });
     expect(JSON.stringify(call.args[0])).not.toContain('card-sandbox');
   });
 
@@ -1194,6 +1200,14 @@ describe('hosted checkout is public, and safe because of its shape', () => {
 
     const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
     expect(call.args[0]).toMatchObject({ amount: amt('7.25'), assetId: 'USDT' });
+  });
+
+  it('D26-P1-P3: forwards payer country and never a risk band from the public door', async () => {
+    const api = await caller([]);
+    await api.checkout.open({ token: 'pl_a_link_token_value', geoCountry: 'DE', riskBand: 'low' } as never);
+    const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
+    expect(call.args[0]).toMatchObject({ geoCountry: 'DE' });
+    expect(JSON.stringify(call.args[0])).not.toContain('riskBand');
   });
 
   it('refuses a JSON number for an amount, on the public surface as everywhere else', async () => {
