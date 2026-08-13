@@ -84,6 +84,21 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
     });
   });
 
+  it('D26-P1-A4 deepen: mixed stale + fresh refuses — no partial ok board', () => {
+    const r = watchApprovalFixtures(
+      [
+        pt({ railId: 'fresh', approvalRate: '0.70', attempts: 200 }),
+        pt({ railId: 'stale', asOf: '2026-08-05T10:00:00.000Z', maxAgeMs: 60_000, approvalRate: '0.50', attempts: 100 }),
+      ],
+      { now: NOW, threshold: '0.85' },
+    );
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'stale',
+    });
+  });
+
   it('rejects invented non-fraction rates', () => {
     const r = watchApprovalFixtures([pt({ railId: 'x', approvalRate: '1.5' })], { now: NOW });
     expect(r.status).toBe('unavailable');

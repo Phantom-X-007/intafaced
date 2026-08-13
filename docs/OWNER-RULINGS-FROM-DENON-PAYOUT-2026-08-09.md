@@ -1,7 +1,8 @@
 # Owner rulings — Denon affiliate payout handoff (shapes + recommended defaults)
 
 **Status:** PENDING your click. Defaults already in code; this card does not invent rates.  
-**Source:** PR #1505 ship notes · Nitro takeover 2026-08-09.
+**Source:** PR #1505 ship notes · Nitro takeover 2026-08-09.  
+**Tip index:** `PAYOUT-01` in [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json) (D26-P0-18 packet completeness).
 
 | #   | Decision                                                      | Recommended default                                                                           | Why                                                                                      | If you change it                                               |
 | --- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------- |

@@ -147,18 +147,39 @@ export interface IndexerRouterDeps {
 }
 
 /**
+ * Chain-door failures that make a served book a lie about "live" state
+ * (D26-P1-I3). Status still surfaces `lastError`; data paths refuse.
+ */
+const CHAIN_DOOR_REFUSE_CODES = new Set([
+  'indexer.chain_not_configured',
+  'indexer.chain_unreachable',
+  'indexer.chain_id_mismatch',
+  'indexer.venue_not_deployed',
+  'indexer.malformed_block',
+]);
+
+/**
  * A halted projection knows its book is wrong and cannot repair it.
- * `status` and `health` still answer so an operator can see why; every data
- * procedure refuses so a client that never checks `status.halted` cannot
- * render a price that belongs to a dead branch.
+ * A projection whose last sync hit a typed chain-door failure likewise must
+ * not serve prices as current. `status` and `health` still answer so an
+ * operator can see why; every data procedure refuses so a client that never
+ * checks `status.halted` / `status.lastError` cannot render a fake book.
  */
 function assertServing(indexer: Indexer): void {
   const halt = indexer.halted;
-  if (!halt) return;
-  throw new TRPCError({
-    code: 'SERVICE_UNAVAILABLE',
-    message: `Indexer halted — projection is known wrong and will not serve data until re-indexed. ${halt.reason}`,
-  });
+  if (halt) {
+    throw new TRPCError({
+      code: 'SERVICE_UNAVAILABLE',
+      message: `Indexer halted — projection is known wrong and will not serve data until re-indexed. ${halt.reason}`,
+    });
+  }
+  const failure = indexer.lastError;
+  if (failure?.code && CHAIN_DOOR_REFUSE_CODES.has(failure.code)) {
+    throw new TRPCError({
+      code: 'SERVICE_UNAVAILABLE',
+      message: `Indexer chain door refused (${failure.code}) — will not serve projected books as live. ${failure.message}`,
+    });
+  }
 }
 
 export function createIndexerRouter(deps: IndexerRouterDeps) {
@@ -262,7 +283,8 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
      * A client holding two books can tell whether they describe the same chain;
      * one holding two bare price ladders cannot.
      *
-     * Refuses when halted — a wrong price costs a trade; unreachability does not.
+     * Refuses when halted or when the chain door last failed with a typed code
+     * (D26-P1-I3) — a wrong/stale-as-live price costs a trade.
      */
     book: publicJurisdictionProcedure('indexer', 'protocol')
       .input(z.object({ market: marketSchema, depth: z.number().int().min(1).max(200).default(50) }))

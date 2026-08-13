@@ -4,6 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
 import { SCANNER_DATA_TOOLS } from './guardrail.js';
+import { SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW, SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './signal-inputs-law.js';
 
 /**
  * `scanner.runSession` is mounted, scoped and shaped.
@@ -67,10 +68,31 @@ const ticker = {
 };
 
 describe('scanner.runSession route', () => {
+  it('D26-P1-A3: refuses blank P0-11 without touching the runtime', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .scanner.runSession({ plane: 'live', userTier: 'free', law, tickers: [ticker] });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.tier_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
   it('refuses a dark plane without touching the runtime, and says it billed nothing', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
-      .scanner.runSession({ plane: 'dark', userTier: 'free', law, tickers: [ticker] });
+      .scanner.runSession({
+        plane: 'dark',
+        userTier: 'free',
+        law,
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+        tickers: [ticker],
+      });
 
     expect(result).toMatchObject({
       status: 'refuse',
@@ -89,7 +111,13 @@ describe('scanner.runSession route', () => {
   it('refuses a blank tier law refuse-closed', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
-      .scanner.runSession({ plane: 'live', userTier: 'free', law: null, tickers: [ticker] });
+      .scanner.runSession({
+        plane: 'live',
+        userTier: 'free',
+        law: null,
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+        tickers: [ticker],
+      });
 
     expect(result).toMatchObject({
       status: 'refuse',
@@ -100,9 +128,13 @@ describe('scanner.runSession route', () => {
   });
 
   it('is empty when no tickers were supplied', async () => {
-    const result = await createAgentsRouter(stubDeps())
-      .createCaller(signed())
-      .scanner.runSession({ plane: 'live', userTier: 'free', law, tickers: [] });
+    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).scanner.runSession({
+      plane: 'live',
+      userTier: 'free',
+      law,
+      signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+      tickers: [],
+    });
 
     expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
     expect(result.metering.billedAmount).toBe('0');
@@ -117,6 +149,7 @@ describe('scanner.runSession route', () => {
           plane: 'dark',
           userTier: 'free',
           law,
+          signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
           tickers: [ticker],
         }),
     ).rejects.toThrow();

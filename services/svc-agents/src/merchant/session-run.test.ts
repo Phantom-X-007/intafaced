@@ -246,7 +246,7 @@ describe('merchant.watch metered session run', () => {
     expect(fake.openCalls).toBe(0);
   });
 
-  it('counts a guardrail refusal instead of inventing rates around it', async () => {
+  it('D26-P1-A4 deepen: partial guardrail drop refuses — no invent ok on subset', async () => {
     const fake = new FakeRuntime();
     fake.guardrail = merchantAgentGuardrail();
     (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 1;
@@ -256,12 +256,14 @@ describe('merchant.watch metered session run', () => {
       points: [point('a'), point('b'), point('c')],
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') return;
-    expect(result.pointsAccepted).toBe(1);
-    expect(result.pointsRefusedByGuardrail).toBe(2);
+    expect(result).toMatchObject({
+      status: 'unavailable',
+      reason: 'no_metrics',
+      userMessageKey: 'agents.merchant.unavailable',
+    });
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
+    expect(result.metering.billedAmount).toBe('0');
   });
 
   it('refuses the whole run when every point was refused by the guardrail', async () => {

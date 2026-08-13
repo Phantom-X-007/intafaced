@@ -31,6 +31,7 @@ describe('the seal — a simulated figure cannot leave unlabelled', () => {
     expect(sealed.venue).toBe('paper');
     expect(sealed.realLedger).toBe(false);
     expect(sealed.withdrawable).toBe(false);
+    expect(sealed.realMoney).toBe(false);
     expect(sealed.disclaimer).toBe(SIMULATED_DISCLAIMER);
     expect(sealed.result).toEqual({ realisedPnl: '12.5' });
   });
@@ -52,6 +53,7 @@ describe('the seal — a simulated figure cannot leave unlabelled', () => {
     ['venue claimed as live', { ...SIMULATED_SEAL, venue: 'live', result: {} }],
     ['realLedger claimed true', { ...SIMULATED_SEAL, realLedger: true, result: {} }],
     ['withdrawable claimed true', { ...SIMULATED_SEAL, withdrawable: true, result: {} }],
+    ['realMoney claimed true', { ...SIMULATED_SEAL, realMoney: true, result: {} }],
     ['disclaimer blanked', { ...SIMULATED_SEAL, disclaimer: '', result: {} }],
     ['payload missing entirely', { ...SIMULATED_SEAL }],
   ])('REFUSES to let a result through with %s', (_why, payload) => {
@@ -70,7 +72,7 @@ describe('the seal — a simulated figure cannot leave unlabelled', () => {
   });
 
   it('the label survives being copied into a log line', () => {
-    expect(simulatedLabelLine()).toBe('simulated=1 venue=paper realLedger=0 withdrawable=0');
+    expect(simulatedLabelLine()).toBe('simulated=1 venue=paper realLedger=0 withdrawable=0 realMoney=0');
   });
 });
 
@@ -98,6 +100,7 @@ describe('valuation uses trade-published prices and refuses to invent one', () =
     expect(v.simulated).toBe(true);
     expect(v.realLedger).toBe(false);
     expect(v.withdrawable).toBe(false);
+    expect(v.realMoney).toBe(false);
     expect(v.venue).toBe('paper');
   });
 

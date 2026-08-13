@@ -31,6 +31,35 @@ describe('CopyService', () => {
     expect(s.feeSharePublished).toBe(false);
     expect(s.jurisdictionPublished).toBe(false);
     expect(s.residual).toContain('DIRECTION §8');
+    expect(s.residual).toContain('D26-P0-02');
+    expect(s.residual).toContain('D26-P0-15');
+    expect(s.residuals.rates).toContain('D26-P0-02');
+    expect(s.residuals.jurisdiction).toContain('D26-P0-15');
+    expect(s.sovereign).toEqual({
+      shape: 'sovereign',
+      custody: false,
+      feeModel: 'protocol_fee_share',
+      pnlFeeForbidden: true,
+      rankingForbidden: true,
+      killUnfollowReal: true,
+    });
+  });
+
+  it('published empty allowlist serves none — still refuse-closed (D26-P0-15)', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: { published: true, allowedRegions: [] },
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
   it('follow refuses when jurisdiction law blank — never invents allowlist', async () => {

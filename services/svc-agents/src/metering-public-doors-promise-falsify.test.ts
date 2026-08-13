@@ -29,6 +29,7 @@ import type { AuditedAction } from './fleet/audit.js';
 import type { SettlementResult } from './metering/meter.js';
 import type { SessionRecord, ThinkResult } from './runtime.js';
 import { SCANNER_DATA_TOOLS } from './scanner/guardrail.js';
+import { SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW } from './scanner/signal-inputs-law.js';
 import { NAVIGATOR_DATA_TOOLS } from './navigator/data-tools.js';
 import { SUPPORT_DATA_TOOLS } from './support-agent/data-tools.js';
 
@@ -134,7 +135,14 @@ describe('D26-P2-01h public doors — dark refuse bills zero', () => {
   it('scanner.runSession dark refuse → billedAmount 0 (createCaller)', async () => {
     const result = await createAgentsRouter(emptyDeps())
       .createCaller(signed())
-      .scanner.runSession({ plane: 'dark', userTier: 'free', law: scannerLaw, tickers: [ticker] });
+      .scanner.runSession({
+        plane: 'dark',
+        userTier: 'free',
+        law: scannerLaw,
+        // Sealed P0-11 so dark-plane refuse is reachable (blank law refuses earlier).
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+        tickers: [ticker],
+      });
     expect(result).toMatchObject({ status: 'refuse', reason: 'market_plane_dark' });
     expect(result.metering).toEqual(ZERO_METERING);
   });

@@ -68,6 +68,7 @@ const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
 const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
+const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -123,6 +124,7 @@ if (!available) {
     await tx.unsafe(fieldGuardMigration);
     await tx.unsafe(disputeRulingMigration);
     await tx.unsafe(lateSettleErrorMigration);
+    await tx.unsafe(disputeOpenOriginMigration);
   });
 
   /**
@@ -609,7 +611,13 @@ if (!available) {
       expect(resolved_at.getTime()).toBeLessThanOrEqual(settled_at.getTime());
 
       const dispute = await p2p.getDispute(trade.id);
-      expect(dispute).toMatchObject({ status: 'resolved', moderatorId: MODERATOR, resolution: 'release' });
+      expect(dispute).toMatchObject({
+        status: 'resolved',
+        moderatorId: MODERATOR,
+        resolution: 'release',
+        openedVia: 'party',
+        resolutionNotes: null,
+      });
       expect(dispute.resolvedAt).not.toBeNull();
 
       // One ruling, one instant. Both rows are written in the moderator's single
@@ -713,6 +721,31 @@ if (!available) {
       // Released to the buyer means the seller lost.
       expect((await p2p.reputationOf(MAKER)).disputesLost).toBe(1);
       expect((await p2p.reputationOf(TAKER)).disputesLost).toBe(0);
+    });
+
+    it('keeps moderator notes on the dispute record after settle via ledger recipes', async () => {
+      // Notes used to be write-only (accepted on resolve, stored, never read back).
+      // A ruling that cannot be reviewed is half of moderated dispute resolution.
+      const trade = await escrowedTrade('100');
+      await p2p.markFiatSent(trade.id, TAKER);
+      await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'paid' });
+      await p2p.resolveDispute({
+        tradeId: trade.id,
+        moderatorId: MODERATOR,
+        resolution: 'release',
+        notes: 'bank proof matches; seller silent',
+      });
+
+      const dispute = await p2p.getDispute(trade.id);
+      expect(dispute).toMatchObject({
+        status: 'resolved',
+        resolution: 'release',
+        resolutionNotes: 'bank proof matches; seller silent',
+        openedVia: 'party',
+      });
+      expect((await p2p.getTrade(trade.id)).status).toBe('released');
+      // Default fee 30 bps on 100 → buyer receives 99.
+      expect(await availableOf(TAKER)).toBe('99');
     });
   });
 
@@ -1406,6 +1439,9 @@ if (!available) {
       const dispute = await p2p.getDispute(trade.id);
       expect(dispute.status).toBe('open');
       expect(dispute.reason).toBe('timeout.seller_did_not_confirm');
+      // Audit P3: the clock opened this — do not attribute a filing to the buyer.
+      expect(dispute.openedVia).toBe('timeout');
+      expect(dispute.openedBy).toBe(TAKER);
     });
 
     it('ESCALATES a dispute no moderator ruled on — and moves nothing', async () => {

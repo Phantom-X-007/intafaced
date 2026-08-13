@@ -1,8 +1,16 @@
 # Owner decision packet — everything waiting on you, in one sitting
 
-**Written by:** Denon, 2026-08-09. **Tip:** `2f9a7df0`.
-**Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-01 · P0-02 · P0-03**, plus every ruling I have accumulated separately.
-**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (b):** copy **jurisdiction list** mechanism is **sealed refuse-closed** (D26-P0-15) — see §A3 table; region codes still owner-published when live. Other items remain open unless noted.
+**Written by:** Denon, 2026-08-09. **Tip at last completeness pass:** `93f6c777` (2026-08-12).  
+**Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-01…18**.  
+**Tip packet family (D26-P0-18 sealed as tracker):**
+
+| Layer         | Path                                                                                           | Role                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| This file     | `docs/OWNER-DECISION-PACKET-2026-08-09.md`                                                     | Human sitting — P0-01…03 + money-path / dark-feed / F10    |
+| Part two      | [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) | Human sitting — P0-04…17 shapes                            |
+| Machine index | [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json)                                 | **SoT for open/sealed/class_x** — every owner decision row |
+
+**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (P0-18):** part two filled + JSON index so open rulings are no longer scattered across side checklists alone. **Update 2026-08-12 (P0-15):** copy **jurisdiction list** mechanism is **sealed refuse-closed** — region codes still owner-published when live; never invent in source.
 
 **One rule I have applied throughout:** where a number is missing, the answer is **not** a placeholder. `services/svc-trade/src/copy/` already does this correctly — it is **refuse-closed** with `COPY_FEE_SHARE_RESIDUAL`, declining the surface and naming the residual rather than inventing a rate. That pattern is the model for item 3 below.
 
@@ -78,15 +86,15 @@ That is the pattern. **A seeded rate in source is indistinguishable from a decid
 
 **What I need from you** — each is a number or an explicit "launch-closed until set":
 
-| Parameter                  | Surface it gates              | Status                                                                                                                                                                                                                                         |
-| -------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `leader_share_bps`         | copy trading payout           | **Open** (D26-P0-02) — refuse-closed until published                                                                                                                                                                                           |
-| Copy **jurisdiction list** | which regions may copy at all | **SEALED refuse-closed (D26-P0-15)** — [`adr/2026-08-12-copy-jurisdiction-refuse-closed.md`](adr/2026-08-12-copy-jurisdiction-refuse-closed.md); publish codes via `TRADE_COPY_JURISDICTION_LAW` when you choose them (never invent in source) |
-| Market commission rate     | `market.commerce`             | **Open** — refuse-blank until published                                                                                                                                                                                                        |
-| Affiliate commission tiers | `ops.affiliates`              | **Open** — refuse-blank until published                                                                                                                                                                                                        |
-| Pay fee table              | PSP pricing surfaces          | **Open** — refuse-blank until published                                                                                                                                                                                                        |
+| Parameter                  | Surface it gates                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leader_share_bps`         | copy trading payout                                                                                                                                                                   |
+| Copy **jurisdiction list** | **SEALED refuse-closed (D26-P0-15)** — which regions may copy; never invent; [`adr/2026-08-12-copy-jurisdiction-refuse-closed.md`](adr/2026-08-12-copy-jurisdiction-refuse-closed.md) |
+| Market commission rate     | `market.commerce`                                                                                                                                                                     |
+| Affiliate commission tiers | `ops.affiliates`                                                                                                                                                                      |
+| Pay fee table              | PSP pricing surfaces                                                                                                                                                                  |
 
-**Recommendation: publish them into a config authority, not source.** Set what you know, leave the rest launch-closed. A launch-closed surface that says why is honest; a surface running on a placeholder is not. **Copy jurisdictions:** mechanism sealed; you still own the eventual allowlist content.
+**Recommendation: publish them into a config authority, not source.** Set what you know, leave the rest launch-closed. A launch-closed surface that says why is honest; a surface running on a placeholder is not. **Copy jurisdictions:** mechanism sealed refuse-closed; you still own the eventual allowlist content via `TRADE_COPY_JURISDICTION_LAW`.
 
 ---
 

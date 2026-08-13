@@ -19,6 +19,7 @@ export {
   isHostSceneWriteConflict,
   isHostSceneWriteOk,
   sceneFingerprint,
+  sceneRequiresHostFingerprint,
   type HostSceneWriteInput,
   type HostSceneWriteResult,
 } from './edit-policy.js';

@@ -81,9 +81,9 @@ Debits were never done through a mutator. They were done as `setBalance(x.subtra
 
 In order. Each step is independently landable.
 
-1. **Delete the ten Grade D sites.** They are reward mints with no ledger equivalent built, so there is nothing to redirect them to. Deleting the mint and keeping the surrounding workflow is the honest move; a `= null` short-circuit is a booby trap for the next author.
-2. **Resolve the compile question.** If `core` does not build, nothing downstream is real.
-3. **A reproducible build.** A source scan that cannot be tied to the artifact is a claim about a file, not a system. Until a jar can be built from scanned source in CI, the runtime posture is unverified — say so rather than implying otherwise.
+1. **Delete the ten Grade D sites.** They are reward mints with no ledger equivalent built, so there is nothing to redirect them to. Deleting the mint and keeping the surrounding workflow is the honest move; a `= null` short-circuit is a booby trap for the next author. **Done (D26-P2-07):** sites deleted; `vendor-java-money-scan` Grade D band empty + ratchet; `vendor-java-jar-truth` bans the `Reward*Setting = null` re-arm shapes.
+2. **Resolve the compile question.** If `core` does not build, nothing downstream is real. **Done:** `vendor-compile.yml` compiles `core` under the pinned JDK 8 / Maven 3.8 image (advisory).
+3. **A reproducible build.** A source scan that cannot be tied to the artifact is a claim about a file, not a system. Until a jar can be built from scanned source in CI, the runtime posture is unverified — say so rather than implying otherwise. **Path real (D26-P2-07):** `pnpm vendor-java:rebuild` (`tooling/scripts/vendor-java-rebuild.mjs`) + `vendor-compile.yml` `package-compose-jars` job; `vendor-java-jar-truth` refuses overclaims and stale jars. Absent jars remain the honest "runtime UNVERIFIED" state — not a green safety tick.
 4. **Move the Grade C twelve off the door.** A door on a module with no compose service is not a control. Either give `admin` the same service-level throw the mutators have, or delete the sites.
 5. **Implement the queue.** Thirty-six sites currently throw. Each `Queue:` target is a real recipe; a throw is a holding position, not an outcome.
 
@@ -95,15 +95,13 @@ In order. Each step is independently landable.
 
 > "**`custody-scan` walks `.ts`/`.tsx` only — it has never read a line of Java.** Fix it, or this decision is unenforced."
 
-**That instruction is wrong and must not be followed.** `custody-scan` is a **Protocol Plane** gate; it derives its service list from `packages/config/src/modules.ts` and enforces §16.10 non-custody. Java custody is a different question with a different gate — `vendor-java-money-scan`, which now exists and does the job. Extending `custody-scan` to Java would extend the wrong gate and weaken both.
-
-This was already proposed twice and corrected twice; the correction is recorded in `custody-scan.mjs`'s own header. It is repeated here because **§4 is still on main saying the opposite**, and an agent reading the law document rather than the gate will do the wrong thing in good faith. §4's second gap (invert `vendor-shell-scan`) was real and is closed.
+**That instruction was half-wrong.** Bolting the dual-book call-site ratchet onto the Protocol Plane checks extends the wrong gate — that work stays in `vendor-java-money-scan`. **D26-P2-08** (2026-08-09 board) corrects the other half: `custody-scan` must still **open** the Java **runtime risk surface** (money-plane `src/main` + committed classpath jars), fail-closed, so `pnpm scan:custody` cannot print clean while blind to vendor money Java. §4's second gap (invert `vendor-shell-scan`) was real and is closed.
 
 ---
 
 ## Standing rules
 
-- **Do not extend `custody-scan` to Java.** See above. Do not propose it a third time.
+- **`custody-scan` walks the Java runtime risk surface (D26-P2-08).** Supersedes the 2026-08-04 "do not extend" line below's original intent: do **not** bolt the dual-book call-site ratchet onto the Protocol Plane checks — that stays in `vendor-java-money-scan`. Do **extend** `custody-scan` so its scan object includes money-plane `src/main/java` + committed classpath jars, fail-closed. The stale DIRECTION §4 instruction to "fix it" without that object distinction remains wrong; D26-P2-08 is the corrected shape.
 - **The ratchet freezes by per-file, per-rule count**, keyed on `module:file` — `rules: { 'jpa-entity-balance-mutation': N }`. That is the scan's own documented convention and it is what implementers follow. It is deliberately **not** a global count, which would be near-useless.
   - **Its one residual weakness, stated rather than hidden:** within a single file and a single rule, removing one site and adding another passes. The blast radius is one file and one rule, which is small — but it is not zero, and a future tightening to exact matched text would close it. Do not describe the current ratchet as text-exact; it is not.
 - **A gate whose walk can be empty must fail loudly.** Applies to every scan in `tooling/ci/`, and is the reason `custody-scan` exits 1 on an empty derivation rather than printing a tick.

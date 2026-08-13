@@ -89,11 +89,13 @@ function stubPay(over: Partial<Record<string, unknown>> = {}): PayService & { ca
     listPayments: record('listPayments', async () => [paymentRow] as never),
     clearingBalance: record('clearingBalance', async () => parseAmount('2.5')),
     merchantBalance: record('merchantBalance', async () => parseAmount('7.25')),
-    createPayment: record('createPayment', async () => ({
+    createPayment: record('createPayment', async (input: { railAdapter?: string }) => ({
       ...paymentRow,
       status: 'created' as const,
       capturedAmount: parseAmount('0'),
       railRef: null,
+      // Echo the rail REST resolved — mode honesty is derived from this field.
+      railAdapter: input.railAdapter ?? paymentRow.railAdapter,
     })),
     authorize: record('authorize', async () => ({
       ...paymentRow,
@@ -358,12 +360,13 @@ describe('the spec is served, and describes what the routes actually do', () => 
 
     // Non-vacuity: two empty sets are equal, and would make this test a comment.
     //
-    // NINE PATHS, not nine routes — OpenAPI keys by path, and three pairs share
-    // one: GET+POST `/payments`, and GET+POST `/webhook-endpoints`.
+    // TEN PATHS — OpenAPI keys by path; GET+POST share `/payments` and
+    // `/webhook-endpoints`.
     //   payments: /payments, /payments/{id}, …/authorize, …/capture, …/refund
     //   balances: /balances
-    //   webhooks: /webhook-endpoints, /webhook-endpoints/{id}, /webhook-deliveries
-    expect(mounted.size).toBe(9);
+    //   webhooks: /webhook-endpoints, /webhook-endpoints/{id},
+    //             /webhook-endpoints/{id}/enable, /webhook-deliveries
+    expect(mounted.size).toBe(10);
     expect([...described].sort()).toEqual([...mounted].sort());
   });
 
@@ -424,6 +427,7 @@ describe('the spec is served, and describes what the routes actually do', () => 
     expect(desc).toMatch(/sandbox/i);
     expect(desc).toContain('ifc_test_');
     expect(desc).toContain('pay.sandbox_rail_refused');
+    expect(desc).toContain('mode: "sandbox" | "live"');
     expect(desc).toContain('Idempotency-Key');
     expect(desc).toMatch(/decimal string/i);
   });
@@ -690,6 +694,27 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
   });
+
+  it('re-enables a disabled endpoint and resets the failure counter', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const webhooks = new MerchantWebhookService(store);
+    app = await build(stubPay(), new MemoryRestIdempotencyStore(), webhooks);
+
+    const created = await webhooks.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/pay');
+    await webhooks.disableEndpoint(MERCHANT, created.id, 'consecutive_failures');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/webhook-endpoints/${created.id}/enable?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { status: string; consecutiveFailures: number; disabledReason: string | null };
+    expect(body.status).toBe('active');
+    expect(body.consecutiveFailures).toBe(0);
+    expect(body.disabledReason).toBeNull();
+  });
 });
 
 describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
@@ -719,6 +744,19 @@ describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
     expect(res.statusCode).toBe(200);
     const args = pay.calls.find((c) => c.method === 'createPayment')!.args[0] as { railAdapter: string };
     expect(args.railAdapter).toBe('card-sandbox');
+    expect(res.json().mode).toBe('sandbox');
+  });
+
+  it('GET payment discloses mode from rail posture (sandbox honesty)', async () => {
+    app = await build();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/payments/${PAYMENT}`,
+      headers: signed(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().mode).toBe('sandbox');
+    expect(res.json().railAdapter).toBe('card-sandbox');
   });
 
   it('live principal naming card-sandbox is refused — NOTHING WAS ATTEMPTED', async () => {

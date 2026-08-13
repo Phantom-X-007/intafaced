@@ -15,9 +15,11 @@ import {
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
 import { assertRailMayMoveValue, selectPublicCheckoutRailDetailed, type ValueMovementPolicy } from './rails/posture.js';
+import { merchantKybMoneyGateRefusal } from './merchant-kyb-money-gate.js';
 import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import { settlementLedgerPlan } from './settlement-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
+import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
 
 /**
  * svc-pay — THE PAYMENTS CORE (§6.1).
@@ -82,6 +84,11 @@ export type PayErrorCode =
   /** KYB transition refused (wrong status, or stub decide blocked under live-only). */
   | 'pay.kyb_invalid'
   | 'pay.kyb_operator_required'
+  /**
+   * Live acquiring money door — merchant lacks approved KYB (D26-P1-P10 Layer B).
+   * Distinct from scope issuance (Layer A); never invents `pay:*`.
+   */
+  | 'pay.kyb_required'
   | 'pay.payment_not_found'
   | 'pay.profile_not_found'
   | 'pay.link_not_found'
@@ -1862,6 +1869,42 @@ export class PayService {
         // rail is confirming, both need a human decision — acting on either
         // automatically would move money on a rail's say-so alone.
         break;
+      case 'dispute.opened': {
+        // D26-P1-P5: case mechanism + settled→disputed writer. Ledger chargeback
+        // recipes refuse-closed via socket.pay-chargeback-ledger-wire — case only.
+        const disputeId = event.disputeId?.trim();
+        if (disputeId) {
+          let marked = false;
+          if (payment.status === 'settled') {
+            await this.markDisputed(payment.id, { disputeId, reasonCode: event.reasonCode ?? null });
+            marked = true;
+          }
+          const amount = event.amount === undefined ? formatAmount(parseAmount(payment.amount)) : formatAmount(event.amount);
+          defaultDisputeCaseStore.open({
+            disputeId,
+            paymentId: payment.id,
+            merchantId: payment.merchant_id,
+            amount,
+            assetId: event.assetId ?? payment.currency,
+            reasonCode: event.reasonCode ?? null,
+            paymentMarkedDisputed: marked,
+          });
+          applied = true;
+        }
+        break;
+      }
+      case 'dispute.won':
+      case 'dispute.lost':
+      case 'dispute.closed': {
+        const disputeId = event.disputeId?.trim();
+        if (disputeId && defaultDisputeCaseStore.get(disputeId)) {
+          if (event.type === 'dispute.won') defaultDisputeCaseStore.markWon(disputeId);
+          else if (event.type === 'dispute.lost') defaultDisputeCaseStore.markLost(disputeId);
+          else defaultDisputeCaseStore.accept(disputeId);
+          applied = true;
+        }
+        break;
+      }
     }
 
     // The dedupe marker, written last. `ON CONFLICT DO NOTHING` because two
@@ -1908,6 +1951,31 @@ export class PayService {
       { isolation: 'read committed', maxAttempts: 5 },
     );
     if (view) this.notifyPaymentEvent('payment.failed', view);
+  }
+
+  /**
+   * D26-P1-P5 — make `settled → disputed` reachable.
+   *
+   * Status transition only. Does **not** post ledger chargeback recipes —
+   * refuse-closed via `socket.pay-chargeback-ledger-wire`. Callers open a case.
+   */
+  async markDisputed(paymentId: string, meta: { disputeId: string; reasonCode?: string | null }): Promise<PaymentView> {
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const row = await lockPayment(tx, paymentId);
+        assertTransition(row, 'disputed');
+        await appendEvent(tx, row.id, 'disputed', {
+          disputeId: meta.disputeId,
+          reasonCode: meta.reasonCode ?? null,
+          ledgerWire: 'refused',
+          ledgerSocket: 'socket.pay-chargeback-ledger-wire',
+        });
+        await tx`UPDATE pay.payments SET status = 'disputed', updated_at = now() WHERE id = ${row.id}`;
+        return this.view(tx, { ...row, status: 'disputed' });
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
   }
 
   // ── Settlement (§6.1) ──────────────────────────────────────────────────────
@@ -2510,18 +2578,27 @@ export class PayService {
   }
 
   /**
-   * One gate, one code, every money-moving surface that should refuse a
-   * non-active merchant: createPayment, openCheckout, createPaymentLink,
-   * authorize, capture, settleWindow (post), prepareSettlement (new freeze),
+   * One gate, every money-moving surface that should refuse a non-active
+   * merchant: createPayment, openCheckout, createPaymentLink, authorize,
+   * capture, settleWindow (post), prepareSettlement (new freeze),
    * payoutSettlement. Refund is intentionally not on this list (payer return).
    *
-   * `status` is the operational cut-off (`suspended` / `closed` / `pending`);
-   * `kybStatus` is a separate flag and is deliberately not read here — wiring
-   * KYB into the money gates is its own residual once a real approver exists.
+   * `status` is the operational cut-off (`suspended` / `closed` / `pending`).
+   * Under `live-only`, Layer B also requires approved KYB (`pay.kyb_required`)
+   * — D26-P1-P10. Does not invent `pay:*` scopes (Layer A stays refuse-closed).
    */
   private assertMerchantActive(merchant: MerchantRecord): void {
     if (merchant.status !== 'active') {
       throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
+    }
+    const kybRefuse = merchantKybMoneyGateRefusal({
+      merchantId: merchant.id,
+      status: merchant.status,
+      kybStatus: merchant.kybStatus,
+      valueMovement: this.valueMovement,
+    });
+    if (kybRefuse) {
+      throw new PayError(kybRefuse.message, kybRefuse.code, kybRefuse.detail);
     }
   }
 }

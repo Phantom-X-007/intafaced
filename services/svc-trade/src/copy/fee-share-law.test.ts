@@ -69,7 +69,7 @@ describe('parseCopyJurisdictionLawJson', () => {
 });
 
 describe('requirePublished*', () => {
-  it('fee-share refuse names DIRECTION §8 residual', () => {
+  it('fee-share refuse names DIRECTION §8 / D26-P0-02 residual', () => {
     try {
       requirePublishedCopyFeeShareLaw(UNPUBLISHED_COPY_FEE_SHARE_LAW);
       expect.unreachable('should refuse');
@@ -78,10 +78,11 @@ describe('requirePublished*', () => {
       expect((err as CopyError).code).toBe('trade.copy_fee_share_blank');
       expect((err as CopyError).residual).toBe(COPY_FEE_SHARE_RESIDUAL);
       expect(COPY_FEE_SHARE_RESIDUAL).toContain('DIRECTION §8');
+      expect(COPY_FEE_SHARE_RESIDUAL).toContain('D26-P0-02');
     }
   });
 
-  it('jurisdiction refuse names DIRECTION §8 residual', () => {
+  it('jurisdiction refuse names DIRECTION §8 / D26-P0-15 residual', () => {
     try {
       requirePublishedCopyJurisdictionLaw(UNPUBLISHED_COPY_JURISDICTION_LAW);
       expect.unreachable('should refuse');
@@ -89,6 +90,7 @@ describe('requirePublished*', () => {
       expect(err).toBeInstanceOf(CopyError);
       expect((err as CopyError).code).toBe('trade.copy_jurisdiction_blank');
       expect((err as CopyError).residual).toBe(COPY_JURISDICTION_RESIDUAL);
+      expect(COPY_JURISDICTION_RESIDUAL).toContain('D26-P0-15');
     }
   });
 
@@ -96,6 +98,8 @@ describe('requirePublished*', () => {
     const line = copyLawStatusLine(UNPUBLISHED_COPY_FEE_SHARE_LAW, UNPUBLISHED_COPY_JURISDICTION_LAW);
     expect(line).toContain('feeShare=0');
     expect(line).toContain('jurisdiction=0');
+    expect(line).toContain('D26-P0-02');
+    expect(line).toContain('D26-P0-15');
     expect(copyLawResidual(UNPUBLISHED_COPY_FEE_SHARE_LAW, UNPUBLISHED_COPY_JURISDICTION_LAW)).toBe(COPY_LAW_RESIDUAL);
   });
 });

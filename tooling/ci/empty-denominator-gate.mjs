@@ -195,6 +195,13 @@ export const ENFORCED = {
     must: /the unmutated scan does not pass/,
     note: 'checks its control run first, so an unrunnable subject cannot be reported as mutants-all-caught.',
   },
+  'wallet-rpc-perimeter-refuse': {
+    kind: 'guard',
+    must: /unmutated scan does not pass/,
+    note:
+      'D26-P2-09 continuous perimeter suite — control is the real mainnet scan; if the tree (or the scan) is gone the ' +
+      'control fails first, so class/register deletions cannot be reported as caught over an unrunnable subject.',
+  },
   'lang-duplicate-key': {
     kind: 'uncaught',
     must: /ENOENT[\s\S]*en\.js/,
@@ -209,6 +216,11 @@ export const ENFORCED = {
     kind: 'guard',
     must: /vendor\/ tree missing — cannot prove dual-book mutators banned/,
     note: 'phrases the refusal as an inability to PROVE, which is the correct epistemics.',
+  },
+  'vendor-java-jar-truth': {
+    kind: 'guard',
+    must: /vendor\/ tree missing — cannot prove Grade D empty or jar posture/,
+    note: 'D26-P2-07 sibling of vendor-java-money: without vendor/ it cannot prove Grade D empty or jar truth.',
   },
   'dual-book-door': {
     kind: 'guard',
@@ -232,6 +244,13 @@ export const ENFORCED = {
       'Class X list-content boundary: with screening.ts gone it cannot prove the list is unshipped and refuses by name ' +
       'rather than printing clean over nothing.',
   },
+  'marketing-language': {
+    kind: 'guard',
+    must: /MARKETING LANGUAGE SCAN FAILED — packages\/config\/src\/marketing-language\.ts is missing/,
+    note:
+      'DIRECTION §8.9 / D26-P0-16: with the law module gone it cannot prove audited/insured/guaranteed product copy is ' +
+      'owner-sealed and refuses by name rather than printing clean over nothing.',
+  },
   workspace: {
     kind: 'guard',
     must: /no service packages found, so checks 1-10 below each iterated an empty list/,
@@ -248,6 +267,13 @@ export const ENFORCED = {
     note:
       'refuses via its stale-entry ratchet rather than a zero-file branch: with no tree, every tolerated-offender path ' +
       'is stale. Correct outcome, adjacent mechanism — recorded so nobody reads this row as a dedicated empty-scan guard.',
+  },
+  'money-skip-honesty': {
+    kind: 'guard',
+    must: /MONEY SKIP HONESTY FAILED/,
+    note:
+      'D26-P2-13 seal: with money roots absent it refuses "no money-path roots"; with roots empty of the inventoried ' +
+      'files it refuses via the stale-row ratchet. Either way it cannot print clean over nothing.',
   },
   'compose-secret-parity': {
     kind: 'uncaught',

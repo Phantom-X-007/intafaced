@@ -18,6 +18,10 @@
  *   · `payout-grade.ts` — absolute notional floor for a two-sided book. Dust
  *     levels that would mint a mid are refused at the adapter (`no_depth`), not
  *     only downstream in svc-trade's mark gate (D26-P1-T8).
+ *   · `capture-lake.ts` — §27:762 capture honesty. A missing / failed capture is
+ *     a typed HOLE in the record; an empty book is only written when a connected
+ *     adapter returned one. Never substitutes empty depth for absence (D-S-18).
+ *     No TSDB — store choice remains open.
  *   · `transport.ts` — the two-interface seam that lets the tests produce the
  *     failures a healthy venue never will.
  *   · `venues/binance-spot.ts` — the first venue, done properly. Public market
@@ -33,6 +37,7 @@ export * from './rate-limit.js';
 export * from './latency.js';
 export * from './cross-check.js';
 export * from './payout-grade.js';
+export * from './capture-lake.js';
 export * from './transport.js';
 export * from './venues/binance-spot.js';
 export * from './venues/bybit-spot.js';

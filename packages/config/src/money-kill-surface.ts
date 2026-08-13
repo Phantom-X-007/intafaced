@@ -67,8 +67,43 @@ export interface MoneyPublicDoor {
 }
 
 /**
- * Canonical money commitment doors — every live custodial public write that
- * must refuse when its kill control is armed.
+ * Residual families that #1683 left thin — must stay in `MONEY_PUBLIC_DOORS`.
+ *
+ * Prior land covered one sample door per live custodial module. D26-P2-10 deepen
+ * closes the remaining commitment surfaces (convert/otc/algo/copy, pay settle +
+ * withdraw, bank loans/spaces, p2p disputes, token unstake/buyback, agents
+ * metering) so "every money route" is not a six-row sketch.
+ */
+export const MONEY_KILL_RESIDUAL_DOOR_IDS = [
+  'trade.convert.execute',
+  'trade.otc.accept',
+  'trade.otc.settle',
+  'trade.algo.createTwap',
+  'trade.copy.follow',
+  'trade.copy.planMirror',
+  'trade.copy.settleFeeShare',
+  'pay.payment.create',
+  'pay.payment.authorize',
+  'pay.payment.capture',
+  'pay.settlement.run',
+  'pay.settlement.payout',
+  'pay.deposit.credit',
+  'pay.withdrawal.create',
+  'pay.public.payments.create',
+  'pay.public.payments.capture',
+  'bank.earn.withdraw',
+  'bank.spaces.create',
+  'bank.loans.open',
+  'p2p.disputes.open',
+  'token.unstake',
+  'token.recordBuyback',
+  'agents.session.open',
+  'agents.run.complete',
+] as const;
+
+/**
+ * Canonical money commitment doors — every live public write that must refuse
+ * when its kill control is armed.
  *
  * Extending this list is how a new money route stays in the prove suite: add a
  * row here, then the edge unit + e2e matrices fail closed until they cover it.
@@ -99,6 +134,62 @@ export const MONEY_PUBLIC_DOORS: readonly MoneyPublicDoor[] = [
     control: { kind: 'edge-module', module: 'trade' },
   },
   {
+    id: 'trade.convert.execute',
+    module: 'trade',
+    method: 'POST',
+    path: '/api/trade/trpc/convert.execute',
+    what: 'execute a convert (instant swap commitment)',
+    control: { kind: 'edge-module', module: 'trade' },
+  },
+  {
+    id: 'trade.otc.accept',
+    module: 'trade',
+    method: 'POST',
+    path: '/api/trade/trpc/otc.accept',
+    what: 'accept an OTC quote (new risk)',
+    control: { kind: 'edge-module', module: 'trade' },
+  },
+  {
+    id: 'trade.otc.settle',
+    module: 'trade',
+    method: 'POST',
+    path: '/api/trade/trpc/otc.settle',
+    what: 'settle an OTC trade (moves value)',
+    control: { kind: 'edge-module', module: 'trade' },
+  },
+  {
+    id: 'trade.algo.createTwap',
+    module: 'trade',
+    method: 'POST',
+    path: '/api/trade/trpc/algo.createTwap',
+    what: 'schedule a TWAP algo (future places)',
+    control: { kind: 'edge-module', module: 'trade' },
+  },
+  {
+    id: 'trade.copy.follow',
+    module: 'trade',
+    method: 'POST',
+    path: '/api/trade/trpc/copy.follow',
+    what: 'follow a copy-trading leader (mirror risk)',
+    control: { kind: 'edge-module', module: 'trade' },
+  },
+  {
+    id: 'trade.copy.planMirror',
+    module: 'trade',
+    method: 'POST',
+    path: '/api/trade/trpc/copy.planMirror',
+    what: 'plan a copy mirror place',
+    control: { kind: 'edge-module', module: 'trade' },
+  },
+  {
+    id: 'trade.copy.settleFeeShare',
+    module: 'trade',
+    method: 'POST',
+    path: '/api/trade/trpc/copy.settleFeeShare',
+    what: 'settle copy fee-share (moves value)',
+    control: { kind: 'edge-module', module: 'trade' },
+  },
+  {
     id: 'pay.checkout.open',
     module: 'pay',
     method: 'POST',
@@ -115,6 +206,78 @@ export const MONEY_PUBLIC_DOORS: readonly MoneyPublicDoor[] = [
     control: { kind: 'edge-module', module: 'pay' },
   },
   {
+    id: 'pay.payment.create',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/trpc/payment.create',
+    what: 'create a merchant payment intent',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.payment.authorize',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/trpc/payment.authorize',
+    what: 'authorize a payment (holds funds)',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.payment.capture',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/trpc/payment.capture',
+    what: 'capture an authorized payment',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.settlement.run',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/trpc/settlement.run',
+    what: 'run a merchant settlement window',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.settlement.payout',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/trpc/settlement.payout',
+    what: 'payout a settlement off-platform',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.deposit.credit',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/trpc/deposit.credit',
+    what: 'credit a user deposit into the book',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.withdrawal.create',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/trpc/withdrawal.create',
+    what: 'withdraw user balance off-platform (edge prefix is pay)',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.public.payments.create',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/v1/payments',
+    what: 'create a payment over the public Pay REST contract',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
+    id: 'pay.public.payments.capture',
+    module: 'pay',
+    method: 'POST',
+    path: '/api/pay/v1/payments/pay_example/capture',
+    what: 'capture a payment over the public Pay REST contract',
+    control: { kind: 'edge-module', module: 'pay' },
+  },
+  {
     id: 'bank.earn.deposit',
     module: 'bank',
     method: 'POST',
@@ -123,11 +286,35 @@ export const MONEY_PUBLIC_DOORS: readonly MoneyPublicDoor[] = [
     control: { kind: 'edge-module', module: 'bank' },
   },
   {
+    id: 'bank.earn.withdraw',
+    module: 'bank',
+    method: 'POST',
+    path: '/api/bank/trpc/earn.withdraw',
+    what: 'withdraw from an earn pool',
+    control: { kind: 'edge-module', module: 'bank' },
+  },
+  {
     id: 'bank.transfers.schedule',
     module: 'bank',
     method: 'POST',
     path: '/api/bank/trpc/transfers.schedule',
     what: 'schedule a standing transfer',
+    control: { kind: 'edge-module', module: 'bank' },
+  },
+  {
+    id: 'bank.spaces.create',
+    module: 'bank',
+    method: 'POST',
+    path: '/api/bank/trpc/spaces.create',
+    what: 'create a bank space that can hold value',
+    control: { kind: 'edge-module', module: 'bank' },
+  },
+  {
+    id: 'bank.loans.open',
+    module: 'bank',
+    method: 'POST',
+    path: '/api/bank/trpc/loans.open',
+    what: 'open a collateralized loan (new debt)',
     control: { kind: 'edge-module', module: 'bank' },
   },
   {
@@ -147,6 +334,14 @@ export const MONEY_PUBLIC_DOORS: readonly MoneyPublicDoor[] = [
     control: { kind: 'edge-module', module: 'p2p' },
   },
   {
+    id: 'p2p.disputes.open',
+    module: 'p2p',
+    method: 'POST',
+    path: '/api/p2p/trpc/disputes.open',
+    what: 'open a P2P dispute (escrow path)',
+    control: { kind: 'edge-module', module: 'p2p' },
+  },
+  {
     id: 'token.stake',
     module: 'token',
     method: 'POST',
@@ -155,11 +350,27 @@ export const MONEY_PUBLIC_DOORS: readonly MoneyPublicDoor[] = [
     control: { kind: 'edge-module', module: 'token' },
   },
   {
+    id: 'token.unstake',
+    module: 'token',
+    method: 'POST',
+    path: '/api/token/trpc/unstake',
+    what: 'unstake (releases custodial lock)',
+    control: { kind: 'edge-module', module: 'token' },
+  },
+  {
     id: 'token.mintEpoch',
     module: 'token',
     method: 'POST',
     path: '/api/token/trpc/mintEpoch',
     what: 'mint the next emission epoch',
+    control: { kind: 'edge-module', module: 'token' },
+  },
+  {
+    id: 'token.recordBuyback',
+    module: 'token',
+    method: 'POST',
+    path: '/api/token/trpc/recordBuyback',
+    what: 'record a buyback burn (treasury money path)',
     control: { kind: 'edge-module', module: 'token' },
   },
   {
@@ -177,6 +388,27 @@ export const MONEY_PUBLIC_DOORS: readonly MoneyPublicDoor[] = [
     path: '/api/market/trpc/createListing',
     what: 'create a paid marketplace listing',
     control: { kind: 'edge-module', module: 'market' },
+  },
+  /**
+   * Agents is non-custodial in MODULES, but metering bills via ledger recipes.
+   * Killing `agents` at the edge stops new billed sessions/runs from the same
+   * `/admin/kill-switches` surface — no second console.
+   */
+  {
+    id: 'agents.session.open',
+    module: 'agents',
+    method: 'POST',
+    path: '/api/agents/trpc/session.open',
+    what: 'open a metered agent session (can bill)',
+    control: { kind: 'edge-module', module: 'agents' },
+  },
+  {
+    id: 'agents.run.complete',
+    module: 'agents',
+    method: 'POST',
+    path: '/api/agents/trpc/run.complete',
+    what: 'run a metered agent completion (bills usage)',
+    control: { kind: 'edge-module', module: 'agents' },
   },
 ] as const;
 
@@ -246,6 +478,22 @@ export function assertCustodialMoneyKillsComplete(): readonly string[] {
     ) {
       failures.push(`${id}: live money module must not be classified not-deployed`);
     }
+  }
+  return failures;
+}
+
+/**
+ * Invariant: residual money families from the deepen pass stay catalogued.
+ * A catalogue that drops convert/otc/algo/copy/withdraw/agents is not complete.
+ */
+export function assertMoneyKillResidualsPresent(): readonly string[] {
+  const ids = new Set(MONEY_PUBLIC_DOORS.map((d) => d.id));
+  const failures: string[] = [];
+  for (const id of MONEY_KILL_RESIDUAL_DOOR_IDS) {
+    if (!ids.has(id)) failures.push(`missing residual money door "${id}"`);
+  }
+  if (!edgeKillableMoneyModules().includes('agents')) {
+    failures.push('agents must be edge-killable — metering bills from the shared kill surface');
   }
   return failures;
 }
