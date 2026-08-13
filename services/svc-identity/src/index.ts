@@ -14,6 +14,7 @@ import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
 import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
+import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -142,6 +143,18 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() }));
+
+/**
+ * D26-P1-O2: fee producers (svc-trade / svc-pay) accrue under owner rate law.
+ * Same durable store as affiliates.accrue — no ledger post. Body-bound S2S.
+ */
+registerAffiliateProducerAccrue(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  referral,
+  freeze,
+  accruals,
+  accrualTierLaw,
+});
 
 /**
  * Service-to-service rank perks (svc-trade reads at order accept).
