@@ -29,6 +29,24 @@ export async function hydrateAlgoIfMissing(
   engine.hydrate(loaded.parent, loaded.plan);
 }
 
+/**
+ * Job-host hydrate: load by parent id with no caller principal. Tick after
+ * restart must see the durable schedule; place still refuses without a live
+ * grant (SOCKET §13 principal durability).
+ */
+export async function hydrateAlgoFromStore(
+  engine: AlgoHydrateTarget,
+  store: TwapParentStore,
+  parentId: string,
+): Promise<void> {
+  if (engine.get(parentId)) return;
+  const loaded = await store.load(parentId);
+  if (!loaded) {
+    throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
+  }
+  engine.hydrate(loaded.parent, loaded.plan);
+}
+
 /** Await the durable write after pause/resume/cancel (onChange is fire-and-forget). */
 export async function persistAlgoMutation(engine: AlgoHydrateTarget, store: TwapParentStore, parent: TwapParent): Promise<TwapParent> {
   const plan = engine.planOf(parent.id) ?? [];

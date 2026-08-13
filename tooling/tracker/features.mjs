@@ -418,6 +418,7 @@ export const FEATURES = [
     note:
       'W4 cancel-fail parks paused + haltReason cancel_incomplete (resume refused until re-cancel). tickAll isolation landed. ' +
       '2026-08-13 hydrate-on-mutate: pause/resume/cancel load durable store after restart and await save (onChange was fire-and-forget). ' +
+      '2026-08-13 persist-on-tick: tickAlgo hydrates from store; tick/tickAll await save so a crash cannot leave Postgres active after a miss/halt. ' +
       'VWAP/POV out — market maturity (owner). Principal durability still SOCKET §13 (in-memory map; place after restart halt principal_unavailable). ' +
       'Owner released 2026-08-08. D-S-04 TWAP Stage #1002 + ADR #1145 + #1193 (re-space, cancel atomicity, scheduler mounted default OFF via TRADE_ALGO_JOBS_ENABLED). ' +
       'Create works when TRADE_ALGO_ENABLED; children fire only when jobs ON.',
