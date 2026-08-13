@@ -36,6 +36,7 @@ import { checkInsuranceFundedForListing } from '../futures/insurance-listing-gat
 import { assertProductionUnsettledAssetClassListing } from './forex-settlement.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
+import { fireAffiliateAccrue, affiliateLegsAfterFill, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
 import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
@@ -166,6 +167,11 @@ export interface TradeServiceOptions {
   subAccounts?: SubAccountOwnershipSource;
   /** Override TWAP durable store (tests inject MemoryTwapParentStore). */
   algoStore?: TwapParentStore;
+  /**
+   * D26-P1-O2: after a fill posts house fees, claim affiliate rows (best-effort).
+   * Default noop — tests stay hermetic; production injects the identity HTTP client.
+   */
+  affiliateAccrue?: AffiliateAccruePort;
 }
 
 export interface ConvertQuoteRequest {
@@ -299,6 +305,8 @@ export class TradeService {
   private readonly algo: TwapEngine;
   /** Durable TWAP schedules — survives process restart (in-memory alone was residual). */
   private readonly algoStore: TwapParentStore;
+  /** Best-effort identity accrue after house fees post (never fails the fill). */
+  private readonly affiliateAccrue: AffiliateAccruePort;
 
   constructor(
     private readonly sql: Sql,
@@ -324,6 +332,7 @@ export class TradeService {
     this.now = options.now ?? (() => new Date());
     this.subAccounts = options.subAccounts ?? new NoSubAccounts();
     this.algoStore = options.algoStore ?? new SqlTwapParentStore(sql);
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
     this.algo = new TwapEngine(
       {
         now: () => this.now(),
@@ -1417,6 +1426,16 @@ export class TradeService {
         }),
       );
 
+      await this.notifyAffiliateAccrue({
+        fillId: fillIdFor(market.id, fill.sequence),
+        makerUserId: HOUSE_MM_USER_UUID,
+        takerUserId: taker.userId,
+        makerFee,
+        takerFee,
+        makerFeeAsset,
+        takerFeeAsset,
+      });
+
       await this.bus.publish(
         'fillSettled',
         {
@@ -1537,6 +1556,16 @@ export class TradeService {
       }),
     );
 
+    await this.notifyAffiliateAccrue({
+      fillId: fillIdFor(market.id, fill.sequence),
+      makerUserId: maker.userId,
+      takerUserId: taker.userId,
+      makerFee,
+      takerFee,
+      makerFeeAsset: takerBuys ? market.quoteAsset : market.baseAsset,
+      takerFeeAsset: takerBuys ? market.baseAsset : market.quoteAsset,
+    });
+
     // User-visible fill + order snapshots for private WS (not money — ledger already moved).
     for (const leg of legs) {
       await this.bus.publish(
@@ -1562,6 +1591,22 @@ export class TradeService {
       const latest = await this.findOrder(leg.order.id);
       if (latest) await this.publishOrderUpdated(latest);
     }
+  }
+
+  /**
+   * After house fees posted. Identity accrue is best-effort (412 / down / timeout
+   * must not unwind the fill). Never invents commission rates.
+   */
+  private async notifyAffiliateAccrue(input: {
+    fillId: string;
+    makerUserId: string;
+    takerUserId: string;
+    makerFee: Amount;
+    takerFee: Amount;
+    makerFeeAsset: string;
+    takerFeeAsset: string;
+  }): Promise<void> {
+    await fireAffiliateAccrue(this.affiliateAccrue, affiliateLegsAfterFill({ ...input, houseMmUserId: HOUSE_MM_USER_UUID }));
   }
 
   // ── Holds: the only two things that can happen to one ─────────────────────

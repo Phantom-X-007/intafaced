@@ -7,6 +7,7 @@ import { env } from './env.js';
 import { TradeService } from './spot/trade-service.js';
 import { createMatchingClient } from './spot/matching-client.js';
 import { createRankPerksClient } from './spot/rank-perks.js';
+import { createAffiliateAccrueClient } from './spot/affiliate-accrue.js';
 import { createSubAccountOwnershipClient } from './spot/sub-account-ownership.js';
 import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
@@ -86,6 +87,7 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const matching = createMatchingClient(env.MATCHING_URL, env.INTERNAL_SERVICE_SECRET);
 const perks = createRankPerksClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const subAccounts = createSubAccountOwnershipClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const affiliateAccrue = createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
@@ -107,6 +109,7 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   // SD-4: same kill as TRADE_MM_SEED_ENABLED — seeded placeOrder path stays OFF by default.
   seedPlaceEnabled: env.TRADE_MM_SEED_ENABLED,
   subAccounts,
+  affiliateAccrue,
 });
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
