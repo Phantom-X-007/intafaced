@@ -14,7 +14,15 @@ import {
 } from '@intafaced/ledger-client';
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
-import { assertRailMayMoveValue, selectPublicCheckoutRailDetailed, type ValueMovementPolicy } from './rails/posture.js';
+import { assertRailMayMoveValue, PublicCheckoutUnavailable, type ValueMovementPolicy } from './rails/posture.js';
+import {
+  REFERENCE_RAIL_ROUTING_PROFILES,
+  selectSmartCheckoutRail,
+  SmartRoutingNoRailError,
+  toRoutingDecisionRecord,
+  type RailRoutingProfile,
+} from './routing/decide.js';
+import { RoutingInputError } from './routing-inputs.js';
 import { merchantKybMoneyGateRefusal } from './merchant-kyb-money-gate.js';
 import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import { settlementLedgerPlan } from './settlement-ledger.js';
@@ -106,6 +114,13 @@ export type PayErrorCode =
   | 'pay.checkout_amount_required'
   /** Too many sessions open on one link. The cheap floor under an anonymous caller. */
   | 'pay.checkout_busy'
+  /**
+   * Smart routing (D26-P1-P3) — a required geo/method/risk dim was blank.
+   * Never invent a country, method, risk band, or approval rate.
+   */
+  | 'pay.routing_input_missing'
+  /** Smart routing ran; no configured rail honestly accepts these dims. */
+  | 'pay.routing_no_rail'
   | 'pay.invalid_amount'
   | 'pay.invalid_transition'
   | 'pay.capture_exceeds_authorized'
@@ -353,6 +368,15 @@ export interface PayServiceOptions {
    */
   readonly checkoutRails?: readonly CheckoutRail[];
 
+  /**
+   * Operator-declared checkout risk band (D26-P1-P3). Blank = missing.
+   * Never invented. Public callers cannot set this — tests may pass `riskBand` on open.
+   */
+  readonly checkoutRiskBand?: string | null;
+
+  /** Eligibility profiles for smart checkout. Default is the v1 reference set. */
+  readonly routingProfiles?: readonly RailRoutingProfile[];
+
   /** How long a browser handoff stays open. Minutes. Never applied to the payment. */
   readonly checkoutSessionTtlSeconds?: number;
 
@@ -503,6 +527,8 @@ export class PayService {
   private readonly valueMovement: ValueMovementPolicy;
   private readonly publicCheckoutMovement: ValueMovementPolicy;
   private readonly checkoutRails: readonly CheckoutRail[];
+  private readonly checkoutRiskBand: string | undefined;
+  private readonly routingProfiles: readonly RailRoutingProfile[];
   private readonly checkoutSessionTtlSeconds: number;
   private readonly linkDefaultTtlDays: number;
   private readonly linkMaxTtlDays: number;
@@ -525,12 +551,57 @@ export class PayService {
     this.valueMovement = options.valueMovement ?? 'allow-sandbox';
     this.publicCheckoutMovement = options.publicCheckoutMovement ?? this.valueMovement;
     this.checkoutRails = options.checkoutRails ?? DEFAULT_CHECKOUT_RAILS;
+    this.checkoutRiskBand = options.checkoutRiskBand?.trim() || undefined;
+    this.routingProfiles = options.routingProfiles ?? REFERENCE_RAIL_ROUTING_PROFILES;
     this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? 900;
     this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? 30;
     this.linkMaxTtlDays = options.linkMaxTtlDays ?? 365;
     this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
     this.now = options.now ?? (() => new Date());
     this.afterPaymentEvent = options.afterPaymentEvent;
+  }
+
+  /**
+   * Unique method on the operator checkout list, if there is exactly one.
+   * Several methods with no caller method → missing (refuse, do not invent).
+   */
+  private uniqueCheckoutMethod(): string | undefined {
+    const methods = [...new Set(this.checkoutRails.map((r) => r.method.trim()).filter(Boolean))];
+    return methods.length === 1 ? methods[0] : undefined;
+  }
+
+  /** D26-P1-P3 — geo/method/risk rail pick. Payer never names a rail id. */
+  private selectCheckoutRail(input: { geoCountry?: string; method?: string; riskBand?: string }) {
+    try {
+      return selectSmartCheckoutRail({
+        inputs: {
+          geoCountry: input.geoCountry,
+          method: input.method ?? this.uniqueCheckoutMethod(),
+          riskBand: input.riskBand ?? this.checkoutRiskBand,
+        },
+        preference: this.checkoutRails.map((r) => r.railId),
+        profiles: this.routingProfiles,
+        rails: this.rails,
+        policy: this.publicCheckoutMovement,
+        now: this.now(),
+      });
+    } catch (e) {
+      if (e instanceof RoutingInputError) {
+        throw new PayError(e.message, 'pay.routing_input_missing', { missing: e.missing });
+      }
+      if (e instanceof SmartRoutingNoRailError) {
+        const posture = e.considered.filter((c) => c.reason === 'sandbox' || c.reason === 'absent' || c.reason === 'unhealthy');
+        const other = e.considered.filter(
+          (c) => c.outcome === 'skipped' && c.reason !== 'sandbox' && c.reason !== 'absent' && c.reason !== 'unhealthy',
+        );
+        if (posture.length > 0 && other.length === 0) {
+          const reason = posture[0]!.reason as 'sandbox' | 'absent' | 'unhealthy';
+          throw new PublicCheckoutUnavailable(posture[0]!.railId, reason);
+        }
+        throw new PayError(e.message, 'pay.routing_no_rail', { considered: e.considered });
+      }
+      throw e;
+    }
   }
 
   /** Fire-and-forget outbound notify — never throws into the money path. */
@@ -1009,19 +1080,29 @@ export class PayService {
     amount?: Amount;
     /** Honoured ONLY when the link fixes no currency. Otherwise the link wins. */
     assetId?: string;
+    /**
+     * ISO country the payer stated. Required for smart routing. Never invented.
+     * Not a rail id.
+     */
+    geoCountry?: string;
+    /**
+     * Payment method (`crypto` / `card`), never a rail adapter id.
+     * When omitted, the unique method on `checkoutRails` is used if there is exactly one.
+     */
+    method?: string;
+    /**
+     * Operator/test risk band. Public tRPC/HTML must not send this — use `checkoutRiskBand`.
+     */
+    riskBand?: string;
   }): Promise<{ sessionToken: string; session: CheckoutSessionView }> {
-    // Step 0. Before anything exists. A deployment with no rail that can
-    // honestly take a public payment refuses here, and the payer sees "this
-    // merchant cannot take payment right now" rather than a form that leads
-    // nowhere or, far worse, a fabricated receipt.
-    const decision = selectPublicCheckoutRailDetailed(
-      this.rails,
-      this.checkoutRails.map((r) => r.railId),
-      // NOT `valueMovement`. The public surface follows the environment, and
-      // `PAY_ALLOW_SANDBOX_RAILS` does not relax it — see the option's comment.
-      this.publicCheckoutMovement,
-      this.now(),
-    );
+    // Step 0. Before anything exists. Smart routing (D26-P1-P3) replaces
+    // preference-only selection. Blank geo/method/risk refuses rather than invent.
+    // A payer still cannot name a rail adapter.
+    const decision = this.selectCheckoutRail({
+      geoCountry: input.geoCountry,
+      method: input.method,
+      riskBand: input.riskBand,
+    });
     const adapter = decision.adapter;
     const method = this.checkoutRails.find((r) => r.railId === adapter.id)!.method;
 
@@ -1079,10 +1160,7 @@ export class PayService {
 
         // SPEC §5 — reason per decision. Taxonomy only (no cost/approval invent).
         // Survives in payment_events so a later dispute can answer "why this rail".
-        await appendEvent(tx, payment.id, 'rail.selected', {
-          chosen: adapter.id,
-          considered: decision.considered,
-        });
+        await appendEvent(tx, payment.id, 'rail.selected', toRoutingDecisionRecord(decision));
 
         // Its own token, not the link's. A link is a MANY-payer capability and a
         // session is ONE payer's: addressing sessions by the link token would

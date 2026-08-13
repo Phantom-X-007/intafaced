@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**72 of 148 shipped (49%)** · 10 in progress · 26 ready to claim · 40 blocked · 39 deliberate §13 sockets
+**72 of 148 shipped (49%)** · 11 in progress · 25 ready to claim · 40 blocked · 39 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -34,7 +34,6 @@ pnpm wt feat/<the-thing>
 | Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
 | WebSocket fan-out: depth, trades, orders, positions | `trade` | 2 | `ws.gateway` |
 | Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
-| Smart routing — geo, method, risk, approval rate | `pay` | 3 | `pay.routing` |
 | Payment instruments — where the buyer actually pays | `p2p` | 3 | `p2p.payment-instruments` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
 | 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
@@ -76,6 +75,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Perps: isolated margin, funding, partial-liquidation ladder | **Phantom-X-007** | `trade` |
 | OTC RFQ desk, staked-tier gate | **Phantom-X-007** | `trade` |
 | Copy trading, audited leaders, fee-share (not profit-share) | **Phantom-X-007** | `trade` |
+| Smart routing — geo, method, risk, approval rate | **Phantom-X-007** | `pay` |
 | Moderated dispute resolution | **Phantom-X-007** | `p2p` |
 | Navigator — tool-calling inside user guardrails | **Phantom-X-007** | `agents` |
 | Market Scanner — ranked signals by tier | **Phantom-X-007** | `agents` |
@@ -168,7 +168,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | PayFac mode — sub-merchant trees, 14 permission areas <br/>_**DONE 2026-08-12 (D26-P1-P2):** Honest partial + §13 — REST /v1/submerchant-permissions/* + shared surface→area map (#1741) · trees + area fence on money paths · named sockets `socket.payfac-settling-party-partner` + `socket.payfac-split-fee-recipes`. Title "14 areas" is historical; eleven shipped. Public-door: `public-rest.payfac-permissions.test.ts`. Not full underwriting / invent fee splits._ | F |  | `pay.payfac` |
 | ✅ | RailAdapter interface + crypto-native + card-sandbox <br/>_Updated 2026-07-31: LIVE-capable crypto rail exists — NOT "go-live complete". `EvmLiveChain` implements CryptoChainPort with posture:live (viem Public+Wallet client, HD acceptance addresses from PAY_CRYPTO_DEPOSIT_MNEMONIC, hot-wallet outbound via PAY_CRYPTO_HOT_WALLET_KEY, asset map PAY_CRYPTO_ASSETS). BroadcastStore claim→send→put-before-receipt ordering (single-process MemoryBroadcastStore wired today). defaultChainFor builds it when PAY_CRYPTO_RPC_URL(+keys) are set; otherwise UnconfiguredChain in staging/prod and MemoryChain in dev/test. In-process CryptoChainWatcher POSTs signed webhooks. staging/prod omit card-sandbox by default so boot posture can pass with only live crypto. Proven: unit + broadcast claim suite + optional anvil. Residuals that BLOCK production go-live (named, not waved): durable multi-replica BroadcastStore still required; address book + watcher are in-process; production RPC/custody are owner-supplied (anvil ≠ chain decision); card acquiring remains a §13 commercial socket. `done` means the adapter + live path exist under env — not that ops may turn on mainnet without those residuals._ | F |  | `pay.rails` |
 | ✅ | User deposit + withdrawal — the two paths off the merchant path <br/>_Updated 2026-07-31: unblocked by live crypto-native. deposit.credit + withdrawal.* remain mounted; under live-only a crypto-native withdrawal can now pass assertRailMayMoveValue when EvmLiveChain is configured (sandbox still refused). Concurrent double-submit + conservation suites unchanged. Residual: operator hand-credit still defaults to card-sandbox (skipped when that adapter is not registered); on-chain user deposits for the retail path are the watcher→webhook→capture loop, not deposit.credit._ | F |  | `pay.user-money` |
-| 🟢 | Smart routing — geo, method, risk, approval rate <br/>_**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M._ | F |  | `pay.routing` |
+| 🔨 | Smart routing — geo, method, risk, approval rate <br/>_**D26-P1-P3 2026-08-13:** Hosted checkout open walks selectSmartCheckoutRail (geo/method/risk). Blank dims → pay.routing_input_missing; no invented approval/cost. Payer cannot name a rail. STILL NOT done: live acquiring / PSP (Class X). Not tracker done until live connectors._ | F |  | `pay.routing` |
 | ✅ | Dual settlement — bank or crypto <br/>_**D26-P1-P4 completed 2026-08-12** — bank and crypto payout paths compose only ledger-client withdraw hold/settle/reverse recipes. Configured crypto completes against the chain adapter; bank remains honestly absent and refuses before any recipe posts until its Class X commercial socket exists. Integration proof pins both outcomes and ledger reconciliation._ | F |  | `pay.settlement` |
 | ✅ | Risk scoring, chargebacks, decline recovery <br/>_**DONE 2026-08-12 (D26-P1-P5):** Scoring mechanism + review queue + dispute case surface (fraud.evaluate / enqueueReview / openDispute) with settled→disputed writer. Chargeback ledger recipes refuse-closed via named §13 `socket.pay-chargeback-ledger-wire` — not a stub unwired matrix and not silent posts. List content (IPs/devices/sanctions) Class X. Public-door proof: `fraud-done-bar.test.ts`. Residual: durable disputes table + owner sign-off to close the socket._ | F |  | `pay.fraud` |
 | ✅ | Recurring — card and crypto <br/>_**DONE 2026-08-12 (D26-P1-P6):** Mandates product-complete; notify gaps honest. Crypto invoice-and-watch E2E (create mandate → subscription → due runner → invoice → capture settles execution → cancel immediate) via `subscriptions-done-bar.test.ts` + merchant doors. Fire path uses `mandateChargeDisposition` matrix; charge traces to active mandate; re-consent refuse `mandate.proposeTerms` → `pay.subscription_reconsent_required`; card refuses `pay.mandate_rail_absent` → `socket.psp-partners` (no invent pull). Bounded dunning = MAX_ATTEMPTS_PER_CYCLE then named `arrears` stall (reachable from fire). Pre-charge notify sealed §13 `socket.pay-precharge-notify` — fire acknowledges gap with `notified:false` before openInvoice; Ready door `subscription.productReady` never reports notified. Parked sockets (not this mountain): live card charge-against-mandate (`socket.psp-partners`), real pre-charge delivery._ | F |  | `pay.subscriptions` |

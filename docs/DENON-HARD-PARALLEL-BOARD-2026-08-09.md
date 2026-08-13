@@ -151,7 +151,7 @@ Nitro asked for **double or triple** mass. **Right is not a count target.** Righ
 | -------------- | --------------------------------------------- | --------------------------------------------------------------- |
 | **D26-P1-P1**  | `pay.psp`                                     | PSP path without third-party money library; merchant durability |
 | **D26-P1-P2**  | `pay.payfac`                                  | Sub-merchant permissions real or honest partial + §13           |
-| **D26-P1-P3**  | `pay.routing`                                 | Geo/method/risk routing; refuse when data missing               |
+| **D26-P1-P3**  | `pay.routing`                                 | Checkout open uses smart routing; refuse blank geo/method/risk  |
 | **D26-P1-P4**  | `pay.settlement`                              | Bank vs crypto settlement recipes only                          |
 | **D26-P1-P5**  | `pay.fraud`                                   | Scoring + chargeback **mechanism**; list content Class X        |
 | **D26-P1-P6**  | `pay.subscriptions`                           | Mandates product-complete; notify gaps honest                   |

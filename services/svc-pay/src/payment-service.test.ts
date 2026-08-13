@@ -131,7 +131,7 @@ if (!available) {
     card = new CardSandboxAdapter({ secret: SECRET });
     crypto = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
     rails = new RailRegistry([card, crypto, new BankPayoutAbsentAdapter()]);
-    pay = new PayService(sql, ledger, rails);
+    pay = new PayService(sql, ledger, rails, { checkoutRiskBand: 'low' });
   });
 
   afterAll(async () => {
@@ -1925,6 +1925,9 @@ if (!available) {
       return { merchant: m, link };
     }
 
+    /** Operator risk band is on the service; tests still must pass a real country. */
+    const geo = { geoCountry: 'DE' };
+
     const paymentIdFor = async (reference: string) => {
       const rows = await sql<Array<{ id: string }>>`SELECT id FROM pay.payments WHERE rail_ref = ${reference}`;
       return rows[0]!.id;
@@ -1933,7 +1936,7 @@ if (!available) {
     it('opens a session, freezes the amount, and hands the payer a rail reference', async () => {
       const { link } = await linked({ amount: '25.5', currency: 'USDT' });
 
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
 
       expect(session.status).toBe('open');
       expect(session.amount).toBe('25.5');
@@ -1960,7 +1963,12 @@ if (!available) {
     it('IGNORES a payer-supplied amount on a fixed-amount link', async () => {
       const { link } = await linked({ amount: '100', currency: 'USDT' });
 
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('0.01'), assetId: 'BTC' });
+      const { session } = await pay.openCheckoutSession({
+        linkToken: link.token,
+        amount: amt('0.01'),
+        assetId: 'BTC',
+        ...geo,
+      });
 
       expect(session.amount).toBe('100');
       expect(session.currency).toBe('USDT');
@@ -1975,11 +1983,11 @@ if (!available) {
     it('needs the payer to state an amount on a variable-amount link, and freezes what they said', async () => {
       const { link } = await linked({ currency: 'USDT' });
 
-      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
         code: 'pay.checkout_amount_required',
       });
 
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('7.25') });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('7.25'), ...geo });
       expect(session.amount).toBe('7.25');
 
       // Frozen: a later read renders the session's number, never a new one.
@@ -1997,11 +2005,37 @@ if (!available) {
     it('chooses the rail server-side; the payer cannot name one', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
 
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const payment = await pay.getPayment(await paymentIdFor(session.instruction!.reference));
 
       expect(payment.railAdapter).toBe('crypto-native');
       expect(rails.has('card-sandbox')).toBe(true);
+    });
+
+    it('D26-P1-P3: refuses checkout when country is missing — writes nothing', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+        code: 'pay.routing_input_missing',
+      });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+    });
+
+    it('D26-P1-P3: refuses checkout when operator risk band is blank — writes nothing', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const blank = new PayService(sql, ledger, rails);
+      await expect(blank.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.routing_input_missing',
+      });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+    });
+
+    it('D26-P1-P3: method that no checkout rail accepts refuses without inventing a fallback', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo, method: 'card' })).rejects.toMatchObject({
+        code: 'pay.routing_no_rail',
+      });
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
     });
 
     /**
@@ -2016,9 +2050,9 @@ if (!available) {
      */
     it('REFUSES to open a checkout on a sandbox rail under live-only, and writes nothing', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
-      const strict = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+      const strict = new PayService(sql, ledger, rails, { valueMovement: 'live-only', checkoutRiskBand: 'low' });
 
-      await expect(strict.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+      await expect(strict.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
         code: 'pay.checkout_rail_not_live',
       });
 
@@ -2031,11 +2065,11 @@ if (!available) {
     it('refuses when the link is exhausted, expired or revoked — before any row exists', async () => {
       const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT', maxUses: 1 });
       await sql`UPDATE pay.payment_links SET uses = 1 WHERE id = ${link.id}`;
-      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.link_exhausted' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({ code: 'pay.link_exhausted' });
 
       const second = await pay.createPaymentLink({ merchantId: m.id, label: 'Old', amount: amt('1'), currency: 'USDT' });
       await sql`UPDATE pay.payment_links SET expires_at = now() - interval '1 hour' WHERE id = ${second.id}`;
-      await expect(pay.openCheckoutSession({ linkToken: second.token })).rejects.toMatchObject({ code: 'pay.link_expired' });
+      await expect(pay.openCheckoutSession({ linkToken: second.token, ...geo })).rejects.toMatchObject({ code: 'pay.link_expired' });
 
       expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
     });
@@ -2043,8 +2077,8 @@ if (!available) {
     it('gives every payer their own session token and their own payment', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
 
-      const first = await pay.openCheckoutSession({ linkToken: link.token });
-      const second = await pay.openCheckoutSession({ linkToken: link.token });
+      const first = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
+      const second = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
 
       expect(first.sessionToken).not.toBe(second.sessionToken);
       expect(first.session.id).not.toBe(second.session.id);
@@ -2055,12 +2089,12 @@ if (!available) {
 
     it('puts a floor under an anonymous caller opening sessions off one URL', async () => {
       const { link } = await linked({ amount: '1', currency: 'USDT' });
-      const bounded = new PayService(sql, ledger, rails, { maxOpenSessionsPerLink: 2 });
+      const bounded = new PayService(sql, ledger, rails, { maxOpenSessionsPerLink: 2, checkoutRiskBand: 'low' });
 
-      await bounded.openCheckoutSession({ linkToken: link.token });
-      await bounded.openCheckoutSession({ linkToken: link.token });
+      await bounded.openCheckoutSession({ linkToken: link.token, ...geo });
+      await bounded.openCheckoutSession({ linkToken: link.token, ...geo });
 
-      await expect(bounded.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.checkout_busy' });
+      await expect(bounded.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({ code: 'pay.checkout_busy' });
     });
 
     /**
@@ -2076,7 +2110,7 @@ if (!available) {
      */
     it('expires the SESSION without expiring the PAYMENT — a late payer is still paid in', async () => {
       const { merchant: m, link } = await linked({ amount: '40', currency: 'USDT' });
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const address = session.instruction!.reference;
 
       // The payer wanders off. The handoff window closes.
@@ -2101,7 +2135,7 @@ if (!available) {
 
     it('counts a completed payment against the link exactly once, however many times the webhook is delivered', async () => {
       const { link } = await linked({ amount: '15', currency: 'USDT', maxUses: 2 });
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const address = session.instruction!.reference;
 
       chain.credit({ address, assetId: 'USDT', amount: amt('15'), from: '0xbuyer', confirmations: 12 });
@@ -2132,7 +2166,7 @@ if (!available) {
      */
     it('resumes a session that was committed before the rail was asked', async () => {
       const { link } = await linked({ amount: '12', currency: 'USDT' });
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const address = session.instruction!.reference;
 
       // Simulate the crash: the row as it was between the two phases.
@@ -2149,7 +2183,7 @@ if (!available) {
       const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
       await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
 
-      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
       expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
     });
 
@@ -2161,7 +2195,7 @@ if (!available) {
 
     it('sweeps lapsed sessions without touching a payment or a balance', async () => {
       const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const paymentId = await paymentIdFor(session.instruction!.reference);
 
       await sql`UPDATE pay.checkout_sessions SET expires_at = now() - interval '1 second' WHERE id = ${session.id}`;

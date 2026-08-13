@@ -178,8 +178,10 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
      *     `amount` is ignored outright — not compared, not validated against the
      *     link, ignored — and the session freezes the link's number.
      *   · THERE IS NO RAIL INPUT, AND THERE WILL NOT BE ONE. The rail is chosen
-     *     server-side from `PAY_CHECKOUT_RAILS`. A hosted checkout that can name
-     *     a rail is the route back to the sandbox-withdrawal P0.
+     *     server-side from `PAY_CHECKOUT_RAILS` via smart routing (geo/method/risk).
+     *     A hosted checkout that can name a rail is the route back to the
+     *     sandbox-withdrawal P0. Country is a routing dim, not a rail name.
+     *     Risk comes from operator `PAY_CHECKOUT_RISK_BAND`, never the payer.
      *   · A SANDBOX RAIL IS REFUSED on the public surface under `live-only`,
      *     even though sandbox `authorize`/`capture` are allowed on the merchant
      *     integration path. See `assertRailMayAcceptPublicPayment`.
@@ -195,6 +197,10 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             amount: amountSchema.optional(),
             /** Honoured only on a link that fixes no currency. Otherwise ignored. */
             assetId: assetIdSchema.optional(),
+            /** Payer-stated ISO country. Blank → pay.routing_input_missing. Not a rail id. */
+            geoCountry: z.string().max(8).optional(),
+            /** Method (`crypto`/`card`), never a rail adapter id. */
+            method: z.string().max(32).optional(),
           }),
         )
         .output(z.object({ sessionToken: z.string(), session: checkoutSessionView }))
@@ -204,6 +210,8 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
               linkToken: input.token,
               amount: input.amount === undefined ? undefined : parseAmount(input.amount),
               assetId: input.assetId,
+              geoCountry: input.geoCountry,
+              method: input.method,
             });
             return { sessionToken, session };
           }),
@@ -1440,6 +1448,10 @@ function toTrpcError(err: unknown): unknown {
       /** The caller is anonymous and opening rows in our database. */
       case 'pay.checkout_busy':
         return 'TOO_MANY_REQUESTS' as const;
+      case 'pay.routing_input_missing':
+        return 'BAD_REQUEST' as const;
+      case 'pay.routing_no_rail':
+        return 'PRECONDITION_FAILED' as const;
       case 'pay.invalid_transition':
       case 'pay.capture_exceeds_authorized':
       case 'pay.refund_exceeds_captured':
