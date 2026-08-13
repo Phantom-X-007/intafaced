@@ -5,11 +5,7 @@ import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { MemoryAccrualStore } from './accrual-store.js';
-import {
-  AFFILIATE_PRODUCER_PATH,
-  AFFILIATE_PRODUCER_SOURCE_BY_SERVICE,
-  registerAffiliateProducerAccrue,
-} from './producer-accrue.js';
+import { AFFILIATE_PRODUCER_PATH, AFFILIATE_PRODUCER_SOURCE_BY_SERVICE, registerAffiliateProducerAccrue } from './producer-accrue.js';
 
 const SECRET = 'test-internal-service-secret-32ch!!';
 const PAYER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
