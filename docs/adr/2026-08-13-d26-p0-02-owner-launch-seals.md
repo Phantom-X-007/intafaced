@@ -77,7 +77,7 @@ Published in `.env.example`. Compose still passes `${TRADE_FUTURES_PROFIT_SOURCE
 
 ### 5. Still unpublished (launch-closed)
 
-- `MARKET_HOUSE_COMMISSION_BPS` — blank. `0` only if Denon later wants an explicit free-cut.
+- `MARKET_HOUSE_COMMISSION_BPS` — **owner published `0`** (2026-08-13 explicit free-cut in `.env.example`). Compose still has no default. Unset on a host still refuses.
 - Pay fee / PSP bps — Class X.
 - `TRADE_COPY_JURISDICTION_LAW` — counsel / Nitro.
 - Token emission / buyback / burn / staking magnitudes.
@@ -88,7 +88,7 @@ Published in `.env.example`. Compose still passes `${TRADE_FUTURES_PROFIT_SOURCE
 ## What agents must not do
 
 - Change these percentages in `svc-trade` / `svc-identity` callers to “unblock” a tracker row.
-- Seed `MARKET_HOUSE_COMMISSION_BPS` or a geo allowlist because this ADR landed.
+- Seed a **non-zero** `MARKET_HOUSE_COMMISSION_BPS` or a compose `:-0` default. Owner published `0` in `.env.example` (2026-08-13); that is the number click, not a silent compose seed.
 - Treat unpublished copy jurisdictions as “worldwide”.
 - Capitalise the profit pot from treasury or invent an insurance fund.
 
