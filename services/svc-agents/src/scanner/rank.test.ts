@@ -21,14 +21,11 @@ function sealedOpts(extra: Parameters<typeof rankFixtures>[1] = {}) {
 }
 
 describe('scanner rankFixtures (Stage-1 fixtures)', () => {
-  it('D26-P1-A3: blank P0-11 → refuse ranked signals (no invent alpha)', () => {
+  it('D26-P1-A3: omitted law uses production sealed recipe (P0-11 on tip)', () => {
     const r = rankFixtures([row({ marketId: 'BTC-USD' })], { now: NOW });
-    expect(r).toEqual({
-      status: 'refuse',
-      reason: 'signal_inputs_law_blank',
-      userMessageKey: 'agents.scanner.tier_closed',
-      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
-    });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.signals[0]?.marketId).toBe('BTC-USD');
   });
 
   it('D26-P1-A3: unpublished law → refuse even with complete fixtures', () => {

@@ -1135,7 +1135,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.spot'],
-    note: '**D26-P1-A3 2026-08-12:** Ranked signals refuse until D26-P0-11 signal-inputs law sealed (`signal_inputs_law_blank`). Stage-1/2 rank paths + metered runSession gated. STILL NOT done: owner seal of P0-11 inputs; live spot tickers (Class X). Not tracker done until sealed law + live data path.',
+    note: '**D26-P1-A3 2026-08-13:** P0-11 sealed — production default is abs_change_x_log_volume + last/volume24h/change24hBps (adr/2026-08-12-scanner-signal-inputs-law.md). Omitted law on public doors uses that constant; explicit unpublished still refuses. STILL NOT done: live spot tickers (Class X). Not tracker done until live data path.',
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',

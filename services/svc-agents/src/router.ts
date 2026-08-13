@@ -12,7 +12,7 @@ import { scannerAgentGuardrail } from './scanner/guardrail.js';
 import { invokeScannerDataTool } from './scanner/data-tools.js';
 import { scannerTierGate } from './scanner/tier-gate.js';
 import { runScannerRankSession } from './scanner/session-run.js';
-import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './scanner/signal-inputs-law.js';
+import { resolveScannerSignalInputsLaw, SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './scanner/signal-inputs-law.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
@@ -602,7 +602,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             marketPlane: z.enum(['live', 'dark']).optional(),
             marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
             now: z.string().datetime().optional(),
-            /** D26-P0-11. Blank / omitted → refuse ranked signals (D26-P1-A3). */
+            /** D26-P0-11. Omitted → production sealed v1 recipe. Explicit unpublished still refuses. */
             signalInputsLaw: z
               .union([
                 z.object({ published: z.literal(false) }),
@@ -656,7 +656,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.marketPlane === undefined ? {} : { marketPlane: input.marketPlane }),
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
-            signalInputsLaw: input.signalInputsLaw ?? null,
+            signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
           });
           // Strip readonly for the wire shape (zod output is mutable arrays).
           if (result.status === 'ok') {
@@ -1006,7 +1006,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             tierLaw: input.law ?? null,
             userTier: input.userTier,
             tickers: input.tickers,
-            signalInputsLaw: input.signalInputsLaw ?? null,
+            signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
           });
@@ -1157,7 +1157,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               feeAssetId,
               plane: input.plane,
               tierLaw: input.law ?? null,
-              signalInputsLaw: input.signalInputsLaw ?? null,
+              signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
               userTier: input.userTier,
               tickers: input.tickers,
               ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
