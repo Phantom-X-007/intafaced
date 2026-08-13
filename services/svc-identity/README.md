@@ -105,7 +105,7 @@ Modules may still call `rank.awardXp` directly — it is a `serviceProcedure` on
 
 **This service holds no balances of its own.** Sub-account revoke still soft-disables only — never posts, never sweeps (same rule as bank space archive). `sub_accounts.id` is what the ledger's `subaccount` owner type keys on.
 
-**Affiliate payout is the one ledger write path.** When `LEDGER_URL` is set and the owner has published fee-share tiers (`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON`), `affiliates.payout` posts through existing ledger recipes (`sweepFeesToRewards` → `rewardPay`). No recipe is invented here. Without published rates or without a ledger client the procedure refuse-closes and moves nothing.
+**Affiliate payout is the one ledger write path.** When `LEDGER_URL` is set and the owner has published fee-share tiers (`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` — D26-P0-02 hops 0–2 at 0.10/0.05/0.02 in `.env.example`), `affiliates.payout` posts through existing ledger recipes (`sweepFeesToRewards` → `rewardPay`). No recipe is invented here. Without a ledger client the procedure refuse-closes and moves nothing.
 
 **D26-P1-O2 accrual authority:** durable `affiliates.accrue` walks the referral tree only under owner-published law — unset → `affiliate.accrual.rates_unset`; per-call tiers → `affiliate.accrual.invent_refused`. Dry-run may simulate tiers. No second money book.
 

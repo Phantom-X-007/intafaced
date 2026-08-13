@@ -274,9 +274,11 @@ describe('svc-trade boots on shipped configuration', () => {
    */
   it('the futures profit source wiring does not throw on the shipped value', () => {
     const shippedValue = shipped.get('TRADE_FUTURES_PROFIT_SOURCE');
-    expect(shippedValue).toBe('');
+    expect(shippedValue).toBe('house:fees:trade:available');
     expect(() => optionalProfitSourceFromConfig(shippedValue)).not.toThrow();
-    expect(optionalProfitSourceFromConfig(shippedValue)).toBeNull();
+    const source = optionalProfitSourceFromConfig(shippedValue);
+    expect(source).not.toBeNull();
+    expect(source?.configured).toBe('house:fees:trade:available');
   });
 
   /**
@@ -297,14 +299,11 @@ describe('svc-trade boots on shipped configuration', () => {
   });
 
   /**
-   * `.env.example` must keep the variable UNSET. A value written there would be
-   * this repository choosing the account that funds real payouts, which the ADR
-   * reserves to the owner — and it would also make the test above vacuous.
+   * D26-P0-02 / PKT-B5: owner published the recipe account in `.env.example`.
+   * Compose still has no default — a host that blanks .env keeps profit refused.
    */
-  it('.env.example still leaves the profit source to the owner', () => {
-    expect(envExample.has('TRADE_FUTURES_PROFIT_SOURCE')).toBe(false);
-    // Documented, though: an operator has to be able to find out it exists.
-    expect(read('.env.example')).toMatch(/TRADE_FUTURES_PROFIT_SOURCE/);
+  it('.env.example publishes the owner-named profit source (PKT-B5)', () => {
+    expect(envExample.get('TRADE_FUTURES_PROFIT_SOURCE')).toBe('house:fees:trade:available');
   });
 
   /**
@@ -314,6 +313,20 @@ describe('svc-trade boots on shipped configuration', () => {
    */
   it('compose passes the profit source through with no default value', () => {
     expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_PROFIT_SOURCE:\s*\$\{TRADE_FUTURES_PROFIT_SOURCE:-\}/);
+  });
+
+  it('shipped copy fee-share JSON is D26-P0-02 owner law', async () => {
+    const { parseCopyFeeShareLawJson } = await import('./copy/fee-share-law.js');
+    const raw = shipped.get('TRADE_COPY_FEE_SHARE_LAW') ?? '';
+    const law = parseCopyFeeShareLawJson(raw);
+    expect(law.published).toBe(true);
+    if (law.published) {
+      expect(law.leaderShareBps).toBe(1000);
+      expect(law.earningsCapPerFollower).toBe('1000.00');
+      expect(law.decayRoundTrips).toBe(50);
+      expect(law.decayShareBps).toBe(5000);
+    }
+    expect(shipped.get('TRADE_COPY_JURISDICTION_LAW') ?? '').toBe('');
   });
 
   /**

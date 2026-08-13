@@ -3,7 +3,7 @@
   "boardId": "D26-P0-18",
   "title": "Owner ruling packet — tip index of every open owner decision",
   "updated": "2026-08-13",
-  "tipAtWrite": "93f6c777",
+  "tipAtWrite": "a8e3effe",
   "purpose": "Single machine-readable index so open owner decisions are not scattered across packets, Class X checklists, and lane-stop parks. Completeness for D26-P0-18 is this file + the human packets it points at — not a tip-bump.",
   "humanPacket": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
   "humanPacketPartTwo": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
@@ -31,15 +31,16 @@
     },
     {
       "id": "D26-P0-02",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "DIRECTION §8 rates / fee-shares",
-      "blocks": ["trade.copy", "market.commerce", "ops.affiliates", "pay fee tables"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "blocks": ["trade.copy geo (P0-15)", "pay fee tables Class X", "MARKET_HOUSE_COMMISSION_BPS blank"],
+      "primaryDoc": "docs/adr/2026-08-13-d26-p0-02-owner-launch-seals.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#3--the-8-rate-fee-and-share-numbers--and-the-mechanism",
       "answerShape": "named_params_in_authority_or_launch_closed",
       "priority": 2,
-      "related": ["D26-P0-10", "D26-P0-15", "PAYOUT-01"]
+      "related": ["D26-P0-10", "D26-P0-15", "PAYOUT-01", "PKT-B5"],
+      "notes": "2026-08-13 Denon: copy leaderShareBps=1000 cap 1000.00 decay 50/5000; affiliate hops 0-2 rates 0.10/0.05/0.02; marketplace bps stay blank; pay tables Class X; copy geo still P0-15."
     },
     {
       "id": "D26-P0-03",
@@ -136,7 +137,7 @@
       "related": ["D26-P0-02"],
       "answerShape": "commission_authority_plus_refuse_blank",
       "priority": 3,
-      "notes": "2026-08-13 seal: blank MARKET_HOUSE_COMMISSION_BPS = market.commission_not_configured. No invented bps. Magnitude remains P0-02."
+      "notes": "2026-08-13 seal: blank MARKET_HOUSE_COMMISSION_BPS = market.commission_not_configured. P0-02 2026-08-13: magnitude stays blank (launch-closed). Explicit 0 only if owner later wants a free-cut."
     },
     {
       "id": "D26-P0-11",
@@ -234,26 +235,28 @@
     },
     {
       "id": "PKT-B5",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Which account funds realised futures profit (TRADE_FUTURES_PROFIT_SOURCE)",
       "blocks": ["futuresRealizeProfit"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-d26-p0-02-owner-launch-seals.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#5--which-account-funds-realised-futures-profit",
-      "related": ["D26-P0-09"],
+      "related": ["D26-P0-09", "D26-P0-02"],
       "answerShape": "named_house_or_fee_account_no_default",
-      "priority": 2
+      "priority": 2,
+      "notes": "2026-08-13 Denon: house:fees:trade:available (the account futuresRealizeProfit already draws from). Published in .env.example; compose still has no default."
     },
     {
       "id": "PKT-B6",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Turning funding on for a market",
       "blocks": ["TRADE_FUTURES_JOBS_ENABLED funding path"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-d26-p0-02-owner-launch-seals.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#6--turning-funding-on-for-a-market",
       "answerShape": "per_market_owner_enable",
-      "priority": 4
+      "priority": 4,
+      "notes": "2026-08-13 Denon: funding stays OFF until a listed market is explicitly enabled. No invented |rate| ceiling."
     },
     {
       "id": "PKT-C7",
@@ -314,14 +317,15 @@
     },
     {
       "id": "PAYOUT-01",
-      "status": "pending_click",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Affiliate payout handoff — hops / fee pool / atomicity / multi-beneficiary",
       "blocks": ["ops.affiliates payout"],
       "primaryDoc": "docs/OWNER-RULINGS-FROM-DENON-PAYOUT-2026-08-09.md",
       "related": ["D26-P0-02"],
       "answerShape": "click_or_override_recommended_defaults",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-13 Denon click: hops=5, identity pool + per-event sourceModule, replay-safe keys, no multi-beneficiary recipe."
     },
     {
       "id": "CLASS-X-NOTIFY",
@@ -426,5 +430,5 @@
       "priority": 5
     }
   ],
-  "answerFirst": ["D26-P0-02", "CLASS-X-WALLET-SECRETS", "D26-P0-04"]
+  "answerFirst": ["CLASS-X-WALLET-SECRETS", "D26-P0-15", "D26-P0-04"]
 }

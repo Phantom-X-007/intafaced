@@ -339,7 +339,7 @@ The service checks these; the database enforces them regardless.
 
 ## Copy deepen (D26-P1-T3)
 
-Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. Owner rates stay refuse-closed until **D26-P0-02** (`TRADE_COPY_FEE_SHARE_LAW`); served jurisdictions stay refuse-closed until **D26-P0-15** (`TRADE_COPY_JURISDICTION_LAW` — ADR `docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md`). Agents never invent a geo allowlist or `leader_share_bps`.
+Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. **D26-P0-02** published `TRADE_COPY_FEE_SHARE_LAW` (1000 bps of our fee). Served jurisdictions stay refuse-closed until **D26-P0-15** (`TRADE_COPY_JURISDICTION_LAW` — ADR `docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md`). Agents never invent a geo allowlist.
 
 `copy.killFeeShare` and `copy.unfollow` are unilateral controls and remain reachable while the owner fee-share rates are blank. Every mirror plan, fee-share settlement, kill, and unfollow is serialized per follow:
 
@@ -415,7 +415,7 @@ With it on, futures orders match on the **same** svc-matching book as spot, unde
 - **No funding.** Turning funding on for a market at all is reserved to the owner
   (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`), and it still needs `TRADE_FUTURES_JOBS_ENABLED` plus an
   explicit `TRADE_FUTURES_FUNDING_MARKET_IDS`.
-- **No payout source.** `TRADE_FUTURES_PROFIT_SOURCE` still has no default, on purpose.
+- **No payout source invent.** `TRADE_FUTURES_PROFIT_SOURCE` is owner-named in `.env.example` as `house:fees:trade:available` (PKT-B5). Compose still has no default.
 
 **Convert and TWAP stay spot-only on both settings** (`assertSpotSurface`). They were spot-only for free while
 `assertTradable` refused every non-spot market; now that it does not, they refuse by name, because neither has been
