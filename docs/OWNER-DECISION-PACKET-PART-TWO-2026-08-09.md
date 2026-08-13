@@ -79,10 +79,9 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-10 · Listings / treasury / house commission law
 
-**Blocks:** `market.commerce` commission invent.  
-**Overlaps:** P0-02 market commission rate.  
-**Question:** where does house commission authority live, and does blank refuse?  
-**Recommendation:** authority store + refuse-blank; same pattern as copy fee-share residual. Numbers still P0-02.
+**Status:** **SEALED 2026-08-13 (D26-P0-10)** — [`adr/2026-08-13-house-commission-authority.md`](adr/2026-08-13-house-commission-authority.md).  
+**Blocks:** nothing on mechanism; **P0-02** still owns the bps.  
+**Ruling:** authority is host `MARKET_HOUSE_COMMISSION_BPS` (no in-repo default). Blank is `market.commission_not_configured`. Explicit `0` is owner free-commission. House cut only via `marketPurchase` → `houseFees(market)`. Agents do not seed a rate.
 
 ---
 
@@ -158,5 +157,5 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## What to answer next (aligned with part one)
 
-1. **P0-02 / P0-10** — rates + commission authority (or launch-closed).
+1. **P0-02** — named §8 rates (or launch-closed). Commission **mechanism** is sealed (P0-10); the number is not.
 2. Class X wallet rotation / notify credentials when you want out-of-app margin calls.

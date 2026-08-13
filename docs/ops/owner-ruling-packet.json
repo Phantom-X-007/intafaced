@@ -126,15 +126,16 @@
     },
     {
       "id": "D26-P0-10",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Listings / treasury / house commission law",
       "blocks": ["market.commerce"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-house-commission-authority.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-10--listings--treasury--house-commission-law",
       "related": ["D26-P0-02"],
       "answerShape": "commission_authority_plus_refuse_blank",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-13 seal: blank MARKET_HOUSE_COMMISSION_BPS = market.commission_not_configured. No invented bps. Magnitude remains P0-02."
     },
     {
       "id": "D26-P0-11",
@@ -424,5 +425,5 @@
       "priority": 5
     }
   ],
-  "answerFirst": ["D26-P0-02", "D26-P0-10", "CLASS-X-WALLET-SECRETS", "D26-P0-04"]
+  "answerFirst": ["D26-P0-02", "CLASS-X-WALLET-SECRETS", "D26-P0-04"]
 }

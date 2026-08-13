@@ -1397,7 +1397,8 @@ export const FEATURES = [
     dependsOn: ['market.vendors'],
     requires: ['services/svc-market'],
     note:
-      'C1+C2 ON MAIN 2026-08-09 — #1189 (listings + one-time purchase + house commission Class M). ' +
+      'D26-P0-10 SEALED 2026-08-13 (adr/2026-08-13-house-commission-authority.md): authority = host ' +
+      'MARKET_HOUSE_COMMISSION_BPS; blank refuses; 0 is explicit owner free-cut; no agent-invented bps. ' +
       'Money only via recipes.marketPurchase → houseFees(market); blank MARKET_HOUSE_COMMISSION_BPS refuses ' +
       'market.commission_not_configured (never invents free commission; 0 only when owner sets). ' +
       'Crash re-drive settles from claim snapshot (not live env bps). Over-capacity after unstake: oldest-first ' +
