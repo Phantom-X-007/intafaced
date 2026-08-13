@@ -158,7 +158,5 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## What to answer next (aligned with part one)
 
-1. **P0-03** — one venue sentence (highest unblock per finished code).
-2. **P0-02 / P0-15 / P0-10** — rates + jurisdictions + commission authority (or launch-closed).
-3. **P0-17 + P0-14** — insurance fund policy and mark dust floors before live perps.
-4. Class X wallet rotation / notify credentials when you want out-of-app margin calls.
+1. **P0-02 / P0-10** — rates + commission authority (or launch-closed).
+2. Class X wallet rotation / notify credentials when you want out-of-app margin calls.
