@@ -93,40 +93,24 @@
     {
       "id": "market.settlement",
       "fileEnds": "ExchangeTradeConsumer.java",
-      "topics": [
-        "exchange-trade",
-        "exchange-order-completed",
-        "exchange-order-cancel-success"
-      ],
+      "topics": ["exchange-trade", "exchange-order-completed", "exchange-order-cancel-success"],
       "valueMove": "spot settle / refund via exchange-core service",
       "disposition": "THROW",
       "note": "HTTP door cannot reach Kafka; service throw is the control",
       "present": true,
       "classId": "market:ExchangeTradeConsumer.java",
-      "topicsFound": [
-        "exchange-trade",
-        "exchange-order-completed",
-        "exchange-order-cancel-success"
-      ]
+      "topicsFound": ["exchange-trade", "exchange-order-completed", "exchange-order-cancel-success"]
     },
     {
       "id": "wallet.finance",
       "fileEnds": "FinanceConsumer.java",
-      "topics": [
-        "deposit",
-        "withdraw",
-        "withdraw-notify"
-      ],
+      "topics": ["deposit", "withdraw", "withdraw-notify"],
       "valueMove": "deposit credit + withdraw chain send then book",
       "disposition": "§13",
       "note": "chain send before dual-book throw on withdraw path; module absent from compose today",
       "present": true,
       "classId": "wallet:FinanceConsumer.java",
-      "topicsFound": [
-        "deposit",
-        "withdraw",
-        "withdraw-notify"
-      ]
+      "topicsFound": ["deposit", "withdraw", "withdraw-notify"]
     }
   ],
   "walletRpc": {
