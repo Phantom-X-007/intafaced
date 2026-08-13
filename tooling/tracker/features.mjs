@@ -382,8 +382,9 @@ export const FEATURES = [
     note:
       'CLAIM 2026-08-12 Denon agent (feat/copy-trading-deepen-2026-08-12): SOCKET §13 `socket.copy-auto-mirror-place` — ' +
       'placeMirror refuse-closed after planMirror; never invent spot fills. ' +
-      'Prior: deskStatus.sovereign + P0-02/P0-15 residual cites; kill/unfollow real (#1692); ' +
-      'jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW — never invent geo. ' +
+      'D26-P0-15 SEALED 2026-08-12: jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW ' +
+      '(adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo list. ' +
+      'Prior: deskStatus.sovereign + P0-02 residual cites; kill/unfollow real (#1692). ' +
       'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
       'Still open: owner rates (P0-02) + region table (P0-15 content); session-key caps (protocol); closing the place socket with a real follower wire.',
   }),
