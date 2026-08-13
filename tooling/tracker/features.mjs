@@ -1462,8 +1462,9 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
-      'D26-P0-02 SEALED 2026-08-13: IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON hops 0–2 at 0.10/0.05/0.02; PAYOUT-01 clicked (depth 5, identity pool, replay-safe). Mountain stays wip: svc-pay caller + identity LEDGER_URL + Vue. ' +
-      'D26-P1-O2 2026-08-13: identity accrue door LANDED #1794; svc-trade settleFill best-effort POST after house fees (412/down never unwind fill; no invent rates). svc-pay caller not this PR. ' +
+      'D26-P1-O2 2026-08-13: svc-pay settleWindow best-effort POST after merchantSettlement (412/down never unwind; sourceModule=pay; no invent rates). ' +
+      'D26-P0-02 SEALED 2026-08-13 #1799: IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON hops 0–2 at 0.10/0.05/0.02; PAYOUT-01 clicked (depth 5). Mountain stays wip: identity LEDGER_URL + Vue. ' +
+      'D26-P1-O2 2026-08-13: identity accrue door LANDED #1794; svc-trade settleFill best-effort POST after house fees (412/down never unwind fill; no invent rates). ' +
       'D26-P1-O2 SEALED 2026-08-12: accrual tree under rate authority — durable `affiliates.accrue` uses owner-published ' +
       '`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; ' +
       'dry-run may simulate; Stage `treeStatus` exposes `rateAuthorityPublished` + status line (tier count only, never rate invent); ' +

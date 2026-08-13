@@ -192,6 +192,12 @@ const schema = serviceEnvSchema
       PAY_CHECKOUT_RISK_BAND: z.string().optional().default(''),
 
       /**
+       * svc-identity base for D26-P1-O2 affiliate accrue after merchantSettlement.
+       * Blank → noop port (settlement still posts). Never invent rates.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * The prefix a BROWSER sees the hosted checkout under.
        *
        * svc-pay serves `/checkout`; svc-edge is the only public listener and

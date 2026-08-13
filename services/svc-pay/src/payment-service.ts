@@ -28,6 +28,7 @@ import { assertPayoutDestinationKind, DestinationKindError } from './payout-dest
 import { settlementLedgerPlan } from './settlement-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
+import { affiliateLegAfterPaySettlement, fireAffiliateAccrue, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
 
 /**
  * svc-pay — THE PAYMENTS CORE (§6.1).
@@ -403,6 +404,12 @@ export interface PayServiceOptions {
     type: 'payment.authorized' | 'payment.captured' | 'payment.refunded' | 'payment.failed';
     payment: PaymentView;
   }) => void | Promise<void>;
+
+  /**
+   * D26-P1-O2 — identity affiliate accrue after house pay fees post.
+   * Default noop. Failures must not unwind settlement.
+   */
+  readonly affiliateAccrue?: AffiliateAccruePort;
 }
 
 /** One entry in `checkoutRails`: which adapter, and what `payments.method` it writes. */
@@ -540,6 +547,7 @@ export class PayService {
         payment: PaymentView;
       }) => void | Promise<void>)
     | undefined;
+  private readonly affiliateAccrue: AffiliateAccruePort;
 
   constructor(
     private readonly sql: Sql,
@@ -559,6 +567,7 @@ export class PayService {
     this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
     this.now = options.now ?? (() => new Date());
     this.afterPaymentEvent = options.afterPaymentEvent;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
   }
 
   /**
@@ -2124,7 +2133,7 @@ export class PayService {
     // not finish the move; captured volume stays in clearing until reopen.
     this.assertMerchantActive(merchant);
 
-    return transaction(
+    const posted = await transaction(
       this.sql,
       async (tx) => {
         const rows = await tx<SettlementRow[]>`
@@ -2199,6 +2208,22 @@ export class PayService {
         return toSettlement({ ...row, status: 'posted', payout_method: 'ledger' });
       },
       { isolation: 'read committed', maxAttempts: 5 },
+    );
+    await this.notifyPayAffiliateAccrue(posted, merchant.userId);
+    return posted;
+  }
+
+  /** Best-effort; never throws. Settlement already committed. */
+  private async notifyPayAffiliateAccrue(posted: SettlementRecord, merchantUserId: string): Promise<void> {
+    if (posted.status !== 'posted') return;
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterPaySettlement({
+        settlementId: posted.id,
+        merchantUserId,
+        feeAmount: posted.fees,
+        feeAsset: posted.assetId,
+      }),
     );
   }
 
