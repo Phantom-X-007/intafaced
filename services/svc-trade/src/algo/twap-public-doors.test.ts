@@ -22,6 +22,7 @@ import { createTradeRouter, type TradeRouter } from '../router.js';
 import { TradeError, type OrderSide } from '../spot/types.js';
 import type { TradeService } from '../spot/trade-service.js';
 import { MemoryTwapParentStore } from './parent-store.js';
+import { hydrateAlgoIfMissing, persistAlgoMutation } from './hydrate-on-mutate.js';
 import { presentAlgoProgress, FORBIDDEN_PARENT_MONEY_KEYS } from './present.js';
 import { TwapEngine, type TwapEnginePorts } from './twap-engine.js';
 import type { AlgoQuotedMark, CreateTwapInput, TwapParent } from './types.js';
@@ -180,13 +181,16 @@ function makeTwapTrade(opts: { liquidity?: boolean; mark?: boolean; algoEnabled?
       return presentAlgoProgress(parent, 0n);
     },
     async pauseAlgo(p: Principal, parentId: string) {
-      return engine.pause(p.userId, parentId);
+      await hydrateAlgoIfMissing(engine, store, p.userId, parentId);
+      return persistAlgoMutation(engine, store, engine.pause(p.userId, parentId));
     },
     async resumeAlgo(p: Principal, parentId: string) {
-      return engine.resume(p.userId, parentId);
+      await hydrateAlgoIfMissing(engine, store, p.userId, parentId);
+      return persistAlgoMutation(engine, store, engine.resume(p.userId, parentId));
     },
     async cancelAlgo(p: Principal, parentId: string) {
-      return engine.cancel(p.userId, parentId);
+      await hydrateAlgoIfMissing(engine, store, p.userId, parentId);
+      return persistAlgoMutation(engine, store, await engine.cancel(p.userId, parentId));
     },
     async tickAlgo(parentId: string) {
       return engine.tick(parentId);

@@ -416,9 +416,11 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['trade.spot'],
     note:
+      'W4 cancel-fail parks paused + haltReason cancel_incomplete (resume refused until re-cancel). tickAll isolation landed. ' +
+      '2026-08-13 hydrate-on-mutate: pause/resume/cancel load durable store after restart and await save (onChange was fire-and-forget). ' +
+      'VWAP/POV out — market maturity (owner). Principal durability still SOCKET §13 (in-memory map; place after restart halt principal_unavailable). ' +
       'Owner released 2026-08-08. D-S-04 TWAP Stage #1002 + ADR #1145 + #1193 (re-space, cancel atomicity, scheduler mounted default OFF via TRADE_ALGO_JOBS_ENABLED). ' +
-      'Create works when TRADE_ALGO_ENABLED; children fire only when jobs ON. VWAP/POV out — market maturity (owner), not missing candles. ' +
-      'Residual craft: cancel-fail still leaves parent active (W4), tickAll isolation, hydrate on mutate, principal durability socket. Tip re-verified W4.',
+      'Create works when TRADE_ALGO_ENABLED; children fire only when jobs ON.',
     requires: ['services/svc-trade/src/algo'],
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {

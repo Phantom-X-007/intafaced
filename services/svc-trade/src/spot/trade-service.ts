@@ -52,6 +52,7 @@ import {
   type TwapParent,
   type TwapParentStore,
 } from '../algo/index.js';
+import { hydrateAlgoIfMissing, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import {
   TradeError,
   type Candle,
@@ -2310,12 +2311,14 @@ export class TradeService {
 
   async pauseAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
-    return this.algo.pause(principal.userId, parentId);
+    await hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
+    return persistAlgoMutation(this.algo, this.algoStore, this.algo.pause(principal.userId, parentId));
   }
 
   async resumeAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
-    return this.algo.resume(principal.userId, parentId);
+    await hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
+    return persistAlgoMutation(this.algo, this.algoStore, this.algo.resume(principal.userId, parentId));
   }
 
   async cancelAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
@@ -2325,7 +2328,8 @@ export class TradeService {
     // without a durable principal grant (SOCKET §13) — cancel is different:
     // the user is presenting authority right now.
     this.algoPrincipals.set(principal.userId, principal);
-    return this.algo.cancel(principal.userId, parentId);
+    await hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
+    return persistAlgoMutation(this.algo, this.algoStore, await this.algo.cancel(principal.userId, parentId));
   }
 
   /** Drive one parent's next due slice (job host / tests). */
