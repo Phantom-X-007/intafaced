@@ -776,17 +776,16 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
-      'CLAIM 2026-08-12 Denon agent (feat/p2p-disputes-product-complete): deepen engine — `opened_via` party|timeout ' +
-      '(audit P3 honesty); `resolutionNotes` on wire; `disputes.backlog` for allowlisted moderators; ledger release/refund ' +
-      'unchanged via escrow recipes. PRIOR STAGE (#1007): allowlist · empty → `p2p.moderation_unreachable` · list/evidence/' +
-      'escalate-and-hold · natural-person rulings only. SOCKET / not agent-done: apps/admin dispute console (nitro-frontend-all); ' +
-      '`p2p:moderate` scope mint (DIRECTION §3 owner); who moderates = Class X env allowlist (do not invent); chat_thread_id ' +
-      'product; outbox (events plane). Auto-ruling forbidden.',
+      '**DONE 2026-08-13:** mechanism on tip — open/list/backlog/resolve, `opened_via`, `resolutionNotes`, empty ' +
+      '`P2P_MODERATOR_USER_IDS` → `p2p.moderation_unreachable`, API keys cannot rule, SQL invariant 0003 (no auto-ruling). ' +
+      'Money only existing escrow release/refund recipes. Pin: `disputes-tracker-pin.test.ts`. Residual not blocking: ' +
+      'apps/admin Vue (`nitro-frontend-all`); `p2p:moderate` scope mint (DIRECTION §3); who-moderates Class X env ' +
+      'allowlist (do not invent ids); chat_thread_id; events outbox.',
   }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', {
     module: 'p2p',
