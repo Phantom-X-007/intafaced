@@ -246,6 +246,8 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      # D26-P0-02 owner-published accrual tiers — pass-through, no compose default.
+      IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: ${IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4002']
     healthcheck: *healthcheck
@@ -336,32 +338,22 @@ services:
       # It does NOT turn futures on as a product. Funding still needs
       # TRADE_FUTURES_JOBS_ENABLED, an explicit market list, and
       # TRADE_FUTURES_FUNDING_MAX_ABS_RATE (no product default — D2 residual);
-      # realised profit still needs TRADE_FUTURES_PROFIT_SOURCE, which has no
-      # default on purpose (see below). This flag governs orderability only.
+      # realised profit still needs TRADE_FUTURES_PROFIT_SOURCE (PKT-B5 named
+      # in .env.example; compose still has no default). This flag governs
+      # orderability only.
       TRADE_FUTURES_ENABLED: ${TRADE_FUTURES_ENABLED:-false}
       # Absolute max |period funding rate| — empty refuses publish/settle.
       # Required when funding market ids are non-empty. No invented ceiling.
       TRADE_FUTURES_FUNDING_MAX_ABS_RATE: ${TRADE_FUTURES_FUNDING_MAX_ABS_RATE:-}
       # THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM — its balance is the
-      # ceiling, and a payout that would exceed it refuses rather than
-      # overdrawing (docs/adr/2026-08-05-futures-risk-and-mark-law.md).
-      #
-      # Passed through with NO DEFAULT, and that stays. Which pot funds profit
-      # is a fee and revenue recipe and an owner decision (DIRECTION §8 item 6),
-      # so a value written here would be this file quietly making it. Set it in
-      # `.env` — `.env.example` has the format and the one spelling the current
-      # recipe admits.
-      #
-      # What CHANGED is what empty means. svc-trade used to refuse to START on
-      # it, so this line plus a commented-out `.env.example` entry meant
-      # `pnpm platform:up` from a clean clone crash-looped the container that
-      # serves spot orders, ticker, orderbook, balances, fees, positions and the
-      # websocket feeds. A container that will not start is NOT a better outcome
-      # than one that starts with futures switched off — it is the same unmade
-      # decision with the whole exchange attached to it. Empty now disables
-      # futures: opens are refused, no realised profit is paid, and nothing ever
-      # leaves a pot nobody chose, which is all the ADR asked for.
+      # ceiling (docs/adr/2026-08-05-futures-risk-and-mark-law.md). PKT-B5
+      # 2026-08-13 named `house:fees:trade:available` in `.env.example`. This
+      # line still has NO compose default — a host that blanks .env keeps
+      # futures profit refused; a typed-wrong pot still fails boot.
       TRADE_FUTURES_PROFIT_SOURCE: ${TRADE_FUTURES_PROFIT_SOURCE:-}
+      # D26-P0-02 copy fee-share JSON — pass-through. Geo stays unpublished.
+      TRADE_COPY_FEE_SHARE_LAW: ${TRADE_COPY_FEE_SHARE_LAW:-}
+      TRADE_COPY_JURISDICTION_LAW: ${TRADE_COPY_JURISDICTION_LAW:-}
       # Options listing gate (trade.options / D7). Empty = refuse kind=options
       # listing. Opaque stamp only — never invent fixing source/window/payor.
       TRADE_OPTIONS_SETTLEMENT_FIXING: ${TRADE_OPTIONS_SETTLEMENT_FIXING:-}

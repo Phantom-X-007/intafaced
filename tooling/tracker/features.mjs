@@ -386,13 +386,15 @@ export const FEATURES = [
       'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts',
     ],
     note:
+      'D26-P0-02 SEALED 2026-08-13: TRADE_COPY_FEE_SHARE_LAW published (leaderShareBps=1000, cap 1000.00, decay 50/5000) — ' +
+      'adr/2026-08-13-d26-p0-02-owner-launch-seals.md. Follow still refuse-closed on D26-P0-15 geo. ' +
       'CLAIM 2026-08-12 Denon agent (feat/copy-trading-deepen-2026-08-12): SOCKET §13 `socket.copy-auto-mirror-place` — ' +
       'placeMirror refuse-closed after planMirror; never invent spot fills. ' +
       'D26-P0-15 SEALED 2026-08-12: jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW ' +
       '(adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo list. ' +
       'Prior: deskStatus.sovereign + P0-02 residual cites; kill/unfollow real (#1692). ' +
       'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      'Still open: owner rates (P0-02) + region table (P0-15 content); session-key caps (protocol); closing the place socket with a real follower wire.',
+      'Still open: region table (P0-15 content); session-key caps (protocol); closing the place socket with a real follower wire.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
@@ -1460,11 +1462,12 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
+      'D26-P0-02 SEALED 2026-08-13: IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON hops 0–2 at 0.10/0.05/0.02; PAYOUT-01 clicked (depth 5, identity pool, replay-safe). Mountain stays wip: svc-pay caller + identity LEDGER_URL + Vue. ' +
       'D26-P1-O2 2026-08-13: identity accrue door LANDED #1794; svc-trade settleFill best-effort POST after house fees (412/down never unwind fill; no invent rates). svc-pay caller not this PR. ' +
       'D26-P1-O2 SEALED 2026-08-12: accrual tree under rate authority — durable `affiliates.accrue` uses owner-published ' +
       '`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; ' +
       'dry-run may simulate; Stage `treeStatus` exposes `rateAuthorityPublished` + status line (tier count only, never rate invent); ' +
-      'payout still existing ledger recipes only (no invent commissions). Mountain stays wip/ready-not-done until owner rates + producer wire. ' +
+      'Mountain stays wip/ready-not-done until pay producer + ledger URL on identity. Owner rates are now published (D26-P0-02). ' +
       'Wave 13 L04 honesty: mixed sourceModule on one fee event refuses `affiliate.payout.mixed_source_module` (no multi-pool debit); treeStatus frozenCount = freezes on tree participants only (not global freeze ledger). ' +
       'Wave 10 #L05 / #1589 source_module on accruals (fee-pool provenance for payout sweep) — land before producer wire. ' +
       'Rate invent FIXED #1133 (2026-08-08): blank / unpublished accrual tiers refuse-closed; DEFAULT_ACCRUAL_TIERS gone. ' +
@@ -1475,15 +1478,12 @@ export const FEATURES = [
       'fan-out from durable accrual rows and posts it through EXISTING recipes (sweepFeesToRewards + rewardPay). No recipe added or edited — DIRECTION §3 ' +
       'owner carve-out. svc-identity gained @intafaced/ledger-client and a `Pick<LedgerClient,"post">` client (narrower than all seven siblings on purpose: ' +
       'a service that must hold no balance gets no balance read). ' +
-      'STILL `ready`, NOT `done`, AND THE REASON IS THE DELIVERABLE: every commission rate is DIRECTION §8 owner-only (item 10 reserves leader_share_bps ' +
-      '"and every other fee-share rate"; item 6 reserves fee/revenue recipes). With no published law the path refuses `affiliate.payout.rates_unset` and ' +
-      'moves nothing — asserted on BALANCES, not on a tRPC code. A payout engine refuse-closed on an owner rate is `ready`. ' +
+      'STILL `wip`, NOT `done`: rates are published (D26-P0-02) but svc-pay producer + identity LEDGER_URL + Vue remain. Blank env still refuses `affiliate.payout.rates_unset`. ' +
       'NEW HOLE CLOSED THAT WAS NOT IN THE BRIEF: resolveAccrualTiers accepts per-call operator `requestTiers`, which is defensible at accrual (writes a ' +
       'claim, moves nothing) and NOT at payout — paying "the rate on the row" would launder an operator-supplied rate into real money. Payout therefore ' +
       'ignores row.rate and requires every row to match the owner-published tier for its hop, else `affiliate.payout.rate_unpublished`. Compared numerically, ' +
       'so "0.10" vs "0.1" is not a false refuse an operator would "fix" by editing a rate. ' +
-      'OWNER RULING PENDING (not a rate, but it multiplies one): MAX_PAYOUT_TIER_DEPTH — one named constant in payout-engine.ts, conservatively equal to the ' +
-      'tree write-time cap DEFAULT_MAX_REFERRAL_DEPTH = 5. Each extra commissionable hop is a money decision. ' +
+      'PAYOUT-01 CLICKED 2026-08-13: MAX_PAYOUT_TIER_DEPTH = 5 (same as DEFAULT_MAX_REFERRAL_DEPTH). ' +
       'ATOMICITY, STATED HONESTLY: LedgerClient has no batch API and an all-legs single post would need a new multi-beneficiary recipe (owner carve-out), so ' +
       'the fan-out is replay-safe by key rather than one transaction — a crash mid-fan-out leaves the tree partly paid and re-running completes it, paying ' +
       'nobody twice. Keys are business-derived: `affiliate:<feeEventId>:<beneficiaryId>:h<hop>`, which IS the accrual unique constraint — no clock, no UUID. ' +
