@@ -1,7 +1,7 @@
 {
   "board": "D26-P2-02",
-  "generatedAt": "2026-08-12T09:46:18.182Z",
-  "headHint": "f7a915a6",
+  "generatedAt": "2026-08-13T03:31:19.616Z",
+  "headHint": "d3b8f311",
   "counts": {
     "javaAll": 897,
     "javaMain": 871,
@@ -10,37 +10,37 @@
   "doorRegistrations": [
     {
       "app": "admin",
-      "key": "admin:ApplicationConfig.java",
+      "classId": "admin:ApplicationConfig.java",
       "registered": true,
       "reason": "interceptor registered on /**"
     },
     {
       "app": "ucenter-api",
-      "key": "ucenter-api:ApplicationConfig.java",
+      "classId": "ucenter-api:ApplicationConfig.java",
       "registered": true,
       "reason": "interceptor registered on /**"
     },
     {
       "app": "otc-api",
-      "key": "otc-api:ApplicationConfig.java",
+      "classId": "otc-api:ApplicationConfig.java",
       "registered": true,
       "reason": "interceptor registered on /**"
     },
     {
       "app": "exchange-api",
-      "key": "exchange-api:ApplicationConfig.java",
+      "classId": "exchange-api:ApplicationConfig.java",
       "registered": true,
       "reason": "interceptor registered on /**"
     },
     {
       "app": "exchange",
-      "key": "exchange:ApplicationConfig.java",
+      "classId": "exchange:ApplicationConfig.java",
       "registered": true,
       "reason": "interceptor registered on /**"
     }
   ],
   "doorFragments": {
-    "key": "core:DualBookMoneyDoorInterceptor.java",
+    "classId": "core:DualBookMoneyDoorInterceptor.java",
     "fragments": [
       "/member/member-wallet/recharge",
       "/member/member-wallet/balance",
@@ -93,66 +93,82 @@
     {
       "id": "market.settlement",
       "fileEnds": "ExchangeTradeConsumer.java",
-      "topics": ["exchange-trade", "exchange-order-completed", "exchange-order-cancel-success"],
+      "topics": [
+        "exchange-trade",
+        "exchange-order-completed",
+        "exchange-order-cancel-success"
+      ],
       "valueMove": "spot settle / refund via exchange-core service",
       "disposition": "THROW",
       "note": "HTTP door cannot reach Kafka; service throw is the control",
       "present": true,
-      "key": "market:ExchangeTradeConsumer.java",
-      "topicsFound": ["exchange-trade", "exchange-order-completed", "exchange-order-cancel-success"]
+      "classId": "market:ExchangeTradeConsumer.java",
+      "topicsFound": [
+        "exchange-trade",
+        "exchange-order-completed",
+        "exchange-order-cancel-success"
+      ]
     },
     {
       "id": "wallet.finance",
       "fileEnds": "FinanceConsumer.java",
-      "topics": ["deposit", "withdraw", "withdraw-notify"],
+      "topics": [
+        "deposit",
+        "withdraw",
+        "withdraw-notify"
+      ],
       "valueMove": "deposit credit + withdraw chain send then book",
       "disposition": "§13",
       "note": "chain send before dual-book throw on withdraw path; module absent from compose today",
       "present": true,
-      "key": "wallet:FinanceConsumer.java",
-      "topicsFound": ["deposit", "withdraw", "withdraw-notify"]
+      "classId": "wallet:FinanceConsumer.java",
+      "topicsFound": [
+        "deposit",
+        "withdraw",
+        "withdraw-notify"
+      ]
     }
   ],
   "walletRpc": {
     "spendControllers": [
       {
         "module": "bitcoin",
-        "key": "bitcoin:WalletController.java",
+        "classId": "bitcoin:WalletController.java",
         "spendHttp": true,
         "disposition": "§13",
         "note": "real on-chain send surface — owner wallet-rpc perimeter / auth (not dual-book door)"
       },
       {
         "module": "ect",
-        "key": "ect:WalletController.java",
+        "classId": "ect:WalletController.java",
         "spendHttp": true,
         "disposition": "§13",
         "note": "real on-chain send surface — owner wallet-rpc perimeter / auth (not dual-book door)"
       },
       {
         "module": "erc-eusdt",
-        "key": "erc-eusdt:WalletController.java",
+        "classId": "erc-eusdt:WalletController.java",
         "spendHttp": true,
         "disposition": "§13",
         "note": "real on-chain send surface — owner wallet-rpc perimeter / auth (not dual-book door)"
       },
       {
         "module": "erc-token",
-        "key": "erc-token:WalletController.java",
+        "classId": "erc-token:WalletController.java",
         "spendHttp": true,
         "disposition": "§13",
         "note": "real on-chain send surface — owner wallet-rpc perimeter / auth (not dual-book door)"
       },
       {
         "module": "eth",
-        "key": "eth:WalletController.java",
+        "classId": "eth:WalletController.java",
         "spendHttp": true,
         "disposition": "§13",
         "note": "real on-chain send surface — owner wallet-rpc perimeter / auth (not dual-book door)"
       },
       {
         "module": "usdt",
-        "key": "usdt:WalletController.java",
+        "classId": "usdt:WalletController.java",
         "spendHttp": true,
         "disposition": "§13",
         "note": "real on-chain send surface — owner wallet-rpc perimeter / auth (not dual-book door)"
@@ -161,56 +177,56 @@
     "nonSpendControllers": [
       {
         "module": "act",
-        "key": "act:WalletController.java",
+        "classId": "act:WalletController.java",
         "spendHttp": false,
         "disposition": "NONE",
         "note": "no rpc transfer/withdraw mapping detected"
       },
       {
         "module": "bch",
-        "key": "bch:WalletController.java",
+        "classId": "bch:WalletController.java",
         "spendHttp": false,
         "disposition": "CLOSED",
         "note": "stub route only — no chain send helper in controller"
       },
       {
         "module": "bsv",
-        "key": "bsv:WalletController.java",
+        "classId": "bsv:WalletController.java",
         "spendHttp": false,
         "disposition": "CLOSED",
         "note": "stub route only — no chain send helper in controller"
       },
       {
         "module": "btm",
-        "key": "btm:WalletController.java",
+        "classId": "btm:WalletController.java",
         "spendHttp": false,
         "disposition": "CLOSED",
         "note": "stub route only — no chain send helper in controller"
       },
       {
         "module": "eos",
-        "key": "eos:WalletController.java",
+        "classId": "eos:WalletController.java",
         "spendHttp": false,
         "disposition": "NONE",
         "note": "no rpc transfer/withdraw mapping detected"
       },
       {
         "module": "ltc",
-        "key": "ltc:WalletController.java",
+        "classId": "ltc:WalletController.java",
         "spendHttp": false,
         "disposition": "CLOSED",
         "note": "stub route only — no chain send helper in controller"
       },
       {
         "module": "rpc-common",
-        "key": "rpc-common:RpcController.java",
+        "classId": "rpc-common:RpcController.java",
         "spendHttp": false,
         "disposition": "NONE",
         "note": "no rpc transfer/withdraw mapping detected"
       },
       {
         "module": "xmr",
-        "key": "xmr:WalletController.java",
+        "classId": "xmr:WalletController.java",
         "spendHttp": false,
         "disposition": "NONE",
         "note": "no rpc transfer/withdraw mapping detected"
@@ -218,12 +234,12 @@
     ],
     "cronSpenders": [
       {
-        "key": "eth-support:PaymentHandler.java",
+        "classId": "eth-support:PaymentHandler.java",
         "disposition": "§13",
         "note": "@Scheduled spender — HTTP interceptor cannot cover"
       },
       {
-        "key": "usdt:CoinCollectJob.java",
+        "classId": "usdt:CoinCollectJob.java",
         "disposition": "§13",
         "note": "@Scheduled spender — HTTP interceptor cannot cover"
       }

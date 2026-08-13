@@ -138,13 +138,13 @@ function findDoorRegistrations(javaFiles) {
       return parts.includes(app);
     });
     if (!match) {
-      rows.push({ app, key: null, registered: false, reason: 'ApplicationConfig missing' });
+      rows.push({ app, classId: null, registered: false, reason: 'ApplicationConfig missing' });
       continue;
     }
     const text = stripComments(readFileSync(match, 'utf8'));
     rows.push({
       app,
-      key: moduleClassKey(match),
+      classId: moduleClassKey(match),
       registered: REGISTRATION.test(text),
       reason: REGISTRATION.test(text) ? 'interceptor registered on /**' : 'import or missing registration',
     });
@@ -175,7 +175,7 @@ function findKafkaMoneyDoors(javaFiles) {
   for (const k of keys) {
     const hit = javaFiles.find((p) => segs(p).at(-1) === k.fileEnds);
     if (!hit) {
-      out.push({ ...k, present: false, key: null });
+      out.push({ ...k, present: false, classId: null });
       continue;
     }
     const text = readFileSync(hit, 'utf8');
@@ -183,7 +183,7 @@ function findKafkaMoneyDoors(javaFiles) {
     out.push({
       ...k,
       present: true,
-      key: moduleClassKey(hit),
+      classId: moduleClassKey(hit),
       topicsFound,
     });
   }
@@ -204,7 +204,7 @@ function findWalletRpcSpendDoors(javaFiles) {
     else if (stub) disposition = 'CLOSED';
     rows.push({
       module: mod,
-      key: moduleClassKey(p),
+      classId: moduleClassKey(p),
       spendHttp: spend,
       disposition,
       note: spend
@@ -223,7 +223,7 @@ function findWalletRpcSpendDoors(javaFiles) {
     // Narrow: scheduled + money verb in same file
     if (!/@Scheduled[\s\S]{0,800}?(transfer|withdraw|sendFrom|sendtoaddress|eth_send)/i.test(raw)) continue;
     cronRows.push({
-      key: moduleClassKey(p),
+      classId: moduleClassKey(p),
       disposition: '§13',
       note: '@Scheduled spender — HTTP interceptor cannot cover',
     });
@@ -233,11 +233,11 @@ function findWalletRpcSpendDoors(javaFiles) {
 
 function findInterceptorFragments() {
   const files = walk(VENDOR, (name) => name === 'DualBookMoneyDoorInterceptor.java');
-  if (files.length !== 1) return { key: null, fragments: [], hasPromotion: false, hasMonitor: false };
+  if (files.length !== 1) return { classId: null, fragments: [], hasPromotion: false, hasMonitor: false };
   const text = readFileSync(files[0], 'utf8');
   const fragments = [...text.matchAll(/"(\/[a-z0-9_\/-]+)"/gi)].map((m) => m[1]);
   return {
-    key: moduleClassKey(files[0]),
+    classId: moduleClassKey(files[0]),
     fragments,
     hasPromotion: fragments.includes('/promotion'),
     hasMonitor: fragments.includes('/monitor/reset-trader') && fragments.includes('/monitor/start-trader'),
@@ -421,7 +421,7 @@ function renderMarkdown(inv) {
   lines.push('## 2 · HTTP dual-book door registrations (executed)');
   lines.push('');
   for (const d of inv.doorRegistrations) {
-    lines.push(`- \`${d.app}\` → ${d.registered ? 'REGISTERED' : 'MISSING'} · ${d.key || '—'} · ${d.reason}`);
+    lines.push(`- \`${d.app}\` → ${d.registered ? 'REGISTERED' : 'MISSING'} · ${d.classId || '—'} · ${d.reason}`);
   }
   lines.push('');
   lines.push(
@@ -433,7 +433,7 @@ function renderMarkdown(inv) {
   lines.push('');
   for (const k of inv.kafkaMoney) {
     lines.push(
-      `- \`${k.id}\` · ${k.present ? k.key : 'ABSENT'} · topics=[${(k.topicsFound || []).join(', ')}] · **${k.disposition}** — ${k.note}`,
+      `- \`${k.id}\` · ${k.present ? k.classId : 'ABSENT'} · topics=[${(k.topicsFound || []).join(', ')}] · **${k.disposition}** — ${k.note}`,
     );
   }
   lines.push('');
@@ -441,12 +441,12 @@ function renderMarkdown(inv) {
   lines.push('');
   lines.push('### HTTP spend controllers (live send helper)');
   for (const r of inv.walletRpc.spendControllers) {
-    lines.push(`- \`${r.key}\` · **${r.disposition}** — ${r.note}`);
+    lines.push(`- \`${r.classId}\` · **${r.disposition}** — ${r.note}`);
   }
   lines.push('');
   lines.push('### Stub / non-spend controllers (CLOSED)');
   for (const r of inv.walletRpc.nonSpendControllers.filter((x) => x.disposition === 'CLOSED')) {
-    lines.push(`- \`${r.key}\` · **CLOSED** — ${r.note}`);
+    lines.push(`- \`${r.classId}\` · **CLOSED** — ${r.note}`);
   }
   lines.push('');
   lines.push('### Cron / floor spenders');
@@ -454,7 +454,7 @@ function renderMarkdown(inv) {
     lines.push('_None matched the narrow scheduled+send heuristic (re-check on tip)._');
   } else {
     for (const r of inv.walletRpc.cronSpenders) {
-      lines.push(`- \`${r.key}\` · **${r.disposition}** — ${r.note}`);
+      lines.push(`- \`${r.classId}\` · **${r.disposition}** — ${r.note}`);
     }
   }
   lines.push('');
