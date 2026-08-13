@@ -116,9 +116,9 @@ const accruals = new SqlAccrualStore(sql);
 const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON);
 
 /**
- * The affiliate payout rail. Absent unless an operator configures LEDGER_URL —
- * and payout then refuses `affiliate.payout.ledger_unwired` rather than
- * reporting a payment it could not make.
+ * The affiliate payout rail. Compose sets LEDGER_URL to in-network svc-ledger.
+ * Absent (non-compose / omitted) → payout refuses `affiliate.payout.ledger_unwired`
+ * rather than reporting a payment it could not make. No localhost default.
  */
 const ledger = env.LEDGER_URL ? createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET) : undefined;
 

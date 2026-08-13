@@ -1462,8 +1462,9 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
-      'D26-P1-O2 2026-08-13: svc-pay settleWindow best-effort POST after merchantSettlement (412/down never unwind; sourceModule=pay; no invent rates). ' +
-      'D26-P0-02 SEALED 2026-08-13 #1799: IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON hops 0–2 at 0.10/0.05/0.02; PAYOUT-01 clicked (depth 5). Mountain stays wip: identity LEDGER_URL + Vue. ' +
+      'D26-P1-O2 2026-08-13: compose identity LEDGER_URL→svc-ledger (payout can post; unset still ledger_unwired; no localhost default). Vue residual (nitro-frontend-all). ' +
+      'D26-P1-O2 2026-08-13: svc-pay settleWindow best-effort POST after merchantSettlement LANDED #1800 (412/down never unwind; sourceModule=pay; no invent rates). ' +
+      'D26-P0-02 SEALED 2026-08-13 #1799: IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON hops 0–2 at 0.10/0.05/0.02; PAYOUT-01 clicked (depth 5). Mountain stays wip: Vue. ' +
       'D26-P1-O2 2026-08-13: identity accrue door LANDED #1794; svc-trade settleFill best-effort POST after house fees (412/down never unwind fill; no invent rates). ' +
       'D26-P1-O2 SEALED 2026-08-12: accrual tree under rate authority — durable `affiliates.accrue` uses owner-published ' +
       '`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; ' +
@@ -1496,9 +1497,8 @@ export const FEATURES = [
       'ONE OF THOSE MUTATIONS FOUND A REAL BUG IN THIS PR before merge: payoutKeysAreBusinessDerived allowed a uuid that `endsWith` the key on the theory that ' +
       'a trailing id was the business one — backwards, since trailing is exactly where a generated id is appended, so `close:${id}:${randomUUID()}` passed the ' +
       'guard clean. Replaced with a count (exactly one uuid per key, the beneficiary) plus a Date.now() segment check, and pointed a test at both shapes. ' +
-      'Still NOT done beyond the rate: no caller ACCRUES from a real fee event yet — svc-trade/svc-pay do not emit affiliate fee events, so accrual rows are ' +
-      'operator-supplied today. LEDGER_URL is optional and undefaulted in svc-identity, so a deployment that has not set it refuses ' +
-      '`affiliate.payout.ledger_unwired` rather than failing at post time. ' +
+      'Compose fleet now sets identity LEDGER_URL→svc-ledger (2026-08-13). Schema stays optional/undefaulted: a host that omits it still refuses ' +
+      '`affiliate.payout.ledger_unwired` rather than posting against localhost. Vue residual keeps the mountain `wip`. ' +
       'NAMED GAP FOR WHOEVER WIRES THE PRODUCER, because it will bite them and is invisible from the payout side: FeeEvent and the accrual row do NOT record ' +
       'which module fee pool the fee landed in. A trading fee lands in houseFees("trade"), a payment fee in houseFees("pay") — payout has only ' +
       'AFFILIATE_PAYOUT_SOURCE_MODULE = "identity" to sweep from. It is one named constant plus an overridable `sourceModule` param rather than a literal at the ' +
