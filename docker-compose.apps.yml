@@ -720,10 +720,10 @@ services:
       # localhost:4001 which is unreachable inside the compose network — purchase
       # would invent a broken settle path instead of posting marketPurchase.
       LEDGER_URL: http://svc-ledger:4001
-      # MARKET_HOUSE_COMMISSION_BPS deliberately UNSET — refuse-closed
-      # (market.commission_not_configured). Never invent a platform rate here;
-      # owner sets the magnitude when ready to sell. Explicit 0 is allowed only
-      # as an owner free-commission decision via env override.
+      # D26-P0-02 owner click 2026-08-13: explicit free-cut via host env.
+      # Pass-through only — no compose default. Silence still refuses
+      # market.commission_not_configured. Copy .env.example → .env for 0.
+      MARKET_HOUSE_COMMISSION_BPS: ${MARKET_HOUSE_COMMISSION_BPS:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4018']
     healthcheck: *healthcheck

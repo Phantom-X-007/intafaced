@@ -49,11 +49,13 @@ P0-10’s done bar is **authority + refuse-blank**. That is this document plus t
 
 Until a number is published, commerce stays refuse-closed. `market.commerce` C1+C2 staying `done` means the **mechanism** is done, not that a rate exists.
 
+**Number click (2026-08-13):** owner published `MARKET_HOUSE_COMMISSION_BPS=0` in `.env.example` (explicit free-cut). Compose remains pass-through with no default. Unset on a host is still `market.commission_not_configured`.
+
 ---
 
 ## What agents must not do
 
-- Seed `MARKET_HOUSE_COMMISSION_BPS` in compose, `.env.example`, or source.
+- Seed a non-zero `MARKET_HOUSE_COMMISSION_BPS` or a compose `${...:-0}` default. The owner number is `.env.example` `0` (2026-08-13); silence on a host is still refuse.
 - Dual-edit `commerce-service.ts` / `env.ts` because this ADR landed.
 - Treat `0` as the default to “unblock” screens.
 

@@ -1402,6 +1402,8 @@ export const FEATURES = [
     dependsOn: ['market.vendors'],
     requires: ['services/svc-market'],
     note:
+      'D26-P0-02 OWNER NUMBER 2026-08-13: MARKET_HOUSE_COMMISSION_BPS=0 in `.env.example` (explicit free-cut); ' +
+      'compose pass-through `${MARKET_HOUSE_COMMISSION_BPS:-}` (no `:-0` seed); schema still has no in-code default. ' +
       'D26-P0-10 SEALED 2026-08-13 (adr/2026-08-13-house-commission-authority.md): authority = host ' +
       'MARKET_HOUSE_COMMISSION_BPS; blank refuses; 0 is explicit owner free-cut; no agent-invented bps. ' +
       'Money only via recipes.marketPurchase → houseFees(market); blank MARKET_HOUSE_COMMISSION_BPS refuses ' +
@@ -1411,7 +1413,7 @@ export const FEATURES = [
       'slots (claimSlot FOR UPDATE + orphan rollback). Catalogue registration order (ASC) — ranking DIRECTION §8 owner. ' +
       'D26-P1-M1 Class M residual SEALED 2026-08-12: compose LEDGER_URL→svc-ledger (no localhost invent); ' +
       'public-door PRECONDITION_FAILED + empty catalogue proofs; ledger listing/premium recipes coord #1761. ' +
-      'RESIDUAL / PARK: C3 subscriptions (period/past-due/cancel/access law — Nitro); commission bps value (Nitro env); ' +
+      'RESIDUAL / PARK: C3 subscriptions (period/past-due/cancel/access law — Nitro); ' +
       'ranking/featured. Purchase of subscription refuse market.subscription_not_built; public catalogue hides them.',
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
