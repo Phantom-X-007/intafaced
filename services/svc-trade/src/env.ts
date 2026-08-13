@@ -358,6 +358,8 @@ const schema = serviceEnvSchema
        * Empty (default) = unpublished → follow refuses. Never invent geo list
        * (adr/2026-08-12-copy-jurisdiction-refuse-closed.md). Owner publishes
        * codes via deploy config only.
+       * Published shape: {"published":true,"allowedRegions":["…"]}
+       * Published empty array = serve none (still fail closed).
        */
       TRADE_COPY_JURISDICTION_LAW: z.string().default(''),
 

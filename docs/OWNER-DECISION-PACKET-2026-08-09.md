@@ -10,7 +10,7 @@
 | Part two      | [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) | Human sitting — P0-04…17 shapes                            |
 | Machine index | [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json)                                 | **SoT for open/sealed/class_x** — every owner decision row |
 
-**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (P0-18):** part two filled + JSON index so open rulings are no longer scattered across side checklists alone.
+**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (P0-18):** part two filled + JSON index so open rulings are no longer scattered across side checklists alone. **Update 2026-08-12 (P0-15):** copy **jurisdiction list** mechanism is **sealed refuse-closed** — region codes still owner-published when live; never invent in source.
 
 **One rule I have applied throughout:** where a number is missing, the answer is **not** a placeholder. `services/svc-trade/src/copy/` already does this correctly — it is **refuse-closed** with `COPY_FEE_SHARE_RESIDUAL`, declining the surface and naming the residual rather than inventing a rate. That pattern is the model for item 3 below.
 
@@ -86,15 +86,15 @@ That is the pattern. **A seeded rate in source is indistinguishable from a decid
 
 **What I need from you** — each is a number or an explicit "launch-closed until set":
 
-| Parameter                  | Surface it gates              |
-| -------------------------- | ----------------------------- |
-| `leader_share_bps`         | copy trading payout           |
-| Copy **jurisdiction list** | which regions may copy at all |
-| Market commission rate     | `market.commerce`             |
-| Affiliate commission tiers | `ops.affiliates`              |
-| Pay fee table              | PSP pricing surfaces          |
+| Parameter                  | Surface it gates                                                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leader_share_bps`         | copy trading payout                                                                                                                                                                   |
+| Copy **jurisdiction list** | **SEALED refuse-closed (D26-P0-15)** — which regions may copy; never invent; [`adr/2026-08-12-copy-jurisdiction-refuse-closed.md`](adr/2026-08-12-copy-jurisdiction-refuse-closed.md) |
+| Market commission rate     | `market.commerce`                                                                                                                                                                     |
+| Affiliate commission tiers | `ops.affiliates`                                                                                                                                                                      |
+| Pay fee table              | PSP pricing surfaces                                                                                                                                                                  |
 
-**Recommendation: publish them into a config authority, not source.** Set what you know, leave the rest launch-closed. A launch-closed surface that says why is honest; a surface running on a placeholder is not.
+**Recommendation: publish them into a config authority, not source.** Set what you know, leave the rest launch-closed. A launch-closed surface that says why is honest; a surface running on a placeholder is not. **Copy jurisdictions:** mechanism sealed refuse-closed; you still own the eventual allowlist content via `TRADE_COPY_JURISDICTION_LAW`.
 
 ---
 
