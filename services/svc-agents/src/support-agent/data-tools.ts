@@ -95,7 +95,27 @@ export type SupportDataToolRefuseReason =
   | 'incomplete_ticket'
   | 'incomplete_account'
   | 'not_ticket_owner'
-  | 'account_owner_mismatch';
+  | 'account_owner_mismatch'
+  /** Runtime payload carried a money field — refuse invent, do not strip-and-lie. */
+  | 'balance_field_forbidden'
+  /** ops.support / identity grounding said plane dark — do not invent account state. */
+  | 'account_plane_dark'
+  /** Grounding was never attempted — not the same as a clean active account. */
+  | 'account_not_attempted';
+
+/**
+ * Money-shaped keys that must never appear on an account projection fixture.
+ * Checked at runtime because JSON / spreads can smuggle fields TypeScript drops.
+ */
+const ACCOUNT_MONEY_KEY = /^(balance|available|amount|hold|credit|debit|equity|pnl|funds|wallet|reserved)(_|$)/i;
+
+/** True when a projection object invents money fields beyond status + KYC. */
+export function accountProjectionHasInventMoney(account: object): boolean {
+  for (const key of Object.keys(account)) {
+    if (ACCOUNT_MONEY_KEY.test(key) || /balance|amount/i.test(key)) return true;
+  }
+  return false;
+}
 
 export type SupportDataToolRefuse = {
   readonly status: 'refuse';
@@ -219,6 +239,11 @@ export function invokeSupportDataTool(input: {
   const account = input.account;
   if (!account) {
     return unavailable(tool, 'missing_fixture');
+  }
+  // Refuse invent balances: a payload with money keys is not "status+KYC with
+  // extras stripped" — stripping would silently invent a clean projection.
+  if (accountProjectionHasInventMoney(account)) {
+    return unavailable(tool, 'balance_field_forbidden');
   }
   if (!account.userId.trim() || !account.kycTier.trim()) {
     return unavailable(tool, 'incomplete_account');

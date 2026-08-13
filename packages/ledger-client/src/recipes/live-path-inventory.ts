@@ -124,6 +124,18 @@ export const RECIPE_MATRIX = {
   businessApprovalSettle: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/business/business-service.ts' },
   subAccountTransfer: { kind: 'live', module: 'identity', proof: 'services/svc-identity/src/auth/auth-service.ts' },
   marketPurchase: { kind: 'live', module: 'market', proof: 'services/svc-market/src/commerce/commerce-service.ts' },
+  marketListingFee: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — D26-P1-M2 vendor listing fee recipe; amount required (no invent rates). Deliberately unwired from svc-market: VendorService moves no value; commerce listing writer is M1 residual.',
+  },
+  marketPremiumPlacement: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — D26-P1-M2 premium placement fee recipe; amount required (no invent rates). Ranking/featured order stays owner residual; no svc-market writer posts this on tip.',
+  },
 } as const satisfies Record<RecipeName, RecipeDisposition>;
 
 export type MatrixRecipeName = keyof typeof RECIPE_MATRIX;

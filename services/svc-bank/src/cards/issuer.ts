@@ -206,6 +206,20 @@ export const CARD_ISSUER_SETTINGS = ['none', 'card-sim'] as const;
 export type CardIssuerSetting = (typeof CARD_ISSUER_SETTINGS)[number];
 
 /**
+ * LIVE-RAIL auth decision budget (tracker title "<2s auth decision").
+ *
+ * This number is NOT a claim about `card-sim`. An in-process simulator has no
+ * network window to miss — measuring it against 2s would be theatre. It is the
+ * budget a `socket.live-issuer` adapter must meet when carrying our already-true
+ * ledger decision back to a scheme that treats silence as a decline.
+ *
+ * The ledger half proves separately that balance check + hold + named decline
+ * complete well inside this window when the counterparty is simulated, so the
+ * book is not the bottleneck a live rail would blame.
+ */
+export const LIVE_ISSUER_AUTH_DECISION_BUDGET_MS = 2_000;
+
+/**
  * THE ONLY PLACE A DEPLOYMENT'S ISSUER IS CHOSEN.
  *
  * ── Why this function has to exist ───────────────────────────────────────────

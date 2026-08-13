@@ -24,6 +24,7 @@ export {
 } from './mark-gate.js';
 export {
   presentAlgoProgress,
+  sumChildFillQtys,
   assertParentHasNoMoneyFields,
   assertProgressHasNoInventedFills,
   FORBIDDEN_PARENT_MONEY_KEYS,

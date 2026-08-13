@@ -4,6 +4,7 @@ import {
   checkEligibility,
   DEFAULT_ELIGIBILITY,
   isActiveMerchant,
+  standingBrokenByDisputeLaw,
   TRANSITIONS,
   type MerchantStatus,
 } from './merchant-programme.js';
@@ -86,6 +87,25 @@ describe('eligibility — a fresh account cannot borrow merchant trust', () => {
     expect(DEFAULT_ELIGIBILITY.minTradesTotal).toBeGreaterThan(0);
     expect(DEFAULT_ELIGIBILITY.minCompletionRate).toBeGreaterThan(0.9);
     expect(DEFAULT_ELIGIBILITY.maxDisputesLost).toBe(0);
+  });
+});
+
+describe('dispute law — approved standing cannot outlive a moderated loss', () => {
+  it('flags an approved merchant whose reputation now fails eligibility', () => {
+    const broken = standingBrokenByDisputeLaw('approved', snapshotOf(counters({ disputed: 1, disputesLost: 1 })));
+    expect(broken.broken).toBe(true);
+    expect(broken.broken === true && broken.reason).toContain('dispute');
+  });
+
+  it('leaves non-approved rows alone (operator reinstate / apply paths own those)', () => {
+    const lost = snapshotOf(counters({ disputed: 1, disputesLost: 1 }));
+    for (const status of ['applied', 'suspended', 'rejected', 'withdrawn'] as const) {
+      expect(standingBrokenByDisputeLaw(status, lost).broken).toBe(false);
+    }
+  });
+
+  it('does not invent a break when the approved record still meets policy', () => {
+    expect(standingBrokenByDisputeLaw('approved', snapshotOf(counters())).broken).toBe(false);
   });
 });
 

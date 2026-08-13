@@ -419,7 +419,8 @@ describe('svc-indexer mount — status is honest', () => {
       chainProbe: productionNullProbe(),
     });
 
-    const status = await router.createCaller(anonymous()).status();
+    const caller = router.createCaller(anonymous());
+    const status = await caller.status();
     expect(status.lastError).not.toBeNull();
     expect(status.lastError).toMatchObject({
       code: 'indexer.chain_unreachable',
@@ -428,6 +429,8 @@ describe('svc-indexer mount — status is honest', () => {
     expect(typeof status.lastError!.at).toBe('string');
     // ISO timestamp, not a Date object on the wire.
     expect(Number.isNaN(Date.parse(status.lastError!.at))).toBe(false);
+    // D26-P1-I3: chain-door lastError refuses data paths (no fake live book).
+    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('surfaces a halt, so a caller is told before it renders a price', async () => {

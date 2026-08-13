@@ -93,4 +93,28 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
       reason: 'no_metrics',
     });
   });
+
+  it('D26-P1-A4 deepen: mixed stale on wire refuses — no partial alerts', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .merchant.watch({
+        points: [
+          point,
+          {
+            ...point,
+            railId: 'card-b',
+            approvalRate: '0.99',
+            asOf: '2026-08-07T10:00:00.000Z',
+            maxAgeMs: 60_000,
+          },
+        ],
+        threshold: '0.85',
+        now: '2026-08-07T12:00:00.000Z',
+      });
+    expect(result).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'stale',
+    });
+  });
 });

@@ -405,6 +405,19 @@ export const UNRESOLVED_REGION = 'XX';
  */
 export const REGION_FAIL_CLOSED_ENV = 'INTAFACED_REGION_FAIL_CLOSED';
 
+/**
+ * Process-wide fail-closed switch when the screening list is `unset`.
+ *
+ * Default OFF so local/dev and historical call sites keep the honesty-only
+ * path (`allowed` + `listConfigured: false`). When ON, `checkAccess` returns
+ * `denied.screening_unconfigured` — refuse hosted access rather than look
+ * screened-clean with no list. Mechanism seal (D26-P1-O1); does **not** invent
+ * sanctions list content (Class X / Nitro counsel).
+ *
+ * Accepted truthy forms (case-insensitive): `1`, `true`, `yes`, `on`.
+ */
+export const SCREENING_FAIL_CLOSED_ENV = 'INTAFACED_SCREENING_FAIL_CLOSED';
+
 /** True when `region` is not the platform unresolved sentinel. */
 export function isRegionResolved(region: RegionCode): boolean {
   return region.toUpperCase() !== UNRESOLVED_REGION;
@@ -416,6 +429,15 @@ export function isRegionResolved(region: RegionCode): boolean {
  */
 export function regionFailClosedFromEnv(env: Record<string, string | undefined> = process.env): boolean {
   const raw = env[REGION_FAIL_CLOSED_ENV]?.trim().toLowerCase() ?? '';
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+/**
+ * Read the screening-list fail-closed switch from an env map.
+ * Explicit `AccessQuery.screeningFailClosed` always wins over this.
+ */
+export function screeningFailClosedFromEnv(env: Record<string, string | undefined> = process.env): boolean {
+  const raw = env[SCREENING_FAIL_CLOSED_ENV]?.trim().toLowerCase() ?? '';
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
 }
 
@@ -456,6 +478,16 @@ export interface AccessQuery {
    * must not serve under an unknown jurisdiction.
    */
   readonly regionFailClosed?: boolean;
+  /**
+   * When true, refuse if the screening list is `unset` (nobody supplied content).
+   *
+   * Omitted → `screeningFailClosedFromEnv()`. Default env is OFF so honesty-only
+   * surfaces keep returning `allowed` with `listConfigured: false`. Pass `true`
+   * in tests, or set `INTAFACED_SCREENING_FAIL_CLOSED`, when hosted access must
+   * not proceed without a counsel-supplied list (or attributed `none`).
+   * Does not invent list content — Class X stays outside this mechanism.
+   */
+  readonly screeningFailClosed?: boolean;
 }
 
 export interface AccessDecision {
@@ -466,6 +498,7 @@ export interface AccessDecision {
     | 'allowed.permissionless'
     | 'denied.region_blocked'
     | 'denied.region_unknown'
+    | 'denied.screening_unconfigured'
     | 'denied.module_blocked'
     | 'denied.kyc_required'
     | 'denied.plane_unsupported';
@@ -570,6 +603,11 @@ export function unreviewedRegions(): RegionCode[] {
  * still `allowed` (fail-closed OFF, the default). Flip
  * `INTAFACED_REGION_FAIL_CLOSED` (or pass `regionFailClosed: true`) to refuse
  * with `denied.region_unknown` instead of falling open on defaults.
+ *
+ * Screening list honesty: every decision carries `screening.listConfigured`.
+ * Flip `INTAFACED_SCREENING_FAIL_CLOSED` (or pass `screeningFailClosed: true`)
+ * to refuse with `denied.screening_unconfigured` when the list is `unset`.
+ * `reviewed-empty` and `listed` are configured answers and do not refuse here.
  */
 export function checkAccess(q: AccessQuery): AccessDecision {
   const mod = MODULES[q.module];
@@ -577,6 +615,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
   const provenance = provenanceOf(screening);
   const regionResolved = isRegionResolved(q.region);
   const failClosed = q.regionFailClosed ?? regionFailClosedFromEnv();
+  const screeningFailClosed = q.screeningFailClosed ?? screeningFailClosedFromEnv();
 
   if (!mod.planes.includes(q.plane)) {
     return {
@@ -585,6 +624,27 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       status: 'blocked',
       limitMultiplier: 0,
       reason: `${q.module} does not operate on the ${q.plane} plane`,
+      screening: provenance,
+      regionResolved,
+    };
+  }
+
+  // Screening-list fail-closed (D26-P1-O1 mechanism seal). Default OFF: call
+  // sites keep honesty-only (`allowed` + listConfigured:false). When ON, refuse
+  // before region/permissionless so "nobody supplied a list" cannot ride as a
+  // clean bill of health. Does not invent Class X list content — operators set
+  // INTAFACED_SANCTIONS_REGIONS (counsel) or attributed `none`.
+  if (screening.declaration === 'unset' && screeningFailClosed) {
+    return {
+      allowed: false,
+      code: 'denied.screening_unconfigured',
+      status: 'blocked',
+      limitMultiplier: 0,
+      reason:
+        `Sanctions screening list is unset — nothing was consulted. ` +
+        `Hosted access refuses under ${SCREENING_FAIL_CLOSED_ENV}. ` +
+        `Counsel/Nitro must supply ${SANCTIONS_REGIONS_ENV} (or attributed ` +
+        `"${SCREENING_REVIEWED_EMPTY}"); agents must not invent list content.`,
       screening: provenance,
       regionResolved,
     };

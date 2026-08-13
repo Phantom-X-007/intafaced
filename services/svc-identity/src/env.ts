@@ -59,6 +59,11 @@ const schema = serviceEnvSchema
        * `affiliate.payout.ledger_unwired`. Unset is a legible state, not a gap.
        */
       LEDGER_URL: z.string().url().optional(),
+      /**
+       * Owner-published max *live* (non-revoked) sub-accounts per identity
+       * (SPEC-SUBACCOUNTS §4 / §8). Default 25 — abuse bound, not a tier ladder.
+       */
+      IDENTITY_MAX_SUB_ACCOUNTS: z.coerce.number().int().min(1).max(10_000).default(25),
     }),
   );
 

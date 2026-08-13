@@ -7,7 +7,7 @@
  * - Accept binds the quoted price; requote / last-look is forbidden.
  */
 
-import { formatAmount, mul, mulBps, parseAmount, sub, type Amount } from '@intafaced/ledger-client';
+import { div, formatAmount, mul, mulBps, parseAmount, sub, type Amount } from '@intafaced/ledger-client';
 import type { OtcCounterpartyMode } from './desk-law.js';
 import { OtcError } from './errors.js';
 
@@ -89,10 +89,15 @@ export function buildOtcQuote(input: OtcQuoteInput): OtcQuote {
   }
 
   // VWAP after spread: buy ceil, sell floor (same honesty as convert).
-  const quotedPrice =
-    input.side === 'buy'
-      ? (userNotional + input.qty - 1n) / input.qty // ceil div
-      : userNotional / input.qty;
+  //
+  // `div`, not `/`. Both operands are SCALED bigints, so raw bigint division
+  // cancels the scale and returns the ratio 1e18 times too small: a 1 BTC buy
+  // quoted off a mid of 200 came back as `0.000000000000000201` rather than
+  // `201`. It never moved the wrong amount — settle pays `fillNotional`, which
+  // was always right — but the price ON THE QUOTE is the number the customer
+  // decides against, and A4.1 requires the quote to state it. A desk that
+  // charges 201 while printing 0.000000000000000201 has not quoted a price.
+  const quotedPrice = div(userNotional, input.qty, input.side === 'buy' ? 'ceil' : 'floor');
 
   const expires = new Date(input.now.getTime() + input.quoteTtlMs);
 

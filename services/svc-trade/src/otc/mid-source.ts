@@ -90,7 +90,7 @@ export function parseOtcMids(raw: string | null | undefined): Map<string, string
 /**
  * Ops-published map stamped at boot.
  *
- * ── SOCKET §13 · `socket.otc-mid-feed` ──────────────────────────────────────
+ * ── SOCKET §13 · `socket.otc-mid-feed` (see mid-feed.ts) ─────────────────────
  *
  * This is a FIXED price read once at boot. `asOf` is the boot stamp, so the
  * desk law's `maxMidAgeSeconds` makes the map go dark after that window —
@@ -100,6 +100,7 @@ export function parseOtcMids(raw: string | null | undefined): Map<string, string
  * A live OTC desk needs a feed that refreshes `asOf` on each observation
  * (`createObservedOtcMidSource` or a venue-chained source). The max-age number
  * itself is owner law on the desk (DIRECTION §8), never a default here.
+ * Public posture: `otc.deskStatus.midFeed` — published=false until that feed.
  */
 export function createConfigOtcMidSource(raw: string | null | undefined, bootAsOf: Date = new Date()): OtcMidSource {
   const mids = parseOtcMids(raw);
