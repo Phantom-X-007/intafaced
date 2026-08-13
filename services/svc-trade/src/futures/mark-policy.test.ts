@@ -11,6 +11,7 @@ import {
   MARK_INVALID,
   MARK_MISSING,
   MARK_UNUSABLE,
+  acceptableForEntry,
   acceptableForLiquidation,
   acceptableForMarking,
   markMissing,
@@ -73,6 +74,32 @@ describe('acceptableForMarking', () => {
 
   it('refuses a mark dated in the future — a clock problem is how a stale price passes', () => {
     const check = acceptableForMarking(mark({ asOf: new Date(NOW.getTime() + 60_000) }), NOW, DEFAULT_FUTURES_MARK_POLICY);
+    expect(check.ok).toBe(false);
+    expect(check.code).toBe(MARK_UNUSABLE);
+  });
+});
+
+describe('acceptableForEntry — DIRECTION MVP-1 (not last-trade)', () => {
+  it('refuses `last` as an entry basis under the default policy', () => {
+    const lastMark = mark({ quality: 'last' });
+    // Still fine to show / value (screens, losing voluntary exits).
+    expect(acceptableForMarking(lastMark, NOW, DEFAULT_FUTURES_MARK_POLICY).ok).toBe(true);
+    // Not fine to open — entry sizes the margin lock.
+    const check = acceptableForEntry(lastMark, NOW, DEFAULT_FUTURES_MARK_POLICY);
+    expect(check.ok).toBe(false);
+    expect(check.code).toBe(MARK_UNUSABLE);
+    expect(check.reason).toContain('not an entry basis');
+    expect(check.reason).toContain('last-trade');
+  });
+
+  it('accepts index and mid for entry', () => {
+    for (const quality of ['index', 'mid'] as const) {
+      expect(acceptableForEntry(mark({ quality }), NOW, DEFAULT_FUTURES_MARK_POLICY).ok).toBe(true);
+    }
+  });
+
+  it('still refuses a stale mark — entry does not weaken the marking age limit', () => {
+    const check = acceptableForEntry(mark({ asOf: agedSeconds(301) }), NOW, DEFAULT_FUTURES_MARK_POLICY);
     expect(check.ok).toBe(false);
     expect(check.code).toBe(MARK_UNUSABLE);
   });

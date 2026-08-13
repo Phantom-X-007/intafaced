@@ -13,7 +13,8 @@ import {
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
-import { assertCryptoRamp, refuseFiatRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
+import { emptyPayFiatRampPort, resolvePayFiatRailId, type PayFiatRampPort } from './pay-fiat-adapter.js';
+import { assertCryptoRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
 
 /**
  * RAMPS (§8.1 / D-S-09) — the CRYPTO LEDGER half: on-ramp credit, off-ramp settle.
@@ -56,9 +57,12 @@ import { assertCryptoRamp, refuseFiatRamp, type RampProgramme, NO_RAMP_PROGRAMME
  * WHAT IS NOT HERE
  * ═════════════════════════════════════════════════════════════════════════════
  *
- *   · FIAT. `socket.psp-partners` — refuse `bank.fiat_ramp_socket`.
+ *   · FIAT without a live pay RailAdapter. `socket.psp-partners` — refuse
+ *     `bank.fiat_ramp_socket`. When `PayFiatRampPort` yields a live rail, fiat
+ *     uses the same ledger-client deposit/withdraw recipes (no second book).
  *   · CHAIN BROADCAST / CONFIRMATION. Live crypto send and inbound watcher are
- *     svc-pay. Settle here means value left OUR book to `bank-crypto-ledger`.
+ *     svc-pay. Settle here means value left OUR book to `bank-crypto-ledger`
+ *     (crypto) or the pay rail id (fiat via adapter).
  *   · EARN APY, CARD BIN, or any commercial rate invention.
  *   · A LIVE MODE that sets `simulated: false`. Class X is a human decision.
  */
@@ -142,10 +146,17 @@ export interface RampServiceOptions {
    * silence is `none`, and every money path then refuses `bank.no_ramp_rail`.
    */
   programme?: RampProgramme;
+  /**
+   * Pay-adapter plane for fiat legs (D26-P1-B4). Default empty → honest refuse.
+   * Never invent a partner here; inject from the edge when pay registers a live
+   * fiat RailAdapter.
+   */
+  payFiat?: PayFiatRampPort;
 }
 
 export class RampService {
   private readonly programme: RampProgramme;
+  private readonly payFiat: PayFiatRampPort;
 
   constructor(
     private readonly sql: Sql,
@@ -153,6 +164,7 @@ export class RampService {
     options: RampServiceOptions = {},
   ) {
     this.programme = options.programme ?? NO_RAMP_PROGRAMME;
+    this.payFiat = options.payFiat ?? emptyPayFiatRampPort;
   }
 
   /** What this deployment's ramp programme is — including that it is not one. */
@@ -180,7 +192,8 @@ export class RampService {
    * OPERATOR-CREDENTIALED. A user who can credit their own balance does not
    * need a ramp. Router gates on `admin:treasury`.
    *
-   * Fiat refuses before a row is written. Unconfigured programme refuses by name.
+   * Fiat resolves a live pay RailAdapter rail id (or refuses the socket) before
+   * any row. Unconfigured crypto programme refuses by name.
    */
   async creditOnramp(input: {
     userId: string;
@@ -190,12 +203,11 @@ export class RampService {
     railRef: string;
     creditedBy: string;
   }): Promise<OnrampRecord> {
-    if (input.kind === 'fiat') refuseFiatRamp();
     if (input.amount <= 0n) {
       throw new BankError('On-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
     assertRampAssetId(input.assetId);
-    const rail = assertCryptoRamp(this.programme);
+    const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'onramp') : assertCryptoRamp(this.programme);
 
     return withMoneySpan(
       'bank.ramp.onramp',
@@ -244,7 +256,6 @@ export class RampService {
     destinationRef: string;
     clientRef: string;
   }): Promise<OfframpRecord> {
-    if (input.kind === 'fiat') refuseFiatRamp();
     if (input.amount <= 0n) {
       throw new BankError('Off-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
@@ -252,7 +263,7 @@ export class RampService {
     if (!input.destinationRef.trim()) {
       throw new BankError('Off-ramp destination is required', 'bank.ramp_invalid_destination');
     }
-    const rail = assertCryptoRamp(this.programme);
+    const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'offramp') : assertCryptoRamp(this.programme);
 
     return withMoneySpan(
       'bank.ramp.offramp',

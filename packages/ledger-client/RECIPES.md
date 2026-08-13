@@ -1,6 +1,6 @@
 # Ledger recipe matrix
 
-**50 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
+**55 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
 
 Generated from `src/recipes/index.ts` registry. If this table and the registry disagree, the registry wins and this file is wrong.
 
@@ -59,6 +59,8 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | `businessApprovalSettle`       | `bank`     | `bank.business.approval.settled`                                 |
 | `subAccountTransfer`           | `identity` | `identity.sub_account.transfer`                                  |
 | `marketPurchase`               | `market`   | `market.purchase`                                                |
+| `marketListingFee`             | `market`   | `market.listing_fee`                                             |
+| `marketPremiumPlacement`       | `market`   | `market.premium_placement`                                       |
 
 ## Source files
 
@@ -69,10 +71,12 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | `src/recipes/loans.ts`        | collateral / draw / repay / liquidate / bad debt / reserve                                  |
 | `src/recipes/chargeback.ts`   | chargeback open / shortfall / won / recovered (owner sign-off banner; not wired to svc-pay) |
 | `src/recipes/sub-accounts.ts` | only legal cross-partition transfer                                                         |
-| `src/recipes/market.ts`       | one-time listing purchase + house commission                                                |
+| `src/recipes/market.ts`       | purchase + house commission (live); listing fee + premium placement (§13 unwired)           |
 
 ## Sealed notes
 
 - **Chargeback** recipes ship with an owner-sign-off banner and are deliberately unwired from svc-pay (L04 residual).
-- **Market commerce** recipes (if any) are L07 wall — not dual-edited here.
+- **Market listing / premium fees** are §13 unwired (D26-P1-M2): recipes exist so the vendor lifecycle can book owner-published fees without inventing magnitudes; no svc-market writer yet (VendorService moves no value; commerce wire is M1).
+- **Market purchase** (`marketPurchase`) is live via svc-market commerce — commission bps still owner-gated upstream.
 - Conformance + MemoryLedger prove sum-to-zero; Postgres proves CHECK constraints.
+- **D26-P2-11 live-path closure:** every registry key is `live` (production caller) or explicit §13 socket — machine inventory in `src/recipes/live-path-inventory.ts` (executed by `live-path-inventory.test.ts`). Do not invent recipes to close a path; socket it.

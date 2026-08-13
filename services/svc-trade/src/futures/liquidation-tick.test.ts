@@ -541,6 +541,7 @@ describe('runLiquidationTick — C15 margin-call transport + grace non-start', (
     });
 
     expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.items[0]!.delivered).toBe(false);
     expect(result.marginCalls).toBe(1);
     expect(result.liquidated).toBe(0);
     expect(result.partial).toBe(0);
@@ -588,6 +589,7 @@ describe('runLiquidationTick — C15 margin-call transport + grace non-start', (
     });
 
     expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.items[0]!.delivered).toBe(false);
     expect(result.liquidated).toBe(0);
     expect(posts).toEqual([]);
     expect(closed).toEqual([]);
@@ -636,6 +638,7 @@ describe('runLiquidationTick — C15 margin-call transport + grace non-start', (
 
     // Delivery accepted, but graceExpiresAt is still null on the tick path.
     expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.items[0]!.delivered).toBe(true);
     expect(result.liquidated).toBe(0);
     expect(posts).toEqual([]);
     expect(closed).toEqual([]);

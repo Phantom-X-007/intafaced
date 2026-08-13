@@ -247,6 +247,24 @@ describe('refusals — never a book we cannot stand behind', () => {
     expect(snapshot.asks).toEqual([]);
   });
 
+  it('TWO-SIDED DUST book: refused as no_depth — not a mid-able quote (D26-P1-T8)', async () => {
+    const http = new FakeHttp().queue(
+      orderbook(9, {
+        b: [['30000.00', '0.00000001']],
+        a: [['30002.00', '0.00000001']],
+      }),
+    );
+    const md = adapter(http, new FakeStream());
+    try {
+      await md.snapshotBook('BTC/USDT');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('no_depth');
+      expect((error as VenueUnavailableError).message).toMatch(/not payout-grade/);
+    }
+  });
+
   it('UNKNOWN market id: a non-zero retCode is refused as not_ready, never as an empty book', async () => {
     const http = new FakeHttp().queue({ retCode: 10_001, retMsg: 'Not supported symbols', result: {}, time: 1 });
     const md = adapter(http, new FakeStream());

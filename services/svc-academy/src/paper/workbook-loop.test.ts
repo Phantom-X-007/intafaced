@@ -591,21 +591,26 @@ describe('a drill cannot be projected without saying it is simulated', () => {
     if (!started.ok) return;
     expect(started.run.simulated).toBe(true);
     expect(drillBoardCard(started.run).simulated).toBe(true);
+    expect(drillBoardCard(started.run).realMoney).toBe(false);
+    expect(drillStepBar(started.run).realMoney).toBe(false);
+    expect(drillProgress(started.run).realMoney).toBe(false);
   });
 
-  it('both status lines lead with it, so a pasted line stays labelled', () => {
+  it('both status lines lead with simulated + realMoney=0, so a pasted line stays labelled', () => {
     const started = start();
     if (!started.ok) return;
-    expect(drillStatusLine(started.run).startsWith('simulated=1 ')).toBe(true);
-    expect(drillStatusLineDetailed(started.run).startsWith('simulated=1 ')).toBe(true);
+    expect(drillStatusLine(started.run).startsWith('simulated=1 realMoney=0 ')).toBe(true);
+    expect(drillStatusLineDetailed(started.run).startsWith('simulated=1 realMoney=0 ')).toBe(true);
   });
 
   it('a status line with the label STRIPPED no longer parses — it does not read as live', () => {
     const started = start();
     if (!started.ok) return;
     const stripped = drillStatusLine(started.run).replace('simulated=1 ', '');
+    const noRealMoney = drillStatusLine(started.run).replace(' realMoney=0', '');
 
     expect(parseDrillStatusLine(stripped)).toBeNull();
+    expect(parseDrillStatusLine(noRealMoney)).toBeNull();
     expect(drillStatusLineConsistent(stripped)).toBe(false);
     expect(parseDrillStatusLineDetailed(drillStatusLineDetailed(started.run).replace('simulated=1 ', ''))).toBeNull();
   });
@@ -617,6 +622,7 @@ describe('a drill cannot be projected without saying it is simulated', () => {
 
     expect(drillStepsExportIsLabelled(text)).toBe(true);
     expect(text.split('\n')[0]).toContain('simulated=1');
+    expect(text.split('\n')[0]).toContain('realMoney=0');
     expect(drillStepsExportHasHeader(text)).toBe(true);
     expect(drillStepsExportRoundTripOk(started.run)).toBe(true);
     // The label is a comment, not a row — it must not be counted as a step.

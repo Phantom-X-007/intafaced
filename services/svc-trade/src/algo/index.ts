@@ -22,7 +22,13 @@ export {
   ALGO_MARK_UNUSABLE,
   ALGO_MARK_INVALID,
 } from './mark-gate.js';
-export { presentAlgoProgress, assertParentHasNoMoneyFields, FORBIDDEN_PARENT_MONEY_KEYS } from './present.js';
+export {
+  presentAlgoProgress,
+  sumChildFillQtys,
+  assertParentHasNoMoneyFields,
+  assertProgressHasNoInventedFills,
+  FORBIDDEN_PARENT_MONEY_KEYS,
+} from './present.js';
 export type {
   TwapParent,
   AlgoProgressView,

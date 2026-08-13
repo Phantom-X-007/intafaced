@@ -102,6 +102,46 @@ if (!available) {
       expect(formatAmount((await ledger.balance(userAvailable(BUYER, 'USDT'))).amount)).toBe('0');
     });
 
+    it('refuses createListing when commission bps is not configured (no slot burn)', async () => {
+      await approvedVendor(VENDOR_USER);
+      const blank = new CommerceService(sql, vendors, ledger, { commissionBps: null });
+      await expect(
+        blank.createListing({
+          userId: VENDOR_USER,
+          title: 'Orphan bait',
+          description: 'Must not claim a slot',
+          offerType: 'one_time',
+          assetId: 'USDT',
+          price: '10',
+        }),
+      ).rejects.toMatchObject({ code: 'market.commission_not_configured' });
+
+      const status = await vendors.slotStatus(VENDOR_USER);
+      expect(status.held).toBe(0);
+      const [count] = await sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM market.listings WHERE vendor_id = (
+          SELECT id FROM market.vendors WHERE user_id = ${VENDOR_USER}
+        )
+      `;
+      expect(count?.n).toBe('0');
+    });
+
+    it('public catalogue is empty when commission is blank (no unsellable shopfront)', async () => {
+      await approvedVendor(VENDOR_USER);
+      const listing = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Hidden while blank',
+        description: 'Configured create, blank catalogue',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      expect((await commerce.publicListings()).some((l) => l.id === listing.id)).toBe(true);
+
+      const blank = new CommerceService(sql, vendors, ledger, { commissionBps: null });
+      await expect(blank.publicListings()).resolves.toEqual([]);
+    });
+
     it('programme reports unconfigured when null', () => {
       const blank = new CommerceService(sql, vendors, ledger, { commissionBps: null });
       expect(blank.programme()).toEqual({ commissionBps: null, commissionConfigured: false });

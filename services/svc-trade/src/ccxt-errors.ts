@@ -98,10 +98,24 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    */
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /**
-   * Production listing of forex/commodity without fiat settlement (D-S-05).
-   * Not a symbol to drop forever if the operator later enables rails — BadRequest.
+   * Schedule key not in `TRADING_SCHEDULES` — misconfiguration, not a weekend.
+   * BadRequest so bots do not retry Monday expecting the same key to work.
+   */
+  'trade.unknown_schedule': { ccxt: 'BadRequest', status: 400 },
+  /** `asset_class` outside the instrument-model authority. */
+  'trade.unknown_asset_class': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Production listing/place of forex/commodity refuse-closed at socket.forex-settlement
+   * (D26-P1-T7 / T9 — needs D26-P0-05 + fiat settle rails; never invent settlement).
+   * Not a symbol to drop forever if the owner later closes the socket — BadRequest.
    */
   'trade.unsettled_asset_class_listing': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Options listing refused: D26-P0-05 settlement asset law unset (SOCKET §13).
+   * BadRequest — operator publishes ADR then stamps TRADE_OPTIONS_SETTLEMENT_ASSET_LAW;
+   * not a symbol to drop. Never invent live set / settlement asset / refuse matrix.
+   */
+  'trade.options_settlement_law_unset': { ccxt: 'BadRequest', status: 400 },
   /**
    * Options listing refused: D7 settlement fixing not configured.
    * BadRequest — operator sets TRADE_OPTIONS_SETTLEMENT_FIXING; not a symbol to drop.
@@ -111,6 +125,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Options half-list (missing strike/type/expiry) or terms on non-options kind.
    */
   'trade.options_terms_incomplete': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Real-money futures list/enable refused: insurance fund empty (DIRECTION:33).
+   * BadRequest — operator must capitalise the fund; not a symbol to drop forever.
+   */
+  'trade.insurance_fund_empty': { ccxt: 'BadRequest', status: 400 },
   /** Operator kill-switch across the whole spot plane — venue-wide, retryable. */
   'trade.spot_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },

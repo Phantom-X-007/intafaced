@@ -300,6 +300,19 @@ export class NotifyService {
     });
   }
 
+  /**
+   * Operator delivery-outcomes view — D26-P1-O5 residual after #1701.
+   *
+   * Cross-user, newest-first. Router gates with `admin:read`. Does not invent
+   * delivered status: `accepted` is gateway acceptance, not end-device proof.
+   */
+  async operatorDeliveryOutcomes(limit = 50): Promise<DeliveryRecord[]> {
+    return withNotifySpan('notify.operatorDeliveries', { op: 'operatorDeliveries' }, async () => {
+      if (!this.deps) return [];
+      return this.deps.deliveries.listRecent(limit);
+    });
+  }
+
   // ── Preferences (mute) ─────────────────────────────────────────────────────
 
   async getMutePrefs(userId: string): Promise<ChannelMutePrefs> {

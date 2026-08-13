@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getCurriculumItem, listCurriculum } from './catalog.js';
 import {
   CURRICULUM_CONTENT_SOURCE,
   CURRICULUM_TITLE_PLAYBOOKS,
@@ -6,6 +7,8 @@ import {
   curriculumInventory,
   curriculumImportStageStatus,
   curriculumImportStageStatusLine,
+  curriculumSubstanceReport,
+  lessonSubstanceChecklist,
   validateImportBatch,
   validateImportRecord,
   summarizeImportBatch,
@@ -26,45 +29,44 @@ import {
   workbookLiveQuoteChecklist,
 } from './import-pipeline.js';
 
+/** Real spine playbook — substance gate must accept platform-native lessons. */
+const spinePlaybook = getCurriculumItem(listCurriculum({ kind: 'playbook' })[0]!.slug)!;
 const good = {
   slug: 'foundations-sample-drill',
-  title: 'Sample drill',
-  kind: 'playbook',
-  path: 'foundations',
+  title: spinePlaybook.title,
+  kind: 'playbook' as const,
+  path: 'foundations' as const,
   order: 40,
-  summary: 'A real summary for the import pipeline gate.',
-  body: `# Sample drill
+  summary: spinePlaybook.summary,
+  body: spinePlaybook.body,
+};
 
-Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub.
+/** Real spine workbook — outline drills without painted live quotes. */
+const spineWorkbook = getCurriculumItem(listCurriculum({ kind: 'workbook' })[0]!.slug)!;
+const goodWorkbook = {
+  slug: 'foundations-outline-workbook',
+  title: spineWorkbook.title,
+  kind: 'workbook' as const,
+  path: 'foundations' as const,
+  order: 50,
+  summary: spineWorkbook.summary,
+  body: spineWorkbook.body,
+};
+
+/** Clears the char floor by repeating one line — the theater D26-P1-C5 refuses. */
+const theaterPad = 'Depth floor requires real teaching prose, not a three-bullet stub. '.repeat(20).trim();
+const theaterBody = `# Theater pad
+
+${theaterPad}
 
 ## Worked idea
 
-Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub.
+${theaterPad}
 
 ## Mistakes
 
-Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub.`,
-};
-
-const goodWorkbook = {
-  slug: 'foundations-outline-workbook',
-  title: 'Outline workbook',
-  kind: 'workbook',
-  path: 'foundations',
-  order: 50,
-  summary: 'Outline drills without inventing live market quotes.',
-  body: `# Outline workbook
-
-Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub.
-
-Drill size from invalidation. No fills here. Empty books stay empty.
-
-Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub.
-
-Paper only when the paper market path is on.
-
-Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub. Depth floor requires real teaching prose, not a three-bullet stub.`,
-};
+${theaterPad}
+`;
 
 describe('curriculumInventory — honest count gate', () => {
   it('names platform-native expansion as the content source on tip', () => {
@@ -112,6 +114,49 @@ describe('validateImportRecord', () => {
       }).length,
     ).toBeGreaterThan(0);
     expect(workbookLiveQuoteChecklist({ ...good, kind: 'playbook' })).toEqual([]);
+  });
+});
+
+describe('D26-P1-C5 lesson substance (not char-count theater)', () => {
+  it('refuses a body that only clears the depth floor by repeating filler', () => {
+    expect(theaterBody.trim().length).toBeGreaterThanOrEqual(900);
+    const substanceIssues = lessonSubstanceChecklist(theaterBody);
+    expect(substanceIssues.length).toBeGreaterThan(0);
+    expect(substanceIssues.some((i) => /theater|filler|unique-word|lexicon/i.test(i.message))).toBe(true);
+    const result = validateImportRecord({
+      slug: 'foundations-theater-pad',
+      title: 'Theater pad',
+      kind: 'playbook',
+      path: 'foundations',
+      order: 99,
+      summary: 'A summary that is long enough to pass the summary floor.',
+      body: theaterBody,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.issues.some((i) => i.field === 'body')).toBe(true);
+  });
+
+  it('accepts every spine body and reports substanceBarMet', () => {
+    for (const summary of listCurriculum()) {
+      const item = getCurriculumItem(summary.slug)!;
+      expect(lessonSubstanceChecklist(item.body), summary.slug).toEqual([]);
+      expect(
+        validateImportRecord({
+          slug: item.slug,
+          title: item.title,
+          kind: item.kind,
+          path: item.path,
+          order: item.order,
+          summary: item.summary,
+          body: item.body,
+        }).ok,
+        item.slug,
+      ).toBe(true);
+    }
+    const report = curriculumSubstanceReport();
+    expect(report.total).toBe(listCurriculum().length);
+    expect(report.theaterSlugs).toEqual([]);
+    expect(report.substanceBarMet).toBe(true);
   });
 });
 
@@ -180,7 +225,7 @@ describe('L3 wave47 import-pipeline status/export', () => {
 });
 
 describe('Stage-3 curriculumImportStageStatus', () => {
-  it('reports pipeline + catalog + polish honestly', () => {
+  it('reports pipeline + catalog + polish + substance honestly', () => {
     const status = curriculumImportStageStatus();
     expect(status.stage1Pipeline).toBe(true);
     expect(status.stage2CatalogExpanded).toBe(true);
@@ -188,8 +233,12 @@ describe('Stage-3 curriculumImportStageStatus', () => {
     expect(status.stage3Polish.deepLinksVerified).toBe(true);
     expect(status.stage3Polish.i18nStrategyHonest).toBe(true);
     expect(status.stage3Polish.ready).toBe(true);
+    expect(status.substanceBarMet).toBe(true);
+    expect(status.theaterSlugs).toEqual([]);
     expect(curriculumImportStageStatusLine()).toContain('stage3=1');
     expect(curriculumImportStageStatusLine()).toContain('titleMet=1');
+    expect(curriculumImportStageStatusLine()).toContain('substance=1');
+    expect(curriculumImportStageStatusLine()).toContain('theater=0');
   });
 });
 

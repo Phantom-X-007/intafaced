@@ -15,7 +15,8 @@
 import { randomUUID } from 'node:crypto';
 import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { CopyError } from './errors.js';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './auto-mirror-place.js';
+import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, CopyError } from './errors.js';
 import {
   copyLawResidual,
   copyLawStatusLine,
@@ -43,6 +44,28 @@ export interface CopyServiceOptions {
   store?: CopyFollowStore;
 }
 
+type FollowRef = { followId: string };
+
+type PlanMirrorInput = {
+  followId: string;
+  /** Leader fill business key — required; redelivery must not double-mirror. */
+  fillId: string;
+  marketId: string;
+  side: MirrorSide;
+  qty: string;
+  notional: string;
+};
+
+type SettleFeeShareInput = {
+  followId: string;
+  fillId: string;
+  assetId: string;
+  followerFillNotional: string;
+  protocolFeeBps: number;
+  /** Settled fill fee when known — preferred over notional×bps invent. */
+  fillFeeAmount?: string;
+};
+
 export class CopyService {
   private readonly store: CopyFollowStore;
   private readonly feeShareLaw: CopyFeeShareLaw;
@@ -59,13 +82,62 @@ export class CopyService {
     this.store = options.store ?? new MemoryCopyFollowStore();
   }
 
+  /**
+   * Desk honesty for D26-P1-T3: sovereign shape is always on; rates /
+   * jurisdiction stay refuse-closed until owner publishes P0-02 / P0-15.
+   */
   deskStatus() {
+    const feeSharePublished = this.feeShareLaw.published === true;
+    const jurisdictionPublished = this.jurisdictionLaw.published === true;
     return {
-      feeSharePublished: this.feeShareLaw.published === true,
-      jurisdictionPublished: this.jurisdictionLaw.published === true,
+      /** SPEC-SOVEREIGN §2–§4 — never invent pooling, P&L fees, or ranking. */
+      sovereign: {
+        shape: 'sovereign' as const,
+        custody: false,
+        feeModel: 'protocol_fee_share' as const,
+        pnlFeeForbidden: true,
+        rankingForbidden: true,
+        killUnfollowReal: true,
+      },
+      feeSharePublished,
+      jurisdictionPublished,
       statusLine: copyLawStatusLine(this.feeShareLaw, this.jurisdictionLaw),
       residual: copyLawResidual(this.feeShareLaw, this.jurisdictionLaw),
+      residuals: {
+        rates: feeSharePublished ? null : COPY_FEE_SHARE_RESIDUAL,
+        jurisdiction: jurisdictionPublished ? null : COPY_JURISDICTION_RESIDUAL,
+        autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+      },
+      /** SOCKET §13 — planMirror is real; place into spot stays refuse-closed. */
+      autoMirrorPlace: autoMirrorPlaceStatus(),
     };
+  }
+
+  /**
+   * Place a planned mirror as a spot order — SOCKET §13 refuse until the
+   * follower place wire exists. Never invents a fill from a plan.
+   */
+  async placeMirrorForFollow(principal: Principal, input: { followId: string; fillId: string }) {
+    const follow = await this.store.getFollow(input.followId);
+    if (!follow) {
+      throw new CopyError('Follow not found', 'trade.copy_not_following');
+    }
+    if (follow.followerId !== principal.userId) {
+      throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+    }
+    const prior = await this.store.getMirroredFill(follow.followId, input.fillId.trim());
+    if (!prior) {
+      throw new CopyError(
+        'No durable mirror plan for this fillId — planMirror first; place still refuse-closed',
+        'trade.copy_auto_mirror_place_socket',
+        COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+      );
+    }
+    throw new CopyError(
+      `Auto-mirror place into spot is refuse-closed (${autoMirrorPlaceStatus().socket}) — planMirror claimed fill ${prior.fillId}; never invent a spot fill`,
+      'trade.copy_auto_mirror_place_socket',
+      COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+    );
   }
 
   /**
@@ -129,43 +201,47 @@ export class CopyService {
   }
 
   /** Unilateral unfollow — does not require fee-share law; always allowed. */
-  async unfollow(principal: Principal, input: { followId: string }) {
-    const follow = await this.store.getFollow(input.followId);
-    if (!follow) {
-      throw new CopyError('Follow not found', 'trade.copy_not_following');
-    }
-    if (follow.followerId !== principal.userId) {
-      throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-    }
-    // The churn counters deliberately SURVIVE this.
-    //
-    // They are keyed `leader:follower`, not on `followId`, and that is correct:
-    // SPEC-SOVEREIGN caps leader earnings "per follower per period" and decays
-    // the rate with turnover, so the unit is the pair and the period — not the
-    // envelope. Clearing them here would make `unfollow` — which is unilateral,
-    // needs no law, and is always allowed — a free reset of the abuse brake:
-    // farm to the cap, unfollow, re-follow, farm again, unbounded, for the cost
-    // of two API calls. That is precisely what the cap exists to stop.
-    //
-    // (The counters are in fact LIFETIME rather than per-period today, because
-    // `copy_period_stats` has no period column. That is a real gap and the fix
-    // is a period key, not a user-triggered delete.)
-    await this.store.deleteFollow(follow.followId);
-    return { followId: follow.followId, revoked: true as const };
+  async unfollow(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(input.followId, async (store) => {
+      const follow = await store.getFollow(input.followId);
+      if (!follow) {
+        throw new CopyError('Follow not found', 'trade.copy_not_following');
+      }
+      if (follow.followerId !== principal.userId) {
+        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+      }
+      // The churn counters deliberately SURVIVE this.
+      //
+      // They are keyed `leader:follower`, not on `followId`, and that is correct:
+      // SPEC-SOVEREIGN caps leader earnings "per follower per period" and decays
+      // the rate with turnover, so the unit is the pair and the period — not the
+      // envelope. Clearing them here would make `unfollow` — which is unilateral,
+      // needs no law, and is always allowed — a free reset of the abuse brake:
+      // farm to the cap, unfollow, re-follow, farm again, unbounded, for the cost
+      // of two API calls. That is precisely what the cap exists to stop.
+      //
+      // (The counters are in fact LIFETIME rather than per-period today, because
+      // `copy_period_stats` has no period column. That is a real gap and the fix
+      // is a period key, not a user-triggered delete.)
+      await store.deleteFollow(follow.followId);
+      return { followId: follow.followId, revoked: true as const };
+    });
   }
 
   /** Kill fee-share for a follow (churn / abuse brake). Follow may remain. */
-  async killFeeShare(principal: Principal, input: { followId: string }) {
-    const follow = await this.store.getFollow(input.followId);
-    if (!follow) {
-      throw new CopyError('Follow not found', 'trade.copy_not_following');
-    }
-    if (follow.followerId !== principal.userId) {
-      throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-    }
-    const next: CopyFollow = { ...follow, feeShareKilled: true };
-    await this.store.saveFollow(next);
-    return presentCopyFollow(next);
+  async killFeeShare(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(input.followId, async (store) => {
+      const follow = await store.getFollow(input.followId);
+      if (!follow) {
+        throw new CopyError('Follow not found', 'trade.copy_not_following');
+      }
+      if (follow.followerId !== principal.userId) {
+        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+      }
+      const next: CopyFollow = { ...follow, feeShareKilled: true };
+      await store.saveFollow(next);
+      return presentCopyFollow(next);
+    });
   }
 
   /**
@@ -180,19 +256,12 @@ export class CopyService {
    * as `addExposureIfUnderCap` (#1191), so concurrent distinct fills still
    * cannot both pass a stale near-cap read.
    */
-  async planMirrorForFollow(
-    principal: Principal,
-    input: {
-      followId: string;
-      /** Leader fill business key — required; redelivery must not double-mirror. */
-      fillId: string;
-      marketId: string;
-      side: MirrorSide;
-      qty: string;
-      notional: string;
-    },
-  ) {
-    const follow = await this.store.getFollow(input.followId);
+  async planMirrorForFollow(principal: Principal, input: PlanMirrorInput) {
+    return this.store.runFollowExclusive(input.followId, (store) => this.planMirrorForFollowExclusive(store, principal, input));
+  }
+
+  private async planMirrorForFollowExclusive(store: CopyFollowStore, principal: Principal, input: PlanMirrorInput) {
+    const follow = await store.getFollow(input.followId);
     if (!follow) {
       throw new CopyError('Follow not found', 'trade.copy_not_following');
     }
@@ -211,12 +280,12 @@ export class CopyService {
     });
 
     // Fast path: already claimed this leader fill under this follow.
-    const prior = await this.store.getMirroredFill(follow.followId, observation.fillId);
+    const prior = await store.getMirroredFill(follow.followId, observation.fillId);
     if (prior) {
       return presentMirrorPlan({ ...prior, reason: 'within_envelope' });
     }
 
-    const current = await this.store.getExposure(follow.followId);
+    const current = await store.getExposure(follow.followId);
     // Envelope / market / expiry / per-order checks — may throw typed refuse.
     // Cap is re-checked inside claimMirrorFill under the follow exclusive lock
     // so a concurrent first-claim cannot overshoot even if this read is stale.
@@ -227,7 +296,7 @@ export class CopyService {
       now: this.now(),
     });
 
-    const claimed = await this.store.claimMirrorFill({
+    const claimed = await store.claimMirrorFill({
       followId: follow.followId,
       fillId: observation.fillId,
       maxAggregate: follow.envelope.maxAggregateExposure,
@@ -273,19 +342,12 @@ export class CopyService {
    * Same-fill redelivery on **this** path is closed via runFeeShareSettleOnce —
    * reserveEarnings must not fire twice for one fillId (period poison).
    */
-  async settleFeeShare(
-    principal: Principal,
-    input: {
-      followId: string;
-      fillId: string;
-      assetId: string;
-      followerFillNotional: string;
-      protocolFeeBps: number;
-      /** Settled fill fee when known — preferred over notional×bps invent. */
-      fillFeeAmount?: string;
-    },
-  ) {
-    const follow = await this.store.getFollow(input.followId);
+  async settleFeeShare(principal: Principal, input: SettleFeeShareInput) {
+    return this.store.runFollowExclusive(input.followId, (store) => this.settleFeeShareExclusive(store, principal, input));
+  }
+
+  private async settleFeeShareExclusive(store: CopyFollowStore, principal: Principal, input: SettleFeeShareInput) {
+    const follow = await store.getFollow(input.followId);
     if (!follow) {
       throw new CopyError('Follow not found', 'trade.copy_not_following');
     }
@@ -293,9 +355,9 @@ export class CopyService {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
 
-    const once = await this.store.runFeeShareSettleOnce(follow.followId, input.fillId, async () => {
+    const once = await store.runFeeShareSettleOnce(follow.followId, input.fillId, async () => {
       const key = `${follow.leaderId}:${follow.followerId}`;
-      const period = await this.store.getPeriodStats(key);
+      const period = await store.getPeriodStats(key);
       const attribution = attributeCopyFeeShare({
         law: this.feeShareLaw,
         fillId: input.fillId,
@@ -315,8 +377,9 @@ export class CopyService {
       if (law.published !== true) {
         // attributeCopyFeeShare already throws on blank; this is defensive for types.
         throw new CopyError(
-          'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+          'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 / D26-P0-02 leader_share_bps',
           'trade.copy_fee_share_blank',
+          COPY_FEE_SHARE_RESIDUAL,
         );
       }
       const cap = parseAmount(law.earningsCapPerFollower);
@@ -324,7 +387,7 @@ export class CopyService {
       // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
       // reserveEarnings always +1 round-trip so decay still advances on skips.
       const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
-      const reserved = await this.store.reserveEarnings(key, intend, cap);
+      const reserved = await store.reserveEarnings(key, intend, cap);
 
       if (reserved.reserved <= 0n) {
         const skipped =
@@ -359,7 +422,7 @@ export class CopyService {
       try {
         await postCopyFeeShareSettle(this.ledger, plan);
       } catch (err) {
-        await this.store.releaseEarnings(key, reserved.reserved);
+        await store.releaseEarnings(key, reserved.reserved);
         throw err;
       }
       return {

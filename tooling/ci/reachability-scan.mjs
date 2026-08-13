@@ -133,6 +133,7 @@ for (const f of sources) {
 const KEEPERS = [
   'packages/config/src/fiat-currency-honesty.ts',
   'packages/config/src/module-id-honesty.ts',
+  'packages/config/src/marketing-language.ts',
   'packages/contracts/src/analytics-metric-honesty.ts',
   'services/svc-agents/src/copy-intel/money-deny-honesty.ts',
   'services/svc-agents/src/merchant/guardrail-honesty.ts',

@@ -12,6 +12,7 @@
  *   · chargeback ledger wire (recipes exist; Nitro Class M/X sign-off — park)
  *   · sanctions screening (separate knobs — never shared with fraud)
  *   · inventing risk scores, approval rates, or protected-characteristic signals
+ *   · silent allow when a configured rule is missing its required signal
  *   · silent auto-decline with no reason
  *
  * Pure function of inputs. No DB, no balances, no ledger. Money never moves here.
@@ -124,6 +125,11 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
   const th = input.thresholds ?? {};
   const enabled = input.enabled;
 
+  const flag = (ruleId: FraudRuleId, detail: string, action: 'review' | 'decline'): void => {
+    reasons.push({ ruleId, detail });
+    outcome = worse(outcome, action);
+  };
+
   const consider = (ruleId: FraudRuleId, run: () => void): void => {
     if (!isRuleEnabled(enabled, ruleId)) {
       skippedDisabled.push(ruleId);
@@ -134,22 +140,25 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('blocklist_ip', () => {
     const ip = input.ip?.trim();
-    if (!ip) return;
-    if (toSet(input.blocklists?.ips).has(ip)) {
-      reasons.push({ ruleId: 'blocklist_ip', detail: `ip ${ip} is on the merchant/ops blocklist` });
-      outcome = worse(outcome, 'decline');
+    const ips = toSet(input.blocklists?.ips);
+    if (!ip) {
+      if (ips.size > 0) flag('blocklist_ip', 'IP risk signal is unavailable', 'review');
+      return;
+    }
+    if (ips.has(ip)) {
+      flag('blocklist_ip', 'IP matched the merchant/ops blocklist', 'decline');
     }
   });
 
   consider('blocklist_device', () => {
     const deviceId = input.deviceId?.trim();
-    if (!deviceId) return;
-    if (toSet(input.blocklists?.devices).has(deviceId)) {
-      reasons.push({
-        ruleId: 'blocklist_device',
-        detail: `device ${deviceId} is on the merchant/ops blocklist`,
-      });
-      outcome = worse(outcome, 'decline');
+    const devices = toSet(input.blocklists?.devices);
+    if (!deviceId) {
+      if (devices.size > 0) flag('blocklist_device', 'device risk signal is unavailable', 'review');
+      return;
+    }
+    if (devices.has(deviceId)) {
+      flag('blocklist_device', 'device matched the merchant/ops blocklist', 'decline');
     }
   });
 
@@ -157,14 +166,13 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
     const max = th.maxPaymentsInWindow;
     if (max === undefined || max < 0) return;
     const count = input.recentPaymentCount;
-    if (count === undefined) return; // no meter → do not invent a count
+    if (count === undefined || !Number.isSafeInteger(count) || count < 0) {
+      flag('velocity_count', 'recent payment count signal is unavailable', 'review');
+      return;
+    }
     if (count > max) {
       const action = th.velocityCountAction ?? 'review';
-      reasons.push({
-        ruleId: 'velocity_count',
-        detail: `recentPaymentCount ${count} exceeds maxPaymentsInWindow ${max}`,
-      });
-      outcome = worse(outcome, action);
+      flag('velocity_count', `recentPaymentCount ${count} exceeds maxPaymentsInWindow ${max}`, action);
     }
   });
 
@@ -172,14 +180,13 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
     const maxVol = parseDecimal(th.maxVolumeInWindow);
     if (maxVol === null) return;
     const recent = parseDecimal(input.recentVolume);
-    if (recent === null) return; // no meter → do not invent volume
+    if (recent === null) {
+      flag('velocity_volume', 'recent volume signal is unavailable', 'review');
+      return;
+    }
     if (recent > maxVol) {
       const action = th.velocityVolumeAction ?? 'review';
-      reasons.push({
-        ruleId: 'velocity_volume',
-        detail: `recentVolume ${input.recentVolume} exceeds maxVolumeInWindow ${th.maxVolumeInWindow}`,
-      });
-      outcome = worse(outcome, action);
+      flag('velocity_volume', `recentVolume ${input.recentVolume} exceeds maxVolumeInWindow ${th.maxVolumeInWindow}`, action);
     }
   });
 
@@ -187,16 +194,18 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
     const mult = th.amountAnomalyMultiplier;
     if (mult === undefined || !(mult > 1) || !Number.isFinite(mult)) return;
     const baseline = parseDecimal(input.baselineAmount);
-    if (baseline === null || baseline === 0) return; // no baseline → skip, never invent
+    if (baseline === null || baseline === 0) {
+      flag('amount_anomaly', 'merchant amount baseline signal is unavailable', 'review');
+      return;
+    }
     const amount = parseDecimal(input.amount);
-    if (amount === null) return;
+    if (amount === null) {
+      flag('amount_anomaly', 'payment amount signal is unavailable', 'review');
+      return;
+    }
     if (amount > baseline * mult) {
       const action = th.amountAnomalyAction ?? 'review';
-      reasons.push({
-        ruleId: 'amount_anomaly',
-        detail: `amount ${input.amount} exceeds ${mult}× baseline ${input.baselineAmount}`,
-      });
-      outcome = worse(outcome, action);
+      flag('amount_anomaly', `amount exceeds ${mult}× merchant baseline`, action);
     }
   });
 

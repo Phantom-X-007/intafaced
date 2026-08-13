@@ -148,9 +148,10 @@ export interface LiquidationLadderDeps {
  * transport accepted the notice — that is the sole predicate that may start a
  * future grace clock (`mayStartMarginCallGrace` in `maintenance-ladder.ts`).
  *
- * Until a real channel is wired, use `stubMarginCallNotifier` (always
- * undelivered). An optional port that defaults to "pretend delivered" would
- * re-open C15; the stub defaults the other way on purpose.
+ * Production wires `durableMarginCallNotifier` (store write ⇒ delivered).
+ * Tests that want the pre-transport seal still use `stubMarginCallNotifier`
+ * (always undelivered). An optional port that defaults to "pretend delivered"
+ * would re-open C15; the tick still defaults to the stub when the dep is omitted.
  */
 export interface MarginCallNotifier {
   notifyMarginCall(input: {
@@ -250,9 +251,11 @@ export interface LiquidationTickDeps {
   ladder?: LiquidationLadderDeps;
   /**
    * C15 transport for the `margin-call` rung. Defaults to
-   * `stubMarginCallNotifier` (delivered=false). Real notify must return
-   * delivered=true before any future grace field may start; the tick never
-   * treats margin_call as grace-expired seizure while grace is unimplemented.
+   * `stubMarginCallNotifier` (delivered=false) so a forgotten wire stays
+   * honest. Production (`startFuturesJobs`) passes
+   * `durableMarginCallNotifier`. Real notify must return delivered=true
+   * before any future grace field may start; the tick never treats
+   * margin_call as grace-expired seizure while grace is unimplemented.
    */
   notifyMarginCall?: MarginCallNotifier;
 }
@@ -272,6 +275,11 @@ export interface LiquidationTickItemResult {
     | 'invalid';
   reason: string;
   summary?: string;
+  /**
+   * Set when `outcome === 'margin_call'`: whether the notify port accepted
+   * delivery. Observable on the tick result; REST durability is the trader door.
+   */
+  delivered?: boolean;
 }
 
 export interface LiquidationTickResult {
@@ -555,6 +563,7 @@ async function runLadderRung(
         outcome: 'margin_call',
         reason: decision.reason,
         summary: summarizeLadder(decision),
+        delivered: delivery.delivered,
       };
     }
 

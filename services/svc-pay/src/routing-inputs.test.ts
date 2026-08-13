@@ -90,7 +90,7 @@ describe('pay.routing — refuse when geo/method/risk data missing', () => {
   });
 
   it('source tree still bans inventable score field assignments in routing modules', () => {
-    const files = ['routing-inputs.ts', 'rails/posture.ts', 'sandbox-key-routing.ts'];
+    const files = ['routing-inputs.ts', 'rails/posture.ts', 'sandbox-key-routing.ts', 'routing/decide.ts'];
     for (const f of files) {
       const src = readFileSync(join(here, f), 'utf8');
       // No property assignment / object field definition of inventable scores.

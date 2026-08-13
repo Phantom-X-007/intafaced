@@ -331,6 +331,33 @@ describe('navigator.answer metered session run', () => {
     expect(result.findings).toHaveLength(1);
   });
 
+  it('refuses another user identity session inside the audited runtime and bills zero', async () => {
+    const fake = new FakeRuntime();
+    const result = await runNavigatorAnswerSession({
+      ...baseInput(fake),
+      asks: [
+        {
+          tool: 'identity.session.read',
+          session: {
+            sessionId: 'session-other',
+            userId: '99999999-9999-4999-8999-999999999999',
+            status: 'open' as const,
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_grounded_answer',
+      unanswered: [{ tool: 'identity.session.read', refusedBy: 'tool', reason: 'subject_mismatch' }],
+      metering: { billedAmount: '0', settlements: [] },
+    });
+    expect(fake.toolCalls).toEqual(['identity.session.read']);
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
   it('refuses the whole run when nothing was reachable — no empty answer dressed as a result', async () => {
     const fake = new FakeRuntime();
     const result = await runNavigatorAnswerSession({

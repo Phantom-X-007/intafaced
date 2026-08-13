@@ -30,6 +30,7 @@ describe('startFuturesJobs', () => {
       },
     });
     expect(handle.host.list()).toEqual([]);
+    expect(handle.marginCalls).toBeTruthy();
     handle.stop();
   });
 

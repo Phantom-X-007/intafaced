@@ -1,5 +1,6 @@
 /**
- * Subscriptions — schedule + lifecycle + due runner (invoice path, no pull).
+ * Subscriptions — schedule arithmetic, the charge cycle, lifecycle, and the
+ * internal runner route. Invoice path only; nothing here pulls.
  */
 export {
   CADENCES,
@@ -12,14 +13,58 @@ export {
   type DuePlan,
 } from './schedule.js';
 export {
+  MAX_ATTEMPTS_PER_CYCLE,
+  STALL_REASONS,
+  assertKeyedByPeriod,
+  assertWithinMandateCeiling,
+  assertWithinMandateWindow,
+  chargeIdempotencyKey,
+  invoiceExpiredAt,
+  lastAuthorisedOccurrence,
+  mandateChargeCeiling,
+  occurrenceDueAt,
+  planChargeCycle,
+  projectReAnchor,
+  resolveSubscriptionFeeBps,
+  retryDueAt,
+  type CycleDisposition,
+  type CycleFrame,
+  type CycleStatus,
+  type LastCycle,
+  type StallReason,
+} from './charge-cycle.js';
+export {
   SubscriptionService,
   assertMandateTermsUnchanged,
   normaliseSubscriptionPath,
   SUBSCRIPTION_PATHS,
+  type CycleOutcome,
+  type CycleRecord,
+  type ExecutionRecord,
+  type FiringOutcome,
   type MandateRecord,
-  type SubscriptionRecord,
+  type MerchantFeeBpsResolver,
   type SubscriptionInvoiceOpener,
   type SubscriptionPath,
-  type FiringOutcome,
+  type SubscriptionRecord,
+  type SubscriptionServiceOptions,
   type RunReport,
 } from './subscription-service.js';
+export {
+  CARD_MANDATE_CHARGE_SOCKET,
+  DUNNING_STALL_REASON,
+  MANDATE_PATH_MATRIX,
+  PRECHARGE_NOTIFY_SOCKET,
+  acknowledgePreChargeNotifyBeforeCharge,
+  assertChargeTracesToMandate,
+  dunningAttemptsExhausted,
+  mandateChargeDisposition,
+  mandateDunningBound,
+  pathOpensMoney,
+  preChargeNotifyGap,
+  subscriptionsProductPosture,
+  type MandateChargeDisposition,
+  type MandatePathRow,
+  type PreChargeNotifyGap,
+} from './mandate-product.js';
+export { registerSubscriptionCycleRoutes } from './internal-cycle-routes.js';

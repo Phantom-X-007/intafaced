@@ -15,8 +15,9 @@ import {
 } from './fleet/guardrails.js';
 import { digestOfText, type ModelGateway } from './gateway/gateway.js';
 import type { RouteDef } from './gateway/routing.js';
+import { type SettlementResult, type UsageMeter } from './metering/meter.js';
+import { meteringOffSettlementStub, shouldMeterUsage } from './metering/product-law.js';
 import { usageCost } from './metering/pricing.js';
-import { chargeKeyFor, type SettlementResult, type UsageMeter } from './metering/meter.js';
 import type { TokenUsage } from './providers/provider.js';
 import { withEngineSpan } from './tracing.js';
 
@@ -58,11 +59,11 @@ export interface AgentRuntimeOptions {
   /**
    * Operator kill-switch for billing (§14 admin controls).
    *
-   * When off: no `usage_records` row, no usage window, no `feeCharge`. The
-   * completion still lands on the action audit with token counts so operators
-   * can see what the fleet spent while billing was dark. Restoring
-   * `usage_records` while metering is off is a product ruling — do not invent
-   * a silent dual-write path that would re-price later under a different rate.
+   * When off (D26-P1-A6 product law, sealed): audit-only forever — no
+   * `usage_records` row, no usage window, no `feeCharge`. The completion still
+   * lands on the action audit with token counts so operators can see what the
+   * fleet spent while billing was dark. Dual-write of `usage_records` while
+   * metering is off is forbidden — see `metering/product-law.ts`.
    */
   readonly meteringEnabled?: boolean;
 }
@@ -401,7 +402,7 @@ export class AgentRuntime {
     // used to call the provider again, insert zero-cost usage (ON CONFLICT), and
     // bypass the spend cap. Once a request id has been metered, the caller opens
     // a new id — they do not get free re-inference under the old one.
-    const shouldMeter = session.metered && this.meteringEnabled;
+    const shouldMeter = shouldMeterUsage(session.metered, this.meteringEnabled);
     if (shouldMeter && (await this.meter.hasRequest(session.id, input.requestId))) {
       const err = new AgentError(
         `Request id "${input.requestId}" was already metered on session ${session.id}`,
@@ -568,24 +569,18 @@ export class AgentRuntime {
    * transaction id, so a settlement that was posted but not yet recorded
    * resumes to exactly one charge and exactly one log line.
    *
-   * When `meteringEnabled` is false, returns `settled: false` and posts nothing
-   * — leftover windows stay open for a later metering-on process.
+   * When `meteringEnabled` is false (D26-P1-A6), returns the metering-off
+   * settlement stub and posts nothing — leftover windows stay open for a later
+   * metering-on process. No silent feeCharge.
    */
   async settleWindow(sessionId: string, windowId: string): Promise<SettlementResult> {
     const session = await this.requireSession(sessionId, { allowClosed: true });
-    // Kill-switch: never feeCharge while metering is off — including leftover
+    // D26-P1-A6: never feeCharge while metering is off — including leftover
     // windows from a prior metering-on process. When billing returns, open
     // windows are settled again; while off, inventing a charge would break the
-    // audit-only promise.
+    // audit-only forever promise.
     if (!this.meteringEnabled) {
-      return {
-        sessionId,
-        windowId,
-        chargeKey: chargeKeyFor(sessionId, windowId),
-        amount: 0n,
-        chargeTxId: null,
-        settled: false,
-      };
+      return meteringOffSettlementStub(sessionId, windowId);
     }
     const result = await this.meter.settle({ sessionId, userId: session.userId, windowId });
 

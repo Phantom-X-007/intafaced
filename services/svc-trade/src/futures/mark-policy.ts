@@ -144,6 +144,34 @@ export function acceptableForMarking(mark: FuturesQuotedMark, now: Date, policy:
 }
 
 /**
+ * Is this mark fit to OPEN a position — to set entry and size the margin lock?
+ *
+ * `DIRECTION` MVP-1: a position opens against an oracle, and the mark is **not**
+ * our own last-trade price. Entry is a money-moving price (it locks margin), so
+ * `last` is refused here even though valuation (screens, losing voluntary exits)
+ * may still use it under `acceptableForMarking`.
+ *
+ * Qualities reuse `liquidationQualities` (index/mid by default) — the same
+ * oracle-grade set — without the tighter liquidation staleness or the deviation
+ * breaker (there is no previous mark at open).
+ */
+export function acceptableForEntry(mark: FuturesQuotedMark, now: Date, policy: MarkPolicy): MarkCheck {
+  const base = acceptableForMarking(mark, now, policy);
+  if (!base.ok) return base;
+
+  if (!policy.liquidationQualities.includes(mark.quality)) {
+    return {
+      ok: false,
+      code: MARK_UNUSABLE,
+      reason:
+        `${mark.marketId}: mark quality "${mark.quality}" is not an entry basis (allowed: ` +
+        `${policy.liquidationQualities.join(', ')}) — DIRECTION MVP-1: a position must not open on last-trade`,
+    };
+  }
+  return OK;
+}
+
+/**
  * Is this mark fit to CLOSE A POSITION THE OWNER DID NOT ASK TO CLOSE? A strictly higher bar.
  *
  * `previous` is the last mark this position was accepted against. Passing null

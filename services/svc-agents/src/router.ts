@@ -12,6 +12,7 @@ import { scannerAgentGuardrail } from './scanner/guardrail.js';
 import { invokeScannerDataTool } from './scanner/data-tools.js';
 import { scannerTierGate } from './scanner/tier-gate.js';
 import { runScannerRankSession } from './scanner/session-run.js';
+import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './scanner/signal-inputs-law.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
@@ -21,6 +22,7 @@ import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
+import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/directory.js';
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
@@ -578,7 +580,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      *
      * Spec: docs/ops/trk/agents.scanner.md. Never invents prices or market rows:
      * caller hands allowlisted fixtures / tool rows. Dark plane + blank tier law
-     * refuse-closed. No ledger, no order placement.
+     * + unsealed D26-P0-11 signal-inputs law refuse-closed. No ledger, no order placement.
      */
     scanner: router({
       rankFixtures: scopedProcedure('agents:read', { module: 'agents' })
@@ -600,6 +602,19 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             marketPlane: z.enum(['live', 'dark']).optional(),
             marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
             now: z.string().datetime().optional(),
+            /** D26-P0-11. Blank / omitted → refuse ranked signals (D26-P1-A3). */
+            signalInputsLaw: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  p0_11: z.literal('sealed'),
+                  allowedInputs: z.array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding'])).max(20),
+                  rankingRecipeId: z.literal('abs_change_x_log_volume'),
+                }),
+              ])
+              .nullable()
+              .optional(),
           }),
         )
         .output(
@@ -627,6 +642,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               userMessageKey: z.literal('agents.scanner.unavailable'),
               reason: z.enum(['stale', 'no_quotes', 'market_plane_dark']),
             }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['signal_inputs_law_blank', 'inputs_empty', 'ranking_recipe_unknown', 'required_inputs_missing']),
+              userMessageKey: z.literal('agents.scanner.tier_closed'),
+              residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL),
+            }),
           ]),
         )
         .query(({ input }) => {
@@ -635,6 +656,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.marketPlane === undefined ? {} : { marketPlane: input.marketPlane }),
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
+            signalInputsLaw: input.signalInputsLaw ?? null,
           });
           // Strip readonly for the wire shape (zod output is mutable arrays).
           if (result.status === 'ok') {
@@ -879,7 +901,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
 
       /**
        * Stage-2 rank via allowlisted ticker tools + tier depth.
-       * Blank law / dark plane / all tickers refused → typed refuse (no invent).
+       * Blank P0-11 / blank law / dark plane / all tickers refused → typed refuse (no invent).
        */
       rankLive: scopedProcedure('agents:read', { module: 'agents' })
         .input(
@@ -899,6 +921,18 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                       }),
                     )
                     .default({}),
+                }),
+              ])
+              .nullable()
+              .optional(),
+            signalInputsLaw: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  p0_11: z.literal('sealed'),
+                  allowedInputs: z.array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding'])).max(20),
+                  rankingRecipeId: z.literal('abs_change_x_log_volume'),
                 }),
               ])
               .nullable()
@@ -950,8 +984,19 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['tier_law_blank', 'tier_not_granted', 'depth_invalid', 'market_plane_dark', 'no_live_tickers']),
-              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
+              reason: z.enum([
+                'tier_law_blank',
+                'tier_not_granted',
+                'depth_invalid',
+                'market_plane_dark',
+                'no_live_tickers',
+                'signal_inputs_law_blank',
+                'inputs_empty',
+                'ranking_recipe_unknown',
+                'required_inputs_missing',
+              ]),
+              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed', 'agents.scanner.tier_closed']),
+              residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL).optional(),
             }),
           ]),
         )
@@ -961,6 +1006,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             tierLaw: input.law ?? null,
             userTier: input.userTier,
             tickers: input.tickers,
+            signalInputsLaw: input.signalInputsLaw ?? null,
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
           });
@@ -1019,6 +1065,18 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               ])
               .nullable()
               .optional(),
+            signalInputsLaw: z
+              .union([
+                z.object({ published: z.literal(false) }),
+                z.object({
+                  published: z.literal(true),
+                  p0_11: z.literal('sealed'),
+                  allowedInputs: z.array(z.enum(['last', 'volume24h', 'change24hBps', 'spread', 'funding'])).max(20),
+                  rankingRecipeId: z.literal('abs_change_x_log_volume'),
+                }),
+              ])
+              .nullable()
+              .optional(),
             // Capped well under the guardrail's per-session action budget: one
             // ticker is one audited tool call.
             tickers: z
@@ -1072,8 +1130,19 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['tier_law_blank', 'tier_not_granted', 'depth_invalid', 'market_plane_dark', 'no_live_tickers']),
-              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed']),
+              reason: z.enum([
+                'tier_law_blank',
+                'tier_not_granted',
+                'depth_invalid',
+                'market_plane_dark',
+                'no_live_tickers',
+                'signal_inputs_law_blank',
+                'inputs_empty',
+                'ranking_recipe_unknown',
+                'required_inputs_missing',
+              ]),
+              userMessageKey: z.enum(['agents.scanner.unavailable', 'agents.scanner.tier_closed', 'agents.scanner.tier_closed']),
+              residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL).optional(),
               tickersRefusedByTool: z.number().int(),
               tickersRefusedByGuardrail: z.number().int(),
               metering: runMeteringOutput,
@@ -1088,6 +1157,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               feeAssetId,
               plane: input.plane,
               tierLaw: input.law ?? null,
+              signalInputsLaw: input.signalInputsLaw ?? null,
               userTier: input.userTier,
               tickers: input.tickers,
               ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
@@ -1133,6 +1203,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 status: 'refuse' as const,
                 reason: result.reason,
                 userMessageKey: result.userMessageKey,
+                ...(result.residual === undefined ? {} : { residual: result.residual }),
                 tickersRefusedByTool: result.tickersRefusedByTool,
                 tickersRefusedByGuardrail: result.tickersRefusedByGuardrail,
                 metering,
@@ -1438,6 +1509,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'stale',
                   'empty_markets',
                   'incomplete_session',
+                  'subject_mismatch',
                 ]),
                 userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
               }),
@@ -1453,12 +1525,13 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           }),
         )
-        .query(({ input }) => {
+        .query(({ ctx, input }) => {
           const result = invokeNavigatorDataTool({
             tool: input.tool,
             plane: input.plane,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
+            requesterUserId: ctx.principal.userId,
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             quote: input.quote ?? null,
             markets: input.markets ?? null,
@@ -1918,6 +1991,9 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'incomplete_account',
                   'not_ticket_owner',
                   'account_owner_mismatch',
+                  'balance_field_forbidden',
+                  'account_plane_dark',
+                  'account_not_attempted',
                 ]),
                 userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               }),
@@ -2072,6 +2148,21 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .optional(),
             /** The user is asking for money to move. Escalates to a person, free. */
             moneyRequest: z.boolean().optional(),
+            /**
+             * Published ops.support KB spine (contract `SupportKbArticle`).
+             * Used when an ask carries `kbQuery` — never invents articles.
+             */
+            kbCatalog: z
+              .array(
+                z.object({
+                  id: z.string().min(1).max(200),
+                  titleKey: z.string().min(1).max(200),
+                  bodyKey: z.string().min(1).max(200),
+                }),
+              )
+              .max(500)
+              .nullable()
+              .optional(),
             // Capped well under the guardrail's per-session action budget: one
             // read is one audited tool call, refusals included.
             asks: z
@@ -2089,6 +2180,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                     .max(200)
                     .nullable()
                     .optional(),
+                  /** Search fragment against `kbCatalog` when articles omitted. */
+                  kbQuery: z.string().max(200).nullable().optional(),
                   ticket: z
                     .object({
                       ticketId: z.string().min(1).max(120),
@@ -2104,6 +2197,25 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                       status: z.enum(['active', 'frozen', 'closed']),
                       kycTier: z.string().max(64),
                     })
+                    .nullable()
+                    .optional(),
+                  /** Contract grounding — unread/plane-dark refuses invent. */
+                  accountGrounding: z
+                    .discriminatedUnion('status', [
+                      z.object({
+                        status: z.literal('read'),
+                        state: z.object({
+                          userId: z.string().uuid(),
+                          status: z.enum(['active', 'frozen', 'closed']),
+                          kycTier: z.enum(['none', 'basic', 'full', 'institutional']),
+                        }),
+                        readAt: z.string().datetime(),
+                      }),
+                      z.object({
+                        status: z.literal('unread'),
+                        reason: z.enum(['plane_dark', 'not_attempted']),
+                      }),
+                    ])
                     .nullable()
                     .optional(),
                 }),
@@ -2153,15 +2265,24 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               metering: runMeteringOutput,
             }),
             z.object({
+              status: z.literal('stopped'),
+              reason: z.literal('aborted'),
+              // No new i18n key — FE fence. Caller keys off status+reason.
+              userMessageKey: z.literal('agents.support.unavailable'),
+              findings: z.array(supportFindingOutput),
+              unanswered: z.array(supportUnansweredOutput),
+              metering: runMeteringOutput,
+            }),
+            z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read']),
+              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read', 'account_state_missing']),
               userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               unanswered: z.array(supportUnansweredOutput),
               metering: runMeteringOutput,
             }),
           ]),
         )
-        .mutation(({ ctx, input }) =>
+        .mutation(({ ctx, input, signal }) =>
           guard(async () => {
             const result = await runSupportReplySession({
               runtime,
@@ -2171,11 +2292,15 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               tierLaw: input.law ?? null,
               userTier: input.userTier,
               ...(input.moneyRequest === undefined ? {} : { moneyRequest: input.moneyRequest }),
+              ...(signal === undefined ? {} : { signal }),
+              kbCatalog: input.kbCatalog ?? null,
               asks: input.asks.map((ask) => ({
                 tool: ask.tool,
                 articles: ask.articles ?? null,
+                kbQuery: ask.kbQuery ?? null,
                 ticket: ask.ticket ?? null,
                 account: ask.account ?? null,
+                accountGrounding: ask.accountGrounding ?? null,
               })),
             });
 
@@ -2219,6 +2344,17 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 : f,
             );
 
+            if (result.status === 'stopped') {
+              return {
+                status: 'stopped' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                findings,
+                unanswered,
+                metering,
+              };
+            }
+
             if (result.status === 'escalate') {
               const cf = result.caseFile;
               return {
@@ -2258,6 +2394,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
     /**
      * Copy-Intel Stage-1 — audited leader stats from caller fixtures only.
      * trade.copy is on tip; live leader plane is residual — dark refuses invent.
+     * SPEC-SOVEREIGN §4: ok output is a directory (leaderId order), never a
+     * returns-ranked marketing board (D26-P1-A5).
      * Spec: docs/ops/trk/agents.copy-intel.md Stage 1.
      */
     copyIntel: router({
@@ -2319,6 +2457,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 }),
               ),
               skippedIncomplete: z.number().int(),
+              presentation: z.object({
+                kind: z.literal('directory'),
+                rankedByReturns: z.literal(false),
+                sortKey: z.literal('leaderId'),
+              }),
             }),
             z.object({
               status: z.literal('empty'),
@@ -2338,18 +2481,108 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
           });
           if (result.status === 'ok') {
+            // Directory presentation (D26-P1-A5 residual): leaderId order on the wire —
+            // pure buildLeaderStats keeps fixture order; this door never echoes a PnL rank.
+            const ordered = sortDirectoryByLeaderId(result.stats);
+            const byLeader = new Map(result.audit.map((a) => [a.leaderId, a] as const));
             return {
               status: 'ok' as const,
               skippedIncomplete: result.skippedIncomplete,
-              stats: result.stats.map((s) => ({ ...s })),
-              audit: result.audit.map((a) => ({
-                id: a.id,
-                writtenAt: a.writtenAt,
-                source: a.source,
-                leaderId: a.leaderId,
-                stat: { ...a.stat },
-                provenance: { ...a.provenance },
-              })),
+              stats: ordered.map((s) => ({ ...s })),
+              audit: ordered
+                .map((s) => byLeader.get(s.leaderId))
+                .filter((a): a is NonNullable<typeof a> => a !== undefined)
+                .map((a) => ({
+                  id: a.id,
+                  writtenAt: a.writtenAt,
+                  source: a.source,
+                  leaderId: a.leaderId,
+                  stat: { ...a.stat },
+                  provenance: { ...a.provenance },
+                })),
+              presentation: {
+                kind: 'directory' as const,
+                rankedByReturns: false as const,
+                sortKey: 'leaderId' as const,
+              },
+            };
+          }
+          return result;
+        }),
+
+      /**
+       * Present audited stats as a searchable directory.
+       * Returns-rank / marketing-board modes refuse (SPEC-SOVEREIGN §4).
+       */
+      presentDirectory: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            stats: z
+              .array(
+                z.object({
+                  leaderId: z.string().min(1).max(64),
+                  realisedPnl: z.string(),
+                  closedTrades: z.number().int(),
+                  winRate: z.string(),
+                  windowStart: z.string().min(1),
+                  windowEnd: z.string().min(1),
+                }),
+              )
+              .max(500),
+            mode: z.string().max(64).optional(),
+            sortBy: z.string().max(64).optional(),
+            leaderFilter: z.array(z.string().min(1).max(64)).max(500).optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('ok'),
+              skippedFiltered: z.number().int(),
+              presentation: z.object({
+                kind: z.literal('directory'),
+                rankedByReturns: z.literal(false),
+                sortKey: z.literal('leaderId'),
+                leaders: z.array(
+                  z.object({
+                    leaderId: z.string(),
+                    realisedPnl: z.string(),
+                    closedTrades: z.number().int(),
+                    winRate: z.string(),
+                    windowStart: z.string(),
+                    windowEnd: z.string(),
+                  }),
+                ),
+              }),
+            }),
+            z.object({
+              status: z.literal('empty'),
+              userMessageKey: z.literal('agents.copy_intel.empty'),
+            }),
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['returns_ranked_board', 'marketing_board']),
+              userMessageKey: z.literal('agents.copy_intel.unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = presentLeaderDirectory({
+            stats: input.stats,
+            ...(input.mode === undefined ? {} : { mode: input.mode }),
+            ...(input.sortBy === undefined ? {} : { sortBy: input.sortBy }),
+            ...(input.leaderFilter === undefined ? {} : { leaderFilter: input.leaderFilter }),
+          });
+          if (result.status === 'ok') {
+            return {
+              status: 'ok' as const,
+              skippedFiltered: result.skippedFiltered,
+              presentation: {
+                kind: 'directory' as const,
+                rankedByReturns: false as const,
+                sortKey: 'leaderId' as const,
+                leaders: result.presentation.leaders.map((l) => ({ ...l })),
+              },
             };
           }
           return result;
@@ -2362,6 +2595,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
        * same builder through `openSession → act → settle → closeSession` so
        * every leader read is guardrail-checked and audited. Dark copy plane
        * refuses before any session opens (unbilled). Never invents fee share.
+       * Ok presentation is always a directory — never returns-ranked.
        */
       runSession: scopedProcedure('agents:execute', { module: 'agents' })
         .input(
@@ -2424,6 +2658,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               fixturesAccepted: z.number().int(),
               fixturesRefusedByGuardrail: z.number().int(),
               writesRefusedByGuardrail: z.number().int(),
+              presentation: z.object({
+                kind: z.literal('directory'),
+                rankedByReturns: z.literal(false),
+                sortKey: z.literal('leaderId'),
+              }),
               metering: runMeteringOutput,
             }),
             z.object({
@@ -2473,21 +2712,31 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
 
             if (result.status === 'ok') {
+              const ordered = sortDirectoryByLeaderId(result.stats);
+              const byLeader = new Map(result.audit.map((a) => [a.leaderId, a] as const));
               return {
                 status: 'ok' as const,
                 skippedIncomplete: result.skippedIncomplete,
                 fixturesAccepted: result.fixturesAccepted,
                 fixturesRefusedByGuardrail: result.fixturesRefusedByGuardrail,
                 writesRefusedByGuardrail: result.writesRefusedByGuardrail,
-                stats: result.stats.map((s) => ({ ...s })),
-                audit: result.audit.map((a) => ({
-                  id: a.id,
-                  writtenAt: a.writtenAt,
-                  source: a.source,
-                  leaderId: a.leaderId,
-                  stat: { ...a.stat },
-                  provenance: { ...a.provenance },
-                })),
+                stats: ordered.map((s) => ({ ...s })),
+                audit: ordered
+                  .map((s) => byLeader.get(s.leaderId))
+                  .filter((a): a is NonNullable<typeof a> => a !== undefined)
+                  .map((a) => ({
+                    id: a.id,
+                    writtenAt: a.writtenAt,
+                    source: a.source,
+                    leaderId: a.leaderId,
+                    stat: { ...a.stat },
+                    provenance: { ...a.provenance },
+                  })),
+                presentation: {
+                  kind: 'directory' as const,
+                  rankedByReturns: false as const,
+                  sortKey: 'leaderId' as const,
+                },
                 metering,
               };
             }

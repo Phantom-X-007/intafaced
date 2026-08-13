@@ -23,6 +23,24 @@ describe('updateScene concurrent edit policy (wired residual)', () => {
     expect(ok.ok).toBe(true);
   });
 
+  it('omit fingerprint on non-empty server scene refuses (no last-write)', () => {
+    const current = {
+      version: 1 as const,
+      stage: { width: 10, height: 10 },
+    };
+    const next = { version: 1 as const, stage: { width: 20, height: 20 } };
+    const omitted = decideHostSceneWrite({ current, next });
+    expect(omitted.ok).toBe(false);
+    if (!omitted.ok) expect(omitted.reason).toBe('conflict');
+
+    const ok = decideHostSceneWrite({
+      current,
+      next,
+      expectedFingerprint: sceneFingerprint(current),
+    });
+    expect(ok.ok).toBe(true);
+  });
+
   it('duplicate participantId is presence_collision (not silent last-write)', () => {
     const current = emptyScene();
     const next = {

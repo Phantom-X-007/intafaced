@@ -7,6 +7,7 @@ import { createAccountStateClient } from './account-state.js';
 import { SupportService } from './support-service.js';
 import { PostgresSupportStore } from './store.js';
 import { createSupportRouter, type SupportRouter } from './router.js';
+import { deskVsAgentSplit } from './desk-vs-agent-split.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -55,14 +56,21 @@ const edgeContext = createEdgeContext({
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({
-  ready: true,
-  stage: '4-audited-grounded-desk',
-  store: 'postgres',
-  // Named so an operator can tell "no account state was readable" from "this
-  // desk was never pointed at an identity service" without reading the logs.
-  accountStateSource: 'svc-identity',
-}));
+app.get('/ready', async () => {
+  // D26-P1-O3: desk mountain vs agents.support assist — same constants as tests.
+  const split = deskVsAgentSplit();
+  return {
+    ready: true,
+    stage: split.stage,
+    store: 'postgres',
+    // Named so an operator can tell "no account state was readable" from "this
+    // desk was never pointed at an identity service" without reading the logs.
+    accountStateSource: split.accountStateSource,
+    deskMountain: split.deskMountain,
+    agentAssist: split.agentAssist,
+    deskStandalone: split.deskStandalone,
+  };
+});
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',

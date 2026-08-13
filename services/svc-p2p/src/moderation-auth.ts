@@ -45,11 +45,14 @@ export function isModerationConfigured(moderatorUserIds: readonly string[]): boo
 }
 
 /**
- * A principal is a moderator when they hold `admin:compliance` OR their user
- * id is on the allowlist. The allowlist path is what makes a real session
- * reachable; the scope path remains for tests and any future operator grant.
+ * A SESSION principal is a moderator when they hold `admin:compliance` OR
+ * their user id is on the allowlist. `kid` marks an identity-issued API key;
+ * machine credentials never satisfy the human-ruling requirement, even when
+ * the underlying user is allowlisted or the key carries an operator-looking
+ * scope. This is the service-local backstop for D-S-08.
  */
-export function isModerator(principal: Pick<Principal, 'userId' | 'scopes'>, moderatorUserIds: readonly string[]): boolean {
+export function isModerator(principal: Pick<Principal, 'userId' | 'scopes' | 'kid'>, moderatorUserIds: readonly string[]): boolean {
+  if (principal.kid) return false;
   if (principal.scopes.includes('admin:compliance')) return true;
   if (!isNaturalPersonId(principal.userId)) return false;
   return moderatorUserIds.includes(principal.userId.toLowerCase());
@@ -59,8 +62,15 @@ export function isModerator(principal: Pick<Principal, 'userId' | 'scopes'>, mod
  * Gate for list / resolve. Distinguishes "nobody can moderate here" from
  * "you are not one of the people who can".
  */
-export function assertModerator(principal: Pick<Principal, 'userId' | 'scopes'>, moderatorUserIds: readonly string[]): void {
+export function assertModerator(principal: Pick<Principal, 'userId' | 'scopes' | 'kid'>, moderatorUserIds: readonly string[]): void {
   if (isModerator(principal, moderatorUserIds)) return;
+
+  if (principal.kid) {
+    throw new P2pError(
+      'A human moderator using an interactive session must rule on a P2P dispute; API keys cannot adjudicate escrow.',
+      'p2p.not_a_moderator',
+    );
+  }
 
   if (!isModerationConfigured(moderatorUserIds)) {
     throw new P2pError(

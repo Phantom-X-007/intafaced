@@ -108,6 +108,92 @@ export function buildRefundRequest(
   };
 }
 
+export function buildAuthorizePaymentRequest(opts: PayPluginClientOptions, paymentId: string, idempotencyKey: string): PluginRequest {
+  if (!paymentId.trim()) throw new Error('pay.plugins: paymentId required');
+  if (!idempotencyKey.trim()) {
+    throw new Error('pay.plugins: Idempotency-Key is required on money POSTs');
+  }
+  return {
+    method: 'POST',
+    path: `${PAY_PUBLIC_API_BASE}/payments/${encodeURIComponent(paymentId)}/authorize`,
+    headers: {
+      authorization: `Bearer ${opts.apiKey}`,
+      'content-type': 'application/json',
+      'idempotency-key': idempotencyKey,
+    },
+    body: '{}',
+  };
+}
+
+export function buildCapturePaymentRequest(opts: PayPluginClientOptions, paymentId: string, idempotencyKey: string): PluginRequest {
+  if (!paymentId.trim()) throw new Error('pay.plugins: paymentId required');
+  if (!idempotencyKey.trim()) {
+    throw new Error('pay.plugins: Idempotency-Key is required on money POSTs');
+  }
+  return {
+    method: 'POST',
+    path: `${PAY_PUBLIC_API_BASE}/payments/${encodeURIComponent(paymentId)}/capture`,
+    headers: {
+      authorization: `Bearer ${opts.apiKey}`,
+      'content-type': 'application/json',
+      'idempotency-key': idempotencyKey,
+    },
+    body: '{}',
+  };
+}
+
+export interface RegisterWebhookEndpointBody {
+  readonly merchantId: string;
+  /** Must be https — merchant-webhooks refuse http remotes. */
+  readonly url: string;
+}
+
+/**
+ * Build (do not send) webhook-endpoint registration.
+ * Public REST step 3 — returns signing secret once on the wire; client does not invent secrets.
+ */
+export function buildRegisterWebhookEndpointRequest(opts: PayPluginClientOptions, body: RegisterWebhookEndpointBody): PluginRequest {
+  if (!body.merchantId.trim()) throw new Error('pay.plugins: merchantId required');
+  assertHttpsWebhookUrl(body.url);
+  return {
+    method: 'POST',
+    path: `${PAY_PUBLIC_API_BASE}/webhook-endpoints`,
+    headers: {
+      authorization: `Bearer ${opts.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ merchantId: body.merchantId, url: body.url }),
+  };
+}
+
+export function buildListWebhookEndpointsRequest(opts: PayPluginClientOptions, merchantId: string): PluginRequest {
+  if (!merchantId.trim()) throw new Error('pay.plugins: merchantId required');
+  return {
+    method: 'GET',
+    path: `${PAY_PUBLIC_API_BASE}/webhook-endpoints?merchantId=${encodeURIComponent(merchantId)}`,
+    headers: {
+      authorization: `Bearer ${opts.apiKey}`,
+    },
+  };
+}
+
+export function buildListWebhookDeliveriesRequest(
+  opts: PayPluginClientOptions,
+  merchantId: string,
+  status?: 'failed' | 'delivered' | 'pending',
+): PluginRequest {
+  if (!merchantId.trim()) throw new Error('pay.plugins: merchantId required');
+  const qs = new URLSearchParams({ merchantId });
+  if (status) qs.set('status', status);
+  return {
+    method: 'GET',
+    path: `${PAY_PUBLIC_API_BASE}/webhook-deliveries?${qs.toString()}`,
+    headers: {
+      authorization: `Bearer ${opts.apiKey}`,
+    },
+  };
+}
+
 export function absoluteUrl(opts: PayPluginClientOptions, path: string): string {
   const base = opts.baseUrl.replace(/\/$/, '');
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
@@ -117,6 +203,19 @@ export function absoluteUrl(opts: PayPluginClientOptions, path: string): string 
 export function assertDecimalAmount(amount: string): void {
   if (typeof amount !== 'string' || !/^\d+(\.\d+)?$/.test(amount.trim())) {
     throw new Error(`pay.plugins: amount must be a non-negative decimal string, got ${JSON.stringify(amount)}`);
+  }
+}
+
+/** Store plugins may only register https remotes (matches merchant-webhooks refuse path). */
+export function assertHttpsWebhookUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`pay.plugins: webhook url must be a valid https URL, got ${JSON.stringify(url)}`);
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`pay.plugins: webhook url must be https, got ${JSON.stringify(url)}`);
   }
 }
 

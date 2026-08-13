@@ -78,10 +78,11 @@ const schema = serviceEnvSchema
       AGENTS_USAGE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
 
       /**
-       * Kill-switch for billing (§14 admin controls). When off: no usage_records,
-       * no windows, no feeCharge — including settle of leftover windows. Token
-       * counts stay on the action audit only (knowable cost without inventing a
-       * deferred bill). Re-open usage_records dual-write only with product ruling.
+       * Kill-switch for billing (§14 admin controls). When off (D26-P1-A6
+       * product law, sealed): audit-only forever — no usage_records, no windows,
+       * no feeCharge — including settle of leftover windows. Token counts stay
+       * on the action audit only (knowable cost without inventing a deferred
+       * bill). Dual-write of usage_records while off is forbidden.
        */
       AGENTS_METERING_ENABLED: bool.default(true),
 

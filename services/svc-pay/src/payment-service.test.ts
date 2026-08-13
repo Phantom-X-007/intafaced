@@ -20,6 +20,7 @@ import { PayService, PayError, type PaymentView } from './payment-service.js';
 import { RailRegistry } from './rails/registry.js';
 import { CardSandboxAdapter, SANDBOX_DECLINE_TOKEN } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
+import { BankPayoutAbsentAdapter } from './rails/bank-payout.js';
 import { MemoryChain } from './rails/chain-port.js';
 import { signPayload } from './rails/webhook-signature.js';
 
@@ -129,7 +130,7 @@ if (!available) {
     chain = new MemoryChain();
     card = new CardSandboxAdapter({ secret: SECRET });
     crypto = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
-    rails = new RailRegistry([card, crypto]);
+    rails = new RailRegistry([card, crypto, new BankPayoutAbsentAdapter()]);
     pay = new PayService(sql, ledger, rails);
   });
 
@@ -1369,6 +1370,7 @@ if (!available) {
       const payment = await cryptoPayment(m.id, '10');
       await pay.capture(payment.id);
       const settlement = await settle(m.id, 'w-payout');
+      const journalBeforePayout = ledger.journal().length;
 
       const paid = await pay.payoutSettlement({
         settlementId: settlement.id,
@@ -1382,6 +1384,37 @@ if (!available) {
       expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
       expect(chain.totalSent('USDT')).toBe('10');
       expect(ledger.totalsByAsset().USDT).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+      expect(
+        ledger
+          .journal()
+          .slice(journalBeforePayout)
+          .map((tx) => ({ key: tx.idempotencyKey, reason: tx.reason })),
+      ).toEqual([
+        { key: `withdraw.hold:${settlement.id}:0`, reason: 'withdraw.held' },
+        { key: `withdraw.settle:${settlement.id}:0`, reason: 'withdraw.settled' },
+      ]);
+    });
+
+    it('refuses bank settlement before any recipe posts while the bank rail is absent', async () => {
+      const m = await merchant(0);
+      const payment = await cardPayment(m.id, '50');
+      await pay.capture(payment.id);
+      const settlement = await settle(m.id, 'w-bank-absent');
+      const journalBeforePayout = ledger.journal().map((tx) => tx.idempotencyKey);
+
+      await expect(
+        pay.payoutSettlement({
+          settlementId: settlement.id,
+          railId: 'bank-payout',
+          destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
+        }),
+      ).rejects.toMatchObject({ code: 'pay.rail_not_live' });
+
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBeforePayout);
+      expect(await availableOf(MERCHANT_USER)).toBe('50');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
+      expect((await pay.getSettlement(settlement.id)).status).toBe('posted');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -2165,6 +2198,31 @@ if (!available) {
       await expect(livePay.decideKybStub({ merchantId: m.id, decision: 'approved' })).rejects.toMatchObject({
         code: 'pay.kyb_operator_required',
       });
+    });
+
+    it('live-only money door refuses without approved KYB (D26-P1-P10 Layer B)', async () => {
+      const livePay = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+      const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
+      await expect(
+        livePay.createPayment({
+          merchantId: m.id,
+          amount: amt('10'),
+          assetId: 'USDT',
+          method: 'crypto',
+          railAdapter: 'crypto-native',
+        }),
+      ).rejects.toMatchObject({ code: 'pay.kyb_required' });
+
+      // Operator-approved KYB (simulated — no invent grant of pay:* scopes).
+      await sql`UPDATE pay.merchants SET kyb_status = 'approved' WHERE id = ${m.id}`;
+      const payment = await livePay.createPayment({
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'crypto',
+        railAdapter: 'crypto-native',
+      });
+      expect(payment.status).toBe('created');
     });
 
     it('lists payments by durable status projection after card lifecycle', async () => {
