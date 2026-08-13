@@ -339,7 +339,9 @@ export const FEATURES = [
       'Still not umbrella-done: leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, ' +
       'Denon ladder numbers (D3), N1 profit-source capitalisation. ' +
       'D26-P0-17 SEALED 2026-08-13 (adr/2026-08-13-insurance-fund-funding-policy.md): empty insurance pot → no live list ' +
-      '(trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. Never invent mid/funding/grace/ADL rates.',
+      '(trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. ' +
+      'D26-P0-07 SEALED 2026-08-13 (adr/2026-08-13-leverage-defaults-frozen.md): 10× isolated frozen; no silent raise. ' +
+      'Never invent mid/funding/grace/ADL rates.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
