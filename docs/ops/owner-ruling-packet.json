@@ -103,18 +103,19 @@
     },
     {
       "id": "D26-P0-08",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "pay:write / KYB grant mechanism shape",
       "blocks": ["merchant KYB grant", "pay.psp expand"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-pay-write-grant-a2-unpublished.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-08--paywrite--kyb-grant-mechanism-shape",
       "answerShape": "grant_mechanism_shape_on_tip",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-13 seal: A2 unpublished = refuse. No invented grantor. issueMerchantPayScopes stays closed until Nitro publishes."
     },
     {
       "id": "D26-P0-09",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Fee + revenue recipe map",
       "blocks": ["ledger recipe invent"],
@@ -199,7 +200,7 @@
     },
     {
       "id": "D26-P0-16",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Audited / insured / guaranteed language ban surface",
       "blocks": ["marketing copy", "§8.9 claims"],

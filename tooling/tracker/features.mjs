@@ -565,7 +565,8 @@ export const FEATURES = [
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
     note:
-      'CLAIM RELEASED 2026-08-08 by Nitro, by name, alongside `ops.admin`. On OPEN_MONEY allowlist 2026-08-08 so the swarm money gate no longer hides this row. Agents may implement. `wip` became `ready` only because the tracker ' +
+      'D26-P0-08 SEALED 2026-08-13 (adr/2026-08-13-pay-write-grant-a2-unpublished.md): A2 unpublished = ' +
+      'auth.merchant_pay_scope_grant_unpublished; no invented grantor; issueMerchantPayScopes stays refuse. ' +
       'refuses a `wip` row with no owner — "someone is on it right now" needs a name — and `ready` means what it says here: every dependency is ' +
       'done and it is free to claim. Nothing about what is built changed with this edit; the paragraph below is unaltered and still governs. ' +
       'What the release does NOT touch: card acquiring stays a commercial relationship no PR closes (see socket.psp-partners), so an agent that ' +
