@@ -51,9 +51,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-07 · Leverage / margin / liq params beyond §1 defaults
 
-**Not open:** `DEFAULT_MAX_LEVERAGE = 10` — already DIRECTION §1 (see part one “already decided”).  
-**Still open:** any raise above 10×, margin/liquidation parameters beyond §1’s stated defaults, or market-level overrides.  
-**Recommendation:** publish an owner table **or** freeze “§1 defaults only until liquidation ladder proof exists.” Silent constant edits are doctrine crime.
+**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-leverage-defaults-frozen.md`](adr/2026-08-13-leverage-defaults-frozen.md).  
+**Not open:** `DEFAULT_MAX_LEVERAGE = 10` — DIRECTION §1, now frozen as the live table. Isolated v1; partial-before-full.  
+**Still owner-open:** any raise above 10×, D3 ladder _numbers_, market-level overrides, cross-margin (own ADR).  
+**Settled:** silent constant edits are doctrine crime. The freeze is the ruling until an owner table exists.
 
 ---
 

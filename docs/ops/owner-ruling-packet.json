@@ -91,13 +91,13 @@
     },
     {
       "id": "D26-P0-07",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Leverage / margin / liq params beyond §1 defaults",
       "blocks": ["silent raise of DEFAULT_MAX_LEVERAGE"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-leverage-defaults-frozen.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-07--leverage--margin--liq-params-beyond-1-defaults",
-      "notes": "DEFAULT_MAX_LEVERAGE=10 is already settled by DIRECTION §1 — not open. This row is for anything beyond §1 defaults.",
+      "notes": "2026-08-13 seal: §1 defaults frozen. DEFAULT_MAX_LEVERAGE=10. No invented 20× / D3 rungs / market overrides.",
       "answerShape": "owner_table_or_defaults_frozen_until_ruled",
       "priority": 3
     },
