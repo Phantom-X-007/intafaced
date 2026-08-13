@@ -134,10 +134,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-17 · Insurance fund funding policy (futures list gate)
 
-**Blocks:** listing live perps against an empty or undefined fund.  
-**Settled around it:** futures risk ADR refuses inventing a house-fee “insurance” substitute.  
-**Question:** fund exists, is funded by which recipe, and empty → **no list**?  
-**Recommendation:** same honesty as lending reserve — empty fund cannot back a live market. Policy before list.
+**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-insurance-fund-funding-policy.md`](adr/2026-08-13-insurance-fund-funding-policy.md).  
+**Blocks:** listing live perps against an empty or undefined fund (still, until the pot is actually funded on that deploy).  
+**Settled:** ledger insurance account exists; `futuresInsuranceTopup` funds it; `trade.insurance_fund_empty` refuses real-money active futures while `available ≤ 0`; house fees are not the fund; paper/pending may model.  
+**Not invented here:** target size, fee-share, capitalisation schedule.
 
 ---
 
