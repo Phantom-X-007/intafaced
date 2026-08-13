@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "boardId": "D26-P0-18",
   "title": "Owner ruling packet — tip index of every open owner decision",
-  "updated": "2026-08-12",
+  "updated": "2026-08-13",
   "tipAtWrite": "93f6c777",
   "purpose": "Single machine-readable index so open owner decisions are not scattered across packets, Class X checklists, and lane-stop parks. Completeness for D26-P0-18 is this file + the human packets it points at — not a tip-bump.",
   "humanPacket": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
@@ -67,25 +67,27 @@
     },
     {
       "id": "D26-P0-05",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Options / forex settlement asset law",
       "blocks": ["trade.options", "trade.forex"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-options-forex-settlement-asset-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-05--options--forex-settlement-asset-law",
       "answerShape": "adr_live_set_settlement_asset_refuse_matrix",
-      "priority": 4
+      "priority": 4,
+      "notes": "2026-08-13 seal: shape + refuse matrix only. No invented live set / coin / rails. Listing still needs opaque stamp + D7; FX still needs fiat rails. trade.options / trade.forex stay not Done."
     },
     {
       "id": "D26-P0-06",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Listing / delisting policy (DIRECTION §8.5)",
       "blocks": ["market listing surfaces"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-12-listing-delisting-policy.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-06--listing--delisting-policy",
       "answerShape": "written_policy_plus_refuse_path",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-12 seal (#1731): structural eligibility + refuse path. Catalogue stays owner."
     },
     {
       "id": "D26-P0-07",

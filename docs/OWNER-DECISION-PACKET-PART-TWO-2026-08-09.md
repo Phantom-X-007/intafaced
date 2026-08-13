@@ -33,10 +33,11 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-05 · Options / forex settlement asset law
 
-**Blocks:** `trade.options`, `trade.forex` product-complete paths.  
-**Settled:** tracker may show ready-shaped rows; that is **not** licence to invent settlement assets.  
-**Question:** which instruments may go live, in which settlement asset, and what refuses when the set is empty?  
-**Recommendation:** one ADR — live set · settlement asset · refuse matrix — before any engine claims Done. Options/forex stay socket or refuse until that ADR exists.
+**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-options-forex-settlement-asset-law.md`](adr/2026-08-13-options-forex-settlement-asset-law.md).  
+**Blocks:** `trade.options`, `trade.forex` product-complete paths (still). The ADR is shape-law, not a live catalogue.  
+**Settled:** European cash-settled full-collateral options on one book; opaque `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` = “this ADR is in force,” never a parsed coin table; forex production waits on **true fiat rails** (euro-stable ≠ rails). Live set stays owner (P0-06).  
+**Refuse when unset:** `trade.options_settlement_law_unset` · `trade.options_fixing_unconfigured` · `trade.options_terms_incomplete` · `trade.market_kind_unsupported` (orders) · `trade.unsettled_asset_class_listing` (FX/commodity production).  
+**Not invented here:** USDT/USDC/quote-as-cash, FX pair list, D7 fixing content, bank rails.
 
 ---
 
