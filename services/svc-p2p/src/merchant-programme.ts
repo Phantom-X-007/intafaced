@@ -169,3 +169,23 @@ export function canTransition(from: MerchantStatus, to: MerchantStatus, by: Tran
 export function isActiveMerchant(status: MerchantStatus): boolean {
   return status === 'approved';
 }
+
+/**
+ * After a moderated dispute loss, may this approved standing keep the badge?
+ *
+ * Application eligibility already refuses `disputesLost > maxDisputesLost`.
+ * Leaving an approved row untouched after the same loss would let the badge
+ * keep vouching for someone a human moderator has already ruled against —
+ * the dispute-law half of D26-P1-I2. Non-approved rows are untouched here;
+ * operator reinstate remains a deliberate human override of suspension.
+ */
+export function standingBrokenByDisputeLaw(
+  status: MerchantStatus,
+  snapshot: ReputationSnapshot,
+  policy: EligibilityPolicy = DEFAULT_ELIGIBILITY,
+): { readonly broken: true; readonly reason: string } | { readonly broken: false } {
+  if (status !== 'approved') return { broken: false };
+  const verdict = checkEligibility(snapshot, policy);
+  if (verdict.eligible) return { broken: false };
+  return { broken: true, reason: verdict.reason };
+}

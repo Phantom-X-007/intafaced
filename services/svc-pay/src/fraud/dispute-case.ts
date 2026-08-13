@@ -1,12 +1,19 @@
+import {
+  CHARGEBACK_LEDGER_REFUSE_CODE,
+  CHARGEBACK_LEDGER_SOCKET_ID,
+  refuseChargebackLedgerPost,
+  type ChargebackLedgerRefuse,
+} from './chargeback-ledger-socket.js';
+
 /**
  * pay.fraud — chargeback **case** mechanism (D26-P1-P5).
  *
  * Records dispute lifecycle (open → contested | accepted | won | lost) so the
  * `disputed` payment status is no longer a dead end with no writer.
  *
- * Explicitly does NOT call ledger chargeback recipes — those stay owner-signed
- * (DIRECTION §3 Class M carve-out / OWNER SIGN-OFF banner). Mechanism ≠ money wire.
- * Blocklist / scheme list **content** remains Class X.
+ * Ledger chargeback recipes are refuse-closed via
+ * `socket.pay-chargeback-ledger-wire` (named §13) — not a stub "unwired" matrix
+ * and not a silent post. Blocklist / scheme list **content** remains Class X.
  */
 
 export type DisputeCaseStatus = 'open' | 'contested' | 'accepted' | 'won' | 'lost';
@@ -27,10 +34,10 @@ export interface DisputeCase {
   /** True when payment status was moved to disputed by this open. */
   readonly paymentMarkedDisputed: boolean;
   /**
-   * Honest residual: ledger recipes not posted. Always true on tip until
-   * Nitro signs the chargeback recipe wire.
+   * Honest residual: ledger recipes refused-closed (named socket), never posted.
    */
-  readonly ledgerWire: 'unwired';
+  readonly ledgerWire: 'refused';
+  readonly ledgerRefuse: ChargebackLedgerRefuse;
 }
 
 export class DisputeCaseError extends Error {
@@ -87,6 +94,10 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
     if (existing) return existing;
 
     const now = (input.now ?? new Date()).toISOString();
+    const ledgerRefuse = refuseChargebackLedgerPost({
+      disputeId,
+      paymentId: input.paymentId,
+    });
     const row: DisputeCase = {
       disputeId,
       paymentId: input.paymentId,
@@ -100,7 +111,8 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
       contestedAt: null,
       closedAt: null,
       paymentMarkedDisputed: input.paymentMarkedDisputed === true,
-      ledgerWire: 'unwired',
+      ledgerWire: 'refused',
+      ledgerRefuse,
     };
     this.cases.set(disputeId, row);
     return row;
@@ -148,13 +160,18 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
       throw new DisputeCaseError(`Cannot move dispute ${disputeId} from ${current.status} to ${next}`, 'pay.dispute_invalid_transition');
     }
     const ts = (now ?? new Date()).toISOString();
+    const ledgerRefuse = refuseChargebackLedgerPost({
+      disputeId,
+      paymentId: current.paymentId,
+    });
     const row: DisputeCase = {
       ...current,
       status: next,
       updatedAt: ts,
       contestedAt: flags.contested ? ts : current.contestedAt,
       closedAt: flags.close ? ts : current.closedAt,
-      ledgerWire: 'unwired',
+      ledgerWire: 'refused',
+      ledgerRefuse,
     };
     this.cases.set(disputeId, row);
     return row;
@@ -163,3 +180,5 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
 
 /** Process-local default — durable disputes table is residual, not invent here. */
 export const defaultDisputeCaseStore = new MemoryDisputeCaseStore();
+
+export { CHARGEBACK_LEDGER_REFUSE_CODE, CHARGEBACK_LEDGER_SOCKET_ID, refuseChargebackLedgerPost };

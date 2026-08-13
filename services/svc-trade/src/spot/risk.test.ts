@@ -361,6 +361,7 @@ describe('venue hours', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(TradeError);
       expect((e as TradeError).code).toBe('trade.unsettled_asset_class_listing');
+      expect((e as TradeError).message).toContain('socket.forex-settlement');
     }
     expect(() => assertSettlementRails({ ...EURUSD, paper: true })).not.toThrow();
     expect(() => assertSettlementRails(BTCUSDT)).not.toThrow();
@@ -412,7 +413,8 @@ describe('venue hours', () => {
    *
    * It must also be a refusal rather than a crash. Reading `.kind` off the
    * missing lookup throws a TypeError, which reaches the caller as a 500 — and a
-   * 500 is not something a client can act on, where `trade.market_closed` is.
+   * 500 is not something a client can act on, where `trade.unknown_schedule` is.
+   * Distinct from `trade.market_closed` (session boundary — retry Monday).
    */
   it('refuses a schedule it does not recognise instead of failing open', () => {
     const drifted = withMarket({ schedule: 'lse-equities' as Market['schedule'] });
@@ -424,7 +426,7 @@ describe('venue hours', () => {
     } catch (err) {
       // A TradeError, not a TypeError — assert the type, not only that it threw.
       expect(err).toBeInstanceOf(TradeError);
-      expect((err as TradeError).code).toBe('trade.market_closed');
+      expect((err as TradeError).code).toBe('trade.unknown_schedule');
       expect((err as TradeError).message).toContain('lse-equities');
     }
   });
