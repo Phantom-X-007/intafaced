@@ -235,31 +235,31 @@ Backend product-complete only — **not** shell craft.
 
 ## 6 · P2 — Integrity programs (agents thrash)
 
-| ID             | Program                                                | Done bar                                                                                             |
-| -------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| **D26-P2-01**  | **Promise-falsify money services (public doors)**      | Named suite: ledger, trade, pay, bank, p2p, matching, token, market, ws — entry points not unit-only |
-| **D26-P2-01a** | Promise-falsify **svc-trade** deep                     | Futures + convert + copy + algo public doors                                                         |
-| **D26-P2-01b** | Promise-falsify **svc-pay** deep                       | Settle, mandate, dispute, grant gates                                                                |
-| **D26-P2-01c** | Promise-falsify **svc-ledger** + **ledger-client**     | Purpose, recipes, freeze, loan recipes                                                               |
-| **D26-P2-01d** | Promise-falsify **svc-matching**                       | Cancel, phantom market, determinism edges                                                            |
-| **D26-P2-01e** | Promise-falsify **svc-bank**                           | Earn/cards/ramps refuse invent                                                                       |
-| **D26-P2-01f** | Promise-falsify **svc-p2p**                            | Escrow/dispute/fee integrity                                                                         |
-| **D26-P2-01g** | Promise-falsify **svc-token**                          | Stake/unstake/buyback crash windows                                                                  |
-| **D26-P2-01h** | Promise-falsify **svc-agents** metering                | Dark refuse + metering-off never bills                                                               |
-| **D26-P2-02**  | **Vendor Java money-plane map** (896 Java)             | Which doors still move value; close or §13; brand/custody real                                       |
-| **D26-P2-03**  | **Unreachable-guard eradication** (trade/matching)     | Every money guard via public door                                                                    |
-| **D26-P2-04**  | **Fleet real image rebuild runbook**                   | Running fleet = tip images                                                                           |
-| **D26-P2-05**  | **Event bus completeness (D-S-13)**                    | Broken-promise vs socket inventory with **executed** tests                                           |
-| **D26-P2-06**  | **Matching dual-target residual (D-S-06)**             | One book semantics; no structural house prefer                                                       |
-| **D26-P2-07**  | **Java dual-book Grade D delete + jar truth** (D-S-17) | Grade D sites gone; **no safety claim from source scan alone**; rebuild path real                    |
-| **D26-P2-08**  | **custody-scan walks Java**                            | Scan object = runtime risk surface                                                                   |
-| **D26-P2-09**  | **wallet_rpc continuous perimeter**                    | Mainnet/sign/width classes stay refused; regression suite                                            |
-| **D26-P2-10**  | **Kill-switch completeness**                           | Every money route killable from same surface; proven                                                 |
-| **D26-P2-11**  | **Ledger recipe matrix closed for live paths**         | Every money path → recipe or explicit §13                                                            |
-| **D26-P2-12**  | **Re-prove “done” money spine**                        | matching + ledger + identity money doors still honest on tip                                         |
-| **D26-P2-13**  | **No silent test skips on money**                      | Skip-honesty forever; register or delete                                                             |
-| **D26-P2-14**  | **Brand-scan sees vendor shell**                       | Partner names cannot hide in Vue/Java                                                                |
-| **D26-P2-15**  | **Fill-sequence / order SoT residual**                 | Engine-aligned fillId; no second money interpretation                                                |
+| ID             | Program                                                | Done bar                                                                                                                                                          |
+| -------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D26-P2-01**  | **Promise-falsify money services (public doors)**      | Named suite: ledger, trade, pay, bank, p2p, matching, token, market, ws — entry points not unit-only                                                              |
+| **D26-P2-01a** | Promise-falsify **svc-trade** deep                     | Futures + convert + copy + algo public doors                                                                                                                      |
+| **D26-P2-01b** | Promise-falsify **svc-pay** deep                       | Settle, mandate, dispute, grant gates                                                                                                                             |
+| **D26-P2-01c** | Promise-falsify **svc-ledger** + **ledger-client**     | Purpose, recipes, freeze, loan recipes                                                                                                                            |
+| **D26-P2-01d** | Promise-falsify **svc-matching**                       | Cancel, phantom market, determinism edges                                                                                                                         |
+| **D26-P2-01e** | Promise-falsify **svc-bank**                           | Earn/cards/ramps refuse invent                                                                                                                                    |
+| **D26-P2-01f** | Promise-falsify **svc-p2p**                            | Escrow/dispute/fee integrity                                                                                                                                      |
+| **D26-P2-01g** | Promise-falsify **svc-token**                          | Stake/unstake/buyback crash windows                                                                                                                               |
+| **D26-P2-01h** | Promise-falsify **svc-agents** metering                | Dark refuse + metering-off never bills                                                                                                                            |
+| **D26-P2-02**  | **Vendor Java money-plane map** (896 Java)             | **PROOF LANDED** — `pnpm map:vendor-java-money-plane:self-test` · `docs/VENDOR-JAVA-MONEY-PLANE-MAP-D26-P2-02.md` · §13 sockets named; brand/custody posture REAL |
+| **D26-P2-03**  | **Unreachable-guard eradication** (trade/matching)     | Every money guard via public door                                                                                                                                 |
+| **D26-P2-04**  | **Fleet real image rebuild runbook**                   | Running fleet = tip images                                                                                                                                        |
+| **D26-P2-05**  | **Event bus completeness (D-S-13)**                    | Broken-promise vs socket inventory with **executed** tests                                                                                                        |
+| **D26-P2-06**  | **Matching dual-target residual (D-S-06)**             | One book semantics; no structural house prefer                                                                                                                    |
+| **D26-P2-07**  | **Java dual-book Grade D delete + jar truth** (D-S-17) | Grade D sites gone; **no safety claim from source scan alone**; rebuild path real                                                                                 |
+| **D26-P2-08**  | **custody-scan walks Java**                            | Scan object = runtime risk surface                                                                                                                                |
+| **D26-P2-09**  | **wallet_rpc continuous perimeter**                    | Mainnet/sign/width classes stay refused; regression suite                                                                                                         |
+| **D26-P2-10**  | **Kill-switch completeness**                           | Every money route killable from same surface; proven                                                                                                              |
+| **D26-P2-11**  | **Ledger recipe matrix closed for live paths**         | Every money path → recipe or explicit §13                                                                                                                         |
+| **D26-P2-12**  | **Re-prove “done” money spine**                        | matching + ledger + identity money doors still honest on tip                                                                                                      |
+| **D26-P2-13**  | **No silent test skips on money**                      | Skip-honesty forever; register or delete                                                                                                                          |
+| **D26-P2-14**  | **Brand-scan sees vendor shell**                       | Partner names cannot hide in Vue/Java                                                                                                                             |
+| **D26-P2-15**  | **Fill-sequence / order SoT residual**                 | Engine-aligned fillId; no second money interpretation                                                                                                             |
 
 ---
 
