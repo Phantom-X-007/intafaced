@@ -21,6 +21,7 @@
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down -v && docker compose up -d",
     "platform:up": "docker compose -f docker-compose.apps.yml up -d --build",
+    "fleet:tip-images": "node tooling/scripts/fleet-tip-image.mjs",
     "platform:down": "docker compose -f docker-compose.apps.yml down",
     "platform:logs": "docker compose -f docker-compose.apps.yml logs -f",
     "platform:ps": "docker compose -f docker-compose.apps.yml ps",
