@@ -10,13 +10,15 @@ import { MarketError, type VendorService } from '../vendor-service.js';
  * cares — never a stored `is_listed` flag. Stake law stays in VendorService;
  * this class owns the commission half of the vendor→commerce lifecycle.
  *
- * House commission bps is owner-gated (D26-P1-M2 / D26-P0-10). When the
+ * House commission bps is owner-gated (D26-P1-M1 / M2 / D26-P0-10). When the
  * deployment has no rate configured (`commissionBps === null`):
  *   - createListing refuses before insert or slot claim
  *   - publicListings returns [] (shopfront does not advertise unsellable stock)
  *   - purchase refuses before any row or post
  * Never invent a platform rate. Explicit `0` is an owner free-commission
- * decision, not silence.
+ * decision, not silence. Ledger recipe refuses blank/invalid bps so a
+ * miswired caller cannot invent free commission at post time (#1761 owns
+ * listing/premium fee recipe deepen — do not dual-edit market.ts here).
  */
 
 export type OfferType = 'one_time' | 'subscription';

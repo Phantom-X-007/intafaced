@@ -113,14 +113,30 @@ const REQUIRED_CONFIG_MARKERS = [
   { id: 'exchange-api', pathIncludes: ['exchange-api', 'ApplicationConfig.java'] },
   // Matching process hosts MonitorController paths that publish settlement Kafka.
   // Path must not match exchange-api: use the module directory boundary.
-  { id: 'exchange', pathIncludes: ['00_framework/exchange/', 'ApplicationConfig.java'] },
+  // Segments stay OS-agnostic — Windows worktrees use `\` and must not miss the door.
+  { id: 'exchange', pathIncludes: ['00_framework', 'exchange', 'ApplicationConfig.java'] },
 ];
+
+/** Normalize for segment matching so Linux CI and Windows worktrees agree. */
+function pathSegs(p) {
+  return p.split(/[/\\]+/);
+}
+
+function pathHasOrderedSegments(p, segs) {
+  const parts = pathSegs(p);
+  // Require `exchange` as its own segment (not a prefix of `exchange-api`).
+  return segs.every((seg) => {
+    if (seg === 'ApplicationConfig.java') return parts[parts.length - 1] === seg;
+    if (seg === 'exchange') return parts.includes('exchange') && !parts.includes('exchange-api');
+    return parts.includes(seg);
+  });
+}
 
 const appConfigs = walk(VENDOR, (name, p) => name === 'ApplicationConfig.java');
 const failures = [];
 
 for (const marker of REQUIRED_CONFIG_MARKERS) {
-  const match = appConfigs.find((p) => marker.pathIncludes.every((seg) => p.includes(seg)));
+  const match = appConfigs.find((p) => pathHasOrderedSegments(p, marker.pathIncludes));
   if (!match) {
     failures.push(`no ApplicationConfig.java found for ${marker.id}`);
     continue;
@@ -128,7 +144,7 @@ for (const marker of REQUIRED_CONFIG_MARKERS) {
   const text = stripComments(readFileSync(match, 'utf8'));
   if (!REGISTRATION.test(text)) {
     failures.push(
-      `${relative(ROOT, match)} does not REGISTER DualBookMoneyDoorInterceptor ` +
+      `${relative(ROOT, match).replace(/\\/g, '/')} does not REGISTER DualBookMoneyDoorInterceptor ` +
         `(need registry.addInterceptor(new DualBookMoneyDoorInterceptor()).addPathPatterns("/**"))`,
     );
   }

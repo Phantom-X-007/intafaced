@@ -9,7 +9,16 @@ import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.j
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
 import type { PermissionArea } from './submerchants.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
+import {
+  REFERENCE_RAIL_ROUTING_PROFILES,
+  selectSmartCheckoutRail,
+  SmartRoutingNoRailError,
+  toRoutingDecisionRecord,
+  type RailRoutingProfile,
+} from './routing/decide.js';
 import { evaluateFraud } from './fraud/evaluate.js';
+import { defaultFraudReviewQueue, FraudReviewError } from './fraud/review-queue.js';
+import { defaultDisputeCaseStore, DisputeCaseError } from './fraud/dispute-case.js';
 import { PAY_PUBLIC_API_BASE } from './plugins/reference-client.js';
 
 /**
@@ -689,9 +698,9 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
     }),
 
     /**
-     * pay.routing — smart-routing input honesty (SPEC §5 / DIRECTION §8).
-     * When a profile requires geo/method/risk, blank data refuses rather than
-     * inventing approval rates or default bands. Moves no value.
+     * pay.routing — smart geo/method/risk selection (SPEC §5 / DIRECTION §8).
+     * Blank required dims refuse; no invent approval rates / cost weights.
+     * Moves no value — returns a decision record only.
      */
     routing: router({
       assertInputs: publicProcedure
@@ -726,11 +735,98 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             throw e;
           }
         }),
+
+      /**
+       * Product door: select a rail from geo + method + risk + operator profiles.
+       * Preference list is operator-supplied (never a payer-named rail).
+       * Omitting `profiles` uses REFERENCE_RAIL_ROUTING_PROFILES for the v1 rails.
+       */
+      select: publicProcedure
+        .input(
+          z.object({
+            geoCountry: z.string().nullable().optional(),
+            method: z.string().nullable().optional(),
+            riskBand: z.string().nullable().optional(),
+            preference: z.array(z.string().min(1)).min(1),
+            policy: z.enum(['live-only', 'allow-sandbox']).default('allow-sandbox'),
+            profiles: z
+              .array(
+                z.object({
+                  railId: z.string().min(1),
+                  methods: z.array(z.string()).optional(),
+                  countries: z.array(z.string()).optional(),
+                  riskBands: z.array(z.string()).optional(),
+                }),
+              )
+              .optional(),
+          }),
+        )
+        .output(
+          z.object({
+            chosenRailId: z.string(),
+            inputs: z.object({
+              geoCountry: z.string(),
+              method: z.string(),
+              riskBand: z.string(),
+            }),
+            considered: z.array(
+              z.object({
+                railId: z.string(),
+                outcome: z.enum(['chosen', 'skipped']),
+                reason: z.string().optional(),
+              }),
+            ),
+            decision: z.record(z.unknown()),
+          }),
+        )
+        .query(({ input }) => {
+          try {
+            const profiles: readonly RailRoutingProfile[] = input.profiles ?? REFERENCE_RAIL_ROUTING_PROFILES;
+            const decision = selectSmartCheckoutRail({
+              inputs: {
+                geoCountry: input.geoCountry,
+                method: input.method,
+                riskBand: input.riskBand,
+              },
+              preference: input.preference,
+              profiles,
+              rails,
+              policy: input.policy,
+            });
+            return {
+              chosenRailId: decision.chosenRailId,
+              inputs: decision.inputs,
+              considered: decision.considered.map((e) =>
+                e.outcome === 'chosen'
+                  ? { railId: e.railId, outcome: e.outcome as 'chosen' }
+                  : { railId: e.railId, outcome: e.outcome as 'skipped', reason: e.reason },
+              ),
+              decision: toRoutingDecisionRecord(decision),
+            };
+          } catch (e) {
+            if (e instanceof RoutingInputError) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${e.code}: ${e.message}`,
+                cause: e,
+              });
+            }
+            if (e instanceof SmartRoutingNoRailError) {
+              throw new TRPCError({
+                code: 'PRECONDITION_FAILED',
+                message: `${e.code}: ${e.message}`,
+                cause: e,
+              });
+            }
+            throw e;
+          }
+        }),
     }),
 
     /**
-     * pay.fraud — scoring mechanism only (SPEC §3). Moves no value.
-     * Ledger reverse-money recipes stay unwired (Class X park). Declines always explain.
+     * pay.fraud — scoring + review queue + dispute **case** mechanism (D26-P1-P5).
+     * Moves no ledger value. Chargeback recipes refuse-closed via
+     * `socket.pay-chargeback-ledger-wire` (named §13). List content Class X.
      */
     fraud: router({
       evaluate: publicProcedure
@@ -801,6 +897,223 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             outcome: decision.outcome,
             reasons: decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
             skippedDisabled: [...decision.skippedDisabled],
+          };
+        }),
+
+      enqueueReview: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            id: z.string().min(1),
+            merchantId: z.string().min(1),
+            amount: amountSchema,
+            assetId: assetIdSchema,
+            paymentId: z.string().uuid().nullable().optional(),
+            // Re-evaluate from the same inputs so the queue never accepts a forged review.
+            recentPaymentCount: z.number().int().min(0).optional(),
+            recentVolume: amountSchema.optional(),
+            baselineAmount: amountSchema.nullable().optional(),
+            thresholds: z
+              .object({
+                maxPaymentsInWindow: z.number().int().min(0).optional(),
+                maxVolumeInWindow: amountSchema.optional(),
+                amountAnomalyMultiplier: z.number().positive().optional(),
+                velocityCountAction: z.enum(['review', 'decline']).optional(),
+                velocityVolumeAction: z.enum(['review', 'decline']).optional(),
+                amountAnomalyAction: z.enum(['review', 'decline']).optional(),
+              })
+              .optional(),
+            blocklists: z
+              .object({
+                ips: z.array(z.string()).optional(),
+                devices: z.array(z.string()).optional(),
+              })
+              .optional(),
+            enabled: z
+              .object({
+                velocity_count: z.boolean().optional(),
+                velocity_volume: z.boolean().optional(),
+                amount_anomaly: z.boolean().optional(),
+                blocklist_ip: z.boolean().optional(),
+                blocklist_device: z.boolean().optional(),
+              })
+              .optional(),
+          }),
+        )
+        .mutation(({ input }) => {
+          try {
+            const decision = evaluateFraud({
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              recentPaymentCount: input.recentPaymentCount,
+              recentVolume: input.recentVolume,
+              baselineAmount: input.baselineAmount,
+              thresholds: input.thresholds,
+              blocklists: input.blocklists,
+              enabled: input.enabled,
+            });
+            const c = defaultFraudReviewQueue.enqueue({
+              id: input.id,
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              paymentId: input.paymentId ?? null,
+              decision,
+            });
+            return {
+              id: c.id,
+              status: c.status,
+              merchantId: c.merchantId,
+              paymentId: c.paymentId,
+              reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+            };
+          } catch (e) {
+            if (e instanceof FraudReviewError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      listOpenReviews: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().min(1).optional() }).optional())
+        .query(({ input }) =>
+          defaultFraudReviewQueue.listOpen(input?.merchantId).map((c) => ({
+            id: c.id,
+            merchantId: c.merchantId,
+            paymentId: c.paymentId,
+            amount: c.amount,
+            assetId: c.assetId,
+            status: c.status,
+            createdAt: c.createdAt,
+            reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+          })),
+        ),
+
+      resolveReview: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(
+          z.object({
+            id: z.string().min(1),
+            outcome: z.enum(['allow', 'decline']),
+            note: z.string().max(500).nullable().optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) => {
+          try {
+            const c = defaultFraudReviewQueue.resolve({
+              id: input.id,
+              outcome: input.outcome,
+              actorId: ctx.principal.userId,
+              note: input.note,
+            });
+            return {
+              id: c.id,
+              status: c.status,
+              resolvedBy: c.resolvedBy,
+              resolvedAt: c.resolvedAt,
+            };
+          } catch (e) {
+            if (e instanceof FraudReviewError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      /**
+       * Dispute case surface — status machine only. Does not call chargeback recipes.
+       */
+      openDispute: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(
+          z.object({
+            disputeId: z.string().min(1),
+            paymentId: z.string().uuid(),
+            merchantId: z.string().uuid(),
+            amount: amountSchema,
+            assetId: assetIdSchema,
+            reasonCode: z.string().max(64).nullable().optional(),
+            markPaymentDisputed: z.boolean().optional(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            let marked = false;
+            if (input.markPaymentDisputed) {
+              await pay.markDisputed(input.paymentId, {
+                disputeId: input.disputeId,
+                reasonCode: input.reasonCode ?? null,
+              });
+              marked = true;
+            }
+            const c = defaultDisputeCaseStore.open({
+              disputeId: input.disputeId,
+              paymentId: input.paymentId,
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              reasonCode: input.reasonCode,
+              paymentMarkedDisputed: marked,
+            });
+            return {
+              disputeId: c.disputeId,
+              status: c.status,
+              ledgerWire: c.ledgerWire,
+              ledgerRefuseCode: c.ledgerRefuse.code,
+              ledgerSocket: c.ledgerRefuse.socket,
+              paymentMarkedDisputed: c.paymentMarkedDisputed,
+            };
+          } catch (e) {
+            if (e instanceof DisputeCaseError || e instanceof PayError) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${'code' in e ? e.code : 'pay.error'}: ${e.message}`,
+                cause: e,
+              });
+            }
+            throw e;
+          }
+        }),
+
+      contestDispute: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .mutation(({ input }) => {
+          try {
+            const c = defaultDisputeCaseStore.contest(input.disputeId);
+            return {
+              disputeId: c.disputeId,
+              status: c.status,
+              ledgerWire: c.ledgerWire,
+              ledgerRefuseCode: c.ledgerRefuse.code,
+              ledgerSocket: c.ledgerRefuse.socket,
+            };
+          } catch (e) {
+            if (e instanceof DisputeCaseError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      getDispute: scopedProcedure('pay:read', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .query(({ input }) => {
+          const c = defaultDisputeCaseStore.get(input.disputeId);
+          if (!c) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: `pay.dispute_not_found: ${input.disputeId}` });
+          }
+          return {
+            disputeId: c.disputeId,
+            paymentId: c.paymentId,
+            merchantId: c.merchantId,
+            amount: c.amount,
+            assetId: c.assetId,
+            reasonCode: c.reasonCode,
+            status: c.status,
+            ledgerWire: c.ledgerWire,
+            ledgerRefuseCode: c.ledgerRefuse.code,
+            ledgerSocket: c.ledgerRefuse.socket,
+            openedAt: c.openedAt,
+            closedAt: c.closedAt,
           };
         }),
     }),
@@ -1153,6 +1466,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.submerchant_permission_denied':
       case 'pay.rail_not_creditable':
       case 'pay.kyb_operator_required':
+      case 'pay.kyb_required':
         return 'FORBIDDEN' as const;
       case 'pay.kyb_invalid':
         return 'CONFLICT' as const;

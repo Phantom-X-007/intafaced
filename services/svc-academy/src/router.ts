@@ -1,14 +1,24 @@
 import { z } from 'zod';
-import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
+import { AmbassadorPayRefuseError, ambassadorPayPlaneStatus, attemptAmbassadorPay, attemptResidencyIfcPay } from './ambassadors/ifc-pay.js';
 import {
-  AmbassadorPayRefuseError,
-  ambassadorPayPlaneStatus,
-  refuseAmbassadorIfcPay,
-  refuseAmbassadorRevenueShare,
-} from './ambassadors/ifc-pay.js';
+  PrizePoolRefuseError,
+  assertMayStartPrizeSeason,
+  decidePrizeIntent,
+  decidePrizePoolStart,
+  isPrizeRefuseClosed,
+  prizeRefuseStatusLine,
+  type PrizeIntentKind,
+} from './tournaments/prize-refuse.js';
+import {
+  UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
+  UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW,
+  type AmbassadorIfcPayLaw,
+  type AmbassadorRevenueShareLaw,
+} from './ambassadors/ifc-pay-rate-law.js';
 import {
   curriculumDepthReport,
   curriculumStudyGuide,
@@ -35,8 +45,15 @@ import {
   valueSimulatedDrill,
   type PublishedFill,
 } from './paper/simulated-result.js';
+import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
-import { decidePrizeIntent, isPrizeRefuseClosed, prizeRefuseStatusLine, type PrizeIntentKind } from './tournaments/prize-refuse.js';
+import {
+  CERT_PERK_REFUSE_CODE,
+  CERT_PERK_RESIDUAL,
+  decideCertPerkInvent,
+  isCertPerkInventRefuseClosed,
+  type CertPerkInventKind,
+} from './certs/perk-plane.js';
 import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
 
 /**
@@ -188,6 +205,9 @@ const curriculumImportStatusOut = z.object({
     i18nStrategyHonest: z.boolean(),
     ready: z.boolean(),
   }),
+  /** D26-P1-C5 — real lesson substance, not char-count theater. */
+  substanceBarMet: z.boolean(),
+  theaterSlugs: z.array(z.string()),
 });
 
 const curriculumItemLocalizedOut = curriculumItemOut.extend({
@@ -205,12 +225,16 @@ const curriculumItemLocalizedOut = curriculumItemOut.extend({
  * output parser at runtime. The alternative — a `simulated?: boolean` a caller
  * is trusted to set — is the version that ships unlabelled on the day someone
  * adds a field in a hurry.
+ *
+ * `realMoney: false` is the D26-P1-C4 harden — paper flag never readable as
+ * real money even if a client only checks one bit.
  */
 const simulatedSealOut = {
   simulated: z.literal(true),
   venue: z.literal(SIMULATED_VENUE),
   realLedger: z.literal(false),
   withdrawable: z.literal(false),
+  realMoney: z.literal(false),
   disclaimer: z.string().min(1),
 };
 
@@ -252,6 +276,7 @@ const simulatedValuationOut = z.object({
   venue: z.literal(SIMULATED_VENUE),
   realLedger: z.literal(false),
   withdrawable: z.literal(false),
+  realMoney: z.literal(false),
   disclaimer: z.string().min(1),
   fillCount: z.number().int(),
   boughtSize: z.string(),
@@ -381,6 +406,35 @@ const certXpPlaneOut = z.object({
   rankWriter: z.literal('svc-identity'),
   policies: z.array(z.object({ certId: z.string(), xpDelta: z.number().int() })),
 });
+const certPerkInventKind = z.enum(['cert_to_perk_map', 'invent_perk_money', 'invent_fee_discount', 'invent_ifc_grant', 'invent_balance']);
+const certPerkOutcomeOut = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('real'),
+    path: z.literal('identity_rank'),
+    sot: z.literal('svc-identity'),
+    academyHoldsPerkMoney: z.literal(false),
+    academyMapsCertToPerk: z.literal(false),
+    perks: rankPerksSchema,
+  }),
+  z.object({
+    status: z.literal('refuse'),
+    code: z.literal(CERT_PERK_REFUSE_CODE),
+    reason: z.literal('identity_unreadable'),
+    message: z.string(),
+    academyHoldsPerkMoney: z.literal(false),
+    academyMapsCertToPerk: z.literal(false),
+    residual: z.literal(CERT_PERK_RESIDUAL),
+  }),
+]);
+const certPerkPlaneOut = z.object({
+  perksEnabledViaIdentity: z.literal(true),
+  academyMapsCertToPerk: z.literal(false),
+  academyHoldsPerkMoney: z.literal(false),
+  rankWriter: z.literal('svc-identity'),
+  residual: z.literal(CERT_PERK_RESIDUAL),
+  inventKindsRefuseClosed: z.array(certPerkInventKind),
+  statusLine: z.string(),
+});
 const certProgressOut = z.object({
   userId: z.string().uuid(),
   certId: z.string(),
@@ -407,6 +461,14 @@ const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room,
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof AmbassadorPayRefuseError) {
     // PRECONDITION_FAILED: operator asked for pay before owner rates + ledger recipe exist.
+    return new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: err.message,
+      cause: err,
+    });
+  }
+  if (err instanceof PrizePoolRefuseError) {
+    // PRECONDITION_FAILED: blank pool cannot start; amount present still Class M refuse (no invent IFC).
     return new TRPCError({
       code: 'PRECONDITION_FAILED',
       message: err.message,
@@ -477,11 +539,12 @@ function toTrpcError(err: unknown): TRPCError {
 
     case 'academy.paper_price_unavailable':
     case 'academy.paper_result_unlabelled':
+    case 'academy.paper_looks_like_real_money':
       // Neither is the caller's fault and neither may be softened into a
-      // partial answer. "No price was published" and "this figure lost its
-      // simulated label" are both states where the only safe payload is no
-      // payload — a 200 carrying a best guess is the incident this row exists
-      // to prevent.
+      // partial answer. "No price was published", "this figure lost its
+      // simulated label", and "this payload claimed real custody" are all
+      // states where the only safe payload is no payload — a 200 carrying a
+      // best guess is the incident this row exists to prevent.
       return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
 
     case 'academy.stake_unavailable':
@@ -495,7 +558,18 @@ function toTrpcError(err: unknown): TRPCError {
   }
 }
 
-export function createAcademyRouter(academy: AcademyService) {
+export type AcademyRouterPayLaws = {
+  readonly ifcPayLaw?: AmbassadorIfcPayLaw;
+  readonly revenueShareLaw?: AmbassadorRevenueShareLaw;
+};
+
+/**
+ * Optional payLaws: owner-published rate authority (D26-P1-C2).
+ * Default unpublished — refuse invent rates; product dry-run when published.
+ */
+export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRouterPayLaws = {}) {
+  const ifcPayLaw = payLaws.ifcPayLaw ?? UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW;
+  const revenueShareLaw = payLaws.revenueShareLaw ?? UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW;
   const guard = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -701,15 +775,19 @@ export function createAcademyRouter(academy: AcademyService) {
               steps: result.run.steps.map((step) => ({ id: step.id, instruction: step.instruction })),
             }),
           );
-          return {
+          const wire = {
             ok: true as const,
             simulated: sealed.simulated,
             venue: sealed.venue,
             realLedger: sealed.realLedger,
             withdrawable: sealed.withdrawable,
+            realMoney: sealed.realMoney,
             disclaimer: sealed.disclaimer,
             ...sealed.result,
           };
+          // D26-P1-C4 — second door: no custody-looking key may ride along.
+          assertPaperNeverReadableAsRealMoney(wire);
+          return wire;
         }),
       ),
 
@@ -813,15 +891,19 @@ export function createAcademyRouter(academy: AcademyService) {
               valuation,
             }),
           );
-          return {
+          const wire = {
             ok: true as const,
             simulated: sealed.simulated,
             venue: sealed.venue,
             realLedger: sealed.realLedger,
             withdrawable: sealed.withdrawable,
+            realMoney: sealed.realMoney,
             disclaimer: sealed.disclaimer,
             result: sealed.result,
           };
+          // D26-P1-C4 — second door: valuation may not smuggle custody keys.
+          assertPaperNeverReadableAsRealMoney(wire);
+          return wire;
         }),
       ),
 
@@ -1041,31 +1123,42 @@ export function createAcademyRouter(academy: AcademyService) {
       ),
 
     /**
-     * Class M IFC pay / revenue share — refuse-closed. Never invent rates.
-     * Plane status is always dark until owner-published schedule + ledger recipes.
+     * IFC pay / revenue share under rate authority (D26-P1-C2).
+     * Settlement stays dark (no ledger recipe). Quote path opens when owner rates published.
      */
     ambassadorPayPlane: scopedProcedure('admin:read', { module: 'academy' })
       .output(
         z.object({
           ifcPayEnabled: z.literal(false),
           revenueShareEnabled: z.literal(false),
+          ifcRateAuthorityPublished: z.boolean(),
+          revenueShareRateAuthorityPublished: z.boolean(),
+          ifcPayQuoteEnabled: z.boolean(),
+          revenueShareQuoteEnabled: z.boolean(),
           classM: z.literal(true),
           residualIfcPay: z.string(),
           residualRevenueShare: z.string(),
         }),
       )
-      .query(() => ambassadorPayPlaneStatus()),
+      .query(() => ambassadorPayPlaneStatus({ ifc: ifcPayLaw, revenueShare: revenueShareLaw })),
 
     ambassadorIfcPay: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({
-          beneficiaryId: z.string().uuid().optional(),
+          beneficiaryId: z.string().uuid(),
           dryRun: z.boolean().optional(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']).optional(),
         }),
       )
-      .mutation(async () => {
+      .mutation(async ({ input }) => {
         try {
-          refuseAmbassadorIfcPay();
+          return attemptAmbassadorPay({
+            kind: 'ifc_pay',
+            law: ifcPayLaw,
+            beneficiaryId: input.beneficiaryId,
+            dryRun: input.dryRun,
+            residencyStatus: input.residencyStatus,
+          });
         } catch (err) {
           throw toTrpcError(err);
         }
@@ -1074,13 +1167,42 @@ export function createAcademyRouter(academy: AcademyService) {
     ambassadorRevenueShare: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({
-          beneficiaryId: z.string().uuid().optional(),
+          beneficiaryId: z.string().uuid(),
           dryRun: z.boolean().optional(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']).optional(),
         }),
       )
-      .mutation(async () => {
+      .mutation(async ({ input }) => {
         try {
-          refuseAmbassadorRevenueShare();
+          return attemptAmbassadorPay({
+            kind: 'revenue_share',
+            law: revenueShareLaw,
+            beneficiaryId: input.beneficiaryId,
+            dryRun: input.dryRun,
+            residencyStatus: input.residencyStatus,
+          });
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    /** Residency IFC quote under rate authority — accepted residency + published rates. */
+    residencyIfcPayQuote: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          beneficiaryId: z.string().uuid(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']),
+          dryRun: z.boolean().optional().default(true),
+        }),
+      )
+      .mutation(async ({ input }) => {
+        try {
+          return attemptResidencyIfcPay({
+            law: ifcPayLaw,
+            beneficiaryId: input.beneficiaryId,
+            residencyStatus: input.residencyStatus,
+            dryRun: input.dryRun,
+          });
         } catch (err) {
           throw toTrpcError(err);
         }
@@ -1214,6 +1336,7 @@ export function createAcademyRouter(academy: AcademyService) {
      * Class N/M honesty — IFC prize pools refuse-closed on the wire.
      * Pure helpers already refuse; this mounts them so operators never see a
      * success path that invents pool amounts. No amount fields on the output.
+     * D26-P1-C3: unset start refuse is greppable on statusLine / blankStart.
      */
     tournamentPrizePlane: scopedProcedure('admin:read', { module: 'academy' })
       .output(
@@ -1221,7 +1344,13 @@ export function createAcademyRouter(academy: AcademyService) {
           prizesEnabled: z.literal(false),
           ledgerRecipeReady: z.literal(false),
           academyHoldsPrizeBalance: z.literal(false),
+          inventIfc: z.literal(false),
           statusLine: z.string(),
+          blankStart: z.object({
+            status: z.literal('refuse'),
+            code: z.literal('academy.prize_pool_unset'),
+            reason: z.literal('unset'),
+          }),
           intents: z.array(
             z.object({
               kind: z.enum(['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance']),
@@ -1241,16 +1370,26 @@ export function createAcademyRouter(academy: AcademyService) {
           }
           return { kind: d.kind, status: 'refuse' as const, code: d.code };
         });
+        const blankStart = decidePrizePoolStart(null);
+        if (blankStart.code !== 'academy.prize_pool_unset' || blankStart.reason !== 'unset') {
+          throw new AcademyError('Blank prize start must stay prize_pool_unset', 'academy.season_invalid');
+        }
         return {
           prizesEnabled: false as const,
           ledgerRecipeReady: false as const,
           academyHoldsPrizeBalance: false as const,
+          inventIfc: false as const,
           statusLine: prizeRefuseStatusLine(),
+          blankStart: {
+            status: 'refuse' as const,
+            code: 'academy.prize_pool_unset' as const,
+            reason: 'unset' as const,
+          },
           intents,
         };
       }),
 
-    /** Operator attempt to fund/pay/escrow — always PRECONDITION_FAILED, never invents amounts. */
+    /** Operator attempt to fund/pay/escrow — always refuse, never invents amounts. */
     tournamentPrizeIntent: scopedProcedure('admin:write', { module: 'academy' })
       .input(z.object({ kind: z.enum(['fund_pool', 'payout', 'escrow', 'clawback', 'invent_balance']) }))
       .output(
@@ -1275,6 +1414,31 @@ export function createAcademyRouter(academy: AcademyService) {
           academyHoldsPrizeBalance: false as const,
           ledgerRecipeReady: false as const,
         };
+      }),
+
+    /**
+     * D26-P1-C3 — start a prize-bearing season.
+     * Blank / unset pool → PRECONDITION_FAILED `academy.prize_pool_unset`.
+     * Amount present without Class M recipes → still refuse (no invent IFC).
+     * Never returns ok / never invents pool amounts on the wire.
+     */
+    tournamentPrizeStart: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          seasonId: z.string().uuid().optional(),
+          /** Owner pool amount (decimal string). Blank / omitted → unset refuse. */
+          prizePool: z
+            .union([z.string(), z.object({ amount: z.string().optional().nullable() }).passthrough()])
+            .optional()
+            .nullable(),
+        }),
+      )
+      .mutation(({ input }) => {
+        try {
+          assertMayStartPrizeSeason(input.prizePool);
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     setStanding: scopedProcedure('admin:write', { module: 'academy' })
@@ -1337,12 +1501,12 @@ export function createAcademyRouter(academy: AcademyService) {
         }),
       ),
 
-    // ── Certifications (progress + grants + XP emit — NO PAY) ─────────────────
+    // ── Certifications (progress + grants + XP emit + perk real/refuse — NO PAY) ─
     //
     // Definitions are code-seeded. Completions and grants are durable. Stage-2
-    // publishes `intafaced.identity.xp.earned` on grant, keyed on the grant, and
-    // stops there: svc-identity is the only writer to rank_state and the only
-    // place a perk is decided (§4.1). Nothing here posts to the ledger.
+    // publishes `intafaced.identity.xp.earned` on grant. D26-P1-C1 then surfaces
+    // real svc-identity perks or refuses invent perk money — never a cert→perk
+    // map or academy perk book (§4.1). Nothing here posts to the ledger.
 
     certDefinitions: scopedProcedure('academy:read', { module: 'academy' })
       .output(z.array(certDefinitionOut))
@@ -1367,7 +1531,8 @@ export function createAcademyRouter(academy: AcademyService) {
       ),
 
     /**
-     * Grant the caller's own certification, and publish the XP it is worth.
+     * Grant the caller's own certification, publish the XP it is worth, and
+     * report real identity perks (or refuse when invent/unreadable).
      *
      * Safe to call twice: the grant is idempotent on (user, cert) and the award
      * carries that same business key, which identity drops on conflict. Calling
@@ -1381,6 +1546,7 @@ export function createAcademyRouter(academy: AcademyService) {
           grant: certGrantOut,
           alreadyGranted: z.boolean(),
           xp: certXpOut,
+          perks: certPerkOutcomeOut,
         }),
       )
       .mutation(({ input, ctx }) =>
@@ -1395,6 +1561,7 @@ export function createAcademyRouter(academy: AcademyService) {
               idempotencyKey: result.grant.idempotencyKey,
             },
             xp: result.xp,
+            perks: result.perks,
           };
         }),
       ),
@@ -1410,6 +1577,50 @@ export function createAcademyRouter(academy: AcademyService) {
       .query(() => {
         const plane = academy.certXpPlane();
         return { ...plane, policies: [...plane.policies] };
+      }),
+
+    /**
+     * D26-P1-C1 perk plane: real perks via identity rank only; invent money refuse-closed.
+     */
+    certPerkPlane: scopedProcedure('academy:read', { module: 'academy' })
+      .output(certPerkPlaneOut)
+      .query(() => {
+        const plane = academy.certPerkPlane();
+        return { ...plane, inventKindsRefuseClosed: [...plane.inventKindsRefuseClosed] };
+      }),
+
+    /**
+     * Operator attempt to invent cert→perk money / map — always refuse, never amounts.
+     */
+    certPerkIntent: scopedProcedure('admin:write', { module: 'academy' })
+      .input(z.object({ kind: certPerkInventKind }))
+      .output(
+        z.object({
+          ok: z.literal(false),
+          status: z.literal('refuse'),
+          code: z.literal(CERT_PERK_REFUSE_CODE),
+          kind: certPerkInventKind,
+          message: z.string(),
+          academyHoldsPerkMoney: z.literal(false),
+          academyMapsCertToPerk: z.literal(false),
+          residual: z.literal(CERT_PERK_RESIDUAL),
+        }),
+      )
+      .mutation(({ input }) => {
+        const d = decideCertPerkInvent(input.kind as CertPerkInventKind);
+        if (!isCertPerkInventRefuseClosed(d)) {
+          throw new AcademyError('Cert perk invent plane must stay refuse-closed', 'academy.cert_invalid');
+        }
+        return {
+          ok: false as const,
+          status: 'refuse' as const,
+          code: d.code,
+          kind: d.kind,
+          message: d.message,
+          academyHoldsPerkMoney: false as const,
+          academyMapsCertToPerk: false as const,
+          residual: d.residual,
+        };
       }),
 
     myCerts: scopedProcedure('academy:read', { module: 'academy' })

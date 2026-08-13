@@ -22,14 +22,14 @@ import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
 import type { FreezeService } from './affiliates/freeze-service.js';
-import { accrueCommission, CommissionError, type TierRate } from './affiliates/commission.js';
+import { CommissionError } from './affiliates/commission.js';
 import {
   AccrualRateRefuseError,
+  accrualTierLawIsPublished,
   type AccrualTierLaw,
-  resolveAccrualTiers,
   UNPUBLISHED_ACCRUAL_TIER_LAW,
 } from './affiliates/commission-rate-law.js';
-import { accrueWithFreezes } from './affiliates/freeze.js';
+import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
@@ -170,6 +170,7 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     case 'auth.sub_account_denied':
     case 'auth.sub_account_revoked':
+    case 'auth.sub_account_limit':
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     case 'auth.totp_key_missing':
       // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
@@ -1079,7 +1080,29 @@ export function createIdentityRouter(
         })),
 
       /**
-       * Transfer ownership door (SPEC-SUBACCOUNTS residual).
+       * Single-row ownership door (SPEC-SUBACCOUNTS §2 / D26-P1-I1).
+       *
+       * Pure assert — does not move value. Trade and other money surfaces that
+       * name one partition call this (or the S2S ownership snapshot with the
+       * same checks) before acting. Missing id refuses; never defaults to primary.
+       */
+      assertOwned: scopedProcedure('identity:write')
+        .input(
+          z.object({
+            subAccountId: z.string().uuid().optional().nullable(),
+          }),
+        )
+        .output(z.object({ id: z.string().uuid(), parentUserId: z.string().uuid() }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            return await auth.assertSubAccountOwned(ctx.principal.userId, input.subAccountId);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Transfer ownership door (SPEC-SUBACCOUNTS §1–§2 / D26-P1-I1).
        *
        * Pure assert — does not move value. Money services call this (or the
        * AuthService method) before posting `recipes.subAccountTransfer`. A
@@ -1311,8 +1334,8 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Stage admin read — multi-tier tree board (structure + freeze count).
-       * No rates, no payout amounts.
+       * Stage admin read — multi-tier tree board (structure + freeze count) plus
+       * D26-P1-O2 rate-authority honesty. Never invents commission % into the board.
        */
       treeStatus: scopedProcedure('admin:read')
         .output(
@@ -1323,6 +1346,10 @@ export function createIdentityRouter(
             frozenCount: z.number().int().nonnegative(),
             maxDepthCap: z.number().int().positive(),
             statusLine: z.string(),
+            /** Owner published IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON (no invent). */
+            rateAuthorityPublished: z.boolean(),
+            /** Ops board line — published flag + tier count only, never rate values. */
+            rateAuthorityStatusLine: z.string(),
           }),
         )
         .query(async () => {
@@ -1332,6 +1359,8 @@ export function createIdentityRouter(
             return {
               ...board,
               statusLine: affiliateTreeStatusLine(board),
+              rateAuthorityPublished: accrualTierLawIsPublished(accrualTierLaw),
+              rateAuthorityStatusLine: accrualTreeAuthorityStatusLine(accrualTierLaw),
             };
           } catch (err) {
             throw toTrpcError(err);
@@ -1509,8 +1538,9 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Slice B dry-run: fee event → commission rows using durable tree + freezes.
+       * Slice B dry-run: fee event → commission rows under rate authority (D26-P1-O2).
        * NEVER posts ledger. Zero fee → empty rows. Real payout is affiliates.payout.
+       * Simulation tiers allowed here only; durable accrue refuses invent.
        */
       accrueDryRun: scopedProcedure('admin:read')
         .input(
@@ -1525,6 +1555,7 @@ export function createIdentityRouter(
               .regex(/^[a-z][a-z0-9_-]{0,31}$/)
               .optional(),
             at: z.string().datetime().optional(),
+            /** Dry-run simulation only — never written to durable store. */
             tiers: z
               .array(
                 z.object({
@@ -1559,11 +1590,6 @@ export function createIdentityRouter(
           try {
             const parent = await requireReferral().loadParentMap();
             const frozen = await requireFreeze().frozenIds();
-            // No DEFAULT_ACCRUAL_TIERS — refuse when neither request nor owner law supplies rates.
-            const tiers: readonly TierRate[] = resolveAccrualTiers({
-              requestTiers: input.tiers,
-              law: accrualTierLaw,
-            });
             const fee = {
               feeEventId: input.feeEventId,
               userId: input.userId,
@@ -1572,16 +1598,17 @@ export function createIdentityRouter(
               sourceModule: input.sourceModule,
               at: input.at ? new Date(input.at) : new Date(),
             };
-            const without = accrueCommission({ fee, parent, tiers });
-            const withFreeze = accrueWithFreezes({
+            const out = accrueTreeUnderRateAuthority({
               fee,
               parent,
-              tiers,
+              law: accrualTierLaw,
               frozenBeneficiaryIds: frozen,
+              simulationTiers: input.tiers,
+              mode: 'dryRun',
             });
             return {
-              frozenSkipped: Math.max(0, without.length - withFreeze.length),
-              rows: withFreeze.map((r) => ({
+              frozenSkipped: out.frozenSkipped,
+              rows: out.rows.map((r) => ({
                 feeEventId: r.feeEventId,
                 beneficiaryId: r.beneficiaryId,
                 payerId: r.payerId,
@@ -1600,10 +1627,11 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Slice B persist: same accrual as dry-run, written to durable store.
+       * Slice B persist: accrual tree under owner rate authority (D26-P1-O2).
        * NEVER posts ledger. Idempotent on (feeEventId, beneficiary, hop).
-       * Zero fee → zero rows. Payout remains refuse-closed (Slice C / §8).
-       * Rates: request tiers or owner-published law only — never invent.
+       * Zero fee → zero rows. Payout via ledger recipes only (Slice C).
+       * Rates: owner-published IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON only —
+       * per-call tiers refused (`affiliate.accrual.invent_refused`).
        */
       accrue: scopedProcedure('admin:write')
         .input(
@@ -1618,6 +1646,10 @@ export function createIdentityRouter(
               .regex(/^[a-z][a-z0-9_-]{0,31}$/)
               .optional(),
             at: z.string().datetime().optional(),
+            /**
+             * Forbidden on durable accrue — present only so a caller that still
+             * sends invent tiers gets invent_refused rather than silent ignore.
+             */
             tiers: z
               .array(
                 z.object({
@@ -1654,10 +1686,6 @@ export function createIdentityRouter(
             const parent = await requireReferral().loadParentMap();
             const frozen = await requireFreeze().frozenIds();
             const store = requireAccruals();
-            const tiers: readonly TierRate[] = resolveAccrualTiers({
-              requestTiers: input.tiers,
-              law: accrualTierLaw,
-            });
             const fee = {
               feeEventId: input.feeEventId,
               userId: input.userId,
@@ -1666,18 +1694,19 @@ export function createIdentityRouter(
               sourceModule: input.sourceModule,
               at: input.at ? new Date(input.at) : new Date(),
             };
-            const without = accrueCommission({ fee, parent, tiers });
-            const withFreeze = accrueWithFreezes({
+            const out = accrueTreeUnderRateAuthority({
               fee,
               parent,
-              tiers,
+              law: accrualTierLaw,
               frozenBeneficiaryIds: frozen,
+              simulationTiers: input.tiers,
+              mode: 'durable',
             });
-            const inserted = await store.saveRows(withFreeze);
+            const inserted = await store.saveRows(out.rows);
             const stored = await store.listByFeeEvent(input.feeEventId);
             return {
               inserted,
-              frozenSkipped: Math.max(0, without.length - withFreeze.length),
+              frozenSkipped: out.frozenSkipped,
               rows: stored.map((r) => ({
                 feeEventId: r.feeEventId,
                 beneficiaryId: r.beneficiaryId,

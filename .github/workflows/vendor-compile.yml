@@ -8,12 +8,15 @@
 # must run on every PR because a required check that path-filters itself leaves
 # PRs pending forever. This job is advisory; path filter = no wasted minutes.
 #
-# What it proves: the scanned Java source still parses under the toolchain the
-# ADR pins (OpenJDK 8 + Maven 3.8). It does NOT prove jars match compose, does
-# NOT publish artifacts, and does NOT add jars to force a boot.
+# What it proves: the scanned Java source still parses / packages under the
+# toolchain the ADR pins (OpenJDK 8 + Maven 3.8). That is the rebuild path.
+# It does NOT prove a running JVM is safe, does NOT publish artifacts to the
+# monorepo, and does NOT add jars to force a boot. A green package here is
+# still not a substitute for the dual-book source gates — and a green source
+# gate is still not jar truth (D-S-17 / D26-P2-07).
 #
-# If compile would need a new jar vendored or published: stop — owner gate
-# (ADR 2026-08-04: do not add a jar to make something boot).
+# If compile/package would need a new jar vendored or published: stop — owner
+# gate (ADR 2026-08-04: do not add a jar to make something boot).
 name: Vendor compile probe
 
 on:
@@ -21,6 +24,8 @@ on:
     paths:
       - 'vendor/**'
       - '.github/workflows/vendor-compile.yml'
+      - 'tooling/scripts/vendor-java-rebuild.mjs'
+      - 'tooling/ci/vendor-java-jar-truth.mjs'
   workflow_dispatch:
 
 concurrency:
@@ -56,5 +61,35 @@ jobs:
         run: |
           set -euo pipefail
           echo "Vendor compile probe — core only (path-filtered, continue-on-error)"
+          echo "Note: source scan ≠ runtime safety; this step is compile evidence only"
           mvn -B -q -pl core -am -DskipTests compile
           echo "✓ vendor compile probe: framework core compiled"
+
+  # D26-P2-07 / D-S-17: rebuild path real — package the jars compose would run
+  # from the same scanned source the money scan walks. Advisory (continue-on-
+  # error): Spring EOL + otc packaging debt must not freeze the monorepo, but
+  # the path must exist and be exercised in CI rather than only documented.
+  # Module list must stay aligned with tooling/scripts/vendor-java-rebuild.mjs
+  # (compose inventory); jar-truth fails if this job loses `package`.
+  package-compose-jars:
+    name: Package compose jars (rebuild path)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    container:
+      image: maven:3.8.8-eclipse-temurin-8
+    defaults:
+      run:
+        working-directory: vendor/upstream-exchange/00_framework
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Package compose jars from scanned source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Vendor jar rebuild — compose modules from scanned source"
+          echo "Jar truth rule: source scan alone is not runtime safety (ADR 2026-08-04)"
+          echo "Local equivalent: pnpm vendor-java:rebuild (tooling/scripts/vendor-java-rebuild.mjs)"
+          # Keep in sync with composeJarModules() in vendor-java-rebuild.mjs
+          mvn -B -q -pl cloud,exchange,exchange-api,market,otc-api,ucenter-api -am -DskipTests package
+          echo "✓ vendor jar rebuild: compose modules packaged from scanned source"

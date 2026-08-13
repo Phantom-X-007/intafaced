@@ -21,6 +21,16 @@ export function presentAlgoProgress(parent: TwapParent, filledFromChildren: Amou
   return view;
 }
 
+/**
+ * Sum real child fill quantities only (TradeService.algoProgress / ledger fills).
+ * Never use schedule qty, childrenEmitted, or nextSliceIndex as a substitute.
+ */
+export function sumChildFillQtys(fills: ReadonlyArray<{ readonly qty: Amount }>): Amount {
+  let total = 0n;
+  for (const f of fills) total += f.qty;
+  return total;
+}
+
 /** Keys that must NEVER appear on a parent object (fabrication surface). */
 export const FORBIDDEN_PARENT_MONEY_KEYS = [
   'filledQty',

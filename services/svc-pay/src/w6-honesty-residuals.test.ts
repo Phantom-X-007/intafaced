@@ -17,30 +17,33 @@ function stripComments(src: string): string {
 }
 
 describe('W6 honesty residuals', () => {
-  it('assertMerchantActive does not gate on kybStatus (KYB money gate still residual)', () => {
-    // SPEC/harvest: live money must eventually require approved KYB — tip still
-    // refuses only merchant.status. Pin the gate body so a silent kyb read is
-    // deliberate, not accidental.
+  it('assertMerchantActive wires Layer B KYB money gate (D26-P1-P10) without inventing grants', () => {
+    // Live acquiring must require approved KYB via merchantKybMoneyGateRefusal.
+    // Pin the call so a silent remove is deliberate — Layer A grant issuance
+    // stays refuse-closed in @intafaced/auth (never auto-grant here).
     const m = paymentService.match(/private assertMerchantActive\([^)]*\)[^{]*\{([\s\S]*?)\n  \}/);
     expect(m, 'assertMerchantActive missing').toBeTruthy();
     const captured = m?.[1];
     expect(captured, 'assertMerchantActive body missing').toEqual(expect.any(String));
     const body = stripComments(captured as string);
     expect(body).toMatch(/merchant\.status/);
-    expect(body).not.toMatch(/kybStatus|kyb_status|pay\.kyb_required/);
+    expect(body).toMatch(/merchantKybMoneyGateRefusal/);
+    expect(body).toMatch(/kybStatus/);
+    expect(paymentService).not.toMatch(/issueMerchantPayScopes|assertMerchantPayScopeGrantAllowed/);
   });
 
-  it('applyWebhook has no dispute.* or voided cases — rail types exist, status never moves', () => {
-    // RailEventType names dispute/voided; applyWebhook must not silently pretend
-    // they transition money status until Nitro Class M / residual ship.
+  it('applyWebhook dispute.opened is case-only — voided still absent; ledger recipes uncalled', () => {
+    // D26-P1-P5: dispute.* cases write dispute records + may mark disputed status.
+    // They must not call ledger chargeback recipes (owner Class M park).
     expect(railAdapter).toMatch(/dispute\.|'voided'|\"voided\"/);
     const apply = paymentService.match(/async applyWebhook\([\s\S]*?\n  \}/);
     expect(apply, 'applyWebhook missing').toBeTruthy();
     const applySrc = apply?.[0];
     expect(applySrc, 'applyWebhook source missing').toEqual(expect.any(String));
     const body = stripComments(applySrc as string);
-    expect(body).not.toMatch(/case\s+['\"]dispute\./);
+    expect(body).toMatch(/case\s+['\"]dispute\.opened['\"]/);
     expect(body).not.toMatch(/case\s+['\"]voided['\"]/);
+    expect(body).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall/);
     // Still records unsolicited refunds without auto-moving money.
     expect(body).toMatch(/case\s+['\"]refunded['\"]/);
   });

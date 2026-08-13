@@ -152,6 +152,8 @@ describe('copy_intel.stats metered session run', () => {
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
     expect(result.stats).toHaveLength(2);
+    // Tip #1708: fixture/input order (directory leaderId sort is presentDirectory only).
+    expect(result.stats.map((s) => s.leaderId)).toEqual(['leader-a', 'leader-b']);
     expect(result.fixturesAccepted).toBe(2);
     expect(result.writesRefusedByGuardrail).toBe(0);
     // read ×2 then audited write ×2 — write path is the mountain promise

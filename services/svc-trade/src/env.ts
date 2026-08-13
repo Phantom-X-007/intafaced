@@ -138,14 +138,27 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
       /**
+       * OPTIONS SETTLEMENT ASSET LAW stamp (trade.options / D26-P0-05).
+       *
+       * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
+       * kind=options throws `trade.options_settlement_law_unset` until this is a
+       * non-empty opaque string meaning the P0-05 ADR (live set, settlement asset,
+       * refuse matrix) is published. The string is NEVER parsed for assets or
+       * matrix rows — inventing those is SOCKET §13
+       * `socket.options-settlement-asset-law`. Stamp only after the ADR exists.
+       */
+      TRADE_OPTIONS_SETTLEMENT_ASSET_LAW: z.string().default(''),
+
+      /**
        * OPTIONS SETTLEMENT FIXING CONFIG (trade.options / D7).
        *
        * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
        * kind=options throws `trade.options_fixing_unconfigured` until this is
-       * set to a non-empty opaque string. The string is stamped on the market
-       * row as `settlement_fixing`; it is NOT parsed for source, window, expiry
-       * clock, or funded payor account. Those are owner law (D7) and inventing
-       * them here would be the exact failure this thin slice exists to prevent.
+       * set to a non-empty opaque string (and P0-05 law is also stamped). The
+       * string is stamped on the market row as `settlement_fixing`; it is NOT
+       * parsed for source, window, expiry clock, or funded payor account. Those
+       * are owner law (D7) and inventing them here would be the exact failure
+       * this thin slice exists to prevent.
        *
        * No IV surface. No pricing model. Orders on options remain refused by
        * `assertTradable` (`trade.market_kind_unsupported`) until an engine exists.
@@ -330,7 +343,7 @@ const schema = serviceEnvSchema
       TRADE_OTC_MIDS: z.string().default(''),
 
       /**
-       * Copy fee-share law (trade.copy / D-S-03). JSON or empty.
+       * Copy fee-share law (trade.copy / D-S-03 / D26-P0-02). JSON or empty.
        *
        * Empty (default) = unpublished → refuse-closed. Never invent
        * leader_share_bps / caps / decay — DIRECTION §8 owner-only.
@@ -340,10 +353,13 @@ const schema = serviceEnvSchema
       TRADE_COPY_FEE_SHARE_LAW: z.string().default(''),
 
       /**
-       * Copy jurisdiction allowlist (trade.copy / D-S-03). JSON or empty.
+       * Copy jurisdiction allowlist (trade.copy / D-S-03 / D26-P0-15).
        *
-       * Empty (default) = unpublished → follow refuses. Never invent geo list.
-       * Published shape: {"published":true,"allowedRegions":["SG","…"]}
+       * Empty (default) = unpublished → follow refuses. Never invent geo list
+       * (adr/2026-08-12-copy-jurisdiction-refuse-closed.md). Owner publishes
+       * codes via deploy config only.
+       * Published shape: {"published":true,"allowedRegions":["…"]}
+       * Published empty array = serve none (still fail closed).
        */
       TRADE_COPY_JURISDICTION_LAW: z.string().default(''),
 

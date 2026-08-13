@@ -5,12 +5,13 @@ import { requireScope, type Principal, type Scope } from '@intafaced/auth';
 import { createEdgeContext, type EdgeRequest } from '@intafaced/contracts';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
-import type { PermissionArea } from './submerchants.js';
+import { areaForSurface, isPayfacPermissionPort, resolveActorMerchantId, type PayfacPermissionPort } from './payfac-permissions.js';
+import { PERMISSION_AREAS, SubMerchantError, type PermissionArea } from './submerchants.js';
 import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merchant-webhooks.js';
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
 import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
-import { resolveMerchantRail } from './sandbox-key-routing.js';
+import { isSandboxRailId, resolveMerchantRail } from './sandbox-key-routing.js';
 
 /**
  * `pay.public-api` — the merchant REST surface.
@@ -65,6 +66,15 @@ import { resolveMerchantRail } from './sandbox-key-routing.js';
  *   docs/pay/MERCHANT-PUBLIC-API-QUICKSTART.md — callable without monorepo.
  *   OpenAPI description below stays the machine contract (must match behaviour).
  *
+ * D26-P1-P2 — PayFac permissions (when `trees` is SubMerchantService):
+ *   GET    /api/pay/v1/submerchant-permissions/areas
+ *   GET    /api/pay/v1/submerchant-permissions              ?subjectMerchantId=
+ *   GET    /api/pay/v1/submerchant-permissions/history      ?subjectMerchantId=
+ *   POST   /api/pay/v1/submerchant-permissions/grant
+ *   POST   /api/pay/v1/submerchant-permissions/revoke
+ *   Same journal + actor-from-principal rules as tRPC `submerchantPermission.*`.
+ *   Honest partial: docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md
+ *
  * Not Class X go-live. Not a live acquirer. Outbound webhooks do not move value.
  */
 
@@ -107,8 +117,13 @@ export interface PublicRestDeps {
   idempotency?: RestIdempotencyStore;
   /** Outbound merchant webhooks (step 3). Optional so read/mutate tests stay light. */
   webhooks?: MerchantWebhookService;
-  /** PayFac area fence — same as tRPC `createPayRouter` fourth arg. */
-  trees?: MerchantAreaFence | null;
+  /**
+   * PayFac area fence — same as tRPC `createPayRouter` fourth arg.
+   * When the concrete `SubMerchantService` is passed (boot already does), REST
+   * also mounts `/v1/submerchant-permissions/*` (D26-P1-P2) via duck-typing —
+   * no `index.ts` change required while #1720 is open.
+   */
+  trees?: MerchantAreaFence | PayfacPermissionPort | null;
 }
 
 /**
@@ -137,7 +152,7 @@ const errorSchema = {
 
 const paymentSchema = {
   type: 'object',
-  required: ['id', 'merchantId', 'amount', 'assetId', 'status', 'capturedAmount', 'refundedAmount', 'createdAt'],
+  required: ['id', 'merchantId', 'amount', 'assetId', 'status', 'mode', 'capturedAmount', 'refundedAmount', 'createdAt'],
   properties: {
     id: { type: 'string', format: 'uuid' },
     merchantId: { type: 'string', format: 'uuid' },
@@ -148,6 +163,11 @@ const paymentSchema = {
     railAdapter: { type: 'string', nullable: true },
     railRef: { type: 'string', nullable: true },
     status: { type: 'string', enum: [...PAYMENT_STATUSES] },
+    mode: {
+      type: 'string',
+      enum: ['live', 'sandbox'],
+      description: 'Rail posture of this payment (ADR §2.5). `sandbox` when the rail is a sandbox simulation; never silent live.',
+    },
     capturedAmount: { type: 'string', description: 'Decimal string.' },
     refundedAmount: { type: 'string', description: 'Decimal string.' },
     createdAt: { type: 'string', format: 'date-time' },
@@ -280,6 +300,9 @@ function statusFor(code: string): number {
       return 404;
     case 'pay.merchant_forbidden':
     case 'pay.submerchant_permission_denied':
+    case 'pay.submerchant_not_onboarded':
+    case 'pay.submerchant_out_of_scope':
+    case 'pay.submerchant_grant_lateral':
     case 'pay.merchant_inactive':
     case 'pay.kyb_operator_required':
       return 403;
@@ -293,6 +316,8 @@ function statusFor(code: string): number {
     case 'pay.settlement_desynced':
     case 'pay.idempotency_conflict':
     case 'pay.partial_capture_unsupported':
+    case 'pay.submerchant_user_already_merchant':
+    case 'pay.submerchant_cycle':
       return 409;
     case 'pay.rail_operation_unsupported':
     case 'pay.sandbox_rail_refused':
@@ -313,6 +338,10 @@ function send(reply: FastifyReply, err: unknown): FastifyReply {
     return reply.code(503).send(body);
   }
   if (err instanceof PayError) {
+    const body: ErrorBody = { error: { code: err.code, message: err.message } };
+    return reply.code(statusFor(err.code)).send(body);
+  }
+  if (err instanceof SubMerchantError) {
     const body: ErrorBody = { error: { code: err.code, message: err.message } };
     return reply.code(statusFor(err.code)).send(body);
   }
@@ -347,6 +376,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           '',
           '**Sandbox keys** (mode=sandbox / `key_env=sandbox`): createPayment always uses the sandbox rail',
           '(`card-sandbox`). A **live** key that names a sandbox rail is refused (`pay.sandbox_rail_refused`).',
+          'Every payment response includes `mode: "sandbox" | "live"` from the rail posture — never silent.',
           'There is no parallel sandbox deployment — same API, rail posture only.',
           '',
           '**Idempotency-Key** is required on every mutating POST. A repeated key with the same body returns',
@@ -516,7 +546,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       if (!principal) return reply;
       try {
         const payment = await deps.pay.getPayment(req.params.id);
-        await assertAccess(principal.userId, payment.merchantId, 'payment');
+        await assertAccess(principal.userId, payment.merchantId, areaForSurface('rest.payments.read'));
         return reply.send(toPaymentBody(payment));
       } catch (err) {
         return send(reply, err);
@@ -546,7 +576,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
-        await assertAccess(principal.userId, req.query.merchantId, 'payment');
+        await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.payments.list'));
         const rows = await deps.pay.listPayments({
           merchantId: req.query.merchantId,
           status: req.query.status,
@@ -579,7 +609,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
-        await assertAccess(principal.userId, req.query.merchantId, 'merchant.profile');
+        await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.balances.read'));
         const [clearing, available] = await Promise.all([
           deps.pay.clearingBalance(req.query.merchantId, req.query.assetId),
           deps.pay.merchantBalance(req.query.merchantId, req.query.assetId),
@@ -637,7 +667,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
 
       return withIdempotency(req, reply, principal.userId, key, req.body, async () => {
         try {
-          await assertAccess(principal.userId, req.body.merchantId, 'payment');
+          await assertAccess(principal.userId, req.body.merchantId, areaForSurface('rest.payments.create'));
           const amount = requireDecimalString(req.body.amount, 'amount');
           // ADR §2.5 step 4 — sandbox key → sandbox rail; live key may not.
           const railAdapter = resolveMerchantRail({
@@ -693,7 +723,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       return withIdempotency(req, reply, principal.userId, key, req.body ?? {}, async () => {
         try {
           const existing = await deps.pay.getPayment(req.params.id);
-          await assertAccess(principal.userId, existing.merchantId, 'payment');
+          await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.authorize'));
           const payment = await deps.pay.authorize(req.params.id);
           return reply.send(toPaymentBody(payment));
         } catch (err) {
@@ -733,7 +763,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       return withIdempotency(req, reply, principal.userId, key, req.body ?? {}, async () => {
         try {
           const existing = await deps.pay.getPayment(req.params.id);
-          await assertAccess(principal.userId, existing.merchantId, 'payment');
+          await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.capture'));
           const opts = req.body?.amount === undefined ? {} : { amount: parseAmount(requireDecimalString(req.body.amount, 'amount')) };
           const payment = await deps.pay.capture(req.params.id, opts);
           return reply.send(toPaymentBody(payment));
@@ -774,7 +804,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       return withIdempotency(req, reply, principal.userId, key, req.body, async () => {
         try {
           const existing = await deps.pay.getPayment(req.params.id);
-          await assertAccess(principal.userId, existing.merchantId, 'payment.refund');
+          await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.refund'));
           const amount = requireDecimalString(req.body.amount, 'amount');
           // The caller's own business key wins; otherwise their Idempotency-Key
           // IS the business key (see `restRefundId`). Never an attempt ordinal.
@@ -860,7 +890,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:write');
         if (!principal) return reply;
         try {
-          await assertAccess(principal.userId, req.body.merchantId, 'webhook');
+          await assertAccess(principal.userId, req.body.merchantId, areaForSurface('rest.webhooks.write'));
           const created = await webhooks.registerEndpoint(req.body.merchantId, req.body.url);
           return reply.send({
             id: created.id,
@@ -897,7 +927,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
-          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
+          await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.webhooks.read'));
           const rows = await webhooks.listEndpoints(req.query.merchantId);
           return reply.send(
             rows.map((e) => ({
@@ -941,9 +971,48 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:write');
         if (!principal) return reply;
         try {
-          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
+          await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.webhooks.read'));
           await webhooks.disableEndpoint(req.query.merchantId, req.params.id);
           return reply.send({ disabled: true });
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
+    app.post(
+      `${BASE}/webhook-endpoints/:id/enable`,
+      {
+        schema: {
+          tags: ['webhooks'],
+          summary: 'Re-enable a disabled webhook endpoint',
+          description:
+            'After consecutive failures disable an endpoint (ADR §2.4), fix the receiver and call this. Resets the failure counter.',
+          params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+          querystring: {
+            type: 'object',
+            required: ['merchantId'],
+            properties: { merchantId: { type: 'string', format: 'uuid' } },
+          },
+          response: { 200: endpointSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (req: FastifyRequest<{ Params: { id: string }; Querystring: { merchantId: string } }>, reply) => {
+        const principal = principalOf(req, reply, 'pay:write');
+        if (!principal) return reply;
+        try {
+          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
+          const enabled = await webhooks.enableEndpoint(req.query.merchantId, req.params.id);
+          return reply.send({
+            id: enabled.id,
+            merchantId: enabled.merchantId,
+            url: enabled.url,
+            status: enabled.status,
+            disabledReason: enabled.disabledReason,
+            consecutiveFailures: enabled.consecutiveFailures,
+            createdAt: enabled.createdAt.toISOString(),
+            updatedAt: enabled.updatedAt.toISOString(),
+          });
         } catch (err) {
           return send(reply, err);
         }
@@ -979,7 +1048,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
-          await assertAccess(principal.userId, req.query.merchantId, 'webhook');
+          await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.webhooks.read'));
           const rows = await webhooks.listDeliveries(req.query.merchantId, {
             status: req.query.status,
             limit: req.query.limit,
@@ -1006,9 +1075,265 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
     );
   }
+
+  // ── D26-P1-P2 — PayFac permission product path (REST translation of tRPC) ──
+  // Mounted only when `trees` is a full SubMerchantService (boot already passes it).
+  const permissions = isPayfacPermissionPort(deps.trees) ? deps.trees : null;
+  if (permissions) {
+    const areaEnum = [...PERMISSION_AREAS];
+    const grantBody = {
+      type: 'object',
+      required: ['granteeMerchantId', 'subjectMerchantId', 'area', 'reason'],
+      additionalProperties: false,
+      properties: {
+        granteeMerchantId: { type: 'string', format: 'uuid' },
+        subjectMerchantId: { type: 'string', format: 'uuid' },
+        area: { type: 'string', enum: areaEnum },
+        reason: { type: 'string', minLength: 3, maxLength: 500 },
+      },
+    } as const;
+    const eventSchema = {
+      type: 'object',
+      required: [
+        'id',
+        'seq',
+        'granteeMerchantId',
+        'subjectMerchantId',
+        'area',
+        'action',
+        'reason',
+        'actorId',
+        'actorMerchantId',
+        'actorScope',
+        'createdAt',
+      ],
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        seq: { type: 'string' },
+        granteeMerchantId: { type: 'string', format: 'uuid' },
+        subjectMerchantId: { type: 'string', format: 'uuid' },
+        area: { type: 'string' },
+        action: { type: 'string', enum: ['grant', 'revoke'] },
+        reason: { type: 'string' },
+        actorId: { type: 'string' },
+        actorMerchantId: { type: 'string', format: 'uuid' },
+        actorScope: { type: 'string' },
+        createdAt: { type: 'string', format: 'date-time' },
+      },
+    } as const;
+    const grantSchema = {
+      type: 'object',
+      required: ['granteeMerchantId', 'subjectMerchantId', 'area', 'reason', 'actorId', 'actorMerchantId', 'grantedAt'],
+      properties: {
+        granteeMerchantId: { type: 'string', format: 'uuid' },
+        subjectMerchantId: { type: 'string', format: 'uuid' },
+        area: { type: 'string' },
+        reason: { type: 'string' },
+        actorId: { type: 'string' },
+        actorMerchantId: { type: 'string', format: 'uuid' },
+        grantedAt: { type: 'string', format: 'date-time' },
+      },
+    } as const;
+
+    app.get(
+      `${BASE}/submerchant-permissions/areas`,
+      {
+        schema: {
+          tags: ['payfac-permissions'],
+          summary: 'Permission area vocabulary (eleven surfaces; not fourteen)',
+          response: { 200: { type: 'array', items: { type: 'string' } }, 401: errorSchema },
+        },
+      },
+      async (req, reply) => {
+        const principal = principalOf(req, reply, 'pay:read');
+        if (!principal) return reply;
+        return reply.send([...PERMISSION_AREAS]);
+      },
+    );
+
+    app.get(
+      `${BASE}/submerchant-permissions`,
+      {
+        schema: {
+          tags: ['payfac-permissions'],
+          summary: 'Live grants over a subject merchant (implicit root/self authority omitted)',
+          querystring: {
+            type: 'object',
+            required: ['subjectMerchantId'],
+            properties: { subjectMerchantId: { type: 'string', format: 'uuid' } },
+          },
+          response: { 200: { type: 'array', items: grantSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (req: FastifyRequest<{ Querystring: { subjectMerchantId: string } }>, reply) => {
+        const principal = principalOf(req, reply, 'pay:read');
+        if (!principal) return reply;
+        try {
+          const actorMerchantId = await resolveActorMerchantId(deps.pay, principal.userId);
+          const rows = await permissions.listPermissions(actorMerchantId, req.query.subjectMerchantId);
+          return reply.send(
+            rows.map((r) => ({
+              granteeMerchantId: r.granteeMerchantId,
+              subjectMerchantId: r.subjectMerchantId,
+              area: r.area,
+              reason: r.reason,
+              actorId: r.actorId,
+              actorMerchantId: r.actorMerchantId,
+              grantedAt: r.grantedAt.toISOString(),
+            })),
+          );
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
+    app.get(
+      `${BASE}/submerchant-permissions/history`,
+      {
+        schema: {
+          tags: ['payfac-permissions'],
+          summary: 'Grant and revoke journal for a subject, newest first',
+          querystring: {
+            type: 'object',
+            required: ['subjectMerchantId'],
+            properties: {
+              subjectMerchantId: { type: 'string', format: 'uuid' },
+              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
+            },
+          },
+          response: { 200: { type: 'array', items: eventSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (req: FastifyRequest<{ Querystring: { subjectMerchantId: string; limit?: number } }>, reply) => {
+        const principal = principalOf(req, reply, 'pay:read');
+        if (!principal) return reply;
+        try {
+          const actorMerchantId = await resolveActorMerchantId(deps.pay, principal.userId);
+          const rows = await permissions.permissionHistory(actorMerchantId, req.query.subjectMerchantId, req.query.limit ?? 50);
+          return reply.send(
+            rows.map((r) => ({
+              id: r.id,
+              seq: r.seq,
+              granteeMerchantId: r.granteeMerchantId,
+              subjectMerchantId: r.subjectMerchantId,
+              area: r.area,
+              action: r.action,
+              reason: r.reason,
+              actorId: r.actorId,
+              actorMerchantId: r.actorMerchantId,
+              actorScope: r.actorScope,
+              createdAt: r.createdAt.toISOString(),
+            })),
+          );
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
+    app.post(
+      `${BASE}/submerchant-permissions/grant`,
+      {
+        schema: {
+          tags: ['payfac-permissions'],
+          summary: 'Grant an area the caller already holds (reason required; append-only journal)',
+          body: grantBody,
+          response: { 200: eventSchema, 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (
+        req: FastifyRequest<{
+          Body: { granteeMerchantId: string; subjectMerchantId: string; area: PermissionArea; reason: string };
+        }>,
+        reply,
+      ) => {
+        const principal = principalOf(req, reply, 'pay:write');
+        if (!principal) return reply;
+        try {
+          const actorMerchantId = await resolveActorMerchantId(deps.pay, principal.userId);
+          const event = await permissions.grantPermission({
+            actorMerchantId,
+            granteeMerchantId: req.body.granteeMerchantId,
+            subjectMerchantId: req.body.subjectMerchantId,
+            area: req.body.area,
+            reason: req.body.reason,
+            actorId: principal.userId,
+            actorScope: 'pay:write',
+          });
+          return reply.send({
+            id: event.id,
+            seq: event.seq,
+            granteeMerchantId: event.granteeMerchantId,
+            subjectMerchantId: event.subjectMerchantId,
+            area: event.area,
+            action: event.action,
+            reason: event.reason,
+            actorId: event.actorId,
+            actorMerchantId: event.actorMerchantId,
+            actorScope: event.actorScope,
+            createdAt: event.createdAt.toISOString(),
+          });
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+
+    app.post(
+      `${BASE}/submerchant-permissions/revoke`,
+      {
+        schema: {
+          tags: ['payfac-permissions'],
+          summary: 'Revoke a live grant — new journal row, never an edit',
+          body: grantBody,
+          response: { 200: eventSchema, 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        },
+      },
+      async (
+        req: FastifyRequest<{
+          Body: { granteeMerchantId: string; subjectMerchantId: string; area: PermissionArea; reason: string };
+        }>,
+        reply,
+      ) => {
+        const principal = principalOf(req, reply, 'pay:write');
+        if (!principal) return reply;
+        try {
+          const actorMerchantId = await resolveActorMerchantId(deps.pay, principal.userId);
+          const event = await permissions.revokePermission({
+            actorMerchantId,
+            granteeMerchantId: req.body.granteeMerchantId,
+            subjectMerchantId: req.body.subjectMerchantId,
+            area: req.body.area,
+            reason: req.body.reason,
+            actorId: principal.userId,
+            actorScope: 'pay:write',
+          });
+          return reply.send({
+            id: event.id,
+            seq: event.seq,
+            granteeMerchantId: event.granteeMerchantId,
+            subjectMerchantId: event.subjectMerchantId,
+            area: event.area,
+            action: event.action,
+            reason: event.reason,
+            actorId: event.actorId,
+            actorMerchantId: event.actorMerchantId,
+            actorScope: event.actorScope,
+            createdAt: event.createdAt.toISOString(),
+          });
+        } catch (err) {
+          return send(reply, err);
+        }
+      },
+    );
+  }
 }
 
-/** Identical field-for-field to the tRPC `toPaymentOut` — see the header. */
+/**
+ * REST payment body. Same money fields as tRPC `toPaymentOut`, plus `mode`
+ * (sandbox honesty — ADR §2.5) derived from the rail id, never invented.
+ */
 function toPaymentBody(view: {
   id: string;
   merchantId: string;
@@ -1023,6 +1348,7 @@ function toPaymentBody(view: {
   refundedAmount: Amount;
   createdAt: Date;
 }) {
+  const mode: 'live' | 'sandbox' = view.railAdapter && isSandboxRailId(view.railAdapter) ? 'sandbox' : 'live';
   return {
     id: view.id,
     merchantId: view.merchantId,
@@ -1033,6 +1359,7 @@ function toPaymentBody(view: {
     railAdapter: view.railAdapter,
     railRef: view.railRef,
     status: view.status,
+    mode,
     capturedAmount: formatAmount(view.capturedAmount),
     refundedAmount: formatAmount(view.refundedAmount),
     createdAt: view.createdAt.toISOString(),
