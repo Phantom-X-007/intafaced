@@ -173,7 +173,10 @@ export const GATES = [
     id: 'custody',
     script: 'tooling/ci/custody-scan.mjs',
     doctrine: '§16.10',
-    why: 'a Protocol Plane service importing a ledger write recipe. NOTE: walks 4 named services only — see the header of custody-scan.mjs',
+    why:
+      'a Protocol Plane service importing a ledger write recipe, plus D26-P2-08: vendor Java runtime risk surface ' +
+      '(money-plane src/main + committed classpath jars). Dual-book call-site ratchet stays in vendor-java-money-scan — ' +
+      'see the header of custody-scan.mjs',
   },
   {
     id: 'secrets',
