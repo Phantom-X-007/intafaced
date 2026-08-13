@@ -1991,6 +1991,9 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'incomplete_account',
                   'not_ticket_owner',
                   'account_owner_mismatch',
+                  'balance_field_forbidden',
+                  'account_plane_dark',
+                  'account_not_attempted',
                 ]),
                 userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               }),
@@ -2145,6 +2148,21 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .optional(),
             /** The user is asking for money to move. Escalates to a person, free. */
             moneyRequest: z.boolean().optional(),
+            /**
+             * Published ops.support KB spine (contract `SupportKbArticle`).
+             * Used when an ask carries `kbQuery` — never invents articles.
+             */
+            kbCatalog: z
+              .array(
+                z.object({
+                  id: z.string().min(1).max(200),
+                  titleKey: z.string().min(1).max(200),
+                  bodyKey: z.string().min(1).max(200),
+                }),
+              )
+              .max(500)
+              .nullable()
+              .optional(),
             // Capped well under the guardrail's per-session action budget: one
             // read is one audited tool call, refusals included.
             asks: z
@@ -2162,6 +2180,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                     .max(200)
                     .nullable()
                     .optional(),
+                  /** Search fragment against `kbCatalog` when articles omitted. */
+                  kbQuery: z.string().max(200).nullable().optional(),
                   ticket: z
                     .object({
                       ticketId: z.string().min(1).max(120),
@@ -2177,6 +2197,25 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                       status: z.enum(['active', 'frozen', 'closed']),
                       kycTier: z.string().max(64),
                     })
+                    .nullable()
+                    .optional(),
+                  /** Contract grounding — unread/plane-dark refuses invent. */
+                  accountGrounding: z
+                    .discriminatedUnion('status', [
+                      z.object({
+                        status: z.literal('read'),
+                        state: z.object({
+                          userId: z.string().uuid(),
+                          status: z.enum(['active', 'frozen', 'closed']),
+                          kycTier: z.enum(['none', 'basic', 'full', 'institutional']),
+                        }),
+                        readAt: z.string().datetime(),
+                      }),
+                      z.object({
+                        status: z.literal('unread'),
+                        reason: z.enum(['plane_dark', 'not_attempted']),
+                      }),
+                    ])
                     .nullable()
                     .optional(),
                 }),
@@ -2226,15 +2265,24 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               metering: runMeteringOutput,
             }),
             z.object({
+              status: z.literal('stopped'),
+              reason: z.literal('aborted'),
+              // No new i18n key — FE fence. Caller keys off status+reason.
+              userMessageKey: z.literal('agents.support.unavailable'),
+              findings: z.array(supportFindingOutput),
+              unanswered: z.array(supportUnansweredOutput),
+              metering: runMeteringOutput,
+            }),
+            z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read']),
+              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read', 'account_state_missing']),
               userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               unanswered: z.array(supportUnansweredOutput),
               metering: runMeteringOutput,
             }),
           ]),
         )
-        .mutation(({ ctx, input }) =>
+        .mutation(({ ctx, input, signal }) =>
           guard(async () => {
             const result = await runSupportReplySession({
               runtime,
@@ -2244,11 +2292,15 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               tierLaw: input.law ?? null,
               userTier: input.userTier,
               ...(input.moneyRequest === undefined ? {} : { moneyRequest: input.moneyRequest }),
+              ...(signal === undefined ? {} : { signal }),
+              kbCatalog: input.kbCatalog ?? null,
               asks: input.asks.map((ask) => ({
                 tool: ask.tool,
                 articles: ask.articles ?? null,
+                kbQuery: ask.kbQuery ?? null,
                 ticket: ask.ticket ?? null,
                 account: ask.account ?? null,
+                accountGrounding: ask.accountGrounding ?? null,
               })),
             });
 
@@ -2291,6 +2343,17 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 ? { status: 'ok' as const, tool: 'support.kb.search' as const, articles: f.articles.map((a) => ({ ...a })) }
                 : f,
             );
+
+            if (result.status === 'stopped') {
+              return {
+                status: 'stopped' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                findings,
+                unanswered,
+                metering,
+              };
+            }
 
             if (result.status === 'escalate') {
               const cf = result.caseFile;

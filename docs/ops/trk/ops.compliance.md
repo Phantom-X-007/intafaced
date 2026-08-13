@@ -62,18 +62,19 @@ Law already encoded: “we checked and you are clean” vs “we have never had 
 
 ### Slice A — honesty residual
 
-- [ ] Operator-visible screening status (configured vs empty) in admin
-- [ ] Tests already in config — wire display without inventing lists
+- [x] Operator-visible screening status (configured vs empty) in admin / edge status
+- [x] Tests already in config — wire display without inventing lists
+- [x] **D26-P1-O1:** request-time refuse when list unset (`INTAFACED_SCREENING_FAIL_CLOSED` → `denied.screening_unconfigured`); default OFF; no Class X content
 
 ### Slice B — queues
 
-- [ ] Case queue for hits + audit trail
-- [ ] Freeze/allow decisions do not invent KYC tier
+- [x] Case queue mechanism + disposition (partner_cleared refuses without partner) — durable UI/DB residual
+- [x] Freeze/allow decisions do not invent KYC tier
 
 ### Slice C — VPN/Tor (if kept in title)
 
-- [ ] Signal source named; fail-open vs fail-closed law
-- [ ] Or narrow tracker title if out of scope
+- [x] Signal source named; fail-open vs fail-closed law (`network-signal.ts`)
+- [ ] Partner procurement / real feed — Class X residual
 
 ---
 

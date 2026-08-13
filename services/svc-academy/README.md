@@ -8,13 +8,13 @@
 
 **Deliberately not finished here**, each for a stated reason:
 
-| Absent                                                                        | Why                                                                                                                                                                                                                               |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live audio/video                                                              | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                                                                                      |
-| Full DERIV//DESK library (20 playbooks + 3 workbooks)                         | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented. |
-| Cert → **perk** surfacing                                                     | A cert earns XP and stops there. Rank and perks are svc-identity's SoT (§4.1); a perk read here would be a second opinion on somebody else's table.                                                                               |
-| Ambassador **IFC pay / revenue share** (programme + residencies Stage-1 ship) | **Money.** Appoint/freeze/badge and residency apply/decide are real. Pay planes refuse-closed until owner rates + ledger recipes.                                                                                                 |
-| Tournament **IFC prize pools** (ladder Stage-1 ships)                         | Seasons + standings + lifecycle edges are real. Blank/unset pools typed-refuse `academy.prize_pool_unset` (cannot start). Prize fund/payout refuse-closed — no invent IFC. Class M recipes are a separate PR.                     |
+| Absent                                                                        | Why                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live audio/video                                                              | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                                                                                          |
+| Full DERIV//DESK library (20 playbooks + 3 workbooks)                         | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented.     |
+| Cert → **perk** invent / money                                                | D26-P1-C1: `grantCert` surfaces **real** identity perks after XP, or **refuses** when identity is unreadable / invent is requested. Academy never maps cert→perk and never invents perk money (`certs/perk-plane.ts`).                |
+| Ambassador **IFC pay / revenue share** (programme + residencies Stage-1 ship) | **Money under rate authority (D26-P1-C2).** Appoint/freeze/badge and residency apply/decide are real. Owner-published IFC / share law opens dry-run quotes; live settlement refuses until Class M ledger recipes. Never invent rates. |
+| Tournament **IFC prize pools** (ladder Stage-1 ships)                         | Seasons + standings + lifecycle edges are real. Blank/unset pools typed-refuse `academy.prize_pool_unset` (cannot start). Prize fund/payout refuse-closed — no invent IFC. Class M recipes are a separate PR.                         |
 
 ---
 
@@ -125,16 +125,18 @@ is never invented.
 
 ### Certifications → XP (`academy.certs`)
 
-| Procedure                  | Scope           | Purpose                                                                     |
-| -------------------------- | --------------- | --------------------------------------------------------------------------- |
-| `certDefinitions`          | `academy:read`  | Code-seeded certs and the curriculum slugs each requires                    |
-| `enrollCertPath`           | `academy:write` | Enrol the caller on a path                                                  |
-| `markCurriculumComplete`   | `academy:write` | Mark one curriculum item complete (idempotent)                              |
-| `grantCert`                | `academy:write` | Grant the caller's cert when complete, **and publish the XP it is worth**   |
-| `myCerts` / `certProgress` | `academy:read`  | What the caller has earned, and what is missing                             |
-| `certXpPlane`              | `academy:read`  | Is this process publishing awards, under which module/action, at what value |
+| Procedure                  | Scope           | Purpose                                                                                       |
+| -------------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| `certDefinitions`          | `academy:read`  | Code-seeded certs and the curriculum slugs each requires                                      |
+| `enrollCertPath`           | `academy:write` | Enrol the caller on a path                                                                    |
+| `markCurriculumComplete`   | `academy:write` | Mark one curriculum item complete (idempotent)                                                |
+| `grantCert`                | `academy:write` | Grant the caller's cert when complete, **publish XP**, then **real identity perks or refuse** |
+| `myCerts` / `certProgress` | `academy:read`  | What the caller has earned, and what is missing                                               |
+| `certXpPlane`              | `academy:read`  | Is this process publishing awards, under which module/action, at what value                   |
+| `certPerkPlane`            | `academy:read`  | Perks via identity rank only; invent perk money refuse-closed (D26-P1-C1)                     |
+| `certPerkIntent`           | `admin:write`   | Attempt invent cert→perk money — always refuse, never amounts                                 |
 
-`grantCert` is safe to call twice. The grant is idempotent on `(user, cert)` and the award carries the same business key, so a repeat is dropped by identity rather than paid twice — that is also how an award missed during a bus outage is recovered. XP amounts are a v0 policy in `src/certs/xp-policy.ts` with a conservative default; product may retune them, and a cert with no policy publishes **nothing** rather than an invented amount.
+`grantCert` is safe to call twice. The grant is idempotent on `(user, cert)` and the award carries the same business key, so a repeat is dropped by identity rather than paid twice — that is also how an award missed during a bus outage is recovered. XP amounts are a v0 policy in `src/certs/xp-policy.ts` with a conservative default; product may retune them, and a cert with no policy publishes **nothing** rather than an invented amount. After XP, `perks` is either a **real** `rank_thresholds.perks` readout from svc-identity or a **refuse** (identity unreadable / invent path) — academy never invents perk money or a cert→perk map (`src/certs/perk-plane.ts`, D26-P1-C1).
 
 A seat belongs to `ctx.principal.userId`. **No procedure takes a userId from the input except `invite`**, where naming somebody else _is_ the operation — and that one is host-only, so the caller must already own the room. The scene is written **whole** by the host, not merged per attendee: merging would need a conflict model this does not have, and half a merge is a room that renders differently for different people.
 
@@ -179,16 +181,20 @@ All five are pure and need **no database** — none opens a connection, and none
 
 The service's SQL paths are exercised through the fleet's e2e suite rather than a per-service Postgres harness: this service holds no value, and its failure mode is an empty room rather than a lost balance, so the harness cost is better spent on services that move money. The one SQL path that would repay a harness is the capacity race under `FOR UPDATE`, and that is the honest gap in this suite.
 
-## Ambassador programme (Stage-1 — status only)
+## Ambassador programme (Stage-1 status + D26-P1-C2 rate authority)
 
-Appoint / freeze / public badge. **No pay.** Hosting still uses §4.1 `lobbyHostRights` only.
+Appoint / freeze / public badge. Residencies apply/decide are non-money. **IFC / revenue-share rates are owner-only.**
 
-| Capability                        | Gate                             |
-| --------------------------------- | -------------------------------- |
-| Open lobby / invite / run session | `lobbyHostRights` (svc-identity) |
-| Programme badge active            | `ambassadors.status = active`    |
-| Appoint / freeze                  | operator `admin:write`           |
-| IFC pay / revenue share           | **Not built** (Class M Stage-2)  |
+| Capability                        | Gate                                                               |
+| --------------------------------- | ------------------------------------------------------------------ |
+| Open lobby / invite / run session | `lobbyHostRights` (svc-identity)                                   |
+| Programme badge active            | `ambassadors.status = active`                                      |
+| Appoint / freeze                  | operator `admin:write`                                             |
+| IFC / share **rate authority**    | `ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON` / `…_REVENUE_SHARE_LAW_JSON` |
+| IFC / share **dry-run quote**     | published law (+ accepted residency for `residencyIfcPayQuote`)    |
+| IFC / share **live settlement**   | **Refuse** until Class M ledger recipe (separate PR)               |
+
+Blank law JSON → unpublished → refuse invent. Published law opens quote path only; amounts come from the owner JSON, never from code defaults.
 
 Migration: `drizzle/0001_ambassadors.sql`.
 

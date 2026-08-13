@@ -217,8 +217,17 @@ export const GATES = [
       '(24 must fire, -24 must not)", and deleting the occurrence comparison used to exit 0 still printing "none ' +
       'gained a copy" over a tree that had just gained one: both numbers were read off source text, so removing the ' +
       'work left the claim standing. Every summary clause is now minted by the check that establishes it and ' +
-      'reconciled before printing; 10 deletions must each be detected, and a mutant whose anchor has moved fails ' +
+      'reconciled before printing; deletions must each be detected, and a mutant whose anchor has moved fails ' +
       'rather than skips.',
+  },
+  {
+    id: 'wallet-rpc-perimeter-refuse',
+    script: 'tooling/ci/wallet-rpc-perimeter-refuse.mjs',
+    doctrine: '§16 / D26-P2-09',
+    why:
+      'continuous perimeter regression for 01_wallet_rpc — mainnet / sign / width refuse classes must each keep ' +
+      'firing + silent probe halves, and deleting the class register, counters, claim mint, or any class rule ' +
+      'binding must go red. Complements wallet-rpc-mainnet (subject + probes) and its checker-mutation suite.',
   },
   {
     id: 'vendor-shell',
@@ -305,6 +314,15 @@ export const GATES = [
       '"ships empty" — this gate re-derives it on every verify so list content cannot land as a helpful default.',
   },
   {
+    id: 'marketing-language',
+    script: 'tooling/ci/marketing-language-scan.mjs',
+    doctrine: 'DIRECTION §8.9 / D26-P0-16',
+    why:
+      'product copy may not describe anything as audited, insured, or guaranteed without OWNER-SEAL(§8.9). Agents invent ' +
+      'those words as marketing; the gate re-derives the ban over locale catalogues and refuses empty denominators. Law ' +
+      'helpers live in packages/config/src/marketing-language.ts — Vue FE craft stays out of scope (nitro-frontend-all).',
+  },
+  {
     id: 'migrations',
     script: 'tooling/ci/migration-check.mjs',
     doctrine: '§14',
@@ -337,6 +355,17 @@ export const GATES = [
       'an entry goes stale. Those two were recorded as "under the M1–M7 human lock" until 2026-08-06; there ' +
       'is no /services/svc-pay/ line in .github/CODEOWNERS, so that hold never bound and is lifted. They ' +
       'remain on the register because they still skip invisibly — see the entries for what actually holds each.',
+  },
+  {
+    id: 'money-skip-honesty',
+    script: 'tooling/ci/money-skip-honesty-scan.mjs',
+    doctrine: '§14 / D26-P2-13',
+    why:
+      'skip-honesty forbids new private probes repo-wide; money still needed a sealed inventory so a new ' +
+      'conditional skip (or hard it.skip) under ledger/trade/pay/bank/p2p/matching/token/market/ws cannot ' +
+      'grow silently and look like coverage. tooling/ci/money-skip-inventory.mjs is the register — every ' +
+      'money-path skip is listed with a kind, or deleted. The list ratchets both ways. One private-probe ' +
+      'debt remains (svc-pay evm-chain.live); it stays coupled to unreported-suites PRIVATE_PROBE.',
   },
   {
     id: 'compose-secret-parity',
@@ -432,6 +461,8 @@ export const NOT_GATES = {
     'a reporter, not a gate: it prints which infrastructure-backed suites actually executed. It never fails a clean run — it exits 2 for "incomplete but permitted", which verify reports without failing. Run by verify.mjs after the test step.',
   'unreported-suites.mjs':
     'data, not a scan — the register of suites that still skip invisibly, each with the specific reason it was left and what lifts it. It exports two lists and runs nothing. Both skip-honesty-scan.mjs and infra-verdict.mjs import it; the scan fails if an entry goes stale, so it cannot rot into blanket cover.',
+  'money-skip-inventory.mjs':
+    'data, not a scan — D26-P2-13 register of every money-path test file that may skip, each with kind + why. money-skip-honesty-scan.mjs imports it and fails if the list grows or goes stale; private-probe rows stay coupled to unreported-suites PRIVATE_PROBE.',
   'assert-test-db-env.mjs':
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
   'dependency-audit.mjs':

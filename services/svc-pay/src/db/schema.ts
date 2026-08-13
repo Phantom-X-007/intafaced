@@ -32,9 +32,10 @@ export const merchantStatusEnum = pay.enum('merchant_status', ['pending', 'activ
 /**
  * The payment lifecycle (§6.1), verbatim.
  *
- * `disputed` is declared but unreachable in this PR — chargebacks are their own
- * tracker feature. It is in the enum because the enum is the spec's, and adding
- * a value later is a migration against a live payments table.
+ * `disputed` is reachable via the dispute **case** / webhook writer (D26-P1-P5).
+ * Ledger chargeback recipes remain OWNER SIGN-OFF / NOT WIRED — status + case
+ * only; no invent reverse-money. It is in the enum because the enum is the
+ * spec's, and adding a value later is a migration against a live payments table.
  */
 export const paymentStatusEnum = pay.enum('payment_status', [
   'created',

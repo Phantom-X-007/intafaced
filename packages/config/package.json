@@ -49,6 +49,10 @@
     "./money-kill-surface": {
       "types": "./dist/money-kill-surface.d.ts",
       "default": "./dist/money-kill-surface.js"
+    },
+    "./marketing-language": {
+      "types": "./dist/marketing-language.d.ts",
+      "default": "./dist/marketing-language.js"
     }
   },
   "scripts": {

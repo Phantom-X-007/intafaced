@@ -98,6 +98,7 @@ const bus = await JetStreamEventBus.connect({
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
   spotEnabled: env.TRADE_SPOT_ENABLED,
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
+  optionsSettlementAssetLaw: env.TRADE_OPTIONS_SETTLEMENT_ASSET_LAW,
   optionsSettlementFixing: env.TRADE_OPTIONS_SETTLEMENT_FIXING,
   marketSlippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
   convertEnabled: env.TRADE_CONVERT_ENABLED,
@@ -284,7 +285,7 @@ const mmSeedJobs = startMmSeedJobs({
   marketFor: async (marketId) => {
     const m = await trade.marketById(marketId);
     if (!m) return null;
-    return { symbol: m.symbol, kind: m.kind, status: m.status };
+    return { symbol: m.symbol, kind: m.kind, status: m.status, assetClass: m.assetClass };
   },
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
   config: {

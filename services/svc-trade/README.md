@@ -337,7 +337,9 @@ The service checks these; the database enforces them regardless.
 
 ---
 
-## Copy kill / unfollow guarantee (D26-P1-T3)
+## Copy deepen (D26-P1-T3)
+
+Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. Owner rates stay refuse-closed until **D26-P0-02** (`TRADE_COPY_FEE_SHARE_LAW`); served jurisdictions stay refuse-closed until **D26-P0-15** (`TRADE_COPY_JURISDICTION_LAW` — ADR `docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md`). Agents never invent a geo allowlist or `leader_share_bps`.
 
 `copy.killFeeShare` and `copy.unfollow` are unilateral controls and remain reachable while the owner fee-share rates are blank. Every mirror plan, fee-share settlement, kill, and unfollow is serialized per follow:
 

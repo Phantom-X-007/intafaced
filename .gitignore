@@ -81,3 +81,7 @@ docs/ops/RUN-LEDGER.json.tmp
 # `pnpm verify` can name the suites that did not run. Per-run and per-worktree
 # on purpose: two agents verifying at once must not read each other's skips.
 .intafaced-run/
+
+# graphify local knowledge graph (AST cache + reports — rebuild with `graphify update .`)
+graphify-out/
+.graphify/

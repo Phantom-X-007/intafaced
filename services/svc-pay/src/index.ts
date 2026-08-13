@@ -23,6 +23,9 @@ import {
 import { createPayRouter } from './router.js';
 import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
+import { KybService } from './kyb-service.js';
+import { PspModeService, assertNoThirdPartyMoneyLibrary } from './psp-mode.js';
+import { createKybPspRouter } from './kyb-router.js';
 import { SubMerchantService } from './submerchants.js';
 import { createSubMerchantRouter } from './submerchant-router.js';
 import { createSubscriptionRouter } from './subscription-router.js';
@@ -50,12 +53,17 @@ registerProcessHooks(
 /**
  * svc-pay — the payments core (§6.1).
  *
- * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode,
- * PayFac trees, smart routing, fraud scoring, the checkout builder,
- * subscriptions and plugins are each a separate tracker feature, and none of
- * them requires a change to the adapter interface — which is the claim
- * `src/rails/conformance.ts` exists to keep testable.
+ * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode
+ * (digital KYB + custom pricing durability, no third-party money library —
+ * D-S-10) is mounted beside merchant state. PayFac trees, smart routing, fraud
+ * scoring, the checkout builder, subscriptions and plugins are each a separate
+ * tracker feature, and none of them requires a change to the adapter interface
+ * — which is the claim `src/rails/conformance.ts` exists to keep testable.
  */
+
+// D-S-10 / Doctrine 5 — refuse boot if a third-party money orchestrator landed
+// in svc-pay's package.json. Socket.psp-partners stays a commercial relationship.
+assertNoThirdPartyMoneyLibrary();
 
 const sql = postgres(env.DATABASE_URL, {
   max: env.DATABASE_POOL_MAX,
@@ -264,6 +272,13 @@ const userMoney = new UserMoneyService(sql, ledger, rails, {
 const merchantState = new MerchantStateService(sql);
 
 /**
+ * Digital KYB (live operator decide + history) and PSP custom-pricing durability.
+ * Path-disjoint from settlement / fraud. See `kyb-service.ts` / `psp-mode.ts`.
+ */
+const kyb = new KybService(sql);
+const pspMode = new PspModeService(sql);
+
+/**
  * PayFac sub-merchant trees and the permissions over them (§6.1).
  *
  * NO LEDGER CLIENT, ON PURPOSE. This service decides who may act on whose behalf
@@ -292,6 +307,7 @@ export const appRouter = mergeRouters(
   // trees fence: gateway money paths check PayFac areas (merchant-ownership).
   createPayRouter(pay, rails, userMoney, subMerchants),
   createMerchantStateRouter(merchantState),
+  createKybPspRouter(kyb, pspMode),
   // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's
   // own merchant node from the authenticated principal, because a merchant node
   // taken from a request body would let any merchant claim to be acting as any
@@ -301,6 +317,7 @@ export const appRouter = mergeRouters(
 );
 export type { PayRouter } from './router.js';
 export type { MerchantStateRouter } from './merchant-state-router.js';
+export type { KybPspRouter } from './kyb-router.js';
 export type { SubMerchantRouter } from './submerchant-router.js';
 export type { SubscriptionRouter } from './subscription-router.js';
 

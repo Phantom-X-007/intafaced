@@ -10,6 +10,7 @@ import { createStakeSource } from './stake-source.js';
 import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
 import { isUsable, NullStreamProvider, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
+import { parseAmbassadorIfcPayLawJson, parseAmbassadorRevenueShareLawJson } from './ambassadors/ifc-pay-rate-law.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -117,7 +118,10 @@ const academy = new AcademyService(
   certXp,
 );
 
-export const appRouter = createAcademyRouter(academy);
+export const appRouter = createAcademyRouter(academy, {
+  ifcPayLaw: parseAmbassadorIfcPayLawJson(env.ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON),
+  revenueShareLaw: parseAmbassadorRevenueShareLawJson(env.ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON),
+});
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge

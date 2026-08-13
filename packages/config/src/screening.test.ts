@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   SCREENING_ENFORCED_ENVS,
+  SCREENING_FAIL_CLOSED_ENV,
   SHIPPED_BUSINESS_BLOCKS,
   UnscreenedJurisdictionError,
   activeScreeningList,
@@ -10,6 +11,7 @@ import {
   businessBlocksFrom,
   checkAccess,
   isRegionBlocked,
+  screeningFailClosedFromEnv,
   screeningStatus,
   type JurisdictionEntry,
 } from './jurisdiction.js';
@@ -126,6 +128,106 @@ describe('the state is observable — "screened and clear" vs "screened nothing"
     const d = checkAccess({ module: 'pay', plane: 'protocol', region: 'QQ', kycTier: 'full', screening: POPULATED });
     expect(d.code).toBe('denied.plane_unsupported');
     expect(d.screening.listConfigured).toBe(true);
+  });
+});
+
+/**
+ * D26-P1-O1 mechanism seal — request-time refuse when list unset.
+ *
+ * Boot guard already refuses prod start without a list. This is the twin at
+ * checkAccess: when operators arm fail-closed, hosted access cannot look
+ * screened-clean with no counsel content. Default OFF preserves honesty-only.
+ * No real sanctions codes — AA/QQ placeholders only.
+ */
+describe('screening fail-closed — refuse when list unset (D26-P1-O1)', () => {
+  const original = process.env[SCREENING_FAIL_CLOSED_ENV];
+  afterEach(() => {
+    if (original === undefined) delete process.env[SCREENING_FAIL_CLOSED_ENV];
+    else process.env[SCREENING_FAIL_CLOSED_ENV] = original;
+  });
+
+  it('default OFF keeps honesty-only allow with listConfigured false', () => {
+    const d = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'QQ',
+      kycTier: 'none',
+      screening: UNSET_SCREENING_LIST,
+    });
+    expect(d.allowed).toBe(true);
+    expect(d.screening.listConfigured).toBe(false);
+    expect(d.screening.declaration).toBe('unset');
+  });
+
+  it('refuses unset when screeningFailClosed is armed on the query', () => {
+    const d = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'QQ',
+      kycTier: 'none',
+      screening: UNSET_SCREENING_LIST,
+      screeningFailClosed: true,
+    });
+    expect(d.allowed).toBe(false);
+    expect(d.code).toBe('denied.screening_unconfigured');
+    expect(d.screening.listConfigured).toBe(false);
+    expect(d.reason).toContain(SCREENING_FAIL_CLOSED_ENV);
+    expect(d.reason).toMatch(/must not invent list content/i);
+  });
+
+  it('reads INTAFACED_SCREENING_FAIL_CLOSED from the environment', () => {
+    expect(screeningFailClosedFromEnv({})).toBe(false);
+    expect(screeningFailClosedFromEnv({ [SCREENING_FAIL_CLOSED_ENV]: '1' })).toBe(true);
+    expect(screeningFailClosedFromEnv({ [SCREENING_FAIL_CLOSED_ENV]: 'true' })).toBe(true);
+    expect(screeningFailClosedFromEnv({ [SCREENING_FAIL_CLOSED_ENV]: 'no' })).toBe(false);
+
+    process.env[SCREENING_FAIL_CLOSED_ENV] = 'yes';
+    const d = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'QQ',
+      kycTier: 'none',
+      screening: UNSET_SCREENING_LIST,
+    });
+    expect(d.code).toBe('denied.screening_unconfigured');
+  });
+
+  it('does not refuse reviewed-empty or listed (configured answers)', () => {
+    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-test-not-a-real-list');
+    const cleared = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'QQ',
+      kycTier: 'none',
+      screening: reviewed,
+      screeningFailClosed: true,
+    });
+    expect(cleared.allowed).toBe(true);
+    expect(cleared.screening.declaration).toBe('reviewed-empty');
+
+    const listed = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'QQ',
+      kycTier: 'none',
+      screening: POPULATED,
+      screeningFailClosed: true,
+    });
+    expect(listed.allowed).toBe(true);
+    expect(listed.screening.listConfigured).toBe(true);
+  });
+
+  it('query flag wins over a false env', () => {
+    process.env[SCREENING_FAIL_CLOSED_ENV] = '0';
+    const d = checkAccess({
+      module: 'trade',
+      plane: 'fiat',
+      region: 'QQ',
+      kycTier: 'full',
+      screening: UNSET_SCREENING_LIST,
+      screeningFailClosed: true,
+    });
+    expect(d.code).toBe('denied.screening_unconfigured');
   });
 });
 

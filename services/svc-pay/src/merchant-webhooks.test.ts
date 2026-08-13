@@ -5,6 +5,7 @@ import { verifySignature } from './rails/webhook-signature.js';
 import {
   MemoryMerchantWebhookStore,
   MerchantWebhookService,
+  WEBHOOK_CLAIM_LEASE_MS,
   buildSignedHeaders,
   eventIdFor,
   paymentStateBody,
@@ -212,5 +213,49 @@ describe('MerchantWebhookService', () => {
     const dead = await svc.listDeliveries(MERCHANT, { status: 'dead' });
     expect(dead).toHaveLength(1);
     expect(dead[0]?.attempts).toBe(2);
+  });
+
+  it('claimDue leases due rows so a second claim cannot double-POST', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const svc = new MerchantWebhookService(store);
+    await svc.registerEndpoint(MERCHANT, 'https://merchant.example/hooks');
+    await svc.enqueue({ type: 'payment.captured', payment: payment() });
+    // enqueue stamps nextAttemptAt via wall clock; pin it so claimDue's
+    // frozen `now` is never behind that stamp (same pattern as processDue tests).
+    for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
+
+    // Enqueue stamps nextAttemptAt = wall clock. A fixed "now" that falls before
+    // that stamp (e.g. tip-day noon UTC while CI runs after noon) makes claimDue
+    // return [] — pin due, then claim at an explicit instant.
+    const now = new Date('2026-08-12T12:00:00.000Z');
+    for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
+    const first = await store.claimDue(25, now);
+    expect(first).toHaveLength(1);
+    expect(first[0]!.nextAttemptAt.getTime()).toBe(now.getTime() + WEBHOOK_CLAIM_LEASE_MS);
+
+    const second = await store.claimDue(25, now);
+    expect(second).toHaveLength(0);
+  });
+
+  it('enableEndpoint restores active status after consecutive-failure disable', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const { url, server: s } = await listen((_req, res) => {
+      res.writeHead(500);
+      res.end('nope');
+    });
+    server = s;
+
+    const svc = new MerchantWebhookService(store, { disableAfterFailures: 1, maxAttempts: 8 });
+    const created = await svc.registerEndpoint(MERCHANT, url);
+    await svc.enqueue({ type: 'payment.authorized', payment: payment({ status: 'authorized' }) });
+    await svc.processDue();
+
+    const disabled = await svc.listEndpoints(MERCHANT);
+    expect(disabled[0]?.status).toBe('disabled');
+
+    const enabled = await svc.enableEndpoint(MERCHANT, created.id);
+    expect(enabled.status).toBe('active');
+    expect(enabled.consecutiveFailures).toBe(0);
+    expect(enabled.disabledReason).toBeNull();
   });
 });

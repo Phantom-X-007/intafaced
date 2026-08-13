@@ -4,10 +4,14 @@ import { AuthError } from '@intafaced/auth';
 import { formatAmount, parseAmount, InsufficientFundsError, LedgerError } from '@intafaced/ledger-client';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
+import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } from './spot/forex-settlement.js';
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
+import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
+import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
 import type { OtcDeskService } from './otc/otc-service.js';
-import { CopyError } from './copy/errors.js';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
+import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import type { CopyService } from './copy/copy-service.js';
 
 /**
@@ -209,6 +213,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_jurisdiction_blank':
       case 'trade.copy_law_blank':
       case 'trade.copy_settle_refused':
+      case 'trade.copy_auto_mirror_place_socket':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
@@ -463,10 +468,18 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
     otc: router({
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!otc) {
+          const deskLaw = 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed';
           return {
             published: false,
             statusLine: 'published=0 residual=DIRECTION_§8_refuse_closed',
-            residual: 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed',
+            residual: deskLaw,
+            makerRouting: otcMakerRoutingStatus(),
+            midFeed: otcMidFeedStatus(),
+            residuals: {
+              deskLaw,
+              makerRouting: OTC_MAKER_ROUTING_RESIDUAL,
+              midFeed: OTC_MID_FEED_RESIDUAL,
+            },
           };
         }
         return otc.deskStatus();
@@ -474,13 +487,26 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
 
       quote: scopedProcedure('trade:read', { module: 'trade' })
         .input(
-          z.object({
-            side: orderSideSchema,
-            baseAsset: z.string().min(1).max(32),
-            quoteAsset: z.string().min(1).max(32),
-            qty: decimal,
-            makerId: z.string().min(1).max(120).optional(),
-          }),
+          /**
+           * `.strict()`, and it is the money guard rather than tidiness.
+           *
+           * zod strips unknown keys by default, so a body carrying `midPrice`
+           * was accepted and silently discarded. That is the posture #1097
+           * fixed the *reading* of but not the *shape* of: a client sending a
+           * price got a 200 and a quote priced off something else, which is
+           * indistinguishable from the desk having honoured it. On the one
+           * surface where the customer naming the price was a live exploit,
+           * an unknown field is refused and named instead of ignored.
+           */
+          z
+            .object({
+              side: orderSideSchema,
+              baseAsset: z.string().min(1).max(32),
+              quoteAsset: z.string().min(1).max(32),
+              qty: decimal,
+              makerId: z.string().min(1).max(120).optional(),
+            })
+            .strict(),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
@@ -499,10 +525,17 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
 
       accept: scopedProcedure('trade:write', { module: 'trade' })
         .input(
-          z.object({
-            quoteId: z.string().uuid(),
-            assertedPrice: decimal.optional(),
-          }),
+          /**
+           * `assertedPrice` is the one price the customer may send, and it can
+           * only ever cause a REFUSAL: it must equal the quoted price or the
+           * accept is rejected as last look. It is never the price that fills.
+           */
+          z
+            .object({
+              quoteId: z.string().uuid(),
+              assertedPrice: decimal.optional(),
+            })
+            .strict(),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
@@ -515,7 +548,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         ),
 
       settle: scopedProcedure('trade:write', { module: 'trade' })
-        .input(z.object({ quoteId: z.string().uuid() }))
+        .input(z.object({ quoteId: z.string().uuid() }).strict())
         .mutation(({ ctx, input }) =>
           guard(async () => {
             if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
@@ -597,6 +630,39 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
     }),
 
     /**
+     * Forex settlement posture (trade.forex / D26-P1-T7).
+     * Always refuse-closed until D26-P0-05 + fiat settle rails — never invents
+     * settlement asset. §13 socket.forex-settlement.
+     *
+     * Completeness = honest refuse product on public doors (status + listing
+     * probe + place path), not fundable FX. Do not mark trade.forex done.
+     */
+    forex: router({
+      settlementStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => forexSettlementStatus()),
+
+      /**
+       * Same listing gate as TradeService.listMarket / setMarketStatus(active).
+       * Public-door probe so refuse is not unit-helper-only until an admin
+       * listMarket transport mounts. Production active non-paper forex/
+       * commodity → trade.unsettled_asset_class_listing naming the socket.
+       */
+      assertProductionListing: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            assetClass: z.enum(['crypto', 'commodity', 'forex']),
+            status: z.enum(['active', 'pending', 'halted', 'delisted']),
+            paper: z.boolean(),
+          }),
+        )
+        .mutation(({ input }) =>
+          guard(async () => {
+            assertProductionUnsettledAssetClassListing(input);
+            return { ok: true as const, refused: false as const };
+          }),
+        ),
+    }),
+
+    /**
      * Copy trading (trade.copy / D-S-03 / SPEC-SOVEREIGN-ROUTING-AND-COPY).
      *
      * Follow / kill / unfollow are product-mounted. Blank DIRECTION §8 laws
@@ -607,10 +673,24 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!copy) {
           return {
+            sovereign: {
+              shape: 'sovereign' as const,
+              custody: false,
+              feeModel: 'protocol_fee_share' as const,
+              pnlFeeForbidden: true,
+              rankingForbidden: true,
+              killUnfollowReal: true,
+            },
             feeSharePublished: false,
             jurisdictionPublished: false,
-            statusLine: 'feeShare=0 residual=DIRECTION_§8_leader_share_bps jurisdiction=0 residual=DIRECTION_§8_jurisdiction',
-            residual: 'DIRECTION §8 leader_share_bps and jurisdiction list are owner-only — refuse-closed',
+            statusLine: 'feeShare=0 residual=D26-P0-02_leader_share_bps jurisdiction=0 residual=D26-P0-15_jurisdiction',
+            residual: COPY_LAW_RESIDUAL,
+            residuals: {
+              rates: COPY_FEE_SHARE_RESIDUAL,
+              jurisdiction: COPY_JURISDICTION_RESIDUAL,
+              autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+            },
+            autoMirrorPlace: autoMirrorPlaceStatus(),
           };
         }
         return copy.deskStatus();
@@ -631,8 +711,9 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           guard(async () => {
             if (!copy) {
               throw new CopyError(
-                'Copy is refuse-closed until owner publishes DIRECTION §8 served-jurisdiction list',
+                'Copy is refuse-closed until owner publishes DIRECTION §8 / D26-P0-15 served-jurisdiction list',
                 'trade.copy_jurisdiction_blank',
+                COPY_JURISDICTION_RESIDUAL,
               );
             }
             return copy.follow(ctx.principal, input);
@@ -695,6 +776,30 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         ),
 
       /**
+       * Place a planned mirror into spot — SOCKET §13 refuse-closed until the
+       * follower place wire lands. planMirror is real; inventing a fill is not.
+       */
+      placeMirror: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            followId: z.string().min(1).max(64),
+            fillId: z.string().min(1).max(120),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError(
+                `Auto-mirror place into spot is refuse-closed (${autoMirrorPlaceStatus().socket})`,
+                'trade.copy_auto_mirror_place_socket',
+                COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+              );
+            }
+            return copy.placeMirrorForFollow(ctx.principal, input);
+          }),
+        ),
+
+      /**
        * Attribute + settle leader fee-share for a follower fill.
        * Blank §8 → PRECONDITION_FAILED. Never invents rates.
        */
@@ -713,8 +818,9 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           guard(async () => {
             if (!copy) {
               throw new CopyError(
-                'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+                'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 / D26-P0-02 leader_share_bps',
                 'trade.copy_fee_share_blank',
+                COPY_FEE_SHARE_RESIDUAL,
               );
             }
             return copy.settleFeeShare(ctx.principal, input);

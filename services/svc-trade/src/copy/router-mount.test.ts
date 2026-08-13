@@ -125,6 +125,17 @@ describe('trade.copy product mount', () => {
     expect(status.feeSharePublished).toBe(false);
     expect(status.jurisdictionPublished).toBe(false);
     expect(status.residual).toContain('DIRECTION §8');
+    expect(status.residual).toContain('D26-P0-02');
+    expect(status.residual).toContain('D26-P0-15');
+    expect(status.sovereign.shape).toBe('sovereign');
+    expect(status.sovereign.custody).toBe(false);
+    expect(status.sovereign.pnlFeeForbidden).toBe(true);
+    expect(status.sovereign.rankingForbidden).toBe(true);
+    expect(status.sovereign.killUnfollowReal).toBe(true);
+    expect(status.residuals.rates).toContain('D26-P0-02');
+    expect(status.residuals.jurisdiction).toContain('D26-P0-15');
+    expect(status.autoMirrorPlace.published).toBe(false);
+    expect(status.autoMirrorPlace.socket).toContain('socket.copy-auto-mirror-place');
   });
 
   it('follow refuses blank jurisdiction — never invents allowlist', async () => {
