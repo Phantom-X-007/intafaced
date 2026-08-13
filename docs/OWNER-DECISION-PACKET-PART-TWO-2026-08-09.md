@@ -113,8 +113,8 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-14 · `DEFAULT_MIN_BEST_LEVEL_*` + mark dust floor
 
-**Covered in part one item 4** — kept here so the P0 board row has a home in part two’s board span.  
-**Recommendation unchanged:** keep shipped values until a real market lists with observed depth; ties P0-01 Q3 hard exclusion (no inventing a second % cap).
+**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-mark-dust-floor.md`](adr/2026-08-13-mark-dust-floor.md).  
+**Covered in part one item 4.** Keep shipped `'100'` + 100 bps until a real market lists with observed depth. Ties P0-01 Q3 (no inventing a second % cap).
 
 ---
 

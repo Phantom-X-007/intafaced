@@ -172,15 +172,16 @@
     },
     {
       "id": "D26-P0-14",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "DEFAULT_MIN_BEST_LEVEL_NOTIONAL + mark dust floor",
       "blocks": ["futures mark path", "liquidation quotability"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-mark-dust-floor.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#4--two-depth-numbers-on-the-futures-mark-path",
       "related": ["D26-P0-01"],
       "answerShape": "owner_number_or_keep_shipped_until_listed",
-      "priority": 2
+      "priority": 2,
+      "notes": "2026-08-13 seal: keep shipped 100 quote + 100 bps. Dual floor. Q3 hard exclusion. No third %."
     },
     {
       "id": "D26-P0-15",

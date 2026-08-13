@@ -341,6 +341,7 @@ export const FEATURES = [
       'D26-P0-17 SEALED 2026-08-13 (adr/2026-08-13-insurance-fund-funding-policy.md): empty insurance pot → no live list ' +
       '(trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. ' +
       'D26-P0-07 SEALED 2026-08-13 (adr/2026-08-13-leverage-defaults-frozen.md): 10× isolated frozen; no silent raise. ' +
+      'D26-P0-14 SEALED 2026-08-13 (adr/2026-08-13-mark-dust-floor.md): keep shipped min-best 100 quote + 100 bps; no third %. ' +
       'Never invent mid/funding/grace/ADL rates.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
