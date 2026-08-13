@@ -56,16 +56,11 @@ The agent picked `10` independently and matched the standing decision. **This is
 
 ## 2 · The dex venue set — one sentence
 
-**Blocks:** `dex.quote` reaching `done`; `socket.dex-venue-set` is the row.
-**This is not an engineering problem.** The row says it plainly:
+**Status:** **SEALED 2026-08-13 (D26-P0-03)** — [`adr/2026-08-13-dex-venue-set-refuse-closed.md`](adr/2026-08-13-dex-venue-set-refuse-closed.md).  
+**Blocks:** `dex.quote` reaching `done`; `socket.dex-venue-set` still a socket until an owner **publishes** the set on a host.  
+**Ruling:** shipped default is empty; empty is `dex.quote.no_venue_available`. Agents do not seed `DEX_EXTERNAL_VENUES` or name a partner in git. One reachable row already proves the path; that is not a licence to commit it.
 
-> **"THE CODE IS FINISHED. IT CANNOT SERVE A QUOTE."**
-
-Live probe on shipped defaults: HTTP 503, `dex.quote.no_venue_available — No venue could price BTC-USDT: intachain-clob (unreachable); internal-book (unreachable)`. It fails safe and names both dead venues. Given **one** reachable venue via `DEX_EXTERNAL_VENUES` and nothing else changed, the same binary returned HTTP 200 with a real route, correctly flagged `degraded: true`, `singleVenue: true`, `custodialLegs: true`.
-
-**The question: which venue or venues does this platform actually quote?** Answer that and the row moves; leave it and the code stays finished and useless.
-
-**Recommendation:** name the one venue we already have a working adapter for and mark the row `done` with `singleVenue` disclosed on every response — which the service already does. A single disclosed venue is honest; an empty set presented as a router is not.
+The code is finished. It cannot serve a quote on shipped defaults. That is the correct product until Nitro publishes a set. Do not invent the venue in an ADR.
 
 ---
 

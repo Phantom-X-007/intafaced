@@ -43,15 +43,15 @@
     },
     {
       "id": "D26-P0-03",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "socket.dex-venue-set — one sentence",
       "blocks": ["dex.quote", "socket.dex-venue-set"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-13-dex-venue-set-refuse-closed.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#2--the-dex-venue-set--one-sentence",
       "answerShape": "named_venue_set_or_permanent_refuse_closed",
       "priority": 1,
-      "notes": "Code finished; empty venue set returns honest 503. One reachable venue already proves the path."
+      "notes": "2026-08-13 seal: empty default = 503. No invented venue. Socket stays until owner publishes DEX_EXTERNAL_VENUES on a host."
     },
     {
       "id": "D26-P0-04",
@@ -423,5 +423,5 @@
       "priority": 5
     }
   ],
-  "answerFirst": ["D26-P0-03", "D26-P0-02", "CLASS-X-WALLET-SECRETS", "D26-P0-17", "D26-P0-14"]
+  "answerFirst": ["D26-P0-02", "D26-P0-10", "CLASS-X-WALLET-SECRETS", "D26-P0-04"]
 }
