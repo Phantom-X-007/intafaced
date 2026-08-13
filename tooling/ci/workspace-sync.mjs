@@ -34,6 +34,7 @@
  *
  * Exit 0 = the workspace, the image and the fleet agree.
  */
+import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
@@ -711,6 +712,30 @@ if (compose !== null) {
       failures.push({
         file: 'docker-compose.apps.yml',
         reason: `${shown} builds a user-facing app but nothing in the fleet serves it — so it can be worked on for weeks without anyone seeing it, while whichever app DOES start becomes the product by default. If that is deliberate, add "# no-deploy: ${fe.name}" saying why`,
+      });
+    }
+  }
+}
+
+// ── 11 · local up --build / staging digest --no-build (D26-P2-04) ───────────
+// Hot-patch + compose up without --build leaves yesterday's bytes running.
+// Unqualified intafaced/app:dev Hub-pulls if the tag is missing. The proof
+// script is the law; this spawn is how verify/CI see it without a second gate
+// list. A missing script is a failure, not a skip.
+{
+  const proof = join(ROOT, 'tooling', 'scripts', 'fleet-tip-image.mjs');
+  if (!existsSync(proof)) {
+    failures.push({
+      file: 'tooling/scripts/fleet-tip-image.mjs',
+      reason: 'D26-P2-04 proof missing — fleet tip-image law has no executable check',
+    });
+  } else {
+    const r = spawnSync(process.execPath, [proof], { cwd: ROOT, encoding: 'utf8' });
+    if (r.status !== 0) {
+      const detail = (r.stderr || r.stdout || `exit ${r.status}`).trim().split('\n')[0];
+      failures.push({
+        file: 'tooling/scripts/fleet-tip-image.mjs',
+        reason: `D26-P2-04 fleet tip-image law failed: ${detail}`,
       });
     }
   }
