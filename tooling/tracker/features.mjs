@@ -1460,6 +1460,7 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
+      'D26-P1-O2 2026-08-13: S2S producer door `POST /internal/affiliates/accrue` (svc-trade/svc-pay only, v2 body bind, sourceModule must match caller). Unpublished law still `affiliate.accrual.rates_unset`. Does not post ledger. Callers in trade/pay not wired this PR. ' +
       'D26-P1-O2 SEALED 2026-08-12: accrual tree under rate authority — durable `affiliates.accrue` uses owner-published ' +
       '`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; ' +
       'dry-run may simulate; Stage `treeStatus` exposes `rateAuthorityPublished` + status line (tier count only, never rate invent); ' +
