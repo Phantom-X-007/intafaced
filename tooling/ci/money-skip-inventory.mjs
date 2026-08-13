@@ -46,11 +46,14 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-bank/src/bank-service.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/business/business.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/cards/cards.reachable.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-bank/src/cards/cards-auth-product.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/cards/cards.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-bank/src/cards/sovereign-card-product.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/earn/earn-product.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/loans/loans.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/promise-falsify-public-doors.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/ramps/ramps.reachable.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-bank/src/ramps/ramps-fiat-product.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/ramps/ramps.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-ledger ───────────────────────────────────────────────────────────
@@ -93,6 +96,7 @@ export const MONEY_SKIP_REGISTER = [
   },
   { file: 'services/svc-pay/src/submerchants.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/subscriptions/charge-cycle.db.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-pay/src/subscriptions/subscriptions-done-bar.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/user-money-service.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-token ────────────────────────────────────────────────────────────

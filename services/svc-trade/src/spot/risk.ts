@@ -1,5 +1,6 @@
-import { isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES } from '@intafaced/contracts';
+import { isScheduleOpen, nextScheduleTransition } from '@intafaced/contracts';
 import { formatAmount, mul, mulBps, type Amount } from '@intafaced/ledger-client';
+import { assertKnownAssetClass, requireTradingSchedule } from './instrument-enums.js';
 import { TradeError, type Market, type OrderSide, type OrderType } from './types.js';
 
 /**
@@ -90,6 +91,8 @@ export interface TradableOptions {
  * collateral model, and nothing to gate.
  */
 export function assertTradable(market: Market, options: TradableOptions = {}): void {
+  // Enum authority first (D-S-05 / D26-P1-T9) — see instrument-enums.ts.
+  assertKnownAssetClass(market);
   if (market.kind === 'futures') {
     if (options.futuresEnabled !== true) {
       throw new TradeError(
@@ -107,6 +110,15 @@ export function assertTradable(market: Market, options: TradableOptions = {}): v
     throw new TradeError(`${market.symbol} is ${market.status}, not accepting orders`, 'trade.market_not_tradable');
   }
 }
+
+/**
+ * Unknown `asset_class` refuses with the permitted set named.
+ *
+ * Rows arrive as a bare cast of the Postgres enum (`rows.ts`). A migration that
+ * widens the DB enum without updating `ASSET_CLASSES` must not fund an order
+ * under a class the instrument model has never defined.
+ */
+export { assertKnownAssetClass } from './instrument-enums.js';
 
 /**
  * SPOT-SHAPED SURFACES REFUSE NON-SPOT BY NAME, NOT BY OMISSION.
@@ -131,25 +143,14 @@ export function assertSpotSurface(market: Market, surface: string): void {
 }
 
 /**
- * PRODUCTION FOREX / COMMODITY WITHOUT FIAT RAILS MUST NOT TAKE A HOLD.
+ * PRODUCTION FOREX / COMMODITY WITHOUT SETTLEMENT LAW MUST NOT TAKE A HOLD.
  *
- * listMarket already refuses NEW active non-paper forex/commodity listings
- * (`trade.unsettled_asset_class_listing`, #1169). Migration seeds still leave
- * six FX majors `active` + `paper=false`. Without this gate, an open-session
- * placeOrder/convert/TWAP takes a real hold against an unfundable rail.
- *
- * Paper markets stay allowed (academy drills). Owner N5 may still reflag seeds;
- * this is the place-path seal that does not invent settlement law.
+ * Re-export of D26-P1-T7 / `socket.forex-settlement` place-path seal.
+ * listMarket refuses NEW active non-paper listings; seeds stay active in DB —
+ * without this gate, open-session place/convert/TWAP would hold against an
+ * unfundable rail. Never invents settlement asset (P0-05 / D8).
  */
-export function assertSettlementRails(market: Market): void {
-  if (market.paper) return;
-  if (market.assetClass === 'forex' || market.assetClass === 'commodity') {
-    throw new TradeError(
-      `${market.symbol} is ${market.assetClass} without fiat settlement rails — place refused (list as paper or wait for D8)`,
-      'trade.unsettled_asset_class_listing',
-    );
-  }
-}
+export { assertSettlementRails } from './forex-settlement.js';
 
 /**
  * Is the venue open at this instant?
@@ -168,18 +169,9 @@ export function assertSettlementRails(market: Market): void {
  * every interesting case here IS a boundary.
  */
 export function assertMarketOpen(market: Market, at: Date): void {
-  const schedule = TRADING_SCHEDULES[market.schedule];
-
-  // An unrecognised schedule is refused, not ignored. This is the fail-safe
-  // direction: a market whose hours we cannot evaluate must not accept orders,
-  // and reading `.kind` off an undefined lookup would throw a TypeError that
-  // surfaces as a 500 rather than as a refusal the caller can act on.
-  if (!schedule) {
-    throw new TradeError(
-      `${market.symbol} has an unknown trading schedule (${String(market.schedule)}) — refusing orders`,
-      'trade.market_closed',
-    );
-  }
+  // Unknown key → trade.unknown_schedule (instrument-enums). Session shut →
+  // trade.market_closed. Distinct codes so bots do not retry Monday on drift.
+  const schedule = requireTradingSchedule(market);
 
   if (isScheduleOpen(schedule, at)) return;
 

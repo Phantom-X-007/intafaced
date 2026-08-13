@@ -136,6 +136,14 @@ describe('support Stage-2 account.read — status only, never a balance', () => 
     expect(read({ account: null })).toMatchObject({ reason: 'missing_fixture' });
     expect(read({ account: { ...account, kycTier: '' } })).toMatchObject({ reason: 'incomplete_account' });
   });
+
+  it('refuses a projection that invents a balance field rather than stripping it', () => {
+    const withBalance = { ...account, balance: '100.00' };
+    expect(read({ account: withBalance as typeof account })).toMatchObject({
+      reason: 'balance_field_forbidden',
+      userMessageKey: 'agents.support.unavailable',
+    });
+  });
 });
 
 describe('support Stage-2 escalate path', () => {

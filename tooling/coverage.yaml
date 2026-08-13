@@ -638,7 +638,11 @@ capabilities:
     law: '25:627'
     plane: F
     phase: 2
-    tracker: [trade.otc]
+    tracker: [trade.otc, socket.otc-maker-routing, socket.otc-mid-feed]
+    note: >-
+      socket.otc-maker-routing is the §13 refuse-closed half for external-maker settle; platform
+      principal settle stays on trade.otc. socket.otc-mid-feed is the live observation-feed half —
+      boot TRADE_OTC_MIDS map is not that socket closed. Never invent a maker ledger path or mids.
   - id: m.trade.convert
     capability: Convert one-tap
     law: '25:628'
@@ -650,17 +654,21 @@ capabilities:
     law: '25:629'
     plane: B
     phase: 2 / 5P
-    tracker: [trade.copy, agents.copy-intel]
+    tracker: [trade.copy, agents.copy-intel, socket.copy-auto-mirror-place]
     note: >-
       Audit §B2 — the law line and the row both still say "profit share", which
       SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md:95 forbids in v1. Reported for the owner's pen; the
-      law is not edited from here.
+      law is not edited from here. socket.copy-auto-mirror-place is the §13 refuse-closed place half
+      after planMirror (D26-P1-T3) — never invent follower fills.
   - id: m.trade.forex
     capability: Forex pairs
     law: '25:630'
     plane: F
     phase: 2
-    tracker: [trade.forex]
+    tracker: [trade.forex, socket.forex-settlement]
+    note: >-
+      socket.forex-settlement is the §13 refuse-closed half (D26-P1-T7) until D26-P0-05 settlement asset
+      law + fiat settle rails; trade.forex stays the product row. Never invent settlement asset.
   - id: m.trade.matching
     capability: Matching engine, full depth
     law: '25:631'
@@ -1901,6 +1909,13 @@ tracker_extra:
     extends: 13
     reason: >-
       SMS channel, blocked on gateway credentials. Same §13 arithmetic as socket.notify-push.
+  - id: socket.pay-precharge-notify
+    basis: law-extension
+    extends: 13
+    reason: >-
+      SPEC-PAY-VERTICALS §4 requires every recurring charge notified before it lands. Delivery is not
+      on tip (due runner opens invoices with no pre-charge hook); §13 does not name this socket, so the
+      board row extends it. Inventing a silent upcoming event is forbidden until a real notify/journal path exists.
   - id: socket.geo-region-resolution
     basis: law-extension
     extends: 13
@@ -1922,6 +1937,17 @@ tracker_extra:
       of the smart account, §34:829 specs guardian M-of-N as a premium product, and §38:854 adds a
       guardian-recovery DoD test. A tracker row overrode two law sections with no ADR — audit §B5 row 2.
       Recorded here so the contradiction is visible rather than buried in a note; the owner's pen resolves it.
+  - id: socket.pay-chargeback-ledger-wire
+    basis: law-extension
+    extends: 13
+    reason: >-
+      Chargeback ledger recipes exist in packages/ledger-client (chargebackOpen / Shortfall / Won /
+      ShortfallRecovered) with an explicit Class M owner-sign-off banner. svc-pay records dispute cases
+      and projects payment → disputed (D26-P1-P5 mechanism) but must not call those recipes until the
+      four named questions in chargeback.ts are signed. Closing this socket = wire dispute open to
+      post; inventing split legs or shortfall policy is forbidden. Blocklist / sanctions list content
+      remains Class X and is out of scope. Named §13 residual row in features.mjs — not a stale
+      tracker_extra pointing at a missing id.
 
 # ── §11 DROP PHASES ──────────────────────────────────────────────────────────
 # §25:740 — "any Vol. I feature without a green DoD at its phase gate blocks the

@@ -145,6 +145,7 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'ambassadorIfcPay',
         'ambassadorPayPlane',
         'ambassadorRevenueShare',
+        'residencyIfcPayQuote',
         'appointAmbassador',
         'freezeAmbassador',
         'unfreezeAmbassador',
@@ -234,6 +235,8 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
     const status = await caller.curriculumImportStatus();
     expect(status.stage3Polish.ready).toBe(true);
     expect(status.titlePromiseMet).toBe(true);
+    expect(status.substanceBarMet).toBe(true);
+    expect(status.theaterSlugs).toEqual([]);
     const localized = await caller.curriculumItemLocalized({ slug: 'foundations-risk-first', locale: 'fr' });
     expect(localized.fellBack).toBe(true);
     expect(localized.locale).toBe('en');
@@ -686,40 +689,86 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
   });
 });
 
-// ── Ambassador IFC pay / revenue share — Class M refuse on the mount ────────
+// ── Ambassador IFC pay / revenue share — under rate authority on the mount ──
 //
-// Pure ifc-pay tests prove refuse. Without a mount test an operator path could
-// start returning 200 with invented amounts and only unit files would stay green.
-describe('svc-academy mount — ambassador pay stays refuse-closed', () => {
+// Pure ifc-pay tests prove refuse + quote. Without a mount test an operator path
+// could start returning 200 with invented amounts and only unit files would stay green.
+describe('svc-academy mount — ambassador pay under rate authority', () => {
   const admin = () =>
     principal({
       scopes: ['admin:read', 'admin:write', 'academy:read', 'academy:write'],
     });
+  const BENEFICIARY = '11111111-1111-4111-8111-111111111111';
 
-  it('ambassadorPayPlane is always dark (no invent enabled=true)', async () => {
+  it('ambassadorPayPlane is dark for settlement (no invent enabled=true)', async () => {
     const plane = await createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorPayPlane();
     expect(plane.ifcPayEnabled).toBe(false);
     expect(plane.revenueShareEnabled).toBe(false);
+    expect(plane.ifcRateAuthorityPublished).toBe(false);
+    expect(plane.ifcPayQuoteEnabled).toBe(false);
     expect(plane.classM).toBe(true);
     expect(plane).not.toHaveProperty('rate');
     expect(plane).not.toHaveProperty('amount');
     expect(plane).not.toHaveProperty('bps');
-    expect(plane.residualIfcPay).toMatch(/Class M/);
-    expect(plane.residualIfcPay).toMatch(/refuse-closed/);
+    expect(plane.residualIfcPay).toMatch(/refuse-closed|owner-only/);
   });
 
-  it('ambassadorIfcPay refuses closed — PRECONDITION_FAILED, no amount fields', async () => {
-    await expect(createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorIfcPay({})).rejects.toMatchObject({
-      code: 'PRECONDITION_FAILED',
-    });
-  });
-
-  it('ambassadorRevenueShare refuses closed — including dryRun', async () => {
+  it('ambassadorIfcPay refuses closed without rate authority — PRECONDITION_FAILED', async () => {
     await expect(
-      createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorRevenueShare({ dryRun: true }),
+      createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorIfcPay({ beneficiaryId: BENEFICIARY }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
+  });
+
+  it('ambassadorRevenueShare refuses closed — including dryRun without authority', async () => {
+    await expect(
+      createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorRevenueShare({ beneficiaryId: BENEFICIARY, dryRun: true }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
+  it('published rate authority + dryRun returns quote from owner rates only', async () => {
+    const ifcPayLaw = {
+      published: true as const,
+      sessionCredit: '7.25000000',
+      asset: 'IFC',
+      period: 'session',
+    };
+    const caller = createAcademyRouter(stubAcademy(), { ifcPayLaw }).createCaller(signed(admin()));
+    const plane = await caller.ambassadorPayPlane();
+    expect(plane.ifcRateAuthorityPublished).toBe(true);
+    expect(plane.ifcPayQuoteEnabled).toBe(true);
+    expect(plane.ifcPayEnabled).toBe(false);
+
+    const quote = await caller.ambassadorIfcPay({
+      beneficiaryId: BENEFICIARY,
+      dryRun: true,
+      residencyStatus: 'accepted',
+    });
+    expect(quote).toMatchObject({
+      ok: true,
+      kind: 'ifc_pay',
+      sessionCredit: '7.25000000',
+      asset: 'IFC',
+      authority: 'owner_published',
+      settlement: 'refuse_recipe_unset',
+    });
+  });
+
+  it('residencyIfcPayQuote refuses non-accepted residency even with authority', async () => {
+    const ifcPayLaw = {
+      published: true as const,
+      sessionCredit: '1.00000000',
+      asset: 'IFC',
+      period: 'session',
+    };
+    await expect(
+      createAcademyRouter(stubAcademy(), { ifcPayLaw })
+        .createCaller(signed(admin()))
+        .residencyIfcPayQuote({ beneficiaryId: BENEFICIARY, residencyStatus: 'applied' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
   });
 
   it('pay plane is not readable without admin:read', async () => {

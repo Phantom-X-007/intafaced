@@ -3,12 +3,7 @@ import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } 
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
-import {
-  AmbassadorPayRefuseError,
-  ambassadorPayPlaneStatus,
-  refuseAmbassadorIfcPay,
-  refuseAmbassadorRevenueShare,
-} from './ambassadors/ifc-pay.js';
+import { AmbassadorPayRefuseError, ambassadorPayPlaneStatus, attemptAmbassadorPay, attemptResidencyIfcPay } from './ambassadors/ifc-pay.js';
 import {
   PrizePoolRefuseError,
   assertMayStartPrizeSeason,
@@ -18,6 +13,12 @@ import {
   prizeRefuseStatusLine,
   type PrizeIntentKind,
 } from './tournaments/prize-refuse.js';
+import {
+  UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
+  UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW,
+  type AmbassadorIfcPayLaw,
+  type AmbassadorRevenueShareLaw,
+} from './ambassadors/ifc-pay-rate-law.js';
 import {
   curriculumDepthReport,
   curriculumStudyGuide,
@@ -204,6 +205,9 @@ const curriculumImportStatusOut = z.object({
     i18nStrategyHonest: z.boolean(),
     ready: z.boolean(),
   }),
+  /** D26-P1-C5 — real lesson substance, not char-count theater. */
+  substanceBarMet: z.boolean(),
+  theaterSlugs: z.array(z.string()),
 });
 
 const curriculumItemLocalizedOut = curriculumItemOut.extend({
@@ -554,7 +558,18 @@ function toTrpcError(err: unknown): TRPCError {
   }
 }
 
-export function createAcademyRouter(academy: AcademyService) {
+export type AcademyRouterPayLaws = {
+  readonly ifcPayLaw?: AmbassadorIfcPayLaw;
+  readonly revenueShareLaw?: AmbassadorRevenueShareLaw;
+};
+
+/**
+ * Optional payLaws: owner-published rate authority (D26-P1-C2).
+ * Default unpublished — refuse invent rates; product dry-run when published.
+ */
+export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRouterPayLaws = {}) {
+  const ifcPayLaw = payLaws.ifcPayLaw ?? UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW;
+  const revenueShareLaw = payLaws.revenueShareLaw ?? UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW;
   const guard = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -1108,31 +1123,42 @@ export function createAcademyRouter(academy: AcademyService) {
       ),
 
     /**
-     * Class M IFC pay / revenue share — refuse-closed. Never invent rates.
-     * Plane status is always dark until owner-published schedule + ledger recipes.
+     * IFC pay / revenue share under rate authority (D26-P1-C2).
+     * Settlement stays dark (no ledger recipe). Quote path opens when owner rates published.
      */
     ambassadorPayPlane: scopedProcedure('admin:read', { module: 'academy' })
       .output(
         z.object({
           ifcPayEnabled: z.literal(false),
           revenueShareEnabled: z.literal(false),
+          ifcRateAuthorityPublished: z.boolean(),
+          revenueShareRateAuthorityPublished: z.boolean(),
+          ifcPayQuoteEnabled: z.boolean(),
+          revenueShareQuoteEnabled: z.boolean(),
           classM: z.literal(true),
           residualIfcPay: z.string(),
           residualRevenueShare: z.string(),
         }),
       )
-      .query(() => ambassadorPayPlaneStatus()),
+      .query(() => ambassadorPayPlaneStatus({ ifc: ifcPayLaw, revenueShare: revenueShareLaw })),
 
     ambassadorIfcPay: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({
-          beneficiaryId: z.string().uuid().optional(),
+          beneficiaryId: z.string().uuid(),
           dryRun: z.boolean().optional(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']).optional(),
         }),
       )
-      .mutation(async () => {
+      .mutation(async ({ input }) => {
         try {
-          refuseAmbassadorIfcPay();
+          return attemptAmbassadorPay({
+            kind: 'ifc_pay',
+            law: ifcPayLaw,
+            beneficiaryId: input.beneficiaryId,
+            dryRun: input.dryRun,
+            residencyStatus: input.residencyStatus,
+          });
         } catch (err) {
           throw toTrpcError(err);
         }
@@ -1141,13 +1167,42 @@ export function createAcademyRouter(academy: AcademyService) {
     ambassadorRevenueShare: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({
-          beneficiaryId: z.string().uuid().optional(),
+          beneficiaryId: z.string().uuid(),
           dryRun: z.boolean().optional(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']).optional(),
         }),
       )
-      .mutation(async () => {
+      .mutation(async ({ input }) => {
         try {
-          refuseAmbassadorRevenueShare();
+          return attemptAmbassadorPay({
+            kind: 'revenue_share',
+            law: revenueShareLaw,
+            beneficiaryId: input.beneficiaryId,
+            dryRun: input.dryRun,
+            residencyStatus: input.residencyStatus,
+          });
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    /** Residency IFC quote under rate authority — accepted residency + published rates. */
+    residencyIfcPayQuote: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          beneficiaryId: z.string().uuid(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']),
+          dryRun: z.boolean().optional().default(true),
+        }),
+      )
+      .mutation(async ({ input }) => {
+        try {
+          return attemptResidencyIfcPay({
+            law: ifcPayLaw,
+            beneficiaryId: input.beneficiaryId,
+            residencyStatus: input.residencyStatus,
+            dryRun: input.dryRun,
+          });
         } catch (err) {
           throw toTrpcError(err);
         }

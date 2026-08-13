@@ -8,13 +8,13 @@
 
 **Deliberately not finished here**, each for a stated reason:
 
-| Absent                                                                        | Why                                                                                                                                                                                                                               |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live audio/video                                                              | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                                                                                      |
-| Full DERIV//DESK library (20 playbooks + 3 workbooks)                         | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented. |
-| Cert → **perk** invent / money                                                | D26-P1-C1: `grantCert` surfaces **real** identity perks after XP, or **refuses** when identity is unreadable / invent is requested. Academy never maps cert→perk and never invents perk money (`certs/perk-plane.ts`).            |
-| Ambassador **IFC pay / revenue share** (programme + residencies Stage-1 ship) | **Money.** Appoint/freeze/badge and residency apply/decide are real. Pay planes refuse-closed until owner rates + ledger recipes.                                                                                                 |
-| Tournament **IFC prize pools** (ladder Stage-1 ships)                         | Seasons + standings + lifecycle edges are real. Blank/unset pools typed-refuse `academy.prize_pool_unset` (cannot start). Prize fund/payout refuse-closed — no invent IFC. Class M recipes are a separate PR.                     |
+| Absent                                                                        | Why                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live audio/video                                                              | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                                                                                          |
+| Full DERIV//DESK library (20 playbooks + 3 workbooks)                         | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented.     |
+| Cert → **perk** invent / money                                                | D26-P1-C1: `grantCert` surfaces **real** identity perks after XP, or **refuses** when identity is unreadable / invent is requested. Academy never maps cert→perk and never invents perk money (`certs/perk-plane.ts`).                |
+| Ambassador **IFC pay / revenue share** (programme + residencies Stage-1 ship) | **Money under rate authority (D26-P1-C2).** Appoint/freeze/badge and residency apply/decide are real. Owner-published IFC / share law opens dry-run quotes; live settlement refuses until Class M ledger recipes. Never invent rates. |
+| Tournament **IFC prize pools** (ladder Stage-1 ships)                         | Seasons + standings + lifecycle edges are real. Blank/unset pools typed-refuse `academy.prize_pool_unset` (cannot start). Prize fund/payout refuse-closed — no invent IFC. Class M recipes are a separate PR.                         |
 
 ---
 
@@ -181,16 +181,20 @@ All five are pure and need **no database** — none opens a connection, and none
 
 The service's SQL paths are exercised through the fleet's e2e suite rather than a per-service Postgres harness: this service holds no value, and its failure mode is an empty room rather than a lost balance, so the harness cost is better spent on services that move money. The one SQL path that would repay a harness is the capacity race under `FOR UPDATE`, and that is the honest gap in this suite.
 
-## Ambassador programme (Stage-1 — status only)
+## Ambassador programme (Stage-1 status + D26-P1-C2 rate authority)
 
-Appoint / freeze / public badge. **No pay.** Hosting still uses §4.1 `lobbyHostRights` only.
+Appoint / freeze / public badge. Residencies apply/decide are non-money. **IFC / revenue-share rates are owner-only.**
 
-| Capability                        | Gate                             |
-| --------------------------------- | -------------------------------- |
-| Open lobby / invite / run session | `lobbyHostRights` (svc-identity) |
-| Programme badge active            | `ambassadors.status = active`    |
-| Appoint / freeze                  | operator `admin:write`           |
-| IFC pay / revenue share           | **Not built** (Class M Stage-2)  |
+| Capability                        | Gate                                                               |
+| --------------------------------- | ------------------------------------------------------------------ |
+| Open lobby / invite / run session | `lobbyHostRights` (svc-identity)                                   |
+| Programme badge active            | `ambassadors.status = active`                                      |
+| Appoint / freeze                  | operator `admin:write`                                             |
+| IFC / share **rate authority**    | `ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON` / `…_REVENUE_SHARE_LAW_JSON` |
+| IFC / share **dry-run quote**     | published law (+ accepted residency for `residencyIfcPayQuote`)    |
+| IFC / share **live settlement**   | **Refuse** until Class M ledger recipe (separate PR)               |
+
+Blank law JSON → unpublished → refuse invent. Published law opens quote path only; amounts come from the owner JSON, never from code defaults.
 
 Migration: `drizzle/0001_ambassadors.sql`.
 
