@@ -144,7 +144,7 @@ for (const marker of REQUIRED_CONFIG_MARKERS) {
   const text = stripComments(readFileSync(match, 'utf8'));
   if (!REGISTRATION.test(text)) {
     failures.push(
-      `${relative(ROOT, match)} does not REGISTER DualBookMoneyDoorInterceptor ` +
+      `${relative(ROOT, match).replace(/\\/g, '/')} does not REGISTER DualBookMoneyDoorInterceptor ` +
         `(need registry.addInterceptor(new DualBookMoneyDoorInterceptor()).addPathPatterns("/**"))`,
     );
   }

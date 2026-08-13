@@ -275,6 +275,14 @@ export const GATES = [
     why: 'a Java money mutator is a second book, and there is only one book',
   },
   {
+    id: 'vendor-java-jar-truth',
+    script: 'tooling/ci/vendor-java-jar-truth.mjs',
+    doctrine: 'D-S-17 / D26-P2-07 jar truth',
+    why:
+      'Grade D ungated mints must stay deleted, a green source scan must not be read as runtime safety, and the ' +
+      'compose-jar rebuild path (tooling/scripts/vendor-java-rebuild.mjs + vendor-compile package job) must stay real.',
+  },
+  {
     id: 'fabricated-money',
     script: 'tooling/ci/fabricated-money-scan.mjs',
     doctrine: '§0.6',
