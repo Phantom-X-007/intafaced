@@ -1,8 +1,16 @@
 # Owner decision packet — everything waiting on you, in one sitting
 
-**Written by:** Denon, 2026-08-09. **Tip:** `2f9a7df0`.
-**Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-01 · P0-02 · P0-03**, plus every ruling I have accumulated separately.
-**Nothing here is decided by me.** Each item states the question, what is already settled around it, a recommendation, and what unblocks the moment you answer.
+**Written by:** Denon, 2026-08-09. **Tip at last completeness pass:** `93f6c777` (2026-08-12).  
+**Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-01…18**.  
+**Tip packet family (D26-P0-18 sealed as tracker):**
+
+| Layer         | Path                                                                                           | Role                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| This file     | `docs/OWNER-DECISION-PACKET-2026-08-09.md`                                                     | Human sitting — P0-01…03 + money-path / dark-feed / F10    |
+| Part two      | [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) | Human sitting — P0-04…17 shapes                            |
+| Machine index | [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json)                                 | **SoT for open/sealed/class_x** — every owner decision row |
+
+**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (P0-18):** part two filled + JSON index so open rulings are no longer scattered across side checklists alone.
 
 **One rule I have applied throughout:** where a number is missing, the answer is **not** a placeholder. `services/svc-trade/src/copy/` already does this correctly — it is **refuse-closed** with `COPY_FEE_SHARE_RESIDUAL`, declining the surface and naming the residual rather than inventing a rate. That pattern is the model for item 3 below.
 
@@ -26,22 +34,23 @@ The agent picked `10` independently and matched the standing decision. **This is
 
 ## 1 · House desk and internal market making — three questions
 
-**Blocks:** `execution.house-tenant` and the internal half of `execution.market-making`, both boarded and both explicitly unbuildable until ruled.
-**Law:** [`adr/2026-08-08-house-desk-and-market-making-fairness.md`](adr/2026-08-08-house-desk-and-market-making-fairness.md) — five rules Accepted, these three reserved.
+**Status:** **SEALED 2026-08-12 (D26-P0-01).** Recommendations below are now **Accepted owner rulings** in [`adr/2026-08-08-house-desk-and-market-making-fairness.md`](adr/2026-08-08-house-desk-and-market-making-fairness.md). Tracker notes for `execution.house-tenant` / `execution.market-making` flipped to external-only path vs still-blocked internal.
+**Still blocked after seal:** `execution.house-tenant` on our own venue; internal half of `execution.market-making`.
+**Unblocked for engineering:** `execution.sor`, `execution.arbitrage`, external half of `execution.market-making` (still subject to their other deps).
 
 §28 says three things that compose badly: the house desk is **sealed and undisclosed** (`:777`), it has **"structural first-class access"** to the venue we own (`:774`), and its MM engine **"seeds our books and works the street"** (`:773`). Together: a sealed desk quoting both sides of the book we settle customer fills against — sitting on top of _"a price that moves money is never supplied by the party it pays."_
 
 ### Q1 — Does the house desk trade our own venue, or only external ones?
 
-**Recommendation: external-only for v1.** Not caution — **SOR, arbitrage, the cost model and execution reports can all be built and proven against external venues with no fairness surface at all.** You then answer the internal question with a working engine in hand instead of in the abstract.
+**Accepted ruling: external-only for v1.** SOR, arbitrage, the cost model and execution reports may be built and proven against external venues with no fairness surface. Internal house-on-own-venue stays blocked until a later explicit ruling.
 
 ### Q2 — If it trades our venue, is its _existence_ disclosed?
 
-The Throne Law is unambiguous about **strategies** and **silent about existence**. Strategy-secret / existence-disclosed is what regulated venues do and is compatible with §28 as written. Existence-also-secret is defensible for pure alpha and much harder to defend if a user discovers the counterparty to their fill was the operator. **Honesty doctrine points at disclosure; it is a positioning call, not a correctness one.**
+**Deferred.** Existence-disclosure is not decided because internal trading is off for v1. A later ruling that permits internal trading must answer this before that half ships. (Background: Throne Law is unambiguous about **strategies** and silent about **existence**; honesty doctrine points at disclosure — still a positioning call when/if internal is reopened.)
 
 ### Q3 — Where is the line between "seeding" and "supplying a price that moves money"?
 
-Even excluded from marks, a dominant internal quote **influences** the mark others are liquidated on. **Recommendation: hard exclusion rather than a percentage cap** — a cap needs a number, and item 4 already has two unruled ones on this exact path. Two more would be drift.
+**Accepted ruling: HARD EXCLUSION** — internal quotes never counted in mark derivation. No percentage cap invent (ties `DEFAULT_MIN_BEST_LEVEL` / dust refuse path; item 4's unruled numbers stay separate).
 
 ---
 
@@ -160,8 +169,8 @@ Verified in the current source, by the patch’s own symbol names:
 
 # What I recommend you answer first
 
-**Q1 alone unblocks the most.** External-only for v1 turns `execution.sor`, `execution.arbitrage` and the external half of `execution.market-making` from blocked-on-a-ruling into ordinary engineering, and defers the hard fairness question until there is a working engine to reason about.
+**§A1 / Q1 is sealed (2026-08-12).** External-only for v1 turns `execution.sor`, `execution.arbitrage` and the external half of `execution.market-making` from blocked-on-a-ruling into ordinary engineering; internal house + internal MM half stay blocked.
 
-**Item 11 is withdrawn** — it was already fixed by #1194 before I wrote it up. See its section for what I got wrong. **Item 2 moves up.**
+**Item 11 is withdrawn** — it was already fixed by #1194 before I wrote it up. See its section for what I got wrong.
 
-**Then item 2**, because one sentence moves a finished service from useless to shipping.
+**Next open that unblocks most:** **item 2** (dex venue set), because one sentence moves a finished service from useless to shipping.

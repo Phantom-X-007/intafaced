@@ -45,8 +45,53 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
     });
   });
 
+  it('D26-P1-A4: mixed missing + usable rates refuse — no partial ok board', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'card-a', approvalRate: '0.70', attempts: 200 }), pt({ railId: 'card-b', approvalRate: null, attempts: null })],
+      { now: NOW, threshold: '0.85' },
+    );
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'no_metrics',
+    });
+  });
+
+  it('D26-P1-A4: null rate alone among good siblings refuses (no invent completeness)', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'good', approvalRate: '0.99', attempts: 100 }), pt({ railId: 'hole', approvalRate: null, attempts: 50 })],
+      { now: NOW, threshold: '0.85' },
+    );
+    expect(r.status).toBe('unavailable');
+    if (r.status !== 'unavailable') return;
+    expect(r.reason).toBe('no_metrics');
+  });
+
+  it('D26-P1-A4: null attempts alone among good siblings refuses', () => {
+    const r = watchApprovalFixtures(
+      [pt({ railId: 'good', approvalRate: '0.99', attempts: 100 }), pt({ railId: 'hole', approvalRate: '0.50', attempts: null })],
+      { now: NOW, threshold: '0.85' },
+    );
+    expect(r).toMatchObject({ status: 'unavailable', reason: 'no_metrics' });
+  });
+
   it('refuses stale series', () => {
     const r = watchApprovalFixtures([pt({ railId: 'x', asOf: '2026-08-05T10:00:00.000Z', maxAgeMs: 60_000 })], { now: NOW });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'stale',
+    });
+  });
+
+  it('D26-P1-A4 deepen: mixed stale + fresh refuses — no partial ok board', () => {
+    const r = watchApprovalFixtures(
+      [
+        pt({ railId: 'fresh', approvalRate: '0.70', attempts: 200 }),
+        pt({ railId: 'stale', asOf: '2026-08-05T10:00:00.000Z', maxAgeMs: 60_000, approvalRate: '0.50', attempts: 100 }),
+      ],
+      { now: NOW, threshold: '0.85' },
+    );
     expect(r).toEqual({
       status: 'unavailable',
       userMessageKey: 'agents.merchant.unavailable',

@@ -12,7 +12,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
-import { accrualDate, planAccrual } from './interest.js';
+import { accrualBoundary, accrualDate, planAccrual } from './interest.js';
 import { withMoneySpan } from '../tracing.js';
 
 /**
@@ -184,6 +184,9 @@ export class EarnService {
           SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
             FROM bank.earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
         `;
+    if (rows.length === 0) {
+      throw new BankError(assetId ? `No earn rate is configured for ${assetId}` : 'No earn rates are configured', 'bank.earn_rate_unset');
+    }
     return rows.map(toPool);
   }
 
@@ -561,9 +564,10 @@ export class EarnService {
   async accrue(input: { poolId: string; at?: Date; daysPerYear?: number }): Promise<AccrualResult> {
     const at = input.at ?? new Date();
     const date = accrualDate(at);
+    const boundary = accrualBoundary(at);
 
     return withMoneySpan('bank.earn.accrue', { operation: 'interest-accrual', poolId: input.poolId, date }, async (span) => {
-      const result = await this.accrueInner(input.poolId, date, at, input.daysPerYear);
+      const result = await this.accrueInner(input.poolId, date, boundary, input.daysPerYear);
       span.setAttribute('intafaced.recipients', result.recipients);
       span.setAttribute('intafaced.paid', formatAmount(result.paid));
       span.setAttribute('intafaced.already_accrued', result.alreadyAccrued);
@@ -571,7 +575,7 @@ export class EarnService {
     });
   }
 
-  private async accrueInner(poolId: string, date: string, at: Date, daysPerYear?: number): Promise<AccrualResult> {
+  private async accrueInner(poolId: string, date: string, boundary: Date, daysPerYear?: number): Promise<AccrualResult> {
     const pool = await this.pool(poolId);
 
     return transaction(
@@ -603,11 +607,13 @@ export class EarnService {
 
         const accrualId = claimed[0]!.id;
 
-        // Positions opened later than the accrual day earn nothing for it — a
-        // deposit made this afternoon has not been in the pool for a day.
+        // The UTC day boundary is the eligibility cutoff, regardless of when
+        // the scheduler happens to run. A position opened at or after midnight
+        // starts earning on the next day; a late cron cannot grant it a full
+        // day's yield.
         const positions = await tx<Array<{ id: string; user_id: string; principal: string }>>`
           SELECT id, user_id, principal FROM bank.earn_positions
-           WHERE pool_id = ${pool.id} AND status = 'active' AND opened_at <= ${at}
+           WHERE pool_id = ${pool.id} AND status = 'active' AND opened_at < ${boundary}
            ORDER BY id ASC
         `;
 

@@ -4,8 +4,9 @@ The payments core (§6.1). Merchants, the payment lifecycle, settlement into the
 
 **What it is NOT:** it does not hold balances (the ledger does), it does not choose between rails (smart routing is its own feature), and it does not know the name of a single payment processor. Every rail — the two here and every one that comes later — is an implementation of one interface, and `src/rails/conformance.ts` is what keeps that true.
 
-**On tip today:** gateway mode, rails (`crypto-native`, `card-sandbox`, absent `bank-payout`), public REST + webhooks, PayFac **sub-merchant trees + area fence on money paths** ([below](#payfac--sub-merchant-trees-61)), subscriptions as **invoice-and-watch** (schema / due runner / capture→execution settle — no on-chain pull), destination shape refuse (EVM + IBAN) before hold, G3 settlement release, G4 suspend-safe payout hold.
-**Still separate / residual:** PSP mode, smart routing (no invent costs/approval rates), fraud scoring, commerce plugins, **chargeback wire** (recipes exist in `packages/ledger-client` with owner sign-off banner — **not wired** into svc-pay), subscription dunning / pre-charge notify (merchant mandate surface is on tip), IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION §8.4).
+**On tip today:** gateway mode, rails (`crypto-native`, `card-sandbox`, absent `bank-payout`), public REST + webhooks, PayFac **sub-merchant trees + area fence on money paths** ([below](#payfac--sub-merchant-trees-61)), subscriptions as **crypto invoice-and-watch product-complete** (mandate � due � invoice � capture settle � cancel immediate; card path refuses `pay.mandate_rail_absent`; bounded dunning � `arrears` stall; pre-charge notify sealed as �13 `socket.pay-precharge-notify` with Ready `subscription.productReady`  never invents `notified:true`), destination shape refuse (EVM + IBAN) before hold, G3 settlement release, G4 suspend-safe payout hold, **PSP digital KYB** (`kyb.submit` / `kyb.decide` under `admin:compliance` + append-only KYB/pricing histories; no third-party money lib  D-S-10).
+**On tip for pay.fraud (D26-P1-P5):** scoring + review queue + dispute **case** mechanism (`fraud.*` tRPC); chargeback ledger recipes refuse-closed via named �13 `socket.pay-chargeback-ledger-wire` (recipes exist in ledger-client  not posted from svc-pay). List content Class X.
+**Still separate / residual:** smart routing (no invent costs/approval rates), commerce plugins, live card charge-against-mandate + real pre-charge delivery (`socket.psp-partners` / `socket.pay-precharge-notify`), IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION �8.4), `kybStatus` money-gate (pay.gateway  sequenced after approver), card acquiring (`socket.psp-partners`), durable disputes table + owner sign-off to close the chargeback ledger socket.
 
 ---
 
@@ -122,7 +123,7 @@ That builds `EvmLiveChain` (`src/rails/evm-chain.ts`, `posture: 'live'`), starts
 
 - A **production** (or public testnet) RPC, not only compose anvil — anvil proves the wiring; it is not a chain decision (`docs/decisions/local-dev-chain.md`).
 - Custody of the hot wallet / deposit mnemonic outside the repo (HSM or signing service preferred; the in-process key is the v1 minimum).
-- Live boot wires `PostgresBroadcastStore` (`pay.crypto_broadcasts`, migration 0004) for multi-replica claim→put. `MemoryBroadcastStore` remains the unit/local default when no store is passed to `defaultChainFor`. Residual: a crash **after** `eth_sendRawTransaction` but **before** `put` can still double-send on retry (hash never journalled); put-before-receipt closes the wait-for-inclusion window only.
+- Live boot wires `PostgresBroadcastStore` (`pay.crypto_broadcasts`, migration 0004 + `signed_raw` in 0012) for multi-replica claim→putSigned→sendRaw→put. `MemoryBroadcastStore` remains the unit/local default when no store is passed to `defaultChainFor`. DIRECTION §3.1 / D26-P1-P9: the signed raw is journalled **before** `eth_sendRawTransaction`; crash-resume rebroadcasts the identical payload (`claim` → `resume`) instead of signing a second spend. Put-before-receipt still closes the wait-for-inclusion window.
 - **Card acquiring** — sponsor bank / BIN. Still a §13 commercial socket; `card-sandbox` is never it.
 
 `/ready` and `railHealth` both carry `mode` now, because `healthy: true` was accurate and useless — a sandbox is reliably healthy at simulating.
@@ -168,7 +169,7 @@ So this ships the **mechanism**, and `PERMISSION_AREAS` in `src/submerchants.ts`
 - **Settling a sub-merchant out of our account.** `settlingParty` accepts `'self'` only and refuses everything else by name (`pay.submerchant_settling_party_unsupported`). That is acquiring — a sponsor bank and an acquiring BIN, which `docs/SPEC-PAY-VERTICALS-2026-08-02.md` §8 puts on the owner's list and `socket.psp-partners` tracks. The column exists so adopting a partner later is configuration rather than a rewrite; it is not a switch this service can throw.
 - **Areas on the gateway surface (W5).** Money and merchant procedures in `router.ts` / `public-rest.ts` call `assertMerchantAreaAccess` with the matching area (`payment`, `payment.refund`, `settlement`, `settlement.payout`, `payment.link`, `webhook`, `kyb`, …). Self still holds every area. A parent without a grant is `pay.submerchant_permission_denied`; a stranger stays `pay.merchant_forbidden`. Pins: `merchant-ownership.test.ts`.
 - **Split payments and sub-merchant fee routing.** Ledger recipes, Class M, and the owner's sign-off (`docs/PAY-LANE-HARVEST-AND-BUILD-PLAN-2026-08-08.md` §6.4).
-- **Sub-merchant KYB workflow and document capture.** `pay.psp`.
+- **Sub-merchant KYB workflow and document capture.** Top-level merchant digital KYB (submit + operator decide + history) ships under `kyb.*` / mig 0013; document-capture vendor integration and sub-merchant KYB remain residual. Card acquiring stays `socket.psp-partners`.
 
 ### Error codes
 
@@ -235,6 +236,14 @@ Every value movement is a recipe. This service holds no balance of any kind (Doc
 | `deposit`              | `deposit.credited`        | rail boundary → user available                                         |
 
 The three `withdraw*` recipes serve **both** outbound paths — a merchant payout keyed on `<settlementId>:<attempt>`, and a user withdrawal keyed on `<withdrawalId>:<attempt>`. Same shape, same reasoning, one set of recipes.
+
+For D26-P1-P4, `settlement-ledger.ts` makes that constraint executable: both
+`bank` and `crypto` settlement destinations produce only the existing
+`withdrawHold` → `withdrawSettle` / `withdrawReverse` requests. Rail adapters
+own the destination difference; svc-pay does not assemble entries or invent a
+bank-specific book. `bank-payout` remains `absent` and refuses before the hold
+until the Class X sponsor-bank socket exists, while configured `crypto-native`
+can complete the same recipe plan against a real chain.
 
 **`merchantClearing(merchantId, assetId)`** is a new account constructor: a `module`-owned account per merchant, per asset. It answers "a payment was captured but not settled — whose funds are those?" as a balance rather than an investigation. `sum(merchantClearing(m))` is exactly what svc-pay owes merchant `m` right now, readable from the ledger without touching a single svc-pay table — which is what makes reconciliation between the two meaningful.
 

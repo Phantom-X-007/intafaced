@@ -13,8 +13,9 @@
  *
  * It does not invent fee share, profit-share bps, or follower counts. It does
  * not post ledger recipes. The only money verb is `runtime.settleSession`.
- * Ranking/stats are arithmetic over fixtures the caller supplied — so a clean
- * run bills `0` honestly (no engine completion).
+ * Stats are arithmetic over fixtures in input order only — never a
+ * returns-ranked marketing board (D26-P1-A5). A clean run bills `0` honestly
+ * (no engine completion).
  *
  * ── Why cheap refusals happen BEFORE the session opens ───────────────────────
  *
@@ -25,6 +26,7 @@
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
+import { isForbiddenReturnsRankKey, refuseReturnsRankedMarketingBoard } from './returns-board-refuse.js';
 import { buildLeaderStats, type AuditWrite, type CopyPlaneState, type LeaderPerformanceFixture, type LeaderStat } from './stats.js';
 
 /** The agent id the copy-intel guardrail is registered under. */
@@ -125,6 +127,11 @@ export type CopyIntelRunInput = {
   readonly fixtures: readonly LeaderPerformanceFixture[];
   readonly leaderAllowlist?: ReadonlySet<string> | readonly string[];
   readonly now?: Date;
+  /**
+   * D26-P1-A5 — any returns/PnL/winRate rank key is refused before the session
+   * opens (never bill for a marketing board the platform forbids).
+   */
+  readonly rankBy?: string;
 };
 
 /**
@@ -139,6 +146,11 @@ export type CopyIntelRunInput = {
  */
 export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promise<CopyIntelRunResult> {
   const now = input.now ?? new Date();
+
+  // Cheap refuse — never open a metered session to build a marketing board.
+  if (input.rankBy !== undefined && isForbiddenReturnsRankKey(input.rankBy)) {
+    return refuseReturnsRankedMarketingBoard(input.rankBy);
+  }
 
   if (input.plane === 'dark') {
     return {

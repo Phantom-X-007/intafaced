@@ -736,6 +736,47 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     ).resolves.toEqual({ ok: true });
   });
 
+  it('routing.select refuses missing geo/method/risk on the public door', async () => {
+    const api = await caller([]);
+    const err = await api.routing.select({ preference: ['card-sandbox'], method: 'card', riskBand: 'low' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_input_missing/);
+  });
+
+  it('routing.select chooses card-sandbox for card + eligible geo/risk', async () => {
+    const api = await caller([]);
+    const out = await api.routing.select({
+      preference: ['crypto-native', 'card-sandbox'],
+      geoCountry: 'DE',
+      method: 'card',
+      riskBand: 'low',
+      policy: 'allow-sandbox',
+    });
+    expect(out.chosenRailId).toBe('card-sandbox');
+    expect(out.inputs).toEqual({ geoCountry: 'DE', method: 'card', riskBand: 'low' });
+    expect(out.decision.kind).toBe('pay.routing.decision');
+    expect(out.decision).not.toHaveProperty('approvalRate');
+    expect(out.decision).not.toHaveProperty('costBps');
+    const cryptoSkip = out.considered.find((e: { railId: string }) => e.railId === 'crypto-native');
+    expect(cryptoSkip).toMatchObject({ outcome: 'skipped', reason: 'method-mismatch' });
+  });
+
+  it('routing.select returns PRECONDITION_FAILED when no rail matches', async () => {
+    const api = await caller([]);
+    const err = await api.routing
+      .select({
+        preference: ['card-sandbox'],
+        geoCountry: 'DE',
+        method: 'card',
+        riskBand: 'high',
+        policy: 'allow-sandbox',
+        profiles: [{ railId: 'card-sandbox', methods: ['card'], countries: ['*'], riskBands: ['low'] }],
+      })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_no_rail/);
+  });
+
   it('fraud.evaluate declines a blocklisted IP with a reason', async () => {
     const api = await caller([]);
     const d = await api.fraud.evaluate({

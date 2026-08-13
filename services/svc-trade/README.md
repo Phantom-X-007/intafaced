@@ -120,12 +120,13 @@ open has no client idempotency key — see audit residual).
 
 ### Seed / mm honesty (Spec SD-2…SD-4)
 
-| Rule              | Behavior                                                                       |
-| ----------------- | ------------------------------------------------------------------------------ |
-| **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`)         |
-| **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (kill-switch SD-4) |
-| **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)         |
-| **F8**            | seed↔seed prints never inflate public tape                                     |
+| Rule              | Behavior                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`); MM seed records at rest via `recordSeededOrder` (D26-P1-T10) |
+| **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (wired to `TRADE_MM_SEED_ENABLED`, SD-4)                                 |
+| **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)                                                               |
+| **Cross ban**     | Seed submits are limit `PO`; synchronous engine fills → `manufactured_cross` + hold release (SD-5)                                   |
+| **F8**            | seed↔seed prints never inflate public tape                                                                                           |
 
 ### OHLCV / candles (A-TRADE-SPOT-1 + A-TRADE-SPOT-OPS)
 
@@ -333,6 +334,21 @@ The service checks these; the database enforces them regardless.
 | `markets_dust_free_ck`                    | a listing whose smallest legal fill is worth zero — the ledger will not post a movement of nothing                                                                                                                                                                                         |
 | `markets_fee_bounds_ck`                   | a fee at or above 100%, which `tradeFill` would refuse to build entries for                                                                                                                                                                                                                |
 | `orders_price_shape_ck`                   | a limit order with no price, or a market order carrying one                                                                                                                                                                                                                                |
+
+---
+
+## Copy deepen (D26-P1-T3)
+
+Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. Owner rates stay refuse-closed until **D26-P0-02** (`TRADE_COPY_FEE_SHARE_LAW`); served jurisdictions stay refuse-closed until **D26-P0-15** (`TRADE_COPY_JURISDICTION_LAW` — ADR `docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md`). Agents never invent a geo allowlist or `leader_share_bps`.
+
+`copy.killFeeShare` and `copy.unfollow` are unilateral controls and remain reachable while the owner fee-share rates are blank. Every mirror plan, fee-share settlement, kill, and unfollow is serialized per follow:
+
+- an already-started mirror or settlement finishes before kill/unfollow is acknowledged;
+- after `killFeeShare` is acknowledged, a new fill cannot pay leader fee-share;
+- after `unfollow` is acknowledged, a new mirror or settlement cannot use the deleted envelope;
+- production SQL pins the advisory lock and guarded queries to one database connection, so the guarantee holds across service processes without exhausting the connection pool.
+
+The public tRPC proof is `src/copy/router-mount.test.ts`. It blocks an in-flight ledger post/mirror claim, races the public kill/unfollow mutations against it, and proves the control waits before closing every later attempt. No §8 rate is supplied by production defaults; blank rates still refuse closed.
 
 ---
 

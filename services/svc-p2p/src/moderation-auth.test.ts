@@ -41,6 +41,20 @@ describe('moderator gate', () => {
     expect(isModerator({ userId: OTHER, scopes: ['p2p:read'] }, [MOD])).toBe(false);
   });
 
+  it('never recognises an API key as the human required to rule on a dispute', () => {
+    expect(isModerator({ userId: MOD, scopes: ['p2p:read'], kid: 'merchant-key-1' }, [MOD])).toBe(false);
+    expect(isModerator({ userId: OTHER, scopes: ['admin:compliance'], kid: 'operator-key-1' }, [])).toBe(false);
+  });
+
+  it('refuses an API key before any dispute resolution can run', () => {
+    expect(() => assertModerator({ userId: MOD, scopes: ['p2p:read'], kid: 'merchant-key-1' }, [MOD])).toThrow(P2pError);
+    try {
+      assertModerator({ userId: MOD, scopes: ['p2p:read'], kid: 'merchant-key-1' }, [MOD]);
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'p2p.not_a_moderator' });
+    }
+  });
+
   it('honest-refuses when nothing is configured', () => {
     expect(() => assertModerator({ userId: OTHER, scopes: ['p2p:read'] }, [])).toThrow(P2pError);
     try {

@@ -78,12 +78,12 @@ The occurrences that were written off are in the **response**, not merely in the
 
 ### `earn`
 
-| Procedure        | Scope        | Purpose                                |
-| ---------------- | ------------ | -------------------------------------- |
-| `earn.pools`     | `bank:read`  | Open flexible and fixed pools          |
-| `earn.deposit`   | `bank:write` | Open a position                        |
-| `earn.withdraw`  | `bank:write` | Close a position; fixed terms enforced |
-| `earn.positions` | `bank:read`  | The user's open positions              |
+| Procedure        | Scope        | Purpose                                                                                |
+| ---------------- | ------------ | -------------------------------------------------------------------------------------- |
+| `earn.pools`     | `bank:read`  | Open flexible and fixed pools; refuses `bank.earn_rate_unset` when none are configured |
+| `earn.deposit`   | `bank:write` | Open a position                                                                        |
+| `earn.withdraw`  | `bank:write` | Close a position; fixed terms enforced                                                 |
+| `earn.positions` | `bank:read`  | The user's open positions                                                              |
 
 ### `loans` — **built.** Collateralised borrow over the ledger (§8.1)
 
@@ -148,7 +148,7 @@ KYB / payroll / invoicing / expense cards remain residual or §13 — not invent
 
 Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-recipient payroll atomicity, dedicated org principal — not invented here.
 
-### `ramps` — **crypto ledger half. Fiat is a socket.**
+### `ramps` — **crypto ledger half. Fiat via pay adapters (socket until live).**
 
 | Procedure         | Scope        | Purpose                                                                |
 | ----------------- | ------------ | ---------------------------------------------------------------------- |
@@ -157,7 +157,7 @@ Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-r
 | `ramps.offramps`  | `bank:read`  | The user's off-ramps. Every row carries `simulated`                    |
 | `ramps.offramp`   | `bank:write` | Hold then settle to `bank-crypto-ledger`. Does **not** broadcast       |
 
-`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat always refuses `bank.fiat_ramp_socket` → `socket.psp-partners`.
+`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat resolves a live svc-pay RailAdapter via `PayFiatRampPort` (D26-P1-B4) or refuses `bank.fiat_ramp_socket` → `socket.psp-partners`. Empty/sandbox/absent pay rails never launder into a bank fiat ramp. No second book — value still moves only through ledger-client deposit/withdraw recipes.
 
 ```bash
 BANK_RAMP_MODE=none            # default — every ramp money path refuses bank.no_ramp_rail
@@ -333,7 +333,9 @@ Holding a database transaction open across the ledger call is a deliberate cost:
 
 **Earn deposit: ledger first, then the row** — same as svc-token's `stake`, same reason. The reverse order would let a position exist with nothing behind it: a position we would pay interest on that nobody funded.
 
-**Interest: claim the day, post, record.** If the reserve cannot cover the day, **nothing moves** and the claim rolls back so the day is re-runnable the moment the pool is funded. That is the loud failure §8.1 needs — a pool that cannot pay its advertised rate is an operator problem today, not a shortfall discovered at maturity.
+**Interest: claim the UTC day, post, record.** `YYYY-MM-DD` UTC is both the idempotency day and the eligibility boundary. A position must be open before `00:00:00.000Z` for that day; a scheduler running late cannot pay a full day to a position opened after midnight. If the reserve cannot cover the day, **nothing moves** and the claim rolls back so the day is re-runnable the moment the pool is funded. That is the loud failure §8.1 needs — a pool that cannot pay its advertised rate is an operator problem today, not a shortfall discovered at maturity.
+
+**No configured pool means no configured rate, not zero yield.** `earn.pools` and the all-pools accrual door refuse `bank.earn_rate_unset` instead of returning an empty success that makes an unconfigured deployment look live. Individual pool operations still resolve the named pool and use only its stored operator-set APR; svc-bank has no default APR and invents none.
 
 **Interest is paid to `available`, never added to the principal.** Compounding would mean writing a new principal figure every day, and a money column that changes daily is a running total wearing a different name.
 
@@ -438,16 +440,17 @@ pnpm --filter @intafaced/svc-bank test
 
 **~300+ cases across eight files**, including loans, cards, and ramps suites — not a frozen exact count (it moves with craft PRs). Layout on tip (approximate, re-count with `rg -c '^\s*(it|test)\(' services/svc-bank --glob '*.test.ts'`):
 
-| File                                  | Covers                                            |
-| ------------------------------------- | ------------------------------------------------- |
-| `bank-service.test.ts`                | spaces, transfers (incl. pause/resume), earn, ops |
-| `loans/loans.test.ts`                 | open / repay / LTV / liquidation ladder           |
-| `loans/margin-call-publisher.test.ts` | `intafaced.bank.margin_call.created` publish      |
-| `cards/cards.test.ts`                 | issue / auth / capture / reverse / cashback / JIT |
-| `cards/cards.reachable.test.ts`       | composition-root reachability + scopes            |
-| `ramps/ramps.test.ts`                 | crypto ledger half + fiat refuse                  |
-| `ramps/ramps.reachable.test.ts`       | composition-root reachability                     |
-| `router.mount.test.ts`                | mount boundary / unsigned principal               |
+| File                                   | Covers                                            |
+| -------------------------------------- | ------------------------------------------------- |
+| `bank-service.test.ts`                 | spaces, transfers (incl. pause/resume), earn, ops |
+| `loans/loans.test.ts`                  | open / repay / LTV / liquidation ladder           |
+| `loans/margin-call-publisher.test.ts`  | `intafaced.bank.margin_call.created` publish      |
+| `cards/cards.test.ts`                  | issue / auth / capture / reverse / cashback / JIT |
+| `cards/cards.reachable.test.ts`        | composition-root reachability + scopes            |
+| `cards/sovereign-card-product.test.ts` | D26-P1-B3 mounted JIT refuse-invent / freeze seal |
+| `ramps/ramps.test.ts`                  | crypto ledger half + fiat refuse                  |
+| `ramps/ramps.reachable.test.ts`        | composition-root reachability                     |
+| `router.mount.test.ts`                 | mount boundary / unsigned principal               |
 
 All against real Postgres with `MemoryLedger` as the ledger — the reference implementation the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Each file takes its **own database** rather than its own schema (#429), so concurrent worktrees do not truncate each other. The suite skips itself cleanly when Postgres is unavailable.
 
@@ -516,7 +519,7 @@ What `card-sim` **does** get you is the ledger half, end to end, over real posti
 ## Sockets (§13)
 
 - **`socket.live-issuer`** — a card programme needs a **card-scheme sponsor and an issuing BIN**. That is a licence and a commercial relationship, not code: no amount of engineering time produces one, which is precisely the §13 test. `CardIssuerAdapter` is written against the shape a live issuer would implement, and the only implementation in the tree is `cardSim()`, which says on every surface that it is a simulator. Pointing working code at real money is additionally Class X.
-- **`socket.psp-partners`** — fiat on/off ramp needs a **bank/PSP partner and money-transmission permission**. Same §13 test. `bank.ramps` crypto ledger half does not claim this function; fiat refuses `bank.fiat_ramp_socket` by name.
+- **`socket.psp-partners`** — fiat on/off ramp needs a **bank/PSP partner and money-transmission permission**. Same §13 test. Code path is `PayFiatRampPort` (svc-pay `RailAdapter` plane): empty/sandbox/absent refuse `bank.fiat_ramp_socket` before any row; a live injected rail books only via ledger-client recipes against that pay rail id (no second book). Commercial partner + Class X remain the socket.
 - **`ledger.history`** — spend analytics needs a transaction-history read that svc-ledger does not expose yet. Declaring it is a `packages/contracts` + svc-ledger PR that must land first (§1). `createLedgerHistory()` is written against the shape and **fails loudly** rather than returning an empty answer: a spend view that silently reports zero is worse than one that is unavailable, because the user cannot tell "you spent nothing" from "we could not ask".
 - **Chunked interest keys** — one accrual is one ledger transaction per (pool, day). When a pool outgrows a single transaction the key gains a deterministic chunk index, `bank.interest:<poolId>:<date>:<chunk>`, which keeps the same property per chunk. The shape was chosen so that change is additive.
 
@@ -524,19 +527,18 @@ What `card-sim` **does** get you is the ledger half, end to end, over real posti
 
 Code for loans, cards (ledger half), ramps (crypto half), and standing-order pause/resume is **on main**. What is not agent-finishable:
 
-| Residual                                    | Why it is not craft                                                                                                                                                                                          |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Fiat partner** (`socket.psp-partners`)    | Bank/PSP + money-transmission permission — commercial + regulatory                                                                                                                                           |
-| **Live card issuer** (`socket.live-issuer`) | Card-scheme sponsor + issuing BIN — licence; Class X to point at real money                                                                                                                                  |
-| **Earn day-boundary product call**          | Accrual date is `YYYY-MM-DD` **UTC** today (`accrualDate` in earn interest). Whether that is the product rule users should see (timezone, market day, cutoff) is a product decision, not a missing procedure |
+| Residual                                    | Why it is not craft                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| **Fiat partner** (`socket.psp-partners`)    | Bank/PSP + money-transmission permission — commercial + regulatory          |
+| **Live card issuer** (`socket.live-issuer`) | Card-scheme sponsor + issuing BIN — licence; Class X to point at real money |
 
-`bank.sovereign-card` remains a separate tracker feature (product surface beyond the ledger half) and is **not** claimed done by this service's card simulator.
+`bank.sovereign-card` **custodial JIT half** is on main (#1174) and sealed at the mounted door (D26-P1-B3 / `sovereign-card-product.test.ts`): refuse invent FX (`bank.mark_missing`), freeze rate at auth, ledger-only funding asset. The **on-chain / smart-account funding half** remains Shehzad (`protocol.smart-accounts`); the live card rail remains `socket.live-issuer`.
 
-## Ramps: crypto ledger half vs fiat socket
+## Ramps: crypto ledger half vs fiat via pay adapters
 
-| Half       | Missing in the WORLD                                    | Verdict                                            |
-| ---------- | ------------------------------------------------------- | -------------------------------------------------- |
-| **Crypto** | Nothing for the ledger half. Chain confirm/send is pay. | **Built** as ledger sandbox (`bank-crypto-ledger`) |
-| **Fiat**   | A bank/PSP partner and money-transmission permission    | **§13 forever.** Lands on `socket.psp-partners`    |
+| Half       | Missing in the WORLD                                    | Verdict                                                              |
+| ---------- | ------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Crypto** | Nothing for the ledger half. Chain confirm/send is pay. | **Built** as ledger sandbox (`bank-crypto-ledger`)                   |
+| **Fiat**   | A bank/PSP partner and money-transmission permission    | **Code path Done (D26-P1-B4)** via `PayFiatRampPort`; partner is §13 |
 
-`BANK_RAMP_MODE=crypto-ledger` books deposits/withdrawals against rail `bank-crypto-ledger` — deliberately distinct from svc-pay's `crypto-native` boundary so an operator credit here cannot desync pay's chain reconciliation. `simulated: true` is never omitted. Live broadcast and inbound confirmation stay in svc-pay; Class X is pointing working code at real money.
+`BANK_RAMP_MODE=crypto-ledger` books deposits/withdrawals against rail `bank-crypto-ledger` — deliberately distinct from svc-pay's `crypto-native` boundary so an operator credit here cannot desync pay's chain reconciliation. `simulated: true` is never omitted. Fiat on/off with a live pay adapter uses the same ledger-client recipes against the pay rail id; `ramps-fiat-product.test.ts` enters through the mounted router. Live broadcast and inbound confirmation stay in svc-pay; Class X is pointing working code at real money.

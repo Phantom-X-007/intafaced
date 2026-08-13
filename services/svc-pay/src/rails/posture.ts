@@ -419,12 +419,12 @@ export interface PublicCheckoutRailDecision {
 /**
  * Which registered rail serves a public checkout, in configured order.
  *
- * NOT ROUTING. Smart routing — geo, method, amount band, risk score, live
- * approval rates — is its own tracker feature (`pay.routing`), and when it lands
- * it replaces this function and nothing else. What this does is far dumber and
- * deliberately so: walk an operator-configured preference list and take the
- * first entry that is registered, can run the whole inbound lifecycle, is
- * answering, and passes the gate above.
+ * NOT ROUTING ALONE. Smart routing — geo, method, risk — lives in
+ * `services/svc-pay/src/routing/decide.ts` (`selectSmartCheckoutRail`) and
+ * replaces this preference walk when those dimensions are required. What this
+ * does is far dumber and deliberately so: walk an operator-configured preference
+ * list and take the first entry that is registered, can run the whole inbound
+ * lifecycle, is answering, and passes the gate above.
  *
  * THE PREFERENCE LIST IS CONFIGURATION, NEVER A REQUEST FIELD. That is the whole
  * reason this function exists rather than a `railAdapter` input: a hosted

@@ -208,6 +208,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.cashback_pot_unfunded':
       case 'bank.no_ramp_rail':
       case 'bank.fiat_ramp_socket':
+      case 'bank.earn_rate_unset':
       case 'bank.auto_invest_rate_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
 
@@ -1801,7 +1802,8 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   });
 
   /**
-   * RAMPS — crypto ledger half. Fiat is socket.psp-partners and refuses by name.
+   * RAMPS — crypto ledger half. Fiat is socket.psp-partners commercially; the
+   * code path is svc-pay RailAdapter (`fiatVia`) — refuse or ledger-client wire.
    *
    * `simulated` is never omitted: this surface does not broadcast to a chain and
    * never claims a live PSP. Live confirmation stays in svc-pay; Class X is a
@@ -1813,6 +1815,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     displayName: z.string(),
     cryptoRail: z.string().nullable(),
     fiatLeg: z.literal('socket.psp-partners'),
+    fiatVia: z.literal('svc-pay.RailAdapter'),
   });
 
   const onrampOutput = z.object({

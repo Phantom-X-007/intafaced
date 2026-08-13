@@ -4,6 +4,8 @@
  *   (scanner/navigator/support/merchant/copy-intel route tests; residual table).
  * Break: a new agent mount could ship without a dark billedAmount:'0' pin.
  * Done bar: each of the five run-session-route test files asserts dark refuse + billedAmount '0'.
+ * Paired (D26-P2-01h): metering-public-doors-promise-falsify.test.ts runs the same
+ *   five doors via createCaller and pins metering-off never feeCharges.
  * Class: N
  */
 import { readFileSync } from 'node:fs';

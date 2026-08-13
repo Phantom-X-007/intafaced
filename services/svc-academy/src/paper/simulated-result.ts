@@ -65,15 +65,20 @@ export const SIMULATED_DISCLAIMER =
   'Simulated result from a paper trading drill. No value moved, no ledger entry exists, and nothing here is withdrawable.';
 
 /**
- * The seal. Four independent assertions rather than one boolean, because each
+ * The seal. Five independent assertions rather than one boolean, because each
  * answers a different question a reader actually has, and a client that checks
  * only one still cannot mistake this for real money.
+ *
+ * `realMoney: false` is the D26-P1-C4 harden: even if a reader ignores
+ * `realLedger` / `withdrawable`, the payload still says out loud that nothing
+ * here is real money.
  */
 export type SimulatedSeal = {
   readonly simulated: true;
   readonly venue: typeof SIMULATED_VENUE;
   readonly realLedger: false;
   readonly withdrawable: false;
+  readonly realMoney: false;
   readonly disclaimer: string;
 };
 
@@ -82,6 +87,7 @@ export const SIMULATED_SEAL: SimulatedSeal = {
   venue: SIMULATED_VENUE,
   realLedger: false,
   withdrawable: false,
+  realMoney: false,
   disclaimer: SIMULATED_DISCLAIMER,
 };
 
@@ -102,6 +108,7 @@ export function isSealedSimulated(value: unknown): value is Sealed<unknown> {
     v['venue'] === SIMULATED_VENUE &&
     v['realLedger'] === false &&
     v['withdrawable'] === false &&
+    v['realMoney'] === false &&
     typeof v['disclaimer'] === 'string' &&
     (v['disclaimer'] as string).length > 0 &&
     'result' in v
@@ -125,7 +132,7 @@ export function assertSealedSimulated<T>(value: Sealed<T>): Sealed<T> {
 
 /** One-line label for logs, exports and operator boards. */
 export function simulatedLabelLine(): string {
-  return `simulated=1 venue=${SIMULATED_VENUE} realLedger=0 withdrawable=0`;
+  return `simulated=1 venue=${SIMULATED_VENUE} realLedger=0 withdrawable=0 realMoney=0`;
 }
 
 // ── Trade-published fills ───────────────────────────────────────────────────

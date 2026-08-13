@@ -222,13 +222,9 @@ const PINNED = {
     ],
   ],
 
-  // 10 — services/svc-pay
+  // 9 — services/svc-pay (broadcast-store TS2352 pin retired — cast via unknown)
   'services/svc-pay': [
     [1, "src/ledger-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"],
-    [
-      1,
-      "src/rails/broadcast-store.test.ts | TS2352 | Conversion of type '(strings: TemplateStringsArray, ...values: unknown[]) => Promise<{ idempotency_key: string; }[] | { tx_hash: string; }[]>' to type 'BroadcastSql & { rows: Map<string, string>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.",
-    ],
     [4, "src/rails/posture.test.ts | TS2339 | Property 'message' does not exist on type 'Error | { txHash: string; }'."],
     [
       1,

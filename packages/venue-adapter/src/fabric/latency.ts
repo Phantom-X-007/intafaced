@@ -83,17 +83,21 @@ export type {
  * What it does instead is set `VenueHealth` — `healthy` and `latencyMs` — which
  * the existing router already consumes: an unhealthy venue is EXCLUDED AND
  * REPORTED in `RoutePlan.rejected` (§27's requirement, exactly), and `latencyMs`
- * breaks ties between venues at the same price. That is the whole wiring, and
- * it is one function: `healthFromGrade`.
+ * breaks ties between venues at the same price. That wiring is two functions:
+ * `routingWeightFromGrade` (score-feed eligibility — unscored is **zero**) and
+ * `healthFromGrade` (turns weight zero into `healthy: false` the router already
+ * understands).
  *
  * Producing the grade is this file's job. CONSUMING it — an §28 cost model that
- * weights the grade against expected impact and transfer cost — belongs to
- * `execution.sor`, which is a separate boarded row and is blocked. §28:770 makes
- * the grade ONE INPUT to that model, never a ranking rule of its own, and
- * D-S-06 (`docs/adr/2026-08-04-matching-dual-target.md`, Accepted) leaves the
- * bounded, tested 5 bps internal tie-break in `router.ts` as the only permitted
- * preference. A second latency-shaped ranking rule is therefore not a matter of
- * taste here; it is forbidden.
+ * requires a graded latency term alongside fees, expected impact and transfer
+ * cost — lives in `cost-model.ts` / `planRoute({ costTermsByVenue })`
+ * (D26-P1-X3). §28:770 makes the grade ONE INPUT to that model, never a ranking
+ * rule of its own, and D-S-06 leaves the bounded, tested 5 bps internal
+ * tie-break in `router.ts` as the only permitted preference. A second
+ * latency-shaped ranking rule is therefore not a matter of taste here; it is
+ * forbidden. Connect's score feed stops at eligibility weight (D26-P1-X2):
+ * unscored → 0. Letter→bps scaling stays an owner magnitude (D-S-14), not
+ * invented on this surface.
  */
 
 /**
@@ -318,8 +322,29 @@ export class VenueLatencyGrader {
  */
 export const UNMEASURED_LATENCY_MS = Number.MAX_SAFE_INTEGER;
 
+/**
+ * Connect score-feed routing weight (D26-P1-X2 / D-S-18).
+ *
+ * An unscored adapter (`grade: null`, `!isGraded`) contributes **zero**. A
+ * graded adapter contributes **one** — eligibility only. Letter scaling,
+ * expected impact, and transfer cost belong to `execution.sor` (§28); inventing
+ * that cost model on the Connect surface would reopen a boarded deferral.
+ *
+ * Consumers that need a numeric weight MUST call this before using the letter.
+ * Returning 0 for null is the safety property; treating null as "no news is
+ * good news" is the defect D-S-18 forbids. `healthFromGrade` reads this same
+ * gate so weight and routability cannot drift apart.
+ */
+export function routingWeightFromGrade(grade: VenueLatencyGrade): 0 | 1 {
+  return isGraded(grade) ? 1 : 0;
+}
+
 export function healthFromGrade(grade: VenueLatencyGrade, lastUpdate: Date): VenueHealth {
-  if (!isGraded(grade)) {
+  // D26-P1-X2: weight zero and "not healthy" are the same gate. The score feed
+  // is consulted first so a future change cannot mark an unscored venue healthy
+  // while still advertising weight zero (or the reverse). `isGraded` narrows
+  // the graded branch for the type checker.
+  if (routingWeightFromGrade(grade) === 0 || !isGraded(grade)) {
     return {
       healthy: false,
       latencyMs: UNMEASURED_LATENCY_MS,

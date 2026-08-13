@@ -5,7 +5,7 @@ import {
   SANCTIONS_REGIONS_ENV,
   SANCTIONS_SOURCE_ENV,
 } from '@intafaced/config';
-import { ANALYTICS_REPLICA_URL_ENV } from '@intafaced/contracts';
+import { ANALYTICS_ETL_WATERMARK_AT_ENV, ANALYTICS_REPLICA_URL_ENV } from '@intafaced/contracts';
 import { EdgeComplianceQueue, edgeComplianceHonesty } from './compliance-honesty.js';
 
 /**
@@ -157,5 +157,26 @@ describe('edge analytics honesty residual', () => {
     expect(h.analytics.surface.mayLabelLive).toBe(false);
     // No lag → unavailable lag_unknown, not ok with fake points.
     expect(h.analytics.surface.status).not.toBe('ok');
+  });
+
+  it('ETL watermark present does not paint live cubes (D26-P1-O4)', () => {
+    const h = edgeComplianceHonesty({
+      ...cleanEnv(),
+      [ANALYTICS_REPLICA_URL_ENV.ledger]: 'postgres://analytics_ro:x@localhost:5433/wh',
+      [ANALYTICS_ETL_WATERMARK_AT_ENV]: '2026-08-12T10:00:00.000Z',
+    });
+    expect(h.analytics.etlWatermark).toBe('present');
+    expect(h.analytics.etlWatermarkAt).toBe('2026-08-12T10:00:00.000Z');
+    expect(h.analytics.surface.mayLabelLive).toBe(false);
+    expect(h.analytics.surface.status).not.toBe('ok');
+  });
+
+  it('junk ETL watermark env is absent — fail closed', () => {
+    const h = edgeComplianceHonesty({
+      ...cleanEnv(),
+      [ANALYTICS_ETL_WATERMARK_AT_ENV]: 'not-a-timestamp',
+    });
+    expect(h.analytics.etlWatermark).toBe('absent');
+    expect(h.analytics.etlWatermarkAt).toBeNull();
   });
 });

@@ -132,6 +132,10 @@ Response includes a **signing secret** (once).
 - Body is **state** (`payment.captured` with current payment shape), not an instruction to charge again.
 - Permanent failures: endpoint is disabled; inspect with  
   `GET /api/pay/v1/webhook-deliveries?merchantId=&status=failed`.
+- After you fix the receiver:  
+  `POST /api/pay/v1/webhook-endpoints/:id/enable?merchantId=` (resets the failure counter).
+
+Every payment response includes `mode: "sandbox" | "live"` from the rail posture — tell them apart without guessing.
 
 Webhooks never move value by themselves.
 

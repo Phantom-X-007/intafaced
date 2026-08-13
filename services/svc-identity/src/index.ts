@@ -103,6 +103,9 @@ const auth = new AuthService(
       .filter(Boolean),
   },
   env.IDENTITY_TOTP_SECRET_KEY,
+  undefined,
+  undefined,
+  env.IDENTITY_MAX_SUB_ACCOUNTS,
 );
 
 const referral = new ReferralService(sql);

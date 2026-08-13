@@ -7,11 +7,18 @@ import { MarketError, type VendorService } from '../vendor-service.js';
  *
  * No second balance book. Price and commission move only via `marketPurchase`.
  * Listing eligibility is re-computed from VendorService on every write that
- * cares — never a stored `is_listed` flag.
+ * cares — never a stored `is_listed` flag. Stake law stays in VendorService;
+ * this class owns the commission half of the vendor→commerce lifecycle.
  *
- * House commission bps is owner-gated. When the deployment has no rate
- * configured (`commissionBps === null`), every purchase refuses
- * `market.commission_not_configured` before any row or post.
+ * House commission bps is owner-gated (D26-P1-M1 / M2 / D26-P0-10). When the
+ * deployment has no rate configured (`commissionBps === null`):
+ *   - createListing refuses before insert or slot claim
+ *   - publicListings returns [] (shopfront does not advertise unsellable stock)
+ *   - purchase refuses before any row or post
+ * Never invent a platform rate. Explicit `0` is an owner free-commission
+ * decision, not silence. Ledger recipe refuses blank/invalid bps so a
+ * miswired caller cannot invent free commission at post time (#1761 owns
+ * listing/premium fee recipe deepen — do not dual-edit market.ts here).
  */
 
 export type OfferType = 'one_time' | 'subscription';
@@ -135,6 +142,20 @@ export class CommerceService {
     };
   }
 
+  /**
+   * Refuse-closed commission gate for every money-adjacent commerce door.
+   * Blank env is not free commission — that requires an explicit owner `0`.
+   */
+  private requireCommissionConfigured(): number {
+    if (this.config.commissionBps === null) {
+      throw new MarketError(
+        'House commission rate is not configured — marketplace commerce refuses until the owner sets MARKET_HOUSE_COMMISSION_BPS',
+        'market.commission_not_configured',
+      );
+    }
+    return this.config.commissionBps;
+  }
+
   async createListing(input: {
     userId: string;
     title: string;
@@ -144,6 +165,10 @@ export class CommerceService {
     /** Decimal string. */
     price: string;
   }): Promise<ListingRecord> {
+    // Commission law before stake burn: a blank rate must not consume a slot
+    // for inventory that can never settle (D26-P1-M2).
+    this.requireCommissionConfigured();
+
     const title = input.title.trim();
     const description = input.description.trim();
     const assetId = input.assetId.trim();
@@ -249,6 +274,9 @@ export class CommerceService {
    * after insert-before-claim must not sell). Stake outages drop the row like
    * `listedVendors` — nobody rather than a 500 for the whole page.
    *
+   * Blank house commission → `[]`. Advertising inventory that purchase will
+   * refuse invents a working marketplace; empty is the refuse-closed shopfront.
+   *
    * Subscription offers stay out of the shopfront until Stage C3 — purchase
    * already refuses them; listing them would advertise an always-failing buy.
    *
@@ -258,6 +286,10 @@ export class CommerceService {
    * earliest listings).
    */
   async publicListings(opts?: { limit?: number }): Promise<ListingRecord[]> {
+    // Blank commission → empty shopfront. Do not advertise inventory that
+    // purchase will refuse; that would invent a working marketplace.
+    if (this.config.commissionBps === null) return [];
+
     const limit = Math.min(opts?.limit ?? 50, 50);
     const rows = await this.sql<ListingRow[]>`
       SELECT * FROM market.listings
@@ -289,7 +321,7 @@ export class CommerceService {
   /**
    * One-time purchase. Subscription listings refuse by name until Stage 3.
    *
-   * Order: eligibility → commission configured → claim row → re-check sell
+   * Order: commission configured → eligibility → claim row → re-check sell
    * gates → post from the claim snapshot → settle only while still pending.
    * Crash after post before settle: re-drive posts the same key and finishes
    * using the purchase row's price/bps (not a live config that may have changed).
@@ -299,13 +331,7 @@ export class CommerceService {
       throw new MarketError('purchaseId is required', 'market.purchase_id_required');
     }
 
-    if (this.config.commissionBps === null) {
-      throw new MarketError(
-        'House commission rate is not configured — purchases refuse until the owner sets MARKET_HOUSE_COMMISSION_BPS',
-        'market.commission_not_configured',
-      );
-    }
-    const commissionBps = this.config.commissionBps;
+    const commissionBps = this.requireCommissionConfigured();
 
     const listing = await this.getListing(input.listingId);
     if (!listing || listing.status !== 'active') {

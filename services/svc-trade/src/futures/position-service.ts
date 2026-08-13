@@ -39,6 +39,7 @@ import { planClose } from './close-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
 import {
   DEFAULT_FUTURES_MARK_POLICY,
+  acceptableForEntry,
   acceptableForLiquidation,
   acceptableForMarking,
   markMissing,
@@ -159,6 +160,12 @@ export interface PositionServiceDeps {
    */
   maxLeverage?: Amount;
   now?: () => Date;
+  /**
+   * DIRECTION:34 — ADL disclosure gate. When set (production), `open()` refuses
+   * until the trader has ack'd in-product disclosure. Omitted in hermetic unit
+   * tests that are not proving the public door; public-door + index always wire it.
+   */
+  assertAdlDisclosureAcked?: (userId: string) => Promise<void>;
 }
 
 /** Why a position is frozen waiting for a mark — futures-namespaced refuse codes. */
@@ -279,13 +286,25 @@ export class PositionService {
     return { ok: true, mark: quoted };
   }
 
-  /** Open path: darkness refuses. Close path uses `tryMarkForMarking` + freeze. */
+  /**
+   * Open path: darkness refuses, and so does last-trade (DIRECTION MVP-1).
+   * Close path uses `tryMarkForMarking` + freeze — losing exits may still mark
+   * on `last`; entry may not.
+   */
   private async markFor(marketId: string, symbol: string, at: Date, authorisesSize: Amount | null): Promise<FuturesQuotedMark> {
     const got = await this.tryMarkForMarking(marketId, symbol, at, authorisesSize);
     if (!got.ok) {
       throw new FuturesError(
         got.reason === 'trade.mark_missing' ? got.detail : `Refusing to value this position — ${got.detail}`,
         got.reason,
+        503,
+      );
+    }
+    const entry = acceptableForEntry(got.mark, at, this.markPolicy);
+    if (!entry.ok) {
+      throw new FuturesError(
+        entry.code === 'trade.mark_missing' ? (entry.reason ?? 'mark missing') : `Refusing to value this position — ${entry.reason}`,
+        entry.code ?? 'trade.mark_unusable',
         503,
       );
     }
@@ -365,6 +384,14 @@ export class PositionService {
      */
     if (this.deps.profitSource == null) {
       throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 503);
+    }
+
+    /**
+     * DIRECTION:34 — disclosure before open. Wired in production via
+     * `assertAdlDisclosureAcked`; missing ack is a named 403, not a silent open.
+     */
+    if (this.deps.assertAdlDisclosureAcked) {
+      await this.deps.assertAdlDisclosureAcked(input.userId);
     }
 
     /**

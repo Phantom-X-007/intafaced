@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
 import { ModelGateway } from './gateway/gateway.js';
@@ -15,6 +17,8 @@ import type { CompletionRequest } from './providers/provider.js';
 import { ProviderError, AgentError } from './errors.js';
 import { AgentRuntime, RefusedError } from './runtime.js';
 import { hashAction } from './fleet/audit.js';
+import { createAgentsRouter } from './router.js';
+import type { AgentsRouterDeps } from './router.js';
 
 /**
  * svc-agents — the fleet runtime end to end.
@@ -529,6 +533,31 @@ if (!available) {
       expect(stillOpen).toContain(call.windowId!);
     });
 
+    it('metering-off settleSession also refuses feeCharge for leftover windows', async () => {
+      // D26-P1-A6: admin/session.close settleSession must inherit the same gate.
+      const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
+      const session = await on.openSession({ userId: USER_A, agentId: 'probe' });
+      const call = await on.think({
+        sessionId: session.id,
+        requestId: 'r-then-off-session',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      expect(call.windowId).not.toBeNull();
+
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const results = await off.settleSession(session.id);
+      expect(results.length).toBeGreaterThan(0);
+      for (const r of results) {
+        expect(r.settled).toBe(false);
+        expect(r.amount).toBe(0n);
+        expect(r.chargeTxId).toBeNull();
+      }
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      expect(await meter.openWindows(session.id)).toContain(call.windowId!);
+    });
+
     it('keeps each user’s meter to themselves', async () => {
       const a = await open(USER_A);
       const b = await open(USER_B);
@@ -922,6 +951,92 @@ if (!available) {
       // The routing task travels; the model does not.
       expect(serialised).toContain('plan');
       expect(serialised).not.toContain('reasoning-lg');
+    });
+  });
+
+  // ── D26-P2-01h: real metering-off kill-switch through public tRPC doors ───
+  // Paired with metering-public-doors-promise-falsify.test.ts (DB-free createCaller
+  // matrix). Lives here so TRUNCATE stays single-owner with this Postgres suite.
+
+  describe('D26-P2-01h public doors — real AgentRuntime metering-off', () => {
+    const DOORS_SECRET = 'an-agents-runtime-metering-doors-secret';
+    const doorsEdge = createEdgeContext({ secret: DOORS_SECRET, serviceName: 'svc-agents' });
+
+    function doorsPrincipal(overrides: Partial<Principal> = {}): Principal {
+      return {
+        sub: USER_A,
+        userId: USER_A,
+        sid: '22222222-2222-4222-8222-222222222222',
+        scopes: ['agents:read', 'agents:execute', 'admin:write'],
+        tier: 'none',
+        mfa: false,
+        expiresAt: new Date(Date.now() + 60_000),
+        ...overrides,
+      } as Principal;
+    }
+
+    function doorsSigned(p: Principal = doorsPrincipal()) {
+      const raw = encodePrincipal(p);
+      return doorsEdge({
+        headers: {
+          'x-intafaced-principal': raw,
+          'x-intafaced-principal-sig': signPrincipalHeader(raw, DOORS_SECRET, 'DE'),
+          'x-intafaced-region': 'DE',
+        },
+        id: 'req-doors',
+      });
+    }
+
+    function routerDeps(rt: AgentRuntime): AgentsRouterDeps {
+      return { runtime: rt, gateway, meter, feeAssetId: 'IFC' };
+    }
+
+    it('run.complete through createCaller never bills / never feeCharges', async () => {
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const session = await off.openSession({ userId: USER_A, agentId: 'probe' });
+      const result = await createAgentsRouter(routerDeps(off)).createCaller(doorsSigned()).run.complete({
+        sessionId: session.id,
+        requestId: 'doors-off-complete-1',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+
+      expect(result.metered).toBe(false);
+      expect(result.cost).toBe('0');
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+    });
+
+    it('usage.settle / settleSession / session.close refuse leftover windows without feeCharge', async () => {
+      const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
+      const session = await on.openSession({ userId: USER_A, agentId: 'probe' });
+      const call = await on.think({
+        sessionId: session.id,
+        requestId: 'doors-then-off',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      expect(call.metered).toBe(true);
+      expect(call.windowId).not.toBeNull();
+
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const caller = createAgentsRouter(routerDeps(off)).createCaller(doorsSigned());
+
+      const settle = await caller.usage.settle({ sessionId: session.id, windowId: call.windowId! });
+      expect(settle).toMatchObject({ amount: '0', settled: false, assetId: 'IFC' });
+
+      const settleAll = await caller.usage.settleSession({ sessionId: session.id });
+      expect(settleAll.settlements.every((s) => s.settled === false && s.amount === '0')).toBe(true);
+
+      const closed = await caller.session.close({ sessionId: session.id });
+      expect(closed.status).toBe('closed');
+
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const stillOpen = await meter.openWindows(session.id);
+      expect(stillOpen).toContain(call.windowId!);
     });
   });
 }

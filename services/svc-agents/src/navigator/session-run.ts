@@ -292,6 +292,7 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
               plane: input.plane,
               tierLaw: input.tierLaw,
               userTier: input.userTier,
+              requesterUserId: input.userId,
               now,
               quote: ask.quote ?? null,
               markets: ask.markets ?? null,

@@ -18,6 +18,12 @@ export type BankErrorCode =
   | 'bank.pool_not_found'
   | 'bank.pool_closed'
   | 'bank.pool_underfunded'
+  /**
+   * No open pool carries an operator-configured APR for the requested earn
+   * surface. Empty does not mean zero yield: the product refuses rather than
+   * inventing a plausible default rate.
+   */
+  | 'bank.earn_rate_unset'
   | 'bank.below_minimum'
   | 'bank.native_asset_not_earnable'
   | 'bank.position_not_found'

@@ -40,6 +40,7 @@ const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
 const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
+const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
 
 const SELLER = '11111111-1111-4111-8111-111111111111';
 const BUYER = '22222222-2222-4222-8222-222222222222';
@@ -104,6 +105,7 @@ if (!available) {
     await tx.unsafe(fieldGuardMigration);
     await tx.unsafe(disputeRulingMigration);
     await tx.unsafe(lateSettleErrorMigration);
+    await tx.unsafe(disputeOpenOriginMigration);
   });
 
   const instruments = new InstrumentService(sql);
@@ -844,6 +846,10 @@ if (!available) {
         'disputes.list': {},
         'disputes.get': { tradeId: trade.id },
         'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
+        // Moderator backlog counts only (open/overdue/escalated/neverSeen) —
+        // no instrument id, no account details, no dispute row join. Stranger
+        // without allowlist/moderation env refuses; probe asserts no canary.
+        'disputes.backlog': {},
         // Operator-only late settlement queue — no instrument fields; stranger refuses.
         'ops.lateSettlements': {},
         'reputation.get': { userId: SELLER },
@@ -876,10 +882,12 @@ if (!available) {
         // details, by construction: `merchant-service.ts` selects from
         // `p2p_merchants` and `p2p_merchant_events` only.
         //
-        // `me` and `submitApplication` are self-only — neither takes a userId,
-        // so a stranger reaches their own (absent) record. `decide` and
-        // `history` need `admin:compliance`, which a stranger does not hold.
-        // Probed as a stranger anyway: the assertion is on what comes back.
+        // `apiAccess`, `me` and `submitApplication` are self-only — none takes
+        // a userId, so a stranger reaches their own standing only. `apiAccess`
+        // returns literals plus that status and never joins instrument tables.
+        // `decide` and `history` need `admin:compliance`, which a stranger does
+        // not hold. Probed anyway: the assertion is on what comes back.
+        'merchants.apiAccess': undefined,
         'merchants.me': undefined,
         // Offer-ceiling posture only — decimal strings / null from env policy.
         // Never joins instrument tables (merchant-limits.ts pure functions).

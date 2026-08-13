@@ -152,6 +152,8 @@ describe('copy_intel.stats metered session run', () => {
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
     expect(result.stats).toHaveLength(2);
+    // Tip #1708: fixture/input order (directory leaderId sort is presentDirectory only).
+    expect(result.stats.map((s) => s.leaderId)).toEqual(['leader-a', 'leader-b']);
     expect(result.fixturesAccepted).toBe(2);
     expect(result.writesRefusedByGuardrail).toBe(0);
     // read ×2 then audited write ×2 — write path is the mountain promise
@@ -216,6 +218,22 @@ describe('copy_intel.stats metered session run', () => {
     expect(fake.openCalls).toBe(0);
     expect(result.metering.sessionId).toBeNull();
     expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('D26-P1-A5: refuses returns-ranked board before opening a session', async () => {
+    const fake = new FakeRuntime();
+    await expect(
+      runCopyIntelStatsSession({
+        ...baseInput(fake),
+        fixtures: [fixture('leader-a')],
+        rankBy: 'realisedPnl',
+      }),
+    ).rejects.toMatchObject({
+      code: 'agents.refused',
+      userMessageKey: 'agents.copy_intel.unavailable',
+      userMessageParams: { reason: 'returns_ranked_board_forbidden', rankBy: 'realisedPnl' },
+    });
+    expect(fake.openCalls).toBe(0);
   });
 
   it('is empty — not a session — when nothing was asked for', async () => {

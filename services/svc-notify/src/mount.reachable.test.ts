@@ -205,15 +205,27 @@ describe('svc-notify serves its router over a real socket', () => {
     const { base } = await mount();
     const res = await call(base, 'notify.channels', { headers: edgeHeaders() });
     expect(res.status).toBe(200);
-    const channels = data(res.body) as readonly { channel: string; available: boolean; reason: string | null; requires: string[] }[];
+    const channels = data(res.body) as readonly {
+      channel: string;
+      available: boolean;
+      reason: string | null;
+      requires: string[];
+      socket: string | null;
+    }[];
 
-    expect(channels.find((c) => c.channel === 'inapp')).toMatchObject({ available: true, reason: null, requires: [] });
+    expect(channels.find((c) => c.channel === 'inapp')).toMatchObject({
+      available: true,
+      reason: null,
+      requires: [],
+      socket: null,
+    });
 
     for (const channel of ['email', 'push', 'sms'] as const) {
       expect(channels.find((c) => c.channel === channel)).toMatchObject({
         available: false,
         reason: 'channel.not_configured',
         requires: [`NOTIFY_${channel.toUpperCase()}_GATEWAY_URL`, `NOTIFY_${channel.toUpperCase()}_GATEWAY_TOKEN`],
+        socket: `socket.notify-${channel}`,
       });
     }
   });

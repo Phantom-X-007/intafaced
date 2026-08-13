@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, formatAmount, parseAmount as amt, houseFees, userAvailable, recipes } from '../index.js';
-import { marketPurchase } from './market.js';
+import { marketListingFee, marketPremiumPlacement, marketPurchase } from './market.js';
 import { InvalidEntryError } from '../types.js';
 
 const BUYER = '11111111-1111-4111-8111-111111111111';
@@ -166,5 +166,91 @@ describe('marketPurchase', () => {
         expect(debitSum).toBe(price);
       }
     }
+  });
+});
+
+describe('marketListingFee (§8.7 · §13 unwired)', () => {
+  it('refuses blank listingId / non-positive amount (no invent free fee post)', () => {
+    expect(() => marketListingFee({ listingId: '  ', vendorUserId: VENDOR, assetId: 'USDT', amount: amt('1') })).toThrow(InvalidEntryError);
+    expect(() => marketListingFee({ listingId: 'l1', vendorUserId: VENDOR, assetId: 'USDT', amount: 0n })).toThrow(InvalidEntryError);
+  });
+
+  it('posts vendor → houseFees(market) once under listingId', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: VENDOR,
+        assetId: 'USDT',
+        amount: amt('100'),
+        rail: 'test',
+        railRef: 'vendor-seed',
+      }),
+    );
+
+    const body = {
+      listingId: 'listing-fee-1',
+      vendorUserId: VENDOR,
+      assetId: 'USDT',
+      amount: amt('5'),
+    };
+    const req = marketListingFee(body);
+    expect(req.idempotencyKey).toBe('market.listing_fee:listing-fee-1');
+    expect(req.reason).toBe('market.listing_fee');
+    expect(req.meta?.socket).toBe('§13');
+
+    const first = await ledger.post(req);
+    const second = await ledger.post(marketListingFee(body));
+    expect(second.id).toBe(first.id);
+    expect(formatAmount((await ledger.balance(userAvailable(VENDOR, 'USDT'))).amount)).toBe('95');
+    expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('5');
+  });
+});
+
+describe('marketPremiumPlacement (§8.7 · §13 unwired)', () => {
+  it('keys on placementId so one listing can buy placement more than once', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: VENDOR,
+        assetId: 'USDT',
+        amount: amt('50'),
+        rail: 'test',
+        railRef: 'vendor-seed-2',
+      }),
+    );
+
+    await ledger.post(
+      marketPremiumPlacement({
+        placementId: 'place-a',
+        listingId: 'l1',
+        vendorUserId: VENDOR,
+        assetId: 'USDT',
+        amount: amt('10'),
+      }),
+    );
+    await ledger.post(
+      marketPremiumPlacement({
+        placementId: 'place-b',
+        listingId: 'l1',
+        vendorUserId: VENDOR,
+        assetId: 'USDT',
+        amount: amt('10'),
+      }),
+    );
+
+    expect(formatAmount((await ledger.balance(userAvailable(VENDOR, 'USDT'))).amount)).toBe('30');
+    expect(formatAmount((await ledger.balance(houseFees('market', 'USDT'))).amount)).toBe('20');
+  });
+
+  it('refuses blank placementId', () => {
+    expect(() =>
+      marketPremiumPlacement({
+        placementId: '',
+        listingId: 'l1',
+        vendorUserId: VENDOR,
+        assetId: 'USDT',
+        amount: amt('1'),
+      }),
+    ).toThrow(InvalidEntryError);
   });
 });

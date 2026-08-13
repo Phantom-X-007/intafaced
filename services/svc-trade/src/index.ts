@@ -13,14 +13,24 @@ import { subscribeMatchingEvents } from './events.js';
 import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerPrivateRest } from './private-rest.js';
-import { PositionService } from './futures/position-service.js';
+import { PositionService, FuturesError } from './futures/position-service.js';
+import {
+  ADL_DISCLOSURE_VERSION,
+  assertAdlDisclosureAcked,
+  presentAdlDisclosureWire,
+  sqlAdlDisclosureStore,
+  AdlDisclosureError,
+} from './futures/adl-disclosure.js';
+import { presentAdlActionDisclosureWire, sqlAdlDisclosureEventStore } from './futures/adl-last-resort.js';
 import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
+import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
+import { HOUSE_MM_USER_UUID } from './spot/ids.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
 import { startEngineLedgerReconcileJobs } from './spot/engine-ledger-reconcile-jobs.js';
@@ -88,19 +98,22 @@ const bus = await JetStreamEventBus.connect({
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
   spotEnabled: env.TRADE_SPOT_ENABLED,
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
+  optionsSettlementAssetLaw: env.TRADE_OPTIONS_SETTLEMENT_ASSET_LAW,
   optionsSettlementFixing: env.TRADE_OPTIONS_SETTLEMENT_FIXING,
   marketSlippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
   convertEnabled: env.TRADE_CONVERT_ENABLED,
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
   algoEnabled: env.TRADE_ALGO_ENABLED,
+  // SD-4: same kill as TRADE_MM_SEED_ENABLED — seeded placeOrder path stays OFF by default.
+  seedPlaceEnabled: env.TRADE_MM_SEED_ENABLED,
   subAccounts,
 });
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
-// trade.otc — D-S-02 Stage. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
-// Empty TRADE_OTC_MIDS → the desk can source no price and refuses every quote,
-// which is the correct posture: a dark feed is a refusal, not a fallback.
+// trade.otc — D-S-02 / D26-P1-T2. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
+// Empty TRADE_OTC_MIDS → the desk can source no price and refuses every quote.
+// Boot-stamped mids carry asOf; published maxMidAgeSeconds makes them go dark.
 const otcDeskLaw = parseOtcDeskLawJson(env.TRADE_OTC_DESK_LAW);
 const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET);
 const otcMids = createConfigOtcMidSource(env.TRADE_OTC_MIDS);
@@ -213,11 +226,26 @@ if (profitSource) {
  * Positions price from `futuresJobs.marks` — the same venue-fabric-then-depth
  * port liquidation reads. Constructed after the jobs for that reason: there is
  * no second price path, and no request body anywhere near one.
+ *
+ * DIRECTION:34 — ADL disclosure gate is wired here so open refuses without ack
+ * even if a caller bypasses the REST door.
  */
+const adlDisclosureAcks = sqlAdlDisclosureStore(sql);
+const adlDisclosureEvents = sqlAdlDisclosureEventStore(sql);
 const positions = new PositionService(sql, ledger, {
   marks: futuresJobs.marks,
   profitSource,
   bus,
+  assertAdlDisclosureAcked: async (userId) => {
+    try {
+      await assertAdlDisclosureAcked(adlDisclosureAcks, userId);
+    } catch (err) {
+      if (err instanceof AdlDisclosureError) {
+        throw new FuturesError(err.message, err.code, err.status);
+      }
+      throw err;
+    }
+  },
 });
 
 // Spot candle materialization — default OFF. REST OHLCV still live from fills.
@@ -257,7 +285,7 @@ const mmSeedJobs = startMmSeedJobs({
   marketFor: async (marketId) => {
     const m = await trade.marketById(marketId);
     if (!m) return null;
-    return { symbol: m.symbol, kind: m.kind, status: m.status };
+    return { symbol: m.symbol, kind: m.kind, status: m.status, assetClass: m.assetClass };
   },
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
   config: {
@@ -270,6 +298,20 @@ const mmSeedJobs = startMmSeedJobs({
     targets: parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS),
   },
   statePath: env.TRADE_MM_SEED_STATE_PATH,
+  // SD-2: flag resting MM seed orders so public tape excludes them before fill.
+  recordSeededOrder: async (row) => {
+    await sql`
+      INSERT INTO trade.orders (
+        id, user_id, market_id, side, type, price, qty, status, tif,
+        hold_asset, hold_amount, fee_discount_bps, seeded
+      ) VALUES (
+        ${row.orderId}, ${HOUSE_MM_USER_UUID}, ${row.marketId}, ${row.side}, ${'limit'},
+        ${row.price}::numeric, ${row.qty}::numeric, ${'open'}, ${'PO'},
+        ${row.holdAsset}, ${row.holdAmount}::numeric, ${0}, ${true}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+  },
   onError: (name, err) => app.log.error({ err, job: name }, 'mm seed job tick failed'),
   onResult: (marketId, result) => {
     if ('skipped' in result) {
@@ -455,6 +497,20 @@ registerPrivateRest(app, {
       clientOpenId: input.clientOpenId,
     }),
   closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
+  getOpenMarginCall: async (principal, positionId) => {
+    const row = await futuresJobs.marginCalls.getOpenForPosition(positionId);
+    if (!row || row.userId !== principal.userId) return null;
+    return presentMarginCallWire(row);
+  },
+  getAdlDisclosure: async (principal) => presentAdlDisclosureWire(await adlDisclosureAcks.getAck(principal.userId, ADL_DISCLOSURE_VERSION)),
+  ackAdlDisclosure: async (principal) => {
+    const row = await adlDisclosureAcks.recordAck(principal.userId, ADL_DISCLOSURE_VERSION, new Date());
+    return presentAdlDisclosureWire(row);
+  },
+  listAdlDisclosureEvents: async (principal) => {
+    const rows = await adlDisclosureEvents.listForUser(principal.userId);
+    return rows.map(presentAdlActionDisclosureWire);
+  },
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -507,6 +563,10 @@ app.log.info(
       'GET /api/v1/account/fees',
       'GET /api/v1/account/balance',
       'GET /api/v1/positions',
+      'GET /api/v1/positions/:id/margin-call',
+      'GET /api/v1/futures/adl-disclosure',
+      'POST /api/v1/futures/adl-disclosure/ack',
+      'GET /api/v1/futures/adl-events',
       'POST /api/v1/positions',
       'DELETE /api/v1/positions/:id',
       'POST /api/v1/positions/leverage',

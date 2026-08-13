@@ -32,6 +32,8 @@ import {
   requireSupportedType,
 } from './risk.js';
 import { resolveOptionsListing } from './options-listing.js';
+import { checkInsuranceFundedForListing } from '../futures/insurance-listing-gate.js';
+import { assertProductionUnsettledAssetClassListing } from './forex-settlement.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
@@ -109,11 +111,20 @@ export interface TradeServiceOptions {
    */
   futuresEnabled?: boolean;
   /**
+   * Opaque D26-P0-05 settlement-asset-law stamp
+   * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW`).
+   *
+   * EMPTY BY DEFAULT. Presence only — never parsed for live set, settlement
+   * asset, or refuse matrix (SOCKET §13 `socket.options-settlement-asset-law`).
+   * Empty → listMarket refuses kind=options with `trade.options_settlement_law_unset`.
+   */
+  optionsSettlementAssetLaw?: string;
+  /**
    * Opaque D7 settlement-fixing config (`TRADE_OPTIONS_SETTLEMENT_FIXING`).
    *
    * EMPTY BY DEFAULT. Presence is the only signal — never parsed for source,
    * window, or payor account (those are owner law). Empty → listMarket refuses
-   * kind=options with `trade.options_fixing_unconfigured`.
+   * kind=options with `trade.options_fixing_unconfigured` (after P0-05 is set).
    */
   optionsSettlementFixing?: string;
   /**
@@ -247,12 +258,16 @@ export interface ListMarketInput {
    * acts: "modelling an instrument is always honest; listing one you cannot settle
    * never is" (`2026-08-04-instrument-enum-authority.md`). A futures row created
    * here is quotable and readable and takes no order at all unless
-   * `TRADE_FUTURES_ENABLED` is on.
+   * `TRADE_FUTURES_ENABLED` is on. Real-money active futures also require a
+   * non-empty insurance fund for the quote asset (DIRECTION:33) — empty →
+   * `trade.insurance_fund_empty`; paper/pending remain allowed.
    *
-   * `options` is refused until settlement fixing is configured
-   * (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European contract terms
-   * are supplied — half-listed options cannot exist (service + DB CHECK). Even
-   * when listed, `assertTradable` still refuses options orders by kind (no engine).
+   * `options` is refused until D26-P0-05 settlement asset law is stamped
+   * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` / SOCKET §13) AND settlement fixing is
+   * configured (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European
+   * contract terms are supplied — half-listed options cannot exist (service + DB
+   * CHECK). Even when listed, `assertTradable` still refuses options orders by
+   * kind (no engine). Never invent live set / settlement asset / refuse matrix.
    */
   kind?: MarketKind;
   /** Required when kind=options: call or put. */
@@ -268,7 +283,9 @@ export interface ListMarketInput {
 export class TradeService {
   private readonly spotEnabled: boolean;
   private readonly futuresEnabled: boolean;
-  /** Opaque D7 fixing stamp; empty refuses options listing. */
+  /** Opaque P0-05 ADR stamp; empty refuses options listing (SOCKET §13). */
+  private readonly optionsSettlementAssetLaw: string;
+  /** Opaque D7 fixing stamp; empty refuses options listing (after P0-05). */
   private readonly optionsSettlementFixing: string;
   private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
@@ -295,7 +312,8 @@ export class TradeService {
     // `?? false`, and the asymmetry with the line above is the whole point: a
     // deploy that forgets to mention futures does not get futures.
     this.futuresEnabled = options.futuresEnabled ?? false;
-    // Empty default — D7 unset means refuse options listing, never invent a fixing.
+    // Empty defaults — P0-05 / D7 unset means refuse options listing, never invent law.
+    this.optionsSettlementAssetLaw = options.optionsSettlementAssetLaw ?? '';
     this.optionsSettlementFixing = options.optionsSettlementFixing ?? '';
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
@@ -418,20 +436,28 @@ export class TradeService {
     const paper = input.paper === true;
     const status = input.status ?? 'active';
     const kind = input.kind ?? 'spot';
-    // D-S-05 / instrument-enum ADR: modelling forex/commodities is honest;
-    // listing them for production trading without fiat settlement is the lie.
-    // paper=true (drills) and non-active status remain allowed.
-    if ((assetClass === 'forex' || assetClass === 'commodity') && status === 'active' && !paper) {
-      throw new TradeError(
-        `${assetClass} cannot be listed for production trading until fiat settlement rails exist — list as paper=true or status pending/halted (model is fine)`,
-        'trade.unsettled_asset_class_listing',
-      );
+    // D26-P1-T7 / D-S-05: modelling forex/commodities is honest; production
+    // active listing without P0-05 + fiat settle rails is the lie (§13 socket.forex-settlement).
+    // paper=true (drills) and non-active status remain allowed. Never invent settlement.
+    assertProductionUnsettledAssetClassListing({ assetClass, status, paper });
+    // DIRECTION:33 — empty insurance fund → no real-money futures list.
+    // Target size/schedule stay owner-open; any positive balance passes.
+    const insuranceGate = await checkInsuranceFundedForListing({
+      kind,
+      status,
+      paper,
+      quoteAsset: input.quoteAsset,
+      balance: (ref) => this.ledger.balance(ref),
+    });
+    if (!insuranceGate.ok) {
+      throw new TradeError(insuranceGate.reason, insuranceGate.code);
     }
-    // trade.options honest thin: refuse kind=options until D7 fixing is configured;
-    // require complete European terms so half-listed options cannot exist.
-    // No IV surface, no pricing model, no invented oracle numbers.
+    // trade.options: refuse kind=options until P0-05 law + D7 fixing; require
+    // complete European terms so half-listed options cannot exist.
+    // No IV surface, no pricing model, no invented settlement asset / matrix.
     const optionTerms = resolveOptionsListing({
       kind,
+      settlementAssetLawConfigured: this.optionsSettlementAssetLaw,
       settlementFixingConfigured: this.optionsSettlementFixing,
       optionType: input.optionType,
       optionStyle: input.optionStyle,
@@ -476,6 +502,32 @@ export class TradeService {
    * lets a user out of a market the operator has frozen.
    */
   async setMarketStatus(marketId: string, status: Market['status']): Promise<Market> {
+    // Load first: FX/commodity re-activate must not bypass socket.forex-settlement,
+    // and empty-fund futures enable-to-active must refuse (DIRECTION:33).
+    const existing = await this.sql<MarketRow[]>`
+      SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
+             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+             asset_class, schedule, paper
+        FROM trade.markets WHERE id = ${marketId}
+    `;
+    const current = existing[0];
+    if (!current) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
+    const currentMarket = toMarket(current);
+    assertProductionUnsettledAssetClassListing({
+      assetClass: current.asset_class,
+      status,
+      paper: currentMarket.paper,
+    });
+    const insuranceGate = await checkInsuranceFundedForListing({
+      kind: currentMarket.kind,
+      status,
+      paper: currentMarket.paper,
+      quoteAsset: currentMarket.quoteAsset,
+      balance: (ref) => this.ledger.balance(ref),
+    });
+    if (!insuranceGate.ok) {
+      throw new TradeError(insuranceGate.reason, insuranceGate.code);
+    }
     const rows = await this.sql<MarketRow[]>`
       UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,

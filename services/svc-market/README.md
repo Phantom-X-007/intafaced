@@ -301,8 +301,12 @@ otherwise.
 
 - **Idempotency:** `market.purchase:<purchaseId>` (client-supplied).
 - **Commission:** `MARKET_HOUSE_COMMISSION_BPS` — **no default**. Unset refuses
-  `market.commission_not_configured` before any row or post. `0` is an explicit
-  free rate, not silence.
+  `market.commission_not_configured` on **createListing** and **purchase**
+  before any row, slot claim, or post; **public catalogue returns []** so the
+  shopfront never advertises unsellable stock. `0` is an explicit free rate,
+  not silence (D26-P1-M1 Class M residual + M2 lifecycle; no invent rates).
+  Compose leaves the env unset on purpose and wires `LEDGER_URL` to
+  `svc-ledger` so a configured rate posts `marketPurchase` for real.
 - **Rounding:** floor on commission (customer favour); buyer pays exactly the
   listed price (vendor net + house = price).
 - **Eligibility:** catalogue and purchase re-check `listingEligibility` plus a

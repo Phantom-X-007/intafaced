@@ -262,6 +262,28 @@ if (!available) {
     });
   }
 
+  /**
+   * DIRECTION:33 — real-money active futures list requires a non-empty insurance
+   * pot. Seed via the real recipes (fees pot → topup), never invent a target size.
+   */
+  async function fundInsurance(amount: string) {
+    const seed = amt(amount);
+    const pos = `ins-seed-${randomUUID()}`;
+    await ledger.post(recipes.deposit({ userId: CAROL, assetId: 'USDT', amount: seed, rail: 'test', railRef: `ins-${randomUUID()}` }));
+    await ledger.post(recipes.futuresMarginLock({ positionId: pos, userId: CAROL, assetId: 'USDT', amount: seed }));
+    await ledger.post(
+      recipes.futuresRealizeLoss({
+        positionId: pos,
+        userId: CAROL,
+        assetId: 'USDT',
+        fromMargin: seed,
+        fromInsurance: 0n,
+        lossId: pos,
+      }),
+    );
+    await ledger.post(recipes.futuresInsuranceTopup({ topupId: pos, assetId: 'USDT', amount: seed }));
+  }
+
   beforeEach(async () => {
     await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
@@ -273,7 +295,9 @@ if (!available) {
     tradeOn = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, futuresEnabled: true });
 
     // Listing is not enabling. This row exists on both services identically; the
-    // only difference between them is one boolean.
+    // only difference between them is one boolean. Fund first — empty pot refuses
+    // the active futures INSERT (DIRECTION:33 / D26-P0-17).
+    await fundInsurance('1');
     perp = await tradeOff.listMarket(listing());
     spot = await tradeOff.listMarket(
       listing({ symbol: 'BTC/USDT', kind: 'spot', lotSize: amt('0.0001'), minQty: amt('0.0001'), minNotional: amt('1') }),

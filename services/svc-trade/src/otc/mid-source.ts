@@ -13,6 +13,11 @@
  * Null → `trade.otc_no_reference_price`. A dark feed is a refusal, never a
  * fallback and never a stale number.
  *
+ * Every usable mid carries `asOf` — when the price was OBSERVED, not when it
+ * was read. The desk law's owner-published `maxMidAgeSeconds` decides when an
+ * observation is still a price rather than a memory (DIRECTION §8 — never
+ * invented here).
+ *
  * This deliberately does NOT reuse `mm/mid-source.ts`, whose config source is
  * the same handful of lines: that module reaches `venue-contracts` and
  * `futures/mark-source`, and importing it here would pull the venue fabric and
@@ -22,7 +27,13 @@
  */
 
 /** Keyed by pair, not by market id — the OTC desk quotes assets, not listings. */
-export type OtcMidSource = (pairKey: string) => string | null | Promise<string | null>;
+export interface OtcQuotedMid {
+  readonly mid: string;
+  /** Observation time — not read time. A read-time stamp defeats age gates. */
+  readonly asOf: Date;
+}
+
+export type OtcMidSource = (pairKey: string) => OtcQuotedMid | null | Promise<OtcQuotedMid | null>;
 
 /**
  * The one normalisation, used for BOTH the lookup key and the assets that reach
@@ -77,29 +88,38 @@ export function parseOtcMids(raw: string | null | undefined): Map<string, string
 }
 
 /**
- * Ops-published map only. Blank env → refuses for every pair.
+ * Ops-published map stamped at boot.
  *
- * ── SOCKET §13 · `socket.otc-mid-feed` ──────────────────────────────────────
+ * ── SOCKET §13 · `socket.otc-mid-feed` (see mid-feed.ts) ─────────────────────
  *
- * This is a FIXED price read once at boot. It has no observation time, so
- * nothing here can tell a current mid from one the market left behind hours
- * ago, and a stale mid is the same economic hole as a caller-supplied one —
- * it just needs patience instead of a wire field. Publish `BTC/USDT:65000`,
- * let BTC trade to 40000, and the desk keeps buying at 65000 from anyone
- * staked.
+ * This is a FIXED price read once at boot. `asOf` is the boot stamp, so the
+ * desk law's `maxMidAgeSeconds` makes the map go dark after that window —
+ * which is the point. Publish `BTC/USDT:65000`, let the market move, and the
+ * age gate refuses rather than keeping the desk open on a memory.
  *
- * The vocabulary for the real thing already exists one directory over:
- * `futures/mark-policy.ts` carries `asOf`, `maxAgeSeconds` and a quality gate,
- * under the line "Older than this and the mark is not a price, it is a memory."
- * A live OTC desk needs a mid source of that shape.
- *
- * So: this map is safe for a refuse-closed or non-production desk, and
- * `TRADE_OTC_MIDS` must NOT be given a value in production until the source
- * carries a timestamp and refuses on age. The max-age number itself is owner
- * law (DIRECTION §8), not a default to pick here — which is why this is a
- * socket and not a TODO.
+ * A live OTC desk needs a feed that refreshes `asOf` on each observation
+ * (`createObservedOtcMidSource` or a venue-chained source). The max-age number
+ * itself is owner law on the desk (DIRECTION §8), never a default here.
+ * Public posture: `otc.deskStatus.midFeed` — published=false until that feed.
  */
-export function createConfigOtcMidSource(raw: string | null | undefined): OtcMidSource {
+export function createConfigOtcMidSource(raw: string | null | undefined, bootAsOf: Date = new Date()): OtcMidSource {
   const mids = parseOtcMids(raw);
-  return (pairKey) => mids.get(pairKey) ?? null;
+  return (pairKey) => {
+    const mid = mids.get(pairKey);
+    if (mid == null) return null;
+    return { mid, asOf: bootAsOf };
+  };
+}
+
+/**
+ * Observed mid map — `asOf` comes from the caller (feed clock), not read time.
+ * Used by tests and by any live adapter that already has an observation time.
+ */
+export function createObservedOtcMidSource(raw: string | null | undefined, asOf: () => Date): OtcMidSource {
+  const mids = parseOtcMids(raw);
+  return (pairKey) => {
+    const mid = mids.get(pairKey);
+    if (mid == null) return null;
+    return { mid, asOf: asOf() };
+  };
 }

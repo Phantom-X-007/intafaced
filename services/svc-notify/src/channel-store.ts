@@ -212,6 +212,14 @@ export interface DeliveryStore {
   settle(input: SettleInput): Promise<void>;
   listForNotification(notificationId: string): Promise<DeliveryRecord[]>;
   /**
+   * Operator delivery-outcomes view (D26-P1-O5 residual).
+   *
+   * Newest-first across the whole delivery table — not scoped to a caller.
+   * Callers must gate with an admin scope; this store method has no auth.
+   * Caps at `limit` so an ops console cannot pull the entire history by accident.
+   */
+  listRecent(limit: number): Promise<DeliveryRecord[]>;
+  /**
    * Retire rows that have run out of attempts — or out of anyone who will try —
    * and that nobody owns.
    *
@@ -376,6 +384,12 @@ export class MemoryDeliveryStore implements DeliveryStore {
 
   async listForNotification(notificationId: string): Promise<DeliveryRecord[]> {
     return [...this.byId.values()].filter((r) => r.notificationId === notificationId).sort((a, b) => a.channel.localeCompare(b.channel));
+  }
+
+  async listRecent(limit: number): Promise<DeliveryRecord[]> {
+    const cap = Math.max(0, Math.min(Math.floor(limit), 500));
+    if (cap === 0) return [];
+    return [...this.byId.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id)).slice(0, cap);
   }
 
   async reapExhausted(maxAttempts: number, opts: ReapExhaustedOptions = {}): Promise<number> {
@@ -665,6 +679,17 @@ export class PostgresDeliveryStore implements DeliveryStore {
       SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
        WHERE notification_id = ${notificationId}
        ORDER BY channel ASC
+    `;
+    return rows.map(fromDeliveryPg);
+  }
+
+  async listRecent(limit: number): Promise<DeliveryRecord[]> {
+    const cap = Math.max(0, Math.min(Math.floor(limit), 500));
+    if (cap === 0) return [];
+    const rows = await this.sql<DeliveryPgRow[]>`
+      SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
+       ORDER BY updated_at DESC, id ASC
+       LIMIT ${cap}
     `;
     return rows.map(fromDeliveryPg);
   }

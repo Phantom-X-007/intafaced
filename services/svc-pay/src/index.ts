@@ -23,14 +23,17 @@ import {
 import { createPayRouter } from './router.js';
 import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
+import { KybService } from './kyb-service.js';
+import { PspModeService, assertNoThirdPartyMoneyLibrary } from './psp-mode.js';
+import { createKybPspRouter } from './kyb-router.js';
 import { SubMerchantService } from './submerchants.js';
 import { createSubMerchantRouter } from './submerchant-router.js';
 import { createSubscriptionRouter } from './subscription-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { registerPublicPayRest } from './public-rest.js';
-import { SubscriptionService } from './subscriptions/index.js';
+import { SubscriptionService, registerSubscriptionCycleRoutes } from './subscriptions/index.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, mergeRouters, verifyServiceHeaders } from '@intafaced/contracts';
+import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -50,12 +53,17 @@ registerProcessHooks(
 /**
  * svc-pay — the payments core (§6.1).
  *
- * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode,
- * PayFac trees, smart routing, fraud scoring, the checkout builder,
- * subscriptions and plugins are each a separate tracker feature, and none of
- * them requires a change to the adapter interface — which is the claim
- * `src/rails/conformance.ts` exists to keep testable.
+ * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode
+ * (digital KYB + custom pricing durability, no third-party money library —
+ * D-S-10) is mounted beside merchant state. PayFac trees, smart routing, fraud
+ * scoring, the checkout builder, subscriptions and plugins are each a separate
+ * tracker feature, and none of them requires a change to the adapter interface
+ * — which is the claim `src/rails/conformance.ts` exists to keep testable.
  */
+
+// D-S-10 / Doctrine 5 — refuse boot if a third-party money orchestrator landed
+// in svc-pay's package.json. Socket.psp-partners stays a commercial relationship.
+assertNoThirdPartyMoneyLibrary();
 
 const sql = postgres(env.DATABASE_URL, {
   max: env.DATABASE_POOL_MAX,
@@ -87,7 +95,7 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
  */
 /**
  * Live crypto outbound broadcasts journal in Postgres so multi-replica fleets
- * share claim→put (MemoryBroadcastStore alone is single-process residual).
+ * share claim→putSigned→sendRaw→put (MemoryBroadcastStore alone is single-process).
  * Unconfigured/Memory chain paths ignore the store.
  */
 const broadcasts = new PostgresBroadcastStore(sql);
@@ -192,9 +200,33 @@ const subscriptions = new SubscriptionService(
         subscriptionId: input.subscriptionId,
         occurrence: String(input.occurrence),
         customerId: input.customerId,
+        /*
+         * The BUSINESS key for the period, carried onto the payment so an
+         * operator reconciling a suspected double charge can see which PERIOD a
+         * payment belongs to without joining anything. Derived from
+         * (subscription, occurrence) and from nothing else — that is the
+         * difference between a retry that charges once and the shape that
+         * drained a pot here.
+         */
+        subscriptionCycleKey: input.idempotencyKey,
       },
     });
     return { paymentId: payment.id };
+  },
+  {
+    /*
+     * EVERY RATE IS OWNER-ONLY, and the cycle has to refuse EARLIER than
+     * settlement does.
+     *
+     * `PAY_DEFAULT_FEE_BPS` is unset by default on purpose (see `env.ts`), and a
+     * merchant may carry no `pricing.feeBps` of its own. `prepareSettlement`
+     * already refuses to settle at an unknown price rather than settling at zero
+     * — "revenue that is not merely lost but invisible". A subscription must
+     * refuse to OPEN the charge, because by settlement time the customer has
+     * already paid and the refusal has arrived too late to be honest.
+     */
+    defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
+    resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
   },
 );
 
@@ -240,6 +272,13 @@ const userMoney = new UserMoneyService(sql, ledger, rails, {
 const merchantState = new MerchantStateService(sql);
 
 /**
+ * Digital KYB (live operator decide + history) and PSP custom-pricing durability.
+ * Path-disjoint from settlement / fraud. See `kyb-service.ts` / `psp-mode.ts`.
+ */
+const kyb = new KybService(sql);
+const pspMode = new PspModeService(sql);
+
+/**
  * PayFac sub-merchant trees and the permissions over them (§6.1).
  *
  * NO LEDGER CLIENT, ON PURPOSE. This service decides who may act on whose behalf
@@ -268,6 +307,7 @@ export const appRouter = mergeRouters(
   // trees fence: gateway money paths check PayFac areas (merchant-ownership).
   createPayRouter(pay, rails, userMoney, subMerchants),
   createMerchantStateRouter(merchantState),
+  createKybPspRouter(kyb, pspMode),
   // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's
   // own merchant node from the authenticated principal, because a merchant node
   // taken from a request body would let any merchant claim to be acting as any
@@ -277,6 +317,7 @@ export const appRouter = mergeRouters(
 );
 export type { PayRouter } from './router.js';
 export type { MerchantStateRouter } from './merchant-state-router.js';
+export type { KybPspRouter } from './kyb-router.js';
 export type { SubMerchantRouter } from './submerchant-router.js';
 export type { SubscriptionRouter } from './subscription-router.js';
 
@@ -340,20 +381,21 @@ app.get('/ready', async () => ({
 await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
 
 /**
- * Subscription due-runner (SPEC §4). External cron, not setInterval.
+ * Subscription charge cycle (SPEC §4). External cron, not setInterval.
+ *
+ * The handler used to be inline here. It moved into
+ * `subscriptions/internal-cycle-routes.ts` so a test can reach it over HTTP:
+ * `reachability` is a doctrine gate, and a route defined in the file that also
+ * reads env, opens the pool and calls `listen()` is not reachable from a suite.
+ * The mount is this line; there is no second copy of the handler.
  *
  * Crypto path opens a payment/invoice (never pull). Service credentials required
- * so an unauthenticated caller cannot fan-out invoices.
+ * so an unauthenticated caller cannot fan out invoices to every customer on the
+ * platform.
  */
-function requireService(req: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;
-}
-
-app.post('/internal/jobs/run-due-subscriptions', async (req, reply) => {
-  if (!requireService(req)) {
-    return reply.code(401).send({ error: 'service credentials required', code: 'pay.unauthenticated' });
-  }
-  return subscriptions.runDueSubscriptions();
+registerSubscriptionCycleRoutes(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  subscriptions,
 });
 
 /**

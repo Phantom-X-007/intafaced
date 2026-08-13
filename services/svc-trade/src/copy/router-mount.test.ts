@@ -8,11 +8,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { MemoryLedger } from '@intafaced/ledger-client';
+import { MemoryLedger, parseAmount, recipes, userAvailable } from '@intafaced/ledger-client';
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
 import { CopyService } from './copy-service.js';
 import type { CopyFeeShareLaw, CopyJurisdictionLaw } from './fee-share-law.js';
+import { MemoryCopyFollowStore } from './follow-store.js';
 
 const SECRET = 'a-trade-copy-mount-test-edge-secret-long';
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';
@@ -67,10 +68,53 @@ function stubTrade() {
   return {} as unknown as TradeService;
 }
 
-function makeCopy(opts?: { fee?: CopyFeeShareLaw; jur?: CopyJurisdictionLaw }) {
-  return new CopyService(new MemoryLedger(), {
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function nextTurn() {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+class BlockingLedger extends MemoryLedger {
+  readonly entered = deferred();
+  readonly release = deferred();
+  private armed = false;
+
+  arm() {
+    this.armed = true;
+  }
+
+  override async post(plan: Parameters<MemoryLedger['post']>[0]) {
+    if (this.armed) {
+      this.armed = false;
+      this.entered.resolve();
+      await this.release.promise;
+    }
+    return super.post(plan);
+  }
+}
+
+class BlockingMirrorStore extends MemoryCopyFollowStore {
+  readonly entered = deferred();
+  readonly release = deferred();
+
+  override async claimMirrorFill(input: Parameters<MemoryCopyFollowStore['claimMirrorFill']>[0]) {
+    this.entered.resolve();
+    await this.release.promise;
+    return super.claimMirrorFill(input);
+  }
+}
+
+function makeCopy(opts?: { fee?: CopyFeeShareLaw; jur?: CopyJurisdictionLaw; ledger?: MemoryLedger; store?: MemoryCopyFollowStore }) {
+  return new CopyService(opts?.ledger ?? new MemoryLedger(), {
     feeShareLaw: opts?.fee ?? { published: false },
     jurisdictionLaw: opts?.jur ?? { published: false },
+    ...(opts?.store ? { store: opts.store } : {}),
   });
 }
 
@@ -81,6 +125,17 @@ describe('trade.copy product mount', () => {
     expect(status.feeSharePublished).toBe(false);
     expect(status.jurisdictionPublished).toBe(false);
     expect(status.residual).toContain('DIRECTION §8');
+    expect(status.residual).toContain('D26-P0-02');
+    expect(status.residual).toContain('D26-P0-15');
+    expect(status.sovereign.shape).toBe('sovereign');
+    expect(status.sovereign.custody).toBe(false);
+    expect(status.sovereign.pnlFeeForbidden).toBe(true);
+    expect(status.sovereign.rankingForbidden).toBe(true);
+    expect(status.sovereign.killUnfollowReal).toBe(true);
+    expect(status.residuals.rates).toContain('D26-P0-02');
+    expect(status.residuals.jurisdiction).toContain('D26-P0-15');
+    expect(status.autoMirrorPlace.published).toBe(false);
+    expect(status.autoMirrorPlace.socket).toContain('socket.copy-auto-mirror-place');
   });
 
   it('follow refuses blank jurisdiction — never invents allowlist', async () => {
@@ -97,8 +152,8 @@ describe('trade.copy product mount', () => {
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
   });
 
-  it('follow → killFeeShare → unfollow product path when laws published', async () => {
-    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
+  it('follow → killFeeShare → unfollow stays reachable while fee rates are blank', async () => {
+    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: { published: false }, jur: publishedJur }));
     const caller = router.createCaller(signed());
 
     const follow = await caller.copy.follow({
@@ -122,6 +177,120 @@ describe('trade.copy product mount', () => {
     await expect(caller.copy.unfollow({ followId: follow.followId })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+  });
+
+  it('killFeeShare waits for an in-flight public settlement, then blocks every later fill', async () => {
+    const ledger = new BlockingLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+        rail: 'test',
+        railRef: 'copy-kill-public',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'copy-kill-public-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('10'),
+      }),
+    );
+    const copy = makeCopy({ fee: publishedFee, jur: publishedJur, ledger });
+    const caller = createTradeRouter(stubTrade(), undefined, copy).createCaller(signed());
+    const follow = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+
+    ledger.arm();
+    const settling = caller.copy.settleFeeShare({
+      followId: follow.followId,
+      fillId: 'fill-before-kill',
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10,
+    });
+    await ledger.entered.promise;
+
+    let killAcknowledged = false;
+    const killing = caller.copy.killFeeShare({ followId: follow.followId }).then((result) => {
+      killAcknowledged = true;
+      return result;
+    });
+    await nextTurn();
+    expect(killAcknowledged).toBe(false);
+
+    ledger.release.resolve();
+    await settling;
+    expect((await killing).feeShareKilled).toBe(true);
+    const balanceAfterKill = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+
+    await expect(
+      caller.copy.settleFeeShare({
+        followId: follow.followId,
+        fillId: 'fill-after-kill',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(balanceAfterKill);
+  });
+
+  it('unfollow waits for an in-flight public mirror, then rejects every later mirror', async () => {
+    const store = new BlockingMirrorStore();
+    const copy = makeCopy({ fee: { published: false }, jur: publishedJur, store });
+    const caller = createTradeRouter(stubTrade(), undefined, copy).createCaller(signed());
+    const follow = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+
+    const mirroring = caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'fill-before-unfollow',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.1',
+      notional: '100',
+    });
+    await store.entered.promise;
+
+    let unfollowAcknowledged = false;
+    const unfollowing = caller.copy.unfollow({ followId: follow.followId }).then((result) => {
+      unfollowAcknowledged = true;
+      return result;
+    });
+    await nextTurn();
+    expect(unfollowAcknowledged).toBe(false);
+
+    store.release.resolve();
+    await mirroring;
+    expect(await unfollowing).toEqual({ followId: follow.followId, revoked: true });
+    expect(await caller.copy.listMyFollows()).toEqual([]);
+    await expect(
+      caller.copy.planMirror({
+        followId: follow.followId,
+        fillId: 'fill-after-unfollow',
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '0.1',
+        notional: '100',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('settleFeeShare refuses blank §8 rates — never invents leader_share_bps', async () => {

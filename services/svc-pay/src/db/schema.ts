@@ -32,9 +32,10 @@ export const merchantStatusEnum = pay.enum('merchant_status', ['pending', 'activ
 /**
  * The payment lifecycle (§6.1), verbatim.
  *
- * `disputed` is declared but unreachable in this PR — chargebacks are their own
- * tracker feature. It is in the enum because the enum is the spec's, and adding
- * a value later is a migration against a live payments table.
+ * `disputed` is reachable via the dispute **case** / webhook writer (D26-P1-P5).
+ * Ledger chargeback recipes remain OWNER SIGN-OFF / NOT WIRED — status + case
+ * only; no invent reverse-money. It is in the enum because the enum is the
+ * spec's, and adding a value later is a migration against a live payments table.
  */
 export const paymentStatusEnum = pay.enum('payment_status', [
   'created',
@@ -545,12 +546,15 @@ export const checkoutSessions = pay.table(
 );
 
 /**
- * Outbound crypto broadcast journal (Class M). Not money — only idempotency keys
- * and tx hashes so multi-replica live rails cannot double-send.
+ * Outbound crypto broadcast journal (Class M). Not money — only idempotency keys,
+ * signed raw payloads (DIRECTION §3.1), and tx hashes so multi-replica live rails
+ * cannot double-send and crash-resume rebroadcasts the same bytes.
  */
 export const cryptoBroadcasts = pay.table('crypto_broadcasts', {
   idempotencyKey: text('idempotency_key').primaryKey(),
   txHash: text('tx_hash').notNull(),
+  /** Signed raw tx hex; set before eth_sendRawTransaction (D26-P1-P9). */
+  signedRaw: text('signed_raw'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

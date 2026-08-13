@@ -4,6 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createP2pRouter } from './router.js';
 import type { P2pService } from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
+import type { MerchantStatus } from './merchant-programme.js';
 
 /**
  * THE MOUNT BOUNDARY, for svc-p2p (docs/decisions/mount-boundary.md).
@@ -101,6 +102,22 @@ function stubInstruments(overrides: Partial<Record<string, unknown>> = {}) {
 
 const routerFor = (p2p: P2pService, instruments: InstrumentService = stubInstruments()) => createP2pRouter(p2p, instruments);
 
+function merchantStub(status: MerchantStatus | null) {
+  return {
+    get: async (userId: string) =>
+      status === null
+        ? null
+        : {
+            userId,
+            status,
+            appliedCompletionRate: 1,
+            appliedTradesTotal: 100,
+            appliedAt: new Date('2026-01-01T00:00:00.000Z'),
+            decidedAt: new Date('2026-01-02T00:00:00.000Z'),
+          },
+  };
+}
+
 describe('svc-p2p mount — authorisation', () => {
   it('refuses an anonymous caller on a scoped procedure, and reads nothing', async () => {
     // Shaped like the ledger's: it does not assert on a message, it asserts the
@@ -176,6 +193,83 @@ describe('svc-p2p mount — authorisation', () => {
   });
 });
 
+describe('svc-p2p mount — merchant API access', () => {
+  it('refuses P2P API-key traffic until the key owner is an approved merchant', async () => {
+    let reads = 0;
+    const p2p = stubP2p({
+      listOffers: async () => {
+        reads++;
+        return [];
+      },
+    });
+    const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+
+    await expect(
+      createP2pRouter(p2p, stubInstruments(), undefined, {}, merchantStub('applied') as never)
+        .createCaller(ctx)
+        .offers.list({}),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: expect.stringMatching(/approved merchant/i),
+    });
+    expect(reads).toBe(0);
+  });
+
+  it('allows an approved merchant to use an identity-issued P2P API key', async () => {
+    const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub('approved') as never).createCaller(ctx);
+
+    await expect(caller.offers.list({})).resolves.toEqual([]);
+  });
+
+  it('removes API access immediately when merchant standing is suspended', async () => {
+    let status: MerchantStatus = 'approved';
+    const merchants = {
+      get: async (userId: string) => ({
+        userId,
+        status,
+        appliedCompletionRate: 1,
+        appliedTradesTotal: 100,
+        appliedAt: new Date('2026-01-01T00:00:00.000Z'),
+        decidedAt: new Date('2026-01-02T00:00:00.000Z'),
+      }),
+    };
+    const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(ctx);
+
+    await expect(caller.offers.list({})).resolves.toEqual([]);
+    status = 'suspended';
+    await expect(caller.offers.list({})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('does not turn ordinary interactive P2P access into merchant-only access', async () => {
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub(null) as never).createCaller(ctx);
+
+    await expect(caller.offers.list({})).resolves.toEqual([]);
+  });
+
+  it('reports API eligibility from the same current standing that enforces it', async () => {
+    const keyCtx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
+    const sessionCtx = signed(principal({ scopes: ['p2p:read'] }));
+    const router = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub('approved') as never);
+
+    await expect(router.createCaller(keyCtx).merchants.apiAccess()).resolves.toEqual({
+      eligible: true,
+      credential: 'api_key',
+      merchantStatus: 'approved',
+      keyPlane: 'identity',
+      rateLimitPlane: 'edge',
+      disputeResolution: 'interactive_human_only',
+    });
+    await expect(router.createCaller(sessionCtx).merchants.apiAccess()).resolves.toMatchObject({
+      eligible: true,
+      credential: 'session',
+      merchantStatus: 'approved',
+    });
+  });
+});
+
 /**
  * THE MODERATOR SURFACE.
  *
@@ -192,6 +286,7 @@ describe('svc-p2p mount — the moderator queue', () => {
     id: '44444444-4444-4444-8444-444444444444',
     tradeId: '55555555-5555-4555-8555-555555555555',
     openedBy: BUYER,
+    openedVia: 'party' as const,
     reason: 'nothing arrived',
     evidence: [
       { seq: 1, submittedBy: BUYER, submittedAt: new Date('2026-08-04T00:00:00.000Z'), item: { ref: 'BUYER-RECEIPT' } },
@@ -362,6 +457,178 @@ describe('svc-p2p mount — the moderator queue', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(resolved).toBe(0);
   });
+
+  it('pulls merchant standing for the party who lost a moderated dispute (release → seller)', async () => {
+    const MOD = BUYER;
+    const suspended: Array<{ userId: string; tradeId: string; disputeId: string; actorId: string }> = [];
+    const resolvedTrade = {
+      id: dispute.tradeId,
+      offerId: dispute.tradeId,
+      takerId: BUYER,
+      makerId: SELLER,
+      sellerId: SELLER,
+      buyerId: BUYER,
+      asset: 'USDT',
+      amount: 100n,
+      fiatCurrency: 'EUR',
+      fiatAmount: 100n,
+      price: 1n,
+      method: 'sepa',
+      feeBps: 0,
+      status: 'released' as const,
+      resolution: 'released' as const,
+      resolutionReason: 'moderator:release',
+      deadlines: {},
+      deadlineAt: null,
+      createdAt: new Date('2026-07-20T00:00:00.000Z'),
+      escrowedAt: new Date('2026-07-20T00:00:00.000Z'),
+      fiatSentAt: null,
+      resolvedAt: new Date('2026-08-04T02:00:00.000Z'),
+      settledAt: new Date('2026-08-04T02:00:00.000Z'),
+    };
+    const p2p = stubP2p({
+      resolveDispute: async () => resolvedTrade,
+      getDispute: async () => ({ ...dispute, status: 'resolved' as const, resolution: 'release' as const }),
+    });
+    const merchants = {
+      ...merchantStub('approved'),
+      suspendIfStandingBrokenByDisputeLaw: async (input: {
+        userId: string;
+        tradeId: string;
+        disputeId: string;
+        actorId: string;
+        actorScope: string;
+      }) => {
+        suspended.push({
+          userId: input.userId,
+          tradeId: input.tradeId,
+          disputeId: input.disputeId,
+          actorId: input.actorId,
+        });
+        return null;
+      },
+    };
+    const ctx = signed(principal({ userId: MOD, sub: MOD, scopes: ['p2p:read'] }));
+
+    await createP2pRouter(p2p, stubInstruments(), undefined, { moderatorUserIds: [MOD] }, merchants as never)
+      .createCaller(ctx)
+      .disputes.resolve({ tradeId: dispute.tradeId, resolution: 'release' });
+
+    expect(suspended).toEqual([{ userId: SELLER, tradeId: dispute.tradeId, disputeId: dispute.id, actorId: MOD }]);
+  });
+
+  it('attributes a refund loss to the buyer for merchant suspension', async () => {
+    const MOD = '77777777-7777-4777-8777-777777777777';
+    const suspended: string[] = [];
+    const resolvedTrade = {
+      id: dispute.tradeId,
+      offerId: dispute.tradeId,
+      takerId: BUYER,
+      makerId: SELLER,
+      sellerId: SELLER,
+      buyerId: BUYER,
+      asset: 'USDT',
+      amount: 100n,
+      fiatCurrency: 'EUR',
+      fiatAmount: 100n,
+      price: 1n,
+      method: 'sepa',
+      feeBps: 0,
+      status: 'cancelled' as const,
+      resolution: 'refunded' as const,
+      resolutionReason: 'moderator:refund',
+      deadlines: {},
+      deadlineAt: null,
+      createdAt: new Date('2026-07-20T00:00:00.000Z'),
+      escrowedAt: new Date('2026-07-20T00:00:00.000Z'),
+      fiatSentAt: null,
+      resolvedAt: new Date('2026-08-04T02:00:00.000Z'),
+      settledAt: new Date('2026-08-04T02:00:00.000Z'),
+    };
+    const p2p = stubP2p({
+      resolveDispute: async () => resolvedTrade,
+      getDispute: async () => ({ ...dispute, status: 'resolved' as const, resolution: 'refund' as const }),
+    });
+    const merchants = {
+      ...merchantStub('approved'),
+      suspendIfStandingBrokenByDisputeLaw: async (input: { userId: string }) => {
+        suspended.push(input.userId);
+        return null;
+      },
+    };
+    const ctx = signed(principal({ userId: MOD, sub: MOD, scopes: ['p2p:read'] }));
+
+    await createP2pRouter(p2p, stubInstruments(), undefined, { moderatorUserIds: [MOD] }, merchants as never)
+      .createCaller(ctx)
+      .disputes.resolve({ tradeId: dispute.tradeId, resolution: 'refund' });
+
+    expect(suspended).toEqual([BUYER]);
+  });
+
+  it('serves the backlog counts to an allowlisted moderator', async () => {
+    let called = 0;
+    const p2p = stubP2p({
+      moderationBacklog: async () => {
+        called++;
+        return { open: 3, overdue: 1, escalated: 1, neverSeen: 2 };
+      },
+    });
+    const ctx = signed(principal({ userId: USER, scopes: ['p2p:read'] }));
+    const page = await createP2pRouter(p2p, stubInstruments(), undefined, {
+      moderatorUserIds: [USER],
+    })
+      .createCaller(ctx)
+      .disputes.backlog();
+    expect(page).toEqual({
+      open: 3,
+      overdue: 1,
+      escalated: 1,
+      neverSeen: 2,
+      moderationReachable: true,
+    });
+    expect(called).toBe(1);
+  });
+
+  it('honest-refuses backlog when moderation is unconfigured', async () => {
+    let called = 0;
+    const p2p = stubP2p({
+      moderationBacklog: async () => {
+        called++;
+        return { open: 0, overdue: 0, escalated: 0, neverSeen: 0 };
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).disputes.backlog()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/moderation is not configured/i),
+    });
+    expect(called).toBe(0);
+  });
+
+  it('serialises openedVia and resolutionNotes on a dispute get', async () => {
+    const ruled = {
+      ...dispute,
+      status: 'resolved' as const,
+      moderatorId: USER,
+      resolution: 'release' as const,
+      resolutionNotes: 'receipt holds',
+      resolvedAt: new Date('2026-08-05T00:00:00.000Z'),
+      openedVia: 'timeout' as const,
+    };
+    const p2p = stubP2p({
+      getTrade: async () => trade,
+      getDisputeAsModerator: async () => ruled,
+    });
+    const ctx = signed(principal({ userId: USER, scopes: ['p2p:read'] }));
+    const got = await createP2pRouter(p2p, stubInstruments(), undefined, {
+      moderatorUserIds: [USER],
+    })
+      .createCaller(ctx)
+      .disputes.get({ tradeId: dispute.tradeId });
+    expect(got.openedVia).toBe('timeout');
+    expect(got.resolutionNotes).toBe('receipt holds');
+    expect(got.resolution).toBe('release');
+  });
 });
 
 describe('svc-p2p mount — trade/dispute read IDOR', () => {
@@ -422,6 +689,7 @@ describe('svc-p2p mount — trade/dispute read IDOR', () => {
       id: '44444444-4444-4444-8444-444444444444',
       tradeId,
       openedBy: BUYER,
+      openedVia: 'party' as const,
       reason: 'nothing arrived',
       evidence: [],
       moderatorId: null,

@@ -305,6 +305,28 @@ if (!available) {
     expect(ledger.journal().filter((tx) => String(tx.reason).includes('futures.margin'))).toHaveLength(0);
   });
 
+  /**
+   * DIRECTION MVP-1 / D26-P1-T1a: entry mark is not last-trade. A `last` quote
+   * is still fine to show and can let a loser out — it must not size a new lock.
+   */
+  it('refuses to OPEN on a `last` mark, and no margin is locked', async () => {
+    feed('50000', 'last');
+    await fundProfitSource('10000');
+    const before = formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount);
+    await expect(
+      positions.open({
+        clientOpenId: 't-open-last-trade-refused',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.mark_unusable' });
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe(before);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
   it('refuses to OPEN when the feed has no mark, and no margin is locked', async () => {
     const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     await expect(
