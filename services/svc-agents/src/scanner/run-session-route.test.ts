@@ -68,10 +68,16 @@ const ticker = {
 };
 
 describe('scanner.runSession route', () => {
-  it('D26-P1-A3: refuses blank P0-11 without touching the runtime', async () => {
+  it('D26-P1-A3: refuses unpublished P0-11 without touching the runtime', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
-      .scanner.runSession({ plane: 'live', userTier: 'free', law, tickers: [ticker] });
+      .scanner.runSession({
+        plane: 'live',
+        userTier: 'free',
+        law,
+        signalInputsLaw: { published: false },
+        tickers: [ticker],
+      });
 
     expect(result).toMatchObject({
       status: 'refuse',

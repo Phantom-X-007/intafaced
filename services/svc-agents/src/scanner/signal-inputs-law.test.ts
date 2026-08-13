@@ -4,6 +4,7 @@ import {
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
   SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
   UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW,
+  resolveScannerSignalInputsLaw,
   scannerSignalInputsGate,
   scannerSignalInputsGateBoardCard,
   scannerSignalInputsGateStatusLine,
@@ -11,7 +12,7 @@ import {
 
 describe('scannerSignalInputsGate (D26-P0-11 / D26-P1-A3)', () => {
   it('refuse-closed when law blank / unpublished — no invent rankings', () => {
-    for (const law of [null, undefined, UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW, { published: false as const }]) {
+    for (const law of [null, UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW, { published: false as const }]) {
       const r = scannerSignalInputsGate(law);
       expect(r).toEqual({
         status: 'refuse',
@@ -90,6 +91,12 @@ describe('scannerSignalInputsGate (D26-P0-11 / D26-P1-A3)', () => {
     });
     expect(scannerSignalInputsGateBoardCard(r).ok).toBe(true);
     expect(scannerSignalInputsGateStatusLine(r)).toBe('ok=1 board=D26-P0-11 recipe=abs_change_x_log_volume inputs=3');
+  });
+
+  it('resolve: omitted law is production sealed v1; null stays unpublished refuse', () => {
+    expect(resolveScannerSignalInputsLaw(undefined)).toEqual(SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW);
+    expect(resolveScannerSignalInputsLaw(null)).toBeNull();
+    expect(resolveScannerSignalInputsLaw(UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW)).toEqual(UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW);
   });
 
   it('residual string names D26-P0-11 and invent ban (high-signal ops grep)', () => {

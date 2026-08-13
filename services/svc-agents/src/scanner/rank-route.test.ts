@@ -50,7 +50,7 @@ function stubDeps(): AgentsRouterDeps {
 }
 
 describe('scanner.rankFixtures route (Stage-1)', () => {
-  it('D26-P1-A3: blank P0-11 refuses ranked signals on the wire', async () => {
+  it('D26-P1-A3: omitted law ranks on the wire (production sealed P0-11)', async () => {
     const now = '2026-08-07T12:00:00.000Z';
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
@@ -67,12 +67,9 @@ describe('scanner.rankFixtures route (Stage-1)', () => {
           },
         ],
       });
-    expect(result).toEqual({
-      status: 'refuse',
-      reason: 'signal_inputs_law_blank',
-      userMessageKey: 'agents.scanner.tier_closed',
-      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
-    });
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.signals[0]?.marketId).toBe('btc-usdt');
   });
 
   it('ranks complete fresh fixtures when P0-11 is sealed', async () => {

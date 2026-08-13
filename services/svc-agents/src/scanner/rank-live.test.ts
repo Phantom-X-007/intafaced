@@ -25,12 +25,13 @@ function ticker(partial: Partial<TickerFixture> & Pick<TickerFixture, 'marketId'
 }
 
 describe('rankLiveFromTickers (Stage-2)', () => {
-  it('D26-P1-A3: blank P0-11 refuses before tier / dark checks', () => {
+  it('D26-P1-A3: unpublished P0-11 refuses before tier / dark checks', () => {
     const r = rankLiveFromTickers({
       plane: 'live',
       tierLaw: law,
       userTier: 'free',
       now: NOW,
+      signalInputsLaw: { published: false },
       tickers: [ticker({ marketId: 'BTC-USD' })],
     });
     expect(r).toEqual({
@@ -39,6 +40,19 @@ describe('rankLiveFromTickers (Stage-2)', () => {
       userMessageKey: 'agents.scanner.tier_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
     });
+  });
+
+  it('D26-P1-A3: omitted law uses production sealed recipe', () => {
+    const r = rankLiveFromTickers({
+      plane: 'live',
+      tierLaw: law,
+      userTier: 'free',
+      now: NOW,
+      tickers: [ticker({ marketId: 'BTC-USD' })],
+    });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.signals[0]?.marketId).toBe('BTC-USD');
   });
 
   it('ranks accepted tickers and caps by tier maxSignals', () => {

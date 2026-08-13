@@ -17,6 +17,7 @@
 
 import {
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  resolveScannerSignalInputsLaw,
   scannerSignalInputsGate,
   type ScannerSignalInputsGateRefuseReason,
   type ScannerSignalInputsLaw,
@@ -125,13 +126,13 @@ export function rankFixtures(
     /** Stage-2: only rank these market ids when provided and non-empty. */
     marketAllowlist?: ReadonlySet<string> | readonly string[];
     /**
-     * D26-P0-11 signal-inputs law. Default / blank → refuse-closed.
-     * Pass a sealed law only after the owner publishes what may rank.
+     * D26-P0-11 signal-inputs law. Omitted → production sealed v1 recipe.
+     * Explicit null / unpublished → refuse-closed.
      */
     signalInputsLaw?: ScannerSignalInputsLaw | null;
   } = {},
 ): RankResult {
-  const inputsGate = scannerSignalInputsGate(options.signalInputsLaw);
+  const inputsGate = scannerSignalInputsGate(resolveScannerSignalInputsLaw(options.signalInputsLaw));
   if (inputsGate.status === 'refuse') {
     return {
       status: 'refuse',

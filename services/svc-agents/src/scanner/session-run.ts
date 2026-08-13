@@ -46,6 +46,7 @@ import { invokeScannerDataTool, type TickerFixture } from './data-tools.js';
 import { rankFixtures, type MarketPlaneState, type RankedSignal } from './rank.js';
 import {
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  resolveScannerSignalInputsLaw,
   scannerSignalInputsGate,
   type ScannerSignalInputsGateRefuseReason,
   type ScannerSignalInputsLaw,
@@ -194,7 +195,7 @@ export async function runScannerRankSession(input: ScannerRunInput): Promise<Sca
 
   // ── Free refusals, before a session exists ────────────────────────────────
   // D26-P1-A3: no ranked signals until P0-11 seals what may rank.
-  const inputsGate = scannerSignalInputsGate(input.signalInputsLaw);
+  const inputsGate = scannerSignalInputsGate(resolveScannerSignalInputsLaw(input.signalInputsLaw));
   if (inputsGate.status === 'refuse') {
     return {
       status: 'refuse',
@@ -319,7 +320,7 @@ export async function runScannerRankSession(input: ScannerRunInput): Promise<Sca
       now,
       limit: tier.maxSignals,
       marketPlane: input.plane,
-      signalInputsLaw: input.signalInputsLaw,
+      signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
       ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
     });
 
