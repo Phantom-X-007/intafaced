@@ -10,9 +10,9 @@
 
 <!-- tracker:start -->
 
-`██████████░░░░░░░░░░` **50%** — 74 of 148 features shipped
+`██████████░░░░░░░░░░` **51%** — 75 of 148 features shipped
 
-Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 14/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 18/55 · **5P** 1/4
+Phases: **0** 11/12 · **1** 11/13 · **2** 7/25 · **3** 14/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 18/55 · **5P** 1/4
 
 **In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007)
 
@@ -21,11 +21,11 @@ Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 14/18 · **3P** 9/13 �
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.forex` — Fiat pairs on the same engine
 - `trade.algo` — TWAP / VWAP / POV execution
-- `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
 - `trade.mm-bot` — Internal market-maker seeding books at launch
 - `venue.aggregation` — External venue adapters via CCXT (cross-venue)
 - `web.terminal` — Pro terminal — depth, charts, hotkeys, sub-accounts
 - `ws.gateway` — WebSocket fan-out: depth, trades, orders, positions
+- `pay.gateway` — Branded gateway, hosted checkout, payment links
 - …and 18 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
