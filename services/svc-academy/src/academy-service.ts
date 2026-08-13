@@ -41,6 +41,13 @@ import {
   type CertXpPlaneStatus,
   type CertXpPublisher,
 } from './certs/xp-publish.js';
+import {
+  assertNoCertPerkMoneyAttachment,
+  certPerkPlaneStatus,
+  resolveCertPerkOutcome,
+  type CertPerkOutcome,
+  type CertPerkPlaneStatus,
+} from './certs/perk-plane.js';
 import { hasCurriculumSlug } from './curriculum/catalog.js';
 import {
   assertMayWriteScore,
@@ -81,10 +88,10 @@ import { withAcademySpan } from './tracing.js';
  *   · FULL DERIV//DESK library (20 playbooks + 3 workbooks) is residual —
  *     proprietary content is not in this monorepo; the thin spine is platform-
  *     native so the list + content path is real rather than empty.
- *   · CERTIFICATIONS now track progress against that curriculum and publish the
- *     XP a grant is worth (`certs/xp-publish.ts`). What is still NOT here is the
- *     ladder: svc-identity is the only writer to `rank_state` and the only place
- *     a perk is decided, so a cert earns XP and nothing else (§4.1).
+ *   · CERTIFICATIONS track progress, publish XP (`certs/xp-publish.ts`), then
+ *     surface real identity perks or refuse invent perk money (`certs/perk-plane.ts`).
+ *     svc-identity remains the only writer to `rank_state` / perk SoT (§4.1) —
+ *     academy never maps cert → perk and never invents perk money.
  *   · AMBASSADOR PAY and lobby subscriptions MOVE VALUE. They need ledger
  *     recipes that do not exist, and a half-built pay path is worse than an
  *     absent one.
@@ -1513,7 +1520,15 @@ export class AcademyService {
   }
 
   /**
-   * Grant a certification, then publish the XP it is worth.
+   * D26-P1-C1 — perk plane honesty: identity SoT for real perks; invent money refuse-closed.
+   */
+  certPerkPlane(): CertPerkPlaneStatus {
+    return certPerkPlaneStatus();
+  }
+
+  /**
+   * Grant a certification, publish the XP it is worth, then surface real
+   * identity perks (or refuse when the SoT is unreadable / invent is requested).
    *
    * TWO THINGS ABOUT THE ORDER, both deliberate:
    *
@@ -1528,11 +1543,14 @@ export class AcademyService {
    * NOTHING` drops the repeat. It is instead the recovery path: a grant whose
    * emit failed heals the next time anyone asks for that cert, with no outbox
    * table and no sweep.
+   *
+   * Perks are read AFTER XP publish and never invented: svc-identity is SoT.
    */
   async grantCert(input: {
     userId: string;
     certId: string;
-  }): Promise<{ grant: CertGrantRecord; alreadyGranted: boolean; xp: CertXpEmitResult }> {
+  }): Promise<{ grant: CertGrantRecord; alreadyGranted: boolean; xp: CertXpEmitResult; perks: CertPerkOutcome }> {
+    assertNoCertPerkMoneyAttachment(input);
     const cert = certById(input.certId);
     const completed = await this.completedSlugs(input.userId);
     const existing = await this.existingGrant(input.userId, input.certId);
@@ -1548,7 +1566,9 @@ export class AcademyService {
       this.mapCertErr(err);
     }
     if (decision.alreadyGranted) {
-      return { ...decision, xp: await this.certXp.publishCertXp(decision.grant) };
+      const xp = await this.certXp.publishCertXp(decision.grant);
+      const perks = await resolveCertPerkOutcome({ userId: input.userId, hostRights: this.hostRights, xp });
+      return { ...decision, xp, perks };
     }
     // ON CONFLICT DO NOTHING — concurrent second writer must not hardcode
     // alreadyGranted:false (UI would fire "just earned" twice; XP still safe).
@@ -1563,10 +1583,13 @@ export class AcademyService {
       if (!raced) {
         throw new AcademyError(`Grant race left no cert row for ${input.certId}`, 'academy.cert_invalid');
       }
+      const xp = await this.certXp.publishCertXp(raced);
+      const perks = await resolveCertPerkOutcome({ userId: input.userId, hostRights: this.hostRights, xp });
       return {
         grant: raced,
         alreadyGranted: alreadyGrantedAfterInsert(false),
-        xp: await this.certXp.publishCertXp(raced),
+        xp,
+        perks,
       };
     }
     const grant: CertGrantRecord = {
@@ -1575,10 +1598,13 @@ export class AcademyService {
       grantedAt: rows[0]!.granted_at,
       idempotencyKey: rows[0]!.idempotency_key,
     };
+    const xp = await this.certXp.publishCertXp(grant);
+    const perks = await resolveCertPerkOutcome({ userId: input.userId, hostRights: this.hostRights, xp });
     return {
       alreadyGranted: alreadyGrantedAfterInsert(true),
       grant,
-      xp: await this.certXp.publishCertXp(grant),
+      xp,
+      perks,
     };
   }
 

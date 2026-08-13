@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   MODULES,
   MODULE_IDS,
+  MONEY_KILL_RESIDUAL_DOOR_IDS,
   MONEY_PUBLIC_DOORS,
   assertCustodialMoneyKillsComplete,
+  assertMoneyKillResidualsPresent,
   edgeKillableMoneyModules,
   moneyKillControlFor,
 } from './index.js';
@@ -38,6 +40,11 @@ describe('money kill surface (D26-P2-10)', () => {
     }
   });
 
+  it('residual money families stay catalogued (deepen after #1683)', () => {
+    expect(assertMoneyKillResidualsPresent()).toEqual([]);
+    expect(MONEY_KILL_RESIDUAL_DOOR_IDS.length).toBeGreaterThan(10);
+  });
+
   it('ledger is freeze-only — never a pretend module kill', () => {
     expect(moneyKillControlFor('ledger')).toEqual({
       kind: 'ledger-freeze',
@@ -53,7 +60,7 @@ describe('money kill surface (D26-P2-10)', () => {
   });
 
   it('live money modules use the shared edge kill surface', () => {
-    for (const module of ['trade', 'pay', 'bank', 'p2p', 'token', 'market'] as const) {
+    for (const module of ['trade', 'pay', 'bank', 'p2p', 'token', 'market', 'agents'] as const) {
       expect(moneyKillControlFor(module)).toEqual({ kind: 'edge-module', module });
     }
   });

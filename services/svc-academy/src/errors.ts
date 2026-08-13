@@ -58,6 +58,11 @@ export type AcademyErrorCode =
    * one, which is the single failure this row exists to prevent.
    */
   | 'academy.paper_result_unlabelled'
+  /**
+   * A paper success payload claimed real custody (banned key) or flipped a
+   * seal bit to true. D26-P1-C4: paper flag must never be readable as real money.
+   */
+  | 'academy.paper_looks_like_real_money'
   /** Residency applications Stage-1 (no pay). */
   | 'academy.residency_invalid'
   | 'academy.residency_not_found'
@@ -108,6 +113,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.paper_trading_disabled',
   'academy.paper_price_unavailable',
   'academy.paper_result_unlabelled',
+  'academy.paper_looks_like_real_money',
   'academy.residency_invalid',
   'academy.residency_not_found',
   'academy.residency_already_open',

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
+import { isScheduleKey, isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
 import { TIMEFRAMES, timeframeSchema, type Timeframe } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
@@ -154,6 +154,10 @@ function presentMarketHours(schedule: TradingSchedule):
  * Session open + next flip at `atMs`, from the same predicates as
  * `assertMarketOpen` (risk.ts). Unknown schedule key → closed, no transition
  * guess (fail closed on the public wire for the open flag).
+ *
+ * Order path refuses unknown keys with `trade.unknown_schedule` (D26-P1-T9) —
+ * distinct from session-shut `trade.market_closed`. Public market data cannot
+ * invent hours for a key outside `TRADING_SCHEDULES`, so sessionOpen=false.
  */
 export function sessionStateForMarket(
   market: Pick<Market, 'schedule'>,
@@ -165,11 +169,27 @@ export function sessionStateForMarket(
   schedule: Market['schedule'];
 } {
   const scheduleKey = market.schedule;
+  // Authority guard first (same set as requireTradingSchedule) — never index
+  // TRADING_SCHEDULES with a drifted key and treat undefined as a soft open.
+  if (!isScheduleKey(scheduleKey)) {
+    // Unknown key: order path → trade.unknown_schedule. Public wire says
+    // closed and publishes a zero-width window so `hours.kind` never claims
+    // continuous (always open) when we cannot evaluate hours.
+    return {
+      schedule: scheduleKey,
+      sessionOpen: false,
+      nextSessionChange: null,
+      hours: {
+        kind: 'sessions',
+        timezone: 'UTC',
+        windows: [{ open: { day: 0, time: '00:00' }, close: { day: 0, time: '00:00' } }],
+        holidays: [],
+      },
+    };
+  }
   const schedule = TRADING_SCHEDULES[scheduleKey];
   if (!schedule) {
-    // Unknown key: order path refuses (`trade.market_closed`). Public wire
-    // says closed and publishes a zero-width window so `hours.kind` never
-    // claims continuous (always open) when we cannot evaluate hours.
+    // Defensive — isScheduleKey already proved the key; keep fail-closed.
     return {
       schedule: scheduleKey,
       sessionOpen: false,
@@ -434,6 +454,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
         paperListPolicy: 'paper markets stay listed with paper:true — exclude-from-list is Nitro product (N3)',
         rateLimit: 'Published RATE_LIMITS in exchange-contract may differ from edge default 300/min — edge enforces; N4 residual',
         neverInvent: 'mids, funding rates, candles, leverage live re-set',
+        openPositionGates: 'caller price 400 · cross margin 400 · ADL disclosure ack required 403 (DIRECTION:34)',
       },
     });
   });

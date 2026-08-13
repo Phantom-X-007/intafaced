@@ -218,6 +218,18 @@ export async function runMerchantWatchSession(input: MerchantRunInput): Promise<
       };
     }
 
+    // D26-P1-A4 deepen: a guardrail drop is a hole in the requested series.
+    // Watching only the accepted subset would invent a complete board.
+    if (pointsRefusedByGuardrail > 0) {
+      metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
+      return {
+        status: 'unavailable',
+        userMessageKey: 'agents.merchant.unavailable',
+        reason: 'no_metrics',
+        metering,
+      };
+    }
+
     const watched = watchApprovalFixtures(accepted, {
       now,
       payPlane: input.plane,

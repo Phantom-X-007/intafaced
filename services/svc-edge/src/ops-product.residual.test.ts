@@ -180,6 +180,36 @@ describe('U2 — compliance queue open product', () => {
     expect(body.empty).toBe(false); // case still open
     expect(body.recentAudit.some((a) => a.itemId === 'hit-2' && a.ok === false && a.code === 'refuse.partner_absent')).toBe(true);
   });
+
+  it('attributes a disposition to the verified operator, never a caller-supplied actor', async () => {
+    const { app } = await buildEdge();
+    const authorization = await asOperator();
+    await app.inject({
+      method: 'POST',
+      url: '/admin/compliance/queue/open',
+      headers: { authorization },
+      payload: { id: 'hit-forge', kind: 'manual', subjectId: 'user-3' },
+    });
+
+    const disposition = await app.inject({
+      method: 'POST',
+      url: '/admin/compliance/queue/disposition',
+      headers: { authorization },
+      payload: {
+        itemId: 'hit-forge',
+        status: 'rejected',
+        actor: '99999999-9999-4999-8999-999999999999',
+        reason: 'identity evidence did not match',
+      },
+    });
+
+    expect(disposition.statusCode).toBe(200);
+    expect(disposition.json()).toMatchObject({ ok: true, actor: OPERATOR });
+    expect(disposition.json().queue.recentAudit[0]).toMatchObject({
+      itemId: 'hit-forge',
+      actor: OPERATOR,
+    });
+  });
 });
 
 describe('U4 — analytics warehouse door', () => {

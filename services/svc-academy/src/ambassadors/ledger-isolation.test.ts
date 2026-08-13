@@ -75,6 +75,6 @@ describe('ambassadors ledger isolation (source scan)', () => {
     for (const rule of FORBIDDEN) {
       expect(region, `router pay region: ${rule.why}`).not.toMatch(rule.pattern);
     }
-    expect(region).toMatch(/refuseAmbassadorIfcPay|refuseAmbassadorRevenueShare|ambassadorPayPlaneStatus/);
+    expect(region).toMatch(/attemptAmbassadorPay|attemptResidencyIfcPay|ambassadorPayPlaneStatus/);
   });
 });

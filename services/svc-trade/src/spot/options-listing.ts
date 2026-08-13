@@ -2,17 +2,23 @@ import type { Amount } from '@intafaced/ledger-client';
 import { TradeError, type MarketKind } from './types.js';
 
 /**
- * OPTIONS LISTING — honest thin slice until D7 (settlement fixing law).
+ * OPTIONS LISTING — refuse-closed until D26-P0-05 (settlement asset law).
  *
+ * ── SOCKET §13 · `socket.options-settlement-asset-law` ──────────────────────
  * Full-collateral European options need no IV surface: payoff is mechanical once
- * a settlement price is known. The real blocker is that settlement fixing —
- * which source, over what window, at what expiry time, which funded account pays
- * ITM holders — and that is owner law (D7). Agents do not invent it.
+ * a settlement price and settlement *asset* are known. P0-05 owns the ADR for
+ * live instrument set, settlement asset, and refuse matrix. Agents do not invent
+ * that law. Until the operator stamps that ADR is published
+ * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` non-empty opaque id), kind=options cannot
+ * be listed — even if D7 fixing and European terms are complete.
  *
- * Until fixing is configured (`TRADE_OPTIONS_SETTLEMENT_FIXING` non-empty), an
- * options market cannot be listed at all. When it is configured, the row must
- * still carry complete European contract terms so a half-listed option cannot
- * exist (mirrored by `markets_options_terms_ck` in the schema).
+ * After P0-05 is stamped: D7 fixing (`TRADE_OPTIONS_SETTLEMENT_FIXING`) must still
+ * be configured, and the row must carry complete European contract terms so a
+ * half-listed option cannot exist (mirrored by `markets_options_terms_ck`).
+ *
+ * Opaque stamps are never parsed for live set / settlement asset / refuse matrix
+ * / source / window / payor — inventing those fields here would be the failure
+ * this socket exists to prevent.
  *
  * Listing is not trading: `assertTradable` still refuses options orders by kind
  * until an options engine exists.
@@ -34,6 +40,11 @@ export interface OptionsContractTerms {
 export interface ResolveOptionsListingInput {
   readonly kind: MarketKind;
   /**
+   * Opaque stamp that P0-05 ADR is published (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW`).
+   * Empty / whitespace = unset → refuse. Never parsed for assets or matrix rows.
+   */
+  readonly settlementAssetLawConfigured: string;
+  /**
    * Deployment config for D7 fixing. Empty / whitespace = not configured.
    * Presence is the only signal — this function never invents source/window/account.
    */
@@ -47,7 +58,8 @@ export interface ResolveOptionsListingInput {
 /**
  * Resolve option contract terms for a listing, or null for non-options.
  *
- * Throws `trade.options_fixing_unconfigured` when kind is options and fixing
+ * Throws `trade.options_settlement_law_unset` when kind is options and P0-05 law
+ * is blank (SOCKET §13). Throws `trade.options_fixing_unconfigured` when fixing
  * is blank. Throws `trade.options_terms_incomplete` when terms are partial or
  * attached to a non-options kind.
  */
@@ -66,6 +78,16 @@ export function resolveOptionsListing(input: ResolveOptionsListingInput): Option
       );
     }
     return null;
+  }
+
+  // ── SOCKET §13 · `socket.options-settlement-asset-law` (D26-P0-05) ────────
+  // First gate: no invent of live set / settlement asset / refuse matrix.
+  const assetLaw = input.settlementAssetLawConfigured.trim();
+  if (assetLaw.length === 0) {
+    throw new TradeError(
+      'options cannot be listed until D26-P0-05 settlement asset law is published (TRADE_OPTIONS_SETTLEMENT_ASSET_LAW empty) — SOCKET §13 socket.options-settlement-asset-law; empty means refuse, never invent live set / settlement asset / refuse matrix',
+      'trade.options_settlement_law_unset',
+    );
   }
 
   const fixing = input.settlementFixingConfigured.trim();

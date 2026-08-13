@@ -19,6 +19,16 @@ import {
   type LastCycle,
   type StallReason,
 } from './charge-cycle.js';
+import {
+  acknowledgePreChargeNotifyBeforeCharge,
+  assertChargeTracesToMandate,
+  mandateChargeDisposition,
+  normaliseSubscriptionPath,
+  SUBSCRIPTION_PATHS,
+  type SubscriptionPath,
+} from './mandate-product.js';
+
+export { normaliseSubscriptionPath, SUBSCRIPTION_PATHS, type SubscriptionPath };
 
 /**
  * SUBSCRIPTION LIFECYCLE AND CHARGE CYCLE (SPEC §4).
@@ -111,24 +121,6 @@ export interface ExecutionRecord {
   attemptedAt: Date;
   settledAt: Date | null;
   createdAt: Date;
-}
-
-/** Paths that may be stored. Anything else is refuse-closed (no silent crypto). */
-export const SUBSCRIPTION_PATHS = ['crypto_invoice', 'card'] as const;
-export type SubscriptionPath = (typeof SUBSCRIPTION_PATHS)[number];
-
-/**
- * Default `crypto_invoice`. `card_mandate` aliases `card` (fire refuses
- * `pay.mandate_rail_absent`). Unknown strings refuse — they used to open a
- * crypto invoice, which is inventing a rail under a wrong name.
- */
-export function normaliseSubscriptionPath(path: string | undefined): SubscriptionPath {
-  const raw = (path ?? 'crypto_invoice').trim();
-  if (raw === 'crypto_invoice') return 'crypto_invoice';
-  if (raw === 'card' || raw === 'card_mandate') return 'card';
-  throw new PayError(`Subscription path ${JSON.stringify(raw)} is not supported — use crypto_invoice or card`, 'pay.subscription_invalid', {
-    path: raw,
-  });
 }
 
 interface MandateRow {
@@ -993,14 +985,27 @@ export class SubscriptionService {
           return { outcome: 'rejected' as const, rejectionCode: code, idempotencyKey };
         }
 
-        // Card mandate rail: the port has createMandate/revokeMandate and NO
-        // charge-against-mandate operation. Refuse by name; never invent a pull.
-        if (sub.path === 'card' || sub.path === 'card_mandate') {
-          await this.rejectCycle(tx, executionId, 'pay.mandate_rail_absent', attemptCount, now);
-          return { outcome: 'rejected' as const, rejectionCode: 'pay.mandate_rail_absent', idempotencyKey };
+        /*
+         * Product path law (mandate-product.ts): card refuses by name; crypto
+         * opens an invoice. Trace the period amount to the active mandate
+         * before either arm — a charge without a mandate does not go out.
+         */
+        assertChargeTracesToMandate({
+          executionSubscriptionId: sub.id,
+          subscriptionId: sub.id,
+          mandateId: mandate.id,
+          mandateStatus: mandate.status,
+          amount: chargeAmount,
+          mandateAmount: mandate.amount,
+        });
+
+        const disposition = mandateChargeDisposition(sub.path);
+        if (disposition.kind === 'refuse') {
+          await this.rejectCycle(tx, executionId, disposition.code, attemptCount, now);
+          return { outcome: 'rejected' as const, rejectionCode: disposition.code, idempotencyKey };
         }
 
-        // crypto_invoice (default): open a payment, never pull.
+        // crypto_invoice: open a payment, never pull.
         if (!this.openInvoice) {
           await this.rejectCycle(tx, executionId, 'pay.subscription_driver_absent', attemptCount, now);
           return { outcome: 'rejected' as const, rejectionCode: 'pay.subscription_driver_absent', idempotencyKey };
@@ -1025,6 +1030,20 @@ export class SubscriptionService {
             paymentId = prior[0]?.payment_id ?? null;
           }
           if (!paymentId) {
+            /*
+             * SPEC §4 pre-charge notify — acknowledge the §13 gap BEFORE money
+             * work. `notified` stays false; inventing delivery is forbidden.
+             * Ready/merchant posture reads the same socket.
+             */
+            const notify = acknowledgePreChargeNotifyBeforeCharge({
+              subscriptionId: sub.id,
+              occurrence,
+              path: sub.path,
+            });
+            if (notify.notified !== false || notify.status !== 'absent') {
+              throw new PayError('Pre-charge notify invent refused — socket.pay-precharge-notify is absent', 'pay.subscription_invalid');
+            }
+
             const opened = await this.openInvoice({
               merchantId: sub.merchantId,
               customerId: sub.customerId,

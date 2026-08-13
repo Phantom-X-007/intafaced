@@ -16,7 +16,15 @@ import { dirname } from 'node:path';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
-import { cancelSeedMarket, seedMarket, type CancelSeedResult, type SeedMarketResult, type SeedTradableMarket } from './seed-market.js';
+import { mmSeedJobsArmed } from './seed-honesty.js';
+import {
+  cancelSeedMarket,
+  seedMarket,
+  type CancelSeedResult,
+  type SeededOrderRecord,
+  type SeedMarketResult,
+  type SeedTradableMarket,
+} from './seed-market.js';
 
 export type MmSeedLastRun = { runId: string; levels: number };
 
@@ -106,6 +114,8 @@ export interface MmSeedJobsDeps {
    * memory only (pre-persist behavior).
    */
   statePath?: string;
+  /** SD-2 recorder — persist resting seed orders as seeded (optional). */
+  recordSeededOrder?: (row: SeededOrderRecord) => Promise<void>;
 }
 
 export interface MmSeedJobsHandle {
@@ -119,7 +129,8 @@ export interface MmSeedJobsHandle {
 export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
   const host = createJobHost({ onError: deps.onError });
 
-  if (!deps.config.enabled || deps.config.targets.length === 0) {
+  // SD-4: kill-switch — disabled or empty targets → stopped host (never invent markets).
+  if (!mmSeedJobsArmed(deps.config.enabled, deps.config.targets.length)) {
     return { host, stop: () => host.stopAll() };
   }
 
@@ -203,12 +214,14 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
           matching: deps.matching,
           market,
           futuresEnabled: deps.futuresEnabled,
+          recordSeededOrder: deps.recordSeededOrder,
         },
       );
 
       // Track runs that may leave live orders or stranded holds for cancel path.
       const trackable = result.placements.some(
-        (p) => p.status === 'resting' || p.status === 'submit_indeterminate' || p.status === 'rejected',
+        (p) =>
+          p.status === 'resting' || p.status === 'submit_indeterminate' || p.status === 'rejected' || p.status === 'manufactured_cross',
       );
       if (trackable) {
         lastRun.set(target.marketId, { runId, levels: deps.config.levels });

@@ -2200,6 +2200,31 @@ if (!available) {
       });
     });
 
+    it('live-only money door refuses without approved KYB (D26-P1-P10 Layer B)', async () => {
+      const livePay = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+      const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
+      await expect(
+        livePay.createPayment({
+          merchantId: m.id,
+          amount: amt('10'),
+          assetId: 'USDT',
+          method: 'crypto',
+          railAdapter: 'crypto-native',
+        }),
+      ).rejects.toMatchObject({ code: 'pay.kyb_required' });
+
+      // Operator-approved KYB (simulated — no invent grant of pay:* scopes).
+      await sql`UPDATE pay.merchants SET kyb_status = 'approved' WHERE id = ${m.id}`;
+      const payment = await livePay.createPayment({
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'crypto',
+        railAdapter: 'crypto-native',
+      });
+      expect(payment.status).toBe('created');
+    });
+
     it('lists payments by durable status projection after card lifecycle', async () => {
       const m = await merchant();
       const payment = await cardPayment(m.id, '25');

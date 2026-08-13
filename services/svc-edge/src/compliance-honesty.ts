@@ -37,7 +37,9 @@ import {
   assertAnalyticsReplicaRole,
   listConfiguredAnalyticsReplicaUrls,
   queryWarehouseSurface,
+  resolveEtlWatermark,
   warehouseSurfaceStatusLine,
+  type EtlWatermarkState,
   type WarehouseSurfaceResult,
 } from '@intafaced/contracts';
 
@@ -75,12 +77,15 @@ export type EdgeAnalyticsHonesty = {
   readonly surface: WarehouseSurfaceResult;
   readonly statusLine: string;
   /**
-   * ETL watermark honesty residual (ops.analytics Done bar).
+   * ETL watermark honesty residual (ops.analytics / D26-P1-O4 Done bar).
    *
-   * `absent` — this edge has no watermark: empty cannot claim "ETL ran and
-   * found nothing" vs "ETL never ran". Never invent a watermark or cubes.
+   * `absent` — no parseable operator stamp: empty cannot claim "ETL ran and
+   * found nothing" vs "ETL never ran". `present` — ISO stamp from
+   * ANALYTICS_ETL_WATERMARK_AT. Never invent cubes from a stamp alone.
    */
-  readonly etlWatermark: 'absent';
+  readonly etlWatermark: EtlWatermarkState;
+  /** ISO-8601 when present; otherwise null. */
+  readonly etlWatermarkAt: string | null;
   readonly etlNote: string;
 };
 
@@ -164,17 +169,19 @@ export function edgeComplianceHonesty(
   };
 }
 
-const ETL_ABSENT_NOTE = 'ETL watermark: ABSENT on this edge — cannot claim "ran and found nothing" vs "never ran". No fake cubes.';
-
-function withEtl(base: Omit<EdgeAnalyticsHonesty, 'etlWatermark' | 'etlNote'>): EdgeAnalyticsHonesty {
-  return { ...base, etlWatermark: 'absent', etlNote: ETL_ABSENT_NOTE };
+function withEtl(
+  env: Record<string, string | undefined>,
+  base: Omit<EdgeAnalyticsHonesty, 'etlWatermark' | 'etlWatermarkAt' | 'etlNote'>,
+): EdgeAnalyticsHonesty {
+  const etl = resolveEtlWatermark(env);
+  return { ...base, etlWatermark: etl.state, etlWatermarkAt: etl.at, etlNote: etl.note };
 }
 
 function analyticsHonesty(env: Record<string, string | undefined>): EdgeAnalyticsHonesty {
   const listed = listConfiguredAnalyticsReplicaUrls(env);
   if (listed.length === 0) {
     const surface = queryWarehouseSurface({ replicaConfigured: false, lagSeconds: null, facts: [] });
-    return withEtl({
+    return withEtl(env, {
       replicaConfigured: false,
       replicaCount: 0,
       refuse: null,
@@ -187,7 +194,7 @@ function analyticsHonesty(env: Record<string, string | undefined>): EdgeAnalytic
     const role = assertAnalyticsReplicaRole(url, 'readonly');
     if (!role.ok) {
       const surface = queryWarehouseSurface({ replicaConfigured: false, lagSeconds: null, facts: [] });
-      return withEtl({
+      return withEtl(env, {
         replicaConfigured: false,
         replicaCount: listed.length,
         refuse: `analytics replica ${source}: ${role.reason}`,
@@ -198,14 +205,15 @@ function analyticsHonesty(env: Record<string, string | undefined>): EdgeAnalytic
   }
 
   // Replica URLs present and role-clean, but this edge does not run lag probes
-  // or ETL. Surface is honest dark/unavailable — never invent live cubes.
+  // here. Surface is honest dark/unavailable — never invent live cubes.
+  // ETL watermark (if stamped) is disclosed separately and does not paint live.
   const surface = queryWarehouseSurface({
     replicaConfigured: true,
     lagSeconds: null,
     lagSource: 'unknown',
     facts: [],
   });
-  return withEtl({
+  return withEtl(env, {
     replicaConfigured: true,
     replicaCount: listed.length,
     refuse: null,

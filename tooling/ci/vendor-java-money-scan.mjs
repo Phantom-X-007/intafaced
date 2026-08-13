@@ -88,6 +88,13 @@
  * be comfortable with.
  *
  * Exit 0 = clean. Exit 1 = live second-book write still present.
+ *
+ * ── SOURCE ONLY (D-S-17 / D26-P2-07) ───────────────────────────────────────
+ *
+ * A clean run proves what the SCANNED SOURCE says. It is not jar/runtime proof.
+ * Compose may still launch gitignored, pre-neutering jars. Do not claim Java
+ * runtime safety from this scan alone — see `vendor-java-jar-truth.mjs` and
+ * `pnpm vendor-java:rebuild`.
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -738,10 +745,20 @@ if (failed) {
   process.exit(1);
 }
 
+// Grade D band must stay empty: any allowlist reason naming Grade D is a new
+// ungated mint, not old debt (ADR 2026-08-04 / D26-P2-07).
+const gradeDAllowRows = VENDOR_JAVA_ALLOWLIST.filter((e) => /Grade D/i.test(e.reason ?? ''));
+if (gradeDAllowRows.length > 0) {
+  console.error('✖ vendor-java-money-scan: Grade D allowlist band must stay EMPTY');
+  for (const e of gradeDAllowRows) console.error(`  · ${entryKey(e)} — ${e.reason}`);
+  process.exit(1);
+}
+
 const allowedTotal = VENDOR_JAVA_ALLOWLIST.reduce((sum, e) => sum + Object.values(e.rules).reduce((a, b) => a + b, 0), 0);
 console.log(
   `✓ vendor-java-money-scan clean — ${javaScanned} Java file(s), ${FORBIDDEN.length} live-write pattern(s) + ` +
     `${CODE_RULES.length} second-book shape(s), ${daoDeclarationsVerified} DAO mutator declaration(s) proved no-op` +
     `${allowedTotal > 0 ? `, ${allowedTotal} known write(s) held by the ratchet across ${VENDOR_JAVA_ALLOWLIST.length} file(s)` : ''}` +
-    `${javaSkippedTests > 0 ? ` (${javaSkippedTests} vendor test source(s) skipped)` : ''}`,
+    `${javaSkippedTests > 0 ? ` (${javaSkippedTests} vendor test source(s) skipped)` : ''}` +
+    ` · SOURCE ONLY — not jar/runtime proof (see vendor-java-jar-truth / pnpm vendor-java:rebuild)`,
 );

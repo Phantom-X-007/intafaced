@@ -15,7 +15,8 @@
 import { randomUUID } from 'node:crypto';
 import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { CopyError } from './errors.js';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './auto-mirror-place.js';
+import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, CopyError } from './errors.js';
 import {
   copyLawResidual,
   copyLawStatusLine,
@@ -81,13 +82,62 @@ export class CopyService {
     this.store = options.store ?? new MemoryCopyFollowStore();
   }
 
+  /**
+   * Desk honesty for D26-P1-T3: sovereign shape is always on; rates /
+   * jurisdiction stay refuse-closed until owner publishes P0-02 / P0-15.
+   */
   deskStatus() {
+    const feeSharePublished = this.feeShareLaw.published === true;
+    const jurisdictionPublished = this.jurisdictionLaw.published === true;
     return {
-      feeSharePublished: this.feeShareLaw.published === true,
-      jurisdictionPublished: this.jurisdictionLaw.published === true,
+      /** SPEC-SOVEREIGN §2–§4 — never invent pooling, P&L fees, or ranking. */
+      sovereign: {
+        shape: 'sovereign' as const,
+        custody: false,
+        feeModel: 'protocol_fee_share' as const,
+        pnlFeeForbidden: true,
+        rankingForbidden: true,
+        killUnfollowReal: true,
+      },
+      feeSharePublished,
+      jurisdictionPublished,
       statusLine: copyLawStatusLine(this.feeShareLaw, this.jurisdictionLaw),
       residual: copyLawResidual(this.feeShareLaw, this.jurisdictionLaw),
+      residuals: {
+        rates: feeSharePublished ? null : COPY_FEE_SHARE_RESIDUAL,
+        jurisdiction: jurisdictionPublished ? null : COPY_JURISDICTION_RESIDUAL,
+        autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+      },
+      /** SOCKET §13 — planMirror is real; place into spot stays refuse-closed. */
+      autoMirrorPlace: autoMirrorPlaceStatus(),
     };
+  }
+
+  /**
+   * Place a planned mirror as a spot order — SOCKET §13 refuse until the
+   * follower place wire exists. Never invents a fill from a plan.
+   */
+  async placeMirrorForFollow(principal: Principal, input: { followId: string; fillId: string }) {
+    const follow = await this.store.getFollow(input.followId);
+    if (!follow) {
+      throw new CopyError('Follow not found', 'trade.copy_not_following');
+    }
+    if (follow.followerId !== principal.userId) {
+      throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+    }
+    const prior = await this.store.getMirroredFill(follow.followId, input.fillId.trim());
+    if (!prior) {
+      throw new CopyError(
+        'No durable mirror plan for this fillId — planMirror first; place still refuse-closed',
+        'trade.copy_auto_mirror_place_socket',
+        COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+      );
+    }
+    throw new CopyError(
+      `Auto-mirror place into spot is refuse-closed (${autoMirrorPlaceStatus().socket}) — planMirror claimed fill ${prior.fillId}; never invent a spot fill`,
+      'trade.copy_auto_mirror_place_socket',
+      COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+    );
   }
 
   /**
@@ -327,8 +377,9 @@ export class CopyService {
       if (law.published !== true) {
         // attributeCopyFeeShare already throws on blank; this is defensive for types.
         throw new CopyError(
-          'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+          'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 / D26-P0-02 leader_share_bps',
           'trade.copy_fee_share_blank',
+          COPY_FEE_SHARE_RESIDUAL,
         );
       }
       const cap = parseAmount(law.earningsCapPerFollower);

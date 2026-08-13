@@ -728,15 +728,17 @@ describe('money modules — same kill surface (D26-P2-10)', () => {
    * always `POST /admin/kill-switches` — the same route trade/token already use.
    * Do not invent a second operator UX.
    */
-  const MONEY_MODULES = ['trade', 'pay', 'bank', 'p2p', 'token', 'market'] as const;
+  const MONEY_MODULES = ['trade', 'pay', 'bank', 'p2p', 'token', 'market', 'agents'] as const;
 
   const SAMPLE_DOOR: Record<(typeof MONEY_MODULES)[number], string> = {
-    trade: '/api/v1/orders',
-    pay: '/api/pay/trpc/checkout.open',
-    bank: '/api/bank/trpc/earn.deposit',
-    p2p: '/api/p2p/trpc/trades.take',
-    token: '/api/token/trpc/stake',
+    trade: '/api/trade/trpc/convert.execute',
+    // Public REST commit path (not only tRPC) — same /api/pay prefix kill.
+    pay: '/api/pay/v1/payments',
+    bank: '/api/bank/trpc/loans.open',
+    p2p: '/api/p2p/trpc/disputes.open',
+    token: '/api/token/trpc/unstake',
     market: '/api/market/trpc/purchase',
+    agents: '/api/agents/trpc/run.complete',
   };
 
   it('arms every live money module from POST /admin/kill-switches', async () => {
