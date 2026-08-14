@@ -25,6 +25,8 @@ const queueEntrySchema = z.object({
   score: z.number().finite(),
   ageMs: z.number().nonnegative(),
   createdAt: z.string().datetime(),
+  timingKind: z.literal('score_not_promise'),
+  sla: z.literal(false),
 });
 
 const queueResultSchema = z.discriminatedUnion('status', [
