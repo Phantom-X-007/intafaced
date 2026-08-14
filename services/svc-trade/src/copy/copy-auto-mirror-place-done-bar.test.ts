@@ -8,7 +8,7 @@
  */
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { MemoryLedger, parseAmount } from '@intafaced/ledger-client';
+import { MemoryLedger, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { describe, expect, it } from 'vitest';
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
@@ -137,7 +137,7 @@ describe('D26-P1-T3 auto-mirror place Done-bar', () => {
       fillId: 'leader-fill-2',
     });
     expect(result.orderId).toBe('ord-follower-1');
-    expect(result.qty).toBe('0.010000000000000000');
+    expect(result.qty).toBe(formatAmount(parseAmount('0.01')));
     expect(placed).toHaveLength(1);
     expect(placed[0]!.qty).toBe(parseAmount('0.01'));
     expect(placed[0]!.clientOrderId).toBe(copyMirrorClientOrderId(follow.followId, 'leader-fill-2'));
