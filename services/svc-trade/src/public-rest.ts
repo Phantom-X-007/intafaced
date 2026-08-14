@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { isScheduleKey, isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
-import { TIMEFRAMES, timeframeSchema, type Timeframe } from '@intafaced/exchange-contract';
+import { TIMEFRAMES, timeframeSchema, RATE_LIMITS, type Timeframe } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
@@ -452,7 +452,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       refuseArms: CCXT_REFUSE_ARMS,
       notes: {
         paperListPolicy: 'paper markets stay listed with paper:true — exclude-from-list is Nitro product (N3)',
-        rateLimit: 'Published RATE_LIMITS in exchange-contract may differ from edge default 300/min — edge enforces; N4 residual',
+        rateLimit: {
+          enforcedBy: 'edge',
+          publicPerMinute: RATE_LIMITS.publicPerMinute,
+          privatePerMinute: RATE_LIMITS.privatePerMinute,
+          windowMs: 60_000,
+        },
         neverInvent: 'mids, funding rates, candles, leverage live re-set',
         openPositionGates: 'caller price 400 · cross margin 400 · ADL disclosure ack required 403 (DIRECTION:34)',
       },
