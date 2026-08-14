@@ -13,7 +13,7 @@ import {
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
-import { emptyPayFiatRampPort, resolvePayFiatRailId, type PayFiatRampPort } from './pay-fiat-adapter.js';
+import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { assertCryptoRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
 
 /**
@@ -58,7 +58,7 @@ import { assertCryptoRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails
  * ═════════════════════════════════════════════════════════════════════════════
  *
  *   · FIAT without a live pay RailAdapter. `socket.psp-partners` — refuse
- *     `bank.fiat_ramp_socket`. When `PayFiatRampPort` yields a live rail, fiat
+ *     `bank.fiat_ramp_no_pay_adapter`. When `PayFiatRampPort` yields a live rail, fiat
  *     uses the same ledger-client deposit/withdraw recipes (no second book).
  *   · CHAIN BROADCAST / CONFIRMATION. Live crypto send and inbound watcher are
  *     svc-pay. Settle here means value left OUR book to `bank-crypto-ledger`
@@ -170,6 +170,18 @@ export class RampService {
   /** What this deployment's ramp programme is — including that it is not one. */
   programmeInfo(): RampProgramme {
     return this.programme;
+  }
+
+  /**
+   * Public settle probe: either a live pay adapter can host both fiat legs,
+   * or refuse with `bank.fiat_ramp_no_pay_adapter`. Empty rails cannot look live.
+   */
+  async fiatSettle(): Promise<{ canSettle: true; onrampRailId: string; offrampRailId: string }> {
+    const rails = await Promise.resolve(this.payFiat.listFiatRails());
+    assertEmptyRailsCannotLookLive(rails, { simulated: this.programme.simulated });
+    const onrampRailId = await resolvePayFiatRailId(this.payFiat, 'onramp');
+    const offrampRailId = await resolvePayFiatRailId(this.payFiat, 'offramp');
+    return { canSettle: true, onrampRailId, offrampRailId };
   }
 
   async onrampsOf(userId: string): Promise<OnrampRecord[]> {

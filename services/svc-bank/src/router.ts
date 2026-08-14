@@ -207,6 +207,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.no_card_issuer':
       case 'bank.cashback_pot_unfunded':
       case 'bank.no_ramp_rail':
+      case 'bank.fiat_ramp_no_pay_adapter':
       case 'bank.fiat_ramp_socket':
       case 'bank.earn_rate_unset':
       case 'bank.auto_invest_rate_unset':
@@ -1749,7 +1750,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * Operator on-ramp credit for the CRYPTO ledger half.
      *
      * Not user-callable: a user who credits their own balance does not need a
-     * ramp. Fiat refuses `bank.fiat_ramp_socket` before a row is written.
+     * ramp. Fiat refuses `bank.fiat_ramp_no_pay_adapter` when no pay adapter can settle.
      */
     creditOnramp: scopedProcedure('admin:treasury')
       .input(
@@ -1997,6 +1998,21 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     programme: scopedProcedure('bank:read', { module: 'bank' })
       .output(rampProgrammeOutput)
       .query(async () => guard(async () => bank.ramps.programmeInfo())),
+
+    /**
+     * Fiat settle probe. Refuses with a typed code when no svc-pay adapter can
+     * settle fiat (empty / sandbox / absent). Does not invent FX. Live partner
+     * rails remain Class X — this door never claims simulated: false.
+     */
+    fiatSettle: scopedProcedure('bank:read', { module: 'bank' })
+      .output(
+        z.object({
+          canSettle: z.literal(true),
+          onrampRailId: z.string(),
+          offrampRailId: z.string(),
+        }),
+      )
+      .query(async () => guard(async () => bank.ramps.fiatSettle())),
 
     onramps: scopedProcedure('bank:read', { module: 'bank' })
       .output(z.array(onrampOutput))

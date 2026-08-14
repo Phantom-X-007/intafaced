@@ -11,7 +11,7 @@
  *   · cards.issue + ops.cardAuthorize with settlement ≠ funding and no rates →
  *     PRECONDITION_FAILED / bank.mark_missing; no authorization row; no hold.
  *   · ramps.offramp / ops.creditOnramp with programme none → PRECONDITION_FAILED /
- *     bank.no_ramp_rail; fiat kind → bank.fiat_ramp_socket before any row.
+ *     bank.no_ramp_rail; fiat kind → bank.fiat_ramp_no_pay_adapter before any row.
  * Class: N (honesty) / M surface (no invent yields or §8 rates). Leverage:
  *   createBankRouter + createBankServices + MemoryLedger (Phase A shell/ledger).
  */
@@ -290,7 +290,7 @@ if (!available) {
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_socket' },
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
       });
       const rows = await sql`SELECT count(*)::text AS c FROM bank.ramp_onramps`;
       expect(rows[0]?.c).toBe('0');

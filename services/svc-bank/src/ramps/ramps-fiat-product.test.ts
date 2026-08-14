@@ -26,7 +26,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
 import { createBankRouter } from '../router.js';
-import type { PayFiatRampPort } from './pay-fiat-adapter.js';
+import { inRepoPayFiatRampPort, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { CRYPTO_LEDGER_PROGRAMME } from './rails.js';
 
 const SECRET = 'bank-ramps-fiat-product-boundary-secret-32';
@@ -111,6 +111,26 @@ if (!available) {
       });
     });
 
+    it('ramps.fiatSettle public door refuses when no pay adapter can settle fiat', async () => {
+      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+      });
+      await expect(signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.fiatSettle()).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+      });
+    });
+
+    it('ramps.fiatSettle refuses in-repo sandbox/absent pay adapters', async () => {
+      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: inRepoPayFiatRampPort },
+      });
+      await expect(signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.fiatSettle()).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+      });
+    });
+
     it('refuses fiat through ops.creditOnramp when no live pay adapter is injected', async () => {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
@@ -126,7 +146,7 @@ if (!available) {
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_socket' },
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
       });
       const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
       expect(count[0]!.n).toBe(0);
@@ -148,7 +168,7 @@ if (!available) {
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_socket' },
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
       });
       const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
       expect(count[0]!.n).toBe(0);
@@ -181,6 +201,8 @@ if (!available) {
       // Crypto ledger rail must not absorb fiat — that would be a second book path.
       expect((await ledger.balance(railBoundary('bank-crypto-ledger', 'USDT'))).amount).toBe(amt('0'));
       expect(ledger.reconcile()).toEqual({ ok: true });
+      // Same decimal in, same decimal out — no invented FX mark.
+      expect(credited.amount).toBe('25');
     });
 
     it('settles fiat off-ramp through user ramps.offramp onto the same pay rail', async () => {

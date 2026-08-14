@@ -43,6 +43,48 @@ export const emptyPayFiatRampPort: PayFiatRampPort = {
 };
 
 /**
+ * Honest snapshot of in-repo svc-pay adapters (Phase A IN). Names only — this
+ * service does not import `@intafaced/svc-pay`.
+ *
+ *   crypto-native — chain rail, not fiat settle
+ *   card-sandbox  — sandbox succeeds on pay; must not launder into bank fiat
+ *   bank-payout   — registered `absent`; every call refuses
+ *
+ * None of these can honestly move fiat. A live partner rail is Class X.
+ */
+export const IN_REPO_PAY_FIAT_RAILS: readonly PayFiatRailSnapshot[] = [
+  { railId: 'crypto-native', mode: 'sandbox', capabilities: [] },
+  { railId: 'card-sandbox', mode: 'sandbox', capabilities: ['onramp'] },
+  { railId: 'bank-payout', mode: 'absent', capabilities: ['offramp'] },
+];
+
+export const inRepoPayFiatRampPort: PayFiatRampPort = {
+  listFiatRails: () => IN_REPO_PAY_FIAT_RAILS,
+};
+
+/**
+ * Empty / non-live rails must not present as a working fiat ramp.
+ *
+ * `simulated: false` or `looksLive: true` against an empty (or non-settling)
+ * adapter list is the honesty bug this residual seals.
+ */
+export function assertEmptyRailsCannotLookLive(
+  rails: readonly PayFiatRailSnapshot[],
+  claim: { simulated: boolean; looksLive?: boolean },
+): void {
+  const canSettle =
+    selectLivePayFiatRail(rails, 'onramp') !== null || selectLivePayFiatRail(rails, 'offramp') !== null;
+  const looksLive = claim.simulated === false || claim.looksLive === true;
+  if (looksLive && !canSettle) {
+    throw new BankError(
+      'A fiat ramp cannot look live when no svc-pay adapter can settle fiat — rails empty, sandbox, or absent. ' +
+        'No invented FX. Socket remains socket.psp-partners.',
+      'bank.fiat_ramp_no_pay_adapter',
+    );
+  }
+}
+
+/**
  * Pick a usable live pay rail for the capability. Sandbox and absent never win.
  */
 export function selectLivePayFiatRail(
@@ -76,8 +118,8 @@ export async function resolvePayFiatRailId(port: PayFiatRampPort | null | undefi
 
   throw new BankError(
     `Fiat ${capability} is socket.psp-partners — a bank/PSP partner and money-transmission permission, not inventable code. ` +
-      `The only in-repo path is a live svc-pay RailAdapter (PayFiatRampPort); sandbox/absent rails cannot host bank fiat. ` +
-      `Considered: ${summary}.`,
-    'bank.fiat_ramp_socket',
+      `No svc-pay adapter can settle fiat. The only in-repo path is a live svc-pay RailAdapter (PayFiatRampPort); ` +
+      `sandbox/absent/empty rails cannot host bank fiat. No invented FX rate. Considered: ${summary}.`,
+    'bank.fiat_ramp_no_pay_adapter',
   );
 }
