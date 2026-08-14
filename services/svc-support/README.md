@@ -43,8 +43,10 @@ contract, and a CHECK constraint. There is no `amount` field anywhere;
 `money_request` is a reason NAME that files a request for whoever owns the
 pay/ledger recipe.
 
-**No SLA.** Queue priority is a score, not a promise. Describing support timing
-to a user needs an owner ruling (DIRECTION §8 item 9).
+**No SLA.** Queue priority is a score, not a promise. Every queue row carries
+`timingKind: score_not_promise` and `sla: false` — never `eta` / `dueAt` /
+`slaMinutes`. Describing support timing to a user needs an owner ruling
+(DIRECTION §8 item 9).
 
 ## API
 

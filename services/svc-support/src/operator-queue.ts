@@ -8,6 +8,7 @@
  */
 
 import type { SupportTicket, SupportTicketStatus } from '@intafaced/contracts';
+import { queueTimingHonesty, type QueueTimingHonesty } from './sla-honesty.js';
 
 /** Higher = more urgent. Product may retune; defaults are checkable. */
 export const CATEGORY_WEIGHT: Readonly<Record<string, number>> = {
@@ -26,6 +27,9 @@ export type QueueEntry = {
   readonly score: number;
   readonly ageMs: number;
   readonly createdAt: string;
+  /** Score is ranking, not a timed promise (DIRECTION §8 item 9). */
+  readonly timingKind: QueueTimingHonesty['timingKind'];
+  readonly sla: false;
 };
 
 export type QueueResult = { readonly status: 'ok'; readonly entries: readonly QueueEntry[] } | { readonly status: 'empty' };
@@ -66,6 +70,7 @@ export function buildOperatorQueue(tickets: readonly SupportTicket[], options: {
       score,
       ageMs,
       createdAt: t.createdAt,
+      ...queueTimingHonesty(),
     });
   }
 

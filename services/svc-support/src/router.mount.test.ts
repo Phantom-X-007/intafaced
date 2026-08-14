@@ -214,6 +214,8 @@ describe('svc-support mount', () => {
             score: 70,
             ageMs: 0,
             createdAt,
+            timingKind: 'score_not_promise' as const,
+            sla: false as const,
           },
         ],
       })),
@@ -226,6 +228,8 @@ describe('svc-support mount', () => {
         score: 70,
         ageMs: 0,
         createdAt,
+        timingKind: 'score_not_promise' as const,
+        sla: false as const,
       })),
       claimForOperator: vi.fn(async () => ({
         id: ticketId,
