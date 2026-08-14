@@ -40,7 +40,7 @@ import { checkEngineSequences, describeRegressions } from './spot/sequence-guard
 import { parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { parseOtcDeskLawJson } from './otc/desk-law.js';
-import { createConfigOtcMidSource } from './otc/mid-source.js';
+import { createOtcMidSourceFromConfig } from './otc/venue-mid-source.js';
 import { OtcDeskService } from './otc/otc-service.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
 import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
@@ -114,13 +114,26 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
+// Venue fabric public mid (A-TRADE-VENUE-1). Empty venue = off. Shared with MM + OTC.
+// Unknown venue id → null (refuse invent). Created before OTC so the desk can chain it.
+const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
+
 // trade.otc — D-S-02 / D26-P1-T2. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
-// Empty TRADE_OTC_MIDS → the desk can source no price and refuses every quote.
-// Boot-stamped mids carry asOf; published maxMidAgeSeconds makes them go dark.
+// Empty TRADE_OTC_MIDS / unmapped venue pair → the desk can source no price and refuses.
+// Boot-stamped mids carry asOf; venue observation refreshes asOf when opted in.
 const otcDeskLaw = parseOtcDeskLawJson(env.TRADE_OTC_DESK_LAW);
 const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET);
-const otcMids = createConfigOtcMidSource(env.TRADE_OTC_MIDS);
-const otc = new OtcDeskService(ledger, otcStakes, { law: otcDeskLaw, midSource: otcMids });
+const otcMidBuilt = createOtcMidSourceFromConfig({
+  midsEnv: env.TRADE_OTC_MIDS,
+  midFromVenue: env.TRADE_OTC_MID_FROM_VENUE,
+  venueAdapter: venuePublicAdapter,
+  venueSymbols: env.TRADE_OTC_VENUE_SYMBOLS,
+});
+const otc = new OtcDeskService(ledger, otcStakes, {
+  law: otcDeskLaw,
+  midSource: otcMidBuilt.source,
+  liveObservationFeed: otcMidBuilt.liveObservationFeed,
+});
 
 // trade.copy — D-S-03 Stage product mount. Empty TRADE_COPY_* laws → refuse-closed
 // (never invent leader_share_bps or jurisdiction allowlist). Sql store needs
@@ -152,10 +165,7 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-// Venue fabric public mid → mark path (A-TRADE-VENUE-1). Empty venue = off.
-// Unknown venue id → null (refuse invent). Symbol map required per market.
-// Shared adapter also feeds MM mid port when TRADE_MM_SEED_MID_FROM_VENUE (A-TRADE-MM-3).
-const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
+// Venue fabric public mid → mark path (A-TRADE-VENUE-1). Adapter created above (OTC/MM share).
 const venueMarkConfigured = createConfiguredVenueMarkSource({
   venueId: env.TRADE_VENUE_MARK_VENUE,
   symbols: env.TRADE_VENUE_MARK_SYMBOLS,

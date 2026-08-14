@@ -36,6 +36,8 @@ export interface OtcDeskServiceOptions {
   platformCounterpartyId?: string;
   /** Server-side reference mid. Absent → every quote refuses (never the caller's number). */
   midSource?: OtcMidSource;
+  /** True when production installed the venue observation source (not the boot map). */
+  liveObservationFeed?: boolean;
   now?: () => Date;
 }
 
@@ -45,6 +47,7 @@ export class OtcDeskService {
   private readonly law: OtcDeskLaw;
   private readonly platformCounterpartyId: string;
   private readonly midSource: OtcMidSource;
+  private readonly liveObservationFeed: boolean;
   private readonly now: () => Date;
 
   constructor(
@@ -55,6 +58,7 @@ export class OtcDeskService {
     this.law = options.law ?? UNPUBLISHED_OTC_DESK_LAW;
     this.platformCounterpartyId = options.platformCounterpartyId ?? 'platform:otc-desk';
     this.midSource = options.midSource ?? NO_OTC_MIDS;
+    this.liveObservationFeed = options.liveObservationFeed === true;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -65,12 +69,12 @@ export class OtcDeskService {
       residual: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
       /** SOCKET §13 — platform settle real; maker route refuse-closed. */
       makerRouting: otcMakerRoutingStatus(),
-      /** SOCKET §13 — boot map age-gates; live observation feed not published. */
-      midFeed: otcMidFeedStatus(),
+      /** SOCKET §13 — boot map age-gates unless venue observation source is installed. */
+      midFeed: otcMidFeedStatus(this.liveObservationFeed),
       residuals: {
         deskLaw: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
         makerRouting: OTC_MAKER_ROUTING_RESIDUAL,
-        midFeed: OTC_MID_FEED_RESIDUAL,
+        midFeed: this.liveObservationFeed ? null : OTC_MID_FEED_RESIDUAL,
       },
     };
   }

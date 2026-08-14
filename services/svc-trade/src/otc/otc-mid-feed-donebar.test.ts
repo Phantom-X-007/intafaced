@@ -12,7 +12,7 @@ import { FixedOtcStake } from './stake-source.js';
 import { OTC_MID_FEED_RESIDUAL, OTC_MID_FEED_SOCKET, otcMidFeedStatus } from './mid-feed.js';
 
 describe('socket.otc-mid-feed Done bar', () => {
-  it('deskStatus names the mid-feed socket refuse-closed', () => {
+  it('deskStatus names the mid-feed socket refuse-closed when venue observation is not installed', () => {
     const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('0')));
     const status = svc.deskStatus();
     expect(status.midFeed).toEqual(otcMidFeedStatus());
@@ -20,5 +20,16 @@ describe('socket.otc-mid-feed Done bar', () => {
     expect(status.midFeed.socket).toBe(OTC_MID_FEED_SOCKET);
     expect(status.midFeed.liveObservationFeed).toBe(false);
     expect(status.residuals.midFeed).toBe(OTC_MID_FEED_RESIDUAL);
+  });
+
+  it('deskStatus publishes liveObservationFeed when the venue source is installed', () => {
+    const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('0')), {
+      liveObservationFeed: true,
+    });
+    const status = svc.deskStatus();
+    expect(status.midFeed).toEqual(otcMidFeedStatus(true));
+    expect(status.midFeed.published).toBe(true);
+    expect(status.midFeed.liveObservationFeed).toBe(true);
+    expect(status.residuals.midFeed).toBeNull();
   });
 });
