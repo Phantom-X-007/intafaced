@@ -211,11 +211,10 @@ export function assertCardMandateCannotOpenMoney(path: string): void {
   }
   const d = mandateChargeDisposition(path);
   if (d.kind !== 'refuse' || d.code !== 'pay.mandate_rail_absent') {
-    throw new PayError(
-      `Card mandate rail must refuse pay.mandate_rail_absent (${CARD_MANDATE_CHARGE_SOCKET})`,
-      'pay.mandate_rail_absent',
-      { path, socket: CARD_MANDATE_CHARGE_SOCKET },
-    );
+    throw new PayError(`Card mandate rail must refuse pay.mandate_rail_absent (${CARD_MANDATE_CHARGE_SOCKET})`, 'pay.mandate_rail_absent', {
+      path,
+      socket: CARD_MANDATE_CHARGE_SOCKET,
+    });
   }
 }
 

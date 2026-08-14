@@ -120,7 +120,7 @@ describe('tracker parks card rail and pre-charge (mountain event not this slice)
     const tracker = readFileSync(join(here, '../../../../tooling/tracker/features.mjs'), 'utf8');
     const start = tracker.indexOf("f('pay.subscriptions'");
     expect(start).toBeGreaterThan(-1);
-    const next = tracker.indexOf("\n  f(", start + 1);
+    const next = tracker.indexOf('\n  f(', start + 1);
     const block = tracker.slice(start, next === -1 ? undefined : next);
     expect(block).toMatch(/pay\.mandate_rail_absent/);
     expect(block).toMatch(/socket\.psp-partners/);
