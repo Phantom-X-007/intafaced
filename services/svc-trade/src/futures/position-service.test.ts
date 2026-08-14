@@ -740,7 +740,7 @@ if (!available) {
         size: amt('1'),
         leverage: amt('10'),
       }),
-    ).rejects.toMatchObject({ code: 'trade.futures_unconfigured', status: 503 });
+    ).rejects.toMatchObject({ code: 'trade.futures_unconfigured', status: 403 });
 
     expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
     expect(await positions.listOpen(ALICE)).toEqual([]);
@@ -767,7 +767,7 @@ if (!available) {
     feed('51000');
     await expect(withoutProfitSource().close(ALICE, pos.id!)).rejects.toMatchObject({
       code: 'trade.profit_source_unconfigured',
-      status: 503,
+      status: 403,
     });
 
     expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userBefore);

@@ -384,7 +384,7 @@ export class PositionService {
      * a pot was configured stay available — see `close()`.
      */
     if (this.deps.profitSource == null) {
-      throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 503);
+      throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 403);
     }
 
     /**
@@ -820,7 +820,7 @@ export class PositionService {
             throw new FuturesError(
               `Cannot realise ${formatAmount(plan.profit)} ${row.margin_asset} of profit — ${PROFIT_SOURCE_UNCONFIGURED}`,
               'trade.profit_source_unconfigured',
-              503,
+              403,
             );
           }
 

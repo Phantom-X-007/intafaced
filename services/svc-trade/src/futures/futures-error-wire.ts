@@ -2,10 +2,9 @@
  * REST body for `FuturesError`.
  *
  * Operator-config codes stay domain `{ error, message }` but carry `ccxtCode:
- * NotSupported` and `retry: false`. HTTP may still be 503 (current open/close
- * throws) — CCXT transports retry 5xx unless the body says not to. These are
- * not venue-down: an operator names the profit pot. Same posture as
- * `trade.futures_disabled` → NotSupported.
+ * NotSupported` and `retry: false`. HTTP is 403 (same as `trade.futures_disabled`)
+ * so CCXT transports do not retry 5xx. These are not venue-down: an operator
+ * names the profit pot.
  *
  * Other FuturesError codes keep the historical two-field body — do not invent
  * a retry class for marks / locks here.
