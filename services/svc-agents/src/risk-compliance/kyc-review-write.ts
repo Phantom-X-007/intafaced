@@ -3,7 +3,6 @@
  * This agent must never write it — a draft is not an approval.
  */
 
-import type { CopyKey } from '../copy.js';
 import { RISK_COMPLIANCE_REFUSE_COPY } from './screening-draft.js';
 
 export type KycReviewWriteRefuse = {
@@ -14,7 +13,7 @@ export type KycReviewWriteRefuse = {
   /** Named so tests can grep the boundary without a write landing. */
   readonly column: 'reviewed_by';
   readonly writable: false;
-  readonly userMessageKey: CopyKey;
+  readonly userMessageKey: typeof RISK_COMPLIANCE_REFUSE_COPY;
 };
 
 export type KycReviewWriteInput = {

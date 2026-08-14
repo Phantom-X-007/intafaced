@@ -19,7 +19,7 @@ import {
 } from '@intafaced/config';
 import type { CopyKey } from '../copy.js';
 
-export const RISK_COMPLIANCE_REFUSE_COPY: CopyKey = 'agents.error.capability_unavailable';
+export const RISK_COMPLIANCE_REFUSE_COPY = 'agents.error.capability_unavailable' as const satisfies CopyKey;
 
 export type ScreeningDraftRefuseReason = 'screening_unset' | 'screening_empty' | 'inputs_missing' | 'decision_forbidden';
 
