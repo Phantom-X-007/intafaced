@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { router, scopedProcedure, publicProcedure, TRPCError } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { PayError, type PayService } from './payment-service.js';
+import { DestinationKindError } from './payout-destination.js';
+import {
+  assertOnlyPayoutDestinations,
+  PayoutDestinationMissingError,
+  type MerchantPayoutDestinations,
+} from './merchant-payout-destination.js';
 import type { UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import type { RailRegistry } from './rails/registry.js';
 import { RAIL_CAPABILITIES, RAIL_MODES } from './rails/rail-adapter.js';
@@ -131,7 +137,7 @@ type WithdrawalViewOut = z.infer<typeof withdrawalView>;
  * `assertSelf`. NOT_FOUND leaks less because it never confirms the id exists,
  * but every id here is a v4 uuid the caller already holds.
  */
-export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService, trees: MerchantAreaFence | null = null) {
+export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService, trees: MerchantAreaFence | null = null, destinations: MerchantPayoutDestinations = assertOnlyPayoutDestinations()) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -299,6 +305,28 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
             const merchant = await pay.createMerchant({ ...input, userId });
             return { id: merchant.id, userId: merchant.userId, mode: merchant.mode, feeBps: merchant.pricing.feeBps ?? 0 };
+          }),
+        ),
+
+      /**
+       * Persist a payout destination through assertPayoutDestinationKind
+       * (IBAN / IFSC / EVM) so a later payout has a real ref before withdrawHold.
+       */
+      setPayoutDestination: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            railId: z.string().min(1),
+            kind: z.string().min(1),
+            ref: z.string().min(1),
+          }),
+        )
+        .output(z.object({ kind: z.string(), ref: z.string(), railId: z.string() }))
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement.payout');
+            const dest = await destinations.persist(input);
+            return { ...dest, railId: input.railId };
           }),
         ),
 
@@ -645,7 +673,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           z.object({
             settlementId: z.string().uuid(),
             railId: z.string().min(1),
-            destination: z.object({ kind: z.string().min(1), ref: z.string().min(1) }),
+            destination: z.object({ kind: z.string().min(1), ref: z.string().min(1) }).optional(),
           }),
         )
         .output(settlementView)
@@ -653,7 +681,15 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           wrap(async () => {
             const settlement = await pay.getSettlement(input.settlementId);
             await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement.payout');
-            return toSettlementOut(await pay.payoutSettlement(input));
+            const destination = input.destination
+              ? await destinations.persist({
+                  merchantId: settlement.merchantId,
+                  railId: input.railId,
+                  kind: input.destination.kind,
+                  ref: input.destination.ref,
+                })
+              : await destinations.require({ merchantId: settlement.merchantId, railId: input.railId });
+            return toSettlementOut(await pay.payoutSettlement({ ...input, destination }));
           }),
         ),
 
