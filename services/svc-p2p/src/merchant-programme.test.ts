@@ -3,7 +3,11 @@ import {
   canTransition,
   checkEligibility,
   DEFAULT_ELIGIBILITY,
+  describeReputationSnapshot,
   isActiveMerchant,
+  mayRestoreProgrammePrivileges,
+  programmeVouch,
+  reputationOnPublicDoor,
   standingBrokenByDisputeLaw,
   TRANSITIONS,
   type MerchantStatus,
@@ -106,6 +110,41 @@ describe('dispute law — approved standing cannot outlive a moderated loss', ()
 
   it('does not invent a break when the approved record still meets policy', () => {
     expect(standingBrokenByDisputeLaw('approved', snapshotOf(counters())).broken).toBe(false);
+  });
+});
+
+describe('operator freeze / restore — same snapshot badges use', () => {
+  it('names the counters and derived badges so a freeze is checkable later', () => {
+    const snap = snapshotOf(counters());
+    expect(describeReputationSnapshot(snap)).toContain('20 escrowed trades');
+    expect(describeReputationSnapshot(snap)).toContain('derived badges:');
+    expect(describeReputationSnapshot(snap)).toContain('reliable');
+    expect(describeReputationSnapshot(snap)).not.toContain('spotless');
+  });
+
+  it('refuses unfreeze when live reputation would fail apply', () => {
+    const lost = snapshotOf(counters({ disputed: 1, disputesLost: 1 }));
+    const verdict = mayRestoreProgrammePrivileges(lost);
+    expect(verdict.eligible).toBe(false);
+    expect(verdict.eligible === false && verdict.reason).toContain('dispute');
+  });
+
+  it('allows unfreeze only when the current snapshot still meets programme rules', () => {
+    expect(mayRestoreProgrammePrivileges(snapshotOf(counters())).eligible).toBe(true);
+  });
+
+  it('puts freeze on the public reputation door without minting a badge', () => {
+    const snap = snapshotOf(counters());
+    const frozen = reputationOnPublicDoor(snap, programmeVouch('suspended', true));
+    expect(frozen.merchant).toBe(false);
+    expect(frozen.badges).toEqual(snap.badges);
+    expect(frozen).not.toHaveProperty('p2pLimitMultiplier');
+
+    const restored = reputationOnPublicDoor(snap, programmeVouch('approved', true));
+    expect(restored.merchant).toBe(true);
+    expect(restored.badges).toEqual(snap.badges);
+
+    expect(programmeVouch('approved', false)).toBeNull();
   });
 });
 

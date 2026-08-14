@@ -10,6 +10,7 @@ import { parseAmount } from '@intafaced/ledger-client';
 import { createLedgerClient } from './ledger-client.js';
 import { describeLimits, limitsConfigured } from './merchant-limits.js';
 import type { MerchantStatus } from './merchant-programme.js';
+import { programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import { MerchantService } from './merchant-service.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
 import { parseModeratorUserIds } from './moderation-auth.js';
@@ -192,7 +193,10 @@ app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (r
     return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
   }
   const snapshot = await p2p.reputationOf(req.params.userId);
-  return { ...snapshot, badges: [...snapshot.badges] };
+  const record = await merchants.get(req.params.userId);
+  // Same door tRPC reputation.get uses: derived badges + freeze, never a
+  // second scorecard and never an invented p2pLimitMultiplier.
+  return reputationOnPublicDoor(snapshot, programmeVouch(record?.status, true));
 });
 
 // ── The sweeps ───────────────────────────────────────────────────────────────
