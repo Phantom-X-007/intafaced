@@ -193,6 +193,33 @@ export function pathOpensMoney(path: string): boolean {
 }
 
 /**
+ * Card mandate door: a `card` / `card_mandate` path must refuse
+ * `pay.mandate_rail_absent`. Crypto is not this door — it may open an invoice.
+ *
+ * Fire already uses `mandateChargeDisposition`. This assertion is the pin a
+ * test can call without inventing a pull: if it throws, the card rail opened.
+ */
+export function assertCardMandateCannotOpenMoney(path: string): void {
+  const normalised = normaliseSubscriptionPath(path);
+  if (normalised !== 'card') return;
+  if (pathOpensMoney(path)) {
+    throw new PayError(
+      `Card mandate path ${JSON.stringify(path)} opened money — acquiring is ${CARD_MANDATE_CHARGE_SOCKET}`,
+      'pay.mandate_rail_absent',
+      { path, socket: CARD_MANDATE_CHARGE_SOCKET },
+    );
+  }
+  const d = mandateChargeDisposition(path);
+  if (d.kind !== 'refuse' || d.code !== 'pay.mandate_rail_absent') {
+    throw new PayError(
+      `Card mandate rail must refuse pay.mandate_rail_absent (${CARD_MANDATE_CHARGE_SOCKET})`,
+      'pay.mandate_rail_absent',
+      { path, socket: CARD_MANDATE_CHARGE_SOCKET },
+    );
+  }
+}
+
+/**
  * Merchant / Ready surface — product posture in one object.
  *
  * Crypto mandate lifecycle is product-complete on tip (invoice-and-watch).
