@@ -29,6 +29,7 @@ import {
 import { planOtcSettle, postOtcSettle } from './settle.js';
 import { assertOtcStakeGate, otcStakeGate } from './stake-gate.js';
 import type { OtcStakeSource } from './stake-source.js';
+import { MemoryOtcQuoteStore, type OtcQuoteStore } from './quote-store.js';
 
 export interface OtcDeskServiceOptions {
   law?: OtcDeskLaw;
@@ -36,15 +37,19 @@ export interface OtcDeskServiceOptions {
   platformCounterpartyId?: string;
   /** Server-side reference mid. Absent → every quote refuses (never the caller's number). */
   midSource?: OtcMidSource;
+  /** True when production installed the venue observation source (not the boot map). */
+  liveObservationFeed?: boolean;
+  /** Durable quote table. Tests inject MemoryOtcQuoteStore; boot uses SQL. */
+  store?: OtcQuoteStore;
   now?: () => Date;
 }
 
 export class OtcDeskService {
-  private readonly quotes = new Map<string, OtcQuote>();
-  private readonly bounds = new Map<string, BoundOtcFill>();
+  private readonly store: OtcQuoteStore;
   private readonly law: OtcDeskLaw;
   private readonly platformCounterpartyId: string;
   private readonly midSource: OtcMidSource;
+  private readonly liveObservationFeed: boolean;
   private readonly now: () => Date;
 
   constructor(
@@ -55,6 +60,8 @@ export class OtcDeskService {
     this.law = options.law ?? UNPUBLISHED_OTC_DESK_LAW;
     this.platformCounterpartyId = options.platformCounterpartyId ?? 'platform:otc-desk';
     this.midSource = options.midSource ?? NO_OTC_MIDS;
+    this.liveObservationFeed = options.liveObservationFeed === true;
+    this.store = options.store ?? new MemoryOtcQuoteStore();
     this.now = options.now ?? (() => new Date());
   }
 
@@ -65,12 +72,12 @@ export class OtcDeskService {
       residual: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
       /** SOCKET §13 — platform settle real; maker route refuse-closed. */
       makerRouting: otcMakerRoutingStatus(),
-      /** SOCKET §13 — boot map age-gates; live observation feed not published. */
-      midFeed: otcMidFeedStatus(),
+      /** SOCKET §13 — boot map age-gates unless venue observation source is installed. */
+      midFeed: otcMidFeedStatus(this.liveObservationFeed),
       residuals: {
         deskLaw: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
         makerRouting: OTC_MAKER_ROUTING_RESIDUAL,
-        midFeed: OTC_MID_FEED_RESIDUAL,
+        midFeed: this.liveObservationFeed ? null : OTC_MID_FEED_RESIDUAL,
       },
     };
   }
@@ -154,7 +161,7 @@ export class OtcDeskService {
       quoteTtlMs: law.quoteTtlMs,
     });
 
-    this.quotes.set(quote.quoteId, quote);
+    await this.store.saveOpen(quote);
     return presentOtcQuote(quote);
   }
 
@@ -163,12 +170,24 @@ export class OtcDeskService {
     input: { quoteId: string; /** Optional — if set must equal quoted price (last-look guard). */ assertedPrice?: string },
   ) {
     requirePublishedOtcDeskLaw(this.law);
-    const quote = this.quotes.get(input.quoteId);
-    if (!quote) {
+    const stored = await this.store.load(input.quoteId);
+    if (!stored) {
       throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
     }
-    if (quote.userId !== principal.userId) {
+    if (stored.quote.userId !== principal.userId) {
       throw new OtcError('OTC quote belongs to another user', 'trade.otc_not_owner');
+    }
+    if (stored.lifecycle === 'settled') {
+      throw new OtcError('OTC quote already settled', 'trade.otc_already_settled');
+    }
+    if (stored.lifecycle === 'bound') {
+      if (input.assertedPrice != null && input.assertedPrice.trim() !== '') {
+        const asserted = parseAmount(input.assertedPrice);
+        if (asserted !== stored.bound.fillPrice) {
+          throw new OtcError('Last look is not permitted — accept must honour the quoted price', 'trade.otc_last_look_forbidden');
+        }
+      }
+      return presentBoundOtcFill(stored.bound);
     }
 
     let asserted: Amount | null = null;
@@ -176,9 +195,8 @@ export class OtcDeskService {
       asserted = parseAmount(input.assertedPrice);
     }
 
-    const bound = acceptOtcQuote({ quote, now: this.now(), assertedPrice: asserted });
-    this.bounds.set(bound.quoteId, bound);
-    this.quotes.delete(quote.quoteId);
+    const bound = acceptOtcQuote({ quote: stored.quote, now: this.now(), assertedPrice: asserted });
+    await this.store.saveBound(stored.quote, bound);
     return presentBoundOtcFill(bound);
   }
 
@@ -188,31 +206,39 @@ export class OtcDeskService {
    */
   async settle(principal: Principal, input: { quoteId: string }) {
     const law = requirePublishedOtcDeskLaw(this.law);
-    const bound = this.bounds.get(input.quoteId);
-    if (!bound) {
+    const stored = await this.store.load(input.quoteId);
+    if (!stored || stored.lifecycle === 'open') {
       throw new OtcError('OTC bound fill not found — accept first', 'trade.otc_quote_missing');
     }
-    if (bound.userId !== principal.userId) {
+    if (stored.bound.userId !== principal.userId) {
       throw new OtcError('OTC fill belongs to another user', 'trade.otc_not_owner');
     }
 
     // Derived from the quote, never minted: a retry after a partial post must
     // compute the same keys and find the ledger's original transaction.
-    const { takerOrderId, makerOrderId, fillId } = otcSettleIdsFor(bound.quoteId);
+    const { takerOrderId, makerOrderId, fillId } = otcSettleIdsFor(stored.bound.quoteId);
+    if (stored.lifecycle === 'settled') {
+      return {
+        fillId,
+        takerOrderId,
+        makerOrderId,
+        ...presentBoundOtcFill(stored.bound),
+      };
+    }
     const plan = planOtcSettle({
       law,
-      bound,
+      bound: stored.bound,
       takerOrderId,
       makerOrderId,
       fillId,
     });
     await postOtcSettle(this.ledger, plan);
-    this.bounds.delete(bound.quoteId);
+    await this.store.saveSettled(stored.quote, stored.bound, this.now());
     return {
       fillId,
       takerOrderId,
       makerOrderId,
-      ...presentBoundOtcFill(bound),
+      ...presentBoundOtcFill(stored.bound),
     };
   }
 }

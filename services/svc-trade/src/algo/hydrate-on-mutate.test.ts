@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import { TradeError } from '../spot/types.js';
 import { MemoryTwapParentStore } from './parent-store.js';
-import { hydrateAlgoIfMissing, persistAlgoMutation } from './hydrate-on-mutate.js';
+import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoMutation } from './hydrate-on-mutate.js';
 import { TwapEngine, type TwapEnginePorts } from './twap-engine.js';
 import type { AlgoQuotedMark, CreateTwapInput } from './types.js';
 
@@ -75,5 +75,33 @@ describe('trade.algo — hydrate on mutate after restart', () => {
     const store = new MemoryTwapParentStore();
     const cold = new TwapEngine(ports());
     await expect(hydrateAlgoIfMissing(cold, store, USER, 'missing')).rejects.toBeInstanceOf(TradeError);
+  });
+
+  it('tick after restart hydrates from store and awaits save of the miss', async () => {
+    const dry = { ...ports(), bestOpposingPrice: async () => null };
+    const store = new MemoryTwapParentStore();
+    const live = new TwapEngine(dry);
+    const parent = live.create(USER, baseInput(), LOT);
+    await store.save({ parent, plan: live.planOf(parent.id) ?? [] });
+    expect((await store.load(parent.id))?.parent.misses).toHaveLength(0);
+
+    const cold = new TwapEngine(dry);
+    await hydrateAlgoFromStore(cold, store, parent.id);
+    const tick = await cold.tick(parent.id);
+    expect(tick.kind).toBe('miss');
+    const after = cold.get(parent.id)!;
+    await persistAlgoMutation(cold, store, after);
+
+    const loaded = await store.load(parent.id);
+    expect(loaded?.parent.misses).toHaveLength(1);
+    expect(loaded?.parent.nextSliceIndex).toBe(1);
+  });
+
+  it('hydrateAlgoFromStore 404s when the store has no row', async () => {
+    const store = new MemoryTwapParentStore();
+    const cold = new TwapEngine(ports());
+    await expect(hydrateAlgoFromStore(cold, store, 'missing')).rejects.toMatchObject({
+      code: 'trade.algo_not_found',
+    });
   });
 });

@@ -52,7 +52,9 @@ import {
   type TwapParent,
   type TwapParentStore,
 } from '../algo/index.js';
-import { hydrateAlgoIfMissing, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
+import { captureAlgoPlaceGrant, principalFromAlgoGrant } from '../algo/durable-principal.js';
+import type { TwapParentRecord } from '../algo/parent-store.js';
+import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import {
   TradeError,
   type Candle,
@@ -344,27 +346,11 @@ export class TradeService {
           if (!parent) throw new TradeError(`algo ${req.parentId} not found`, 'trade.algo_not_found');
           const principal = this.algoPrincipals.get(parent.userId);
           if (!principal) {
-            // ── SOCKET §13 · `socket.algo-principal-durability` ─────────────
-            //
-            // `algoPrincipals` is in-process and only ever written by
-            // `createTwap`. `tickAllAlgos` rehydrates the PARENT from Postgres
-            // but cannot rehydrate the caller's authority, so after a restart
-            // every schedule that survived finds nothing here.
-            //
-            // The obvious fix — persist the principal with the parent — is not
-            // a refactor: it stores an authorisation grant that outlives the
-            // session that gave it, and how long a schedule may carry the right
-            // to trade on someone's behalf is owner law, not a default to pick.
-            // Minting a principal from the parent's userId is worse — that is
-            // the service granting itself authority the user never presented.
-            //
-            // Until that is decided the honest behaviour is to STOP. The engine
-            // halts on this code and leaves the schedule intact, so the user
-            // finds an order that stopped with a stated reason and can cancel
-            // or re-place it — rather than one that quietly ran to "completed"
-            // having placed nothing.
+            // Pre-migration rows, expired grant, or missing trade:write on
+            // stored claims. Creating a TWAP persists the presented grant
+            // (`grant_claims`); tick reinstalls it. Never mint from userId.
             throw new TradeError(
-              "this schedule outlived the session that authorised it — refusing to place on the caller's behalf (SOCKET §13 socket.algo-principal-durability)",
+              "this schedule has no durable place grant — refusing to place on the caller's behalf",
               'trade.algo_principal_unavailable',
             );
           }
@@ -2277,9 +2263,8 @@ export class TradeService {
     this.algoPrincipals.set(principal.userId, principal);
 
     const parent = this.algo.create(principal.userId, createInput, market.lotSize);
-    // Await durable write so a crash between create and first onChange cannot lose the schedule.
     const plan = this.algo.planOf(parent.id) ?? [];
-    await this.algoStore.save({ parent, plan });
+    await this.algoStore.save({ parent, plan, grant: captureAlgoPlaceGrant(principal) });
     return parent;
   }
 
@@ -2334,7 +2319,13 @@ export class TradeService {
 
   /** Drive one parent's next due slice (job host / tests). */
   async tickAlgo(parentId: string) {
-    return this.algo.tick(parentId);
+    await hydrateAlgoFromStore(this.algo, this.algoStore, parentId);
+    const loaded = await this.algoStore.load(parentId);
+    if (loaded) this.installAlgoPlaceGrant(loaded);
+    const result = await this.algo.tick(parentId);
+    const live = this.algo.get(parentId);
+    if (live) await persistAlgoMutation(this.algo, this.algoStore, live);
+    return result;
   }
 
   /** Drive all active algos once. Hydrates durable active parents first. */
@@ -2344,8 +2335,32 @@ export class TradeService {
       if (!this.algo.get(rec.parent.id)) {
         this.algo.hydrate(rec.parent, rec.plan);
       }
+      this.installAlgoPlaceGrant(rec);
     }
-    return this.algo.tickAll();
+    await this.algo.tickAll();
+    for (const rec of active) {
+      const live = this.algo.get(rec.parent.id);
+      if (live) await persistAlgoMutation(this.algo, this.algoStore, live);
+    }
+  }
+
+  /**
+   * Reinstall the createTwap place grant after restart. Missing/expired grant
+   * leaves the in-memory map empty so placeChild still halts.
+   */
+  private installAlgoPlaceGrant(record: TwapParentRecord): void {
+    if (!record.grant) return;
+    try {
+      const restored = principalFromAlgoGrant({
+        userId: record.parent.userId,
+        grant: record.grant,
+        expiresAt: record.parent.projectedEndsAt,
+        now: this.now(),
+      });
+      this.algoPrincipals.set(restored.userId, restored);
+    } catch {
+      this.algoPrincipals.delete(record.parent.userId);
+    }
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────

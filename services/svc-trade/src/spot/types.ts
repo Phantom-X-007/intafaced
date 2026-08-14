@@ -253,6 +253,7 @@ export type TradeErrorCode =
   | 'trade.otc_last_look_forbidden'
   | 'trade.otc_not_owner'
   | 'trade.otc_quote_missing'
+  | 'trade.otc_already_settled'
   | 'trade.otc_settle_refused'
   /** Algo (D-S-04 TWAP) kill-switch / schedule / state. */
   | 'trade.algo_disabled'
