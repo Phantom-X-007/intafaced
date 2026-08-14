@@ -99,7 +99,7 @@ export function assertPersistableWithdrawDestination(destination: { kind: string
 
 /**
  * Router-test default: assert on persist, never invent a stored ref.
- * A later withdraw without a dest refuses closed.
+ * A later withdraw without a dest refuses closed — no invented ref.
  */
 export function assertOnlyWithdrawDestinations(): UserWithdrawDestinations {
   return {
