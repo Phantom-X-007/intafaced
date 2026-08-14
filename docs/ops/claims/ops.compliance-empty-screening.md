@@ -1,7 +1,8 @@
 # Claim ops.compliance-empty-screening
 
-**status:** claimed
+**status:** pr-open
 **owner:** denon-agent
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/1856
 **tracker:** ops.compliance (stays ready — slice, not mountain-done)
 **branch:** feat/ops-compliance-empty-screening-refuse
 **updated:** 2026-08-14
