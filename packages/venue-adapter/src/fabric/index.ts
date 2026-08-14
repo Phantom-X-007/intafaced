@@ -27,9 +27,13 @@
  *   · `venues/binance-spot.ts` — the first venue, done properly. Public market
  *     data is live; the trading half refuses loudly rather than pretending.
  *   · `venues/bybit-spot.ts` — the SECOND venue, public market data only. It is
- *     what makes `latency.ts` and `cross-check.ts` mean something: a grade with
- *     nothing to rank against is a number, and a median of one venue is that
- *     venue's opinion of itself.
+ *     what makes `latency.ts` mean something: a grade with nothing to rank
+ *     against is a number.
+ *   · `venues/okx-spot.ts` — the THIRD venue, public market data only. Two
+ *     venues leave `cross-check.ts` inconclusive by construction (the median of
+ *     two is their midpoint). Three make the median a check.
+ *   · `venues/factory.ts` — `createVenueMarketDataAdapter`. An adapter written
+ *     and unregistered is a file, not a venue.
  */
 export * from './sequenced-book.js';
 export * from './book-feed.js';
@@ -41,3 +45,5 @@ export * from './capture-lake.js';
 export * from './transport.js';
 export * from './venues/binance-spot.js';
 export * from './venues/bybit-spot.js';
+export * from './venues/okx-spot.js';
+export * from './venues/factory.js';
