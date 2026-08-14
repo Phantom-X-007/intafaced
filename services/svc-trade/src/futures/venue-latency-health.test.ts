@@ -65,6 +65,8 @@ describe('presentVenueLatencyHealth', () => {
     expect(h.hasScore).toBe(false);
     expect(h.routingWeight).toBe(0);
     expect(h.reason).toBe('venue_off');
+    expect(h.streamEnabled).toBe(false);
+    expect(h.streamDefault).toBe(false);
   });
 
   it('adapter without latencyGrade is wiring, not a venue F', () => {
@@ -128,5 +130,16 @@ describe('presentVenueLatencyHealth', () => {
     expect(h.routingWeight).toBe(1);
     expect(h.p95Ms).toBe(80);
     expect(h.samples).toBe(12);
+    expect(h.streamEnabled).toBe(false);
+    expect(h.streamDefault).toBe(false);
+  });
+
+  it('streamEnabled is only true when the host says the stream flag is on', () => {
+    const off = presentVenueLatencyHealth(null);
+    expect(off.streamEnabled).toBe(false);
+    const on = presentVenueLatencyHealth(null, new Date(), { streamEnabled: true });
+    expect(on.streamEnabled).toBe(true);
+    expect(on.streamDefault).toBe(false);
+    expect(on.reason).toBe('venue_off');
   });
 });
