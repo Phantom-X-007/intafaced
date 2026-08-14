@@ -452,7 +452,9 @@ const reconcileJobs = startEngineLedgerReconcileJobs({
 app.get('/health', async () => ({
   ok: true,
   service: env.SERVICE_NAME,
-  venueLatency: presentVenueLatencyHealth(venuePublicAdapter),
+  venueLatency: presentVenueLatencyHealth(venuePublicAdapter, new Date(), {
+    streamEnabled: env.TRADE_VENUE_MARK_STREAM,
+  }),
   mmSeed: presentMmSeedHealth({
     enabled: env.TRADE_MM_SEED_ENABLED,
     targetCount: mmSeedTargets.length,
