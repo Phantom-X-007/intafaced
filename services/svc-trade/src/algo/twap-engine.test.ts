@@ -508,6 +508,7 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
     });
     expect(engine.get(parent.id)!.status).not.toBe('cancelled');
     // W4 C1: partial cancel pauses so the next tick cannot place more children.
+    expect(engine.get(parent.id)!.status).not.toBe('active');
     expect(engine.get(parent.id)!.status).toBe('paused');
     expect(engine.get(parent.id)!.haltReason).toBe('cancel_incomplete');
     // Collect-all: both children were asked before the flip decision.

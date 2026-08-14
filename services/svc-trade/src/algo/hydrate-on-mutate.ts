@@ -48,3 +48,28 @@ export async function persistAlgoMutation(engine: AlgoHydrateTarget, store: Twap
   await store.save({ parent, plan });
   return parent;
 }
+
+export interface AlgoCancelTarget extends AlgoHydrateTarget {
+  cancel(userId: string, parentId: string): Promise<TwapParent>;
+}
+
+/**
+ * Cancel then await durable save. Child-cancel failure parks the parent
+ * paused (`cancel_incomplete`) in memory first — persist that park before
+ * rethrowing so `listActive` / restart tick cannot keep the parent tradable.
+ */
+export async function persistAlgoCancelAttempt(
+  engine: AlgoCancelTarget,
+  store: TwapParentStore,
+  userId: string,
+  parentId: string,
+): Promise<TwapParent> {
+  try {
+    const cancelled = await engine.cancel(userId, parentId);
+    return await persistAlgoMutation(engine, store, cancelled);
+  } catch (err) {
+    const live = engine.get(parentId);
+    if (live) await persistAlgoMutation(engine, store, live);
+    throw err;
+  }
+}

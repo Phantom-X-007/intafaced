@@ -55,7 +55,7 @@ import {
 import { captureAlgoPlaceGrant, principalFromAlgoGrant } from '../algo/durable-principal.js';
 import { alignLookbackVolumes, sliceCount, timeframeForSliceInterval } from '../algo/volume-plan.js';
 import type { TwapParentRecord } from '../algo/parent-store.js';
-import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
+import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoCancelAttempt, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import {
   TradeError,
   type Candle,
@@ -2345,7 +2345,7 @@ export class TradeService {
     // the user is presenting authority right now.
     this.algoPrincipals.set(principal.userId, principal);
     await hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
-    return persistAlgoMutation(this.algo, this.algoStore, await this.algo.cancel(principal.userId, parentId));
+    return persistAlgoCancelAttempt(this.algo, this.algoStore, principal.userId, parentId);
   }
 
   /** Drive one parent's next due slice (job host / tests). */
