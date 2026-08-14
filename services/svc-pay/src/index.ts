@@ -230,6 +230,7 @@ const subscriptions = new SubscriptionService(
      */
     defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
     resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
+    valueMovement: railPosture.policy,
   },
 );
 

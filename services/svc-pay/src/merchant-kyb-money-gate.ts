@@ -26,21 +26,22 @@ export type MerchantKybMoneyGateInput = {
 };
 
 /**
- * Live acquiring (`live-only`) requires `kybStatus === 'approved'`.
- *
- * `allow-sandbox` keeps the fixture path status-only — sandbox suites and
- * `decideKybStub` remain usable without inventing a production grantor.
+ * `rejected` never transacts like approved — every posture, including sandbox
+ * fixtures. `live-only` further requires `kybStatus === 'approved'` (none /
+ * pending refuse). Sandbox still allows `none`/`pending` so suites and
+ * `decideKybStub` stay usable without inventing a production grantor.
  *
  * Returns a refuse payload or `null` when the money door may continue.
  */
 export function merchantKybMoneyGateRefusal(
   input: MerchantKybMoneyGateInput,
 ): { code: typeof PAY_KYB_REQUIRED_CODE; message: string; detail: { kybStatus: MerchantKybStatus } } | null {
-  if (input.valueMovement !== 'live-only') return null;
   if (input.kybStatus === 'approved') return null;
+  if (input.valueMovement !== 'live-only' && input.kybStatus !== 'rejected') return null;
+  const requirement = input.valueMovement === 'live-only' ? 'live acquiring requires approved KYB' : 'rejected KYB cannot transact';
   return {
     code: PAY_KYB_REQUIRED_CODE,
-    message: `Merchant ${input.merchantId} KYB is ${input.kybStatus}; live acquiring requires approved KYB`,
+    message: `Merchant ${input.merchantId} KYB is ${input.kybStatus}; ${requirement}`,
     detail: { kybStatus: input.kybStatus },
   };
 }
