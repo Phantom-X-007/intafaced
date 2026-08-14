@@ -1,0 +1,38 @@
+name: wire-crypto-payout-once
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/wire-crypto-payout-once.yml
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/pay-crypto-payout-stored-evm
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply stored-EVM crypto payout wire
+        run: python3 services/svc-pay/scripts/wire-crypto-payout.py
+      - name: Commit patch and self-delete
+        run: |
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git rm -f .github/workflows/wire-crypto-payout-once.yml
+          git rm -f services/svc-pay/scripts/wire-crypto-payout.py
+          git add services/svc-pay/src/index.ts \
+                  services/svc-pay/src/merchant-payout-destination.ts \
+                  services/svc-pay/src/merchant-payout-destination.test.ts \
+                  services/svc-pay/src/payment-service.ts \
+                  services/svc-pay/src/payment-service.test.ts \
+                  services/svc-pay/src/router.ts
+          git commit -m "$(cat <<'MSG'
+feat(svc-pay): crypto payout uses stored EVM dest through ledger-client
+
+Merchant crypto-native payout requires a persisted EVM destination before
+withdrawHold. Refuse closed if none stored. No PSP. bank-payout stays absent.
+MSG
+)"
+          git push origin HEAD:feat/pay-crypto-payout-stored-evm
