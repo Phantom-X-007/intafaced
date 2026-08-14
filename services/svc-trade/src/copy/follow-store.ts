@@ -1,6 +1,24 @@
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { CopyError } from './errors.js';
 import type { CopyFollow } from './follows.js';
+
+/** postgres.js surfaces PG SQLSTATE on `err.code`. */
+export function isPgUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
+}
+
+/**
+ * Unique `(follower_id, leader_id)` is the durable already-following gate.
+ * Concurrent follows can both pass the list check; the index must not leak a
+ * raw 23505 onto the wire (same honesty as fill-sequence-conflict).
+ */
+export function rethrowCopyFollowUnique(err: unknown): never {
+  if (isPgUniqueViolation(err)) {
+    throw new CopyError('Already following this leader', 'trade.copy_already_following');
+  }
+  throw err;
+}
 
 /**
  * Durable copy-follow store (trade.copy residual — same pattern as #1010 TWAP).
@@ -207,6 +225,11 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   }
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
+    for (const existing of this.follows.values()) {
+      if (existing.followerId === follow.followerId && existing.leaderId === follow.leaderId && existing.followId !== follow.followId) {
+        throw new CopyError('Already following this leader', 'trade.copy_already_following');
+      }
+    }
     this.follows.set(follow.followId, follow);
     if (!this.exposure.has(follow.followId)) {
       this.exposure.set(follow.followId, exposure);
@@ -477,7 +500,8 @@ export class SqlCopyFollowStore implements CopyFollowStore {
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
     const markets = JSON.stringify([...follow.envelope.permittedMarkets]);
-    await this.sql`
+    try {
+      await this.sql`
       INSERT INTO copy_follows (
         follow_id, follower_id, leader_id, region, permitted_markets,
         max_notional_per_order, max_aggregate_exposure, expires_at,
@@ -505,6 +529,9 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         region = EXCLUDED.region,
         updated_at = now()
     `;
+    } catch (err) {
+      rethrowCopyFollowUnique(err);
+    }
   }
 
   async getFollow(followId: string): Promise<CopyFollow | null> {

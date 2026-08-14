@@ -41,7 +41,7 @@ import {
   refusePnlLinkedCopyFee,
 } from './fee-share.js';
 import { parseLeaderFillObservation, planMirror, presentMirrorPlan, refuseCopyLeaderRanking, type MirrorSide } from './mirror.js';
-import { MemoryCopyFollowStore, type CopyFollowStore } from './follow-store.js';
+import { MemoryCopyFollowStore, rethrowCopyFollowUnique, type CopyFollowStore } from './follow-store.js';
 
 export interface CopyServiceOptions {
   feeShareLaw?: CopyFeeShareLaw;
@@ -233,7 +233,12 @@ export class CopyService {
       createdAt: this.now(),
       feeShareKilled: false,
     };
-    await this.store.saveFollow(follow, 0n);
+    try {
+      await this.store.saveFollow(follow, 0n);
+    } catch (err) {
+      if (err instanceof CopyError) throw err;
+      rethrowCopyFollowUnique(err);
+    }
     return presentCopyFollow(follow);
   }
 
