@@ -246,6 +246,10 @@ describe('stateForError', () => {
     expect(stateForError(payErr('pay.checkout_rail_not_live', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.routing_no_rail', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.merchant_inactive', '')).kind).toBe('unavailable');
+    // Layer B money-door refuse — hosted HTML must not 500 a live KYB gap.
+    expect(stateForError(payErr('pay.kyb_required', '')).kind).toBe('unavailable');
+    // Operator stub decide is not a checkout money door — do not over-map.
+    expect(stateForError(payErr('pay.kyb_operator_required', '')).kind).toBe('error');
     // Anything unrecognised is a 500, never a friendlier-looking state — the
     // friendly-looking states are the ones that imply money moved.
     expect(stateForError(payErr('pay.something_new', '')).kind).toBe('error');
@@ -430,6 +434,34 @@ describe('checkout routes', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.body).toContain('Nothing has been charged');
+    await app.close();
+  });
+
+  /**
+   * D26-P1-P10 Layer B is already on the money door (`assertMerchantActive`).
+   * The hosted page used to fall through to 500 "Something went wrong" — a lie
+   * to an anonymous payer. Same unavailable page as posture / inactive; never
+   * leak KYB status or invite a retry that cannot fix it.
+   */
+  it('shows the unavailable page when live KYB is not approved — not a 500, not a receipt', async () => {
+    const app = await build({
+      openCheckoutSession: async () => {
+        throw payErr('pay.kyb_required', 'Merchant x KYB is none; live acquiring requires approved KYB');
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/checkout/session',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'token=pl_stubbed_token_value&geoCountry=DE',
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Nothing has been charged');
+    expect(res.body.toLowerCase()).not.toContain('try again');
+    expect(res.body.toLowerCase()).not.toContain('kyb');
+    expect(res.body.toLowerCase()).not.toContain('something went wrong');
     await app.close();
   });
 

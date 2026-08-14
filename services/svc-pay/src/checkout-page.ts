@@ -436,14 +436,17 @@ export function stateForError(err: unknown): CheckoutPageState {
       return { kind: 'exhausted' };
     case 'pay.checkout_busy':
       return { kind: 'busy' };
-    // The posture refusal, a rail that cannot move value, and a suspended
-    // merchant all land on the same page on purpose: each means "this merchant
-    // cannot take payment right now", and telling a payer which one it is
-    // discloses our rail estate to the internet.
+    // The posture refusal, a rail that cannot move value, a suspended merchant,
+    // and live acquiring without approved KYB (D26-P1-P10 Layer B, already on
+    // the money door) all land on the same page: each means "this merchant
+    // cannot take payment right now". Telling a payer which one it is discloses
+    // our rail estate or KYB state to the internet. A 500 here was a lie —
+    // nothing broke; the merchant cannot take live payment.
     case 'pay.checkout_rail_not_live':
     case 'pay.rail_not_live':
     case 'pay.merchant_inactive':
     case 'pay.routing_no_rail':
+    case 'pay.kyb_required':
       return { kind: 'unavailable' };
     default:
       return { kind: 'error' };
