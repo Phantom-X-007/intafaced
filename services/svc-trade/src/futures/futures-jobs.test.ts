@@ -71,6 +71,34 @@ describe('startFuturesJobs', () => {
     void timers;
   });
 
+  it('enabled with empty fundingMarketIds schedules liq only — never invents a funding market', () => {
+    const handle = startFuturesJobs({
+      sql: Object.assign((strings: TemplateStringsArray) => {
+        void strings;
+        return Promise.resolve([]);
+      }, {}) as never,
+      ledger: {
+        post: async () => ({ id: 'x' }) as never,
+        balance: async () => ({ account: {} as never, accountId: 'x', amount: 0n }),
+      },
+      matching: {
+        depth: async () => ({ bids: [], asks: [], sequence: 0 }),
+      } as never,
+      bus: null,
+      config: {
+        enabled: true,
+        liqIntervalMs: 60_000,
+        fundingIntervalMs: 60_000,
+        fundingMarketIds: [],
+        fundingMaxAbsRate: null,
+      },
+    });
+    const names = handle.host.list();
+    expect(names).toContain('futures.liquidation');
+    expect(names.filter((n) => n.startsWith('futures.funding.'))).toEqual([]);
+    handle.stop();
+  });
+
   it('markPrice prefers venue fabric over matching depth', async () => {
     const venue: MarkSource = {
       markPrice: async ({ marketId }) => (marketId === 'm1' ? '50000' : null),
