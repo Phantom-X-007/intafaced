@@ -29,6 +29,7 @@ import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
 import { presentVenueLatencyHealth } from './futures/venue-latency-health.js';
 import { presentInsuranceListingPolicy } from './futures/insurance-listing-gate.js';
+import { presentFuturesJobsHealth } from './futures/futures-jobs-health.js';
 import { MaintainedBook } from '@intafaced/venue-adapter';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
@@ -459,6 +460,11 @@ app.get('/health', async () => ({
   mmSeed: presentMmSeedHealth({
     enabled: env.TRADE_MM_SEED_ENABLED,
     targetCount: mmSeedTargets.length,
+  }),
+  futuresJobs: presentFuturesJobsHealth({
+    enabled: env.TRADE_FUTURES_JOBS_ENABLED,
+    fundingMarketCount: fundingMarketIds.length,
+    fundingMaxAbsRateConfigured: fundingMaxAbsRate !== null,
   }),
   insuranceListing: presentInsuranceListingPolicy(),
 }));
