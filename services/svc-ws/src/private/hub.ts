@@ -6,6 +6,15 @@ import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js
  * Fans trade-owned lifecycle frames to sockets authenticated as that user only.
  * This hub never places orders, never opens positions, and never holds balances —
  * it is a mirror of events for clients that already know the user.
+ *
+ * ── Empty ≠ zero ────────────────────────────────────────────────────────────
+ *
+ * An unseeded blotter, a matching 404, or a seed failure is **absence**.
+ * Emitting `{ orders: [] }` / `{ positions: [] }` (or a JSON `[]`) would let a
+ * client treat that as a live zero book of nothing. Listed seats stay
+ * subscribed with no blotter frames until a real order or position exists.
+ * Fills are never invented. Ready frames (`type: "ready"`) are honesty about
+ * the bus, not a snapshot.
  */
 
 export type PrivateSink = DepthSink;
@@ -73,6 +82,40 @@ export interface PrivateOrderHubOptions {
    * Defaults to 16 when omitted (env: `WS_PRIVATE_MAX_CONNECTIONS_PER_USER`).
    */
   readonly maxConnectionsPerUser?: number;
+  /**
+   * Optional cold-start fetch (tests / future matching blotter). Empty or throw
+   * is absence — never flushed as `{ orders: [] }`. Fills are never seeded.
+   */
+  readonly seedOrders?: (userId: string) => Promise<readonly PrivateOrderUpdate[]>;
+  /**
+   * Optional cold-start fetch for positions. Empty or throw is absence — never
+   * flushed as `{ positions: [] }`.
+   */
+  readonly seedPositions?: (userId: string) => Promise<readonly PrivatePositionUpdate[]>;
+}
+
+/**
+ * `{ orders: [] }` / `{ positions: [] }` / `{ fills: [] }` / JSON `[]` on the
+ * wire is a priced empty blotter. Empty is absent: no frame, not a live zero
+ * book of nothing. Ready frames are not a snapshot.
+ */
+export function isLiveZeroBlotterPayload(value: unknown): boolean {
+  if (Array.isArray(value) && value.length === 0) return true;
+  if (value === null || typeof value !== 'object') return false;
+  const rec = value as Record<string, unknown>;
+  if (rec.type === 'ready') return false;
+  for (const key of ['orders', 'positions', 'fills'] as const) {
+    if (key in rec && Array.isArray(rec[key]) && rec[key].length === 0) return true;
+  }
+  return false;
+}
+
+export function isLiveZeroBlotterFrame(frame: string): boolean {
+  try {
+    return isLiveZeroBlotterPayload(JSON.parse(frame) as unknown);
+  } catch {
+    return false;
+  }
 }
 
 interface Subscription {
@@ -146,10 +189,57 @@ export class PrivateOrderHub {
 
     const sub: Subscription = { userId, sink, lagTicks: 0, closed: false };
     this.#subscriptions.add(sub);
+    if (this.#options.seedOrders || this.#options.seedPositions) {
+      void this.#seed(sub);
+    }
     return () => {
       sub.closed = true;
       this.#subscriptions.delete(sub);
     };
+  }
+
+  /**
+   * Matching 404 / empty / throw is absence. Replay real rows only — never
+   * `{ orders: [] }` or `{ positions: [] }`. Fills are never seeded.
+   */
+  async #seed(sub: Subscription): Promise<void> {
+    if (this.#options.seedOrders) {
+      try {
+        const orders = await this.#options.seedOrders(sub.userId);
+        if (orders.length === 0) {
+          this.#log.warn({ userId: sub.userId }, 'ws-private: order seed empty — no blotter on the wire; live orders publish when they exist');
+        } else {
+          for (const order of orders) {
+            if (sub.closed) return;
+            this.#write(sub, JSON.stringify({ channel: 'orders', ...order }));
+          }
+        }
+      } catch (err) {
+        this.#log.warn(
+          { userId: sub.userId, err: err instanceof Error ? err.message : String(err) },
+          'ws-private: order seed failed — no blotter on the wire; matching 404 is absence not { orders: [] }',
+        );
+      }
+    }
+    if (sub.closed) return;
+    if (this.#options.seedPositions) {
+      try {
+        const positions = await this.#options.seedPositions(sub.userId);
+        if (positions.length === 0) {
+          this.#log.warn({ userId: sub.userId }, 'ws-private: position seed empty — no blotter on the wire; live positions publish when they exist');
+        } else {
+          for (const position of positions) {
+            if (sub.closed) return;
+            this.#write(sub, JSON.stringify({ channel: 'positions', ...position }));
+          }
+        }
+      } catch (err) {
+        this.#log.warn(
+          { userId: sub.userId, err: err instanceof Error ? err.message : String(err) },
+          'ws-private: position seed failed — no blotter on the wire; matching 404 is absence not { positions: [] }',
+        );
+      }
+    }
   }
 
   /**
@@ -161,13 +251,8 @@ export class PrivateOrderHub {
   announceBus(bus: boolean): void {
     for (const sub of this.#subscriptions) {
       if (sub.closed) continue;
-      try {
-        for (const channel of READY_CHANNELS) {
-          sub.sink.send(JSON.stringify({ channel, type: 'ready', userId: sub.userId, bus }));
-        }
-      } catch {
-        sub.closed = true;
-        this.#subscriptions.delete(sub);
+      for (const channel of READY_CHANNELS) {
+        this.#write(sub, JSON.stringify({ channel, type: 'ready', userId: sub.userId, bus }));
       }
     }
   }
@@ -196,12 +281,21 @@ export class PrivateOrderHub {
       }
 
       sub.lagTicks = 0;
-      try {
-        sub.sink.send(frame);
-      } catch {
-        sub.closed = true;
-        this.#subscriptions.delete(sub);
-      }
+      this.#write(sub, frame);
+    }
+  }
+
+  #write(sub: Subscription, frame: string): void {
+    if (sub.closed) return;
+    if (isLiveZeroBlotterFrame(frame)) {
+      this.#log.warn({ userId: sub.userId }, 'ws-private: refused live-zero blotter frame');
+      return;
+    }
+    try {
+      sub.sink.send(frame);
+    } catch {
+      sub.closed = true;
+      this.#subscriptions.delete(sub);
     }
   }
 

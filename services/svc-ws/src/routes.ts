@@ -187,6 +187,58 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     }
   });
 
+  /**
+   * Public door has no orders blotter. Empty ≠ zero: never `200 { orders: [] }`.
+   * Unknown market is `404 MarketNotFound`. Listed is `404 NoBlotter`.
+   */
+  app.get('/markets/:marketId/orders', async (req, reply) => {
+    reply.header('access-control-allow-origin', '*');
+
+    if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+
+    const { marketId } = req.params as { marketId: string };
+    if (!MARKET_ID.test(marketId)) {
+      return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+
+    try {
+      if (!(await hub.ensureKnownMarket(marketId))) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+      }
+      return reply.code(404).send({ code: 'NoBlotter', message: `"${marketId}": no public orders blotter` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'orders unavailable';
+      req.log.error({ err, marketId }, 'ws: orders snapshot failed');
+      return reply.code(502).send({ code: 'UpstreamUnavailable', message });
+    }
+  });
+
+  /**
+   * Public door has no positions blotter. Empty ≠ zero: never `200 { positions: [] }`.
+   * Unknown market is `404 MarketNotFound`. Listed is `404 NoPositions`.
+   */
+  app.get('/markets/:marketId/positions', async (req, reply) => {
+    reply.header('access-control-allow-origin', '*');
+
+    if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+
+    const { marketId } = req.params as { marketId: string };
+    if (!MARKET_ID.test(marketId)) {
+      return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+
+    try {
+      if (!(await hub.ensureKnownMarket(marketId))) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+      }
+      return reply.code(404).send({ code: 'NoPositions', message: `"${marketId}": no public positions blotter` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'positions unavailable';
+      req.log.error({ err, marketId }, 'ws: positions snapshot failed');
+      return reply.code(502).send({ code: 'UpstreamUnavailable', message });
+    }
+  });
+
   /** The market list, so a client can discover what it may subscribe to. */
   app.get('/markets', async (_req, reply) => {
     reply.header('access-control-allow-origin', '*');
