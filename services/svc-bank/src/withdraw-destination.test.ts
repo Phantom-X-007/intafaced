@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BankError } from './errors.js';
-import {
-  assertOnlyWithdrawDestinations,
-  assertPersistableWithdrawDestination,
-  destKindForRamp,
-} from './withdraw-destination.js';
+import { assertOnlyWithdrawDestinations, assertPersistableWithdrawDestination, destKindForRamp } from './withdraw-destination.js';
 
 const EVM = '0x000000000000000000000000000000000000dEaD';
 const IBAN = 'GB82WEST12345698765432';

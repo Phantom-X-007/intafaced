@@ -15,11 +15,7 @@ import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
 import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { assertCryptoRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
-import {
-  destKindForRamp,
-  UserWithdrawDestinationStore,
-  type UserWithdrawDestinations,
-} from '../withdraw-destination.js';
+import { destKindForRamp, UserWithdrawDestinationStore, type UserWithdrawDestinations } from '../withdraw-destination.js';
 
 /**
  * RAMPS (§8.1 / D-S-09) — the CRYPTO LEDGER half: on-ramp credit, off-ramp settle.
