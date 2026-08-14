@@ -131,10 +131,10 @@ export class TwapEngine {
 
   create(userId: string, input: CreateTwapInput, lotSize: Amount): TwapParent {
     if (input.durationMs > this.maxDurationMs) {
-      throw new TradeError(`TWAP duration exceeds max ${this.maxDurationMs}ms`, 'trade.algo_invalid_schedule');
+      throw new TradeError(`algo duration exceeds max ${this.maxDurationMs}ms`, 'trade.algo_invalid_schedule');
     }
     if (input.sliceIntervalMs < this.minSliceIntervalMs) {
-      throw new TradeError(`TWAP sliceIntervalMs below min ${this.minSliceIntervalMs}ms`, 'trade.algo_invalid_schedule');
+      throw new TradeError(`algo sliceIntervalMs below min ${this.minSliceIntervalMs}ms`, 'trade.algo_invalid_schedule');
     }
 
     const kind = input.kind ?? 'twap';

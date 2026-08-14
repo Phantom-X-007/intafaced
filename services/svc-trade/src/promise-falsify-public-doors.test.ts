@@ -240,7 +240,7 @@ describe('D26-P2-01a refuse-closed defaults (no invent)', () => {
 
   it('TWAP create refuses blank two-sided mark rather than inventing a feed', () => {
     const src = readFileSync(join(here, 'spot/trade-service.ts'), 'utf8');
-    expect(src).toMatch(/refusing TWAP rather than inventing a feed/);
+    expect(src).toMatch(/refusing algo rather than inventing a feed/);
     expect(src).toMatch(/trade\.algo_mark_missing/);
   });
 });
@@ -471,7 +471,7 @@ describe('D26-P2-01a public doors — algo refuse invent mark feed', () => {
   it('algo.createTwap refuses missing two-sided mark over the wire', async () => {
     const createTwap = vi.fn(async () => {
       throw new TradeError(
-        'BTC/USDT: no two-sided mark at creation — refusing TWAP rather than inventing a feed',
+        'BTC/USDT: no two-sided mark at creation — refusing algo rather than inventing a feed',
         'trade.algo_mark_missing',
       );
     });

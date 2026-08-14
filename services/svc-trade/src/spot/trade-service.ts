@@ -2245,7 +2245,7 @@ export class TradeService {
     const ask = depth.asks[0] ? parseAmount(depth.asks[0][0]) : null;
     if (bid === null || ask === null) {
       throw new TradeError(
-        `${market.symbol}: no two-sided mark at creation — refusing TWAP rather than inventing a feed`,
+        `${market.symbol}: no two-sided mark at creation — refusing algo rather than inventing a feed`,
         'trade.algo_mark_missing',
       );
     }
