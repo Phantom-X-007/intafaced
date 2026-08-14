@@ -197,6 +197,17 @@ export const CCXT_REFUSE_ARMS: readonly CcxtRefuseArm[] = [
     wireShape: 'domain',
     when: 'profitSource unset — domain 503 today; NotSupported class so bots do not retry as venue-down (operator names the pot; same posture as futures_disabled)',
   },
+  {
+    id: 'profitSourceUnconfiguredOnClose',
+    routeName: 'closePosition',
+    method: 'DELETE',
+    path: '/api/v1/positions/:id',
+    httpStatus: 503,
+    ccxtCode: 'NotSupported',
+    intafacedCode: 'trade.profit_source_unconfigured',
+    wireShape: 'domain',
+    when: 'winning close with profitSource unset — domain 503 today; losing/flat close still settles; NotSupported so bots do not retry as venue-down',
+  },
 ] as const;
 
 const refuseIds = (...ids: string[]): readonly string[] => ids;
@@ -284,8 +295,8 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     auth: 'private',
     scope: 'trade:write',
     kind: 'supported',
-    refuseArmIds: refuseIds('callerPriceOnClose'),
-    notes: 'Close at current mark; exitPrice/price query fields refused 400',
+    refuseArmIds: refuseIds('callerPriceOnClose', 'profitSourceUnconfiguredOnClose'),
+    notes: 'Close at current mark; caller price 400; winning close without named pot 503 NotSupported',
   },
   {
     name: 'fetchPositionMarginCall',
