@@ -10,12 +10,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: collapse double blanks and self-delete
+      - name: collapse blanks, commit, self-delete
         run: |
-          python3 -c "from pathlib import Path\nfor rel in ['services/svc-bank/src/db/schema.ts','services/svc-bank/src/ramps/ramps.test.ts']:\n p=Path(rel); t=p.read_text()\n while '\\n\\n\\n' in t: t=t.replace('\\n\\n\\n','\\n\\n')\n p.write_text(t)\nPath('.github/workflows/format-withdraw-dest-once.yml').unlink(missing_ok=True)"
-          git config user.name "ZenYoda3"
-          git config user.email "intafaced@gmail.com"
-          git add services/svc-bank/src/db/schema.ts services/svc-bank/src/ramps/ramps.test.ts .github/workflows/format-withdraw-dest-once.yml
+          python3 services/svc-bank/scripts/format-withdraw-dest.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
           git diff --cached --quiet && exit 0
           git commit -m "style(svc-bank): prettier withdraw dest blanks"
           git push
