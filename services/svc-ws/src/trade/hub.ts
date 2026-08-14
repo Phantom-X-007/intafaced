@@ -202,10 +202,7 @@ export class TradeHub {
         const prints = await seedRecent(marketId);
         if (prints.length === 0) {
           // Matching 404 / never printed: absence. Do not `#recent.set([],)`.
-          this.#log.warn(
-            { marketId },
-            'ws: trade seed empty — no tape on the wire; live prints publish when they exist',
-          );
+          this.#log.warn({ marketId }, 'ws: trade seed empty — no tape on the wire; live prints publish when they exist');
           return;
         }
         for (const print of prints) this.#acceptPrint(print);
