@@ -140,7 +140,7 @@ function makeTwapTrade(opts: { liquidity?: boolean; mark?: boolean; algoEnabled?
       // Same refuse as TradeService.createTwap — no two-sided mark → no schedule.
       if (!markOk || !liquidity) {
         throw new TradeError(
-          `${SYMBOL}: no two-sided mark at creation — refusing TWAP rather than inventing a feed`,
+          `${SYMBOL}: no two-sided mark at creation — refusing algo rather than inventing a feed`,
           'trade.algo_mark_missing',
         );
       }
@@ -339,7 +339,7 @@ describe('D26-P1-T4 public doors — TWAP children pause overdue no fake fills',
       limitPrice: '100',
     });
     expect(refused.statusCode).toBe(400);
-    expect(refused.body.error?.message ?? '').toMatch(/refusing TWAP rather than inventing/);
+    expect(refused.body.error?.message ?? '').toMatch(/refusing algo rather than inventing/);
     await app.close();
   });
 
