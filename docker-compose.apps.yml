@@ -581,7 +581,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-}
     # Compose network only. It holds provider credentials, so it is never
-      # published to the host and never reachable through svc-edge.
+    # published to the host and never reachable through svc-edge.
     expose: ['4400']
 
   svc-agents:
