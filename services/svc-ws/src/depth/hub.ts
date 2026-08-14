@@ -143,6 +143,16 @@ export function toSnapshot(book: DepthBook): DepthSnapshot {
   return { type: 'snapshot', marketId: book.marketId, sequence: book.sequence, bids: side(book.bids), asks: side(book.asks) };
 }
 
+/** Resting depth on either side. Empty sides are absence, not a live zero book. */
+export function snapshotHasRestingDepth(snapshot: DepthSnapshot): boolean {
+  const book = bookFromSnapshot(snapshot);
+  return book.bids.size > 0 || book.asks.size > 0;
+}
+
+function bookHasRestingDepth(book: DepthBook): boolean {
+  return book.bids.size > 0 || book.asks.size > 0;
+}
+
 const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
 
 export class DepthHub {
@@ -244,9 +254,9 @@ export class DepthHub {
   async #open(sub: Subscription): Promise<void> {
     try {
       if (!(await this.ensureKnownMarket(sub.marketId))) {
-        // Not listed anywhere. This is the only case that earns `unknown
-        // market` — a LISTED market the engine has never traded is a legitimate
-        // subscription that opens on an empty book (`HttpDepthSource.snapshot`).
+        // Not listed anywhere. Typed close — never a fabricated empty ladder.
+        // A LISTED market with no book stays open with no snapshot until
+        // matching has resting depth (empty ≠ zero).
         this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
         return;
       }
@@ -351,18 +361,13 @@ export class DepthHub {
         }
         this.ingest(snapshot);
       } catch (err) {
-        // A LISTED market whose engine is unreachable opens on an empty book —
-        // the same shape as "never traded". Closing the socket with the raw
-        // upstream error confuses "matching is down" with "this is not a market"
-        // and contradicts the README: engine down → listed markets open empty.
-        // Poll will replace the empty book when matching recovers.
+        // Listed, but matching has no book or is down. Do not invent
+        // `{ bids: [], asks: [], sequence: 0 }` — that is a live zero book.
+        // The socket stays open; poll publishes the first real snapshot.
         this.#log.warn(
           { marketId, err: err instanceof Error ? err.message : String(err) },
-          'ws: depth seed failed — opening empty book; poll will replace when matching recovers',
+          'ws: depth seed failed — no book on the wire; poll will publish when matching has depth',
         );
-        if (!this.#books.has(marketId)) {
-          this.ingest({ type: 'snapshot', marketId, sequence: 0, bids: [], asks: [] });
-        }
       } finally {
         this.#seeding.delete(marketId);
       }
@@ -392,6 +397,10 @@ export class DepthHub {
   ingest(snapshot: DepthSnapshot): DepthDelta | null {
     const previous = this.#books.get(snapshot.marketId);
     const next = bookFromSnapshot(snapshot);
+    if (!previous && !bookHasRestingDepth(next)) {
+      // No prior book and no resting depth: absent, not a priced empty book.
+      return null;
+    }
     this.#books.set(snapshot.marketId, next);
 
     if (!previous) {
@@ -446,6 +455,7 @@ export class DepthHub {
 
       if (sub.pending !== null) {
         if (delta !== null) this.#queue(sub, delta);
+        if (bookHasRestingDepth(book)) this.#flush(sub);
         continue;
       }
 
@@ -495,9 +505,11 @@ export class DepthHub {
 
   /** Send the snapshot, then whatever the stream sent while we were producing it. */
   #flush(sub: Subscription): void {
+    if (sub.closed || sub.pending === null) return;
     const book = this.#books.get(sub.marketId);
-    if (!book) {
-      this.#evict(sub, CLOSE_TRY_LATER, 'no book for this market');
+    if (!book || !bookHasRestingDepth(book)) {
+      // Listed, no live book yet. Stay open with no frames — do not emit []
+      // and do not close as unknown. Poll / a later ingest flushes for real.
       return;
     }
 

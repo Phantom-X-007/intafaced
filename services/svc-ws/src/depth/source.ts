@@ -23,8 +23,8 @@ export interface DepthSource {
   /**
    * Top-N aggregated depth, current as of an engine sequence.
    *
-   * A listed market the engine has no book for is not an error here — see
-   * `HttpDepthSource.snapshot`. It is an empty book at sequence 0.
+   * A listed market the engine has no book for throws `DepthNoBookError` —
+   * absence, not a fabricated empty snapshot. See `HttpDepthSource.snapshot`.
    */
   snapshot(marketId: string, limit: number): Promise<DepthSnapshot>;
 }
@@ -36,6 +36,17 @@ export class DepthSourceError extends Error {
   ) {
     super(message);
     this.name = 'DepthSourceError';
+  }
+}
+
+/**
+ * Matching has no book for this id (HTTP 404). That is absence, not a live
+ * zero book — callers must not coerce it into `{ bids: [], asks: [], sequence: 0 }`.
+ */
+export class DepthNoBookError extends DepthSourceError {
+  constructor(readonly marketId: string) {
+    super(`${marketId}: matching holds no book`, 404);
+    this.name = 'DepthNoBookError';
   }
 }
 
@@ -114,27 +125,17 @@ export class HttpDepthSource implements DepthSource {
   }
 
   /**
-   * A LISTED MARKET WITH NO BOOK IS AN EMPTY BOOK, NOT A FAILURE.
+   * A LISTED MARKET WITH NO BOOK IS ABSENCE, NOT A ZERO BOOK.
    *
    * svc-matching answers 404 for a market it holds no book for, and it is right
-   * to: reading must not create, and the engine will not allocate a book for an
-   * arbitrary string. But "the engine has never seen a trade here" and "that is
-   * not a market" are different facts, and only the listing registry can tell
-   * them apart — which it already has, before this call is ever made.
-   *
-   * So a 404 here becomes `{bids: [], asks: [], sequence: 0}`. Six of the
-   * sixteen listed markets have never traded; refusing to stream them would
-   * make an honest empty ladder look like a broken terminal, and the shell
-   * already renders exactly this as "No asks / No bids".
-   *
-   * Sequence 0 is the truthful number, not a placeholder: nothing has happened.
-   * When the market's first order lands, the engine's sequence is above 0 and
-   * the hub diffs into it normally, so a client watching an untraded market
-   * sees its first quote as a delta and never needs to be told to resnapshot.
+   * to: reading must not create. Fabricating `{ bids: [], asks: [], sequence: 0 }`
+   * would let a client draw a live empty ladder — a priced zero book — when
+   * matching never allocated one. "Not listed" is the hub's typed close;
+   * "listed, no book" is this error. Empty ≠ zero.
    */
   async snapshot(marketId: string, limit: number): Promise<DepthSnapshot> {
     const body = await this.#get(`/markets/${encodeURIComponent(marketId)}/depth?limit=${limit}`);
-    if (body === null) return { type: 'snapshot', marketId, sequence: 0, bids: [], asks: [] };
+    if (body === null) throw new DepthNoBookError(marketId);
     const raw = body as { marketId?: unknown; sequence?: unknown; bids?: unknown; asks?: unknown };
 
     if (typeof raw.sequence !== 'number' || !Number.isInteger(raw.sequence)) {

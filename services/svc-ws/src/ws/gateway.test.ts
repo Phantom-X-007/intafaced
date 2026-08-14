@@ -11,7 +11,7 @@ import {
   type TradePrint,
 } from '@intafaced/market-data';
 import { DepthHub } from '../depth/hub.js';
-import type { DepthSource } from '../depth/source.js';
+import { DepthNoBookError, type DepthSource } from '../depth/source.js';
 import { PrivateOrderHub } from '../private/hub.js';
 import { registerRoutes } from '../routes.js';
 import { TradeHub } from '../trade/hub.js';
@@ -537,7 +537,21 @@ describe('the HTTP half', () => {
     const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/depth' });
 
     expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
     expect(source.snapshotCalls).toEqual([]);
+  });
+
+  it('404s NoBook when matching holds no book — never a 200 empty ladder', async () => {
+    source.snapshot = async (marketId: string) => {
+      source.snapshotCalls.push(marketId);
+      throw new DepthNoBookError(marketId);
+    };
+
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoBook' });
+    expect(response.json()).not.toMatchObject({ bids: [], asks: [] });
   });
 
   it('400s a market id that could never be one', async () => {

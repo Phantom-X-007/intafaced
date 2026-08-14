@@ -61,7 +61,7 @@ numbers anywhere in this service's output are integer sequences.
 | -------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                                                                                                                         |
 | `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                                                                                                                      |
-| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unlisted · `502` upstream down                                                                                                            |
+| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` `MarketNotFound` (unlisted) · `404` `NoBook` (listed, no resting depth) · `502` upstream down                                             |
 | `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books                                                                                                     |
 | `GET /health`                                      | —     | `{ ok, service, enabled, connections, capacity.{depth,trades,private}, tradesBus, privateBus, … }` — occupancy never 503s; ceilings are per-hub, not process-wide |
 | `GET /ready`                                       | —     | depth + trade counters + `tradesBus` / `privateBus` / `privateConnections` · `503` only when kill-switch off · bus down does **not** 503 (depth still works)      |
@@ -119,14 +119,15 @@ That distinction was, for a long time, the whole reason live depth did not work.
 intersection** — sixteen listed ids, ten journal ids, nothing in common — so every id a browser could legitimately
 discover was refused by the socket with `unknown market`, while both services reported healthy and correct.
 
-A listed market with no book is **not** an error. Six of the sixteen have never traded, and svc-matching answers 404
-for them; `HttpDepthSource` turns that into an empty book at sequence 0, which is what the terminal renders as
-"No asks / No bids". Refusing to stream a market because nobody has quoted in it yet is a lie about the market.
-An id **nobody** lists is still refused, with `unknown market` — that is the one case that earns it.
+A listed market with no book is **not** "a live empty ladder". Six of the sixteen have never traded, and
+svc-matching answers 404 for them; `HttpDepthSource` throws `DepthNoBookError` rather than fabricating
+`{ bids: [], asks: [], sequence: 0 }`. Empty ≠ zero: the socket stays open with **no snapshot** until matching
+has resting depth; the first real quote is a snapshot, not a delta off a fake sequence 0. An id **nobody** lists
+is still refused, with `unknown market` — that is the one case that earns a typed close for the market id.
 
 The union survives a failure of either source: the listing being down leaves every traded market streaming, the
-engine being down leaves every listed market opening on an empty book, and only a failure of both keeps the last
-known list. `depth/registry.ts` carries the reasoning next to the code.
+engine being down leaves every listed market subscribed without a fabricated book, and only a failure of both
+keeps the last known list. `depth/registry.ts` carries the reasoning next to the code.
 
 ### The thing that would have been a vulnerability
 
@@ -137,7 +138,7 @@ depth route), so the market check is no longer the only thing standing between a
 heap. It is still the difference between "nobody is quoting" and "that is not a market", which is why it stays.
 
 There are tests asserting the depth endpoint is never called for an unlisted market, on both the socket and the HTTP
-path, and that a listed market with no book opens on an empty ladder rather than a close frame.
+path, and that a listed market with no book stays open without emitting a priced empty snapshot.
 
 There is deliberately **no Origin check**. An origin allow-list is an authorisation control and there is nothing here
 to authorise; it would inconvenience a bot without protecting anything, since the same bytes are a `curl` away.

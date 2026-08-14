@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DepthSourceError, HttpDepthSource } from './source.js';
+import { DepthNoBookError, DepthSourceError, HttpDepthSource } from './source.js';
 
 /**
  * The wire between two of our own services is still a wire.
@@ -88,24 +88,21 @@ describe('HttpDepthSource', () => {
   });
 
   /**
-   * A LISTED MARKET WITH NO BOOK IS AN EMPTY BOOK.
+   * A LISTED MARKET WITH NO BOOK IS NOT A ZERO BOOK.
    *
-   * svc-matching answers 404 for a market it holds no book for — correctly:
-   * reading must not allocate. But six of the sixteen listed markets have never
-   * traded, and refusing to stream them made an honest empty ladder look like a
-   * broken terminal. The listing check has already run by the time this call is
-   * made, so a 404 here can only mean "nobody has quoted here yet".
+   * svc-matching answers 404 when it holds no book — correctly: reading must
+   * not allocate. Coercing that into `{ bids: [], asks: [], sequence: 0 }`
+   * would let a client treat absence as a live empty ladder.
    */
-  it('turns an upstream 404 into an empty book rather than an error', async () => {
+  it('throws DepthNoBookError on an upstream 404 rather than fabricating an empty book', async () => {
     const s = source(respondWith({ code: 'MarketNotFound' }, 404));
 
-    await expect(s.snapshot('7b64a76b-0000-0000-0000-000000000000', 50)).resolves.toEqual({
-      type: 'snapshot',
+    await expect(s.snapshot('7b64a76b-0000-0000-0000-000000000000', 50)).rejects.toMatchObject({
+      name: 'DepthNoBookError',
+      status: 404,
       marketId: '7b64a76b-0000-0000-0000-000000000000',
-      sequence: 0,
-      bids: [],
-      asks: [],
     });
+    await expect(s.snapshot('7b64a76b-0000-0000-0000-000000000000', 50)).rejects.toBeInstanceOf(DepthNoBookError);
   });
 
   it('still fails loudly on every other upstream status', async () => {
@@ -124,11 +121,8 @@ describe('HttpDepthSource', () => {
     await expect(s.markets()).rejects.toThrow(/no market list/);
   });
 
-  it('sequences an empty book at 0, so the first real quote arrives as a delta', async () => {
-    // Not a placeholder — nothing has happened. When the engine's first order
-    // lands its sequence is above 0 and the hub diffs into it normally, so a
-    // client watching an untraded market never has to be told to resnapshot.
+  it('does not invent sequence 0 when matching has no book', async () => {
     const s = source(respondWith({ code: 'MarketNotFound' }, 404));
-    await expect(s.snapshot('never-traded', 50)).resolves.toMatchObject({ sequence: 0 });
+    await expect(s.snapshot('never-traded', 50)).rejects.toBeInstanceOf(DepthNoBookError);
   });
 });
