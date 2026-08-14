@@ -24,10 +24,7 @@ export { HOUSE_MM_USER_UUID };
  * back to the order row's userId the same way — house UUID → house STP id,
  * customer UUID stays the customer, empty stays empty (caller refuses).
  */
-export function recoverMatchingAccountId(input: {
-  eventAccountId?: string | null;
-  orderUserId?: string | null;
-}): string {
+export function recoverMatchingAccountId(input: { eventAccountId?: string | null; orderUserId?: string | null }): string {
   const fromEvent = (input.eventAccountId ?? '').trim();
   if (fromEvent === HOUSE_MM_USER_UUID) return MM_MATCHING_ACCOUNT_ID;
   if (fromEvent.length > 0) return fromEvent;

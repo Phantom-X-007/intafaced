@@ -6,12 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { mmSeedJobsArmed } from './seed-honesty.js';
-import {
-  HOUSE_MM_USER_UUID,
-  MM_MATCHING_ACCOUNT_ID,
-  looksLikeAnonymousCustomerFill,
-  recoverMatchingAccountId,
-} from './fill-account.js';
+import { HOUSE_MM_USER_UUID, MM_MATCHING_ACCOUNT_ID, looksLikeAnonymousCustomerFill, recoverMatchingAccountId } from './fill-account.js';
 
 const CUSTOMER = '11111111-1111-4111-8111-111111111111';
 
