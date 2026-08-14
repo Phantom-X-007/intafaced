@@ -198,10 +198,7 @@ export interface ReputationPublicDoor {
 }
 
 /** One payload: derived badges + programme freeze. Never a second scorecard. */
-export function reputationOnPublicDoor(
-  snapshot: ReputationSnapshot,
-  merchant: boolean | null,
-): ReputationPublicDoor {
+export function reputationOnPublicDoor(snapshot: ReputationSnapshot, merchant: boolean | null): ReputationPublicDoor {
   return {
     tradesTotal: snapshot.tradesTotal,
     completed: snapshot.completed,

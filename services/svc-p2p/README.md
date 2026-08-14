@@ -130,13 +130,13 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 
 HTTP (`src/index.ts`):
 
-| Route                              | Purpose                                                                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /health`                      | liveness; discloses `moderationReachable` + `offerLimitsConfigured` (ceilings armed)                                           |
-| `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationReachable`                                                                  |
-| `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500 |
+| Route                              | Purpose                                                                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                      | liveness; discloses `moderationReachable` + `offerLimitsConfigured` (ceilings armed)                                             |
+| `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationReachable`                                                                    |
+| `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500   |
 | `GET /internal/reputation/:userId` | Same snapshot as `reputation.get`: counters, derived badges, `merchant` freeze. Not a `p2pLimitMultiplier` (identity owns rank). |
-| `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more                            |
+| `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more                              |
 
 Three background sweeps start before the HTTP listener. The first two are why escrow cannot strand; the third is why we do not keep personal data after we need it:
 
