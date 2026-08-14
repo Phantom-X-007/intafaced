@@ -146,10 +146,7 @@ describe('D26-P2-05 bus completeness inventory (ADR D-S-13)', () => {
 
     const closed = inventory.ends.filter(
       (r) =>
-        r.event === 'xpEarned' ||
-        r.event === 'bankMarginCalled' ||
-        r.event === 'agentActionRejected' ||
-        r.event === 'agentActionCompleted',
+        r.event === 'xpEarned' || r.event === 'bankMarginCalled' || r.event === 'agentActionRejected' || r.event === 'agentActionCompleted',
     );
     expect(closed.every((r) => r.disposition.kind === 'wired')).toBe(true);
   });
