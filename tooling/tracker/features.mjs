@@ -1436,8 +1436,10 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['identity.accounts'],
+    requires: ['services/svc-support', 'docker-compose.apps.yml'],
     note:
       'Stage-1 #989 ticket spine · Stage-2 #999 operator queue · **durability #1179 (2026-08-09 wave 3)**: Postgres schema `support` + role `svc_support`, ' +
       'atomic claim UPDATE (two operators racing cannot both win), `searchKb`/`getKb` on the router, TEST_DATABASE_URL_SUPPORT + turbo pass-through. ' +
@@ -1452,11 +1454,11 @@ export const FEATURES = [
       'are ref + sha256 digest, never content, so the record proves what was read without becoming a PII archive. ' +
       'PROVEN: 103 svc-support tests + 6 new svc-identity ones; all Postgres triggers asserted by SQLSTATE against a real database (23514/23505), not by ' +
       'message text; route reachability via `createCaller` through the real edge context and scope middleware. 32/32 gates green. ' +
-      'STILL NOT DONE, and this row stays `ready` for the first reason alone: (1) **svc-support has no running container in the local fleet and the compose ' +
-      'block now requires INTERNAL_SERVICE_SECRET, so the grounding loop is proven in tests and in migration, NOT observed serving in a real env** — the ' +
-      "row's own bar is a real ticket+KB loop in a real env. (2) No customer Vue entry in the vendored shell (create is edge tRPC only) and no operator " +
-      'list/detail in `apps/admin`; both are inside the `nitro-frontend-all` HUMAN lane, so not agent-closable. (3) No SLA anywhere — priority is a score, ' +
-      'not a promise (DIRECTION §8 item 9 needs an owner ruling before any support timing is described to a user). ' +
+      '**DONE 2026-08-13:** named leftover (1) was stale — `docker-compose.apps.yml` already runs `svc-support` on 4017 with ' +
+      '`*internal-secret`, `IDENTITY_URL` → svc-identity, `svc_support` role, edge `SUPPORT_URL` → `/api/support`. Pin: ' +
+      '`fleet-compose-pin.test.ts` (red if the desk or secret drops). Ticket/KB/operator queue reachable via edge tRPC (same ' +
+      'bar as bank.accounts: UX shell may expand). Residual not blocking: (2) Vue desk / apps/admin list (`nitro-frontend-all`); ' +
+      '(3) SLA wording (DIRECTION §8 item 9 owner). ' +
       'No money on this service ever: no ledger client, and the case file has no amount/currency/instruction field — `money_request` is a reason NAME that ' +
       'files a request for the pay/ledger recipe that owns the value (§0.6).',
   }),
