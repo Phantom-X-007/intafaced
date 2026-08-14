@@ -42,6 +42,7 @@ import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { parseOtcDeskLawJson } from './otc/desk-law.js';
 import { createOtcMidSourceFromConfig } from './otc/venue-mid-source.js';
 import { OtcDeskService } from './otc/otc-service.js';
+import { SqlOtcQuoteStore } from './otc/quote-store.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
 import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
 import { CopyService } from './copy/copy-service.js';
@@ -133,6 +134,7 @@ const otc = new OtcDeskService(ledger, otcStakes, {
   law: otcDeskLaw,
   midSource: otcMidBuilt.source,
   liveObservationFeed: otcMidBuilt.liveObservationFeed,
+  store: new SqlOtcQuoteStore(sql),
 });
 
 // trade.copy — D-S-03 Stage product mount. Empty TRADE_COPY_* laws → refuse-closed
