@@ -1,0 +1,25 @@
+name: wire-crypto-withdraw-once
+on:
+  push:
+    paths:
+      - .github/workflows/wire-crypto-withdraw-once.yml
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/bank-crypto-withdraw-stored-evm
+      - name: Apply stored-EVM crypto withdraw patch
+        run: git apply services/svc-bank/scripts/crypto-withdraw.patch
+      - name: Commit patch and self-delete
+        run: |
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git rm -f .github/workflows/wire-crypto-withdraw-once.yml
+          git rm -f services/svc-bank/scripts/crypto-withdraw.patch
+          git add services/svc-bank/src
+          git commit -m "feat(svc-bank): crypto withdraw uses stored EVM dest through ledger-client"
+          git push origin HEAD:feat/bank-crypto-withdraw-stored-evm
