@@ -540,6 +540,7 @@ registerPublicRest(app, {
     jobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     orderableEnabled: env.TRADE_FUTURES_ENABLED,
     profitSourceConfigured: profitSource != null,
+    fundingMaxAbsRateConfigured: env.TRADE_FUTURES_FUNDING_MAX_ABS_RATE.trim() !== '',
   },
 });
 
