@@ -6,7 +6,7 @@
  * 4. Class N
  * 5. Paths: svc-trade/src/algo
  * 6. RED: {} → jobsEnabled false
- * 7. Collision: no index.ts (open #1831)
+ * 7. Collision: none — live host wire is algo-env-passthrough.test.ts
  */
 
 import { describe, expect, it } from 'vitest';
