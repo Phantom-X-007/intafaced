@@ -317,7 +317,7 @@ export const settlements = pay.table(
   ],
 );
 
-// ── USER MONEY IN AND OUT ────────────────────────────────────────────
+// ── USER MONEY IN AND OUT ────────────────────────────────────────────────────
 //
 // Everything above this line is MERCHANT money: a third party pays a merchant,
 // and svc-pay clears and settles it. The two tables below are the other half —
