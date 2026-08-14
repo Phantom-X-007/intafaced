@@ -24,7 +24,7 @@ name: intafaced
 include:
   - docker-compose.yml
 
-# ── Shared blocks ────────────────────────────────────────────────────────────
+# ── Shared blocks ────────────────────────────────────────────
 
 x-app: &app
   # One image for every service and both apps — see the Dockerfile header for
@@ -86,7 +86,7 @@ x-needs-bus: &needs-bus
     condition: service_healthy
 
 services:
-  # ── Migrations ─────────────────────────────────────────────────────────────
+  # ── Migrations ─────────────────────────────────────────────
   # Runs every service's `db:migrate` and exits. Everything with a schema waits
   # on `service_completed_successfully`, so a service physically cannot reach
   # its `SELECT 1 FROM <schema>.<table>` boot assertion before its migration has
@@ -105,7 +105,7 @@ services:
       postgres:
         condition: service_healthy
 
-  # ── Phase 1 · THE CORE ─────────────────────────────────────────────────────
+  # ── Phase 1 · THE CORE ─────────────────────────────────────
 
   # svc-ledger is the root of the money plane: six services call it and none of
   # them can move value without it. It owns the `ledger` JetStream stream and
@@ -135,7 +135,7 @@ services:
     depends_on:
       <<: [*needs-schema, *needs-bus]
 
-  # ── THE FRONT DOOR ─────────────────────────────────────────────────────────
+  # ── THE FRONT DOOR ─────────────────────────────────────────
   #
   # svc-edge is the only service a browser talks to. It exchanges a bearer token
   # for the signed principal every mounted service requires, and strips anything
@@ -153,7 +153,7 @@ services:
   # Deliberately holds no DATABASE_URL and no INTERNAL_SERVICE_SECRET. The
   # internet-facing component gets the smallest blast radius in the fleet, and
   # that is a property of what it is allowed to hold.
-  # ── Protocol Plane: the DEX (§8.6, §17.5) ──────────────────────────────────
+  # ── Protocol Plane: the DEX (§8.6, §17.5) ──────────────────────────
   #
   # Non-custodial by construction, and the environment is part of the proof:
   # no DATABASE_URL (a position we hold is custody) and no
@@ -248,6 +248,9 @@ services:
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
       # D26-P0-02 owner-published accrual tiers — pass-through, no compose default.
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: ${IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-}
+      # #1806 KYC document vault. Pass-through only — no compose default, no invented key.
+      # Host sets IDENTITY_KYC_DOC_KEY → vault boots. Blank stays refuse-closed.
+      IDENTITY_KYC_DOC_KEY: ${IDENTITY_KYC_DOC_KEY:-}
       # ops.affiliates: payout posts sweepFeesToRewards + rewardPay. Without this,
       # compose identity refuses affiliate.payout.ledger_unwired (env stays optional
       # and undefaulted — unset is still a legible refuse, not a localhost invent).
@@ -281,7 +284,7 @@ services:
       svc-ledger:
         condition: service_healthy
 
-  # ── Phase 2 · TRADE ────────────────────────────────────────────────────────
+  # ── Phase 2 · TRADE ────────────────────────────────────────
 
   # No DATABASE_URL, deliberately: §5.1 gives this service in-memory books and
   # the file journal below, and nothing else. It is therefore not gated on
@@ -427,7 +430,7 @@ services:
       svc-matching:
         condition: service_healthy
 
-  # ── Phase 3 · PAY + P2P ────────────────────────────────────────────────────
+  # ── Phase 3 · PAY + P2P ────────────────────────────────────
 
   svc-pay:
     <<: *app
@@ -477,7 +480,7 @@ services:
       svc-ledger:
         condition: service_healthy
 
-  # ── Phase 4 · BLUEPRINT ────────────────────────────────────────────────────
+  # ── Phase 4 · BLUEPRINT ────────────────────────────────────
 
   svc-blueprint:
     <<: *app
@@ -509,7 +512,7 @@ services:
     depends_on:
       <<: [*needs-schema, *needs-bus]
 
-  # ── Phase 5 · SURFACES ─────────────────────────────────────────────────────
+  # ── Phase 5 · SURFACES ─────────────────────────────────────
 
   svc-bank:
     <<: *app
@@ -796,11 +799,11 @@ services:
       svc-token:
         condition: service_healthy
 
-  # ── Protocol Plane (§17.4) ─────────────────────────────────────────────────
+  # ── Protocol Plane (§17.4) ─────────────────────────────────────
 
   # Non-custodial and permissionless: no ledger connection, no signing key.
   #
-  # ── The chain, and what changed ────────────────────────────────────────────
+  # ── The chain, and what changed ────────────────────────────
   #
   # PROTOCOL_RPC_URL used to point OUTSIDE the compose network at a node the
   # developer had to run themselves, with `0x0` factory addresses, because the
@@ -814,7 +817,7 @@ services:
   # lands the implementation and the factory at the same two CREATE addresses
   # every time. They mean nothing on any chain but this one.
   #
-  # ── Configured is not deployed ────────────────────────────────────────────
+  # ── Configured is not deployed ────────────────────────────
   #
   # Naming an address here does NOT make svc-protocol claim the contracts
   # exist. `protocol.chainStatus` reads `eth_getCode` at both addresses and
@@ -915,7 +918,7 @@ services:
     depends_on:
       <<: *needs-schema
 
-  # ── Apps ───────────────────────────────────────────────────────────────────
+  # ── Apps ───────────────────────────────────────────────
   #
   # The customer surface is `vendor-shell` below, on :8090. It is the SOLE
   # product surface — ADR `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`.
@@ -997,7 +1000,7 @@ services:
   # THE OPERATOR CONSOLE — and the one container in this file that is a SAFETY
   # CONTROL rather than a surface.
   #
-  # ── Why this block grew ────────────────────────────────────────────────────
+  # ── Why this block grew ────────────────────────────────────
   #
   # #186 wired `apps/admin` to svc-edge: `src/lib/control-plane-client.ts` reads
   # `EDGE_URL` + `ADMIN_OPERATOR_TOKEN` and posts module kills, and
@@ -1030,7 +1033,7 @@ services:
   # do not need one. Absent means the console SAYS, on every page, that it cannot
   # halt anything. See `src/lib/console-status.ts`.
   #
-  # ── No `depends_on: svc-edge` ──────────────────────────────────────────────
+  # ── No `depends_on: svc-edge` ──────────────────────────────
   #
   # Unlike the note above about browser-side URLs, this container now DOES call
   # svc-edge server-side (`/` and `/ledger` server-load the control plane before
