@@ -88,7 +88,7 @@
  */
 import { formatAmount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter, BookTop } from '@intafaced/venue-contracts';
-import { BinanceSpotMarketData, BybitSpotMarketData } from '@intafaced/venue-adapter';
+import { BinanceSpotMarketData, BybitSpotMarketData, OkxSpotMarketData } from '@intafaced/venue-adapter';
 import type { MarkRequest, MarkSource, QuotedMarkSource } from './liquidation-tick.js';
 import { markSourceFromBook, midFromBook } from './mark-source.js';
 import {
@@ -180,8 +180,9 @@ export function readObservedAt(snapshot: { observedAt?: unknown }): Date | null 
 
 /**
  * MarkSource that mids an external venue public book via MarketDataAdapter.
- * Inject the adapter — a real one (`BinanceSpotMarketData`, `BybitSpotMarketData`)
- * or a test double. This function knows nothing about which venue it is reading,
+ * Inject the adapter — a real one (`BinanceSpotMarketData`, `BybitSpotMarketData`,
+ * `OkxSpotMarketData`) or a test double. The factory below is how ops names it.
+ * This function knows nothing about which venue it is reading,
  * which is why the size-aware gate below applies to every venue for free and no
  * adapter can be given a threshold of its own.
  */
@@ -366,25 +367,25 @@ export function parseVenueMarkSymbols(raw: string | undefined): Map<string, stri
  * whichever caller happened to pass the wrong shape.
  */
 export type VenueMarketDataOptions = ConstructorParameters<typeof BinanceSpotMarketData>[0] &
-  ConstructorParameters<typeof BybitSpotMarketData>[0];
+  ConstructorParameters<typeof BybitSpotMarketData>[0] &
+  ConstructorParameters<typeof OkxSpotMarketData>[0];
 
 /**
  * Supported venue ids for this thin mount.
  * Unknown id → null (refuse invent of an adapter).
  * Empty / off / none → null (feature off).
  *
- * Two venues, both PUBLIC market data and neither holding a credential. Two is
- * the number that matters rather than a step toward six: `latency.ts` grades
- * adapters against each other and `cross-check.ts` medians them, and with one
- * adapter both were mechanisms with nothing to compare — a grade with no peer and
- * a median of one. Adding an id here is what makes an adapter REACHABLE; an
- * adapter written and unregistered is a file, not a venue.
+ * Three public MarketDataAdapters, none holding a credential. `cross-check.ts`
+ * medians three mids; two leave the median inconclusive. Adding an id here is
+ * what makes an adapter REACHABLE from TRADE_VENUE_MARK_VENUE; an adapter
+ * written and unregistered is a file, not a venue.
  */
 export function createVenueMarketDataAdapter(venueId: string, options?: VenueMarketDataOptions): MarketDataAdapter | null {
   const id = venueId.trim().toLowerCase();
   if (!id || id === 'off' || id === 'none' || id === 'false') return null;
   if (id === 'binance-spot') return new BinanceSpotMarketData(options);
   if (id === 'bybit-spot') return new BybitSpotMarketData(options);
+  if (id === 'okx-spot') return new OkxSpotMarketData(options);
   return null;
 }
 
