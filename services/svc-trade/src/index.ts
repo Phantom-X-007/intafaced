@@ -120,6 +120,27 @@ const subscriptions = await subscribeMatchingEvents(bus, trade);
 // Unknown venue id → null (refuse invent). Created before OTC so the desk can chain it.
 const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
 
+// Stream books start after Fastify (needs app.log). The map is filled then;
+// lookups before run() returns null (unservable), never an invented mid.
+const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
+const otcVenueSymbols = parseVenueMarkSymbols(env.TRADE_OTC_VENUE_SYMBOLS);
+const venueStreamSymbols = new Set([...venueMarkSymbols.values(), ...otcVenueSymbols.values()]);
+const venueMaintainedBooks = new Map<string, MaintainedBook>();
+const venueBookPort =
+  env.TRADE_VENUE_MARK_STREAM && venuePublicAdapter && venueStreamSymbols.size > 0
+    ? (symbol: string) => {
+        const book = venueMaintainedBooks.get(symbol);
+        if (!book) return null;
+        return {
+          get servable() {
+            return book.servable;
+          },
+          top: () => book.top(),
+          observedAt: () => book.tracker.observedAt,
+        };
+      }
+    : undefined;
+
 // trade.otc — D-S-02 / D26-P1-T2. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
 // Empty TRADE_OTC_MIDS / unmapped venue pair → the desk can source no price and refuses.
 // Boot-stamped mids carry asOf; venue observation refreshes asOf when opted in.
@@ -130,6 +151,7 @@ const otcMidBuilt = createOtcMidSourceFromConfig({
   midFromVenue: env.TRADE_OTC_MID_FROM_VENUE,
   venueAdapter: venuePublicAdapter,
   venueSymbols: env.TRADE_OTC_VENUE_SYMBOLS,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
 const otc = new OtcDeskService(ledger, otcStakes, {
   law: otcDeskLaw,
@@ -169,10 +191,8 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 // Venue fabric public mid → mark path (A-TRADE-VENUE-1). Adapter created above (OTC/MM share).
-const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
-const venueMaintainedBooks = new Map<string, MaintainedBook>();
-if (env.TRADE_VENUE_MARK_STREAM && venuePublicAdapter) {
-  for (const symbol of new Set(venueMarkSymbols.values())) {
+if (venueBookPort && venuePublicAdapter) {
+  for (const symbol of venueStreamSymbols) {
     const book = new MaintainedBook(venuePublicAdapter, symbol);
     venueMaintainedBooks.set(symbol, book);
     void book.run().then((status) => {
@@ -180,20 +200,6 @@ if (env.TRADE_VENUE_MARK_STREAM && venuePublicAdapter) {
     });
   }
 }
-const venueBookPort =
-  venueMaintainedBooks.size > 0
-    ? (symbol: string) => {
-        const book = venueMaintainedBooks.get(symbol);
-        if (!book) return null;
-        return {
-          get servable() {
-            return book.servable;
-          },
-          top: () => book.top(),
-          observedAt: () => book.tracker.observedAt,
-        };
-      }
-    : undefined;
 const venueMarkConfigured = createConfiguredVenueMarkSource({
   venueId: env.TRADE_VENUE_MARK_VENUE,
   symbols: venueMarkSymbols,
