@@ -238,6 +238,7 @@ _None._
 | `intafaced.identity.rank.updated`    | `notify-rank-updated`        | Inbox row when rank changes                                |
 | `intafaced.token.stake.created`      | `notify-stake-created`       | Inbox row when a stake is locked                           |
 | `intafaced.bank.margin_call.created` | `notify-bank-margin-called`  | **Critical** inbox row + fan-out when a loan is called     |
+| `intafaced.agents.action.rejected`   | `notify-agent-action-rejected` | Inbox row when a guardrail refuses an agent action       |
 
 ### Idempotency and backpressure
 
