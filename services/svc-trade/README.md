@@ -162,7 +162,7 @@ Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matc
 
 | Path                                      | Behavior                                                                                                                                                                                    |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from public book snapshot; futures jobs prefer it, then depth.                                      |
+| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from the public book; futures jobs prefer it, then depth. `TRADE_VENUE_MARK_STREAM` (default OFF) uses sequenced `MaintainedBook` instead of polling `snapshotBook`. Desynced feed → null. |
 | **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.                                                |
 | **OTC mid** `TRADE_OTC_MID_FROM_VENUE`    | Default **OFF**. When true, OTC RFQ mids come from the **same** public adapter; `TRADE_OTC_VENUE_SYMBOLS` maps pairKey→symbol. Unmapped/dark → null. Boot `TRADE_OTC_MIDS` is not mixed in. |
 
@@ -172,6 +172,7 @@ Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matc
 | ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`** — both keyless. Unknown id → warn once, stay off (never invent). |
 | `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                         |
+| `TRADE_VENUE_MARK_STREAM`      | `false` | When true, start one `MaintainedBook` per mapped symbol (stream-first + snapshot join). Default off so boot does not open WS. Desynced → null mark.          |
 | `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                  |
 | `TRADE_OTC_MID_FROM_VENUE`     | `false` | Optional OTC observation feed from the same public adapter. Default off.                                                                                      |
 | `TRADE_OTC_VENUE_SYMBOLS`      | `""`    | `BTC/USDT:BTC/USDT` — OTC pairKey → venue unified symbol. Empty = every pair unmapped (never invent).                                                         |
@@ -180,7 +181,7 @@ Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matc
 
 1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget. Both governors reserve 20% headroom, and both refuse rather than silently waiting.
 2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols). The symbol format is the unified one (`BTC/USDT`) for either venue — the venue's own spelling is produced inside the adapter and nowhere else.
-3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` **or** `bybit-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median.
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` **or** `bybit-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median. Optional: `TRADE_VENUE_MARK_STREAM=true` to consume `MaintainedBook` instead of polling (still default off).
 4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
 5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
 6. Optional OTC: set `TRADE_OTC_VENUE_SYMBOLS` to real pair keys (never invent a catalogue) then `TRADE_OTC_MID_FROM_VENUE=true`. Dark/unmapped pairs still refuse. Boot `TRADE_OTC_MIDS` is not a fallback while this is on.
