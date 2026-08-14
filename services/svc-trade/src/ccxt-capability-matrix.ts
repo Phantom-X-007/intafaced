@@ -49,7 +49,7 @@ export type CcxtRefuseArm = {
   readonly routeName: string;
   readonly method: string;
   readonly path: string;
-  readonly httpStatus: 400 | 403 | 501;
+  readonly httpStatus: 400 | 403 | 501 | 503;
   /**
    * CCXT `code` when wireShape is `ccxt`; for domain refuses, the stable
    * vocabulary class bots should treat as client error (not retried as venue).
@@ -186,6 +186,17 @@ export const CCXT_REFUSE_ARMS: readonly CcxtRefuseArm[] = [
     wireShape: 'domain',
     when: 'futures open without ack of current ADL disclosure version — DIRECTION:34',
   },
+  {
+    id: 'futuresUnconfiguredOnOpen',
+    routeName: 'openPosition',
+    method: 'POST',
+    path: '/api/v1/positions',
+    httpStatus: 503,
+    ccxtCode: 'NotSupported',
+    intafacedCode: 'trade.futures_unconfigured',
+    wireShape: 'domain',
+    when: 'profitSource unset — domain 503 today; NotSupported class so bots do not retry as venue-down (operator names the pot; same posture as futures_disabled)',
+  },
 ] as const;
 
 const refuseIds = (...ids: string[]): readonly string[] => ids;
@@ -257,8 +268,14 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     auth: 'private',
     scope: 'trade:write',
     kind: 'supported',
-    refuseArmIds: refuseIds('callerPriceOnOpen', 'crossMarginOnOpen', 'leverageRequiredOnOpen', 'adlDisclosureRequired'),
-    notes: 'Open funded futures; mark entry only; leverage required (no 1x default); cross margin + missing ADL ack refuse',
+    refuseArmIds: refuseIds(
+      'callerPriceOnOpen',
+      'crossMarginOnOpen',
+      'leverageRequiredOnOpen',
+      'adlDisclosureRequired',
+      'futuresUnconfiguredOnOpen',
+    ),
+    notes: 'Open funded futures; mark entry only; leverage required (no 1x default); cross / missing ADL ack / unnamed profit pot refuse',
   },
   {
     name: 'closePosition',
