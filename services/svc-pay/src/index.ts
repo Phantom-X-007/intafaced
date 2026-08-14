@@ -21,6 +21,7 @@ import {
   shouldRegisterCardSandbox,
 } from './rails/posture.js';
 import { createPayRouter } from './router.js';
+import { MerchantPayoutDestinationStore } from './merchant-payout-destination.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
 import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
@@ -309,7 +310,7 @@ const subMerchants = new SubMerchantService(sql);
  */
 export const appRouter = mergeRouters(
   // trees fence: gateway money paths check PayFac areas (merchant-ownership).
-  createPayRouter(pay, rails, userMoney, subMerchants),
+  createPayRouter(pay, rails, userMoney, subMerchants, new MerchantPayoutDestinationStore(sql)),
   createMerchantStateRouter(merchantState),
   createKybPspRouter(kyb, pspMode),
   // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's

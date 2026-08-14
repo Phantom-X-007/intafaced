@@ -730,8 +730,29 @@ export const subscriptionExecutions = pay.table(
   ],
 );
 
+/**
+ * Where a merchant is paid out — kind+ref asserted through
+ * `assertPayoutDestinationKind` before insert. One row per (merchant, rail).
+ * Loaded by payout so withdrawHold never runs against an invented dest.
+ */
+export const merchantPayoutDestinations = pay.table(
+  'merchant_payout_destinations',
+  {
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    railId: text('rail_id').notNull(),
+    kind: text('kind').notNull(),
+    ref: text('ref').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ name: 'merchant_payout_destinations_pkey', columns: [t.merchantId, t.railId] })],
+);
+
 export const schema = {
   merchants,
+  merchantPayoutDestinations,
   merchantPermissionEvents,
   paymentProfiles,
   paymentLinks,
