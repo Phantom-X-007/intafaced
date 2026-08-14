@@ -20,10 +20,7 @@ export type VenueLatencyHealth = {
   readonly provisional: boolean | null;
 };
 
-export function presentVenueLatencyHealth(
-  adapter: MarketDataAdapter | null,
-  now: Date = new Date(),
-): VenueLatencyHealth {
+export function presentVenueLatencyHealth(adapter: MarketDataAdapter | null, now: Date = new Date()): VenueLatencyHealth {
   if (!adapter) {
     return {
       configured: false,
