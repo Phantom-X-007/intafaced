@@ -37,8 +37,9 @@ registerProcessHooks(
  *
  * Stage-1 product factories (navigator / support / scanner / merchant /
  * copy-intel) are registered into `agent_definitions` at boot so metered
- * `runSession` paths can open without a separate deploy-side seed. Portfolio /
- * launch / risk / coach / growth remain doctrine names only until product law.
+ * `runSession` paths can open without a separate deploy-side seed. `coach` is a
+ * refuse/citation door (not a factory). Portfolio / launch / growth remain
+ * doctrine names only until product law.
  */
 
 const sql = postgres(env.DATABASE_URL, {

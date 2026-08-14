@@ -36,6 +36,7 @@ import { runSupportReplySession } from './support-agent/session-run.js';
 import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
 import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
 import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write.js';
+import { envCoachGrounding, runCoachSession } from './coach/grounded-session.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -3102,6 +3103,88 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }),
         )
         .query(({ input }) => refuseIdentityKycReviewWrite(input)),
+    }),
+
+    /**
+     * AI Coach — curriculum-grounded citations (§8.2). Empty catalog is a
+     * chatbot (refuse). Licensed library titles are never invented. Position
+     * grounding is owner-undecided → refuse. Not a fleet runSession.
+     */
+    coach: router({
+      session: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            ask: z.string().max(2000).optional(),
+            requestedSlug: z.string().min(1).max(128).optional(),
+            includePositions: z.boolean().optional(),
+            asAdvice: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum([
+                'curriculum_empty',
+                'library_import_pending',
+                'invented_library',
+                'positions_not_decided',
+                'advice_forbidden',
+              ]),
+              kind: z.literal('not_advice'),
+              isAdvice: z.literal(false),
+              positionsReferenced: z.literal(false),
+              licensedLibraryImported: z.boolean(),
+              inventedLibrary: z.literal(false),
+              citedCount: z.literal(0),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+            z.object({
+              status: z.literal('grounded'),
+              kind: z.literal('citation'),
+              isAdvice: z.literal(false),
+              positionsReferenced: z.literal(false),
+              licensedLibraryImported: z.boolean(),
+              inventedLibrary: z.literal(false),
+              citedCount: z.number().int(),
+              citations: z.array(z.object({ slug: z.string(), title: z.string() })),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = runCoachSession({
+            grounding: envCoachGrounding(),
+            ...(input.ask === undefined ? {} : { ask: input.ask }),
+            ...(input.requestedSlug === undefined ? {} : { requestedSlug: input.requestedSlug }),
+            ...(input.includePositions === undefined ? {} : { includePositions: input.includePositions }),
+            ...(input.asAdvice === undefined ? {} : { asAdvice: input.asAdvice }),
+          });
+          if (result.status === 'refuse') {
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              kind: 'not_advice' as const,
+              isAdvice: false as const,
+              positionsReferenced: false as const,
+              licensedLibraryImported: result.licensedLibraryImported,
+              inventedLibrary: false as const,
+              citedCount: 0 as const,
+              userMessageKey: 'agents.error.capability_unavailable' as const,
+            };
+          }
+          return {
+            status: 'grounded' as const,
+            kind: 'citation' as const,
+            isAdvice: false as const,
+            positionsReferenced: false as const,
+            licensedLibraryImported: result.licensedLibraryImported,
+            inventedLibrary: false as const,
+            citedCount: result.citedCount,
+            citations: result.citations.map((c) => ({ slug: c.slug, title: c.title })),
+            userMessageKey: 'agents.error.capability_unavailable' as const,
+          };
+        }),
     }),
   });
 }
