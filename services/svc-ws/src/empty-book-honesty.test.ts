@@ -149,6 +149,7 @@ describe('empty book is absent, not a zero book', () => {
     expect(sink.closed).toBeNull();
     expect(sink.frames).toEqual([]);
     expect(sink.frames.some((f) => f.includes('"bids"') || f.includes('"asks"'))).toBe(false);
+    expect(sink.frames.some((f) => f.includes('"trades":[]') || f === '[]')).toBe(false);
   });
 
   it('trade tape closes unknown markets without a fake empty tape object', async () => {

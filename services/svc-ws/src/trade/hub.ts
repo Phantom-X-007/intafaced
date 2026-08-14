@@ -18,6 +18,14 @@ import { CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type H
  * Unwatched markets store nothing — otherwise every `orderFilled` on the bus
  * would pin memory forever for markets nobody opened.
  *
+ * ── Empty ≠ zero ────────────────────────────────────────────────────────────
+ *
+ * An unseeded tape, a matching 404, or a seed failure is **absence**. Emitting
+ * `{ trades: [] }` (or a JSON `[]`) would let a client treat that as a live
+ * zero-print market. Listed markets stay subscribed with no frames until a
+ * real `TradePrint` exists. Unknown markets stay a typed close. Never invent
+ * prints or mids.
+ *
  * ── Backpressure ────────────────────────────────────────────────────────────
  *
  * Same policy as depth, simpler: over the high-water mark a print is dropped
@@ -40,6 +48,32 @@ export interface TradeHubOptions {
    * 404 on the engine, so we refuse anything not on the known list.
    */
   readonly ensureKnownMarket: (marketId: string) => Promise<boolean>;
+  /**
+   * Optional cold-start fetch (tests / future matching tape). Empty or throw
+   * is absence — never stored as `[]`, never flushed as `{ trades: [] }`.
+   */
+  readonly seedRecent?: (marketId: string) => Promise<readonly TradePrint[]>;
+}
+
+/**
+ * `{ trades: [] }` / JSON `[]` on the wire is a priced empty market. Empty
+ * tape is absent: no frame, not a live zero print.
+ */
+export function isLiveZeroTapePayload(value: unknown): boolean {
+  if (Array.isArray(value) && value.length === 0) return true;
+  if (value !== null && typeof value === 'object' && 'trades' in value) {
+    const trades = (value as { trades: unknown }).trades;
+    return Array.isArray(trades) && trades.length === 0;
+  }
+  return false;
+}
+
+export function isLiveZeroTapeFrame(frame: string): boolean {
+  try {
+    return isLiveZeroTapePayload(JSON.parse(frame) as unknown);
+  } catch {
+    return false;
+  }
 }
 
 interface Subscription {
@@ -62,6 +96,8 @@ export class TradeHub {
   readonly #recent = new Map<string, TradePrint[]>();
   /** Sequences already accepted, so a JetStream redelivery is a no-op. */
   readonly #seen = new Map<string, Set<number>>();
+  /** In-flight cold-start fetches — N connections cost one seed. */
+  readonly #seeding = new Map<string, Promise<void>>();
 
   #droppedFrames = 0;
   #evictions = 0;
@@ -142,19 +178,57 @@ export class TradeHub {
         return;
       }
       if (sub.closed) return;
+      if (this.#options.seedRecent && !this.#recent.has(sub.marketId)) {
+        await this.#seed(sub.marketId);
+      }
+      if (sub.closed) {
+        this.#forgetIdleMarket(sub.marketId);
+        return;
+      }
       this.#flush(sub);
     } catch (err) {
       this.#evict(sub, CLOSE_TRY_LATER, err instanceof Error ? err.message : 'trades unavailable');
     }
   }
 
-  /** Replay the ring, then mark the subscription live. */
+  async #seed(marketId: string): Promise<void> {
+    const inFlight = this.#seeding.get(marketId);
+    if (inFlight) return inFlight;
+    const seedRecent = this.#options.seedRecent;
+    if (!seedRecent) return;
+
+    const run = (async () => {
+      try {
+        const prints = await seedRecent(marketId);
+        if (prints.length === 0) {
+          // Matching 404 / never printed: absence. Do not `#recent.set([],)`.
+          this.#log.warn({ marketId }, 'ws: trade seed empty — no tape on the wire; live prints publish when they exist');
+          return;
+        }
+        for (const print of prints) this.#acceptPrint(print);
+      } catch (err) {
+        this.#log.warn(
+          { marketId, err: err instanceof Error ? err.message : String(err) },
+          'ws: trade seed failed — no tape on the wire; matching 404 is absence not { trades: [] }',
+        );
+      } finally {
+        this.#seeding.delete(marketId);
+      }
+    })();
+    this.#seeding.set(marketId, run);
+    return run;
+  }
+
+  /** Replay real prints only. An empty ring is silence, not `{ trades: [] }`. */
   #flush(sub: Subscription): void {
     if (sub.closed || !sub.pending) return;
 
-    for (const print of this.#recent.get(sub.marketId) ?? []) {
-      if (sub.closed) return;
-      this.#write(sub, JSON.stringify(print));
+    const ring = this.#recent.get(sub.marketId);
+    if (ring && ring.length > 0) {
+      for (const print of ring) {
+        if (sub.closed) return;
+        this.#write(sub, JSON.stringify(print));
+      }
     }
     sub.pending = false;
   }
@@ -176,6 +250,10 @@ export class TradeHub {
       return null;
     }
 
+    return this.#acceptPrint(print);
+  }
+
+  #acceptPrint(print: TradePrint): TradePrint | null {
     // No watchers → no ring, no fan-out. Leaving the ring grow for idle markets
     // would re-pin memory after #forgetIdleMarket and for markets never opened.
     if (!this.#hasWatcher(print.marketId)) {
@@ -240,6 +318,10 @@ export class TradeHub {
   }
 
   #write(sub: Subscription, frame: string): void {
+    if (isLiveZeroTapeFrame(frame)) {
+      this.#log.warn({ marketId: sub.marketId }, 'ws: refused live-zero tape frame');
+      return;
+    }
     try {
       sub.sink.send(frame);
     } catch (err) {
