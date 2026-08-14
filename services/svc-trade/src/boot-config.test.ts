@@ -326,7 +326,18 @@ describe('svc-trade boots on shipped configuration', () => {
       expect(law.decayRoundTrips).toBe(50);
       expect(law.decayShareBps).toBe(5000);
     }
-    expect(shipped.get('TRADE_COPY_JURISDICTION_LAW') ?? '').toBe('');
+    const geoRaw = shipped.get('TRADE_COPY_JURISDICTION_LAW') ?? '';
+    const { parseCopyJurisdictionLawJson } = await import('./copy/fee-share-law.js');
+    const geo = parseCopyJurisdictionLawJson(geoRaw);
+    expect(geo.published).toBe(true);
+    if (geo.published) {
+      expect(geo.allowedRegions).toHaveLength(49);
+      expect(geo.allowedRegions).toContain('DE');
+      expect(geo.allowedRegions).toContain('JP');
+      for (const blocked of ['US', 'CA', 'GB', 'CN', 'HK', 'SG', 'NL', 'BE', 'CU', 'IR', 'KP', 'SY', 'RU', 'BY']) {
+        expect(geo.allowedRegions, blocked).not.toContain(blocked);
+      }
+    }
   });
 
   /**

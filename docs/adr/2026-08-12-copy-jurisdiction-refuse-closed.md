@@ -1,6 +1,6 @@
 # ADR: copy served-jurisdiction list — refuse-closed until the owner publishes
 
-**Status:** **Accepted — 2026-08-12.** Seals **D26-P0-15**.
+**Status:** **Accepted — 2026-08-12.** Seals **D26-P0-15**. **Owner list published 2026-08-14** in `.env.example` (`TRADE_COPY_JURISDICTION_LAW`). Blank env still refuse-closed. Not worldwide.
 **Decision owner:** repo owner. **Written by:** Denon.
 **Law:** [`DIRECTION-2026-07-31.md`](../DIRECTION-2026-07-31.md) §8 item 10; [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](../SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md) (served-jurisdiction answer); [`OWNER-DECISION-PACKET-2026-08-09.md`](../OWNER-DECISION-PACKET-2026-08-09.md) §A3.
 **Board:** `trade.copy` · D26-P0-15 on [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](../DENON-HARD-PARALLEL-BOARD-2026-08-09.md).
@@ -10,7 +10,7 @@
 
 ## The decision
 
-> **There is no in-repo default geo allowlist for sovereign copy. Until the owner publishes an allowlist through `TRADE_COPY_JURISDICTION_LAW`, every copy follow is refuse-closed and names the residual. Agents must not invent region codes, “obvious launch markets,” or a seed table that looks like policy.**
+> **There is no in-repo default geo allowlist baked into source.** Follow is refuse-closed until `TRADE_COPY_JURISDICTION_LAW` is published. **Owner published the list 2026-08-14 in `.env.example`** (market-comp CEX copy, 49 ISO codes, not worldwide). Compose has no default. Blank host still refuse-closed. Agents must not grow that array into “all countries” or OFAC-comprehensive codes.
 
 This is the same shape already Accepted for `leader_share_bps`: unset is not zero and not a placeholder — it is a closed door that says why.
 

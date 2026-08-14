@@ -344,7 +344,7 @@ The service checks these; the database enforces them regardless.
 
 ## Copy deepen (D26-P1-T3)
 
-Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. **D26-P0-02** published `TRADE_COPY_FEE_SHARE_LAW` (1000 bps of our fee). Served jurisdictions stay refuse-closed until **D26-P0-15** (`TRADE_COPY_JURISDICTION_LAW` — ADR `docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md`). Agents never invent a geo allowlist.
+Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. **D26-P0-02** published `TRADE_COPY_FEE_SHARE_LAW` (1000 bps of our fee). **D26-P0-15** owner-published `TRADE_COPY_JURISDICTION_LAW` in `.env.example` (2026-08-14, market-comp CEX copy, not worldwide). Blank env still refuse-closed. Compose has no default.
 
 `copy.killFeeShare` and `copy.unfollow` are unilateral controls and remain reachable while the owner fee-share rates are blank. Every mirror plan, fee-share settlement, kill, and unfollow is serialized per follow:
 

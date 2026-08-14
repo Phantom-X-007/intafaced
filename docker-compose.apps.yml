@@ -357,7 +357,8 @@ services:
       # line still has NO compose default — a host that blanks .env keeps
       # futures profit refused; a typed-wrong pot still fails boot.
       TRADE_FUTURES_PROFIT_SOURCE: ${TRADE_FUTURES_PROFIT_SOURCE:-}
-      # D26-P0-02 copy fee-share JSON — pass-through. Geo stays unpublished.
+      # D26-P0-02 copy fee-share + D26-P0-15 geo — pass-through, no compose default.
+      # Published JSON lives in `.env.example`. Blank host still refuse-closed.
       TRADE_COPY_FEE_SHARE_LAW: ${TRADE_COPY_FEE_SHARE_LAW:-}
       TRADE_COPY_JURISDICTION_LAW: ${TRADE_COPY_JURISDICTION_LAW:-}
       # Options listing gate (trade.options / D7). Empty = refuse kind=options
