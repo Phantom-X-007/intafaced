@@ -395,6 +395,7 @@ export const FEATURES = [
       '(adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo list. ' +
       'Prior: deskStatus.sovereign + P0-02 residual cites; kill/unfollow real (#1692). ' +
       'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
+      '2026-08-14: listFollowsByFollower (not full table) + unique (follower,leader) race maps to trade.copy_already_following (never raw PG 23505). ' +
       'Still open: region table (P0-15 content); session-key caps (protocol).',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {

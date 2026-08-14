@@ -164,6 +164,62 @@ describe('CopyService', () => {
     expect(store.listFollowsCalls).toBe(0);
   });
 
+  it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {
+    class RaceStore extends MemoryCopyFollowStore {
+      override async listFollowsByFollower() {
+        return [];
+      }
+    }
+    const store = new RaceStore();
+    const opts = { feeShareLaw: publishedFee, jurisdictionLaw: publishedJur, store };
+    const first = new CopyService(new MemoryLedger(), opts);
+    const second = new CopyService(new MemoryLedger(), opts);
+    await first.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      second.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+  });
+
+  it('follow maps a leaked Postgres unique_violation to already_following', async () => {
+    class PgLeakStore extends MemoryCopyFollowStore {
+      override async listFollowsByFollower() {
+        return [];
+      }
+      override async saveFollow(): Promise<void> {
+        throw Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+      }
+    }
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store: new PgLeakStore(),
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_already_following' });
+  });
+
   it('follow → mirror plan within envelope; cap exceed refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new CopyService(new MemoryLedger(), {
