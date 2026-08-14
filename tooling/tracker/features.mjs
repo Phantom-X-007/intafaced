@@ -388,13 +388,12 @@ export const FEATURES = [
     note:
       'D26-P0-02 SEALED 2026-08-13: TRADE_COPY_FEE_SHARE_LAW published (leaderShareBps=1000, cap 1000.00, decay 50/5000) — ' +
       'adr/2026-08-13-d26-p0-02-owner-launch-seals.md. Follow still refuse-closed on D26-P0-15 geo. ' +
-      'CLAIM 2026-08-12 Denon agent (feat/copy-trading-deepen-2026-08-12): SOCKET §13 `socket.copy-auto-mirror-place` — ' +
-      'placeMirror refuse-closed after planMirror; never invent spot fills. ' +
+      '2026-08-14: placeMirror wires follower placeOrder (IOC market, clientOrderId copy-mirror:follow:fill); unwired port still refuses; never invents fills. ' +
       'D26-P0-15 SEALED 2026-08-12: jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW ' +
       '(adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo list. ' +
       'Prior: deskStatus.sovereign + P0-02 residual cites; kill/unfollow real (#1692). ' +
       'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      'Still open: region table (P0-15 content); session-key caps (protocol); closing the place socket with a real follower wire.',
+      'Still open: region table (P0-15 content); session-key caps (protocol).',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',

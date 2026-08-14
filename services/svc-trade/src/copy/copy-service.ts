@@ -15,11 +15,18 @@
 import { randomUUID } from 'node:crypto';
 import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './auto-mirror-place.js';
+import {
+  autoMirrorPlaceStatus,
+  copyMirrorClientOrderId,
+  COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+  COPY_AUTO_MIRROR_PLACE_SOCKET,
+  type PlaceFollowerOrderPort,
+} from './auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, CopyError } from './errors.js';
 import {
   copyLawResidual,
   copyLawStatusLine,
+  requirePublishedCopyJurisdictionLaw,
   UNPUBLISHED_COPY_FEE_SHARE_LAW,
   UNPUBLISHED_COPY_JURISDICTION_LAW,
   type CopyFeeShareLaw,
@@ -42,6 +49,11 @@ export interface CopyServiceOptions {
   now?: () => Date;
   /** Defaults to in-memory. Production wires SqlCopyFollowStore. */
   store?: CopyFollowStore;
+  /**
+   * Follower spot place. Production wires TradeService.placeOrder.
+   * Absent → placeMirror still refuse-closed (never invent a fill).
+   */
+  placeFollowerOrder?: PlaceFollowerOrderPort;
 }
 
 type FollowRef = { followId: string };
@@ -71,6 +83,7 @@ export class CopyService {
   private readonly feeShareLaw: CopyFeeShareLaw;
   private readonly jurisdictionLaw: CopyJurisdictionLaw;
   private readonly now: () => Date;
+  private readonly placeFollowerOrder: PlaceFollowerOrderPort | null;
 
   constructor(
     private readonly ledger: LedgerClient,
@@ -80,6 +93,7 @@ export class CopyService {
     this.jurisdictionLaw = options.jurisdictionLaw ?? UNPUBLISHED_COPY_JURISDICTION_LAW;
     this.now = options.now ?? (() => new Date());
     this.store = options.store ?? new MemoryCopyFollowStore();
+    this.placeFollowerOrder = options.placeFollowerOrder ?? null;
   }
 
   /**
@@ -106,38 +120,61 @@ export class CopyService {
       residuals: {
         rates: feeSharePublished ? null : COPY_FEE_SHARE_RESIDUAL,
         jurisdiction: jurisdictionPublished ? null : COPY_JURISDICTION_RESIDUAL,
-        autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+        autoMirrorPlace: this.placeFollowerOrder ? null : COPY_AUTO_MIRROR_PLACE_RESIDUAL,
       },
-      /** SOCKET §13 — planMirror is real; place into spot stays refuse-closed. */
-      autoMirrorPlace: autoMirrorPlaceStatus(),
+      autoMirrorPlace: autoMirrorPlaceStatus(this.placeFollowerOrder !== null),
     };
   }
 
   /**
-   * Place a planned mirror as a spot order — SOCKET §13 refuse until the
-   * follower place wire exists. Never invents a fill from a plan.
+   * Place a planned mirror as a real follower spot order.
+   * Never invents a fill — qty/side/market come from the durable plan.
    */
   async placeMirrorForFollow(principal: Principal, input: { followId: string; fillId: string }) {
-    const follow = await this.store.getFollow(input.followId);
-    if (!follow) {
-      throw new CopyError('Follow not found', 'trade.copy_not_following');
-    }
-    if (follow.followerId !== principal.userId) {
-      throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-    }
-    const prior = await this.store.getMirroredFill(follow.followId, input.fillId.trim());
-    if (!prior) {
-      throw new CopyError(
-        'No durable mirror plan for this fillId — planMirror first; place still refuse-closed',
-        'trade.copy_auto_mirror_place_socket',
-        COPY_AUTO_MIRROR_PLACE_RESIDUAL,
-      );
-    }
-    throw new CopyError(
-      `Auto-mirror place into spot is refuse-closed (${autoMirrorPlaceStatus().socket}) — planMirror claimed fill ${prior.fillId}; never invent a spot fill`,
-      'trade.copy_auto_mirror_place_socket',
-      COPY_AUTO_MIRROR_PLACE_RESIDUAL,
-    );
+    return this.store.runFollowExclusive(input.followId, async (store) => {
+      const follow = await store.getFollow(input.followId);
+      if (!follow) {
+        throw new CopyError('Follow not found', 'trade.copy_not_following');
+      }
+      if (follow.followerId !== principal.userId) {
+        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+      }
+      requirePublishedCopyJurisdictionLaw(this.jurisdictionLaw);
+      assertCopyRegionAllowed(this.jurisdictionLaw, follow.region);
+      if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
+        throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
+      }
+      const prior = await store.getMirroredFill(follow.followId, input.fillId.trim());
+      if (!prior) {
+        throw new CopyError(
+          'No durable mirror plan for this fillId — planMirror first',
+          'trade.copy_auto_mirror_place_socket',
+          COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+        );
+      }
+      if (!this.placeFollowerOrder) {
+        throw new CopyError(
+          `Auto-mirror place into spot is refuse-closed (${COPY_AUTO_MIRROR_PLACE_SOCKET}) — planMirror claimed fill ${prior.fillId}; never invent a spot fill`,
+          'trade.copy_auto_mirror_place_socket',
+          COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+        );
+      }
+      const placed = await this.placeFollowerOrder(principal, {
+        symbol: prior.marketId,
+        marketId: prior.marketId,
+        side: prior.side,
+        qty: prior.qty,
+        clientOrderId: copyMirrorClientOrderId(follow.followId, prior.fillId),
+      });
+      return {
+        followId: follow.followId,
+        fillId: prior.fillId,
+        orderId: placed.orderId,
+        marketId: prior.marketId,
+        side: prior.side,
+        qty: formatAmount(prior.qty),
+      };
+    });
   }
 
   /**

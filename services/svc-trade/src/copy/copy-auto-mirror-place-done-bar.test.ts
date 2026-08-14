@@ -1,18 +1,18 @@
 /**
- * Done-bar — trade.copy auto-mirror place socket (SOCKET §13).
+ * Done-bar — trade.copy auto-mirror place (follower placeOrder wire).
  *
  * Breaks caught:
- *   · planMirror succeeds but placeMirror invents a spot fill / order id;
- *   · deskStatus omits the open socket so residual looks closed;
+ *   · unwired port still refuse-closed (never invent a fill);
+ *   · wired port places via the port with plan qty/side — never a fabricated fill;
  *   · placeMirror without a prior plan returns a fake success.
  */
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { MemoryLedger } from '@intafaced/ledger-client';
+import { MemoryLedger, parseAmount } from '@intafaced/ledger-client';
 import { describe, expect, it } from 'vitest';
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
-import { COPY_AUTO_MIRROR_PLACE_SOCKET, CopyService } from './index.js';
+import { COPY_AUTO_MIRROR_PLACE_SOCKET, CopyService, copyMirrorClientOrderId } from './index.js';
 
 const SECRET = 'copy-auto-mirror-place-done-bar-secret-32b';
 const FOLLOWER = '11111111-1111-4111-8111-111111111111';
@@ -46,16 +46,16 @@ function signed() {
   });
 }
 
-function makeCopy() {
-  return new CopyService(new MemoryLedger(), {
-    feeShareLaw: { published: false },
-    jurisdictionLaw: { published: true, allowedRegions: ['SG'] },
-  });
+function laws() {
+  return {
+    feeShareLaw: { published: false as const },
+    jurisdictionLaw: { published: true as const, allowedRegions: ['SG'] },
+  };
 }
 
 describe('D26-P1-T3 auto-mirror place Done-bar', () => {
-  it('deskStatus publishes the §13 socket as refuse-closed', async () => {
-    const status = await createTradeRouter({} as TradeService, undefined, makeCopy())
+  it('unwired deskStatus publishes the §13 socket as refuse-closed', async () => {
+    const status = await createTradeRouter({} as TradeService, undefined, new CopyService(new MemoryLedger(), laws()))
       .createCaller(signed())
       .copy.deskStatus();
     expect(status.autoMirrorPlace.published).toBe(false);
@@ -63,8 +63,8 @@ describe('D26-P1-T3 auto-mirror place Done-bar', () => {
     expect(status.residuals.autoMirrorPlace).toContain(COPY_AUTO_MIRROR_PLACE_SOCKET);
   });
 
-  it('planMirror is real; placeMirror refuses by name and never invents a fill', async () => {
-    const caller = createTradeRouter({} as TradeService, undefined, makeCopy()).createCaller(signed());
+  it('unwired: planMirror is real; placeMirror refuses and never invents a fill', async () => {
+    const caller = createTradeRouter({} as TradeService, undefined, new CopyService(new MemoryLedger(), laws())).createCaller(signed());
 
     const follow = await caller.copy.follow({
       leaderId: LEADER,
@@ -84,7 +84,6 @@ describe('D26-P1-T3 auto-mirror place Done-bar', () => {
       notional: '50',
     });
     expect(plan.fillId).toBe('leader-fill-1');
-    expect(plan.reason).toBe('within_envelope');
 
     await expect(
       caller.copy.placeMirror({
@@ -99,5 +98,48 @@ describe('D26-P1-T3 auto-mirror place Done-bar', () => {
         fillId: 'never-planned',
       }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  });
+
+  it('wired: placeMirror calls follower placeOrder with plan qty — never invents a fill', async () => {
+    const placed: { clientOrderId: string; qty: bigint; side: string }[] = [];
+    const copy = new CopyService(new MemoryLedger(), {
+      ...laws(),
+      placeFollowerOrder: async (_p, input) => {
+        placed.push({ clientOrderId: input.clientOrderId, qty: input.qty, side: input.side });
+        return { orderId: 'ord-follower-1' };
+      },
+    });
+    const caller = createTradeRouter({} as TradeService, undefined, copy).createCaller(signed());
+
+    const follow = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'leader-fill-2',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+
+    const status = await caller.copy.deskStatus();
+    expect(status.autoMirrorPlace.published).toBe(true);
+    expect(status.residuals.autoMirrorPlace).toBeNull();
+
+    const result = await caller.copy.placeMirror({
+      followId: follow.followId,
+      fillId: 'leader-fill-2',
+    });
+    expect(result.orderId).toBe('ord-follower-1');
+    expect(result.qty).toBe('0.010000000000000000');
+    expect(placed).toHaveLength(1);
+    expect(placed[0]!.qty).toBe(parseAmount('0.01'));
+    expect(placed[0]!.clientOrderId).toBe(copyMirrorClientOrderId(follow.followId, 'leader-fill-2'));
   });
 });

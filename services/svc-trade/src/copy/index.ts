@@ -17,7 +17,13 @@ export {
   type RunFeeShareSettleOnceResult,
 } from './follow-store.js';
 export { CopyError, COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, type CopyErrorCode } from './errors.js';
-export { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL, COPY_AUTO_MIRROR_PLACE_SOCKET } from './auto-mirror-place.js';
+export {
+  autoMirrorPlaceStatus,
+  COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+  COPY_AUTO_MIRROR_PLACE_SOCKET,
+  copyMirrorClientOrderId,
+} from './auto-mirror-place.js';
+export type { PlaceFollowerOrderPort, PlaceFollowerOrderInput } from './auto-mirror-place.js';
 export {
   parseCopyFeeShareLawJson,
   parseCopyJurisdictionLawJson,

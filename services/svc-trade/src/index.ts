@@ -131,6 +131,18 @@ const copy = new CopyService(ledger, {
   feeShareLaw: copyFeeShareLaw,
   jurisdictionLaw: copyJurisdictionLaw,
   store: new SqlCopyFollowStore(sql),
+  placeFollowerOrder: async (principal, input) => {
+    const order = await trade.placeOrder(principal, {
+      symbol: input.symbol,
+      marketId: input.marketId,
+      side: input.side,
+      type: 'market',
+      qty: input.qty,
+      tif: 'IOC',
+      clientOrderId: input.clientOrderId,
+    });
+    return { orderId: order.id };
+  },
 });
 
 export const appRouter = createTradeRouter(trade, otc, copy);

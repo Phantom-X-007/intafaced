@@ -145,6 +145,10 @@ describe('CopyService', () => {
     expect(plan.reason).toBe('within_envelope');
 
     await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: plan.fillId }),
+    ).rejects.toMatchObject({ code: 'trade.copy_auto_mirror_place_socket' });
+
+    await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
         fillId: 'fill-cap-2',
@@ -177,6 +181,39 @@ describe('CopyService', () => {
         notional: '10',
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_key_expired' });
+  });
+
+  it('wired placeMirror uses follower placeOrder with plan qty — never invents a fill', async () => {
+    const placed: { qty: bigint; clientOrderId: string }[] = [];
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeFollowerOrder: async (_p, input) => {
+        placed.push({ qty: input.qty, clientOrderId: input.clientOrderId });
+        return { orderId: 'ord-1' };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-place-1',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    const out = await svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-place-1' });
+    expect(out.orderId).toBe('ord-1');
+    expect(placed).toHaveLength(1);
+    expect(placed[0]!.qty).toBe(parseAmount('0.01'));
+    expect(svc.deskStatus().autoMirrorPlace.published).toBe(true);
   });
 
   it('unfollow always works (unilateral revoke)', async () => {
