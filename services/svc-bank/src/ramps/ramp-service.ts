@@ -15,7 +15,12 @@ import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
 import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { assertCryptoRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
-import { destKindForRamp, UserWithdrawDestinationStore, type UserWithdrawDestinations } from '../withdraw-destination.js';
+import {
+  destKindForRamp,
+  UserWithdrawDestinationStore,
+  type UserWithdrawDestinations,
+  type WithdrawDestination,
+} from '../withdraw-destination.js';
 
 /**
  * RAMPS (§8.1 / D-S-09) — the CRYPTO LEDGER half: on-ramp credit, off-ramp settle.
@@ -270,7 +275,9 @@ export class RampService {
 
   /**
    * Move value out of the user's available balance to the crypto ledger rail
-   * boundary. Does NOT broadcast. `simulated` stays true.
+   * boundary. Crypto pays the stored EVM dest through ledger-client; refuses
+   * if none stored — before withdrawHold. Does NOT broadcast.
+   * `simulated` stays true.
    */
   async offramp(input: {
     offrampId: string;
@@ -286,10 +293,7 @@ export class RampService {
     }
     assertRampAssetId(input.assetId);
     const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'offramp') : assertCryptoRamp(this.programme);
-    const destKind = destKindForRamp(input.kind);
-    const dest = input.destinationRef?.trim()
-      ? await this.destinations.persist({ userId: input.userId, kind: destKind, ref: input.destinationRef })
-      : await this.destinations.require({ userId: input.userId, kind: destKind });
+    const dest = await this.resolveWithdrawDestination(input.userId, input.kind, input.destinationRef);
 
     return withMoneySpan(
       'bank.ramp.offramp',
@@ -364,6 +368,30 @@ export class RampService {
   /** Ledger read: available balance for the user/asset (no local mirror). */
   async availableOf(userId: string, assetId: string): Promise<Amount> {
     return (await this.ledger.balance(userAvailable(userId, assetId))).amount;
+  }
+
+  /**
+   * Crypto withdraw always uses the stored EVM dest. Persist an offered dest
+   * then require the store — refuse closed if none stored, before withdrawHold.
+   * Fiat still persist-or-require (IBAN/IFSC). No PSP.
+   */
+  private async resolveWithdrawDestination(
+    userId: string,
+    kind: RampKind,
+    offeredRef?: string,
+  ): Promise<WithdrawDestination> {
+    const destKind = destKindForRamp(kind);
+    const offered = offeredRef?.trim();
+    if (kind === 'crypto') {
+      if (offered) {
+        await this.destinations.persist({ userId, kind: destKind, ref: offered });
+      }
+      return this.destinations.require({ userId, kind: destKind });
+    }
+    if (offered) {
+      return this.destinations.persist({ userId, kind: destKind, ref: offered });
+    }
+    return this.destinations.require({ userId, kind: destKind });
   }
 
   /** Hold account for an offramp — for tests and recovery visibility. */
