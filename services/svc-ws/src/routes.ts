@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { toSnapshot, type DepthHub } from './depth/hub.js';
-import { DepthSourceError, type DepthSource } from './depth/source.js';
+import { snapshotHasRestingDepth, toSnapshot, type DepthHub } from './depth/hub.js';
+import { DepthNoBookError, DepthSourceError, type DepthSource } from './depth/source.js';
 import type { TradeHub } from './trade/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
@@ -121,8 +121,8 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     try {
       // Checked against the LISTING before any depth call — not against the
       // engine's book list, which omits every market that has not traded yet
-      // (`depth/registry.ts`). A listed market with no book is not a 404 here;
-      // it is an empty book, which is what `source.snapshot` returns for it.
+      // (`depth/registry.ts`). Unlisted → 404 MarketNotFound. Listed with no
+      // resting depth → 404 NoBook, never a 200 with bids/asks [].
       if (!(await hub.ensureKnownMarket(marketId))) {
         return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
       }
@@ -131,11 +131,23 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       // socket is diffed against, so a client that fetches here and then applies
       // deltas cannot land between two versions of the truth.
       const book = hub.bookFor(marketId);
-      if (book) return reply.code(200).send(toSnapshot(book));
+      if (book) {
+        const snap = toSnapshot(book);
+        if (!snapshotHasRestingDepth(snap)) {
+          return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
+        }
+        return reply.code(200).send(snap);
+      }
 
       const snapshot = await withWsSpan('ws.depth.snapshot', { marketId }, () => source.snapshot(marketId, depthLimit));
+      if (!snapshotHasRestingDepth(snapshot)) {
+        return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
+      }
       return reply.code(200).send(snapshot);
     } catch (err) {
+      if (err instanceof DepthNoBookError) {
+        return reply.code(404).send({ code: 'NoBook', message: err.message });
+      }
       // 502, not 500: this service is fine, svc-matching is not, and a caller
       // needs to tell those apart before deciding whether to retry.
       const message = err instanceof DepthSourceError ? err.message : 'depth unavailable';

@@ -719,7 +719,7 @@ describe('DepthHub — book lifecycle', () => {
  *
  * So the hub now takes a registry that is separate from its depth source, and
  * these are the two facts that must hold: the listing decides, and a listed
- * market with no book still opens.
+ * market with no book still opens (no frames until resting depth — empty ≠ zero).
  */
 describe('DepthHub — the listing decides, not the engine', () => {
   const LISTED = 'fbbe6534-e7af-49a8-a782-bbdd1e1894ba';
@@ -736,14 +736,16 @@ describe('DepthHub — the listing decides, not the engine', () => {
     await settle();
 
     expect(sink.closed).toBeNull();
-    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', marketId: LISTED });
+    expect(sink.messages()).toEqual([]);
+    expect(sink.frames).toEqual([]);
+
+    hub.ingest(snapshot(4, [['100', '1']], [['101', '1']], LISTED));
+    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', marketId: LISTED, sequence: 4 });
   });
 
-  it('opens an EMPTY BOOK for a listed market that has never traded', async () => {
-    // Six of the sixteen. `HttpDepthSource` turns svc-matching's 404 into this
-    // snapshot; here the shape is what matters — no asks, no bids, sequence 0,
-    // and a live socket rather than a close frame. The shell already renders
-    // exactly this as "No asks / No bids".
+  it('does not emit a priced empty book for a listed market that has never traded', async () => {
+    // Matching 404 / never-traded is absence. A snapshot with bids/asks [] is a
+    // live zero book a client would draw as "No asks / No bids" with a sequence.
     const source = new FakeSource([]);
     source.current.set(LISTED, { type: 'snapshot', marketId: LISTED, sequence: 0, bids: [], asks: [] });
     const hub = hubFor(source, { registry: { markets: async () => [LISTED] } });
@@ -753,7 +755,8 @@ describe('DepthHub — the listing decides, not the engine', () => {
     await settle();
 
     expect(sink.closed).toBeNull();
-    expect(sink.messages()[0]).toEqual({ type: 'snapshot', marketId: LISTED, sequence: 0, bids: [], asks: [] });
+    expect(sink.messages()).toEqual([]);
+    expect(hub.bookFor(LISTED)).toBeUndefined();
   });
 
   it('still refuses an id nobody lists', async () => {
@@ -800,9 +803,9 @@ describe('DepthHub — the listing decides, not the engine', () => {
     expect(hub.knownMarkets).toEqual([LISTED]);
   });
 
-  it('opens an empty book when the market is known but matching cannot serve depth', async () => {
-    // README: engine down → listed market opens empty book. The socket stays
-    // open; raw upstream errors do not become the close reason.
+  it('does not fabricate an empty book when matching cannot serve depth', async () => {
+    // Engine down → listed market stays open with no frames. Raw upstream
+    // errors do not become the close reason (that would look like unknown).
     const source = new FakeSource([MARKET]);
     source.failSnapshot = new Error('svc-matching unreachable: connect ECONNREFUSED');
     const hub = hubFor(source);
@@ -812,21 +815,15 @@ describe('DepthHub — the listing decides, not the engine', () => {
     await settle();
 
     expect(sink.closed).toBeNull();
-    expect(sink.messages()[0]).toEqual({
-      type: 'snapshot',
-      marketId: MARKET,
-      sequence: 0,
-      bids: [],
-      asks: [],
-    });
-    expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
+    expect(sink.messages()).toEqual([]);
+    expect(hub.bookFor(MARKET)).toBeUndefined();
 
-    // Matching recovers; a later successful ingest continues as a delta.
+    // Matching recovers; the first real book is a snapshot, not a delta off fake 0.
     source.failSnapshot = null;
     source.current.set(MARKET, snapshot(5, [['100', '2']]));
     hub.ingest(snapshot(5, [['100', '2']]));
 
-    expect(sink.messages().at(-1)?.type).toBe('delta');
+    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 5 });
     expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
   });
 });
@@ -870,7 +867,7 @@ describe('DepthHub — seed vs poll races and window pins', () => {
     expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 20 });
   });
 
-  it('turns the first real quote on an empty book@0 into a continuous delta', async () => {
+  it('emits the first real quote as a snapshot, not a delta off a fabricated empty@0', async () => {
     const source = new FakeSource([MARKET]);
     source.current.set(MARKET, snapshot(0, [], []));
     const hub = hubFor(source);
@@ -879,16 +876,14 @@ describe('DepthHub — seed vs poll races and window pins', () => {
     hub.attach(MARKET, sink);
     await settle();
 
-    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 0, bids: [], asks: [] });
+    expect(sink.messages()).toEqual([]);
 
     hub.ingest(snapshot(1, [['100', '1']], [['101', '1']]));
 
-    const last = sink.messages().at(-1);
-    expect(last?.type).toBe('delta');
-    if (last?.type === 'delta') {
-      expect(last.fromSequence).toBe(0);
-      expect(last.sequence).toBe(1);
-    }
+    expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 1 });
+    expect(sink.messages().some((m) => m.type === 'snapshot' && m.bids.length === 0 && m.asks.length === 0)).toBe(
+      false,
+    );
     expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
   });
 
