@@ -913,6 +913,35 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
     expect(result.perks.status).toBe('refuse');
   });
 
+  it('grantCert unpriced cert publishes nothing — perk outcome is refuse, not granted money', async () => {
+    const academy = stubAcademy({
+      grantCert: vi.fn(async () => ({
+        alreadyGranted: false,
+        grant: { userId: USER, certId: 'not-in-policy-v1', grantedAt: new Date(), idempotencyKey: `cert:${USER}:not-in-policy-v1` },
+        xp: { emitted: false as const, reason: 'no_policy' as const },
+        perks: {
+          status: 'refuse' as const,
+          code: 'academy.cert_perk_refuse_closed' as const,
+          reason: 'unpriced' as const,
+          message: 'Unpriced cert publishes nothing — no XP, no identity perk grant, no invent perk money',
+          academyHoldsPerkMoney: false as const,
+          academyMapsCertToPerk: false as const,
+          residual: 'TRK-academy.certs D26-P1-C1 — perks via svc-identity rank only; cert→perk money refuse-closed (no invent)' as const,
+        },
+      })),
+    });
+
+    const result = await createAcademyRouter(academy).createCaller(signed()).grantCert({ certId: 'not-in-policy-v1' });
+
+    expect(result.xp).toEqual({ emitted: false, reason: 'no_policy' });
+    expect(result.xp).not.toHaveProperty('xpDelta');
+    expect(result.perks.status).toBe('refuse');
+    if (result.perks.status !== 'refuse') throw new Error('expected refuse');
+    expect(result.perks.reason).toBe('unpriced');
+    expect(result.perks).not.toHaveProperty('perks');
+    expect(result.perks.academyHoldsPerkMoney).toBe(false);
+  });
+
   it('certXpPlane names svc-identity as the rank writer, never academy', async () => {
     const plane = await caller().certXpPlane();
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BinanceSpotMarketData, routingWeightFromGrade } from '@intafaced/venue-adapter';
 import type { MarketDataAdapter, VenueLatencyGrade } from '@intafaced/venue-contracts';
 import { presentVenueLatencyHealth } from './venue-latency-health.js';
 
@@ -40,12 +41,29 @@ function gradedA(): VenueLatencyGrade {
   };
 }
 
+/** Letter without a live p95 — answering in errors is not a latency score (#1843). */
+function letterWithoutP95(): VenueLatencyGrade {
+  return {
+    ...ungraded(),
+    grade: 'F',
+    samples: 4,
+    p50Ms: null,
+    p95Ms: null,
+    rejectRateBps: 0,
+    errorRateBps: 10_000,
+    staleMs: 10,
+    provisional: true,
+    reasons: ['no successful round-trip'],
+  };
+}
+
 describe('presentVenueLatencyHealth', () => {
   it('venue off is unconfigured, not a failing grade', () => {
     const h = presentVenueLatencyHealth(null);
     expect(h.configured).toBe(false);
     expect(h.grade).toBeNull();
     expect(h.hasScore).toBe(false);
+    expect(h.routingWeight).toBe(0);
     expect(h.reason).toBe('venue_off');
   });
 
@@ -55,6 +73,7 @@ describe('presentVenueLatencyHealth', () => {
     expect(h.reason).toBe('not_gradable');
     expect(h.grade).toBeNull();
     expect(h.hasScore).toBe(false);
+    expect(h.routingWeight).toBe(0);
     expect(h.venueId).toBe('binance-spot');
   });
 
@@ -67,9 +86,37 @@ describe('presentVenueLatencyHealth', () => {
     expect(h.reason).toBe('ungraded');
     expect(h.grade).toBeNull();
     expect(h.hasScore).toBe(false);
+    expect(h.routingWeight).toBe(0);
   });
 
-  it('measured grade is reported without inventing routing weights', () => {
+  it('a letter without live p95 is weight 0 — not ranked as scored', () => {
+    const grade = letterWithoutP95();
+    expect(routingWeightFromGrade(grade)).toBe(0);
+    const adapter = {
+      venue,
+      latencyGrade: () => grade,
+    } as MarketDataAdapter;
+    const h = presentVenueLatencyHealth(adapter);
+    expect(h.hasScore).toBe(false);
+    expect(h.routingWeight).toBe(0);
+    expect(h.grade).toBeNull();
+    expect(h.p95Ms).toBeNull();
+    expect(h.reason).toBe('unscored');
+  });
+
+  it('a never-run factory adapter does not rank as scored', () => {
+    const adapter = new BinanceSpotMarketData();
+    const grade = adapter.latencyGrade!(new Date(0));
+    expect(routingWeightFromGrade(grade)).toBe(0);
+    const h = presentVenueLatencyHealth(adapter, new Date(0));
+    expect(h.hasScore).toBe(false);
+    expect(h.routingWeight).toBe(0);
+    expect(h.grade).toBeNull();
+    expect(h.p95Ms).toBeNull();
+    expect(h.reason).toBe('ungraded');
+  });
+
+  it('measured grade is reported without inventing a second scorer', () => {
     const adapter = {
       venue,
       latencyGrade: () => gradedA(),
@@ -78,6 +125,7 @@ describe('presentVenueLatencyHealth', () => {
     expect(h.reason).toBe('measured');
     expect(h.grade).toBe('A');
     expect(h.hasScore).toBe(true);
+    expect(h.routingWeight).toBe(1);
     expect(h.p95Ms).toBe(80);
     expect(h.samples).toBe(12);
   });

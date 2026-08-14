@@ -462,7 +462,7 @@ const certPerkOutcomeOut = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('refuse'),
     code: z.literal(CERT_PERK_REFUSE_CODE),
-    reason: z.literal('identity_unreadable'),
+    reason: z.enum(['identity_unreadable', 'unpriced']),
     message: z.string(),
     academyHoldsPerkMoney: z.literal(false),
     academyMapsCertToPerk: z.literal(false),

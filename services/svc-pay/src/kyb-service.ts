@@ -21,9 +21,9 @@ import { transaction } from '@intafaced/db';
  * and a reason; no partner SDK, no Hyperswitch, no third-party money library
  * (D-S-10 ADR `docs/adr/2026-08-04-pay-rails-and-psp-socket.md`).
  *
- * IT DOES NOT wire `kybStatus` into payment.create. That is `pay.gateway`
- * residual, sequenced after a real approver exists — wiring it first bricks
- * every live merchant. This file IS the approver surface.
+ * IT DOES NOT own the money-door read of `kybStatus`. That lives in
+ * `merchant-kyb-money-gate.ts` / `assertMerchantActive` (`pay.gateway` IN slice).
+ * This file IS the dossier writer / approver surface.
  *
  * IT DOES NOT replace `decideKybStub` under allow-sandbox. The stub stays for
  * gateway tests; live / PSP product path is this service.

@@ -10,9 +10,10 @@
  */
 
 import type { CreateResult, NotifyService } from '../notify-service.js';
+import { acceptAlertMark, outOfAppRequiredRefusal } from './accepted-mark.js';
 import { evaluatePriceAlert } from './evaluate.js';
 import type { AlertStore } from './store.js';
-import type { AlertEvalOutcome, CreatePriceAlertInput, MarkSource, PriceAlert } from './types.js';
+import type { AlertEvalOutcome, AlertRefuseCode, CreatePriceAlertInput, MarkSource, PriceAlert } from './types.js';
 
 /**
  * How often the mounted sweep evaluates every market holding an active watch.
@@ -44,7 +45,7 @@ export type AlertEvaluationStatus = {
    */
   readonly canFire: boolean;
   /** The refusal every evaluation would record right now, or null. */
-  readonly code: 'alert.price_unavailable' | null;
+  readonly code: Extract<AlertRefuseCode, 'alert.price_unavailable' | 'channel.not_configured' | 'channel.disabled'> | null;
 };
 
 /** One pass of the sweep, in the shape `/ready` reports and a test asserts. */
@@ -94,12 +95,22 @@ export class AlertService {
    * Read by the router so the answer reaches the person who created the watch.
    */
   evaluationStatus(): AlertEvaluationStatus {
-    const live = this.marks.kind === 'live';
-    return {
-      markSource: this.marks.kind,
-      canFire: live,
-      code: live ? null : 'alert.price_unavailable',
-    };
+    if (this.marks.kind !== 'live') {
+      return {
+        markSource: 'dark',
+        canFire: false,
+        code: 'alert.price_unavailable',
+      };
+    }
+    const ooa = this.namedOutOfAppRefusal();
+    if (ooa) {
+      return {
+        markSource: 'live',
+        canFire: false,
+        code: ooa.code,
+      };
+    }
+    return { markSource: 'live', canFire: true, code: null };
   }
 
   /**
@@ -170,12 +181,17 @@ export class AlertService {
    * for a later pass.
    */
   async evaluateMarket(marketId: string, at: Date = new Date()): Promise<EvaluateMarketReport> {
-    const quote = await this.marks.quote(marketId, at);
+    const raw = await this.marks.quote(marketId, at);
+    const quote = acceptAlertMark(this.marks, raw);
+    const ooa = this.namedOutOfAppRefusal();
     const actives = await this.store.listActiveByMarket(marketId);
     const results: EvaluateMarketReport['results'][number][] = [];
 
     for (const alert of actives) {
-      const outcome = evaluatePriceAlert(alert, quote);
+      let outcome = evaluatePriceAlert(alert, quote);
+      if (outcome.kind === 'fire' && ooa) {
+        outcome = { kind: 'refuse', code: ooa.code, detail: ooa.detail };
+      }
       let notificationId: string | null = null;
 
       if (outcome.kind === 'fire') {
@@ -223,5 +239,11 @@ export class AlertService {
       sourceSubject: 'intafaced.notify.alert.price.crossed',
       sourceIdempotencyKey: `${alert.id}:${markPrice}`,
     });
+  }
+
+  /** Inbox-only NotifyService stubs may omit channelStatus — that means nothing OOA was required. */
+  private namedOutOfAppRefusal() {
+    const status = typeof this.notify.channelStatus === 'function' ? this.notify.channelStatus() : [];
+    return outOfAppRequiredRefusal(status);
   }
 }

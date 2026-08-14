@@ -56,6 +56,7 @@ export {
   MANDATE_PATH_MATRIX,
   PRECHARGE_NOTIFY_SOCKET,
   acknowledgePreChargeNotifyBeforeCharge,
+  assertCardMandateCannotOpenMoney,
   assertChargeTracesToMandate,
   dunningAttemptsExhausted,
   mandateChargeDisposition,
