@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { envScreeningList, SHIPPED_BUSINESS_BLOCKS } from '@intafaced/config';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
 import { AgentError } from './errors.js';
@@ -33,6 +34,8 @@ import { supportTierGate } from './support-agent/tier-gate.js';
 import { invokeSupportDataTool, supportAnswerOrEscalate } from './support-agent/data-tools.js';
 import { runSupportReplySession } from './support-agent/session-run.js';
 import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
+import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
+import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -2982,6 +2985,91 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
           }),
         ),
+    }),
+
+    /**
+     * Risk & Compliance — screening-support drafts (§8.2).
+     * Public door refuses when the sanctions list is empty / unset or inputs
+     * are missing. Drafts are proposals only. Never writes identity.kyc-review
+     * `reviewed_by`. Never invents JURISDICTION_MATRIX `blocked: true`.
+     */
+    riskCompliance: router({
+      draftScreening: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            subjectId: z.string().min(1).max(64).optional(),
+            region: z.string().min(1).max(8).optional(),
+            asDecision: z.boolean().optional(),
+            writeReviewedBy: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['screening_unset', 'screening_empty', 'inputs_missing', 'decision_forbidden']),
+              kind: z.literal('not_a_decision'),
+              isDecision: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+              screeningDeclaration: z.enum(['unset', 'listed', 'reviewed-empty']),
+              screeningConfigured: z.boolean(),
+              screeningSource: z.string(),
+              inventedBlockedList: z.literal(false),
+            }),
+            z.object({
+              status: z.literal('draft'),
+              kind: z.literal('proposal'),
+              isDecision: z.literal(false),
+              subjectId: z.string(),
+              region: z.string(),
+              screeningDeclaration: z.enum(['unset', 'listed', 'reviewed-empty']),
+              screeningConfigured: z.boolean(),
+              screeningSource: z.string(),
+              listHitCount: z.number().int(),
+              businessHitCount: z.number().int(),
+              listHits: z.array(
+                z.object({
+                  region: z.string(),
+                  reason: z.string(),
+                  source: z.string(),
+                  authority: z.literal('screening'),
+                }),
+              ),
+              inventedBlockedList: z.literal(false),
+            }),
+          ]),
+        )
+        .query(({ input }) =>
+          draftScreeningSupport({
+            screening: envScreeningList(),
+            businessBlocks: SHIPPED_BUSINESS_BLOCKS,
+            ...(input.subjectId === undefined ? {} : { subjectId: input.subjectId }),
+            ...(input.region === undefined ? {} : { region: input.region }),
+            ...(input.asDecision === undefined ? {} : { asDecision: input.asDecision }),
+            ...(input.writeReviewedBy === undefined ? {} : { writeReviewedBy: input.writeReviewedBy }),
+          }),
+        ),
+
+      refuseKycReview: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            recordId: z.string().min(1).max(64).optional(),
+            reviewerId: z.string().min(1).max(64).optional(),
+            decision: z.string().max(32).optional(),
+          }),
+        )
+        .output(
+          z.object({
+            status: z.literal('refuse'),
+            reason: z.literal('kyc_review_is_operator_only'),
+            kind: z.literal('not_a_decision'),
+            isDecision: z.literal(false),
+            column: z.literal('reviewed_by'),
+            writable: z.literal(false),
+            userMessageKey: z.literal('agents.error.capability_unavailable'),
+          }),
+        )
+        .query(({ input }) => refuseIdentityKycReviewWrite(input)),
     }),
   });
 }
