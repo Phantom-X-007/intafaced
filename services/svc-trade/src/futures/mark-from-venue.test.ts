@@ -213,6 +213,24 @@ describe('createVenueMarketDataAdapter', () => {
     // a venue the operator did not name.
     expect(createVenueMarketDataAdapter('bybit')).toBeNull();
     expect(createVenueMarketDataAdapter('bybit-futures')).toBeNull();
+    expect(createVenueMarketDataAdapter('okx')).toBeNull();
+    expect(createVenueMarketDataAdapter('okx-futures')).toBeNull();
+  });
+
+  it('okx-spot → real public MarketDataAdapter, reached by its id', () => {
+    const a = createVenueMarketDataAdapter('okx-spot');
+    expect(a).not.toBeNull();
+    expect(a!.venue.id).toBe('okx-spot');
+    expect(a!.venue.kind).toBe('external-cex');
+    expect(a!.venue.sequencedDepth).toBe(true);
+    expect(createVenueMarketDataAdapter('  OKX-SPOT  ')!.venue.id).toBe('okx-spot');
+  });
+
+  it('the three ids resolve to DIFFERENT adapters — a median of one is not a check', () => {
+    const binance = createVenueMarketDataAdapter('binance-spot');
+    const bybit = createVenueMarketDataAdapter('bybit-spot');
+    const okx = createVenueMarketDataAdapter('okx-spot');
+    expect(new Set([binance!.venue.id, bybit!.venue.id, okx!.venue.id]).size).toBe(3);
   });
 });
 
@@ -333,6 +351,79 @@ describe('bybit-spot reaches the mark path, and refuses on it', () => {
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
     expect(await src.quote({ marketId: 'm1', at: new Date() })).toBeNull();
     expect(DEFAULT_MIN_BEST_LEVEL_NOTIONAL).toBe('100');
+  });
+});
+
+const okxBook = (over: { bids?: [string, string][]; asks?: [string, string][]; code?: string }): unknown => ({
+  code: over.code ?? '0',
+  msg: '',
+  data: [
+    {
+      asks: (over.asks ?? []).map(([p, q]) => [p, q, '0', '1']),
+      bids: (over.bids ?? []).map(([p, q]) => [p, q, '0', '1']),
+      ts: String(Date.now()),
+      seqId: 7,
+    },
+  ],
+});
+
+function okxMarkSource(http: HttpPort) {
+  const configured = createConfiguredVenueMarkSource({
+    venueId: 'okx-spot',
+    symbols: 'm1:BTC/USDT',
+    adapter: createVenueMarketDataAdapter('okx-spot', { http, restBase: 'https://rest.test', heartbeatMs: 0 }),
+  });
+  expect(configured).not.toBeNull();
+  return configured!.source;
+}
+
+describe('okx-spot reaches the mark path, and refuses on it', () => {
+  it('the ops factory builds the venue from its id with nothing injected', () => {
+    const configured = createConfiguredVenueMarkSource({ venueId: 'okx-spot', symbols: 'm1:BTC/USDT' });
+    expect(configured).not.toBeNull();
+    expect(configured!.venueId).toBe('okx-spot');
+  });
+
+  it('a real two-sided book with real size behind it mids normally', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [['99000', '1']], asks: [['101000', '1']] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBe('100000');
+  });
+
+  it('EMPTY book → null', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [], asks: [] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('ONE-SIDED book → null', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [['99000', '1']], asks: [] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('UNKNOWN instrument (non-zero code) → null, never an empty book', async () => {
+    const src = okxMarkSource(fixedHttp({ code: '51001', msg: 'Instrument ID does not exist', data: [] }));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('UNMAPPED symbol → null, and the venue is never called', async () => {
+    const configured = createConfiguredVenueMarkSource({
+      venueId: 'okx-spot',
+      symbols: 'm1:BTC/USDT',
+      adapter: createVenueMarketDataAdapter('okx-spot', {
+        http: {
+          async get() {
+            throw new Error('must not call the venue for an unmapped market');
+          },
+        },
+        restBase: 'https://rest.test',
+        heartbeatMs: 0,
+      }),
+    });
+    expect(await configured!.source.markPrice({ marketId: 'm-other', at: new Date() })).toBeNull();
+  });
+
+  it('two dust orders mint nothing — same threshold, no second policy', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [['1000', DUST]], asks: [['3000', DUST]] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
   });
 });
 
