@@ -1324,9 +1324,7 @@ export class SubscriptionService {
     return occurrenceDueAt(frame, occurrence + 1);
   }
 
-  private async requireMerchant(
-    merchantId: string,
-  ): Promise<{ id: string; status: string; kybStatus: MerchantKybStatus }> {
+  private async requireMerchant(merchantId: string): Promise<{ id: string; status: string; kybStatus: MerchantKybStatus }> {
     const rows = await this.sql<Array<{ id: string; status: string; kyb_status: MerchantKybStatus }>>`
       SELECT id, status, kyb_status FROM pay.merchants WHERE id = ${merchantId}
     `;
