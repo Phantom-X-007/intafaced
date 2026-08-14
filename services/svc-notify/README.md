@@ -387,9 +387,17 @@ every `ALERT_SWEEP_INTERVAL_MS`, clearing it on shutdown. The last pass is on
 `/ready`; a null `lastAt` means the driver never ran.
 
 **Dark mark refuse.** Evaluation is pure (`evaluatePriceAlert`) against an
-injected mark port. When the port returns unavailable (dark / stale / refused),
-the outcome is `alert.price_unavailable` and **nothing is written to the inbox**.
-A missing mark is never treated as zero and never invented.
+injected mark port. `acceptAlertMark` is the accepted-mark gate: a `kind: 'dark'`
+source cannot fire even if `quote()` invents `{ kind: 'ok' }`, and an absent
+quote is refused rather than treated as zero. When the accepted mark is
+unavailable (dark / stale / refused), the outcome is `alert.price_unavailable`
+and **nothing is written to the inbox**.
+
+**Out-of-app required.** If this deployment listed a channel in
+`NOTIFY_REQUIRED_CHANNELS` and that channel cannot deliver, a crossing watch
+refuses `channel.not_configured` / `channel.disabled` by name — it does not
+silently drop the device leg and mark the watch fired. Inbox-only (nothing
+required) remains the honest fallback; sockets stay open (tracker `ready`).
 
 **Live mark when `TRADE_URL` is set.** Production injects
 `createTradeHttpMarkSource` against svc-trade's public REST — the same

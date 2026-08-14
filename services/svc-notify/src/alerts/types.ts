@@ -65,11 +65,18 @@ export type MarkSource = {
   quote(marketId: string, at?: Date): Promise<MarkQuote>;
 };
 
+export type AlertRefuseCode =
+  | 'alert.price_unavailable'
+  | 'alert.not_active'
+  | 'alert.invalid_price'
+  | 'channel.not_configured'
+  | 'channel.disabled';
+
 export type AlertEvalOutcome =
   | { readonly kind: 'hold'; readonly markPrice: string }
   | { readonly kind: 'fire'; readonly markPrice: string }
   | {
       readonly kind: 'refuse';
-      readonly code: 'alert.price_unavailable' | 'alert.not_active' | 'alert.invalid_price';
+      readonly code: AlertRefuseCode;
       readonly detail: string;
     };
