@@ -1,0 +1,25 @@
+name: format-crypto-withdraw-once
+on:
+  push:
+    paths:
+      - .github/workflows/format-crypto-withdraw-once.yml
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/bank-crypto-withdraw-stored-evm
+      - name: Apply prettier wrap
+        run: git apply services/svc-bank/scripts/fmt-withdraw.patch
+      - name: Commit and self-delete
+        run: |
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git rm -f .github/workflows/format-crypto-withdraw-once.yml
+          git rm -f services/svc-bank/scripts/fmt-withdraw.patch
+          git add services/svc-bank/src/ramps/ramps.test.ts
+          git commit -m "style(svc-bank): wrap crypto-withdraw test import for prettier"
+          git push origin HEAD:feat/bank-crypto-withdraw-stored-evm
