@@ -1514,7 +1514,7 @@ describe('private REST — mount boundary + order write path', () => {
       const app = await build(
         deps({
           closePosition: async () => {
-            throw new FuturesError('cannot pay', 'trade.profit_source_unconfigured', 503);
+            throw new FuturesError('cannot pay', 'trade.profit_source_unconfigured', 403);
           },
         }),
       );
@@ -1523,7 +1523,7 @@ describe('private REST — mount boundary + order write path', () => {
         url: `/api/v1/positions/${ORDER_ID}`,
         headers: signedHeaders(),
       });
-      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).toBe(403);
       expect(res.json()).toMatchObject({
         error: 'trade.profit_source_unconfigured',
         ccxtCode: 'NotSupported',
@@ -1632,7 +1632,7 @@ describe('private REST — mount boundary + order write path', () => {
       const app = await build(
         deps({
           openPosition: async () => {
-            throw new FuturesError('no pot', 'trade.futures_unconfigured', 503);
+            throw new FuturesError('no pot', 'trade.futures_unconfigured', 403);
           },
         }),
       );
@@ -1648,7 +1648,7 @@ describe('private REST — mount boundary + order write path', () => {
           leverage: '5',
         },
       });
-      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).toBe(403);
       expect(res.json()).toMatchObject({
         error: 'trade.futures_unconfigured',
         ccxtCode: 'NotSupported',

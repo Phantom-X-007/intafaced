@@ -197,12 +197,12 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(refuseArmById('adlDisclosureRequired')!.intafacedCode).toBe(ADL_DISCLOSURE_REQUIRED);
     expect(privateRestSource).toContain('FuturesError');
     const unconfigured = refuseArmById('futuresUnconfiguredOnOpen')!;
-    expect(unconfigured.httpStatus).toBe(503);
+    expect(unconfigured.httpStatus).toBe(403);
     expect(unconfigured.intafacedCode).toBe('trade.futures_unconfigured');
     expect(unconfigured.ccxtCode).toBe('NotSupported');
-    expect(positionServiceSource).toContain("'trade.futures_unconfigured', 503");
+    expect(positionServiceSource).toContain("'trade.futures_unconfigured', 403");
     const closeUnconfigured = refuseArmById('profitSourceUnconfiguredOnClose')!;
-    expect(closeUnconfigured.httpStatus).toBe(503);
+    expect(closeUnconfigured.httpStatus).toBe(403);
     expect(closeUnconfigured.intafacedCode).toBe('trade.profit_source_unconfigured');
     expect(closeUnconfigured.ccxtCode).toBe('NotSupported');
     expect(positionServiceSource).toContain("'trade.profit_source_unconfigured'");
@@ -461,9 +461,9 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     expect(body.refuseArms.some((a) => a.id === 'crossMarginOnOpen' && a.httpStatus === 400)).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'leverageRequiredOnOpen' && a.httpStatus === 400)).toBe(true);
     expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('futuresUnconfiguredOnOpen'))).toBe(true);
-    expect(body.refuseArms.some((a) => a.id === 'futuresUnconfiguredOnOpen' && a.httpStatus === 503)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'futuresUnconfiguredOnOpen' && a.httpStatus === 403)).toBe(true);
     expect(body.routes.some((r) => r.name === 'closePosition' && r.refuseArmIds?.includes('profitSourceUnconfiguredOnClose'))).toBe(true);
-    expect(body.refuseArms.some((a) => a.id === 'profitSourceUnconfiguredOnClose' && a.httpStatus === 503)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'profitSourceUnconfiguredOnClose' && a.httpStatus === 403)).toBe(true);
     await app.close();
   });
 
