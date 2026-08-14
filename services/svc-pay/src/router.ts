@@ -1457,6 +1457,12 @@ function toTrpcError(err: unknown): unknown {
   if (err instanceof PublicCheckoutUnavailable) {
     return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: `${err.code}: ${err.message}`, cause: err });
   }
+  if (err instanceof DestinationKindError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.code}: ${err.message}`, cause: err });
+  }
+  if (err instanceof PayoutDestinationMissingError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.code}: ${err.message}`, cause: err });
+  }
   if (!(err instanceof PayError)) return err;
 
   const code = (() => {
