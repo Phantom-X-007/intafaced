@@ -3,7 +3,14 @@ import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } 
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
-import { AmbassadorPayRefuseError, ambassadorPayPlaneStatus, attemptAmbassadorPay, attemptResidencyIfcPay } from './ambassadors/ifc-pay.js';
+import {
+  AmbassadorPayRefuseError,
+  ambassadorPayPlaneStatus,
+  attemptAmbassadorPay,
+  attemptResidencyIfcPay,
+  decidePublicAmbassadorPayQuote,
+  decidePublicResidencyPayQuote,
+} from './ambassadors/ifc-pay.js';
 import {
   PrizePoolRefuseError,
   assertMayStartPrizeSeason,
@@ -14,6 +21,7 @@ import {
   type PrizeIntentKind,
 } from './tournaments/prize-refuse.js';
 import {
+  AmbassadorRateAuthorityRefuseError,
   UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
   UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW,
   type AmbassadorIfcPayLaw,
@@ -372,6 +380,30 @@ const residencyOut = z.object({
   decidedBy: z.string().uuid().nullable(),
   decisionNote: z.string().nullable(),
 });
+/** Public IFC / residency pay door — typed refuse only (no quote amounts). */
+const publicAmbassadorPayQuoteOut = z.object({
+  status: z.literal('refuse'),
+  ok: z.literal(false),
+  payable: z.literal(false),
+  inventedIfc: z.literal(false),
+  kind: z.enum(['ifc_pay', 'revenue_share', 'residency']),
+  code: z.enum([
+    'academy.ambassador_pay.rates_unset',
+    'academy.ambassador_pay.class_m',
+    'academy.ambassador_pay.recipe_unset',
+    'academy.ambassador_pay.invent_refused',
+    'academy.ambassador_pay.residency_not_accepted',
+    'academy.ambassador_revenue_share.rates_unset',
+    'academy.ambassador_revenue_share.class_m',
+    'academy.ambassador_revenue_share.recipe_unset',
+    'academy.ambassador_revenue_share.invent_refused',
+    'academy.ambassador_revenue_share.residency_not_accepted',
+  ]),
+  reason: z.enum(['unset', 'invent', 'class_m']),
+  rateAuthorityPublished: z.boolean(),
+  residual: z.string(),
+  message: z.string(),
+});
 
 const certDefinitionOut = z.object({
   id: z.string(),
@@ -472,6 +504,13 @@ const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room,
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof AmbassadorPayRefuseError) {
     // PRECONDITION_FAILED: operator asked for pay before owner rates + ledger recipe exist.
+    return new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: err.message,
+      cause: err,
+    });
+  }
+  if (err instanceof AmbassadorRateAuthorityRefuseError) {
     return new TRPCError({
       code: 'PRECONDITION_FAILED',
       message: err.message,
@@ -1173,6 +1212,20 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
       )
       .query(() => ambassadorPayPlaneStatus({ ifc: ifcPayLaw, revenueShare: revenueShareLaw })),
 
+    /**
+     * Public door (academy:read) — typed refuse, never a fake IFC quote.
+     * Unset rate authority → rates_unset; never payable.
+     */
+    ambassadorPayQuote: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ kind: z.enum(['ifc_pay', 'revenue_share']).optional() }).optional())
+      .output(publicAmbassadorPayQuoteOut)
+      .query(({ input }) =>
+        decidePublicAmbassadorPayQuote({
+          kind: input?.kind ?? 'ifc_pay',
+          law: (input?.kind ?? 'ifc_pay') === 'revenue_share' ? revenueShareLaw : ifcPayLaw,
+        }),
+      ),
+
     ambassadorIfcPay: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({
@@ -1217,7 +1270,20 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
         }
       }),
 
-    /** Residency IFC quote under rate authority — accepted residency + published rates. */
+    /**
+     * Public residency IFC door — refuse when rates unset (accepted residency is not payable).
+     */
+    residencyPayQuote: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ residencyStatus: residencyStatus.optional() }).optional())
+      .output(publicAmbassadorPayQuoteOut)
+      .query(({ input }) =>
+        decidePublicResidencyPayQuote({
+          law: ifcPayLaw,
+          residencyStatus: input?.residencyStatus,
+        }),
+      ),
+
+    /** Operator residency IFC quote under rate authority — accepted residency + published rates. */
     residencyIfcPayQuote: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({

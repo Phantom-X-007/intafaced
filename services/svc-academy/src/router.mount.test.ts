@@ -148,8 +148,10 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'ambassadors',
         'ambassadorIfcPay',
         'ambassadorPayPlane',
+        'ambassadorPayQuote',
         'ambassadorRevenueShare',
         'residencyIfcPayQuote',
+        'residencyPayQuote',
         'appointAmbassador',
         'freezeAmbassador',
         'unfreezeAmbassador',
@@ -817,6 +819,40 @@ describe('svc-academy mount — ambassador pay under rate authority', () => {
 
   it('pay plane is not readable without admin:read', async () => {
     await expect(createAcademyRouter(stubAcademy()).createCaller(signed()).ambassadorPayPlane()).rejects.toBeTruthy();
+  });
+
+  it('public ambassadorPayQuote returns typed refuse when rates unset — not a fake quote', async () => {
+    const quote = await createAcademyRouter(stubAcademy()).createCaller(signed()).ambassadorPayQuote();
+    expect(quote.status).toBe('refuse');
+    expect(quote.ok).toBe(false);
+    expect(quote.payable).toBe(false);
+    expect(quote.inventedIfc).toBe(false);
+    expect(quote.reason).toBe('unset');
+    expect(quote.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(quote.rateAuthorityPublished).toBe(false);
+    expect(quote).not.toHaveProperty('sessionCredit');
+    expect(quote).not.toHaveProperty('amount');
+    expect(quote).not.toHaveProperty('shareOfFeeBps');
+  });
+
+  it('public residencyPayQuote refuses unset rates even for accepted residency', async () => {
+    const quote = await createAcademyRouter(stubAcademy()).createCaller(signed()).residencyPayQuote({ residencyStatus: 'accepted' });
+    expect(quote.status).toBe('refuse');
+    expect(quote.kind).toBe('residency');
+    expect(quote.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(quote.payable).toBe(false);
+    expect(quote).not.toHaveProperty('sessionCredit');
+  });
+
+  it('unset public doors never look payable', async () => {
+    const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
+    const ifc = await caller.ambassadorPayQuote({ kind: 'ifc_pay' });
+    const share = await caller.ambassadorPayQuote({ kind: 'revenue_share' });
+    const residency = await caller.residencyPayQuote();
+    expect(ifc.ok).toBe(false);
+    expect(share.ok).toBe(false);
+    expect(residency.ok).toBe(false);
+    expect(ifc.payable || share.payable || residency.payable).toBe(false);
   });
 });
 

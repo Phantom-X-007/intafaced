@@ -20,6 +20,7 @@ import {
   AmbassadorRateAuthorityRefuseError,
   ambassadorIfcPayLawIsPublished,
   ambassadorRevenueShareLawIsPublished,
+  isAmbassadorRateAuthorityUnset,
   resolveAmbassadorIfcPayLaw,
   resolveAmbassadorRevenueShareLaw,
   type AmbassadorIfcPayLaw,
@@ -32,11 +33,15 @@ export type AmbassadorPayRefuseCode =
   | 'academy.ambassador_pay.rates_unset'
   | 'academy.ambassador_pay.class_m'
   | 'academy.ambassador_pay.recipe_unset'
+  | 'academy.ambassador_pay.invent_refused'
   | 'academy.ambassador_pay.residency_not_accepted'
   | 'academy.ambassador_revenue_share.rates_unset'
   | 'academy.ambassador_revenue_share.class_m'
   | 'academy.ambassador_revenue_share.recipe_unset'
+  | 'academy.ambassador_revenue_share.invent_refused'
   | 'academy.ambassador_revenue_share.residency_not_accepted';
+
+export type PublicAmbassadorPayKind = AmbassadorPayKind | 'residency';
 
 export type AmbassadorPayKind = 'ifc_pay' | 'revenue_share';
 
@@ -374,4 +379,104 @@ export function attemptResidencyIfcPay(input: {
     residencyStatus: input.residencyStatus,
     dryRun: input.dryRun ?? true,
   }) as AmbassadorIfcPayQuote;
+}
+
+/**
+ * Public-door quote (academy:read). Never a payable fake quote.
+ *
+ * Unset rate authority → typed `rates_unset` refuse (no sessionCredit / bps).
+ * Published authority still not payable here (Class M recipe residual).
+ * Per-call invented rates → invent_refused.
+ */
+export type PublicAmbassadorPayQuote = {
+  readonly status: 'refuse';
+  readonly ok: false;
+  readonly payable: false;
+  readonly inventedIfc: false;
+  readonly kind: PublicAmbassadorPayKind;
+  readonly code: AmbassadorPayRefuseCode;
+  readonly reason: 'unset' | 'invent' | 'class_m';
+  readonly rateAuthorityPublished: boolean;
+  readonly residual: string;
+  readonly message: string;
+};
+
+export function decidePublicAmbassadorPayQuote(input: {
+  readonly kind: PublicAmbassadorPayKind;
+  readonly law: AmbassadorIfcPayLaw | AmbassadorRevenueShareLaw;
+  readonly requestLaw?: AmbassadorIfcPayLaw | AmbassadorRevenueShareLaw | null;
+}): PublicAmbassadorPayQuote {
+  const payKind: AmbassadorPayKind = input.kind === 'revenue_share' ? 'revenue_share' : 'ifc_pay';
+  const published = !isAmbassadorRateAuthorityUnset(input.law);
+
+  if (input.requestLaw && 'published' in input.requestLaw && input.requestLaw.published === true) {
+    return {
+      status: 'refuse',
+      ok: false,
+      payable: false,
+      inventedIfc: false,
+      kind: input.kind,
+      code: payKind === 'ifc_pay' ? 'academy.ambassador_pay.invent_refused' : 'academy.ambassador_revenue_share.invent_refused',
+      reason: 'invent',
+      rateAuthorityPublished: published,
+      residual: payKind === 'ifc_pay' ? AMBASSADOR_IFC_RATE_AUTHORITY_RESIDUAL : AMBASSADOR_REVENUE_SHARE_RATE_AUTHORITY_RESIDUAL,
+      message: 'Ambassador pay refuses per-call rate invent — owner-published authority only',
+    };
+  }
+
+  if (!published) {
+    return {
+      status: 'refuse',
+      ok: false,
+      payable: false,
+      inventedIfc: false,
+      kind: input.kind,
+      code: payKind === 'ifc_pay' ? 'academy.ambassador_pay.rates_unset' : 'academy.ambassador_revenue_share.rates_unset',
+      reason: 'unset',
+      rateAuthorityPublished: false,
+      residual: payKind === 'ifc_pay' ? AMBASSADOR_IFC_RATE_AUTHORITY_RESIDUAL : AMBASSADOR_REVENUE_SHARE_RATE_AUTHORITY_RESIDUAL,
+      message:
+        payKind === 'ifc_pay'
+          ? 'Ambassador IFC pay is refuse-closed until owner-published rate authority exists'
+          : 'Ambassador revenue share is refuse-closed until owner-published rate authority exists',
+    };
+  }
+
+  return {
+    status: 'refuse',
+    ok: false,
+    payable: false,
+    inventedIfc: false,
+    kind: input.kind,
+    code: payKind === 'ifc_pay' ? 'academy.ambassador_pay.recipe_unset' : 'academy.ambassador_revenue_share.recipe_unset',
+    reason: 'class_m',
+    rateAuthorityPublished: true,
+    residual: payKind === 'ifc_pay' ? AMBASSADOR_IFC_PAY_RECIPE_RESIDUAL : AMBASSADOR_REVENUE_SHARE_RECIPE_RESIDUAL,
+    message: 'Ambassador pay quote is not payable on the public door — Class M ledger recipe unset',
+  };
+}
+
+/** Residencies never look payable while IFC rate authority is unset. */
+export function decidePublicResidencyPayQuote(input: {
+  readonly law: AmbassadorIfcPayLaw;
+  readonly residencyStatus?: ResidencyStatus | null;
+  readonly requestLaw?: AmbassadorIfcPayLaw | null;
+}): PublicAmbassadorPayQuote {
+  void input.residencyStatus;
+  return decidePublicAmbassadorPayQuote({ kind: 'residency', law: input.law, requestLaw: input.requestLaw });
+}
+
+/**
+ * Honesty guard: unset (or any public refuse) must not look payable.
+ * A later fake quote with ok/sessionCredit/bps fails this.
+ */
+export function ambassadorPayLooksPayable(quote: object): boolean {
+  const rec = quote as Record<string, unknown>;
+  if (rec.ok === true) return true;
+  if (rec.payable === true) return true;
+  if (rec.status !== undefined && rec.status !== 'refuse') return true;
+  if ('sessionCredit' in rec) return true;
+  if ('shareOfFeeBps' in rec) return true;
+  if ('amount' in rec || 'rate' in rec || 'quote' in rec) return true;
+  return false;
 }

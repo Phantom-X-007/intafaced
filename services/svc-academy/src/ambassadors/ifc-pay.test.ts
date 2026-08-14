@@ -13,6 +13,9 @@ import {
   ambassadorPayStatusLine,
   attemptAmbassadorPay,
   attemptResidencyIfcPay,
+  ambassadorPayLooksPayable,
+  decidePublicAmbassadorPayQuote,
+  decidePublicResidencyPayQuote,
   refuseAmbassadorIfcPay,
   refuseAmbassadorPayAttempt,
   refuseAmbassadorRevenueShare,
@@ -225,5 +228,41 @@ describe('ambassador pay under rate authority — product path (D26-P1-C2)', () 
         dryRun: true,
       }),
     ).toThrow(AmbassadorPayRefuseError);
+  });
+});
+
+describe('public IFC / residency doors — unset rates never look payable', () => {
+  it('unset IFC quote is typed refuse without magnitudes', () => {
+    const q = decidePublicAmbassadorPayQuote({ kind: 'ifc_pay', law: UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW });
+    expect(q.status).toBe('refuse');
+    expect(q.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(q.reason).toBe('unset');
+    expect(ambassadorPayLooksPayable(q)).toBe(false);
+    expect(JSON.stringify(q)).not.toMatch(/sessionCredit/);
+  });
+
+  it('accepted residency + unset rates is not payable', () => {
+    const q = decidePublicResidencyPayQuote({
+      law: UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
+      residencyStatus: 'accepted',
+    });
+    expect(q.kind).toBe('residency');
+    expect(q.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(ambassadorPayLooksPayable(q)).toBe(false);
+  });
+
+  it('per-call invent on public door refuses without quoting', () => {
+    const q = decidePublicAmbassadorPayQuote({
+      kind: 'ifc_pay',
+      law: UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
+      requestLaw: publishedIfc,
+    });
+    expect(q.code).toBe('academy.ambassador_pay.invent_refused');
+    expect(ambassadorPayLooksPayable(q)).toBe(false);
+  });
+
+  it('fails closed if an unset quote were marked payable', () => {
+    const fake = { status: 'ok', ok: true, payable: true, sessionCredit: '1.00' };
+    expect(ambassadorPayLooksPayable(fake)).toBe(true);
   });
 });
