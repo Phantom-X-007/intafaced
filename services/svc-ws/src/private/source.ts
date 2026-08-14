@@ -157,10 +157,7 @@ export async function tryAttachPrivate(input: {
     await orders?.unsubscribe().catch(() => undefined);
     await fills?.unsubscribe().catch(() => undefined);
     await positions?.unsubscribe().catch(() => undefined);
-    input.log?.warn(
-      { err: String(err) },
-      'ws: private bus subscribe failed — trade tape still attached; private half will retry',
-    );
+    input.log?.warn({ err: String(err) }, 'ws: private bus subscribe failed — trade tape still attached; private half will retry');
     return null;
   }
 }

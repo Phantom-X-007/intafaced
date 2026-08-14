@@ -1,12 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryEventBus, validatePayload, type EventBus, type Subscription } from '@intafaced/events';
 import { PrivateOrderHub } from './hub.js';
-import {
-  subscribePrivateFills,
-  subscribePrivateOrders,
-  subscribePrivatePositions,
-  tryAttachPrivate,
-} from './source.js';
+import { subscribePrivateFills, subscribePrivateOrders, subscribePrivatePositions, tryAttachPrivate } from './source.js';
 
 function sink() {
   const sent: string[] = [];

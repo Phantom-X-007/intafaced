@@ -126,10 +126,7 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
         }
         if (result.tradesUp && result.retryPrivate) {
           // Tape is live. Keep retrying private only — do not close the tape.
-          log.info(
-            { tradesBus: true, privateBus: false },
-            'svc-ws: bus consumers attached (private half still retrying)',
-          );
+          log.info({ tradesBus: true, privateBus: false }, 'svc-ws: bus consumers attached (private half still retrying)');
           await retryPrivateHalf(result, backoff);
           return;
         }
