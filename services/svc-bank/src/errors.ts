@@ -199,6 +199,8 @@ export type BankErrorCode =
    */
   | 'bank.ramp_invalid_asset'
   | 'bank.ramp_invalid_destination'
+  /** Persisted dest missing — later withdraw has no real ref before withdrawHold. */
+  | 'bank.withdraw_destination_missing'
   /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */
   | 'bank.ramp_conflict'
   /**

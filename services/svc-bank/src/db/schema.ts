@@ -1,4 +1,4 @@
-import { boolean, date, index, integer, pgSchema, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -948,6 +948,24 @@ export const rampOfframps = bank.table(
   ],
 );
 
+
+/**
+ * Where a user is paid out on withdraw — kind+ref asserted (IBAN/IFSC/EVM)
+ * before insert. One row per (user, kind). Loaded by offramp so withdrawHold
+ * never runs against an invented dest.
+ */
+export const userWithdrawDestinations = bank.table(
+  'user_withdraw_destinations',
+  {
+    userId: text('user_id').notNull(),
+    kind: text('kind').notNull(),
+    ref: text('ref').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ name: 'user_withdraw_destinations_pkey', columns: [t.userId, t.kind] })],
+);
+
 // ── Auto-invest (§31:805 F-plane) ────────────────────────────────────────────
 // Rules are instructions; runs are write-once records. No balance column.
 
@@ -1072,6 +1090,7 @@ export const schema = {
   cardCashback,
   rampOnramps,
   rampOfframps,
+  userWithdrawDestinations,
   autoInvestRules,
   autoInvestRuns,
   businessAccounts,
