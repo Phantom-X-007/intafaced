@@ -1,0 +1,204 @@
+name: payout-dest-wire-once
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/payout-dest-wire-once.yml
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wire persist into router, index, schema
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          # --- index.ts ---
+          p = Path('services/svc-pay/src/index.ts')
+          t = p.read_text()
+          old_imp = "import { createPayRouter } from './router.js';\n"
+          new_imp = (
+              "import { createPayRouter } from './router.js';\n"
+              "import { MerchantPayoutDestinationStore } from './merchant-payout-destination.js';\n"
+          )
+          if old_imp not in t:
+              raise SystemExit('index import not found')
+          if 'MerchantPayoutDestinationStore' not in t:
+              t = t.replace(old_imp, new_imp, 1)
+          old_call = 'createPayRouter(pay, rails, userMoney, subMerchants),'
+          new_call = 'createPayRouter(pay, rails, userMoney, subMerchants, new MerchantPayoutDestinationStore(sql)),'
+          if old_call not in t:
+              raise SystemExit('index createPayRouter call not found')
+          t = t.replace(old_call, new_call, 1)
+          p.write_text(t)
+          print('index patched')
+
+          # --- router.ts ---
+          p = Path('services/svc-pay/src/router.ts')
+          t = p.read_text()
+          old_imp = "import { PayError, type PayService } from './payment-service.js';\n"
+          new_imp = (
+              "import { PayError, type PayService } from './payment-service.js';\n"
+              "import { DestinationKindError } from './payout-destination.js';\n"
+              "import {\n"
+              "  assertOnlyPayoutDestinations,\n"
+              "  PayoutDestinationMissingError,\n"
+              "  type MerchantPayoutDestinations,\n"
+              "} from './merchant-payout-destination.js';\n"
+          )
+          if old_imp not in t:
+              raise SystemExit('router pay import not found')
+          if 'assertOnlyPayoutDestinations' not in t:
+              t = t.replace(old_imp, new_imp, 1)
+          old_sig = 'export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService, trees: MerchantAreaFence | null = null) {'
+          new_sig = 'export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService, trees: MerchantAreaFence | null = null, destinations: MerchantPayoutDestinations = assertOnlyPayoutDestinations()) {'
+          if old_sig not in t:
+              raise SystemExit('router signature not found')
+          t = t.replace(old_sig, new_sig, 1)
+
+          needle = '''            return { id: merchant.id, userId: merchant.userId, mode: merchant.mode, feeBps: merchant.pricing.feeBps ?? 0 };
+          }),
+        ),
+
+      /** Current merchant for the principal — null when not yet onboarded. */'''
+          insert = '''            return { id: merchant.id, userId: merchant.userId, mode: merchant.mode, feeBps: merchant.pricing.feeBps ?? 0 };
+          }),
+        ),
+
+      /**
+       * Persist a payout destination through assertPayoutDestinationKind
+       * (IBAN / IFSC / EVM) so a later payout has a real ref before withdrawHold.
+       */
+      setPayoutDestination: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            railId: z.string().min(1),
+            kind: z.string().min(1),
+            ref: z.string().min(1),
+          }),
+        )
+        .output(z.object({ kind: z.string(), ref: z.string(), railId: z.string() }))
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement.payout');
+            const dest = await destinations.persist(input);
+            return { ...dest, railId: input.railId };
+          }),
+        ),
+
+      /** Current merchant for the principal — null when not yet onboarded. */'''
+          if needle not in t:
+              raise SystemExit('router merchant.create tail not found')
+          t = t.replace(needle, insert, 1)
+
+          old_payout = '''      payout: scopedProcedure('pay:payout', { module: 'pay' })
+        .input(
+          z.object({
+            settlementId: z.string().uuid(),
+            railId: z.string().min(1),
+            destination: z.object({ kind: z.string().min(1), ref: z.string().min(1) }),
+          }),
+        )
+        .output(settlementView)
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const settlement = await pay.getSettlement(input.settlementId);
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement.payout');
+            return toSettlementOut(await pay.payoutSettlement(input));
+          }),
+        ),'''
+          new_payout = '''      payout: scopedProcedure('pay:payout', { module: 'pay' })
+        .input(
+          z.object({
+            settlementId: z.string().uuid(),
+            railId: z.string().min(1),
+            destination: z.object({ kind: z.string().min(1), ref: z.string().min(1) }).optional(),
+          }),
+        )
+        .output(settlementView)
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const settlement = await pay.getSettlement(input.settlementId);
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement.payout');
+            const destination = input.destination
+              ? await destinations.persist({
+                  merchantId: settlement.merchantId,
+                  railId: input.railId,
+                  kind: input.destination.kind,
+                  ref: input.destination.ref,
+                })
+              : await destinations.require({ merchantId: settlement.merchantId, railId: input.railId });
+            return toSettlementOut(await pay.payoutSettlement({ ...input, destination }));
+          }),
+        ),'''
+          if old_payout not in t:
+              raise SystemExit('router payout block not found')
+          t = t.replace(old_payout, new_payout, 1)
+
+          old_trpc = '  if (!(err instanceof PayError)) return err;'
+          new_trpc = '''  if (err instanceof DestinationKindError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.code}: ${err.message}`, cause: err });
+  }
+  if (err instanceof PayoutDestinationMissingError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.code}: ${err.message}`, cause: err });
+  }
+  if (!(err instanceof PayError)) return err;'''
+          if old_trpc not in t:
+              raise SystemExit('toTrpcError PayError guard not found')
+          t = t.replace(old_trpc, new_trpc, 1)
+          p.write_text(t)
+          print('router patched')
+
+          # --- schema.ts ---
+          p = Path('services/svc-pay/src/db/schema.ts')
+          t = p.read_text()
+          marker = 'export const schema = {'
+          table = '''
+/**
+ * Where a merchant is paid out — kind+ref asserted through
+ * `assertPayoutDestinationKind` before insert. One row per (merchant, rail).
+ * Loaded by payout so withdrawHold never runs against an invented dest.
+ */
+export const merchantPayoutDestinations = pay.table(
+  'merchant_payout_destinations',
+  {
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    railId: text('rail_id').notNull(),
+    kind: text('kind').notNull(),
+    ref: text('ref').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ name: 'merchant_payout_destinations_pkey', columns: [t.merchantId, t.railId] })],
+);
+
+'''
+          if 'merchantPayoutDestinations' not in t:
+              if marker not in t:
+                  raise SystemExit('schema export not found')
+              t = t.replace(marker, table + marker, 1)
+          if 'merchantPayoutDestinations,' not in t.split('export const schema')[1]:
+              t = t.replace('  merchants,\n', '  merchants,\n  merchantPayoutDestinations,\n', 1)
+          p.write_text(t)
+          print('schema patched')
+          PY
+      - name: Commit patch and self-delete
+        run: |
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git rm .github/workflows/payout-dest-wire-once.yml
+          git add services/svc-pay/src/index.ts services/svc-pay/src/router.ts services/svc-pay/src/db/schema.ts
+          git commit -m "$(cat <<'MSG'
+          feat(svc-pay): wire persisted payout dest into merchant payout
+
+          setPayoutDestination + payout load the stored IBAN/IFSC/EVM ref
+          before payoutSettlement/withdrawHold. bank-payout stays absent.
+          MSG
+          )"
+          git push
