@@ -1,10 +1,11 @@
 /**
- * Durable TWAP place grant — the caller presented these claims at createTwap.
+ * Durable algo place grant — the caller presented these claims at createTwap
+ * (TWAP / VWAP / POV share that door).
  *
- * Creating a TWAP *is* the authorisation for child slices until the schedule
- * ends or is cancelled. We persist the presented claims (scopes / session /
- * tier), never a JWT or secret. After restart, tick reconstructs a Principal
- * from this grant so children use the same placeOrder path.
+ * Creating the schedule *is* the authorisation for child slices until it ends
+ * or is cancelled. We persist the presented claims (scopes / session / tier),
+ * never a JWT or secret. After restart, tick reconstructs a Principal from this
+ * grant so children use the same placeOrder path.
  *
  * Missing grant (pre-migration rows) still halt `trade.algo_principal_unavailable`.
  * Never mint a principal from userId alone.
@@ -24,7 +25,7 @@ export interface AlgoPlaceGrant {
 
 export function captureAlgoPlaceGrant(principal: Principal): AlgoPlaceGrant {
   if (!principal.scopes.includes('trade:write')) {
-    throw new TradeError('TWAP create cannot persist a place grant without trade:write', 'trade.algo_principal_unavailable');
+    throw new TradeError('algo create cannot persist a place grant without trade:write', 'trade.algo_principal_unavailable');
   }
   return {
     scopes: [...principal.scopes],
@@ -40,15 +41,15 @@ export function captureAlgoPlaceGrant(principal: Principal): AlgoPlaceGrant {
 export function principalFromAlgoGrant(input: {
   userId: string;
   grant: AlgoPlaceGrant;
-  /** Schedule end — grant must not outlive the TWAP it authorised. */
+  /** Schedule end — grant must not outlive the algo it authorised. */
   expiresAt: Date;
   now: Date;
 }): Principal {
   if (input.now.getTime() >= input.expiresAt.getTime()) {
-    throw new TradeError('TWAP place grant expired with the schedule — refusing to place', 'trade.algo_principal_unavailable');
+    throw new TradeError('algo place grant expired with the schedule — refusing to place', 'trade.algo_principal_unavailable');
   }
   if (!input.grant.scopes.includes('trade:write')) {
-    throw new TradeError('stored TWAP place grant is missing trade:write — refusing to mint authority', 'trade.algo_principal_unavailable');
+    throw new TradeError('stored algo place grant is missing trade:write — refusing to mint authority', 'trade.algo_principal_unavailable');
   }
   return {
     sub: input.userId,
