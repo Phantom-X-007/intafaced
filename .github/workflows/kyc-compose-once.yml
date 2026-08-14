@@ -1,0 +1,41 @@
+name: kyc-compose-once
+on:
+  push:
+    branches: [feat/identity-kyc-compose-pass]
+    paths:
+      - '.github/workflows/kyc-compose-once.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/identity-kyc-compose-pass
+      - name: insert IDENTITY_KYC_DOC_KEY pass-through and remove this workflow
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('docker-compose.apps.yml')
+          s = p.read_text()
+          line = '      IDENTITY_KYC_DOC_KEY: ${IDENTITY_KYC_DOC_KEY:-}\n'
+          if line not in s:
+              needle = '      IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: ${IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-}\n'
+              if needle not in s:
+                  raise SystemExit('needle missing')
+              insert = needle + (
+                  '      # #1806 KYC document vault. Pass-through only — no compose default, no invented key.\n'
+                  '      # Host sets IDENTITY_KYC_DOC_KEY → vault boots. Blank stays refuse-closed.\n'
+                  + line
+              )
+              p.write_text(s.replace(needle, insert, 1))
+          wf = Path('.github/workflows/kyc-compose-once.yml')
+          if wf.exists():
+              wf.unlink()
+          PY
+          git config user.name Nitro
+          git config user.email ZenYoda33@pm.me
+          git add docker-compose.apps.yml .github/workflows/kyc-compose-once.yml
+          git commit -m "feat(svc-identity): pass IDENTITY_KYC_DOC_KEY through compose so a host key boots the #1806 vault"
+          git push
