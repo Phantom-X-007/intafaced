@@ -836,9 +836,7 @@ describe('svc-academy mount — ambassador pay under rate authority', () => {
   });
 
   it('public residencyPayQuote refuses unset rates even for accepted residency', async () => {
-    const quote = await createAcademyRouter(stubAcademy())
-      .createCaller(signed())
-      .residencyPayQuote({ residencyStatus: 'accepted' });
+    const quote = await createAcademyRouter(stubAcademy()).createCaller(signed()).residencyPayQuote({ residencyStatus: 'accepted' });
     expect(quote.status).toBe('refuse');
     expect(quote.kind).toBe('residency');
     expect(quote.code).toBe('academy.ambassador_pay.rates_unset');
