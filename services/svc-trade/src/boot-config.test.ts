@@ -453,6 +453,34 @@ describe('the shipped configuration does not turn futures jobs on', () => {
   });
 });
 
+describe('the shipped configuration does not turn the venue mark stream on', () => {
+  it('hands the container the stream OFF on a clean clone', () => {
+    expect(shipped.has('TRADE_VENUE_MARK_STREAM')).toBe(true);
+    expect(shipped.get('TRADE_VENUE_MARK_STREAM')).toBe('false');
+  });
+
+  it('declares the env default as false, so a deployment that never mentions it gets nothing', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_VENUE_MARK_STREAM:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_VENUE_MARK_STREAM is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).toContain('.default(false)');
+    expect(decl![1]).not.toContain('.default(true)');
+  });
+
+  it('leaves TRADE_VENUE_MARK_STREAM commented out in .env.example, and documents it', () => {
+    expect(envExample.has('TRADE_VENUE_MARK_STREAM')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_VENUE_MARK_STREAM/);
+  });
+
+  it('compose defaults the flag to false rather than passing it through blank or on', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_VENUE_MARK_STREAM:\s*\$\{TRADE_VENUE_MARK_STREAM:-false\}/);
+  });
+
+  it('passes the env flag into /health venueLatency rather than implying a live stream', () => {
+    expect(read('services/svc-trade/src/index.ts')).toMatch(/streamEnabled:\s*env\.TRADE_VENUE_MARK_STREAM/);
+  });
+});
+
 describe('the shipped configuration does not invent a funding market list', () => {
   it('declares TRADE_FUTURES_FUNDING_MARKET_IDS default empty', () => {
     const src = joinChains(read('services/svc-trade/src/env.ts'));
