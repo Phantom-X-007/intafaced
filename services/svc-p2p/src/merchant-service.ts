@@ -4,6 +4,8 @@ import {
   canTransition,
   checkEligibility,
   DEFAULT_ELIGIBILITY,
+  describeReputationSnapshot,
+  mayRestoreProgrammePrivileges,
   standingBrokenByDisputeLaw,
   type EligibilityPolicy,
   type MerchantStatus,
@@ -175,6 +177,26 @@ export class MerchantService {
       throw new P2pError('A reason is required: an unexplained change of standing is not reviewable.', 'p2p.merchant_reason_required');
     }
 
+    const currentStanding = await this.get(input.userId);
+    if (!currentStanding) throw new P2pError('No merchant application for this account.', 'p2p.merchant_not_found');
+
+    const freezing = currentStanding.status === 'approved' && input.to === 'suspended';
+    const restoring = currentStanding.status === 'suspended' && input.to === 'approved';
+    let recordedReason = reason;
+    if (freezing || restoring) {
+      const snapshot = await this.p2p.reputationOf(input.userId);
+      if (restoring) {
+        const restore = mayRestoreProgrammePrivileges(snapshot, this.eligibility);
+        if (!restore.eligible) {
+          throw new P2pError(
+            `Cannot restore programme privileges while live reputation fails the same rule badges use. ${restore.reason}`,
+            'p2p.merchant_ineligible',
+          );
+        }
+      }
+      recordedReason = `${reason} Snapshot at ${freezing ? 'freeze' : 'restore'}: ${describeReputationSnapshot(snapshot)}.`;
+    }
+
     return transaction(
       this.sql,
       async (tx) => {
@@ -196,7 +218,7 @@ export class MerchantService {
 
         await tx`
           INSERT INTO p2p.p2p_merchant_events (user_id, from_status, to_status, reason, actor_id, actor_scope)
-          VALUES (${input.userId}, ${current.status}, ${input.to}, ${reason}, ${input.actorId}, ${input.actorScope})
+          VALUES (${input.userId}, ${current.status}, ${input.to}, ${recordedReason}, ${input.actorId}, ${input.actorScope})
         `;
 
         return toRecord(row);

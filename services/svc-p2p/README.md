@@ -106,7 +106,7 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `disputes.get`                   | `p2p:read`               | Party sees their own evidence; moderator sees all of it                                                            |
 | `disputes.list`                  | `p2p:read` + moderator   | **The queue** — allowlisted id or `admin:compliance`; else honest refuse                                           |
 | `disputes.resolve`               | `p2p:read` + moderator   | **Moderator only** — release or refund; empty allowlist → unreachable                                              |
-| `reputation.get`                 | `p2p:read`               | Completion rate, average release time, disputes lost, badges                                                       |
+| `reputation.get`                 | `p2p:read`               | Snapshot + derived badges + `merchant` vouch (false when frozen)                                                   |
 | `instruments.methods.list`       | `p2p:read`               | What each method needs, per country. About methods, never about people                                             |
 | `instruments.methods.register`   | `admin:compliance`       | **Operator only** — declare a market's field requirements                                                          |
 | `instruments.methods.setEnabled` | `admin:compliance`       | Stop accepting new instruments for a method/country                                                                |
@@ -122,7 +122,7 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing; null = unlimited)                                              |
 | `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                                                        |
 | `merchants.withdraw`             | `p2p:write`              | Withdraw a pending application                                                                                     |
-| `merchants.decide`               | `admin:compliance`       | Operator transition to approved / rejected / suspended                                                             |
+| `merchants.decide`               | `admin:compliance`       | Operator approve / reject / freeze (`suspended`); unfreeze re-checks live reputation snapshot                      |
 | `merchants.history`              | `admin:compliance`       | Audit trail of standing changes                                                                                    |
 | `ops.lateSettlements`            | `admin:compliance`       | Committed decisions with no ledger stamp yet (+ durable last settle error)                                         |
 | `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                                                          |
@@ -135,7 +135,7 @@ HTTP (`src/index.ts`):
 | `GET /health`                      | liveness; discloses `moderationReachable` + `offerLimitsConfigured` (ceilings armed)                                           |
 | `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationReachable`                                                                  |
 | `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500 |
-| `GET /internal/reputation/:userId` | the hot path other modules read for `p2pLimitMultiplier`                                                                       |
+| `GET /internal/reputation/:userId` | Same snapshot as `reputation.get`: counters, derived badges, `merchant` freeze. Not a `p2pLimitMultiplier` (identity owns rank). |
 | `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more                            |
 
 Three background sweeps start before the HTTP listener. The first two are why escrow cannot strand; the third is why we do not keep personal data after we need it:

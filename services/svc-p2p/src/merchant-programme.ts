@@ -171,13 +171,78 @@ export function isActiveMerchant(status: MerchantStatus): boolean {
 }
 
 /**
+ * Programme vouch on a public reputation door — same snapshot badges use.
+ *
+ * `null` means the programme is not wired (not "this trader is not a merchant").
+ * Frozen / applied / rejected / withdrawn never read `true`: freeze must be
+ * visible on the same payload as derived badges, or counterparties keep treating
+ * a suspended row as vouched-for.
+ */
+export function programmeVouch(status: MerchantStatus | null | undefined, programmeWired: boolean): boolean | null {
+  if (!programmeWired) return null;
+  return isActiveMerchant(status ?? 'withdrawn');
+}
+
+export interface ReputationPublicDoor {
+  readonly tradesTotal: number;
+  readonly completed: number;
+  readonly cancelled: number;
+  readonly disputed: number;
+  readonly disputesLost: number;
+  readonly totalReleaseSecs: number;
+  readonly releaseSamples: number;
+  readonly completionRate: number;
+  readonly avgReleaseSecs: number;
+  readonly badges: string[];
+  readonly merchant: boolean | null;
+}
+
+/** One payload: derived badges + programme freeze. Never a second scorecard. */
+export function reputationOnPublicDoor(
+  snapshot: ReputationSnapshot,
+  merchant: boolean | null,
+): ReputationPublicDoor {
+  return {
+    tradesTotal: snapshot.tradesTotal,
+    completed: snapshot.completed,
+    cancelled: snapshot.cancelled,
+    disputed: snapshot.disputed,
+    disputesLost: snapshot.disputesLost,
+    totalReleaseSecs: snapshot.totalReleaseSecs,
+    releaseSamples: snapshot.releaseSamples,
+    completionRate: snapshot.completionRate,
+    avgReleaseSecs: snapshot.avgReleaseSecs,
+    badges: [...snapshot.badges],
+    merchant,
+  };
+}
+
+/** Audit line: freeze/restore is checkable against the counters badges use. */
+export function describeReputationSnapshot(snapshot: ReputationSnapshot): string {
+  const badges = snapshot.badges.length === 0 ? 'none' : snapshot.badges.join(',');
+  return `${snapshot.tradesTotal} escrowed trades at ${(snapshot.completionRate * 100).toFixed(2)}% completion, derived badges: ${badges}`;
+}
+
+/**
+ * Unfreeze is not a permanent grant. Restoring `suspended → approved` re-runs
+ * the same eligibility rule apply uses; badges stay derived from counters.
+ */
+export function mayRestoreProgrammePrivileges(
+  snapshot: ReputationSnapshot,
+  policy: EligibilityPolicy = DEFAULT_ELIGIBILITY,
+): EligibilityVerdict {
+  return checkEligibility(snapshot, policy);
+}
+
+/**
  * After a moderated dispute loss, may this approved standing keep the badge?
  *
  * Application eligibility already refuses `disputesLost > maxDisputesLost`.
  * Leaving an approved row untouched after the same loss would let the badge
  * keep vouching for someone a human moderator has already ruled against —
  * the dispute-law half of D26-P1-I2. Non-approved rows are untouched here;
- * operator reinstate remains a deliberate human override of suspension.
+ * operator unfreeze still re-checks live eligibility (`mayRestoreProgrammePrivileges`)
+ * so a human cannot stamp approved over a snapshot that would fail apply.
  */
 export function standingBrokenByDisputeLaw(
   status: MerchantStatus,

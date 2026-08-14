@@ -5,6 +5,7 @@ import { createP2pRouter } from './router.js';
 import type { P2pService } from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
+import { snapshotOf, type ReputationCounters } from './reputation.js';
 
 /**
  * THE MOUNT BOUNDARY, for svc-p2p (docs/decisions/mount-boundary.md).
@@ -914,5 +915,69 @@ describe('svc-p2p mount — merchants offer-limits honest API', () => {
       band: 'merchant',
       merchantStatus: 'approved',
     });
+  });
+
+  it('myOfferCeiling drops a frozen merchant onto the standard band', async () => {
+    const { parseAmount } = await import('@intafaced/ledger-client');
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const ceiling = await createP2pRouter(
+      stubP2p(),
+      stubInstruments(),
+      undefined,
+      {
+        offerLimits: {
+          standardMaxAmount: parseAmount('1000'),
+          merchantMaxAmount: parseAmount('5000'),
+        },
+      },
+      merchantStub('suspended') as never,
+    )
+      .createCaller(ctx)
+      .merchants.myOfferCeiling();
+    expect(ceiling).toEqual({
+      maxAmount: '1000',
+      band: 'standard',
+      merchantStatus: 'suspended',
+    });
+  });
+});
+
+describe('svc-p2p mount — freeze is visible on the reputation door', () => {
+  function spotlessCounters(): ReputationCounters {
+    return {
+      tradesTotal: 60,
+      completed: 60,
+      cancelled: 0,
+      disputed: 0,
+      disputesLost: 0,
+      totalReleaseSecs: 600,
+      releaseSamples: 60,
+    };
+  }
+
+  it('keeps derived badges and drops merchant vouch when standing is frozen', async () => {
+    const snap = snapshotOf(spotlessCounters());
+    const p2p = stubP2p({ reputationOf: async () => snap });
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const door = await createP2pRouter(p2p, stubInstruments(), undefined, {}, merchantStub('suspended') as never)
+      .createCaller(ctx)
+      .reputation.get({ userId: USER });
+
+    expect(door.merchant).toBe(false);
+    expect(door.badges).toEqual(snap.badges);
+    expect(door.badges).toContain('spotless');
+    expect(door).not.toHaveProperty('p2pLimitMultiplier');
+  });
+
+  it('restores programme vouch on unfreeze without minting a badge', async () => {
+    const snap = snapshotOf(spotlessCounters());
+    const p2p = stubP2p({ reputationOf: async () => snap });
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const door = await createP2pRouter(p2p, stubInstruments(), undefined, {}, merchantStub('approved') as never)
+      .createCaller(ctx)
+      .reputation.get({ userId: USER });
+
+    expect(door.merchant).toBe(true);
+    expect(door.badges).toEqual(snap.badges);
   });
 });

@@ -16,7 +16,7 @@ import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
 import { ceilingOnWire, limitsConfigured, limitsOnWire, NO_OFFER_LIMITS, type OfferLimitPolicy } from './merchant-limits.js';
-import { isActiveMerchant } from './merchant-programme.js';
+import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
 export type P2pRouterOptions = {
@@ -1281,19 +1281,8 @@ export function createP2pRouter(
         .query(async ({ input }) =>
           guard(async () => {
             const r = await p2p.reputationOf(input.userId);
-            // Absent programme → null, not false. See `merchant` in the schema.
-            const standing = merchants ? isActiveMerchant((await merchants.get(input.userId))?.status ?? 'withdrawn') : null;
-            return {
-              merchant: standing,
-              tradesTotal: r.tradesTotal,
-              completed: r.completed,
-              cancelled: r.cancelled,
-              disputed: r.disputed,
-              disputesLost: r.disputesLost,
-              completionRate: r.completionRate,
-              avgReleaseSecs: r.avgReleaseSecs,
-              badges: [...r.badges],
-            };
+            const record = merchants ? await merchants.get(input.userId) : null;
+            return reputationOnPublicDoor(r, programmeVouch(record?.status, Boolean(merchants)));
           }),
         ),
     }),
@@ -1402,9 +1391,11 @@ export function createP2pRouter(
         ),
 
       /**
-       * Operator decision. `admin:compliance` rather than `p2p:write`: granting
-       * or revoking a badge a stranger relies on is not a trading action, and a
-       * merchant holding `p2p:write` must not be able to reach it.
+       * Operator freeze / restore / reject. `admin:compliance` rather than
+       * `p2p:write` or a minted `p2p:moderate`: granting or revoking programme
+       * privileges a stranger relies on is not a trading action, and a merchant
+       * holding `p2p:write` must not be able to reach it. Unfreeze re-checks the
+       * live reputation snapshot; it does not stamp badges.
        */
       decide: scopedProcedure('admin:compliance', { module: 'p2p' })
         .input(

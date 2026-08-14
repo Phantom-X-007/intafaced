@@ -34,6 +34,8 @@ import { ANY_COUNTRY } from './instruments.js';
 import { InstrumentService } from './instrument-service.js';
 import { P2pError, P2pService } from './p2p-service.js';
 import { createP2pRouter } from './router.js';
+import { mayRestoreProgrammePrivileges, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
+import { snapshotOf, type ReputationCounters } from './reputation.js';
 
 const EDGE_SECRET = 'p2p-promise-falsify-public-doors-edge-secret-32';
 const INTERNAL_SECRET = 'p2p-promise-falsify-public-doors-internal-secret';
@@ -116,7 +118,18 @@ async function mountStub(
   opts: {
     p2p?: P2pService;
     moderatorUserIds?: readonly string[];
-    merchants?: { get: (userId: string) => Promise<{ status: string } | null> };
+    offerLimits?: { standardMaxAmount: bigint | null; merchantMaxAmount: bigint | null };
+    merchants?: {
+      get: (userId: string) => Promise<{ status: string } | null>;
+      transition?: (input: {
+        userId: string;
+        to: string;
+        by: string;
+        reason: string;
+        actorId: string;
+        actorScope: string;
+      }) => Promise<unknown>;
+    };
   } = {},
 ): Promise<FastifyInstance> {
   const router = createP2pRouter(
@@ -125,6 +138,7 @@ async function mountStub(
     undefined,
     {
       moderatorUserIds: opts.moderatorUserIds ?? [],
+      offerLimits: opts.offerLimits,
     },
     opts.merchants as never,
   );
@@ -137,6 +151,19 @@ async function mountStub(
       createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
     } satisfies FastifyTRPCPluginOptions<typeof router>['trpcOptions'],
   });
+
+  // Same reputation door index.ts mounts — freeze must be on this payload,
+  // not only on tRPC, or other modules keep reading badges as if vouched.
+  app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (req, reply) => {
+    if (verifyServiceHeaders(req.headers, INTERNAL_SECRET).service === null) {
+      return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
+    }
+    const p2p = opts.p2p ?? stubP2p();
+    const snapshot = await p2p.reputationOf(req.params.userId);
+    const record = opts.merchants ? await opts.merchants.get(req.params.userId) : null;
+    return reputationOnPublicDoor(snapshot, programmeVouch(record?.status as never, Boolean(opts.merchants)));
+  });
+
   await app.ready();
   return app;
 }
@@ -394,6 +421,162 @@ describe('D26-P2-01f public doors — dispute refuse invent rulings', () => {
       ifNobodyRules: 'escalated_and_held',
       moderationReachable: false,
     });
+    await app.close();
+  });
+});
+
+describe('p2p.merchants public doors — operator freeze against reputation snapshot', () => {
+  const OPERATOR = '88888888-8888-4888-8888-888888888888';
+  const clean: ReputationCounters = {
+    tradesTotal: 60,
+    completed: 60,
+    cancelled: 0,
+    disputed: 0,
+    disputesLost: 0,
+    totalReleaseSecs: 600,
+    releaseSamples: 60,
+  };
+
+  function merchantRow(status: string) {
+    return {
+      userId: SELLER,
+      status,
+      appliedCompletionRate: 1,
+      appliedTradesTotal: 60,
+      appliedAt: new Date('2026-01-01T00:00:00.000Z'),
+      decidedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+  }
+
+  it('GET /internal/reputation refuses without service auth — freeze is not a public leak', async () => {
+    const app = await mountStub({
+      p2p: stubP2p({ reputationOf: async () => snapshotOf(clean) }),
+      merchants: { get: async () => merchantRow('approved') },
+    });
+    const { statusCode, body } = await get(app, `/internal/reputation/${SELLER}`);
+    expect(statusCode).toBe(401);
+    expect(body).toMatchObject({ code: 'p2p.unauthenticated' });
+    await app.close();
+  });
+
+  it('GET /internal/reputation shows freeze on the same snapshot badges use', async () => {
+    const snap = snapshotOf(clean);
+    const app = await mountStub({
+      p2p: stubP2p({ reputationOf: async () => snap }),
+      merchants: { get: async () => merchantRow('suspended') },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/internal/reputation/${SELLER}`,
+      headers: serviceAuthHeaders('svc-ops', INTERNAL_SECRET),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { merchant: boolean; badges: string[] };
+    expect(body.merchant).toBe(false);
+    expect(body.badges).toEqual([...snap.badges]);
+    expect(body.badges).toContain('spotless');
+    expect(body).not.toHaveProperty('p2pLimitMultiplier');
+    await app.close();
+  });
+
+  it('merchants.decide freeze drops API + merchant-band privileges over the wire', async () => {
+    const { parseAmount } = await import('@intafaced/ledger-client');
+    let status = 'approved';
+    const merchants = {
+      get: async () => merchantRow(status),
+      transition: async (input: { to: string }) => {
+        status = input.to;
+        return merchantRow(status);
+      },
+    };
+    const app = await mountStub({
+      p2p: stubP2p({ reputationOf: async () => snapshotOf(clean) }),
+      offerLimits: {
+        standardMaxAmount: parseAmount('1000'),
+        merchantMaxAmount: parseAmount('5000'),
+      },
+      merchants: merchants as never,
+    });
+
+    const freeze = await post(
+      app,
+      'merchants.decide',
+      { userId: SELLER, to: 'suspended', reason: 'operator freeze' },
+      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'] })),
+    );
+    expect(freeze.statusCode).toBe(200);
+    expect(freeze.body.result?.data).toMatchObject({ status: 'suspended' });
+
+    const access = await app.inject({
+      method: 'GET',
+      url: '/trpc/merchants.apiAccess',
+      headers: signedHeaders(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] })),
+    });
+    expect(access.statusCode).toBe(200);
+    expect(access.json().result?.data).toMatchObject({ eligible: false, merchantStatus: 'suspended' });
+
+    const ceiling = await app.inject({
+      method: 'GET',
+      url: '/trpc/merchants.myOfferCeiling',
+      headers: signedHeaders(),
+    });
+    expect(ceiling.statusCode).toBe(200);
+    expect(ceiling.json().result?.data).toMatchObject({
+      band: 'standard',
+      merchantStatus: 'suspended',
+      maxAmount: '1000',
+    });
+    await app.close();
+  });
+
+  it('unfreeze refuses when live reputation would fail the apply rule', async () => {
+    const broken = snapshotOf({ ...clean, disputed: 1, disputesLost: 1 });
+    const restore = mayRestoreProgrammePrivileges(broken);
+    expect(restore.eligible).toBe(false);
+    const merchants = {
+      get: async () => merchantRow('suspended'),
+      transition: async () => {
+        throw new P2pError(
+          `Cannot restore programme privileges while live reputation fails the same rule badges use. ${restore.eligible === false ? restore.reason : ''}`,
+          'p2p.merchant_ineligible',
+        );
+      },
+    };
+    const app = await mountStub({
+      p2p: stubP2p({ reputationOf: async () => broken }),
+      merchants: merchants as never,
+    });
+    const res = await post(
+      app,
+      'merchants.decide',
+      { userId: SELLER, to: 'approved', reason: 'operator unfreeze' },
+      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'] })),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error!.message).toMatch(/live reputation fails the same rule badges use/i);
+    await app.close();
+  });
+
+  it('empty moderator allowlist still refuses disputes.resolve — freeze does not mint p2p:moderate', async () => {
+    let resolved = 0;
+    const app = await mountStub({
+      p2p: stubP2p({
+        resolveDispute: async () => {
+          resolved += 1;
+          throw new Error('resolve must not run');
+        },
+      }),
+      merchants: { get: async () => merchantRow('approved') },
+    });
+    const { statusCode, body } = await post(
+      app,
+      'disputes.resolve',
+      { tradeId: TRADE, resolution: 'release' },
+      signedHeaders(principal({ scopes: ['p2p:read', 'p2p:write'] })),
+    );
+    expect(statusCode).toBe(412);
+    expect(body.error!.message).toMatch(/moderation is not configured/i);
+    expect(resolved).toBe(0);
     await app.close();
   });
 });
