@@ -64,6 +64,46 @@ describe('createVenueOtcMidSource', () => {
   });
 });
 
+describe('createVenueOtcMidSource from MaintainedBook port', () => {
+  const twoSided = {
+    bestBid: parseAmount('100'),
+    bestAsk: parseAmount('102'),
+    bestBidQty: parseAmount('5'),
+    bestAskQty: parseAmount('5'),
+    spread: parseAmount('2'),
+    mid: parseAmount('101'),
+  };
+  const observedAt = new Date(NOW.getTime() - 2_000);
+
+  it('mids a servable sequenced top and does not poll snapshotBook', async () => {
+    const snapshotBook = vi.fn(async () => healthyBook());
+    const src = createVenueOtcMidSource({
+      adapter: { snapshotBook },
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await src('BTC/USDT')).toEqual({ mid: '101', asOf: observedAt });
+    expect(snapshotBook).not.toHaveBeenCalled();
+  });
+
+  it('withholds while the feed is desynced — never invents an OTC mid from a gap', async () => {
+    const src = createVenueOtcMidSource({
+      adapter: { snapshotBook: vi.fn(async () => healthyBook()) },
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: false,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await src('BTC/USDT')).toBeNull();
+  });
+});
+
 describe('createOtcMidSourceFromConfig', () => {
   it('flag off or no adapter → boot map, not live', async () => {
     const boot = createOtcMidSourceFromConfig({
