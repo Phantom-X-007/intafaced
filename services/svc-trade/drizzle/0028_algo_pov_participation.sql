@@ -1,5 +1,5 @@
 -- trade.algo · POV participation bps (caller-published; never a product default)
--- Reversal: 0027_algo_pov_participation.down.sql
+-- Reversal: 0028_algo_pov_participation.down.sql
 
 ALTER TABLE "trade"."algo_parents"
   ADD COLUMN IF NOT EXISTS "participation_bps" integer;
