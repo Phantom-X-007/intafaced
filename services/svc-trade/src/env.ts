@@ -268,8 +268,8 @@ const schema = serviceEnvSchema
       /**
        * Venue fabric mark source (A-TRADE-VENUE-1 / venue.aggregation).
        * Empty (default) = off — marks fall back to matching depth mid only.
-       * Known ids: `binance-spot`, `bybit-spot` — both PUBLIC MarketDataAdapters,
-       * neither holding a credential.
+       * Known ids: `binance-spot`, `bybit-spot`, `okx-spot` — PUBLIC MarketDataAdapters,
+       * none holding a credential.
        * Unknown id → no adapter (refuse invent). Never invents mid.
        */
       TRADE_VENUE_MARK_VENUE: z.string().default(''),
