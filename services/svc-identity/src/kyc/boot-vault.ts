@@ -12,9 +12,13 @@ export type KycVaultBoot = {
  * Wire the §10 vault for createIdentityRouter when IDENTITY_KYC_DOC_KEY is set.
  * Missing/invalid key → null (procedures refuse closed; never invent a key).
  *
- * Intended for index.ts after Denon dual-write paths clear:
+ * Production index.ts:
  *   const vault = bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY);
- *   createIdentityRouter(auth, rank, { …, ...vault })
+ *   createIdentityRouter(auth, rank, {
+ *     …,
+ *     kycDocs: vault?.kycDocs,
+ *     bindKycProviderRef: vault?.bindKycProviderRef,
+ *   })
  */
 export function bootKycVault(sql: Sql, keyMaterial: string | undefined): KycVaultBoot | null {
   if (!parseKycDocKey(keyMaterial)) return null;
