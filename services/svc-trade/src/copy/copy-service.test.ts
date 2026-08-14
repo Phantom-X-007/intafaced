@@ -144,9 +144,9 @@ describe('CopyService', () => {
     expect(plan.fillId).toBe('fill-cap-1');
     expect(plan.reason).toBe('within_envelope');
 
-    await expect(
-      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: plan.fillId }),
-    ).rejects.toMatchObject({ code: 'trade.copy_auto_mirror_place_socket' });
+    await expect(svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: plan.fillId })).rejects.toMatchObject({
+      code: 'trade.copy_auto_mirror_place_socket',
+    });
 
     await expect(
       svc.planMirrorForFollow(principal, {
